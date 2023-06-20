@@ -1,0 +1,17 @@
+services:
+  validator:
+    build:
+      context: .
+      dockerfile: Dockerfile.validator
+    volumes:
+      - shared:/shared
+
+  bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    volumes:
+      - shared:/shared
+
+volumes:
+  shared:
