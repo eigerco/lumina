@@ -12,6 +12,8 @@ services:
       dockerfile: Dockerfile.bridge
     volumes:
       - shared:/shared
+    ports:
+      - 26658:26658
 
 volumes:
   shared:
