@@ -6,4 +6,12 @@ edition = "2021"
 [dependencies]
 base64 = "0.21.2"
 celestia-proto = { workspace = true }
+nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "eb48f3cb" }
 serde = { version = "1.0.164", features = ["derive"] }
+tendermint-proto = { workspace = true }
+thiserror = "1.0.40"
+tendermint = { workspace = true }
+sha2 = "0.10.7"
+
+[dev-dependencies]
+serde_json = "1.0.97"
