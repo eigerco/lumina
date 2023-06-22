@@ -1,9 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    "proto",
-    "types",
-]
+members = ["proto", "types"]
 
 [workspace.dependencies]
 celestia-proto = { version = "0.1.0", path = "proto" }

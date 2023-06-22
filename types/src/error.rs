@@ -11,6 +11,12 @@ pub enum Error {
     #[error(transparent)]
     Tendermint(#[from] tendermint::Error),
 
+    #[error(transparent)]
+    Protobuf(#[from] tendermint_proto::Error),
+
+    #[error(transparent)]
+    Validation(#[from] crate::ValidationError),
+
     #[error("Missing header")]
     MissingHeader,
 
@@ -34,4 +40,10 @@ pub enum Error {
 
     #[error("Invalid namespace v0")]
     InvalidNamespaceV0,
+
+    #[error("Unexpected absent commit signature")]
+    UnexpectedAbsentSignature,
+
+    #[error("Not enough voting power to verify commit: has {0}, required: {1}")]
+    NotEnoughVotingPower(u64, u64),
 }
