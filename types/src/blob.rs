@@ -1,60 +1,45 @@
-use celestia_proto::tendermint::types as tmtypes;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
+use tendermint_proto::v0_34::types::Blob as RawBlob;
+use tendermint_proto::Protobuf;
 
+use crate::nmt::Namespace;
+use crate::Error;
+
+// NOTE: We don't use the `serde(try_from)` pattern for this type
+// becase JSON representation needs to have `commitment` field but
+// Protobuf definition doesn't.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Blob {
-    blob: tmtypes::Blob,
-    commitment: Vec<u8>,
+    pub namespace: Namespace,
+    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
+    pub data: Vec<u8>,
+    pub share_version: u8,
+    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
+    pub commitment: Vec<u8>,
 }
 
-/// Helper type for serialization
-///
-/// Ref: https://github.com/celestiaorg/celestia-node/blob/6654cdf4994dbd381efd0d6a29688c731177c855/blob/blob.go#L134-L164
-#[derive(Serialize, Deserialize)]
-struct BlobJson {
-    namespace: Vec<u8>, // TODO: namespace ID
-    #[serde(with = "crate::serde_base64")]
-    data: Vec<u8>,
-    share_version: u32,
-    commitment: Vec<u8>, // TODO: Commitment
-}
+impl Protobuf<RawBlob> for Blob {}
 
-impl Serialize for Blob {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let blob_json = BlobJson {
-            namespace: [
-                &[self.blob.namespace_version as u8],
-                &self.blob.namespace_id[..],
-            ]
-            .concat(),
-            data: self.blob.data.clone(),
-            share_version: self.blob.share_version,
-            commitment: self.commitment.clone(),
-        };
+impl TryFrom<RawBlob> for Blob {
+    type Error = Error;
 
-        blob_json.serialize(serializer)
+    fn try_from(value: RawBlob) -> Result<Self, Self::Error> {
+        Ok(Blob {
+            namespace: Namespace::new(value.namespace_version as u8, &value.namespace_id)?,
+            data: value.data,
+            share_version: value.share_version as u8,
+            commitment: Vec::new(),
+        })
     }
 }
 
-impl<'de> Deserialize<'de> for Blob {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let blob_json = BlobJson::deserialize(deserializer)?;
-
-        let blob = Blob {
-            blob: tmtypes::Blob {
-                namespace_id: blob_json.namespace[1..].to_vec(),
-                namespace_version: blob_json.namespace[0] as u32,
-                data: blob_json.data,
-                share_version: blob_json.share_version,
-            },
-            commitment: blob_json.commitment,
-        };
-
-        Ok(blob)
+impl From<Blob> for RawBlob {
+    fn from(value: Blob) -> RawBlob {
+        RawBlob {
+            namespace_id: value.namespace.id().to_vec(),
+            namespace_version: value.namespace.version() as u32,
+            data: value.data,
+            share_version: value.share_version as u32,
+        }
     }
 }

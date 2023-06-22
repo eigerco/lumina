@@ -8,3 +8,10 @@ members = [
 [workspace.dependencies]
 celestia-proto = { version = "0.1.0", path = "proto" }
 celestia-types = { version = "0.1.0", path = "types" }
+tendermint = { git = 'https://github.com/eigerco/celestia-tendermint-rs.git', branch = 'v0.32.x-celestia' }
+tendermint-proto = { git = 'https://github.com/eigerco/celestia-tendermint-rs.git', branch = 'v0.32.x-celestia' }
+
+[patch.'https://github.com/eigerco/celestia-tendermint-rs.git']
+# Uncomment to apply local changes
+#tendermint = { path = "../celestia-tendermint-rs/tendermint" }
+#tendermint-proto = { path = "../celestia-tendermint-rs/proto" }
