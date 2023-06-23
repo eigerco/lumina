@@ -4,6 +4,7 @@ use tendermint::block::header::Header;
 use tendermint::block::{Commit, Height};
 use tendermint::chain::id::Id;
 use tendermint::{validator, Time};
+use tendermint_proto::Protobuf;
 
 use crate::{DataAvailabilityHeader, Error, Result};
 
@@ -40,6 +41,8 @@ impl ExtendedHeader {
         todo!();
     }
 }
+
+impl Protobuf<RawExtendedHeader> for ExtendedHeader {}
 
 impl TryFrom<RawExtendedHeader> for ExtendedHeader {
     type Error = Error;
