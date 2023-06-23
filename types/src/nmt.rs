@@ -4,36 +4,56 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{Error, Result};
 
-const NS_ID_SIZE: usize = 29;
-const NS_ID_V0_MAX_SIZE: usize = 10;
+pub const NS_VER_SIZE: usize = 1;
+pub const NS_ID_SIZE: usize = 28;
+pub const NS_SIZE: usize = NS_VER_SIZE + NS_ID_SIZE;
+pub const NS_ID_V0_MAX_SIZE: usize = 10;
 
-pub type NamespacedHash = nmt_rs::NamespacedHash<NS_ID_SIZE>;
-pub type Nmt = nmt_rs::NamespaceMerkleTree<
-    MemDb<NamespacedHash>,
-    nmt_rs::NamespacedSha2Hasher<NS_ID_SIZE>,
-    NS_ID_SIZE,
->;
+pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
+pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
+pub type NamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;
+pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
-pub struct Namespace(nmt_rs::NamespaceId<NS_ID_SIZE>);
+pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
 impl Namespace {
+    pub fn from_raw(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() <= NS_VER_SIZE {
+            return Err(Error::InvalidNamespaceIdSize(bytes.len()));
+        }
+
+        Namespace::new(bytes[0], &bytes[1..])
+    }
+
     pub fn new(version: u8, id: &[u8]) -> Result<Self> {
         match version {
             0 => Self::new_v0(id),
+            255 => Self::new_max(id),
             n => Err(Error::UnsupportedNamespaceVersion(n)),
         }
     }
 
     pub fn new_v0(id: &[u8]) -> Result<Self> {
+        let start_pos = id.iter().position(|&x| x != 0).unwrap_or(0);
+        let id = &id[start_pos..];
+
         if id.len() > NS_ID_V0_MAX_SIZE {
             return Err(Error::InvalidNamespaceIdSize(id.len()));
         }
 
-        let mut bytes = [0u8; NS_ID_SIZE];
-        bytes[NS_ID_SIZE - id.len()..].copy_from_slice(id);
+        let mut bytes = [0u8; NS_SIZE];
+        bytes[NS_SIZE - id.len()..].copy_from_slice(id);
 
         Ok(Namespace(nmt_rs::NamespaceId(bytes)))
+    }
+
+    pub fn new_max(id: &[u8]) -> Result<Self> {
+        if id.iter().all(|&x| x == 0xff) {
+            Ok(Namespace(nmt_rs::NamespaceId::max_id()))
+        } else {
+            Err(Error::UnsupportedNamespaceVersion(255))
+        }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -49,14 +69,14 @@ impl Namespace {
     }
 }
 
-impl From<Namespace> for nmt_rs::NamespaceId<NS_ID_SIZE> {
+impl From<Namespace> for nmt_rs::NamespaceId<NS_SIZE> {
     fn from(value: Namespace) -> Self {
         value.0
     }
 }
 
-impl From<nmt_rs::NamespaceId<NS_ID_SIZE>> for Namespace {
-    fn from(value: nmt_rs::NamespaceId<NS_ID_SIZE>) -> Self {
+impl From<nmt_rs::NamespaceId<NS_SIZE>> for Namespace {
+    fn from(value: nmt_rs::NamespaceId<NS_SIZE>) -> Self {
         Namespace(value)
     }
 }

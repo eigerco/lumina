@@ -22,4 +22,13 @@ pub enum Error {
 
     #[error("Missing data availability header")]
     MissingDataAvailabilityHeader,
+
+    #[error("Missing proof")]
+    MissingProof,
+
+    #[error("Invalid share size: {0}")]
+    InvalidShareSize(usize),
+
+    #[error("Invalid namespaced hash")]
+    InvalidNamespacedHash,
 }
