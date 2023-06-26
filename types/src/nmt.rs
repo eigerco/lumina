@@ -4,36 +4,68 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{Error, Result};
 
-const NS_ID_SIZE: usize = 29;
-const NS_ID_V0_MAX_SIZE: usize = 10;
+pub const NS_VER_SIZE: usize = 1;
+pub const NS_ID_SIZE: usize = 28;
+pub const NS_SIZE: usize = NS_VER_SIZE + NS_ID_SIZE;
+pub const NS_ID_V0_SIZE: usize = 10;
 
-pub type NamespacedHash = nmt_rs::NamespacedHash<NS_ID_SIZE>;
-pub type Nmt = nmt_rs::NamespaceMerkleTree<
-    MemDb<NamespacedHash>,
-    nmt_rs::NamespacedSha2Hasher<NS_ID_SIZE>,
-    NS_ID_SIZE,
->;
+pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
+pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
+pub type NamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;
+pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
-pub struct Namespace(nmt_rs::NamespaceId<NS_ID_SIZE>);
+pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
 impl Namespace {
+    pub const MAX: Namespace = Namespace(nmt_rs::NamespaceId::MAX_ID);
+
+    pub fn from_raw(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() != NS_SIZE {
+            return Err(Error::InvalidNamespaceSize);
+        }
+
+        Namespace::new(bytes[0], &bytes[1..])
+    }
+
     pub fn new(version: u8, id: &[u8]) -> Result<Self> {
         match version {
             0 => Self::new_v0(id),
+            255 => Self::try_max(id),
             n => Err(Error::UnsupportedNamespaceVersion(n)),
         }
     }
 
     pub fn new_v0(id: &[u8]) -> Result<Self> {
-        if id.len() > NS_ID_V0_MAX_SIZE {
-            return Err(Error::InvalidNamespaceIdSize(id.len()));
+        let id_pos = match id.len() {
+            // Allow 28 bytes len
+            NS_ID_SIZE => NS_ID_SIZE - NS_ID_V0_SIZE,
+            // Allow 10 bytes len or less
+            n if n <= NS_ID_V0_SIZE => 0,
+            // Anything else is an error
+            _ => return Err(Error::InvalidNamespaceSize),
+        };
+
+        let prefix = &id[..id_pos];
+        let id = &id[id_pos..];
+
+        // Validate that prefix is all zeros
+        if prefix.iter().any(|&x| x != 0) {
+            return Err(Error::InvalidNamespaceV0);
         }
 
-        let mut bytes = [0u8; NS_ID_SIZE];
-        bytes[NS_ID_SIZE - id.len()..].copy_from_slice(id);
+        let mut bytes = [0u8; NS_SIZE];
+        bytes[NS_SIZE - id.len()..].copy_from_slice(id);
 
         Ok(Namespace(nmt_rs::NamespaceId(bytes)))
+    }
+
+    fn try_max(id: &[u8]) -> Result<Self> {
+        if id.iter().all(|&x| x == 0xff) {
+            Ok(Namespace::MAX)
+        } else {
+            Err(Error::UnsupportedNamespaceVersion(255))
+        }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -49,14 +81,14 @@ impl Namespace {
     }
 }
 
-impl From<Namespace> for nmt_rs::NamespaceId<NS_ID_SIZE> {
+impl From<Namespace> for nmt_rs::NamespaceId<NS_SIZE> {
     fn from(value: Namespace) -> Self {
         value.0
     }
 }
 
-impl From<nmt_rs::NamespaceId<NS_ID_SIZE>> for Namespace {
-    fn from(value: nmt_rs::NamespaceId<NS_ID_SIZE>) -> Self {
+impl From<nmt_rs::NamespaceId<NS_SIZE>> for Namespace {
+    fn from(value: nmt_rs::NamespaceId<NS_SIZE>) -> Self {
         Namespace(value)
     }
 }
@@ -95,11 +127,28 @@ mod tests {
     #[test]
     fn namespace_id_8_bytes() {
         let nid = Namespace::new_v0(&[1, 2, 3, 4, 5, 6, 7, 8]).unwrap();
+
         let expected_nid = Namespace(nmt_rs::NamespaceId([
             0, // version
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, // reserved filled with zeros
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
             0, 0, 1, 2, 3, 4, 5, 6, 7, 8, // id with left padding
+        ]));
+
+        assert_eq!(nid, expected_nid);
+    }
+
+    #[test]
+    fn namespace_id_8_bytes_with_prefix() {
+        let nid = Namespace::new_v0(&[
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
+            0, 0, 1, 2, 3, 4, 5, 6, 7, 8, // id
+        ])
+        .unwrap();
+
+        let expected_nid = Namespace(nmt_rs::NamespaceId([
+            0, // version
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
+            0, 0, 1, 2, 3, 4, 5, 6, 7, 8, // id
         ]));
 
         assert_eq!(nid, expected_nid);
@@ -110,8 +159,7 @@ mod tests {
         let nid = Namespace::new_v0(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).unwrap();
         let expected_nid = Namespace(nmt_rs::NamespaceId([
             0, // version
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, // reserved filled with zeros
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // id
         ]));
 
@@ -119,7 +167,114 @@ mod tests {
     }
 
     #[test]
+    fn namespace_id_10_bytes_with_prefix() {
+        let nid = Namespace::new_v0(&[
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+        ])
+        .unwrap();
+
+        let expected_nid = Namespace(nmt_rs::NamespaceId([
+            0, // version
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // id
+        ]));
+
+        assert_eq!(nid, expected_nid);
+    }
+
+    #[test]
+    fn namespace_id_with_invalid_prefix() {
+        let e = Namespace::new_v0(&[
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, // prefix
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+        ])
+        .unwrap_err();
+
+        assert!(matches!(e, Error::InvalidNamespaceV0));
+    }
+
+    #[test]
     fn namespace_id_11_bytes() {
-        Namespace::new_v0(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap_err();
+        let e = Namespace::new_v0(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap_err();
+
+        assert!(matches!(e, Error::InvalidNamespaceSize));
+    }
+
+    #[test]
+    fn namespace_id_from_raw_bytes() {
+        let nid = Namespace::from_raw(&[
+            0, // version
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // id
+        ])
+        .unwrap();
+
+        let expected_nid = Namespace(nmt_rs::NamespaceId([
+            0, // version
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // id
+        ]));
+
+        assert_eq!(nid, expected_nid);
+    }
+
+    #[test]
+    fn namespace_id_with_28_raw_bytes() {
+        let e = Namespace::from_raw(&[
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // id
+        ])
+        .unwrap_err();
+
+        assert!(matches!(e, Error::InvalidNamespaceSize));
+    }
+
+    #[test]
+    fn namespace_id_with_30_raw_bytes() {
+        let e = Namespace::from_raw(&[
+            0, // extra
+            0, // version
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // id
+        ])
+        .unwrap_err();
+
+        assert!(matches!(e, Error::InvalidNamespaceSize));
+    }
+
+    #[test]
+    fn max_namespace_id_from_raw_bytes() {
+        let nid = Namespace::from_raw(&[
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff,
+        ])
+        .unwrap();
+
+        let expected_nid = Namespace::MAX;
+
+        assert_eq!(nid, expected_nid);
+    }
+
+    #[test]
+    fn invalid_max_namespace_id_from_raw_bytes() {
+        let e = Namespace::from_raw(&[
+            0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0,
+        ])
+        .unwrap_err();
+
+        assert!(matches!(e, Error::UnsupportedNamespaceVersion(255)));
+    }
+
+    #[test]
+    fn invalid_version() {
+        let e = Namespace::from_raw(&[
+            254, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ])
+        .unwrap_err();
+
+        assert!(matches!(e, Error::UnsupportedNamespaceVersion(254)));
     }
 }

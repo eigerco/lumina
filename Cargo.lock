@@ -435,7 +435,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 [[package]]
 name = "nmt-rs"
 version = "0.1.0"
-source = "git+https://github.com/Sovereign-Labs/nmt-rs.git?rev=eb48f3cb#eb48f3cbe04ed03f9713630d8bf64ba940655eb0"
+source = "git+https://github.com/eigerco/nmt-rs.git?rev=a371723#a371723e7d0f669e46b4afea31b77f98c9ca9dff"
 dependencies = [
  "bytes",
  "sha2 0.10.7",

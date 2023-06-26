@@ -5,8 +5,8 @@ pub enum Error {
     #[error("Unsupported namesapce version: {0}")]
     UnsupportedNamespaceVersion(u8),
 
-    #[error("Invalid namespace ID size: {0}")]
-    InvalidNamespaceIdSize(usize),
+    #[error("Invalid namespace size")]
+    InvalidNamespaceSize,
 
     #[error(transparent)]
     Tendermint(#[from] tendermint::Error),
@@ -22,4 +22,16 @@ pub enum Error {
 
     #[error("Missing data availability header")]
     MissingDataAvailabilityHeader,
+
+    #[error("Missing proof")]
+    MissingProof,
+
+    #[error("Invalid share size: {0}")]
+    InvalidShareSize(usize),
+
+    #[error("Invalid namespaced hash")]
+    InvalidNamespacedHash,
+
+    #[error("Invalid namespace v0")]
+    InvalidNamespaceV0,
 }

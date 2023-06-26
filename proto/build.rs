@@ -1,12 +1,17 @@
 use anyhow::Result;
 
+const DEFAULT: &str = r#"#[serde(default)]"#;
 const SERIALIZED: &str = r#"#[derive(::serde::Deserialize, ::serde::Serialize)]"#;
+const BASE64STRING: &str =
+    r#"#[serde(with = "tendermint_proto::serializers::bytes::base64string")]"#;
 const VEC_BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
 
 pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.da.DataAvailabilityHeader", SERIALIZED),
     (".header.pb.ExtendedHeader", SERIALIZED),
+    (".share.p2p.shrex.nd.Proof", SERIALIZED),
+    (".share.p2p.shrex.nd.Row", SERIALIZED),
 ];
 
 pub static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
@@ -18,6 +23,10 @@ pub static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
         ".celestia.da.DataAvailabilityHeader.column_roots",
         VEC_BASE64STRING,
     ),
+    (".share.p2p.shrex.nd.Proof.nodes", VEC_BASE64STRING),
+    (".share.p2p.shrex.nd.Proof.hashleaf", DEFAULT),
+    (".share.p2p.shrex.nd.Proof.hashleaf", BASE64STRING),
+    (".share.p2p.shrex.nd.Row.shares", VEC_BASE64STRING),
 ];
 
 fn main() -> Result<()> {
