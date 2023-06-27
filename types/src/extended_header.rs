@@ -3,10 +3,11 @@ use serde::{Deserialize, Serialize};
 use tendermint::block::header::Header;
 use tendermint::block::{Commit, Height};
 use tendermint::chain::id::Id;
-use tendermint::{validator, Time};
+use tendermint::{validator, Hash, Time};
 use tendermint_proto::Protobuf;
 
-use crate::{DataAvailabilityHeader, Error, Result};
+use crate::validator_set::ValidatorSetExt;
+use crate::{DataAvailabilityHeader, Error, Result, ValidateBasic, ValidationError};
 
 pub type Validator = validator::Info;
 pub type ValidatorSet = validator::Set;
@@ -34,7 +35,53 @@ impl ExtendedHeader {
     }
 
     pub fn validate(&self) -> Result<()> {
-        todo!();
+        self.header.validate_basic()?;
+        self.commit.validate_basic()?;
+        self.validator_set.validate_basic()?;
+
+        // make sure the validator set is consistent with the header
+        if self.validator_set.hash() != self.header.validators_hash {
+            Err(ValidationError::HeaderAndValSetHashMismatch(
+                self.header.validators_hash,
+                self.validator_set.hash(),
+                self.height(),
+            ))?;
+        }
+
+        // ensure data root from raw header matches computed root
+        if Some(Hash::Sha256(self.dah.hash)) != self.header.data_hash {
+            Err(ValidationError::HeaderAndDahHashMismatch(
+                self.header.data_hash,
+                Hash::Sha256(self.dah.hash),
+                self.height(),
+            ))?;
+        }
+
+        // Make sure the header is consistent with the commit.
+        if self.commit.height != self.height() {
+            Err(ValidationError::HeaderAndCommitHeightMismatch(
+                self.commit.height,
+                self.height(),
+            ))?;
+        }
+
+        if self.header.hash() != self.commit.block_id.hash {
+            Err(ValidationError::HeaderAndCommitBlockHashMismatch(
+                self.header.hash(),
+                self.commit.block_id.hash,
+                self.height(),
+            ))?;
+        }
+
+        self.validator_set.verify_commit_light(
+            &self.header.chain_id,
+            &self.height(),
+            &self.commit,
+        )?;
+
+        self.dah.validate_basic()?;
+
+        Ok(())
     }
 
     pub fn verify(&self) {
@@ -76,5 +123,79 @@ impl From<ExtendedHeader> for RawExtendedHeader {
             validator_set: Some(value.validator_set.into()),
             dah: Some(value.dah.into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static EH_BLOCK_1: &str = include_str!("../test_data/extended_header_block_1.json");
+    static EH_BLOCK_27: &str = include_str!("../test_data/extended_header_block_27.json");
+
+    fn sample_eh() -> ExtendedHeader {
+        serde_json::from_str(EH_BLOCK_27).unwrap()
+    }
+
+    #[test]
+    fn validate_correct() {
+        let cases = [EH_BLOCK_1, EH_BLOCK_27];
+
+        for eh_json in cases {
+            let eh: ExtendedHeader = serde_json::from_str(eh_json).unwrap();
+            eh.validate().unwrap();
+        }
+    }
+
+    #[test]
+    fn validate_validator_hash_mismatch() {
+        let mut eh = sample_eh();
+        eh.header.validators_hash = Hash::None;
+
+        assert!(matches!(
+            eh.validate(),
+            Err(Error::Validation(
+                ValidationError::HeaderAndValSetHashMismatch(..)
+            ))
+        ));
+    }
+
+    #[test]
+    fn validate_dah_hash_mismatch() {
+        let mut eh = sample_eh();
+        eh.dah.hash = [0; 32];
+
+        assert!(matches!(
+            eh.validate(),
+            Err(Error::Validation(
+                ValidationError::HeaderAndDahHashMismatch(..)
+            ))
+        ));
+    }
+
+    #[test]
+    fn validate_commit_height_mismatch() {
+        let mut eh = sample_eh();
+        eh.commit.height = 0xdeadbeefu32.into();
+
+        assert!(matches!(
+            eh.validate(),
+            Err(Error::Validation(
+                ValidationError::HeaderAndCommitHeightMismatch(..)
+            ))
+        ));
+    }
+
+    #[test]
+    fn validate_commit_block_hash_mismatch() {
+        let mut eh = sample_eh();
+        eh.commit.block_id.hash = Hash::None;
+
+        assert!(matches!(
+            eh.validate(),
+            Err(Error::Validation(
+                ValidationError::HeaderAndCommitBlockHashMismatch(..)
+            ))
+        ));
     }
 }
