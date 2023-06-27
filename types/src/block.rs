@@ -6,7 +6,7 @@ use tendermint::{chain, Hash, Vote};
 use crate::consts::{genesis::MAX_CHAIN_ID_LEN, version};
 use crate::{Error, Result, ValidateBasic, ValidationError, ValidationResult};
 
-pub const GENESIS_HEIGHT: u64 = 1;
+const GENESIS_HEIGHT: u64 = 1;
 
 impl ValidateBasic for Header {
     fn validate_basic(&self) -> ValidationResult<()> {
