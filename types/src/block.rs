@@ -8,12 +8,6 @@ use crate::{Error, Result, ValidateBasic, ValidationError, ValidationResult};
 
 pub const GENESIS_HEIGHT: u64 = 1;
 
-fn is_zero(id: &Id) -> bool {
-    matches!(id.hash, Hash::None)
-        && matches!(id.part_set_header.hash, Hash::None)
-        && id.part_set_header.total == 0
-}
-
 impl ValidateBasic for Header {
     fn validate_basic(&self) -> ValidationResult<()> {
         if self.version.block != version::BLOCK_PROTOCOL {
@@ -121,6 +115,12 @@ impl CommitExt for Commit {
         };
         Ok(vote.to_signable_vec(chain_id.clone())?)
     }
+}
+
+fn is_zero(id: &Id) -> bool {
+    matches!(id.hash, Hash::None)
+        && matches!(id.part_set_header.hash, Hash::None)
+        && id.part_set_header.total == 0
 }
 
 #[cfg(test)]
