@@ -1,4 +1,3 @@
-use tendermint::block::parts::Header as PartSetHeader;
 use tendermint::block::{Commit, CommitSig, Header, Id};
 use tendermint::signature::SIGNATURE_LENGTH;
 use tendermint::vote;
@@ -7,20 +6,10 @@ use tendermint::{chain, Hash, Vote};
 use crate::consts::{genesis::MAX_CHAIN_ID_LEN, version};
 use crate::{Error, Result, ValidateBasic, ValidationError, ValidationResult};
 
-trait IsZero {
-    fn is_zero(&self) -> bool;
-}
-
-impl IsZero for Id {
-    fn is_zero(&self) -> bool {
-        matches!(self.hash, Hash::None) && self.part_set_header.is_zero()
-    }
-}
-
-impl IsZero for PartSetHeader {
-    fn is_zero(&self) -> bool {
-        matches!(self.hash, Hash::None) && self.total == 0
-    }
+fn is_zero(id: &Id) -> bool {
+    matches!(id.hash, Hash::None)
+        && matches!(id.part_set_header.hash, Hash::None)
+        && id.part_set_header.total == 0
 }
 
 impl ValidateBasic for Header {
@@ -50,7 +39,7 @@ impl ValidateBasic for Header {
 impl ValidateBasic for Commit {
     fn validate_basic(&self) -> ValidationResult<()> {
         if self.height.value() > 0 {
-            if self.block_id.is_zero() {
+            if is_zero(&self.block_id) {
                 return Err(ValidationError::CommitForNilBlock);
             }
 
@@ -182,16 +171,16 @@ mod tests {
     #[test]
     fn block_id_is_zero() {
         let mut block_id = sample_commit().block_id;
-        assert!(!block_id.is_zero());
+        assert!(!is_zero(&block_id));
 
         block_id.hash = Hash::None;
-        assert!(!block_id.is_zero());
+        assert!(!is_zero(&block_id));
 
         block_id.part_set_header.hash = Hash::None;
-        assert!(!block_id.is_zero());
+        assert!(!is_zero(&block_id));
 
         block_id.part_set_header.total = 0;
-        assert!(block_id.is_zero());
+        assert!(is_zero(&block_id));
     }
 
     #[test]
