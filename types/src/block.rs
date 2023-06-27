@@ -86,7 +86,14 @@ pub trait CommitExt {
 
 impl CommitExt for Commit {
     fn vote_sign_bytes(&self, chain_id: &chain::Id, signature_idx: usize) -> Result<Vec<u8>> {
-        let sig = self.signatures[signature_idx].clone();
+        let sig =
+            self.signatures
+                .get(signature_idx)
+                .cloned()
+                .ok_or(Error::InvalidSignatureIndex(
+                    signature_idx,
+                    self.height.value(),
+                ))?;
         let (validator_address, timestamp, signature) = match sig {
             CommitSig::BlockIdFlagCommit {
                 validator_address,
@@ -309,5 +316,14 @@ mod tests {
         let res = commit.vote_sign_bytes(&"private".to_owned().try_into().unwrap(), 0);
 
         assert!(matches!(res, Err(Error::UnexpectedAbsentSignature)));
+    }
+
+    #[test]
+    fn vote_sign_bytes_non_existent_signature() {
+        let commit = sample_commit();
+
+        let res = commit.vote_sign_bytes(&"private".to_owned().try_into().unwrap(), 3);
+
+        assert!(matches!(res, Err(Error::InvalidSignatureIndex(..))));
     }
 }

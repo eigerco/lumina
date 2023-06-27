@@ -41,6 +41,9 @@ pub enum Error {
     #[error("Invalid namespace v0")]
     InvalidNamespaceV0,
 
+    #[error("Invalid index of signature in commit {0}, height {1}")]
+    InvalidSignatureIndex(usize, u64),
+
     #[error("Unexpected absent commit signature")]
     UnexpectedAbsentSignature,
 
