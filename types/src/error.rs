@@ -1,3 +1,5 @@
+use crate::consts::appconsts;
+
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
@@ -35,6 +37,12 @@ pub enum Error {
     #[error("Invalid share size: {0}")]
     InvalidShareSize(usize),
 
+    #[error(
+        "Sequence len must fit into {} bytes, got value {0}",
+        appconsts::SEQUENCE_LEN_BYTES
+    )]
+    ShareSequenceLenExceeded(usize),
+
     #[error("Invalid namespaced hash")]
     InvalidNamespacedHash,
 
@@ -52,6 +60,15 @@ pub enum Error {
 
     #[error("Verification error: {0}")]
     Verification(#[from] VerificationError),
+
+    #[error(
+        "Share version has to be at most {}, got {0}",
+        appconsts::MAX_SHARE_VERSION
+    )]
+    MaxShareVersionExceeded(u8),
+
+    #[error("Nmt error: {0}")]
+    Nmt(&'static str),
 }
 
 #[derive(Debug, thiserror::Error)]

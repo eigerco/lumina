@@ -9,6 +9,9 @@ pub const NS_ID_SIZE: usize = 28;
 pub const NS_SIZE: usize = NS_VER_SIZE + NS_ID_SIZE;
 pub const NS_ID_V0_SIZE: usize = 10;
 
+pub const TX_NAMESPACE: [u8; NS_ID_V0_SIZE] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+pub const PAY_FOR_BLOB_NAMESPACE: [u8; NS_ID_V0_SIZE] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 4];
+
 pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
 pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
 pub type NamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;
@@ -60,6 +63,12 @@ impl Namespace {
         Ok(Namespace(nmt_rs::NamespaceId(bytes)))
     }
 
+    pub fn new_v0_prefixed(id: [u8; NS_ID_V0_SIZE]) -> Self {
+        let mut bytes = [0u8; NS_SIZE];
+        bytes[NS_SIZE - NS_ID_V0_SIZE..].copy_from_slice(&id);
+        Namespace(nmt_rs::NamespaceId(bytes))
+    }
+
     fn try_max(id: &[u8]) -> Result<Self> {
         if id.iter().all(|&x| x == 0xff) {
             Ok(Namespace::MAX)
@@ -78,6 +87,14 @@ impl Namespace {
 
     pub fn id(&self) -> &[u8] {
         &self.as_bytes()[1..]
+    }
+
+    pub fn is_tx(&self) -> bool {
+        *self == Self::new_v0_prefixed(TX_NAMESPACE)
+    }
+
+    pub fn is_pay_for_blob(&self) -> bool {
+        *self == Self::new_v0_prefixed(PAY_FOR_BLOB_NAMESPACE)
     }
 }
 
@@ -157,6 +174,18 @@ mod tests {
     #[test]
     fn namespace_id_10_bytes() {
         let nid = Namespace::new_v0(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).unwrap();
+        let expected_nid = Namespace(nmt_rs::NamespaceId([
+            0, // version
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // id
+        ]));
+
+        assert_eq!(nid, expected_nid);
+    }
+
+    #[test]
+    fn namespace_id_v0_prefixed() {
+        let nid = Namespace::new_v0_prefixed([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         let expected_nid = Namespace(nmt_rs::NamespaceId([
             0, // version
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix

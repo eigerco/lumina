@@ -6,6 +6,7 @@ license = "Apache-2.0"
 
 [dependencies]
 base64 = "0.21.2"
+bytes = "1.4.0"
 celestia-proto = { workspace = true }
 nmt-rs = { git = "https://github.com/eigerco/nmt-rs.git", rev = "a371723" }
 serde = { version = "1.0.164", features = ["derive"] }

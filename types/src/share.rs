@@ -6,6 +6,11 @@ use tendermint_proto::Protobuf;
 use crate::nmt::{Namespace, NamespaceProof, NamespacedHash, NS_SIZE};
 use crate::{Error, Result};
 
+mod build;
+mod info_byte;
+
+pub use info_byte::InfoByte;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct NamespacedShares {
@@ -39,7 +44,7 @@ impl Share {
         })
     }
 
-    fn _to_vec(&self) -> Vec<u8> {
+    pub fn to_vec(&self) -> Vec<u8> {
         let mut bytes = self.namespace.as_bytes().to_vec();
         bytes.extend_from_slice(&self.data);
         bytes
