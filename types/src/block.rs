@@ -6,6 +6,8 @@ use tendermint::{chain, Hash, Vote};
 use crate::consts::{genesis::MAX_CHAIN_ID_LEN, version};
 use crate::{Error, Result, ValidateBasic, ValidationError, ValidationResult};
 
+pub const GENESIS_HEIGHT: u64 = 1;
+
 fn is_zero(id: &Id) -> bool {
     matches!(id.hash, Hash::None)
         && matches!(id.part_set_header.hash, Hash::None)
@@ -28,7 +30,7 @@ impl ValidateBasic for Header {
             return Err(ValidationError::ZeroHeight);
         }
 
-        if self.last_block_id.is_none() && self.height.value() != 1 {
+        if self.last_block_id.is_none() && self.height.value() != GENESIS_HEIGHT {
             return Err(ValidationError::MissingLastBlockId);
         }
 
@@ -38,7 +40,7 @@ impl ValidateBasic for Header {
 
 impl ValidateBasic for Commit {
     fn validate_basic(&self) -> ValidationResult<()> {
-        if self.height.value() > 0 {
+        if self.height.value() >= GENESIS_HEIGHT {
             if is_zero(&self.block_id) {
                 return Err(ValidationError::CommitForNilBlock);
             }
