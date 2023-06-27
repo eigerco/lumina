@@ -62,7 +62,7 @@ pub enum ValidationError {
     HeaderAndValSetHashMismatch(Hash, Hash, Height),
 
     #[error("DAH hash of header different than DAH hash: header {0:?}, dah {1:?}, height: {2}")]
-    HeaderAndDAHHashMismatch(Option<Hash>, Hash, Height),
+    HeaderAndDahHashMismatch(Option<Hash>, Hash, Height),
 
     #[error("Height of header different than commit height: header {0}, commit {1}")]
     HeaderAndCommitHeightMismatch(Height, Height),

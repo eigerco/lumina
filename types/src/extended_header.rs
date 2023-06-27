@@ -50,7 +50,7 @@ impl ExtendedHeader {
 
         // ensure data root from raw header matches computed root
         if Some(Hash::Sha256(self.dah.hash)) != self.header.data_hash {
-            Err(ValidationError::HeaderAndDAHHashMismatch(
+            Err(ValidationError::HeaderAndDahHashMismatch(
                 self.header.data_hash,
                 Hash::Sha256(self.dah.hash),
                 self.height(),
