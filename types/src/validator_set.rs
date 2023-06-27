@@ -59,8 +59,8 @@ impl ValidatorSetExt for Set {
             .enumerate()
         {
             let signature = match commit_sig {
-                CommitSig::BlockIdFlagCommit { signature, .. } if signature.is_some() => {
-                    signature.as_ref().unwrap()
+                CommitSig::BlockIdFlagCommit { signature: Some(ref sig), .. } => {
+                    sig
                 }
                 CommitSig::BlockIdFlagCommit { .. } => {
                     Err(ValidationError::NoSignatureInCommitSig)?

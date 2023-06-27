@@ -49,7 +49,7 @@ impl ValidateBasic for Header {
 
 impl ValidateBasic for Commit {
     fn validate_basic(&self) -> ValidationResult<()> {
-        if self.height.value() >= 1 {
+        if self.height.value() > 0 {
             if self.block_id.is_zero() {
                 return Err(ValidationError::CommitForNilBlock);
             }
