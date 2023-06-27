@@ -52,23 +52,24 @@ impl ValidatorSetExt for Set {
         let mut tallied_voting_power = 0;
         let voting_power_needed = self.total_voting_power().value() * 2 / 3;
 
-        for (n, (validator, commit_sig)) in self
+        for (idx, (validator, commit_sig)) in self
             .validators()
             .iter()
             .zip(commit.signatures.iter())
             .enumerate()
         {
             let signature = match commit_sig {
-                CommitSig::BlockIdFlagCommit { signature: Some(ref sig), .. } => {
-                    sig
-                }
+                CommitSig::BlockIdFlagCommit {
+                    signature: Some(ref sig),
+                    ..
+                } => sig,
                 CommitSig::BlockIdFlagCommit { .. } => {
                     Err(ValidationError::NoSignatureInCommitSig)?
                 }
                 // not commiting for the block
                 _ => continue,
             };
-            let vote_sign = commit.vote_sign_bytes(chain_id, n)?;
+            let vote_sign = commit.vote_sign_bytes(chain_id, idx)?;
             validator.verify_signature::<Verifier>(&vote_sign, signature)?;
 
             tallied_voting_power += validator.power();
