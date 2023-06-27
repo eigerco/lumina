@@ -168,7 +168,7 @@ mod tests {
         assert!(matches!(
             eh.validate(),
             Err(Error::Validation(
-                ValidationError::HeaderAndDAHHashMismatch(..)
+                ValidationError::HeaderAndDahHashMismatch(..)
             ))
         ));
     }
