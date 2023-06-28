@@ -9,8 +9,8 @@ pub const NS_ID_SIZE: usize = 28;
 pub const NS_SIZE: usize = NS_VER_SIZE + NS_ID_SIZE;
 pub const NS_ID_V0_SIZE: usize = 10;
 
-pub const TX_NAMESPACE: [u8; NS_ID_V0_SIZE] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
-pub const PAY_FOR_BLOB_NAMESPACE: [u8; NS_ID_V0_SIZE] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 4];
+pub const TX_NAMESPACE: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+pub const PAY_FOR_BLOB_NAMESPACE: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 4]);
 
 pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
 pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
@@ -63,9 +63,21 @@ impl Namespace {
         Ok(Namespace(nmt_rs::NamespaceId(bytes)))
     }
 
-    pub fn new_v0_prefixed(id: [u8; NS_ID_V0_SIZE]) -> Self {
+    pub const fn const_v0(id: [u8; NS_ID_V0_SIZE]) -> Self {
         let mut bytes = [0u8; NS_SIZE];
-        bytes[NS_SIZE - NS_ID_V0_SIZE..].copy_from_slice(&id);
+        let start = NS_SIZE - NS_ID_V0_SIZE;
+
+        bytes[start] = id[0];
+        bytes[start + 1] = id[1];
+        bytes[start + 2] = id[2];
+        bytes[start + 3] = id[3];
+        bytes[start + 4] = id[4];
+        bytes[start + 5] = id[5];
+        bytes[start + 6] = id[6];
+        bytes[start + 7] = id[7];
+        bytes[start + 8] = id[8];
+        bytes[start + 9] = id[9];
+
         Namespace(nmt_rs::NamespaceId(bytes))
     }
 
@@ -90,11 +102,11 @@ impl Namespace {
     }
 
     pub fn is_tx(&self) -> bool {
-        *self == Self::new_v0_prefixed(TX_NAMESPACE)
+        *self == TX_NAMESPACE
     }
 
     pub fn is_pay_for_blob(&self) -> bool {
-        *self == Self::new_v0_prefixed(PAY_FOR_BLOB_NAMESPACE)
+        *self == PAY_FOR_BLOB_NAMESPACE
     }
 }
 
@@ -185,7 +197,7 @@ mod tests {
 
     #[test]
     fn namespace_id_v0_prefixed() {
-        let nid = Namespace::new_v0_prefixed([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        let nid = Namespace::const_v0([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         let expected_nid = Namespace(nmt_rs::NamespaceId([
             0, // version
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
