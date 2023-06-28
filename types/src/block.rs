@@ -90,6 +90,7 @@ impl CommitExt for Commit {
                     signature_idx,
                     self.height.value(),
                 ))?;
+
         let (validator_address, timestamp, signature) = match sig {
             CommitSig::BlockIdFlagCommit {
                 validator_address,
@@ -103,6 +104,7 @@ impl CommitExt for Commit {
             } => (validator_address, timestamp, signature),
             CommitSig::BlockIdFlagAbsent => return Err(Error::UnexpectedAbsentSignature),
         };
+
         let vote = Vote {
             vote_type: vote::Type::Precommit,
             height: self.height,
@@ -113,6 +115,7 @@ impl CommitExt for Commit {
             validator_index: signature_idx.try_into()?,
             signature,
         };
+
         Ok(vote.to_signable_vec(chain_id.clone())?)
     }
 }

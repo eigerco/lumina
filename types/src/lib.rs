@@ -6,6 +6,7 @@ mod error;
 mod extended_header;
 pub mod nmt;
 mod share;
+pub mod trust_level;
 mod validate;
 mod validator_set;
 

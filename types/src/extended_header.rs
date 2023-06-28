@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
 use serde::{Deserialize, Serialize};
 use tendermint::block::header::Header;
@@ -6,11 +8,16 @@ use tendermint::chain::id::Id;
 use tendermint::{validator, Hash, Time};
 use tendermint_proto::Protobuf;
 
+use crate::trust_level::DEFAULT_TRUST_LEVEL;
 use crate::validator_set::ValidatorSetExt;
-use crate::{DataAvailabilityHeader, Error, Result, ValidateBasic, ValidationError};
+use crate::{
+    bail_verification, DataAvailabilityHeader, Error, Result, ValidateBasic, ValidationError,
+};
 
 pub type Validator = validator::Info;
 pub type ValidatorSet = validator::Set;
+
+const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "RawExtendedHeader", into = "RawExtendedHeader")]
@@ -49,7 +56,7 @@ impl ExtendedHeader {
         }
 
         // ensure data root from raw header matches computed root
-        if Some(Hash::Sha256(self.dah.hash)) != self.header.data_hash {
+        if Hash::Sha256(self.dah.hash) != self.header.data_hash {
             Err(ValidationError::HeaderAndDahHashMismatch(
                 self.header.data_hash,
                 Hash::Sha256(self.dah.hash),
@@ -84,8 +91,71 @@ impl ExtendedHeader {
         Ok(())
     }
 
-    pub fn verify(&self) {
-        todo!();
+    pub fn verify(&self, untrusted: &ExtendedHeader) -> Result<()> {
+        if untrusted.height() <= self.height() {
+            bail_verification!(
+                "untrusted header height({}) <= current trusted header({})",
+                untrusted.height(),
+                self.height()
+            );
+        }
+
+        if untrusted.chain_id() != self.chain_id() {
+            bail_verification!(
+                "untrusted header has different chain {}, not {}",
+                untrusted.chain_id(),
+                self.chain_id()
+            );
+        }
+
+        if !untrusted.time().after(self.time()) {
+            bail_verification!(
+                "untrusted header time ({}) mut be after current trusted header ({})",
+                untrusted.time(),
+                self.time()
+            );
+        }
+
+        let now = Time::now();
+        let valid_until = now.checked_add(VERIFY_CLOCK_DRIFT).unwrap();
+
+        if !untrusted.time().before(valid_until) {
+            bail_verification!(
+                "new untrusted header has a time from the future {} (now: {}, clock_drift: {:?})",
+                untrusted.time(),
+                now,
+                VERIFY_CLOCK_DRIFT
+            );
+        }
+
+        // If we are verifying an adjacent header
+        if self.height().increment() == untrusted.height() {
+            if untrusted.header.validators_hash != self.header.next_validators_hash {
+                bail_verification!(
+                    "expected old header next validators ({}) to match those from new header ({})",
+                    self.header.next_validators_hash,
+                    untrusted.header.validators_hash,
+                );
+            }
+
+            if untrusted.header.last_commit_hash != self.header.hash() {
+                bail_verification!(
+                    "expected new header to point to last header hash ({}), but got {}",
+                    self.header.hash(),
+                    untrusted.header.hash()
+                );
+            }
+
+            return Ok(());
+        }
+
+        self.validator_set.verify_commit_light_trusting(
+            self.chain_id(),
+            &untrusted.commit,
+            DEFAULT_TRUST_LEVEL,
+        )?;
+
+        Ok(())
     }
 }
 
@@ -133,7 +203,11 @@ mod tests {
     static EH_BLOCK_1: &str = include_str!("../test_data/extended_header_block_1.json");
     static EH_BLOCK_27: &str = include_str!("../test_data/extended_header_block_27.json");
 
-    fn sample_eh() -> ExtendedHeader {
+    fn sample_eh_block_1() -> ExtendedHeader {
+        serde_json::from_str(EH_BLOCK_1).unwrap()
+    }
+
+    fn sample_eh_block_27() -> ExtendedHeader {
         serde_json::from_str(EH_BLOCK_27).unwrap()
     }
 
@@ -149,7 +223,7 @@ mod tests {
 
     #[test]
     fn validate_validator_hash_mismatch() {
-        let mut eh = sample_eh();
+        let mut eh = sample_eh_block_27();
         eh.header.validators_hash = Hash::None;
 
         assert!(matches!(
@@ -162,7 +236,7 @@ mod tests {
 
     #[test]
     fn validate_dah_hash_mismatch() {
-        let mut eh = sample_eh();
+        let mut eh = sample_eh_block_27();
         eh.dah.hash = [0; 32];
 
         assert!(matches!(
@@ -175,7 +249,7 @@ mod tests {
 
     #[test]
     fn validate_commit_height_mismatch() {
-        let mut eh = sample_eh();
+        let mut eh = sample_eh_block_27();
         eh.commit.height = 0xdeadbeefu32.into();
 
         assert!(matches!(
@@ -188,7 +262,7 @@ mod tests {
 
     #[test]
     fn validate_commit_block_hash_mismatch() {
-        let mut eh = sample_eh();
+        let mut eh = sample_eh_block_27();
         eh.commit.block_id.hash = Hash::None;
 
         assert!(matches!(
@@ -197,5 +271,46 @@ mod tests {
                 ValidationError::HeaderAndCommitBlockHashMismatch(..)
             ))
         ));
+    }
+
+    #[test]
+    fn verify() {
+        let eh_block_1 = sample_eh_block_1();
+        let eh_block_27 = sample_eh_block_27();
+
+        eh_block_1.verify(&eh_block_27).unwrap();
+    }
+
+    #[test]
+    fn verify_invalid_height() {
+        let eh_block_27 = sample_eh_block_27();
+        eh_block_27.verify(&eh_block_27).unwrap_err();
+    }
+
+    #[test]
+    fn verify_invalid_chain_id() {
+        let eh_block_1 = sample_eh_block_1();
+        let mut eh_block_27 = sample_eh_block_27();
+
+        eh_block_27.header.chain_id = "1112222".parse::<Id>().unwrap();
+        eh_block_1.verify(&eh_block_27).unwrap_err();
+    }
+
+    #[test]
+    fn verify_invalid_time() {
+        let eh_block_1 = sample_eh_block_1();
+        let mut eh_block_27 = sample_eh_block_27();
+
+        eh_block_27.header.time = eh_block_1.header.time;
+        eh_block_1.verify(&eh_block_27).unwrap_err();
+    }
+
+    #[test]
+    fn verify_time_from_the_future() {
+        let eh_block_1 = sample_eh_block_1();
+        let mut eh_block_27 = sample_eh_block_27();
+
+        eh_block_27.header.time = Time::now().checked_add(Duration::from_secs(60)).unwrap();
+        eh_block_1.verify(&eh_block_27).unwrap_err();
     }
 }

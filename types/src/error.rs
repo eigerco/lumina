@@ -49,4 +49,35 @@ pub enum Error {
 
     #[error("Not enough voting power to verify commit: has {0}, required: {1}")]
     NotEnoughVotingPower(u64, u64),
+
+    #[error("Verification error: {0}")]
+    Verification(#[from] VerificationError),
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum VerificationError {
+    #[error("Not enought voiting power (got {0}, needed {1})")]
+    NotEnoughVotingPower(u64, u64),
+
+    #[error("{0}")]
+    Other(String),
+}
+
+macro_rules! verification_error {
+    ($fmt:literal $(,)?) => {
+        $crate::VerificationError::Other(std::format!($fmt))
+    };
+    ($fmt:literal, $($arg:tt)*) => {
+        $crate::VerificationError::Other(std::format!($fmt, $($arg)*))
+    };
+}
+
+macro_rules! bail_verification {
+    ($($arg:tt)*) => {
+        return Err($crate::verification_error!($($arg)*).into())
+    };
+}
+
+// NOTE: This need to be always after the macro definitions
+pub(crate) use bail_verification;
+pub(crate) use verification_error;
