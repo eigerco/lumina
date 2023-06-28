@@ -196,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn namespace_id_v0_prefixed() {
+    fn namespace_id_const_v0() {
         let nid = Namespace::const_v0([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         let expected_nid = Namespace(nmt_rs::NamespaceId([
             0, // version
