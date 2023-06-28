@@ -155,4 +155,32 @@ mod tests {
             ],
         );
     }
+
+    #[test]
+    fn test_sparse_share_empty_data() {
+        let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();
+        let share_version = appconsts::SHARE_VERSION_ZERO;
+        let data = vec![];
+        let mut cursor = Cursor::new(&data);
+        let expected_share_start: &[u8] = &[
+            1, // info byte
+            0, 0, 0, 0, // sequence len
+        ];
+
+        let share = Share::build(namespace.clone(), share_version, &mut cursor).unwrap();
+
+        assert_eq!(cursor.position(), data.len() as u64);
+        assert_eq!(namespace, share.namespace);
+
+        // check data
+        assert_eq!(
+            &share.data[..expected_share_start.len()],
+            expected_share_start
+        );
+        // check padding
+        assert_eq!(
+            &share.data[expected_share_start.len()..],
+            &vec![0; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE - data.len()],
+        );
+    }
 }
