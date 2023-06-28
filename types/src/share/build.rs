@@ -13,7 +13,7 @@ impl Share {
     /// Builds a `Share` from info and data.
     ///
     /// Returns a `Share` and the leftover data if any.
-    pub fn build(
+    pub(crate) fn build(
         namespace: Namespace,
         share_version: u8,
         is_first_share: bool,
