@@ -1,3 +1,4 @@
+use std::io::Cursor;
 use std::num::NonZeroU64;
 
 use tendermint::{crypto, merkle};
@@ -56,21 +57,15 @@ pub fn create_commitment(blob: &RawBlob) -> Result<Vec<u8>> {
 fn split_blob_to_shares(blob: &RawBlob) -> Result<Vec<Share>> {
     let namespace = Namespace::new(blob.namespace_version as u8, &blob.namespace_id)?;
     let mut shares = Vec::new();
-    let mut data = blob.data.clone();
+    let mut cursor = Cursor::new(&blob.data);
 
-    while !data.is_empty() {
-        let (share, leftover) = Share::build(
+    while cursor.position() != blob.data.len() as u64 {
+        let share = Share::build(
             namespace.clone(),
             appconsts::SHARE_VERSION_ZERO,
-            shares.is_empty(),
-            data,
+            &mut cursor,
         )?;
         shares.push(share);
-        data = if let Some(leftover) = leftover {
-            leftover
-        } else {
-            Vec::with_capacity(0)
-        };
     }
     Ok(shares)
 }
