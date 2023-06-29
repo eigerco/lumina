@@ -3,8 +3,13 @@ use nmt_rs::simple_merkle::proof::Proof as NmtProof;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
+use crate::consts::appconsts;
 use crate::nmt::{Namespace, NamespaceProof, NamespacedHash, NS_SIZE};
 use crate::{Error, Result};
+
+mod info_byte;
+
+pub use info_byte::InfoByte;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -19,7 +24,14 @@ pub struct NamespacedRow {
     pub proof: NamespaceProof,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// NOTE:
+// Share ::= SHARE_SIZE bytes {
+//      Namespace   NS_SIZE bytes
+//      InfoByte    SHARE_INFO_BYTES bytes
+//      SequenceLen SEQUENCE_LEN_BYTES bytes OPTIONAL
+//      Data        bytes
+// }
+#[derive(Debug, Clone)]
 pub struct Share {
     pub namespace: Namespace,
     pub data: Vec<u8>,
@@ -27,7 +39,7 @@ pub struct Share {
 
 impl Share {
     fn new(bytes: Vec<u8>) -> Result<Self> {
-        if bytes.len() < NS_SIZE {
+        if bytes.len() != appconsts::SHARE_SIZE {
             return Err(Error::InvalidShareSize(bytes.len()));
         }
 
@@ -39,7 +51,7 @@ impl Share {
         })
     }
 
-    fn _to_vec(&self) -> Vec<u8> {
+    pub fn to_vec(&self) -> Vec<u8> {
         let mut bytes = self.namespace.as_bytes().to_vec();
         bytes.extend_from_slice(&self.data);
         bytes
@@ -104,6 +116,17 @@ fn to_namespaced_hash(node: &[u8]) -> Result<NamespacedHash> {
 mod tests {
     use super::*;
     use base64::prelude::*;
+
+    #[test]
+    fn share_should_have_correct_len() {
+        Share::new(vec![0; 0]).unwrap_err();
+        Share::new(vec![0; 100]).unwrap_err();
+        Share::new(vec![0; appconsts::SHARE_SIZE - 1]).unwrap_err();
+        Share::new(vec![0; appconsts::SHARE_SIZE + 1]).unwrap_err();
+        Share::new(vec![0; 2 * appconsts::SHARE_SIZE]).unwrap_err();
+
+        Share::new(vec![0; appconsts::SHARE_SIZE]).unwrap();
+    }
 
     #[test]
     fn decode_presence_proof() {

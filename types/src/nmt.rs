@@ -14,7 +14,7 @@ pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
 pub type NamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;
 pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
 impl Namespace {
@@ -58,6 +58,24 @@ impl Namespace {
         bytes[NS_SIZE - id.len()..].copy_from_slice(id);
 
         Ok(Namespace(nmt_rs::NamespaceId(bytes)))
+    }
+
+    pub const fn const_v0(id: [u8; NS_ID_V0_SIZE]) -> Self {
+        let mut bytes = [0u8; NS_SIZE];
+        let start = NS_SIZE - NS_ID_V0_SIZE;
+
+        bytes[start] = id[0];
+        bytes[start + 1] = id[1];
+        bytes[start + 2] = id[2];
+        bytes[start + 3] = id[3];
+        bytes[start + 4] = id[4];
+        bytes[start + 5] = id[5];
+        bytes[start + 6] = id[6];
+        bytes[start + 7] = id[7];
+        bytes[start + 8] = id[8];
+        bytes[start + 9] = id[9];
+
+        Namespace(nmt_rs::NamespaceId(bytes))
     }
 
     fn try_max(id: &[u8]) -> Result<Self> {
@@ -157,6 +175,18 @@ mod tests {
     #[test]
     fn namespace_id_10_bytes() {
         let nid = Namespace::new_v0(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).unwrap();
+        let expected_nid = Namespace(nmt_rs::NamespaceId([
+            0, // version
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // id
+        ]));
+
+        assert_eq!(nid, expected_nid);
+    }
+
+    #[test]
+    fn namespace_id_const_v0() {
+        let nid = Namespace::const_v0([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         let expected_nid = Namespace(nmt_rs::NamespaceId([
             0, // version
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
