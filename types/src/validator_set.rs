@@ -64,7 +64,7 @@ impl ValidatorSetExt for Set {
 
         let mut tallied_voting_power = 0;
         let voting_power_needed =
-            TrustLevelRatio::new(2, 3).total_power_needed(self.total_voting_power())?;
+            TrustLevelRatio::new(2, 3).voting_power_needed(self.total_voting_power())?;
 
         for (idx, (validator, commit_sig)) in self
             .validators()
@@ -107,7 +107,7 @@ impl ValidatorSetExt for Set {
         let mut seen_vals = HashMap::<usize, usize>::new();
         let mut tallied_voting_power = 0;
 
-        let voting_power_needed = trust_level.total_power_needed(self.total_voting_power())?;
+        let voting_power_needed = trust_level.voting_power_needed(self.total_voting_power())?;
 
         for (idx, commit_sig) in commit.signatures.iter().enumerate() {
             let (val_id, signature) = match commit_sig {
@@ -146,7 +146,7 @@ impl ValidatorSetExt for Set {
         Err(Error::NotEnoughVotingPower(
             tallied_voting_power,
             voting_power_needed,
-        ))?
+        ))
     }
 }
 

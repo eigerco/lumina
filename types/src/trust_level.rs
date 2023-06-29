@@ -23,7 +23,7 @@ impl TrustLevelRatio {
         self.denominator
     }
 
-    pub fn total_power_needed(
+    pub fn voting_power_needed(
         &self,
         total_voting_power: impl Into<u64>,
     ) -> Result<u64, VerificationError> {
