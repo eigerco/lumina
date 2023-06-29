@@ -31,6 +31,9 @@ pub enum Error {
     #[error("Missing proof")]
     MissingProof,
 
+    #[error("Unsupported share version: {0}")]
+    UnsupportedShareVersion(u32),
+
     #[error("Invalid share size: {0}")]
     InvalidShareSize(usize),
 
