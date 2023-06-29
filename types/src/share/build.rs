@@ -32,11 +32,10 @@ impl Share {
 
         // If this share is first in the sequence, write the bytes len of the sequence
         if is_first_share {
-            bytes.put_u32(
-                data_len
-                    .try_into()
-                    .map_err(|_| Error::ShareSequenceLenExceeded(data_len))?,
-            );
+            let data_len = data_len
+                .try_into()
+                .map_err(|_| Error::ShareSequenceLenExceeded(data_len))?;
+            bytes.put_u32(data_len);
         }
 
         // If the share is compact, write the index of the next unit

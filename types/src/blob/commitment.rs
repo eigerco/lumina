@@ -39,13 +39,10 @@ pub fn create_commitment(blob: &RawBlob) -> Result<Vec<u8>> {
     let mut subtree_roots: Vec<Vec<u8>> = Vec::new();
     for leaf_set in leaf_sets {
         // create the nmt
-        let mut tree = crate::nmt::Nmt::new();
+        let mut tree = Nmt::new();
         for leaf_share in leaf_set {
-            tree.push_leaf(
-                &leaf_share.to_vec(),
-                nmt_rs::NamespaceId(namespace.as_bytes().try_into().unwrap()),
-            )
-            .map_err(Error::Nmt)?;
+            tree.push_leaf(&leaf_share.to_vec(), namespace.clone().into())
+                .map_err(Error::Nmt)?;
         }
         // add the root
         subtree_roots.push(hash_to_bytes(tree.root()));
@@ -59,7 +56,7 @@ fn split_blob_to_shares(blob: &RawBlob) -> Result<Vec<Share>> {
     let mut shares = Vec::new();
     let mut cursor = Cursor::new(&blob.data);
 
-    while cursor.position() != blob.data.len() as u64 {
+    while cursor.has_remaining() {
         let share = Share::build(
             namespace.clone(),
             appconsts::SHARE_VERSION_ZERO,
