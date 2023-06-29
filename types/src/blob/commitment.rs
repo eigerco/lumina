@@ -19,8 +19,6 @@ type SparseShare = Vec<u8>;
 /// [Non-interactive default rules]: https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/rationale/message_block_layout.md?plain=1#L36
 pub fn create_commitment(blob: &RawBlob) -> Result<Vec<u8>> {
     let namespace = Namespace::new(blob.namespace_version as u8, &blob.namespace_id)?;
-    // TODO: we could probably lower amount of allocations there if
-    // Shares were just a wrapper over a raw data
     let shares = split_blob_to_shares(blob)?;
 
     // the commitment is the root of a merkle mountain range with max tree size
