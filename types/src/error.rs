@@ -55,9 +55,6 @@ pub enum Error {
     #[error("Unexpected absent commit signature")]
     UnexpectedAbsentSignature,
 
-    #[error("Not enough voting power to verify commit: has {0}, required: {1}")]
-    NotEnoughVotingPower(u64, u64),
-
     #[error("Validation error: {0}")]
     Validation(#[from] ValidationError),
 
