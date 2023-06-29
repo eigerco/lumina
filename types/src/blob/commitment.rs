@@ -43,7 +43,7 @@ pub fn create_commitment(blob: &RawBlob) -> Result<Vec<u8>> {
         // create the nmt
         let mut tree = Nmt::new();
         for leaf_share in leaf_set {
-            tree.push_leaf(&leaf_share.to_vec(), namespace.clone().into())
+            tree.push_leaf(&leaf_share, namespace.into())
                 .map_err(Error::Nmt)?;
         }
         // add the root
@@ -60,11 +60,7 @@ fn split_blob_to_shares(blob: &RawBlob) -> Result<Vec<SparseShare>> {
     let mut cursor = Cursor::new(&blob.data);
 
     while cursor.has_remaining() {
-        let share = build_sparse_share(
-            namespace.clone(),
-            appconsts::SHARE_VERSION_ZERO,
-            &mut cursor,
-        )?;
+        let share = build_sparse_share(namespace, appconsts::SHARE_VERSION_ZERO, &mut cursor)?;
         shares.push(share);
     }
     Ok(shares)
@@ -212,7 +208,7 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5, 6, 7];
         let mut cursor = Cursor::new(&data);
 
-        let share = build_sparse_share(namespace.clone(), share_version, &mut cursor).unwrap();
+        let share = build_sparse_share(namespace, share_version, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
@@ -245,8 +241,7 @@ mod tests {
         let data = vec![7; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE + continuation_len];
         let mut cursor = Cursor::new(&data);
 
-        let first_share =
-            build_sparse_share(namespace.clone(), share_version, &mut cursor).unwrap();
+        let first_share = build_sparse_share(namespace, share_version, &mut cursor).unwrap();
 
         // check cursor
         assert_eq!(
@@ -273,8 +268,7 @@ mod tests {
         );
 
         // Continuation share
-        let continuation_share =
-            build_sparse_share(namespace.clone(), share_version, &mut cursor).unwrap();
+        let continuation_share = build_sparse_share(namespace, share_version, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
@@ -310,7 +304,7 @@ mod tests {
             0, 0, 0, 0, // sequence len
         ];
 
-        let share = build_sparse_share(namespace.clone(), share_version, &mut cursor).unwrap();
+        let share = build_sparse_share(namespace, share_version, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
