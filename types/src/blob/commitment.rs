@@ -55,21 +55,24 @@ pub fn create_commitment(blob: &RawBlob) -> Result<Vec<u8>> {
 
 /// Splits blob's data to the sequence of shares
 fn split_blob_to_shares(blob: &RawBlob) -> Result<Vec<SparseShare>> {
+    if blob.share_version != appconsts::SHARE_VERSION_ZERO as u32 {
+        return Err(Error::UnsupportedShareVersion(blob.share_version));
+    }
+
     let namespace = Namespace::new(blob.namespace_version as u8, &blob.namespace_id)?;
     let mut shares = Vec::new();
     let mut cursor = Cursor::new(&blob.data);
 
     while cursor.has_remaining() {
-        let share = build_sparse_share(namespace, appconsts::SHARE_VERSION_ZERO, &mut cursor)?;
+        let share = build_sparse_share_v0(namespace, &mut cursor)?;
         shares.push(share);
     }
     Ok(shares)
 }
 
 /// Build a sparse share from a cursor over data
-fn build_sparse_share(
+fn build_sparse_share_v0(
     namespace: Namespace,
-    share_version: u8,
     data: &mut Cursor<impl AsRef<[u8]>>,
 ) -> Result<SparseShare> {
     let is_first_share = data.position() == 0;
@@ -79,7 +82,7 @@ fn build_sparse_share(
     // Write the namespace
     bytes.put_slice(namespace.as_bytes());
     // Write the info byte
-    let info_byte = InfoByte::new(share_version, is_first_share)?;
+    let info_byte = InfoByte::new(appconsts::SHARE_VERSION_ZERO, is_first_share)?;
     bytes.put_u8(info_byte.as_u8());
 
     // If this share is first in the sequence, write the bytes len of the sequence
@@ -204,11 +207,10 @@ mod tests {
     #[test]
     fn test_single_sparse_share() {
         let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();
-        let share_version = appconsts::SHARE_VERSION_ZERO;
         let data = vec![1, 2, 3, 4, 5, 6, 7];
         let mut cursor = Cursor::new(&data);
 
-        let share = build_sparse_share(namespace, share_version, &mut cursor).unwrap();
+        let share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
@@ -237,11 +239,10 @@ mod tests {
     fn test_sparse_share_with_continuation() {
         let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();
         let continuation_len = 7;
-        let share_version = appconsts::SHARE_VERSION_ZERO;
         let data = vec![7; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE + continuation_len];
         let mut cursor = Cursor::new(&data);
 
-        let first_share = build_sparse_share(namespace, share_version, &mut cursor).unwrap();
+        let first_share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
 
         // check cursor
         assert_eq!(
@@ -268,7 +269,7 @@ mod tests {
         );
 
         // Continuation share
-        let continuation_share = build_sparse_share(namespace, share_version, &mut cursor).unwrap();
+        let continuation_share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
@@ -296,7 +297,6 @@ mod tests {
     #[test]
     fn test_sparse_share_empty_data() {
         let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();
-        let share_version = appconsts::SHARE_VERSION_ZERO;
         let data = vec![];
         let mut cursor = Cursor::new(&data);
         let expected_share_start: &[u8] = &[
@@ -304,7 +304,7 @@ mod tests {
             0, 0, 0, 0, // sequence len
         ];
 
-        let share = build_sparse_share(namespace, share_version, &mut cursor).unwrap();
+        let share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
