@@ -9,9 +9,6 @@ pub const NS_ID_SIZE: usize = 28;
 pub const NS_SIZE: usize = NS_VER_SIZE + NS_ID_SIZE;
 pub const NS_ID_V0_SIZE: usize = 10;
 
-pub const TX_NAMESPACE: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
-pub const PAY_FOR_BLOB_NAMESPACE: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 4]);
-
 pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
 pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
 pub type NamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;
@@ -99,14 +96,6 @@ impl Namespace {
 
     pub fn id(&self) -> &[u8] {
         &self.as_bytes()[1..]
-    }
-
-    pub fn is_tx(&self) -> bool {
-        *self == TX_NAMESPACE
-    }
-
-    pub fn is_pay_for_blob(&self) -> bool {
-        *self == PAY_FOR_BLOB_NAMESPACE
     }
 }
 
