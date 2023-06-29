@@ -4,28 +4,34 @@ use tendermint::vote;
 use tendermint::{chain, Hash, Vote};
 
 use crate::consts::{genesis::MAX_CHAIN_ID_LEN, version};
-use crate::{Error, Result, ValidateBasic, ValidationError, ValidationResult};
+use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
 const GENESIS_HEIGHT: u64 = 1;
 
 impl ValidateBasic for Header {
-    fn validate_basic(&self) -> ValidationResult<()> {
+    fn validate_basic(&self) -> Result<(), ValidationError> {
         if self.version.block != version::BLOCK_PROTOCOL {
-            return Err(ValidationError::IncorrectBlockProtocol(self.version.block));
+            bail_validation!(
+                "version block ({}) != block protocol ({})",
+                self.version.block,
+                version::BLOCK_PROTOCOL,
+            )
         }
 
         if self.chain_id.as_str().len() > MAX_CHAIN_ID_LEN {
-            return Err(ValidationError::ChainIdTooLong(
-                self.chain_id.as_str().into(),
-            ));
+            bail_validation!(
+                "chain id ({}) len > maximum ({})",
+                self.chain_id,
+                MAX_CHAIN_ID_LEN
+            )
         }
 
         if self.height.value() == 0 {
-            return Err(ValidationError::ZeroHeight);
+            bail_validation!("height == 0")
         }
 
         if self.last_block_id.is_none() && self.height.value() != GENESIS_HEIGHT {
-            return Err(ValidationError::MissingLastBlockId);
+            bail_validation!("last_block_id == None at height {}", self.height)
         }
 
         Ok(())
@@ -33,14 +39,14 @@ impl ValidateBasic for Header {
 }
 
 impl ValidateBasic for Commit {
-    fn validate_basic(&self) -> ValidationResult<()> {
+    fn validate_basic(&self) -> Result<(), ValidationError> {
         if self.height.value() >= GENESIS_HEIGHT {
             if is_zero(&self.block_id) {
-                return Err(ValidationError::CommitForNilBlock);
+                bail_validation!("block_id is zero")
             }
 
             if self.signatures.is_empty() {
-                return Err(ValidationError::NoSignaturesInCommit);
+                bail_validation!("no signatures in commit")
             }
 
             for commit_sig in &self.signatures {
@@ -52,22 +58,24 @@ impl ValidateBasic for Commit {
 }
 
 impl ValidateBasic for CommitSig {
-    fn validate_basic(&self) -> ValidationResult<()> {
+    fn validate_basic(&self) -> Result<(), ValidationError> {
         match self {
             CommitSig::BlockIdFlagAbsent => (),
             CommitSig::BlockIdFlagCommit { signature, .. }
             | CommitSig::BlockIdFlagNil { signature, .. } => {
                 if let Some(signature) = signature {
                     if signature.as_bytes().is_empty() {
-                        return Err(ValidationError::NoSignatureInCommitSig);
+                        bail_validation!("no signature in commit sig")
                     }
                     if signature.as_bytes().len() != SIGNATURE_LENGTH {
-                        return Err(ValidationError::InvalidLengthSignature(
-                            signature.clone().to_bytes(),
-                        ));
+                        bail_validation!(
+                            "signature ({:?}) length != required ({})",
+                            signature.as_bytes(),
+                            SIGNATURE_LENGTH
+                        )
                     }
                 } else {
-                    return Err(ValidationError::NoSignatureInCommitSig);
+                    bail_validation!("no signature in commit sig")
                 }
             }
         }
@@ -205,10 +213,7 @@ mod tests {
         let mut header = sample_header();
         header.version.block = 1;
 
-        assert!(matches!(
-            header.validate_basic(),
-            Err(ValidationError::IncorrectBlockProtocol(..))
-        ));
+        header.validate_basic().unwrap_err();
     }
 
     #[test]
@@ -216,10 +221,7 @@ mod tests {
         let mut header = sample_header();
         header.height = 0u32.into();
 
-        assert!(matches!(
-            header.validate_basic(),
-            Err(ValidationError::ZeroHeight)
-        ));
+        header.validate_basic().unwrap_err();
     }
 
     #[test]
@@ -227,10 +229,7 @@ mod tests {
         let mut header = sample_header();
         header.height = 2u32.into();
 
-        assert!(matches!(
-            header.validate_basic(),
-            Err(ValidationError::MissingLastBlockId)
-        ));
+        header.validate_basic().unwrap_err();
     }
 
     #[test]
@@ -245,10 +244,7 @@ mod tests {
         commit.block_id.part_set_header.hash = Hash::None;
         commit.block_id.part_set_header.total = 0;
 
-        assert!(matches!(
-            commit.validate_basic(),
-            Err(ValidationError::CommitForNilBlock)
-        ));
+        commit.validate_basic().unwrap_err();
     }
 
     #[test]
@@ -256,10 +252,7 @@ mod tests {
         let mut commit = sample_commit();
         commit.signatures = vec![];
 
-        assert!(matches!(
-            commit.validate_basic(),
-            Err(ValidationError::NoSignaturesInCommit)
-        ));
+        commit.validate_basic().unwrap_err();
     }
 
     #[test]
@@ -286,10 +279,7 @@ mod tests {
             validator_address,
         };
 
-        assert!(matches!(
-            commit.validate_basic(),
-            Err(ValidationError::NoSignatureInCommitSig)
-        ));
+        commit.validate_basic().unwrap_err();
     }
 
     #[test]
