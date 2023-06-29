@@ -6,12 +6,14 @@ const BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::base64string")]"#;
 const VEC_BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
+const PASCAL_CASE: &str = r#"#[serde(rename_all = "PascalCase")]"#;
 
 pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.da.DataAvailabilityHeader", SERIALIZED),
     (".header.pb.ExtendedHeader", SERIALIZED),
     (".share.p2p.shrex.nd.Proof", SERIALIZED),
     (".share.p2p.shrex.nd.Row", SERIALIZED),
+    (".share.p2p.shrex.nd.Row", PASCAL_CASE),
 ];
 
 pub static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[

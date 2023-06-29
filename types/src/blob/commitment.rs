@@ -4,7 +4,6 @@ use std::num::NonZeroU64;
 use crate::InfoByte;
 use bytes::{Buf, BufMut, BytesMut};
 use tendermint::{crypto, merkle};
-use tendermint_proto::v0_34::types::Blob as RawBlob;
 
 use crate::consts::appconsts;
 use crate::nmt::{Namespace, Nmt};
@@ -17,9 +16,12 @@ type SparseShare = Vec<u8>;
 ///
 /// [Message layout rationale]: https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/rationale/message_block_layout.md?plain=1#L12
 /// [Non-interactive default rules]: https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/rationale/message_block_layout.md?plain=1#L36
-pub fn create_commitment(blob: &RawBlob) -> Result<Vec<u8>> {
-    let namespace = Namespace::new(blob.namespace_version as u8, &blob.namespace_id)?;
-    let shares = split_blob_to_shares(blob)?;
+pub fn create_commitment(
+    namespace: Namespace,
+    share_version: u8,
+    blob_data: &[u8],
+) -> Result<Vec<u8>> {
+    let shares = split_blob_to_shares(namespace, share_version, blob_data)?;
 
     // the commitment is the root of a merkle mountain range with max tree size
     // determined by the number of roots required to create a share commitment
@@ -54,14 +56,17 @@ pub fn create_commitment(blob: &RawBlob) -> Result<Vec<u8>> {
 }
 
 /// Splits blob's data to the sequence of shares
-fn split_blob_to_shares(blob: &RawBlob) -> Result<Vec<SparseShare>> {
-    if blob.share_version != appconsts::SHARE_VERSION_ZERO as u32 {
-        return Err(Error::UnsupportedShareVersion(blob.share_version));
+fn split_blob_to_shares(
+    namespace: Namespace,
+    share_version: u8,
+    blob_data: &[u8],
+) -> Result<Vec<SparseShare>> {
+    if share_version != appconsts::SHARE_VERSION_ZERO {
+        return Err(Error::UnsupportedShareVersion(share_version));
     }
 
-    let namespace = Namespace::new(blob.namespace_version as u8, &blob.namespace_id)?;
     let mut shares = Vec::new();
-    let mut cursor = Cursor::new(&blob.data);
+    let mut cursor = Cursor::new(blob_data);
 
     while cursor.has_remaining() {
         let share = build_sparse_share_v0(namespace, &mut cursor)?;

@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 use tendermint_proto::v0_34::types::Blob as RawBlob;
 use tendermint_proto::Protobuf;
 
+use crate::consts::appconsts;
 use crate::nmt::Namespace;
-use crate::{Error, Result};
+use crate::{bail_validation, Error, Result};
 
 mod commitment;
 
@@ -20,15 +21,44 @@ pub struct Blob {
     pub commitment: Vec<u8>,
 }
 
+impl Blob {
+    pub fn new(namespace: Namespace, data: Vec<u8>) -> Result<Blob> {
+        let commitment =
+            commitment::create_commitment(namespace, appconsts::SHARE_VERSION_ZERO, &data[..])?;
+
+        Ok(Blob {
+            namespace,
+            data,
+            share_version: appconsts::SHARE_VERSION_ZERO,
+            commitment,
+        })
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        let computed_commitment =
+            commitment::create_commitment(self.namespace, self.share_version, &self.data)?;
+
+        if self.commitment != computed_commitment {
+            bail_validation!("blob commitment != localy computed commitment")
+        }
+
+        Ok(())
+    }
+}
+
 impl Protobuf<RawBlob> for Blob {}
 
 impl TryFrom<RawBlob> for Blob {
     type Error = Error;
 
     fn try_from(value: RawBlob) -> Result<Self, Self::Error> {
+        let namespace = Namespace::new(value.namespace_version as u8, &value.namespace_id)?;
+        let commitment =
+            commitment::create_commitment(namespace, value.share_version as u8, &value.data[..])?;
+
         Ok(Blob {
-            commitment: commitment::create_commitment(&value)?,
-            namespace: Namespace::new(value.namespace_version as u8, &value.namespace_id)?,
+            commitment,
+            namespace,
             data: value.data,
             share_version: value.share_version as u8,
         })
@@ -69,5 +99,18 @@ mod tests {
         let created = Blob::try_from(raw).unwrap();
 
         assert_eq!(created, expected);
+    }
+
+    #[test]
+    fn validate_blob() {
+        sample_blob().validate().unwrap();
+    }
+
+    #[test]
+    fn validate_blob_commitment_mismatch() {
+        let mut blob = sample_blob();
+        blob.commitment = vec![7; 32];
+
+        blob.validate().unwrap_err();
     }
 }

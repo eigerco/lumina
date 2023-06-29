@@ -2,44 +2,46 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 jobs:
-  celestia-node-integration:
+  clippy:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v2
+      with:
+        version: "23.3"
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Run clippy
+      run: cargo clippy --all -- -D warnings
+
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Run clippy
+      run: cargo fmt -- --check
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v2
+      with:
+        version: "23.3"
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
     - name: Build the docker-compose stack
       run: docker-compose -f ci/docker-compose.yml up -d
-    - name: Check running containers
-      run: docker ps -a
-    - name: Wait for the second block which includes the coins transfer
-      run: docker-compose -f ci/docker-compose.yml logs -f | awk '$0 ~ /new head.*"height". 2/ {print;exit}'
-    - name: Authorize
+    - name: Wait for bridge node to start
       run: |
-        CELESTIA_NODE_AUTH_TOKEN=$(docker-compose -f ci/docker-compose.yml exec -T bridge \
-          celestia bridge auth admin --p2p.network private)
-        echo "CELESTIA_NODE_AUTH_TOKEN=${CELESTIA_NODE_AUTH_TOKEN}" >> "$GITHUB_ENV"
-    - name: Submit a blob
-      run: |
-        curl -X POST \
-          -H "Content-Type: application/json" \
-          -H "Authorization: Bearer ${{ env.CELESTIA_NODE_AUTH_TOKEN }}" \
-          -d '{
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "blob.Submit",
-            "params": [
-              [
-                {
-                  "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAADCBNOWAP3dM=",
-                  "data": "8fIMqAB+kQo7+LLmHaDya8oH73hxem6lQWX1",
-                  "share_version": 0,
-                  "commitment": "D6YGsPWdxR8ju2OcOspnkgPG2abD30pSHxsFdiPqnVk="
-                }
-              ]
-            ]
-          }' \
-          localhost:26658
-    - name: logs
-      run: docker-compose -f ci/docker-compose.yml logs -t
+        docker-compose -f ci/docker-compose.yml logs -f |
+          awk '/Configuration finished. Running a bridge node/ {print;exit}'
+    - name: Generate auth tokens
+      run: ./tools/gen_auth_tokens.sh
+    - name: Run tests
+      run: cargo test
