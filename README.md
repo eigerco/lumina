@@ -24,3 +24,8 @@ Accessing json RPC api with `celestia` cli:
 ```bash
 celestia rpc blob Submit 0x0c204d39600fddd3 '"Hello world"' --print-request
 ```
+
+Extracting blocks for test cases:
+```bash
+celestia rpc header GetByHeight 27 | jq .result
+```

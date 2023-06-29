@@ -57,18 +57,18 @@ pub enum ValidationError {
     TooBigSquare(usize),
 
     #[error(
-        "Validator hash of header different than validator set hash: header {0:?}, val set {1:?}, height: {2}"
+        "Validator hash of header different than validator set hash: header {0}, val set {1}, height: {2}"
     )]
     HeaderAndValSetHashMismatch(Hash, Hash, Height),
 
-    #[error("DAH hash of header different than DAH hash: header {0:?}, dah {1:?}, height: {2}")]
-    HeaderAndDahHashMismatch(Option<Hash>, Hash, Height),
+    #[error("DAH hash of header different than DAH hash: header {0}, dah {1}, height: {2}")]
+    HeaderAndDahHashMismatch(Hash, Hash, Height),
 
     #[error("Height of header different than commit height: header {0}, commit {1}")]
     HeaderAndCommitHeightMismatch(Height, Height),
 
     #[error(
-        "Block hash of header different than commit's block hash: header {0:?}, block {1:?}, height: {2}"
+        "Block hash of header different than commit's block hash: header {0}, block {1}, height: {2}"
     )]
     HeaderAndCommitBlockHashMismatch(Hash, Hash, Height),
 

@@ -1,9 +1,15 @@
+use std::collections::HashMap;
+
 use tendermint::block::CommitSig;
 use tendermint::crypto::default::signature::Verifier;
-use tendermint::validator::Set;
-use tendermint::{block, chain};
+use tendermint::validator::{Info, Set};
+use tendermint::{account, block, chain};
 
-use crate::{CommitExt, Error, Result, ValidateBasic, ValidationError, ValidationResult};
+use crate::trust_level::TrustLevelRatio;
+use crate::{
+    bail_verification, CommitExt, Error, Result, ValidateBasic, ValidationError, ValidationResult,
+    VerificationError,
+};
 
 impl ValidateBasic for Set {
     fn validate_basic(&self) -> ValidationResult<()> {
@@ -25,6 +31,13 @@ pub trait ValidatorSetExt {
         chain_id: &chain::Id,
         height: &block::Height,
         commit: &block::Commit,
+    ) -> Result<()>;
+
+    fn verify_commit_light_trusting(
+        &self,
+        chain_id: &chain::Id,
+        commit: &block::Commit,
+        trust_level: TrustLevelRatio,
     ) -> Result<()>;
 }
 
@@ -50,7 +63,8 @@ impl ValidatorSetExt for Set {
         }
 
         let mut tallied_voting_power = 0;
-        let voting_power_needed = self.total_voting_power().value() * 2 / 3;
+        let voting_power_needed =
+            TrustLevelRatio::new(2, 3).voting_power_needed(self.total_voting_power())?;
 
         for (idx, (validator, commit_sig)) in self
             .validators()
@@ -64,7 +78,7 @@ impl ValidatorSetExt for Set {
                     ..
                 } => sig,
                 CommitSig::BlockIdFlagCommit { .. } => {
-                    Err(ValidationError::NoSignatureInCommitSig)?
+                    bail_verification!("No signature in CommitSig");
                 }
                 // not commiting for the block
                 _ => continue,
@@ -78,11 +92,69 @@ impl ValidatorSetExt for Set {
             }
         }
 
+        Err(VerificationError::NotEnoughVotingPower(
+            tallied_voting_power,
+            voting_power_needed,
+        ))?
+    }
+
+    fn verify_commit_light_trusting(
+        &self,
+        chain_id: &chain::Id,
+        commit: &block::Commit,
+        trust_level: TrustLevelRatio,
+    ) -> Result<()> {
+        let mut seen_vals = HashMap::<usize, usize>::new();
+        let mut tallied_voting_power = 0;
+
+        let voting_power_needed = trust_level.voting_power_needed(self.total_voting_power())?;
+
+        for (idx, commit_sig) in commit.signatures.iter().enumerate() {
+            let (val_id, signature) = match commit_sig {
+                CommitSig::BlockIdFlagCommit {
+                    validator_address,
+                    signature: Some(ref sig),
+                    ..
+                } => (validator_address, sig),
+                CommitSig::BlockIdFlagCommit { .. } => {
+                    bail_verification!("No signature in CommitSig");
+                }
+                // not commiting for the block
+                _ => continue,
+            };
+
+            let Some((val_idx, validator)) = find_validator(self, val_id) else {
+                continue;
+            };
+
+            if let Some(prev_idx) = seen_vals.get(&val_idx) {
+                bail_verification!("Double vote from {val_id} ({prev_idx} and {idx}");
+            }
+
+            seen_vals.insert(val_idx, idx);
+
+            let vote_sign = commit.vote_sign_bytes(chain_id, idx)?;
+            validator.verify_signature::<Verifier>(&vote_sign, signature)?;
+
+            tallied_voting_power += validator.power();
+
+            if tallied_voting_power > voting_power_needed {
+                return Ok(());
+            }
+        }
+
         Err(Error::NotEnoughVotingPower(
             tallied_voting_power,
             voting_power_needed,
         ))
     }
+}
+
+fn find_validator<'a>(vals: &'a Set, val_id: &account::Id) -> Option<(usize, &'a Info)> {
+    vals.validators()
+        .iter()
+        .enumerate()
+        .find(|(_idx, val)| val.address == *val_id)
 }
 
 #[cfg(test)]
