@@ -7,7 +7,7 @@ use tendermint_proto::Protobuf;
 use crate::consts::data_availability_header::{
     MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
 };
-use crate::{Error, Result, ValidateBasic, ValidationError, ValidationResult};
+use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(
@@ -51,20 +51,29 @@ impl From<DataAvailabilityHeader> for RawDataAvailabilityHeader {
 }
 
 impl ValidateBasic for DataAvailabilityHeader {
-    fn validate_basic(&self) -> ValidationResult<()> {
+    fn validate_basic(&self) -> Result<(), ValidationError> {
         if self.column_roots.len() != self.row_roots.len() {
-            return Err(ValidationError::NotASquare(
+            bail_validation!(
+                "column_roots len ({}) != row_roots len ({})",
                 self.column_roots.len(),
                 self.row_roots.len(),
-            ));
+            )
         }
 
         if self.row_roots.len() < MIN_EXTENDED_SQUARE_WIDTH {
-            return Err(ValidationError::TooLittleSquare(self.row_roots.len()));
+            bail_validation!(
+                "row_roots len ({}) < minimum ({})",
+                self.row_roots.len(),
+                MIN_EXTENDED_SQUARE_WIDTH,
+            )
         }
 
         if self.row_roots.len() > MAX_EXTENDED_SQUARE_WIDTH {
-            return Err(ValidationError::TooBigSquare(self.row_roots.len()));
+            bail_validation!(
+                "row_roots len ({}) > maximum ({})",
+                self.row_roots.len(),
+                MAX_EXTENDED_SQUARE_WIDTH,
+            )
         }
 
         Ok(())
@@ -100,10 +109,7 @@ mod tests {
         let mut dah = sample_dah();
         dah.row_roots.pop();
 
-        assert!(matches!(
-            dah.validate_basic(),
-            Err(ValidationError::NotASquare(..))
-        ));
+        dah.validate_basic().unwrap_err();
     }
 
     #[test]
@@ -127,10 +133,7 @@ mod tests {
         dah.row_roots.pop();
         dah.column_roots.pop();
 
-        assert!(matches!(
-            dah.validate_basic(),
-            Err(ValidationError::TooLittleSquare(..))
-        ));
+        dah.validate_basic().unwrap_err();
     }
 
     #[test]
@@ -154,9 +157,6 @@ mod tests {
         dah.row_roots.push(dah.row_roots[0].clone());
         dah.column_roots.push(dah.column_roots[0].clone());
 
-        assert!(matches!(
-            dah.validate_basic(),
-            Err(ValidationError::TooBigSquare(..))
-        ));
+        dah.validate_basic().unwrap_err();
     }
 }

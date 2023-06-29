@@ -16,9 +16,6 @@ pub enum Error {
     #[error(transparent)]
     Protobuf(#[from] tendermint_proto::Error),
 
-    #[error(transparent)]
-    Validation(#[from] crate::ValidationError),
-
     #[error("Missing header")]
     MissingHeader,
 
@@ -58,6 +55,9 @@ pub enum Error {
     #[error("Not enough voting power to verify commit: has {0}, required: {1}")]
     NotEnoughVotingPower(u64, u64),
 
+    #[error("Validation error: {0}")]
+    Validation(#[from] ValidationError),
+
     #[error("Verification error: {0}")]
     Verification(#[from] VerificationError),
 
@@ -72,12 +72,36 @@ pub enum Error {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum ValidationError {
+    #[error("Not enought voiting power (got {0}, needed {1})")]
+    NotEnoughVotingPower(u64, u64),
+
+    #[error("{0}")]
+    Other(String),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum VerificationError {
     #[error("Not enought voiting power (got {0}, needed {1})")]
     NotEnoughVotingPower(u64, u64),
 
     #[error("{0}")]
     Other(String),
+}
+
+macro_rules! validation_error {
+    ($fmt:literal $(,)?) => {
+        $crate::ValidationError::Other(std::format!($fmt))
+    };
+    ($fmt:literal, $($arg:tt)*) => {
+        $crate::ValidationError::Other(std::format!($fmt, $($arg)*))
+    };
+}
+
+macro_rules! bail_validation {
+    ($($arg:tt)*) => {
+        return Err($crate::validation_error!($($arg)*).into())
+    };
 }
 
 macro_rules! verification_error {
@@ -96,5 +120,7 @@ macro_rules! bail_verification {
 }
 
 // NOTE: This need to be always after the macro definitions
+pub(crate) use bail_validation;
 pub(crate) use bail_verification;
+pub(crate) use validation_error;
 pub(crate) use verification_error;

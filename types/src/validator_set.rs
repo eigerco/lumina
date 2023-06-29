@@ -7,18 +7,18 @@ use tendermint::{account, block, chain};
 
 use crate::trust_level::TrustLevelRatio;
 use crate::{
-    bail_verification, CommitExt, Error, Result, ValidateBasic, ValidationError, ValidationResult,
+    bail_validation, bail_verification, CommitExt, Result, ValidateBasic, ValidationError,
     VerificationError,
 };
 
 impl ValidateBasic for Set {
-    fn validate_basic(&self) -> ValidationResult<()> {
+    fn validate_basic(&self) -> Result<(), ValidationError> {
         if self.validators().is_empty() {
-            return Err(ValidationError::ValidatorsSetEmpty);
+            bail_validation!("validatiors is empty")
         }
 
         if self.proposer().is_none() {
-            return Err(ValidationError::ValidatorsSetProposerMissing);
+            bail_validation!("proposer is none")
         }
 
         Ok(())
@@ -49,17 +49,15 @@ impl ValidatorSetExt for Set {
         commit: &block::Commit,
     ) -> Result<()> {
         if self.validators().len() != commit.signatures.len() {
-            Err(ValidationError::ValidatorsAndSignaturesMismatch(
+            bail_verification!(
+                "validators signature len ({}) != commit signatures len ({})",
                 self.validators().len(),
                 commit.signatures.len(),
-            ))?;
+            )
         }
 
         if height != &commit.height {
-            Err(ValidationError::HeaderAndCommitHeightMismatch(
-                *height,
-                commit.height,
-            ))?;
+            bail_verification!("height ({}) != commit height ({})", height, commit.height,)
         }
 
         let mut tallied_voting_power = 0;
@@ -143,10 +141,10 @@ impl ValidatorSetExt for Set {
             }
         }
 
-        Err(Error::NotEnoughVotingPower(
+        Err(VerificationError::NotEnoughVotingPower(
             tallied_voting_power,
             voting_power_needed,
-        ))
+        ))?
     }
 }
 
@@ -263,18 +261,16 @@ mod tests {
 
     #[test]
     fn validate_validators_missing() {
-        assert!(matches!(
-            sample_validator_set_no_validators().validate_basic(),
-            Err(ValidationError::ValidatorsSetEmpty)
-        ));
+        sample_validator_set_no_validators()
+            .validate_basic()
+            .unwrap_err();
     }
 
     #[test]
     fn validate_proposer_missing() {
-        assert!(matches!(
-            sample_validator_set_no_proposer().validate_basic(),
-            Err(ValidationError::ValidatorsSetProposerMissing)
-        ));
+        sample_validator_set_no_proposer()
+            .validate_basic()
+            .unwrap_err();
     }
 
     #[test]
@@ -297,18 +293,13 @@ mod tests {
         let val_set = sample_validator_set();
         commit.signatures.push(commit.signatures[0].clone());
 
-        let result = val_set.verify_commit_light(
-            &"private".to_string().try_into().unwrap(),
-            &1u32.into(),
-            &commit,
-        );
-
-        assert!(matches!(
-            result,
-            Err(Error::Validation(
-                ValidationError::ValidatorsAndSignaturesMismatch(..)
-            ))
-        ));
+        val_set
+            .verify_commit_light(
+                &"private".to_string().try_into().unwrap(),
+                &1u32.into(),
+                &commit,
+            )
+            .unwrap_err();
     }
 
     #[test]
@@ -317,17 +308,12 @@ mod tests {
         let val_set = sample_validator_set();
         commit.height = 2u32.into();
 
-        let result = val_set.verify_commit_light(
-            &"private".to_string().try_into().unwrap(),
-            &1u32.into(),
-            &commit,
-        );
-
-        assert!(matches!(
-            result,
-            Err(Error::Validation(
-                ValidationError::HeaderAndCommitHeightMismatch(..)
-            ))
-        ));
+        val_set
+            .verify_commit_light(
+                &"private".to_string().try_into().unwrap(),
+                &1u32.into(),
+                &commit,
+            )
+            .unwrap_err();
     }
 }
