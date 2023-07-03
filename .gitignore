@@ -1,3 +1,4 @@
 target
 
 /.*token
+/.env

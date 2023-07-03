@@ -29,3 +29,17 @@ Extracting blocks for test cases:
 ```bash
 celestia rpc header GetByHeight 27 | jq .result
 ```
+
+## Running integration tests with celestia node
+
+Make sure you have the celestia network running inside docker-compose from the section above.
+
+Generate authentication tokens for the tests
+```
+./tools/gen_auth_tokens.sh
+```
+
+Run tests
+```
+cargo test -p celestia-rpc
+```

@@ -21,7 +21,7 @@ pub struct NamespacedShares {
 #[serde(try_from = "RawRow", into = "RawRow")]
 pub struct NamespacedRow {
     pub shares: Vec<Share>,
-    pub proof: NamespaceProof,
+    pub proof: Option<NamespaceProof>,
 }
 
 // NOTE:
@@ -70,11 +70,7 @@ impl TryFrom<RawRow> for NamespacedRow {
             .map(Share::new)
             .collect::<Result<Vec<_>>>()?;
 
-        let proof = value
-            .proof
-            .map(proof_from_proto)
-            .transpose()?
-            .ok_or(Error::MissingProof)?;
+        let proof = value.proof.map(proof_from_proto).transpose()?;
 
         Ok(NamespacedRow { shares, proof })
     }
@@ -181,5 +177,21 @@ mod tests {
 
     fn b64_decode(s: &str) -> Vec<u8> {
         BASE64_STANDARD.decode(s).expect("failed to decode base64")
+    }
+
+    #[test]
+    fn decode_namespaced_shares() {
+        let get_shares_by_namespace_response = r#"[{
+            "Shares":[
+                "AAAAAAAAAAAAAAAAAAAAAAAAAE3BWIMKXpgB8QMBAAAEAP////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////8="
+            ],
+            "Proof":{}
+        }]"#;
+
+        let ns_shares: NamespacedShares =
+            serde_json::from_str(get_shares_by_namespace_response).unwrap();
+
+        assert_eq!(ns_shares.rows[0].shares.len(), 1);
+        assert!(ns_shares.rows[0].proof.is_none());
     }
 }
