@@ -28,9 +28,6 @@ pub enum Error {
     #[error("Missing data availability header")]
     MissingDataAvailabilityHeader,
 
-    #[error("Missing proof")]
-    MissingProof,
-
     #[error("Unsupported share version: {0}")]
     UnsupportedShareVersion(u8),
 
