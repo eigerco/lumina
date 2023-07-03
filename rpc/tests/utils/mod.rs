@@ -31,11 +31,15 @@ pub fn test_client(auth_level: AuthLevel) -> Result<HttpClient> {
 }
 
 pub fn random_ns() -> Namespace {
-    Namespace::const_v0(std::array::from_fn(|_| rand::random()))
+    Namespace::const_v0(random_bytes_array())
 }
 
 pub fn random_bytes(length: usize) -> Vec<u8> {
     let mut bytes = vec![0; length];
     rand::thread_rng().fill_bytes(&mut bytes);
     bytes
+}
+
+pub fn random_bytes_array<const N: usize>() -> [u8; N] {
+    std::array::from_fn(|_| rand::random())
 }

@@ -1,10 +1,9 @@
-use celestia_proto::share::p2p::shrex::nd::{Proof as RawProof, Row as RawRow};
-use nmt_rs::simple_merkle::proof::Proof as NmtProof;
+use celestia_proto::share::p2p::shrex::nd::Row as RawRow;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
 use crate::consts::appconsts;
-use crate::nmt::{Namespace, NamespaceProof, NamespacedHash, NS_SIZE};
+use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
 use crate::{Error, Result};
 
 mod info_byte;
@@ -70,42 +69,19 @@ impl TryFrom<RawRow> for NamespacedRow {
             .map(Share::new)
             .collect::<Result<Vec<_>>>()?;
 
-        let proof = value.proof.map(proof_from_proto).transpose()?;
+        let proof = value.proof.map(TryInto::try_into).transpose()?;
 
         Ok(NamespacedRow { shares, proof })
     }
 }
 
 impl From<NamespacedRow> for RawRow {
-    fn from(_value: NamespacedRow) -> RawRow {
-        todo!();
+    fn from(value: NamespacedRow) -> RawRow {
+        RawRow {
+            shares: value.shares.iter().map(|share| share.to_vec()).collect(),
+            proof: value.proof.map(Into::into),
+        }
     }
-}
-
-fn proof_from_proto(raw_proof: RawProof) -> Result<NamespaceProof> {
-    let siblings = raw_proof
-        .nodes
-        .iter()
-        .map(|n| to_namespaced_hash(n))
-        .collect::<Result<Vec<_>>>()?;
-
-    let mut proof = NamespaceProof::PresenceProof {
-        proof: NmtProof {
-            siblings,
-            start_idx: raw_proof.start as u32,
-        },
-        ignore_max_ns: true,
-    };
-
-    if !raw_proof.hashleaf.is_empty() {
-        proof.convert_to_absence_proof(to_namespaced_hash(&raw_proof.hashleaf)?);
-    }
-
-    Ok(proof)
-}
-
-fn to_namespaced_hash(node: &[u8]) -> Result<NamespacedHash> {
-    node.try_into().map_err(|_| Error::InvalidNamespacedHash)
 }
 
 #[cfg(test)]
@@ -135,9 +111,9 @@ mod tests {
             ]
         }"#;
 
-        let raw_proof: RawProof =
+        let proof: NamespaceProof =
             serde_json::from_str(blob_get_proof_response).expect("can not parse proof");
-        let proof = proof_from_proto(raw_proof).expect("proof_from_proto failed");
+
         assert!(!proof.is_of_absence());
 
         let sibling = &proof.siblings()[0];

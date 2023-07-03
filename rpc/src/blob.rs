@@ -1,6 +1,5 @@
-use celestia_proto::share::p2p::shrex::nd::Proof as RawProof;
-use celestia_types::nmt::Namespace;
-use celestia_types::Blob;
+use celestia_types::nmt::{Namespace, NamespaceProof};
+use celestia_types::{Blob, Commitment};
 use jsonrpsee::proc_macros::rpc;
 
 #[rpc(client)]
@@ -10,7 +9,7 @@ pub trait Blob {
         &self,
         height: u64,
         namespace: Namespace,
-        commitment: &[u8],
+        commitment: Commitment,
     ) -> Result<Blob, Error>;
 
     #[method(name = "blob.GetProof")]
@@ -18,8 +17,8 @@ pub trait Blob {
         &self,
         height: u64,
         namespace: Namespace,
-        commitment: &[u8],
-    ) -> Result<Vec<RawProof>, Error>;
+        commitment: Commitment,
+    ) -> Result<Vec<NamespaceProof>, Error>;
 
     #[method(name = "blob.Submit")]
     async fn blob_submit(&self, blobs: &[Blob]) -> Result<u64, Error>;

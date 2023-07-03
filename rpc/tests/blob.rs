@@ -1,10 +1,10 @@
 use celestia_rpc::prelude::*;
-use celestia_types::Blob;
+use celestia_types::{Blob, Commitment};
 use jsonrpsee::http_client::HttpClient;
 
 pub mod utils;
 
-use utils::{random_bytes, random_ns, test_client, AuthLevel};
+use utils::{random_bytes, random_bytes_array, random_ns, test_client, AuthLevel};
 
 async fn test_blob_submit_and_get(client: &HttpClient) {
     let namespace = random_ns();
@@ -14,7 +14,7 @@ async fn test_blob_submit_and_get(client: &HttpClient) {
     let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();
 
     let received_blob = client
-        .blob_get(submitted_height, namespace, &blob.commitment)
+        .blob_get(submitted_height, namespace, blob.commitment)
         .await
         .unwrap();
 
@@ -22,7 +22,7 @@ async fn test_blob_submit_and_get(client: &HttpClient) {
     assert_eq!(received_blob, blob);
 
     let proofs = client
-        .blob_get_proof(submitted_height, namespace, &blob.commitment)
+        .blob_get_proof(submitted_height, namespace, blob.commitment)
         .await
         .unwrap();
 
@@ -44,7 +44,7 @@ async fn test_blob_submit_and_get_large(client: &HttpClient) {
         .unwrap();
 
     let received_blob = client
-        .blob_get(submitted_height, namespace, &blob.commitment)
+        .blob_get(submitted_height, namespace, blob.commitment)
         .await
         .unwrap();
 
@@ -52,7 +52,7 @@ async fn test_blob_submit_and_get_large(client: &HttpClient) {
     assert_eq!(received_blob, blob);
 
     let proofs = client
-        .blob_get_proof(submitted_height, namespace, &blob.commitment)
+        .blob_get_proof(submitted_height, namespace, blob.commitment)
         .await
         .unwrap();
 
@@ -76,12 +76,12 @@ async fn test_blob_get_get_proof_wrong_ns(client: &HttpClient) {
     let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();
 
     client
-        .blob_get(submitted_height, random_ns(), &blob.commitment)
+        .blob_get(submitted_height, random_ns(), blob.commitment)
         .await
         .unwrap_err();
 
     client
-        .blob_get_proof(submitted_height, random_ns(), &blob.commitment)
+        .blob_get_proof(submitted_height, random_ns(), blob.commitment)
         .await
         .unwrap_err();
 }
@@ -90,16 +90,17 @@ async fn test_blob_get_get_proof_wrong_commitment(client: &HttpClient) {
     let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data).unwrap();
+    let commitment = Commitment(random_bytes_array());
 
     let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();
 
     client
-        .blob_get(submitted_height, namespace, &[1, 2, 3, 4])
+        .blob_get(submitted_height, namespace, commitment)
         .await
         .unwrap_err();
 
     client
-        .blob_get_proof(submitted_height, namespace, &[1, 2, 3, 4])
+        .blob_get_proof(submitted_height, namespace, commitment)
         .await
         .unwrap_err();
 }

@@ -2,6 +2,9 @@ use base64::prelude::*;
 use nmt_rs::simple_merkle::db::MemDb;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+mod namespace_proof;
+
+pub use self::namespace_proof::NamespaceProof;
 use crate::{Error, Result};
 
 pub const NS_VER_SIZE: usize = 1;
@@ -11,7 +14,6 @@ pub const NS_ID_V0_SIZE: usize = 10;
 
 pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
 pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
-pub type NamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;
 pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
