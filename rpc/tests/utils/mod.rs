@@ -3,6 +3,7 @@ use std::env;
 use anyhow::Result;
 use celestia_types::nmt::Namespace;
 use jsonrpsee::http_client::HttpClient;
+use rand::RngCore;
 
 const CONN_STR: &str = "http://localhost:26658";
 
@@ -36,4 +37,11 @@ pub fn test_client(auth_level: AuthLevel) -> Result<HttpClient> {
 #[allow(dead_code)]
 pub fn random_ns() -> Namespace {
     Namespace::const_v0(std::array::from_fn(|_| rand::random()))
+}
+
+#[allow(dead_code)]
+pub fn random_bytes(length: usize) -> Vec<u8> {
+    let mut bytes = vec![0; length];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    bytes
 }

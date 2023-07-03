@@ -5,9 +5,11 @@ mod utils;
 
 use utils::{random_ns, test_client, AuthLevel};
 
+use crate::utils::random_bytes;
+
 async fn test_blob_submit_and_get(client: &HttpClient) {
     let namespace = random_ns();
-    let data = b"foo".to_vec();
+    let data = random_bytes(5);
     let blob = Blob::new(namespace, data).unwrap();
 
     let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();
@@ -30,7 +32,7 @@ async fn test_blob_submit_and_get(client: &HttpClient) {
 
 async fn test_blob_submit_and_get_large(client: &HttpClient) {
     let namespace = random_ns();
-    let data = vec![0xff; 1024 * 1024];
+    let data = random_bytes(1024 * 1024);
     let blob = Blob::new(namespace, data).unwrap();
 
     let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();
@@ -60,7 +62,7 @@ async fn test_blob_submit_and_get_large(client: &HttpClient) {
 
 async fn test_blob_submit_too_large(client: &HttpClient) {
     let namespace = random_ns();
-    let data = vec![0xff; 5 * 1024 * 1024];
+    let data = random_bytes(5 * 1024 * 1024);
     let blob = Blob::new(namespace, data).unwrap();
 
     let submitted_height = client.blob_submit(&[blob.clone()]).await;
@@ -69,7 +71,7 @@ async fn test_blob_submit_too_large(client: &HttpClient) {
 
 async fn test_blob_get_get_proof_wrong_ns(client: &HttpClient) {
     let namespace = random_ns();
-    let data = b"foo".to_vec();
+    let data = random_bytes(5);
     let blob = Blob::new(namespace, data).unwrap();
 
     let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();
@@ -87,7 +89,7 @@ async fn test_blob_get_get_proof_wrong_ns(client: &HttpClient) {
 
 async fn test_blob_get_get_proof_wrong_commitment(client: &HttpClient) {
     let namespace = random_ns();
-    let data = b"foo".to_vec();
+    let data = random_bytes(5);
     let blob = Blob::new(namespace, data).unwrap();
 
     let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();

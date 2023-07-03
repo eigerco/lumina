@@ -7,11 +7,11 @@ use jsonrpsee::http_client::HttpClient;
 
 mod utils;
 
-use utils::{random_ns, test_client, AuthLevel};
+use utils::{random_bytes, random_ns, test_client, AuthLevel};
 
 async fn test_get_shares_by_namespace(client: &HttpClient) {
     let namespace = random_ns();
-    let data = vec![0xff; 1024];
+    let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
 
     let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();
@@ -51,7 +51,7 @@ async fn test_get_shares_by_namespace(client: &HttpClient) {
 
 async fn test_get_shares_by_namespace_wrong_ns(client: &HttpClient) {
     let namespace = random_ns();
-    let data = vec![0xff; 1024];
+    let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
 
     let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();
@@ -70,7 +70,7 @@ async fn test_get_shares_by_namespace_wrong_ns(client: &HttpClient) {
 
 async fn test_get_shares_by_namespace_wrong_roots(client: &HttpClient) {
     let namespace = random_ns();
-    let data = vec![0xff; 1024];
+    let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
 
     client.blob_submit(&[blob.clone()]).await.unwrap();

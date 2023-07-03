@@ -1,11 +1,14 @@
 use celestia_rpc::prelude::*;
-use jsonrpsee::http_client::HttpClient;
 
 mod utils;
 
 use utils::{test_client, AuthLevel};
 
-async fn test_local_head(client: &HttpClient) {
+#[tokio::test]
+async fn test_local_head() {
+    let client = test_client(AuthLevel::Read).unwrap();
+    client.header_wait_for_height(3).await.unwrap();
+
     let local_head = client.header_local_head().await.unwrap();
 
     let head_height = local_head.height();
@@ -20,7 +23,11 @@ async fn test_local_head(client: &HttpClient) {
     adjacent_header.verify(&local_head).unwrap();
 }
 
-async fn test_get_by_height(client: &HttpClient) {
+#[tokio::test]
+async fn test_get_by_height() {
+    let client = test_client(AuthLevel::Read).unwrap();
+    client.header_wait_for_height(2).await.unwrap();
+
     let genesis_header = client.header_get_by_height(1).await.unwrap();
     let second_header = client.header_get_by_height(2).await.unwrap();
 
@@ -28,18 +35,9 @@ async fn test_get_by_height(client: &HttpClient) {
     second_header.validate().unwrap();
 }
 
-async fn test_get_by_height_non_existent(client: &HttpClient) {
-    client.header_get_by_height(999_999_999).await.unwrap_err();
-}
-
 #[tokio::test]
-async fn header_api() {
+async fn test_get_by_height_non_existent() {
     let client = test_client(AuthLevel::Read).unwrap();
 
-    // minimum 3 blocks
-    client.header_wait_for_height(3).await.unwrap();
-
-    test_local_head(&client).await;
-    test_get_by_height(&client).await;
-    test_get_by_height_non_existent(&client).await;
+    client.header_get_by_height(999_999_999).await.unwrap_err();
 }
