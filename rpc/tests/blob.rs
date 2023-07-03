@@ -1,11 +1,9 @@
 use celestia_rpc::prelude::*;
 use jsonrpsee::http_client::HttpClient;
 
-mod utils;
+pub mod utils;
 
-use utils::{random_ns, test_client, AuthLevel};
-
-use crate::utils::random_bytes;
+use utils::{random_bytes, random_ns, test_client, AuthLevel};
 
 async fn test_blob_submit_and_get(client: &HttpClient) {
     let namespace = random_ns();

@@ -5,7 +5,7 @@ use celestia_types::consts::appconsts::{
 };
 use jsonrpsee::http_client::HttpClient;
 
-mod utils;
+pub mod utils;
 
 use utils::{random_bytes, random_ns, test_client, AuthLevel};
 

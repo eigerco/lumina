@@ -9,13 +9,9 @@ const CONN_STR: &str = "http://localhost:26658";
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum AuthLevel {
-    #[allow(dead_code)]
     Public,
-    #[allow(dead_code)]
     Read,
-    #[allow(dead_code)]
     Write,
-    #[allow(dead_code)]
     Admin,
 }
 
@@ -34,12 +30,10 @@ pub fn test_client(auth_level: AuthLevel) -> Result<HttpClient> {
     Ok(celestia_rpc::client::new_http(CONN_STR, token.as_deref())?)
 }
 
-#[allow(dead_code)]
 pub fn random_ns() -> Namespace {
     Namespace::const_v0(std::array::from_fn(|_| rand::random()))
 }
 
-#[allow(dead_code)]
 pub fn random_bytes(length: usize) -> Vec<u8> {
     let mut bytes = vec![0; length];
     rand::thread_rng().fill_bytes(&mut bytes);

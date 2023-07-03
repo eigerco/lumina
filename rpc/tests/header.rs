@@ -1,6 +1,6 @@
 use celestia_rpc::prelude::*;
 
-mod utils;
+pub mod utils;
 
 use utils::{test_client, AuthLevel};
 
