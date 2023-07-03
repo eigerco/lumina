@@ -6,6 +6,7 @@ const BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::base64string")]"#;
 const VEC_BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
+const EMPTY_AS_NONE: &str = r#"#[serde(with = "crate::serializers::empty_as_none")]"#;
 const PASCAL_CASE: &str = r#"#[serde(rename_all = "PascalCase")]"#;
 
 pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
@@ -29,6 +30,8 @@ pub static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".share.p2p.shrex.nd.Proof.hashleaf", DEFAULT),
     (".share.p2p.shrex.nd.Proof.hashleaf", BASE64STRING),
     (".share.p2p.shrex.nd.Row.shares", VEC_BASE64STRING),
+    (".share.p2p.shrex.nd.Row.proof", DEFAULT),
+    (".share.p2p.shrex.nd.Row.proof", EMPTY_AS_NONE),
 ];
 
 fn main() -> Result<()> {
