@@ -41,5 +41,5 @@ Generate authentication tokens for the tests
 
 Run tests
 ```
-cargo test -p rpc
+cargo test -p celestia-rpc
 ```
