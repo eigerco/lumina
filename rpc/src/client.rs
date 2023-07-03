@@ -1,7 +1,9 @@
 use http::{header, HeaderValue};
 use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
 
-pub fn new_http(conn_str: &str, auth_token: Option<&str>) -> crate::Result<HttpClient> {
+use crate::Result;
+
+pub fn new_http(conn_str: &str, auth_token: Option<&str>) -> Result<HttpClient> {
     let mut headers = HeaderMap::new();
 
     if let Some(token) = auth_token {
