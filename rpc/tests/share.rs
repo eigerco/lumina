@@ -1,7 +1,10 @@
 use celestia_rpc::prelude::*;
-use celestia_types::consts::appconsts::{
-    CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SEQUENCE_LEN_BYTES,
-    SHARE_INFO_BYTES,
+use celestia_types::{
+    consts::appconsts::{
+        CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE,
+        SEQUENCE_LEN_BYTES, SHARE_INFO_BYTES,
+    },
+    Blob,
 };
 use jsonrpsee::http_client::HttpClient;
 

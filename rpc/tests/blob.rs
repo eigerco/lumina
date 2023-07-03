@@ -1,4 +1,5 @@
 use celestia_rpc::prelude::*;
+use celestia_types::Blob;
 use jsonrpsee::http_client::HttpClient;
 
 pub mod utils;
