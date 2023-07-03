@@ -4,14 +4,13 @@ mod error;
 mod header;
 mod share;
 
+pub use blob::BlobClient;
 pub use error::{Error, Result};
+pub use header::HeaderClient;
+pub use share::ShareClient;
 
 pub mod prelude {
-    pub use celestia_proto::share::p2p::shrex::nd::Proof as RawProof;
-    pub use celestia_types::nmt::Namespace;
-    pub use celestia_types::Blob;
-
-    pub use crate::blob::BlobClient;
-    pub use crate::header::HeaderClient;
-    pub use crate::share::ShareClient;
+    pub use crate::BlobClient;
+    pub use crate::HeaderClient;
+    pub use crate::ShareClient;
 }
