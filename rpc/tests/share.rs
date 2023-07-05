@@ -3,6 +3,7 @@ use celestia_types::consts::appconsts::{
     CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SEQUENCE_LEN_BYTES,
     SHARE_INFO_BYTES,
 };
+use celestia_types::nmt::NamespacedHash;
 use celestia_types::Blob;
 use jsonrpsee::http_client::HttpClient;
 
@@ -63,10 +64,45 @@ async fn test_get_shares_by_namespace_wrong_ns(client: &HttpClient) {
         .unwrap()
         .dah;
 
-    client
-        .share_get_shares_by_namespace(&dah, random_ns())
-        .await
-        .unwrap_err();
+    // When we try to get shares for the unknown namespace then
+    // if there exists a row where row_root.min_namespace() < namespace < row_root.max_namespace()
+    // then we will get an absence proof for that row
+    // The rows where namespace falls outside of the ns range of the row_root
+    // are not included in the response.
+    // As the block has just a single blob, we can only care about the first row.
+
+    // check the case where we receive absence proof
+    loop {
+        let random_ns = random_ns();
+        let ns_shares = client
+            .share_get_shares_by_namespace(&dah, random_ns)
+            .await
+            .unwrap();
+
+        if !ns_shares.rows.is_empty() {
+            assert_eq!(ns_shares.rows.len(), 1);
+            assert!(ns_shares.rows[0].shares.is_empty());
+
+            let proof = ns_shares.rows[0].proof.clone();
+            assert!(proof.is_of_absence());
+            // TODO: verify proof
+            break;
+        }
+    }
+    // check the case where namespace is outside of the root hash range
+    loop {
+        let random_ns = random_ns();
+        let ns_shares = client
+            .share_get_shares_by_namespace(&dah, random_ns)
+            .await
+            .unwrap();
+
+        if ns_shares.rows.is_empty() {
+            let root_hash = NamespacedHash::try_from(&dah.row_roots[0][..]).unwrap();
+            assert!(!root_hash.contains(random_ns.into()));
+            break;
+        }
+    }
 }
 
 async fn test_get_shares_by_namespace_wrong_roots(client: &HttpClient) {
@@ -78,10 +114,12 @@ async fn test_get_shares_by_namespace_wrong_roots(client: &HttpClient) {
 
     let genesis_dah = client.header_get_by_height(1).await.unwrap().dah;
 
-    client
+    let ns_shares = client
         .share_get_shares_by_namespace(&genesis_dah, namespace)
         .await
-        .unwrap_err();
+        .unwrap();
+
+    assert!(ns_shares.rows.is_empty());
 }
 
 #[tokio::test]
