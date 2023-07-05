@@ -66,17 +66,17 @@ struct RawNamespacedShares {
 impl From<RawNamespacedShares> for NamespacedShares {
     fn from(value: RawNamespacedShares) -> Self {
         Self {
-            rows: value.rows.unwrap_or(vec![]),
+            rows: value.rows.unwrap_or_default(),
         }
     }
 }
 
 impl From<NamespacedShares> for RawNamespacedShares {
     fn from(value: NamespacedShares) -> Self {
-        let rows = if !value.rows.is_empty() {
-            Some(value.rows)
-        } else {
+        let rows = if value.rows.is_empty() {
             None
+        } else {
+            Some(value.rows)
         };
 
         Self { rows }
@@ -239,7 +239,7 @@ mod tests {
             b64_decode("OBQQFb/BaYJ+fBd9qWCox8r2wzLXrzLddHN3BjWOllg=")
         );
 
-        let nmt_rs::NamespaceProof::AbsenceProof { leaf: Some(leaf), .. } = proof.deref() else {
+        let nmt_rs::NamespaceProof::AbsenceProof { leaf: Some(leaf), .. } = &*proof else {
             unreachable!();
         };
 
