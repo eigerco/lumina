@@ -3,6 +3,7 @@ use celestia_types::consts::appconsts::{
     CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SEQUENCE_LEN_BYTES,
     SHARE_INFO_BYTES,
 };
+use celestia_types::nmt::NamespacedHash;
 use celestia_types::Blob;
 use jsonrpsee::http_client::HttpClient;
 
@@ -69,13 +70,27 @@ async fn test_get_shares_by_namespace_wrong_ns(client: &HttpClient) {
         .await
         .unwrap();
 
+    // When we try to get shares for the unknown namespace then
+    // if there exists a row where row_root.min_namespace() < namespace < row_root.max_namespace()
+    // then we will get an absence proof for that row
+    // The rows where namespace falls outside of the ns range of the row_root
+    // are not included in the response.
+    // As the block has just a single blob, we can only care about the first row.
     if !ns_shares.rows.is_empty() {
+        // check the received absence proof
         assert_eq!(ns_shares.rows.len(), 1);
         assert!(ns_shares.rows[0].shares.is_empty());
 
         let proof = ns_shares.rows[0].proof.clone();
         assert!(proof.is_of_absence());
         // TODO: verify proof
+    } else {
+        // check that namespace is outside of the root hash range
+        let root_hash = NamespacedHash::try_from(&dah.row_roots[0][..]).unwrap();
+        assert!(
+            random_ns < root_hash.min_namespace().into()
+                || random_ns > root_hash.max_namespace().into()
+        );
     }
 }
 
