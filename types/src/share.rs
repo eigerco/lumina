@@ -120,8 +120,6 @@ impl From<NamespacedRow> for RawRow {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
-
     use super::*;
     use base64::prelude::*;
 
