@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use celestia_rpc::prelude::*;
 use celestia_types::{Blob, Commitment};
 use jsonrpsee::http_client::HttpClient;
@@ -37,11 +39,8 @@ async fn test_blob_submit_and_get_large(client: &HttpClient) {
     let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();
 
     // It takes a while for a node to process large blob
-    // so we wait for the next block to be produced
-    client
-        .header_wait_for_height(submitted_height + 1)
-        .await
-        .unwrap();
+    // so we need to wait a bit
+    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     let received_blob = client
         .blob_get(submitted_height, namespace, blob.commitment)

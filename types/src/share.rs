@@ -11,7 +11,7 @@ mod info_byte;
 pub use info_byte::InfoByte;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(transparent)]
+#[serde(from = "RawNamespacedShares", into = "RawNamespacedShares")]
 pub struct NamespacedShares {
     pub rows: Vec<NamespacedRow>,
 }
@@ -20,7 +20,7 @@ pub struct NamespacedShares {
 #[serde(try_from = "RawRow", into = "RawRow")]
 pub struct NamespacedRow {
     pub shares: Vec<Share>,
-    pub proof: Option<NamespaceProof>,
+    pub proof: NamespaceProof,
 }
 
 // NOTE:
@@ -57,6 +57,32 @@ impl Share {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+struct RawNamespacedShares {
+    rows: Option<Vec<NamespacedRow>>,
+}
+
+impl From<RawNamespacedShares> for NamespacedShares {
+    fn from(value: RawNamespacedShares) -> Self {
+        Self {
+            rows: value.rows.unwrap_or(vec![]),
+        }
+    }
+}
+
+impl From<NamespacedShares> for RawNamespacedShares {
+    fn from(value: NamespacedShares) -> Self {
+        let rows = if !value.rows.is_empty() {
+            Some(value.rows)
+        } else {
+            None
+        };
+
+        Self { rows }
+    }
+}
+
 impl Protobuf<RawRow> for NamespacedRow {}
 
 impl TryFrom<RawRow> for NamespacedRow {
@@ -69,7 +95,15 @@ impl TryFrom<RawRow> for NamespacedRow {
             .map(Share::new)
             .collect::<Result<Vec<_>>>()?;
 
-        let proof = value.proof.map(TryInto::try_into).transpose()?;
+        let proof: NamespaceProof = value
+            .proof
+            .map(TryInto::try_into)
+            .transpose()?
+            .ok_or(Error::MissingProof)?;
+
+        if shares.is_empty() && !proof.is_of_absence() {
+            return Err(Error::WrongProofType);
+        }
 
         Ok(NamespacedRow { shares, proof })
     }
@@ -79,13 +113,15 @@ impl From<NamespacedRow> for RawRow {
     fn from(value: NamespacedRow) -> RawRow {
         RawRow {
             shares: value.shares.iter().map(|share| share.to_vec()).collect(),
-            proof: value.proof.map(Into::into),
+            proof: Some(value.proof.into()),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Deref;
+
     use super::*;
     use base64::prelude::*;
 
@@ -151,23 +187,107 @@ mod tests {
         );
     }
 
+    #[test]
+    fn decode_absence_proof() {
+        let blob_get_proof_response = r#"{
+            "start": 1,
+            "end": 2,
+            "nodes": [
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABD+sL4GAQk9mj+ejzHmHjUJEyemkpExb+S5aEDtmuHEq",
+                "/////////////////////////////////////////////////////////////////////////////zgUEBW/wWmCfnwXfalgqMfK9sMy168y3XRzdwY1jpZY"
+            ],
+            "leaf_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAJLVUf6krS8362EAAAAAAAAAAAAAAAAAAAAAAAAAktVR/qStLzfrYeEAWUHOa+lE38pJyHstgGaqi9RXPhZtzUscK7iTUbQS",
+            "is_max_namespace_id_ignored": true
+        }"#;
+
+        let proof: NamespaceProof =
+            serde_json::from_str(blob_get_proof_response).expect("can not parse proof");
+
+        assert!(proof.is_of_absence());
+
+        let sibling = &proof.siblings()[0];
+        let min_ns_bytes = &sibling.min_namespace().0[..];
+        let max_ns_bytes = &sibling.max_namespace().0[..];
+        let hash_bytes = &sibling.hash()[..];
+        assert_eq!(
+            min_ns_bytes,
+            b64_decode("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=")
+        );
+        assert_eq!(
+            max_ns_bytes,
+            b64_decode("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=")
+        );
+        assert_eq!(
+            hash_bytes,
+            b64_decode("P6wvgYBCT2aP56PMeYeNQkTJ6aSkTFv5LloQO2a4cSo=")
+        );
+
+        let sibling = &proof.siblings()[1];
+        let min_ns_bytes = &sibling.min_namespace().0[..];
+        let max_ns_bytes = &sibling.max_namespace().0[..];
+        let hash_bytes = &sibling.hash()[..];
+        assert_eq!(
+            min_ns_bytes,
+            b64_decode("//////////////////////////////////////8=")
+        );
+        assert_eq!(
+            max_ns_bytes,
+            b64_decode("//////////////////////////////////////8=")
+        );
+        assert_eq!(
+            hash_bytes,
+            b64_decode("OBQQFb/BaYJ+fBd9qWCox8r2wzLXrzLddHN3BjWOllg=")
+        );
+
+        let nmt_rs::NamespaceProof::AbsenceProof { leaf: Some(leaf), .. } = proof.deref() else {
+            unreachable!();
+        };
+
+        let min_ns_bytes = &leaf.min_namespace().0[..];
+        let max_ns_bytes = &leaf.max_namespace().0[..];
+        let hash_bytes = &leaf.hash()[..];
+        assert_eq!(
+            min_ns_bytes,
+            b64_decode("AAAAAAAAAAAAAAAAAAAAAAAAAJLVUf6krS8362E=")
+        );
+        assert_eq!(
+            max_ns_bytes,
+            b64_decode("AAAAAAAAAAAAAAAAAAAAAAAAAJLVUf6krS8362E=")
+        );
+        assert_eq!(
+            hash_bytes,
+            b64_decode("4QBZQc5r6UTfyknIey2AZqqL1Fc+Fm3NSxwruJNRtBI=")
+        );
+    }
+
     fn b64_decode(s: &str) -> Vec<u8> {
         BASE64_STANDARD.decode(s).expect("failed to decode base64")
     }
 
     #[test]
     fn decode_namespaced_shares() {
-        let get_shares_by_namespace_response = r#"[{
-            "Shares":[
-                "AAAAAAAAAAAAAAAAAAAAAAAAAE3BWIMKXpgB8QMBAAAEAP////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////8="
+        let get_shares_by_namespace_response = r#"[
+          {
+            "Shares": [
+              "AAAAAAAAAAAAAAAAAAAAAAAAAAAADCBNOWAP3dMBAAAAG/HyDKgAfpEKO/iy5h2g8mvKB+94cXpupUFl9QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
             ],
-            "Proof":{}
-        }]"#;
+            "Proof": {
+              "start": 1,
+              "end": 2,
+              "nodes": [
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABFmTiyJVvgoyHdw7JGii/wyMfMbSdN3Nbi6Uj0Lcprk+",
+                "/////////////////////////////////////////////////////////////////////////////0WE8jz9lbFjpXWj9v7/QgdAxYEqy4ew9TMdqil/UFZm"
+              ],
+              "leaf_hash": null,
+              "is_max_namespace_id_ignored": true
+            }
+          }
+        ]"#;
 
         let ns_shares: NamespacedShares =
             serde_json::from_str(get_shares_by_namespace_response).unwrap();
 
         assert_eq!(ns_shares.rows[0].shares.len(), 1);
-        assert!(ns_shares.rows[0].proof.is_none());
+        assert!(!ns_shares.rows[0].proof.is_of_absence());
     }
 }

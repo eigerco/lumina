@@ -63,10 +63,20 @@ async fn test_get_shares_by_namespace_wrong_ns(client: &HttpClient) {
         .unwrap()
         .dah;
 
-    client
-        .share_get_shares_by_namespace(&dah, random_ns())
+    let random_ns = random_ns();
+    let ns_shares = client
+        .share_get_shares_by_namespace(&dah, random_ns)
         .await
-        .unwrap_err();
+        .unwrap();
+
+    if !ns_shares.rows.is_empty() {
+        assert_eq!(ns_shares.rows.len(), 1);
+        assert!(ns_shares.rows[0].shares.is_empty());
+
+        let proof = ns_shares.rows[0].proof.clone();
+        assert!(proof.is_of_absence());
+        // TODO: verify proof
+    }
 }
 
 async fn test_get_shares_by_namespace_wrong_roots(client: &HttpClient) {
@@ -78,10 +88,12 @@ async fn test_get_shares_by_namespace_wrong_roots(client: &HttpClient) {
 
     let genesis_dah = client.header_get_by_height(1).await.unwrap().dah;
 
-    client
+    let ns_shares = client
         .share_get_shares_by_namespace(&genesis_dah, namespace)
         .await
-        .unwrap_err();
+        .unwrap();
+
+    assert!(ns_shares.rows.is_empty());
 }
 
 #[tokio::test]
