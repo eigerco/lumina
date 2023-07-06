@@ -1,5 +1,6 @@
 services:
   validator:
+    image: validator
     build:
       context: .
       dockerfile: Dockerfile.validator
@@ -7,6 +8,7 @@ services:
       - shared:/shared
 
   bridge:
+    image: bridge
     build:
       context: .
       dockerfile: Dockerfile.bridge
