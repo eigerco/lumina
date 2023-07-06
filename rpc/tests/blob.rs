@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use celestia_rpc::prelude::*;
+use celestia_types::nmt::NamespacedHash;
 use celestia_types::{Blob, Commitment};
 use jsonrpsee::http_client::HttpClient;
 
@@ -29,6 +30,18 @@ async fn test_blob_submit_and_get(client: &HttpClient) {
         .unwrap();
 
     assert_eq!(proofs.len(), 1);
+
+    let dah = client
+        .header_get_by_height(submitted_height)
+        .await
+        .unwrap()
+        .dah;
+    let root_hash = NamespacedHash::try_from(&dah.row_roots[0][..]).unwrap();
+    let leaves = blob.to_shares().unwrap();
+
+    proofs[0]
+        .verify_complete_namespace(&root_hash, &leaves, namespace.into())
+        .unwrap();
 }
 
 async fn test_blob_submit_and_get_large(client: &HttpClient) {
@@ -56,6 +69,8 @@ async fn test_blob_submit_and_get_large(client: &HttpClient) {
         .unwrap();
 
     assert!(proofs.len() > 1);
+    // TODO: can't verify the proofs until we have the end index inside the proof
+    //       because without it we can't know how many shares there are in each row
 }
 
 async fn test_blob_submit_too_large(client: &HttpClient) {

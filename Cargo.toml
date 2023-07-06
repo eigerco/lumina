@@ -12,3 +12,7 @@ tendermint-proto = { git = 'https://github.com/eigerco/celestia-tendermint-rs.gi
 # Uncomment to apply local changes
 #tendermint = { path = "../celestia-tendermint-rs/tendermint" }
 #tendermint-proto = { path = "../celestia-tendermint-rs/proto" }
+
+[patch.'https://github.com/eigerco/nmt-rs.git']
+# Uncomment to apply local changes
+# nmt-rs = { path = "../nmt-rs" }

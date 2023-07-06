@@ -85,7 +85,10 @@ async fn test_get_shares_by_namespace_wrong_ns(client: &HttpClient) {
 
             let proof = ns_shares.rows[0].proof.clone();
             assert!(proof.is_of_absence());
-            // TODO: verify proof
+            let root_hash = NamespacedHash::try_from(&dah.row_roots[0][..]).unwrap();
+            proof
+                .verify_complete_namespace(&root_hash, &Vec::<Vec<_>>::new(), random_ns.into())
+                .unwrap();
             break;
         }
     }
