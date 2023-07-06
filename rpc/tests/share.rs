@@ -5,18 +5,20 @@ use celestia_types::consts::appconsts::{
 };
 use celestia_types::nmt::NamespacedHash;
 use celestia_types::Blob;
-use jsonrpsee::http_client::HttpClient;
 
 pub mod utils;
 
-use utils::{random_bytes, random_ns, test_client, AuthLevel};
+use crate::utils::client::blob_submit;
+use crate::utils::{random_bytes, random_ns, test_client, AuthLevel};
 
-async fn test_get_shares_by_namespace(client: &HttpClient) {
+#[tokio::test]
+async fn test_get_shares_by_namespace() {
+    let client = test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
 
-    let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();
+    let submitted_height = blob_submit(&client, &blob).await.unwrap();
 
     let dah = client
         .header_get_by_height(submitted_height)
@@ -51,12 +53,14 @@ async fn test_get_shares_by_namespace(client: &HttpClient) {
     assert_eq!(&reconstructed_data[..seq_len as usize], &data[..]);
 }
 
-async fn test_get_shares_by_namespace_wrong_ns(client: &HttpClient) {
+#[tokio::test]
+async fn test_get_shares_by_namespace_wrong_ns() {
+    let client = test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
 
-    let submitted_height = client.blob_submit(&[blob.clone()]).await.unwrap();
+    let submitted_height = blob_submit(&client, &blob).await.unwrap();
 
     let dah = client
         .header_get_by_height(submitted_height)
@@ -105,12 +109,14 @@ async fn test_get_shares_by_namespace_wrong_ns(client: &HttpClient) {
     }
 }
 
-async fn test_get_shares_by_namespace_wrong_roots(client: &HttpClient) {
+#[tokio::test]
+async fn test_get_shares_by_namespace_wrong_roots() {
+    let client = test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
 
-    client.blob_submit(&[blob.clone()]).await.unwrap();
+    blob_submit(&client, &blob).await.unwrap();
 
     let genesis_dah = client.header_get_by_height(1).await.unwrap().dah;
 
@@ -120,16 +126,4 @@ async fn test_get_shares_by_namespace_wrong_roots(client: &HttpClient) {
         .unwrap();
 
     assert!(ns_shares.rows.is_empty());
-}
-
-#[tokio::test]
-async fn share_api() {
-    let client = test_client(AuthLevel::Write).unwrap();
-
-    // minimum 2 blocks
-    client.header_wait_for_height(2).await.unwrap();
-
-    test_get_shares_by_namespace(&client).await;
-    test_get_shares_by_namespace_wrong_ns(&client).await;
-    test_get_shares_by_namespace_wrong_roots(&client).await;
 }

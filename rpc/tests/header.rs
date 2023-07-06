@@ -2,12 +2,11 @@ use celestia_rpc::prelude::*;
 
 pub mod utils;
 
-use utils::{test_client, AuthLevel};
+use crate::utils::{test_client, AuthLevel};
 
 #[tokio::test]
 async fn test_local_head() {
-    let client = test_client(AuthLevel::Read).unwrap();
-    client.header_wait_for_height(3).await.unwrap();
+    let client = test_client(AuthLevel::Read).await.unwrap();
 
     let local_head = client.header_local_head().await.unwrap();
 
@@ -25,8 +24,7 @@ async fn test_local_head() {
 
 #[tokio::test]
 async fn test_get_by_height() {
-    let client = test_client(AuthLevel::Read).unwrap();
-    client.header_wait_for_height(2).await.unwrap();
+    let client = test_client(AuthLevel::Read).await.unwrap();
 
     let genesis_header = client.header_get_by_height(1).await.unwrap();
     let second_header = client.header_get_by_height(2).await.unwrap();
@@ -37,7 +35,7 @@ async fn test_get_by_height() {
 
 #[tokio::test]
 async fn test_get_by_height_non_existent() {
-    let client = test_client(AuthLevel::Read).unwrap();
+    let client = test_client(AuthLevel::Read).await.unwrap();
 
     client.header_get_by_height(999_999_999).await.unwrap_err();
 }

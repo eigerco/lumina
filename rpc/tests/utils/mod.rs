@@ -1,9 +1,13 @@
 use std::env;
 
 use anyhow::Result;
+use celestia_rpc::client::new_http;
+use celestia_rpc::prelude::*;
 use celestia_types::nmt::Namespace;
 use jsonrpsee::http_client::HttpClient;
 use rand::RngCore;
+
+pub mod client;
 
 const CONN_STR: &str = "http://localhost:26658";
 
@@ -24,10 +28,16 @@ fn token_from_env(auth_level: AuthLevel) -> Result<Option<String>> {
     }
 }
 
-pub fn test_client(auth_level: AuthLevel) -> Result<HttpClient> {
+pub async fn test_client(auth_level: AuthLevel) -> Result<HttpClient> {
     let _ = dotenvy::dotenv();
     let token = token_from_env(auth_level)?;
-    Ok(celestia_rpc::client::new_http(CONN_STR, token.as_deref())?)
+
+    let client = new_http(CONN_STR, token.as_deref())?;
+
+    // minimum 2 blocks
+    client.header_wait_for_height(2).await?;
+
+    Ok(client)
 }
 
 pub fn random_ns() -> Namespace {

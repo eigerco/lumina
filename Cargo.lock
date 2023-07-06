@@ -150,6 +150,7 @@ dependencies = [
  "dotenvy",
  "http",
  "jsonrpsee",
+ "once_cell",
  "rand",
  "tendermint",
  "tendermint-proto",
