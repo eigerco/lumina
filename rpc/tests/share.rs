@@ -3,13 +3,13 @@ use celestia_types::consts::appconsts::{
     CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SEQUENCE_LEN_BYTES,
     SHARE_INFO_BYTES,
 };
-use celestia_types::nmt::NamespacedHash;
+use celestia_types::nmt::Namespace;
 use celestia_types::Blob;
 
 pub mod utils;
 
 use crate::utils::client::blob_submit;
-use crate::utils::{random_bytes, random_ns, test_client, AuthLevel};
+use crate::utils::{random_bytes, random_ns, random_ns_range, test_client, AuthLevel};
 
 #[tokio::test]
 async fn test_get_shares_by_namespace() {
@@ -68,6 +68,10 @@ async fn test_get_shares_by_namespace_wrong_ns() {
         .unwrap()
         .dah;
 
+    let root_hash = dah.root_hash().unwrap();
+    let min_ns = root_hash.min_namespace().into();
+    let max_ns = root_hash.max_namespace().into();
+
     // When we try to get shares for the unknown namespace then
     // if there exists a row where row_root.min_namespace() < namespace < row_root.max_namespace()
     // then we will get an absence proof for that row
@@ -76,37 +80,47 @@ async fn test_get_shares_by_namespace_wrong_ns() {
     // As the block has just a single blob, we can only care about the first row.
 
     // check the case where we receive absence proof
-    loop {
-        let random_ns = random_ns();
-        let ns_shares = client
-            .share_get_shares_by_namespace(&dah, random_ns)
-            .await
-            .unwrap();
+    let random_ns = random_ns_range(min_ns, max_ns);
+    let ns_shares = client
+        .share_get_shares_by_namespace(&dah, random_ns)
+        .await
+        .unwrap();
+    assert_eq!(ns_shares.rows.len(), 1);
+    assert!(ns_shares.rows[0].shares.is_empty());
 
-        if !ns_shares.rows.is_empty() {
-            assert_eq!(ns_shares.rows.len(), 1);
-            assert!(ns_shares.rows[0].shares.is_empty());
+    let proof = ns_shares.rows[0].proof.clone();
+    assert!(proof.is_of_absence());
+    // TODO: verify proof
+}
 
-            let proof = ns_shares.rows[0].proof.clone();
-            assert!(proof.is_of_absence());
-            // TODO: verify proof
-            break;
-        }
-    }
+#[tokio::test]
+async fn test_get_shares_by_namespace_wrong_ns_out_of_range() {
+    let client = test_client(AuthLevel::Write).await.unwrap();
+    let namespace = random_ns();
+    let data = random_bytes(1024);
+    let blob = Blob::new(namespace, data.clone()).unwrap();
+
+    let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
+
+    let dah = client
+        .header_get_by_height(submitted_height)
+        .await
+        .unwrap()
+        .dah;
+
+    let root_hash = dah.root_hash().unwrap();
+    let min_ns = root_hash.min_namespace().into();
+
     // check the case where namespace is outside of the root hash range
-    loop {
-        let random_ns = random_ns();
-        let ns_shares = client
-            .share_get_shares_by_namespace(&dah, random_ns)
-            .await
-            .unwrap();
+    let zero = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let random_ns = random_ns_range(zero, min_ns);
+    let ns_shares = client
+        .share_get_shares_by_namespace(&dah, random_ns)
+        .await
+        .unwrap();
 
-        if ns_shares.rows.is_empty() {
-            let root_hash = NamespacedHash::try_from(&dah.row_roots[0][..]).unwrap();
-            assert!(!root_hash.contains(random_ns.into()));
-            break;
-        }
-    }
+    assert!(ns_shares.rows.is_empty());
+    assert!(!root_hash.contains(random_ns.into()));
 }
 
 #[tokio::test]

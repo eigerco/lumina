@@ -5,7 +5,7 @@ use nmt_rs::simple_merkle::proof::Proof as NmtProof;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
-use crate::nmt::{NamespacedHash, NamespacedSha2Hasher, NS_SIZE};
+use crate::nmt::{to_namespaced_hash, NamespacedSha2Hasher, NS_SIZE};
 use crate::{Error, Result};
 
 type NmtNamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;
@@ -72,8 +72,4 @@ impl From<NamespaceProof> for RawProof {
     fn from(_value: NamespaceProof) -> Self {
         todo!();
     }
-}
-
-fn to_namespaced_hash(node: &[u8]) -> Result<NamespacedHash> {
-    node.try_into().map_err(|_| Error::InvalidNamespacedHash)
 }

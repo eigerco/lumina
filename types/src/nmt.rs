@@ -99,6 +99,15 @@ impl Namespace {
     pub fn id(&self) -> &[u8] {
         &self.as_bytes()[1..]
     }
+
+    pub fn id_v0(&self) -> Option<&[u8]> {
+        if self.version() == 0 {
+            let start = NS_SIZE - NS_ID_V0_SIZE;
+            Some(&self.as_bytes()[start..])
+        } else {
+            None
+        }
+    }
 }
 
 impl From<Namespace> for nmt_rs::NamespaceId<NS_SIZE> {
@@ -138,6 +147,10 @@ impl<'de> Deserialize<'de> for Namespace {
             .map(Namespace)
             .map_err(|e| serde::de::Error::custom(e.to_string()))
     }
+}
+
+pub(crate) fn to_namespaced_hash(node: &[u8]) -> Result<NamespacedHash> {
+    node.try_into().map_err(|_| Error::InvalidNamespacedHash)
 }
 
 #[cfg(test)]

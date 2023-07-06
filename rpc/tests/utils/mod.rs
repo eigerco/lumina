@@ -3,9 +3,9 @@ use std::env;
 use anyhow::Result;
 use celestia_rpc::client::new_http;
 use celestia_rpc::prelude::*;
-use celestia_types::nmt::Namespace;
+use celestia_types::nmt::{Namespace, NS_ID_V0_SIZE};
 use jsonrpsee::http_client::HttpClient;
-use rand::RngCore;
+use rand::{Rng, RngCore};
 
 pub mod client;
 
@@ -40,8 +40,26 @@ pub async fn test_client(auth_level: AuthLevel) -> Result<HttpClient> {
     Ok(client)
 }
 
+fn ns_to_u128(ns: Namespace) -> u128 {
+    let mut bytes = [0u8; 16];
+    let id = ns.id_v0().unwrap();
+    bytes[6..].copy_from_slice(id);
+    u128::from_be_bytes(bytes)
+}
+
 pub fn random_ns() -> Namespace {
     Namespace::const_v0(random_bytes_array())
+}
+
+pub fn random_ns_range(start: Namespace, end: Namespace) -> Namespace {
+    let start = ns_to_u128(start);
+    let end = ns_to_u128(end);
+
+    let num = rand::thread_rng().gen_range(start..end);
+    let bytes = num.to_be_bytes();
+    let id = &bytes[bytes.len() - NS_ID_V0_SIZE..];
+
+    Namespace::new_v0(id).unwrap()
 }
 
 pub fn random_bytes(length: usize) -> Vec<u8> {
