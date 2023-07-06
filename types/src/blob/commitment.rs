@@ -84,7 +84,7 @@ impl<'de> Deserialize<'de> for Commitment {
         // base64 needs more buffer size than the final output
         let mut buf = [0u8; HASH_SIZE * 2];
 
-        let s = String::deserialize(deserializer)?;
+        let s = <&str>::deserialize(deserializer)?;
 
         let len = BASE64_STANDARD
             .decode_slice(s, &mut buf)

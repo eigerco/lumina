@@ -128,7 +128,7 @@ impl<'de> Deserialize<'de> for Namespace {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <&str>::deserialize(deserializer)?;
 
         let bytes = BASE64_STANDARD
             .decode(s)
