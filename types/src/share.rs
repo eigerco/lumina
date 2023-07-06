@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use celestia_proto::share::p2p::shrex::nd::Row as RawRow;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
@@ -54,6 +55,32 @@ impl Share {
         let mut bytes = self.namespace.as_bytes().to_vec();
         bytes.extend_from_slice(&self.data);
         bytes
+    }
+}
+
+impl Serialize for Share {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let bytes = self.to_vec();
+        let s = BASE64_STANDARD.encode(bytes);
+        serializer.serialize_str(&s)
+    }
+}
+
+impl<'de> Deserialize<'de> for Share {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = <&str>::deserialize(deserializer)?;
+
+        let bytes = BASE64_STANDARD
+            .decode(s)
+            .map_err(|e| serde::de::Error::custom(e.to_string()))?;
+
+        Share::new(bytes).map_err(|e| serde::de::Error::custom(e.to_string()))
     }
 }
 
@@ -121,7 +148,6 @@ impl From<NamespacedRow> for RawRow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::prelude::*;
 
     #[test]
     fn share_should_have_correct_len() {
