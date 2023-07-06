@@ -18,7 +18,7 @@ async fn test_get_shares_by_namespace() {
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
 
-    let submitted_height = blob_submit(&client, &blob).await.unwrap();
+    let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
     let dah = client
         .header_get_by_height(submitted_height)
@@ -60,7 +60,7 @@ async fn test_get_shares_by_namespace_wrong_ns() {
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
 
-    let submitted_height = blob_submit(&client, &blob).await.unwrap();
+    let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
     let dah = client
         .header_get_by_height(submitted_height)
@@ -116,7 +116,7 @@ async fn test_get_shares_by_namespace_wrong_roots() {
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
 
-    blob_submit(&client, &blob).await.unwrap();
+    blob_submit(&client, &[blob]).await.unwrap();
 
     let genesis_dah = client.header_get_by_height(1).await.unwrap().dah;
 
