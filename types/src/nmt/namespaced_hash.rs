@@ -69,7 +69,7 @@ impl TryFrom<&'_ Vec<u8>> for NamespacedHash {
     type Error = Error;
 
     fn try_from(value: &'_ Vec<u8>) -> Result<Self, Self::Error> {
-        NamespacedHash::from_raw(&value)
+        NamespacedHash::from_raw(value)
     }
 }
 
