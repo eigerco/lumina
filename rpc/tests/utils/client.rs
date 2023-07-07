@@ -1,8 +1,10 @@
 use anyhow::Result;
-use celestia_rpc::client::new_websocket;
+use celestia_rpc::client::{new_http, new_websocket};
 use celestia_rpc::prelude::*;
 use celestia_types::Blob;
+use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::Error;
+use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::ws_client::WsClient;
 use once_cell::sync::Lazy;
 use std::env;
@@ -10,7 +12,8 @@ use tokio::sync::Mutex;
 
 static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
-const CONN_STR: &str = "ws://localhost:26658";
+const WS_URL: &str = "ws://localhost:26658";
+const HTTP_URL: &str = "http://localhost:26658";
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum AuthLevel {
@@ -29,11 +32,16 @@ fn token_from_env(auth_level: AuthLevel) -> Result<Option<String>> {
     }
 }
 
+fn env_or(var_name: &str, or_value: &str) -> String {
+    env::var(var_name).unwrap_or_else(|_| or_value.to_owned())
+}
+
 pub async fn new_test_client(auth_level: AuthLevel) -> Result<WsClient> {
     let _ = dotenvy::dotenv();
     let token = token_from_env(auth_level)?;
+    let url = env_or("CELESTIA_RPC_URL", WS_URL);
 
-    let client = new_websocket(CONN_STR, token.as_deref()).await?;
+    let client = new_websocket(&url, token.as_deref()).await?;
 
     // minimum 2 blocks
     client.header_wait_for_height(2).await?;
@@ -41,7 +49,24 @@ pub async fn new_test_client(auth_level: AuthLevel) -> Result<WsClient> {
     Ok(client)
 }
 
-pub async fn blob_submit(client: &WsClient, blobs: &[Blob]) -> Result<u64, Error> {
+// This can be used if you want to inspect the requests from `mitmproxy`.
+pub async fn new_test_client_http(auth_level: AuthLevel) -> Result<HttpClient> {
+    let _ = dotenvy::dotenv();
+    let token = token_from_env(auth_level)?;
+    let url = env_or("CELESTIA_RPC_URL", HTTP_URL);
+
+    let client = new_http(&url, token.as_deref())?;
+
+    // minimum 2 blocks
+    client.header_wait_for_height(2).await?;
+
+    Ok(client)
+}
+
+pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, Error>
+where
+    C: ClientT + Sync,
+{
     let _guard = LOCK.lock().await;
     client.blob_submit(&blobs).await
 }

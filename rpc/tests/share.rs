@@ -160,11 +160,15 @@ async fn get_eds() {
         .unwrap()
         .dah;
 
-    let eds = client.share_get_eds(&dah).await.unwrap();
+    let _eds = client.share_get_eds(&dah).await.unwrap();
 
-    println!("{}", eds.data_square.len());
+    // TODO: validate
+}
 
-    for x in eds.data_square {
-        println!("{}", x.len());
-    }
+#[tokio::test]
+async fn probability_of_availability() {
+    let client = new_test_client(AuthLevel::Read).await.unwrap();
+
+    client.share_probability_of_availability().await.unwrap();
+    // TODO: any way to validate it?
 }
