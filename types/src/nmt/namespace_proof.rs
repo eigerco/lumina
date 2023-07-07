@@ -55,7 +55,8 @@ impl TryFrom<RawProof> for NamespaceProof {
         let mut proof = NmtNamespaceProof::PresenceProof {
             proof: NmtProof {
                 siblings,
-                start_idx: value.start as u32,
+                start: value.start as u32,
+                end: value.end as u32,
             },
             ignore_max_ns: true,
         };
@@ -69,8 +70,24 @@ impl TryFrom<RawProof> for NamespaceProof {
 }
 
 impl From<NamespaceProof> for RawProof {
-    fn from(_value: NamespaceProof) -> Self {
-        todo!();
+    fn from(value: NamespaceProof) -> Self {
+        let hashleaf = match &*value {
+            nmt_rs::NamespaceProof::AbsenceProof { leaf, .. } => leaf
+                .map(|ns_hash| ns_hash.iter().copied().collect())
+                .unwrap_or_default(),
+            _ => vec![],
+        };
+        let nodes = value
+            .siblings()
+            .iter()
+            .map(|ns_hash| ns_hash.iter().copied().collect())
+            .collect();
+        RawProof {
+            start: value.start_idx() as i64,
+            end: value.end_idx() as i64,
+            nodes,
+            hashleaf,
+        }
     }
 }
 
