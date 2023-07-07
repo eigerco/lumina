@@ -7,7 +7,7 @@ use tendermint_proto::Protobuf;
 use crate::consts::data_availability_header::{
     MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
 };
-use crate::nmt::{to_namespaced_hash, NamespacedHash};
+use crate::nmt::NamespacedHash;
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,8 +22,12 @@ pub struct DataAvailabilityHeader {
 }
 
 impl DataAvailabilityHeader {
-    pub fn root_hash(&self) -> Option<&NamespacedHash> {
-        self.row_roots.get(0)
+    pub fn row_root(&self, row: usize) -> Option<&NamespacedHash> {
+        self.row_roots.get(row)
+    }
+
+    pub fn column_root(&self, column: usize) -> Option<&NamespacedHash> {
+        self.column_roots.get(column)
     }
 }
 
@@ -44,12 +48,12 @@ impl TryFrom<RawDataAvailabilityHeader> for DataAvailabilityHeader {
             row_roots: value
                 .row_roots
                 .iter()
-                .map(|bytes| to_namespaced_hash(bytes))
+                .map(NamespacedHash::try_from)
                 .collect::<Result<Vec<_>>>()?,
             column_roots: value
                 .column_roots
                 .iter()
-                .map(|bytes| to_namespaced_hash(bytes))
+                .map(NamespacedHash::try_from)
                 .collect::<Result<Vec<_>>>()?,
             hash,
         })
@@ -59,15 +63,11 @@ impl TryFrom<RawDataAvailabilityHeader> for DataAvailabilityHeader {
 impl From<DataAvailabilityHeader> for RawDataAvailabilityHeader {
     fn from(value: DataAvailabilityHeader) -> RawDataAvailabilityHeader {
         RawDataAvailabilityHeader {
-            row_roots: value
-                .row_roots
-                .iter()
-                .map(|hash| hash.iter().copied().collect())
-                .collect(),
+            row_roots: value.row_roots.iter().map(|hash| hash.to_vec()).collect(),
             column_roots: value
                 .column_roots
                 .iter()
-                .map(|hash| hash.iter().copied().collect())
+                .map(|hash| hash.to_vec())
                 .collect(),
         }
     }

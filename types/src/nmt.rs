@@ -3,8 +3,12 @@ use nmt_rs::simple_merkle::db::MemDb;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 mod namespace_proof;
+mod namespaced_hash;
 
 pub use self::namespace_proof::NamespaceProof;
+pub(crate) use self::namespaced_hash::to_nmt_namespaced_hash;
+pub use self::namespaced_hash::NamespacedHash;
+use self::namespaced_hash::NmtNamespacedHash;
 use crate::{Error, Result};
 
 pub const NS_VER_SIZE: usize = 1;
@@ -12,9 +16,8 @@ pub const NS_ID_SIZE: usize = 28;
 pub const NS_SIZE: usize = NS_VER_SIZE + NS_ID_SIZE;
 pub const NS_ID_V0_SIZE: usize = 10;
 
-pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
 pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
-pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
+pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NmtNamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
@@ -147,10 +150,6 @@ impl<'de> Deserialize<'de> for Namespace {
             .map(Namespace)
             .map_err(|e| serde::de::Error::custom(e.to_string()))
     }
-}
-
-pub(crate) fn to_namespaced_hash(node: &[u8]) -> Result<NamespacedHash> {
-    node.try_into().map_err(|_| Error::InvalidNamespacedHash)
 }
 
 #[cfg(test)]
