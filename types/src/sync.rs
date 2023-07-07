@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use tendermint::hash::Hash;
 use tendermint::time::Time;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct SyncState {
     #[serde(rename = "ID")]

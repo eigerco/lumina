@@ -10,7 +10,7 @@ use crate::consts::data_availability_header::{
 use crate::nmt::NamespacedHash;
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     try_from = "RawDataAvailabilityHeader",
     into = "RawDataAvailabilityHeader"

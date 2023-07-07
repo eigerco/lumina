@@ -5,7 +5,7 @@ use crate::{Error, Result};
 
 pub(crate) type NmtNamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NamespacedHash(NmtNamespacedHash);
 
 impl NamespacedHash {

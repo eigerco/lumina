@@ -10,13 +10,13 @@ mod info_byte;
 
 pub use info_byte::InfoByte;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(from = "RawNamespacedShares", into = "RawNamespacedShares")]
 pub struct NamespacedShares {
     pub rows: Vec<NamespacedRow>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawRow", into = "RawRow")]
 pub struct NamespacedRow {
     pub shares: Vec<Share>,
@@ -30,7 +30,7 @@ pub struct NamespacedRow {
 //      SequenceLen SEQUENCE_LEN_BYTES bytes OPTIONAL
 //      Data        bytes
 // }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "RawShare", into = "RawShare")]
 pub struct Share {
     pub namespace: Namespace,

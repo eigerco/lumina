@@ -19,7 +19,7 @@ pub type ValidatorSet = validator::Set;
 
 const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "RawExtendedHeader", into = "RawExtendedHeader")]
 pub struct ExtendedHeader {
     pub header: Header,
