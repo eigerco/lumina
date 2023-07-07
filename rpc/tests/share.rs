@@ -144,3 +144,27 @@ async fn get_shares_by_namespace_wrong_roots() {
 
     assert!(ns_shares.rows.is_empty());
 }
+
+#[tokio::test]
+async fn get_eds() {
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let namespace = random_ns();
+    let data = vec![1, 2, 3, 4];
+    let blob = Blob::new(namespace, data.clone()).unwrap();
+
+    let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
+
+    let dah = client
+        .header_get_by_height(submitted_height)
+        .await
+        .unwrap()
+        .dah;
+
+    let eds = client.share_get_eds(&dah).await.unwrap();
+
+    println!("{}", eds.data_square.len());
+
+    for x in eds.data_square {
+        println!("{}", x.len());
+    }
+}
