@@ -14,6 +14,10 @@ impl NamespacedHash {
         Ok(NamespacedHash(hash))
     }
 
+    pub fn into_inner(self) -> NmtNamespacedHash {
+        self.0
+    }
+
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.iter().copied().collect()
     }

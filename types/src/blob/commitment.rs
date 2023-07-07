@@ -100,7 +100,7 @@ impl<'de> Deserialize<'de> for Commitment {
 }
 
 /// Splits blob's data to the sequence of shares
-fn split_blob_to_shares(
+pub(crate) fn split_blob_to_shares(
     namespace: Namespace,
     share_version: u8,
     blob_data: &[u8],

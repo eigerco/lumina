@@ -14,6 +14,12 @@ type NmtNamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher,
 #[serde(try_from = "RawProof", into = "RawProof")]
 pub struct NamespaceProof(NmtNamespaceProof);
 
+impl NamespaceProof {
+    pub fn into_inner(self) -> NmtNamespaceProof {
+        self.0
+    }
+}
+
 impl Deref for NamespaceProof {
     type Target = NmtNamespaceProof;
 

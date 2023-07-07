@@ -17,6 +17,13 @@ async fn blob_submit_and_get() {
 
     let submitted_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
 
+    let dah = client
+        .header_get_by_height(submitted_height)
+        .await
+        .unwrap()
+        .dah;
+    let root_hash = dah.row_root(0).unwrap();
+
     let received_blob = client
         .blob_get(submitted_height, namespace, blob.commitment)
         .await
@@ -31,6 +38,12 @@ async fn blob_submit_and_get() {
         .unwrap();
 
     assert_eq!(proofs.len(), 1);
+
+    let leaves = blob.to_shares().unwrap();
+
+    proofs[0]
+        .verify_complete_namespace(&root_hash, &leaves, namespace.into())
+        .unwrap();
 }
 
 #[tokio::test]
@@ -95,6 +108,8 @@ async fn blob_submit_and_get_large() {
         .unwrap();
 
     assert!(proofs.len() > 1);
+    // TODO: can't verify the proofs until we have the end index inside the proof
+    //       because without it we can't know how many shares there are in each row
 }
 
 #[tokio::test]

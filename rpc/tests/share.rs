@@ -88,9 +88,12 @@ async fn get_shares_by_namespace_wrong_ns() {
     assert_eq!(ns_shares.rows.len(), 1);
     assert!(ns_shares.rows[0].shares.is_empty());
 
-    let proof = ns_shares.rows[0].proof.clone();
+    let proof = &ns_shares.rows[0].proof;
     assert!(proof.is_of_absence());
-    // TODO: verify proof
+
+    proof
+        .verify_complete_namespace(&root_hash, &Vec::<Vec<_>>::new(), random_ns.into())
+        .unwrap();
 }
 
 #[tokio::test]
