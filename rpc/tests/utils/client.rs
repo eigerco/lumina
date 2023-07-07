@@ -68,5 +68,5 @@ where
     C: ClientT + Sync,
 {
     let _guard = LOCK.lock().await;
-    client.blob_submit(&blobs).await
+    client.blob_submit(blobs).await
 }

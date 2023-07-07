@@ -5,7 +5,7 @@ members = ["proto", "types", "rpc"]
 [workspace.dependencies]
 celestia-proto = { version = "0.1.0", path = "proto" }
 celestia-types = { version = "0.1.0", path = "types" }
-nmt-rs = { git = "https://github.com/eigerco/nmt-rs.git", rev = "f09c879" }
+nmt-rs = { git = "https://github.com/eigerco/nmt-rs.git", rev = "5146800" }
 tendermint = { git = 'https://github.com/eigerco/celestia-tendermint-rs.git', rev = '91d4566' }
 tendermint-proto = { git = 'https://github.com/eigerco/celestia-tendermint-rs.git', rev = '91d4566' }
 

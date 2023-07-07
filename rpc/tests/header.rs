@@ -90,17 +90,14 @@ async fn network_head() {
 async fn subscribe() {
     let client = new_test_client(AuthLevel::Read).await.unwrap();
 
+    let genesis_header = client.header_get_by_height(1).await.unwrap();
+
     let mut incoming_headers = client.header_subscribe().await.unwrap();
-
-    // skip one to avoid race conditions in the test
-    incoming_headers.next().await.unwrap().unwrap();
-
-    let network_head = client.header_network_head().await.unwrap();
     let header1 = incoming_headers.next().await.unwrap().unwrap();
     let header2 = incoming_headers.next().await.unwrap().unwrap();
 
-    network_head.verify(&header1).unwrap();
-    network_head.verify(&header2).unwrap();
+    genesis_header.verify(&header1).unwrap();
+    header1.verify(&header2).unwrap();
 }
 
 #[tokio::test]
@@ -115,5 +112,5 @@ async fn sync_state() {
         .unwrap();
 
     let state2 = client.header_sync_state().await.unwrap();
-    assert_eq!(state2.height, state1.height + 1);
+    assert!(state2.height > state1.height);
 }

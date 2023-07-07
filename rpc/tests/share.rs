@@ -91,8 +91,10 @@ async fn get_shares_by_namespace_wrong_ns() {
     let proof = &ns_shares.rows[0].proof;
     assert!(proof.is_of_absence());
 
+    let no_leafs: &[&[u8]] = &[];
+
     proof
-        .verify_complete_namespace(&root_hash, &Vec::<Vec<_>>::new(), random_ns.into())
+        .verify_complete_namespace(&root_hash, no_leafs, random_ns.into())
         .unwrap();
 }
 

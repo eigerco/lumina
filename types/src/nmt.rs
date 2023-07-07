@@ -7,9 +7,7 @@ mod namespace_proof;
 mod namespaced_hash;
 
 pub use self::namespace_proof::NamespaceProof;
-pub(crate) use self::namespaced_hash::to_nmt_namespaced_hash;
-pub use self::namespaced_hash::NamespacedHash;
-use self::namespaced_hash::NmtNamespacedHash;
+pub use self::namespaced_hash::{NamespacedHash, NamespacedHashExt};
 use crate::{Error, Result};
 
 pub const NS_VER_SIZE: usize = 1;
@@ -18,7 +16,7 @@ pub const NS_SIZE: usize = NS_VER_SIZE + NS_ID_SIZE;
 pub const NS_ID_V0_SIZE: usize = 10;
 
 pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
-pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NmtNamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
+pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
