@@ -783,7 +783,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 [[package]]
 name = "nmt-rs"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/nmt-rs.git?rev=a371723#a371723e7d0f669e46b4afea31b77f98c9ca9dff"
+source = "git+https://github.com/eigerco/nmt-rs.git?rev=f09c879#f09c87930cba5e01c0966ed72457c5a7dd26a451"
 dependencies = [
  "bytes",
  "sha2 0.10.7",
@@ -1348,7 +1348,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?branch=v0.32.x-celestia#bdb2d6415240fa9fe7e66877583f42eb7e573cbb"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=91d4566#91d4566f8ee415107fd5073998879afea2810bac"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -1376,7 +1376,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?branch=v0.32.x-celestia#bdb2d6415240fa9fe7e66877583f42eb7e573cbb"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=91d4566#91d4566f8ee415107fd5073998879afea2810bac"
 dependencies = [
  "bytes",
  "flex-error",

@@ -1,6 +1,7 @@
 use base64::prelude::*;
 use nmt_rs::simple_merkle::db::MemDb;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tendermint_proto::serializers::cow_str::CowStr;
 
 mod namespace_proof;
 mod namespaced_hash;
@@ -140,15 +141,16 @@ impl<'de> Deserialize<'de> for Namespace {
     where
         D: Deserializer<'de>,
     {
-        let s = <&str>::deserialize(deserializer)?;
+        // base64 needs more buffer size than the final output
+        let mut buf = [0u8; NS_SIZE * 2];
 
-        let bytes = BASE64_STANDARD
-            .decode(s)
+        let s = CowStr::deserialize(deserializer)?;
+
+        let len = BASE64_STANDARD
+            .decode_slice(s, &mut buf)
             .map_err(|e| serde::de::Error::custom(e.to_string()))?;
 
-        nmt_rs::NamespaceId::try_from(&bytes[..])
-            .map(Namespace)
-            .map_err(|e| serde::de::Error::custom(e.to_string()))
+        Namespace::from_raw(&buf[..len]).map_err(|e| serde::de::Error::custom(e.to_string()))
     }
 }
 

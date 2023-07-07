@@ -1,4 +1,3 @@
-use base64::prelude::*;
 use celestia_proto::share::p2p::shrex::nd::Row as RawRow;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
@@ -31,7 +30,8 @@ pub struct NamespacedRow {
 //      SequenceLen SEQUENCE_LEN_BYTES bytes OPTIONAL
 //      Data        bytes
 // }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "RawShare", into = "RawShare")]
 pub struct Share {
     pub namespace: Namespace,
     pub data: Vec<u8>,
@@ -58,33 +58,7 @@ impl Share {
     }
 }
 
-impl Serialize for Share {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let bytes = self.to_vec();
-        let s = BASE64_STANDARD.encode(bytes);
-        serializer.serialize_str(&s)
-    }
-}
-
-impl<'de> Deserialize<'de> for Share {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = <&str>::deserialize(deserializer)?;
-
-        let bytes = BASE64_STANDARD
-            .decode(s)
-            .map_err(|e| serde::de::Error::custom(e.to_string()))?;
-
-        Share::new(bytes).map_err(|e| serde::de::Error::custom(e.to_string()))
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(transparent)]
 struct RawNamespacedShares {
     rows: Option<Vec<NamespacedRow>>,
@@ -107,6 +81,29 @@ impl From<NamespacedShares> for RawNamespacedShares {
         };
 
         Self { rows }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(transparent)]
+struct RawShare {
+    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
+    data: Vec<u8>,
+}
+
+impl TryFrom<RawShare> for Share {
+    type Error = Error;
+
+    fn try_from(value: RawShare) -> Result<Self, Self::Error> {
+        Share::new(value.data)
+    }
+}
+
+impl From<Share> for RawShare {
+    fn from(value: Share) -> Self {
+        RawShare {
+            data: value.to_vec(),
+        }
     }
 }
 
@@ -148,6 +145,7 @@ impl From<NamespacedRow> for RawRow {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::prelude::*;
 
     #[test]
     fn share_should_have_correct_len() {
