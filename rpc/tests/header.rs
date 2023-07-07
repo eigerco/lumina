@@ -5,7 +5,7 @@ pub mod utils;
 use crate::utils::{test_client, AuthLevel};
 
 #[tokio::test]
-async fn test_local_head() {
+async fn local_head() {
     let client = test_client(AuthLevel::Read).await.unwrap();
 
     let local_head = client.header_local_head().await.unwrap();
@@ -23,7 +23,7 @@ async fn test_local_head() {
 }
 
 #[tokio::test]
-async fn test_get_by_height() {
+async fn get_by_height() {
     let client = test_client(AuthLevel::Read).await.unwrap();
 
     let genesis_header = client.header_get_by_height(1).await.unwrap();
@@ -34,7 +34,7 @@ async fn test_get_by_height() {
 }
 
 #[tokio::test]
-async fn test_get_by_height_non_existent() {
+async fn get_by_height_non_existent() {
     let client = test_client(AuthLevel::Read).await.unwrap();
 
     client.header_get_by_height(999_999_999).await.unwrap_err();

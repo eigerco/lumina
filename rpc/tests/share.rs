@@ -12,7 +12,7 @@ use crate::utils::client::blob_submit;
 use crate::utils::{random_bytes, random_ns, random_ns_range, test_client, AuthLevel};
 
 #[tokio::test]
-async fn test_get_shares_by_namespace() {
+async fn get_shares_by_namespace() {
     let client = test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
@@ -54,7 +54,7 @@ async fn test_get_shares_by_namespace() {
 }
 
 #[tokio::test]
-async fn test_get_shares_by_namespace_wrong_ns() {
+async fn get_shares_by_namespace_wrong_ns() {
     let client = test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
@@ -68,7 +68,7 @@ async fn test_get_shares_by_namespace_wrong_ns() {
         .unwrap()
         .dah;
 
-    let root_hash = dah.root_hash().unwrap();
+    let root_hash = dah.row_root(0).unwrap();
     let min_ns = root_hash.min_namespace().into();
     let max_ns = root_hash.max_namespace().into();
 
@@ -94,7 +94,7 @@ async fn test_get_shares_by_namespace_wrong_ns() {
 }
 
 #[tokio::test]
-async fn test_get_shares_by_namespace_wrong_ns_out_of_range() {
+async fn get_shares_by_namespace_wrong_ns_out_of_range() {
     let client = test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
@@ -108,7 +108,7 @@ async fn test_get_shares_by_namespace_wrong_ns_out_of_range() {
         .unwrap()
         .dah;
 
-    let root_hash = dah.root_hash().unwrap();
+    let root_hash = dah.row_root(0).unwrap();
     let min_ns = root_hash.min_namespace().into();
 
     // check the case where namespace is outside of the root hash range
@@ -124,7 +124,7 @@ async fn test_get_shares_by_namespace_wrong_ns_out_of_range() {
 }
 
 #[tokio::test]
-async fn test_get_shares_by_namespace_wrong_roots() {
+async fn get_shares_by_namespace_wrong_roots() {
     let client = test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
