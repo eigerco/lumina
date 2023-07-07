@@ -8,12 +8,12 @@ use celestia_types::Blob;
 
 pub mod utils;
 
-use crate::utils::client::blob_submit;
-use crate::utils::{random_bytes, random_ns, random_ns_range, test_client, AuthLevel};
+use crate::utils::client::{blob_submit, new_test_client, AuthLevel};
+use crate::utils::{random_bytes, random_ns, random_ns_range};
 
 #[tokio::test]
 async fn get_shares_by_namespace() {
-    let client = test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
@@ -55,7 +55,7 @@ async fn get_shares_by_namespace() {
 
 #[tokio::test]
 async fn get_shares_by_namespace_wrong_ns() {
-    let client = test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
@@ -98,7 +98,7 @@ async fn get_shares_by_namespace_wrong_ns() {
 
 #[tokio::test]
 async fn get_shares_by_namespace_wrong_ns_out_of_range() {
-    let client = test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();
@@ -128,7 +128,7 @@ async fn get_shares_by_namespace_wrong_ns_out_of_range() {
 
 #[tokio::test]
 async fn get_shares_by_namespace_wrong_roots() {
-    let client = test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone()).unwrap();

@@ -1,44 +1,7 @@
-use std::env;
-
-use anyhow::Result;
-use celestia_rpc::client::new_http;
-use celestia_rpc::prelude::*;
 use celestia_types::nmt::{Namespace, NS_ID_V0_SIZE};
-use jsonrpsee::http_client::HttpClient;
 use rand::{Rng, RngCore};
 
 pub mod client;
-
-const CONN_STR: &str = "http://localhost:26658";
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum AuthLevel {
-    Public,
-    Read,
-    Write,
-    Admin,
-}
-
-fn token_from_env(auth_level: AuthLevel) -> Result<Option<String>> {
-    match auth_level {
-        AuthLevel::Public => Ok(None),
-        AuthLevel::Read => Ok(Some(env::var("CELESTIA_NODE_AUTH_TOKEN_READ")?)),
-        AuthLevel::Write => Ok(Some(env::var("CELESTIA_NODE_AUTH_TOKEN_WRITE")?)),
-        AuthLevel::Admin => Ok(Some(env::var("CELESTIA_NODE_AUTH_TOKEN_ADMIN")?)),
-    }
-}
-
-pub async fn test_client(auth_level: AuthLevel) -> Result<HttpClient> {
-    let _ = dotenvy::dotenv();
-    let token = token_from_env(auth_level)?;
-
-    let client = new_http(CONN_STR, token.as_deref())?;
-
-    // minimum 2 blocks
-    client.header_wait_for_height(2).await?;
-
-    Ok(client)
-}
 
 fn ns_to_u128(ns: Namespace) -> u128 {
     let mut bytes = [0u8; 16];

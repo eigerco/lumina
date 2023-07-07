@@ -5,12 +5,12 @@ use celestia_types::{Blob, Commitment};
 
 pub mod utils;
 
-use crate::utils::client::blob_submit;
-use crate::utils::{random_bytes, random_bytes_array, random_ns, test_client, AuthLevel};
+use crate::utils::client::{blob_submit, new_test_client, AuthLevel};
+use crate::utils::{random_bytes, random_bytes_array, random_ns};
 
 #[tokio::test]
 async fn blob_submit_and_get() {
-    let client = test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data).unwrap();
@@ -48,7 +48,7 @@ async fn blob_submit_and_get() {
 
 #[tokio::test]
 async fn blob_submit_and_get_all() {
-    let client = test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespaces = &[random_ns(), random_ns()];
 
     let blobs = &[
@@ -83,7 +83,7 @@ async fn blob_submit_and_get_all() {
 
 #[tokio::test]
 async fn blob_submit_and_get_large() {
-    let client = test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024 * 1024);
     let blob = Blob::new(namespace, data).unwrap();
@@ -114,7 +114,7 @@ async fn blob_submit_and_get_large() {
 
 #[tokio::test]
 async fn blob_submit_too_large() {
-    let client = test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5 * 1024 * 1024);
     let blob = Blob::new(namespace, data).unwrap();
@@ -124,7 +124,7 @@ async fn blob_submit_too_large() {
 
 #[tokio::test]
 async fn blob_get_get_proof_wrong_ns() {
-    let client = test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data).unwrap();
@@ -144,7 +144,7 @@ async fn blob_get_get_proof_wrong_ns() {
 
 #[tokio::test]
 async fn blob_get_get_proof_wrong_commitment() {
-    let client = test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data).unwrap();
