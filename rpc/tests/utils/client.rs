@@ -1,3 +1,6 @@
+use std::env;
+use std::sync::OnceLock;
+
 use anyhow::Result;
 use celestia_rpc::client::{new_http, new_websocket};
 use celestia_rpc::prelude::*;
@@ -6,14 +9,15 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::Error;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::ws_client::WsClient;
-use once_cell::sync::Lazy;
-use std::env;
-use tokio::sync::Mutex;
-
-static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+use tokio::sync::{Mutex, MutexGuard};
 
 const WS_URL: &str = "ws://localhost:26658";
 const HTTP_URL: &str = "http://localhost:26658";
+
+async fn lock() -> MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(())).lock().await
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum AuthLevel {
@@ -67,6 +71,6 @@ pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, Error>
 where
     C: ClientT + Sync,
 {
-    let _guard = LOCK.lock().await;
+    let _guard = lock().await;
     client.blob_submit(blobs).await
 }
