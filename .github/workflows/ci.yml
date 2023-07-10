@@ -31,6 +31,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
+
+    - name: Set up cargo cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys:
+          cargo-${{ hashFiles('**/Cargo.lock') }}
+          cargo-
+
     - name: Install Protoc
       uses: arduino/setup-protoc@v2
       with:
@@ -39,6 +54,11 @@ jobs:
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
+
+    # needed for the buildx in order to access gha cache
+    # https://github.com/docker/bake-action/issues/36#issuecomment-1103961612
+    - name: Expose github actions runtime
+      uses: crazy-max/ghaction-github-runtime@v1
 
     - name: Build the docker-compose stack
       run: |
