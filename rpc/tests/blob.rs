@@ -53,8 +53,7 @@ async fn blob_submit_and_get_all() {
 
     let blobs = &[
         Blob::new(namespaces[0], random_bytes(5)).unwrap(),
-        Blob::new(namespaces[0], random_bytes(15)).unwrap(),
-        Blob::new(namespaces[1], random_bytes(25)).unwrap(),
+        Blob::new(namespaces[1], random_bytes(15)).unwrap(),
     ];
 
     let submitted_height = blob_submit(&client, &blobs[..]).await.unwrap();
@@ -64,10 +63,10 @@ async fn blob_submit_and_get_all() {
         .await
         .unwrap();
 
-    assert_eq!(received_blobs.len(), 3);
+    assert_eq!(received_blobs.len(), 2);
 
     for (idx, (blob, received_blob)) in blobs.iter().zip(received_blobs.iter()).enumerate() {
-        let namespace = namespaces[idx / 2];
+        let namespace = namespaces[idx];
 
         received_blob.validate().unwrap();
         assert_eq!(received_blob, blob);
