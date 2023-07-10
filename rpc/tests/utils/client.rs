@@ -14,7 +14,7 @@ use tokio::sync::{Mutex, MutexGuard};
 const WS_URL: &str = "ws://localhost:26658";
 const HTTP_URL: &str = "http://localhost:26658";
 
-async fn lock() -> MutexGuard<'static, ()> {
+async fn write_lock() -> MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(())).lock().await
 }
@@ -71,6 +71,6 @@ pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, Error>
 where
     C: ClientT + Sync,
 {
-    let _guard = lock().await;
+    let _guard = write_lock().await;
     client.blob_submit(blobs).await
 }
