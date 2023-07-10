@@ -7,17 +7,28 @@ use tendermint_proto::Protobuf;
 use crate::consts::data_availability_header::{
     MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
 };
+use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     try_from = "RawDataAvailabilityHeader",
     into = "RawDataAvailabilityHeader"
 )]
 pub struct DataAvailabilityHeader {
-    pub row_roots: Vec<Vec<u8>>,
-    pub column_roots: Vec<Vec<u8>>,
+    pub row_roots: Vec<NamespacedHash>,
+    pub column_roots: Vec<NamespacedHash>,
     pub hash: Hash,
+}
+
+impl DataAvailabilityHeader {
+    pub fn row_root(&self, row: usize) -> Option<NamespacedHash> {
+        self.row_roots.get(row).copied()
+    }
+
+    pub fn column_root(&self, column: usize) -> Option<NamespacedHash> {
+        self.column_roots.get(column).copied()
+    }
 }
 
 impl Protobuf<RawDataAvailabilityHeader> for DataAvailabilityHeader {}
@@ -34,8 +45,16 @@ impl TryFrom<RawDataAvailabilityHeader> for DataAvailabilityHeader {
         let hash = simple_hash_from_byte_vectors::<Sha256>(&all_roots);
 
         Ok(DataAvailabilityHeader {
-            row_roots: value.row_roots,
-            column_roots: value.column_roots,
+            row_roots: value
+                .row_roots
+                .iter()
+                .map(|bytes| NamespacedHash::from_raw(bytes))
+                .collect::<Result<Vec<_>>>()?,
+            column_roots: value
+                .column_roots
+                .iter()
+                .map(|bytes| NamespacedHash::from_raw(bytes))
+                .collect::<Result<Vec<_>>>()?,
             hash,
         })
     }
@@ -44,8 +63,12 @@ impl TryFrom<RawDataAvailabilityHeader> for DataAvailabilityHeader {
 impl From<DataAvailabilityHeader> for RawDataAvailabilityHeader {
     fn from(value: DataAvailabilityHeader) -> RawDataAvailabilityHeader {
         RawDataAvailabilityHeader {
-            row_roots: value.row_roots,
-            column_roots: value.column_roots,
+            row_roots: value.row_roots.iter().map(|hash| hash.to_vec()).collect(),
+            column_roots: value
+                .column_roots
+                .iter()
+                .map(|hash| hash.to_vec())
+                .collect(),
         }
     }
 }
@@ -154,8 +177,8 @@ mod tests {
 
         dah.validate_basic().unwrap();
 
-        dah.row_roots.push(dah.row_roots[0].clone());
-        dah.column_roots.push(dah.column_roots[0].clone());
+        dah.row_roots.push(dah.row_roots[0]);
+        dah.column_roots.push(dah.column_roots[0]);
 
         dah.validate_basic().unwrap_err();
     }

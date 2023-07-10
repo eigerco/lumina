@@ -5,7 +5,7 @@ use nmt_rs::simple_merkle::proof::Proof as NmtProof;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
-use crate::nmt::{NamespacedHash, NamespacedSha2Hasher, NS_SIZE};
+use crate::nmt::{NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, NS_SIZE};
 use crate::{Error, Result};
 
 type NmtNamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;
@@ -13,6 +13,19 @@ type NmtNamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher,
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawProof", into = "RawProof")]
 pub struct NamespaceProof(NmtNamespaceProof);
+
+impl NamespaceProof {
+    pub fn into_inner(self) -> NmtNamespaceProof {
+        self.0
+    }
+
+    pub fn leaf(&self) -> Option<&NamespacedHash> {
+        match &self.0 {
+            NmtNamespaceProof::AbsenceProof { leaf, .. } => leaf.as_ref(),
+            _ => None,
+        }
+    }
+}
 
 impl Deref for NamespaceProof {
     type Target = NmtNamespaceProof;
@@ -49,19 +62,20 @@ impl TryFrom<RawProof> for NamespaceProof {
         let siblings = value
             .nodes
             .iter()
-            .map(|n| to_namespaced_hash(n))
+            .map(|bytes| NamespacedHash::from_raw(bytes))
             .collect::<Result<Vec<_>>>()?;
 
         let mut proof = NmtNamespaceProof::PresenceProof {
             proof: NmtProof {
                 siblings,
-                start_idx: value.start as u32,
+                start: value.start as u32,
+                end: value.end as u32,
             },
             ignore_max_ns: true,
         };
 
         if !value.hashleaf.is_empty() {
-            proof.convert_to_absence_proof(to_namespaced_hash(&value.hashleaf)?);
+            proof.convert_to_absence_proof(NamespacedHash::from_raw(&value.hashleaf)?);
         }
 
         Ok(NamespaceProof(proof))
@@ -69,11 +83,12 @@ impl TryFrom<RawProof> for NamespaceProof {
 }
 
 impl From<NamespaceProof> for RawProof {
-    fn from(_value: NamespaceProof) -> Self {
-        todo!();
+    fn from(value: NamespaceProof) -> Self {
+        RawProof {
+            start: value.start_idx() as i64,
+            end: value.end_idx() as i64,
+            nodes: value.siblings().iter().map(|hash| hash.to_vec()).collect(),
+            hashleaf: value.leaf().map(|hash| hash.to_vec()).unwrap_or_default(),
+        }
     }
-}
-
-fn to_namespaced_hash(node: &[u8]) -> Result<NamespacedHash> {
-    node.try_into().map_err(|_| Error::InvalidNamespacedHash)
 }

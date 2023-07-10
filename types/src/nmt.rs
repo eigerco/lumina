@@ -1,10 +1,13 @@
 use base64::prelude::*;
 use nmt_rs::simple_merkle::db::MemDb;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tendermint_proto::serializers::cow_str::CowStr;
 
 mod namespace_proof;
+mod namespaced_hash;
 
 pub use self::namespace_proof::NamespaceProof;
+pub use self::namespaced_hash::{NamespacedHash, NamespacedHashExt};
 use crate::{Error, Result};
 
 pub const NS_VER_SIZE: usize = 1;
@@ -12,7 +15,6 @@ pub const NS_ID_SIZE: usize = 28;
 pub const NS_SIZE: usize = NS_VER_SIZE + NS_ID_SIZE;
 pub const NS_ID_V0_SIZE: usize = 10;
 
-pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
 pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
 pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
 
@@ -99,6 +101,15 @@ impl Namespace {
     pub fn id(&self) -> &[u8] {
         &self.as_bytes()[1..]
     }
+
+    pub fn id_v0(&self) -> Option<&[u8]> {
+        if self.version() == 0 {
+            let start = NS_SIZE - NS_ID_V0_SIZE;
+            Some(&self.as_bytes()[start..])
+        } else {
+            None
+        }
+    }
 }
 
 impl From<Namespace> for nmt_rs::NamespaceId<NS_SIZE> {
@@ -128,15 +139,16 @@ impl<'de> Deserialize<'de> for Namespace {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        // base64 needs more buffer size than the final output
+        let mut buf = [0u8; NS_SIZE * 2];
 
-        let bytes = BASE64_STANDARD
-            .decode(s)
+        let s = CowStr::deserialize(deserializer)?;
+
+        let len = BASE64_STANDARD
+            .decode_slice(s, &mut buf)
             .map_err(|e| serde::de::Error::custom(e.to_string()))?;
 
-        nmt_rs::NamespaceId::try_from(&bytes[..])
-            .map(Namespace)
-            .map_err(|e| serde::de::Error::custom(e.to_string()))
+        Namespace::from_raw(&buf[..len]).map_err(|e| serde::de::Error::custom(e.to_string()))
     }
 }
 

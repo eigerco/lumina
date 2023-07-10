@@ -10,13 +10,13 @@ mod info_byte;
 
 pub use info_byte::InfoByte;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(from = "RawNamespacedShares", into = "RawNamespacedShares")]
 pub struct NamespacedShares {
     pub rows: Vec<NamespacedRow>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawRow", into = "RawRow")]
 pub struct NamespacedRow {
     pub shares: Vec<Share>,
@@ -30,7 +30,8 @@ pub struct NamespacedRow {
 //      SequenceLen SEQUENCE_LEN_BYTES bytes OPTIONAL
 //      Data        bytes
 // }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawShare", into = "RawShare")]
 pub struct Share {
     pub namespace: Namespace,
     pub data: Vec<u8>,
@@ -57,7 +58,7 @@ impl Share {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(transparent)]
 struct RawNamespacedShares {
     rows: Option<Vec<NamespacedRow>>,
@@ -80,6 +81,29 @@ impl From<NamespacedShares> for RawNamespacedShares {
         };
 
         Self { rows }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(transparent)]
+struct RawShare {
+    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
+    data: Vec<u8>,
+}
+
+impl TryFrom<RawShare> for Share {
+    type Error = Error;
+
+    fn try_from(value: RawShare) -> Result<Self, Self::Error> {
+        Share::new(value.data)
+    }
+}
+
+impl From<Share> for RawShare {
+    fn from(value: Share) -> Self {
+        RawShare {
+            data: value.to_vec(),
+        }
     }
 }
 

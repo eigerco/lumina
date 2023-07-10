@@ -43,6 +43,10 @@ impl Blob {
 
         Ok(())
     }
+
+    pub fn to_shares(&self) -> Result<Vec<Vec<u8>>> {
+        commitment::split_blob_to_shares(self.namespace, self.share_version, &self.data)
+    }
 }
 
 impl Protobuf<RawBlob> for Blob {}

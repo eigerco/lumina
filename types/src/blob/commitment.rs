@@ -6,6 +6,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tendermint::crypto::sha256::HASH_SIZE;
 use tendermint::{crypto, merkle};
+use tendermint_proto::serializers::cow_str::CowStr;
 
 use crate::consts::appconsts;
 use crate::nmt::{Namespace, Nmt};
@@ -84,7 +85,7 @@ impl<'de> Deserialize<'de> for Commitment {
         // base64 needs more buffer size than the final output
         let mut buf = [0u8; HASH_SIZE * 2];
 
-        let s = String::deserialize(deserializer)?;
+        let s = CowStr::deserialize(deserializer)?;
 
         let len = BASE64_STANDARD
             .decode_slice(s, &mut buf)
@@ -99,7 +100,7 @@ impl<'de> Deserialize<'de> for Commitment {
 }
 
 /// Splits blob's data to the sequence of shares
-fn split_blob_to_shares(
+pub(crate) fn split_blob_to_shares(
     namespace: Namespace,
     share_version: u8,
     blob_data: &[u8],

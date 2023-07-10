@@ -2,6 +2,7 @@ use crate::{verification_error, VerificationError};
 
 pub const DEFAULT_TRUST_LEVEL: TrustLevelRatio = TrustLevelRatio::new(1, 3);
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrustLevelRatio {
     numerator: u64,
     denominator: u64,

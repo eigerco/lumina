@@ -7,9 +7,10 @@ license = "Apache-2.0"
 [dependencies]
 http = "0.2.9"
 thiserror = "1.0.40"
-jsonrpsee = { version = "0.18.2", features = ["http-client", "macros"] }
+jsonrpsee = { version = "0.18.2", features = ["http-client", "ws-client", "macros"] }
 celestia-types = { workspace = true }
 celestia-proto = { workspace = true }
+tendermint = { workspace = true }
 tendermint-proto = { workspace = true }
 
 [dev-dependencies]
