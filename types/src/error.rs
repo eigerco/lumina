@@ -72,6 +72,15 @@ pub enum Error {
 
     #[error("Nmt error: {0}")]
     Nmt(&'static str),
+
+    #[error("Invalid address prefix: {0}")]
+    InvalidAddressPrefix(String),
+
+    #[error("Invalid address size: {0}")]
+    InvalidAddressSize(usize),
+
+    #[error(transparent)]
+    Cosmos(#[from] cosmrs::ErrorReport),
 }
 
 #[derive(Debug, thiserror::Error)]

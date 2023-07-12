@@ -6,10 +6,13 @@ members = ["proto", "types", "rpc"]
 celestia-proto = { version = "0.1.0", path = "proto" }
 celestia-types = { version = "0.1.0", path = "types" }
 nmt-rs = { git = "https://github.com/eigerco/nmt-rs.git", rev = "5146800" }
-tendermint = { git = 'https://github.com/eigerco/celestia-tendermint-rs.git', rev = '2ea1d65' }
-tendermint-proto = { git = 'https://github.com/eigerco/celestia-tendermint-rs.git', rev = '2ea1d65' }
+tendermint = "0.32"
+tendermint-proto = "0.32"
 
-[patch.'https://github.com/eigerco/celestia-tendermint-rs.git']
+[patch.crates-io]
+# `cosmrs` is using terndermint from crates.io, so we patch it with ours
+tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "2ea1d65" }
+tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "2ea1d65" }
 # Uncomment to apply local changes
 #tendermint = { path = "../celestia-tendermint-rs/tendermint" }
 #tendermint-proto = { path = "../celestia-tendermint-rs/proto" }

@@ -8,12 +8,15 @@ license = "Apache-2.0"
 base64 = "0.21.2"
 bytes = "1.4.0"
 celestia-proto = { workspace = true }
+const_format = "0.2.31"
+cosmrs = "0.14.0"
 nmt-rs = { workspace = true }
+ruint = "1.8.0"
 serde = { version = "1.0.164", features = ["derive"] }
+sha2 = "0.10.7"
+tendermint = { workspace = true }
 tendermint-proto = { workspace = true }
 thiserror = "1.0.40"
-tendermint = { workspace = true }
-sha2 = "0.10.7"
 
 [dev-dependencies]
 serde_json = "1.0.97"

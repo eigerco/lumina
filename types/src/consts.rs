@@ -80,3 +80,33 @@ pub mod data_availability_header {
     pub const MAX_EXTENDED_SQUARE_WIDTH: usize = super::appconsts::SQUARE_SIZE_UPPER_BOUND * 2;
     pub const MIN_EXTENDED_SQUARE_WIDTH: usize = super::appconsts::MIN_SQUARE_SIZE * 2;
 }
+
+pub mod cosmos {
+    use const_format::concatcp;
+
+    const PREFIX_ACCOUNT: &str = "celestia";
+    const PREFIX_PUBLIC: &str = "pub";
+    const PREFIX_VALIDATOR: &str = "val";
+    const PREFIX_OPERATOR: &str = "oper";
+    const PREFIX_CONSENSUS: &str = "cons";
+
+    /// Bech32PrefixAccAddr defines the Bech32 prefix of an account's address.
+    pub const BECH32_PREFIX_ACC_ADDR: &str = PREFIX_ACCOUNT;
+
+    /// Bech32PrefixAccPub defines the Bech32 prefix of an account's public key.
+    pub const BECH32_PREFIX_ACC_PUB: &str = concatcp!(BECH32_PREFIX_ACC_ADDR, PREFIX_PUBLIC);
+
+    /// Bech32PrefixValAddr defines the Bech32 prefix of a validator's operator address.
+    pub const BECH32_PREFIX_VAL_ADDR: &str =
+        concatcp!(PREFIX_ACCOUNT, PREFIX_VALIDATOR, PREFIX_OPERATOR);
+
+    /// Bech32PrefixValPub defines the Bech32 prefix of a validator's operator public key.
+    pub const BECH32_PREFIX_VAL_PUB: &str = concatcp!(BECH32_PREFIX_VAL_ADDR, PREFIX_PUBLIC);
+
+    /// Bech32PrefixConsAddr defines the Bech32 prefix of a consensus node address.
+    pub const BECH32_PREFIX_CONS_ADDR: &str =
+        concatcp!(PREFIX_ACCOUNT, PREFIX_VALIDATOR, PREFIX_CONSENSUS);
+
+    /// Bech32PrefixConsPub defines the Bech32 prefix of a consensus node public key.
+    pub const BECH32_PREFIX_CONS_PUB: &str = concatcp!(BECH32_PREFIX_CONS_ADDR, PREFIX_PUBLIC);
+}
