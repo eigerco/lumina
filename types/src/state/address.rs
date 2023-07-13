@@ -2,11 +2,26 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use cosmrs::AccountId;
+use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
 use tendermint::account::Id;
 
 use crate::consts::cosmos::*;
 use crate::{Error, Result};
+
+#[enum_dispatch(Address)]
+pub trait AddressTrait: FromStr + Display {
+    fn id(&self) -> &Id;
+    fn kind(&self) -> AddressKind;
+
+    fn as_bytes(&self) -> &[u8] {
+        self.id().as_bytes()
+    }
+
+    fn prefix(&self) -> &'static str {
+        self.kind().prefix()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AddressKind {
@@ -15,10 +30,18 @@ pub enum AddressKind {
     Consensus,
 }
 
+#[enum_dispatch]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
-pub struct Address {
-    kind: AddressKind,
+pub enum Address {
+    AccAddress,
+    ValAddress,
+    ConsAddress,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "Raw", into = "Raw")]
+pub struct AccAddress {
     id: Id,
 }
 
@@ -30,7 +53,7 @@ pub struct ValAddress {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
-pub struct AccAddress {
+pub struct ConsAddress {
     id: Id,
 }
 
@@ -41,45 +64,9 @@ struct Raw {
     addr: String,
 }
 
-impl Address {
-    pub fn new(kind: AddressKind, bytes: &[u8]) -> Result<Self> {
-        let bytes = bytes
-            .try_into()
-            .map_err(|_| Error::InvalidAddressSize(bytes.len()))?;
-        let id = Id::new(bytes);
-
-        Ok(Address { kind, id })
-    }
-
-    pub fn with_prefix(prefix: &str, bytes: &[u8]) -> Result<Self> {
-        let kind = match prefix {
-            BECH32_PREFIX_ACC_ADDR => AddressKind::Account,
-            BECH32_PREFIX_VAL_ADDR => AddressKind::Validator,
-            BECH32_PREFIX_CONS_ADDR => AddressKind::Consensus,
-            s => return Err(Error::InvalidAddressPrefix(s.to_owned())),
-        };
-
-        Address::new(kind, bytes)
-    }
-
-    pub fn from_id(kind: AddressKind, id: Id) -> Self {
-        Address { kind, id }
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        self.id.as_bytes()
-    }
-
-    pub fn id(&self) -> Id {
-        self.id
-    }
-
-    pub fn kind(&self) -> AddressKind {
-        self.kind
-    }
-
+impl AddressKind {
     pub fn prefix(&self) -> &'static str {
-        match self.kind {
+        match self {
             AddressKind::Account => BECH32_PREFIX_ACC_ADDR,
             AddressKind::Validator => BECH32_PREFIX_VAL_ADDR,
             AddressKind::Consensus => BECH32_PREFIX_CONS_ADDR,
@@ -87,10 +74,26 @@ impl Address {
     }
 }
 
+impl FromStr for AddressKind {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            BECH32_PREFIX_ACC_ADDR => Ok(AddressKind::Account),
+            BECH32_PREFIX_VAL_ADDR => Ok(AddressKind::Validator),
+            BECH32_PREFIX_CONS_ADDR => Ok(AddressKind::Consensus),
+            _ => Err(Error::InvalidAddressPrefix(s.to_owned())),
+        }
+    }
+}
+
 impl Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let account_id: AccountId = self.clone().into();
-        f.write_str(account_id.as_ref())
+        match self {
+            Address::AccAddress(v) => <AccAddress as Display>::fmt(v, f),
+            Address::ValAddress(v) => <ValAddress as Display>::fmt(v, f),
+            Address::ConsAddress(v) => <ConsAddress as Display>::fmt(v, f),
+        }
     }
 }
 
@@ -98,44 +101,13 @@ impl FromStr for Address {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let account_id = s.parse::<AccountId>()?;
+        let (kind, id) = string_to_kind_and_id(s)?;
 
-        let kind = match account_id.prefix() {
-            BECH32_PREFIX_ACC_ADDR => AddressKind::Account,
-            BECH32_PREFIX_VAL_ADDR => AddressKind::Validator,
-            BECH32_PREFIX_CONS_ADDR => AddressKind::Consensus,
-            s => return Err(Error::InvalidAddressPrefix(s.to_owned())),
-        };
-
-        let bytes = account_id.to_bytes();
-
-        Address::new(kind, &bytes)
-    }
-}
-
-impl From<Address> for AccountId {
-    fn from(addr: Address) -> AccountId {
-        let prefix = addr.prefix();
-        let bytes = addr.as_bytes();
-
-        // There are two reasons that AccountId can return an error:
-        //
-        // 1. The prefix can have upper case characters
-        // 2. The bytes length can be more than 255
-        //
-        // Both cases will never happen because we have full control at
-        // the values.
-        AccountId::new(prefix, bytes).expect("malformed prefix or bytes")
-    }
-}
-
-impl TryFrom<AccountId> for Address {
-    type Error = Error;
-
-    fn try_from(account_id: AccountId) -> Result<Address, Error> {
-        let prefix = account_id.prefix();
-        let bytes = account_id.to_bytes();
-        Address::with_prefix(prefix, &bytes)
+        match kind {
+            AddressKind::Account => Ok(AccAddress::new(id).into()),
+            AddressKind::Validator => Ok(ValAddress::new(id).into()),
+            AddressKind::Consensus => Ok(ConsAddress::new(id).into()),
+        }
     }
 }
 
@@ -149,81 +121,24 @@ impl TryFrom<Raw> for Address {
 
 impl From<Address> for Raw {
     fn from(value: Address) -> Self {
-        Raw {
-            addr: value.to_string(),
-        }
-    }
-}
-
-impl From<Address> for Id {
-    fn from(value: Address) -> Self {
-        value.id
-    }
-}
-
-impl PartialEq for Address {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl PartialEq<Id> for Address {
-    fn eq(&self, other: &Id) -> bool {
-        self.id == *other
-    }
-}
-
-impl PartialEq<AccAddress> for Address {
-    fn eq(&self, other: &AccAddress) -> bool {
-        self.id == other.id
-    }
-}
-
-impl PartialEq<ValAddress> for Address {
-    fn eq(&self, other: &ValAddress) -> bool {
-        self.id == other.id
+        let addr = value.to_string();
+        Raw { addr }
     }
 }
 
 impl AccAddress {
-    pub fn new(bytes: &[u8]) -> Result<Self> {
-        let bytes = bytes
-            .try_into()
-            .map_err(|_| Error::InvalidAddressSize(bytes.len()))?;
-        let id = Id::new(bytes);
-
-        Ok(AccAddress { id })
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        self.id.as_bytes()
-    }
-
-    pub fn id(&self) -> Id {
-        self.id
+    pub fn new(id: Id) -> Self {
+        AccAddress { id }
     }
 }
 
-impl FromStr for AccAddress {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let account_id = s.parse::<AccountId>()?;
-
-        if account_id.prefix() != BECH32_PREFIX_ACC_ADDR {
-            return Err(Error::InvalidAddressPrefix(account_id.prefix().to_owned()));
-        }
-
-        let bytes = account_id.to_bytes();
-
-        AccAddress::new(&bytes)
+impl AddressTrait for AccAddress {
+    fn id(&self) -> &Id {
+        &self.id
     }
-}
 
-impl Display for AccAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let account_id: AccountId = self.clone().into();
-        f.write_str(account_id.as_ref())
+    fn kind(&self) -> AddressKind {
+        AddressKind::Account
     }
 }
 
@@ -237,109 +152,44 @@ impl TryFrom<Raw> for AccAddress {
 
 impl From<AccAddress> for Raw {
     fn from(value: AccAddress) -> Self {
-        Raw {
-            addr: value.to_string(),
+        let addr = value.to_string();
+        Raw { addr }
+    }
+}
+
+impl Display for AccAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = address_to_string(self);
+        f.write_str(&s)
+    }
+}
+
+impl FromStr for AccAddress {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (kind, id) = string_to_kind_and_id(s)?;
+
+        match kind {
+            AddressKind::Account => Ok(AccAddress::new(id)),
+            _ => Err(Error::InvalidAddressPrefix(kind.prefix().to_owned())),
         }
-    }
-}
-
-impl From<Id> for AccAddress {
-    fn from(id: Id) -> Self {
-        AccAddress { id }
-    }
-}
-
-impl From<AccAddress> for AccountId {
-    fn from(addr: AccAddress) -> AccountId {
-        let prefix = BECH32_PREFIX_ACC_ADDR;
-        let bytes = addr.as_bytes();
-        AccountId::new(prefix, bytes).expect("malformed prefix or bytes")
-    }
-}
-
-impl TryFrom<AccountId> for AccAddress {
-    type Error = Error;
-
-    fn try_from(account_id: AccountId) -> Result<AccAddress, Error> {
-        if account_id.prefix() != BECH32_PREFIX_ACC_ADDR {
-            return Err(Error::InvalidAddressPrefix(account_id.prefix().to_owned()));
-        }
-
-        let bytes = account_id.to_bytes();
-
-        AccAddress::new(&bytes)
-    }
-}
-
-impl From<AccAddress> for Id {
-    fn from(value: AccAddress) -> Self {
-        value.id
-    }
-}
-
-impl PartialEq for AccAddress {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl PartialEq<Id> for AccAddress {
-    fn eq(&self, other: &Id) -> bool {
-        self.id == *other
-    }
-}
-
-impl PartialEq<Address> for AccAddress {
-    fn eq(&self, other: &Address) -> bool {
-        self.id == other.id
-    }
-}
-
-impl PartialEq<ValAddress> for AccAddress {
-    fn eq(&self, other: &ValAddress) -> bool {
-        self.id == other.id
     }
 }
 
 impl ValAddress {
-    pub fn new(bytes: &[u8]) -> Result<Self> {
-        let bytes = bytes
-            .try_into()
-            .map_err(|_| Error::InvalidAddressSize(bytes.len()))?;
-        let id = Id::new(bytes);
-
-        Ok(ValAddress { id })
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        self.id.as_bytes()
-    }
-
-    pub fn id(&self) -> Id {
-        self.id
+    pub fn new(id: Id) -> Self {
+        ValAddress { id }
     }
 }
 
-impl FromStr for ValAddress {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let account_id = s.parse::<AccountId>()?;
-
-        if account_id.prefix() != BECH32_PREFIX_VAL_ADDR {
-            return Err(Error::InvalidAddressPrefix(account_id.prefix().to_owned()));
-        }
-
-        let bytes = account_id.to_bytes();
-
-        ValAddress::new(&bytes)
+impl AddressTrait for ValAddress {
+    fn id(&self) -> &Id {
+        &self.id
     }
-}
 
-impl Display for ValAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let account_id: AccountId = self.clone().into();
-        f.write_str(account_id.as_ref())
+    fn kind(&self) -> AddressKind {
+        AddressKind::Validator
     }
 }
 
@@ -353,68 +203,106 @@ impl TryFrom<Raw> for ValAddress {
 
 impl From<ValAddress> for Raw {
     fn from(value: ValAddress) -> Self {
-        Raw {
-            addr: value.to_string(),
+        let addr = value.to_string();
+        Raw { addr }
+    }
+}
+
+impl Display for ValAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = address_to_string(self);
+        f.write_str(&s)
+    }
+}
+
+impl FromStr for ValAddress {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (kind, id) = string_to_kind_and_id(s)?;
+
+        match kind {
+            AddressKind::Validator => Ok(ValAddress::new(id)),
+            _ => Err(Error::InvalidAddressPrefix(kind.prefix().to_owned())),
         }
     }
 }
 
-impl From<Id> for ValAddress {
-    fn from(id: Id) -> Self {
-        ValAddress { id }
+impl ConsAddress {
+    pub fn new(id: Id) -> Self {
+        ConsAddress { id }
     }
 }
 
-impl From<ValAddress> for AccountId {
-    fn from(addr: ValAddress) -> AccountId {
-        let prefix = BECH32_PREFIX_VAL_ADDR;
-        let bytes = addr.as_bytes();
-        AccountId::new(prefix, bytes).expect("malformed prefix or bytes")
+impl AddressTrait for ConsAddress {
+    fn id(&self) -> &Id {
+        &self.id
+    }
+
+    fn kind(&self) -> AddressKind {
+        AddressKind::Consensus
     }
 }
 
-impl TryFrom<AccountId> for ValAddress {
+impl TryFrom<Raw> for ConsAddress {
     type Error = Error;
 
-    fn try_from(account_id: AccountId) -> Result<ValAddress, Error> {
-        if account_id.prefix() != BECH32_PREFIX_VAL_ADDR {
-            return Err(Error::InvalidAddressPrefix(account_id.prefix().to_owned()));
+    fn try_from(value: Raw) -> Result<Self, Self::Error> {
+        value.addr.parse()
+    }
+}
+
+impl From<ConsAddress> for Raw {
+    fn from(value: ConsAddress) -> Self {
+        let addr = value.to_string();
+        Raw { addr }
+    }
+}
+
+impl Display for ConsAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = address_to_string(self);
+        f.write_str(&s)
+    }
+}
+
+impl FromStr for ConsAddress {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (kind, id) = string_to_kind_and_id(s)?;
+
+        match kind {
+            AddressKind::Consensus => Ok(ConsAddress::new(id)),
+            _ => Err(Error::InvalidAddressPrefix(kind.prefix().to_owned())),
         }
-
-        let bytes = account_id.to_bytes();
-
-        ValAddress::new(&bytes)
     }
 }
 
-impl From<ValAddress> for Id {
-    fn from(value: ValAddress) -> Self {
-        value.id
-    }
+fn address_to_string(addr: &impl AddressTrait) -> String {
+    // There are two reasons that AccountId can return an error:
+    //
+    // 1. The prefix can have upper case characters
+    // 2. The bytes length can be more than 255
+    //
+    // Both cases will never happen because we have full control at
+    // the values.
+    AccountId::new(addr.prefix(), addr.as_bytes())
+        .expect("malformed prefix or bytes")
+        .to_string()
 }
 
-impl PartialEq for ValAddress {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
+fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
+    let account_id = s.parse::<AccountId>()?;
 
-impl PartialEq<Id> for ValAddress {
-    fn eq(&self, other: &Id) -> bool {
-        self.id == *other
-    }
-}
+    let kind = account_id.prefix().parse()?;
 
-impl PartialEq<Address> for ValAddress {
-    fn eq(&self, other: &Address) -> bool {
-        self.id == other.id
-    }
-}
+    let bytes = account_id.to_bytes();
+    let bytes = bytes[..]
+        .try_into()
+        .map_err(|_| Error::InvalidAddressSize(bytes.len()))?;
 
-impl PartialEq<AccAddress> for ValAddress {
-    fn eq(&self, other: &AccAddress) -> bool {
-        self.id == other.id
-    }
+    Ok((kind, Id::new(bytes)))
 }
 
 #[cfg(test)]
@@ -426,6 +314,7 @@ mod tests {
     ];
     const ADDR1_ACC_STR: &str = "celestia1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5wgawu3";
     const ADDR1_VAL_STR: &str = "celestiavaloper1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5thlh2h";
+    const ADDR1_CONS_STR: &str = "celestiavalcons1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lyvtxk";
 
     #[test]
     fn parse_acc_addr() {
@@ -439,6 +328,7 @@ mod tests {
         assert_eq!(&addr.to_string(), ADDR1_ACC_STR);
 
         ADDR1_ACC_STR.parse::<ValAddress>().unwrap_err();
+        ADDR1_ACC_STR.parse::<ConsAddress>().unwrap_err();
     }
 
     #[test]
@@ -453,6 +343,7 @@ mod tests {
         assert_eq!(addr.as_bytes(), ADDR1);
 
         serde_json::from_str::<ValAddress>(&addr_json).unwrap_err();
+        serde_json::from_str::<ConsAddress>(&addr_json).unwrap_err();
     }
 
     #[test]
@@ -467,6 +358,7 @@ mod tests {
         assert_eq!(&addr.to_string(), ADDR1_VAL_STR);
 
         ADDR1_VAL_STR.parse::<AccAddress>().unwrap_err();
+        ADDR1_VAL_STR.parse::<ConsAddress>().unwrap_err();
     }
 
     #[test]
@@ -481,6 +373,37 @@ mod tests {
         assert_eq!(addr.as_bytes(), ADDR1);
 
         serde_json::from_str::<AccAddress>(&addr_json).unwrap_err();
+        serde_json::from_str::<ConsAddress>(&addr_json).unwrap_err();
+    }
+
+    #[test]
+    fn parse_cons_addr() {
+        let addr: Address = ADDR1_CONS_STR.parse().unwrap();
+        assert_eq!(addr.kind(), AddressKind::Consensus);
+        assert_eq!(addr.as_bytes(), ADDR1);
+        assert_eq!(&addr.to_string(), ADDR1_CONS_STR);
+
+        let addr: ConsAddress = ADDR1_CONS_STR.parse().unwrap();
+        assert_eq!(addr.as_bytes(), ADDR1);
+        assert_eq!(&addr.to_string(), ADDR1_CONS_STR);
+
+        ADDR1_CONS_STR.parse::<AccAddress>().unwrap_err();
+        ADDR1_CONS_STR.parse::<ValAddress>().unwrap_err();
+    }
+
+    #[test]
+    fn serde_cons_addr() {
+        let addr_json = format!("\"{ADDR1_CONS_STR}\"");
+
+        let addr: Address = serde_json::from_str(&addr_json).unwrap();
+        assert_eq!(addr.kind(), AddressKind::Consensus);
+        assert_eq!(addr.as_bytes(), ADDR1);
+
+        let addr: ConsAddress = serde_json::from_str(&addr_json).unwrap();
+        assert_eq!(addr.as_bytes(), ADDR1);
+
+        serde_json::from_str::<AccAddress>(&addr_json).unwrap_err();
+        serde_json::from_str::<ValAddress>(&addr_json).unwrap_err();
     }
 
     #[test]
@@ -490,41 +413,49 @@ mod tests {
         addr.parse::<Address>().unwrap_err();
         addr.parse::<AccAddress>().unwrap_err();
         addr.parse::<ValAddress>().unwrap_err();
+        addr.parse::<ConsAddress>().unwrap_err();
 
         // Validator address of 1 byte
         let addr = "celestiavaloper1qy2jc8nq";
         addr.parse::<Address>().unwrap_err();
         addr.parse::<AccAddress>().unwrap_err();
         addr.parse::<ValAddress>().unwrap_err();
+        addr.parse::<ConsAddress>().unwrap_err();
+
+        // Consensus address of 1 byte
+        let addr = "celestiavalcons1qy2zlull";
+        addr.parse::<Address>().unwrap_err();
+        addr.parse::<AccAddress>().unwrap_err();
+        addr.parse::<ValAddress>().unwrap_err();
+        addr.parse::<ConsAddress>().unwrap_err();
 
         // Unknown prefix
         let addr = "foobar1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5avgsnn";
         addr.parse::<Address>().unwrap_err();
         addr.parse::<AccAddress>().unwrap_err();
         addr.parse::<ValAddress>().unwrap_err();
+        addr.parse::<ConsAddress>().unwrap_err();
 
         // Malformed string
         let addr = "asdsdfsdgsfd";
         addr.parse::<Address>().unwrap_err();
         addr.parse::<AccAddress>().unwrap_err();
         addr.parse::<ValAddress>().unwrap_err();
+        addr.parse::<ConsAddress>().unwrap_err();
     }
 
     #[test]
-    fn compare() {
+    fn convert() {
         let addr: Address = ADDR1_ACC_STR.parse().unwrap();
-        let acc_addr: AccAddress = ADDR1_ACC_STR.parse().unwrap();
-        let val_addr: ValAddress = ADDR1_VAL_STR.parse().unwrap();
-        let id = Id::new(ADDR1);
+        let acc_addr: AccAddress = addr.try_into().unwrap();
+        let _addr: Address = acc_addr.into();
 
-        assert_eq!(&addr, &acc_addr);
-        assert_eq!(&addr, &val_addr);
-        assert_eq!(&addr, &id);
-        assert_eq!(&acc_addr, &addr);
-        assert_eq!(&acc_addr, &val_addr);
-        assert_eq!(&acc_addr, &id);
-        assert_eq!(&val_addr, &addr);
-        assert_eq!(&val_addr, &acc_addr);
-        assert_eq!(&val_addr, &id);
+        let addr: Address = ADDR1_VAL_STR.parse().unwrap();
+        let val_addr: ValAddress = addr.try_into().unwrap();
+        let _addr: Address = val_addr.into();
+
+        let addr: Address = ADDR1_CONS_STR.parse().unwrap();
+        let cons_addr: ConsAddress = addr.try_into().unwrap();
+        let _addr: Address = cons_addr.into();
     }
 }
