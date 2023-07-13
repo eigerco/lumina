@@ -11,13 +11,20 @@ use crate::{Error, Result};
 
 #[enum_dispatch(Address)]
 pub trait AddressTrait: FromStr + Display {
-    fn id(&self) -> &Id;
+    fn id_ref(&self) -> &Id;
     fn kind(&self) -> AddressKind;
 
-    fn as_bytes(&self) -> &[u8] {
-        self.id().as_bytes()
+    #[inline]
+    fn id(&self) -> Id {
+        *self.id_ref()
     }
 
+    #[inline]
+    fn as_bytes(&self) -> &[u8] {
+        self.id_ref().as_bytes()
+    }
+
+    #[inline]
     fn prefix(&self) -> &'static str {
         self.kind().prefix()
     }
@@ -31,7 +38,7 @@ pub enum AddressKind {
 }
 
 #[enum_dispatch]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub enum Address {
     AccAddress,
@@ -39,19 +46,19 @@ pub enum Address {
     ConsAddress,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct AccAddress {
     id: Id,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct ValAddress {
     id: Id,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct ConsAddress {
     id: Id,
@@ -133,10 +140,12 @@ impl AccAddress {
 }
 
 impl AddressTrait for AccAddress {
-    fn id(&self) -> &Id {
+    #[inline]
+    fn id_ref(&self) -> &Id {
         &self.id
     }
 
+    #[inline]
     fn kind(&self) -> AddressKind {
         AddressKind::Account
     }
@@ -184,10 +193,12 @@ impl ValAddress {
 }
 
 impl AddressTrait for ValAddress {
-    fn id(&self) -> &Id {
+    #[inline]
+    fn id_ref(&self) -> &Id {
         &self.id
     }
 
+    #[inline]
     fn kind(&self) -> AddressKind {
         AddressKind::Validator
     }
@@ -235,10 +246,12 @@ impl ConsAddress {
 }
 
 impl AddressTrait for ConsAddress {
-    fn id(&self) -> &Id {
+    #[inline]
+    fn id_ref(&self) -> &Id {
         &self.id
     }
 
+    #[inline]
     fn kind(&self) -> AddressKind {
         AddressKind::Consensus
     }
@@ -289,7 +302,7 @@ fn address_to_string(addr: &impl AddressTrait) -> String {
     // the values.
     AccountId::new(addr.prefix(), addr.as_bytes())
         .expect("malformed prefix or bytes")
-        .to_string()
+        .into()
 }
 
 fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
