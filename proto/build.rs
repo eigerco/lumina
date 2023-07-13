@@ -4,6 +4,7 @@ const DEFAULT: &str = r#"#[serde(default)]"#;
 const SERIALIZED: &str = r#"#[derive(::serde::Deserialize, ::serde::Serialize)]"#;
 const BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::base64string")]"#;
+const QUOTED: &str = r#"#[serde(with = "tendermint_proto::serializers::from_str")]"#;
 const VEC_BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
 const PASCAL_CASE: &str = r#"#[serde(rename_all = "PascalCase")]"#;
@@ -32,6 +33,9 @@ pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".cosmos.staking.v1beta1.UnbondingDelegation", SERIALIZED),
     (".cosmos.staking.v1beta1.UnbondingDelegationEntry", SERIALIZED),
     (".header.pb.ExtendedHeader", SERIALIZED),
+    (".share.eds.byzantine.pb.BadEncoding", SERIALIZED),
+    (".share.eds.byzantine.pb.MerkleProof", SERIALIZED),
+    (".share.eds.byzantine.pb.Share", SERIALIZED),
     (".share.p2p.shrex.nd.Proof", SERIALIZED),
     (".share.p2p.shrex.nd.Row", SERIALIZED),
     (".share.p2p.shrex.nd.Row", PASCAL_CASE),
@@ -45,6 +49,16 @@ pub static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".cosmos.base.query.v1beta1.PageResponse.next_key", BASE64STRING),
     (".cosmos.staking.v1beta1.RedelegationEntry.completion_time", OPTION_TIMESTAMP),
     (".cosmos.staking.v1beta1.UnbondingDelegationEntry.completion_time", OPTION_TIMESTAMP),
+    (
+        ".share.eds.byzantine.pb.MerkleProof.nodes",
+        VEC_BASE64STRING,
+    ),
+    (".share.eds.byzantine.pb.MerkleProof.leaf_hash", DEFAULT),
+    (
+        ".share.eds.byzantine.pb.MerkleProof.leaf_hash",
+        BASE64STRING,
+    ),
+    (".share.eds.byzantine.pb.BadEncoding.axis", QUOTED),
     (".share.p2p.shrex.nd.Proof.nodes", VEC_BASE64STRING),
     (".share.p2p.shrex.nd.Proof.hashleaf", DEFAULT),
     (".share.p2p.shrex.nd.Proof.hashleaf", BASE64STRING),
@@ -82,6 +96,7 @@ fn main() -> Result<()> {
                 "vendor/celestia/da/data_availability_header.proto",
                 "vendor/header/pb/extended_header.proto",
                 "vendor/share/p2p/shrexnd/pb/share.proto",
+                "vendor/share/eds/byzantine/pb/share.proto",
                 "vendor/cosmos/base/v1beta1/coin.proto",
                 "vendor/cosmos/base/abci/v1beta1/abci.proto",
                 "vendor/cosmos/staking/v1beta1/query.proto",

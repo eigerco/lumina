@@ -16,6 +16,9 @@ pub enum Error {
     #[error(transparent)]
     Protobuf(#[from] tendermint_proto::Error),
 
+    #[error(transparent)]
+    Multihash(#[from] cid::multihash::Error),
+
     #[error("Missing header")]
     MissingHeader,
 
@@ -40,20 +43,29 @@ pub enum Error {
     #[error("Invalid share size: {0}")]
     InvalidShareSize(usize),
 
+    #[error("Invalid nmt leaf size: {0}")]
+    InvalidNmtLeafSize(usize),
+
     #[error(
         "Sequence len must fit into {} bytes, got value {0}",
         appconsts::SEQUENCE_LEN_BYTES
     )]
     ShareSequenceLenExceeded(usize),
 
-    #[error("Invalid namespaced hash")]
-    InvalidNamespacedHash,
-
     #[error("Invalid namespace v0")]
     InvalidNamespaceV0,
 
+    #[error(transparent)]
+    InvalidNamespacedHash(#[from] nmt_rs::InvalidNamespacedHash),
+
     #[error("Invalid index of signature in commit {0}, height {1}")]
     InvalidSignatureIndex(usize, u64),
+
+    #[error("Invalid axis: {0}")]
+    InvalidAxis(i32),
+
+    #[error("Range proof verification failed: {0:?}")]
+    RangeProofError(nmt_rs::simple_merkle::error::RangeProofError),
 
     #[error("Unexpected absent commit signature")]
     UnexpectedAbsentSignature,

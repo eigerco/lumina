@@ -38,16 +38,17 @@ pub struct Share {
 }
 
 impl Share {
-    fn new(bytes: Vec<u8>) -> Result<Self> {
+    pub fn new(mut bytes: Vec<u8>) -> Result<Self> {
         if bytes.len() != appconsts::SHARE_SIZE {
             return Err(Error::InvalidShareSize(bytes.len()));
         }
 
-        let (ns, data) = bytes.split_at(NS_SIZE);
+        let namespace = Namespace::from_raw(&bytes[..NS_SIZE])?;
+        bytes.drain(..NS_SIZE);
 
         Ok(Share {
-            namespace: Namespace::from_raw(ns)?,
-            data: data.to_vec(),
+            namespace,
+            data: bytes,
         })
     }
 
@@ -55,6 +56,13 @@ impl Share {
         let mut bytes = self.namespace.as_bytes().to_vec();
         bytes.extend_from_slice(&self.data);
         bytes
+    }
+
+    pub fn to_array(&self) -> [u8; appconsts::SHARE_SIZE] {
+        let mut out = [0; appconsts::SHARE_SIZE];
+        out[..NS_SIZE].copy_from_slice(self.namespace.as_bytes());
+        out[NS_SIZE..].copy_from_slice(&self.data);
+        out
     }
 }
 

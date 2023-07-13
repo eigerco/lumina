@@ -11,6 +11,7 @@ bytes = "1.4.0"
 celestia-proto = { workspace = true }
 const_format = "0.2.31"
 enum_dispatch = "0.3.12"
+cid = { version = "0.10.1", default-features = false, features = ["std"] }
 nmt-rs = { workspace = true }
 ruint = { version = "1.8.0", features = ["serde"] }
 serde = { version = "1.0.164", features = ["derive"] }
