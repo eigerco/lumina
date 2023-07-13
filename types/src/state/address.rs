@@ -10,7 +10,7 @@ use crate::consts::cosmos::*;
 use crate::{Error, Result};
 
 #[enum_dispatch(Address)]
-pub trait AddressTrait: FromStr + Display {
+pub trait AddressTrait: FromStr + Display + private::Sealed {
     fn id_ref(&self) -> &Id;
     fn kind(&self) -> AddressKind;
 
@@ -28,6 +28,10 @@ pub trait AddressTrait: FromStr + Display {
     fn prefix(&self) -> &'static str {
         self.kind().prefix()
     }
+}
+
+mod private {
+    pub trait Sealed {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,6 +98,8 @@ impl FromStr for AddressKind {
     }
 }
 
+impl private::Sealed for Address {}
+
 impl Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -151,20 +157,7 @@ impl AddressTrait for AccAddress {
     }
 }
 
-impl TryFrom<Raw> for AccAddress {
-    type Error = Error;
-
-    fn try_from(value: Raw) -> Result<Self, Self::Error> {
-        value.addr.parse()
-    }
-}
-
-impl From<AccAddress> for Raw {
-    fn from(value: AccAddress) -> Self {
-        let addr = value.to_string();
-        Raw { addr }
-    }
-}
+impl private::Sealed for AccAddress {}
 
 impl Display for AccAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -186,6 +179,21 @@ impl FromStr for AccAddress {
     }
 }
 
+impl TryFrom<Raw> for AccAddress {
+    type Error = Error;
+
+    fn try_from(value: Raw) -> Result<Self, Self::Error> {
+        value.addr.parse()
+    }
+}
+
+impl From<AccAddress> for Raw {
+    fn from(value: AccAddress) -> Self {
+        let addr = value.to_string();
+        Raw { addr }
+    }
+}
+
 impl ValAddress {
     pub fn new(id: Id) -> Self {
         ValAddress { id }
@@ -204,20 +212,7 @@ impl AddressTrait for ValAddress {
     }
 }
 
-impl TryFrom<Raw> for ValAddress {
-    type Error = Error;
-
-    fn try_from(value: Raw) -> Result<Self, Self::Error> {
-        value.addr.parse()
-    }
-}
-
-impl From<ValAddress> for Raw {
-    fn from(value: ValAddress) -> Self {
-        let addr = value.to_string();
-        Raw { addr }
-    }
-}
+impl private::Sealed for ValAddress {}
 
 impl Display for ValAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -239,6 +234,21 @@ impl FromStr for ValAddress {
     }
 }
 
+impl TryFrom<Raw> for ValAddress {
+    type Error = Error;
+
+    fn try_from(value: Raw) -> Result<Self, Self::Error> {
+        value.addr.parse()
+    }
+}
+
+impl From<ValAddress> for Raw {
+    fn from(value: ValAddress) -> Self {
+        let addr = value.to_string();
+        Raw { addr }
+    }
+}
+
 impl ConsAddress {
     pub fn new(id: Id) -> Self {
         ConsAddress { id }
@@ -257,20 +267,7 @@ impl AddressTrait for ConsAddress {
     }
 }
 
-impl TryFrom<Raw> for ConsAddress {
-    type Error = Error;
-
-    fn try_from(value: Raw) -> Result<Self, Self::Error> {
-        value.addr.parse()
-    }
-}
-
-impl From<ConsAddress> for Raw {
-    fn from(value: ConsAddress) -> Self {
-        let addr = value.to_string();
-        Raw { addr }
-    }
-}
+impl private::Sealed for ConsAddress {}
 
 impl Display for ConsAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -289,6 +286,21 @@ impl FromStr for ConsAddress {
             AddressKind::Consensus => Ok(ConsAddress::new(id)),
             _ => Err(Error::InvalidAddressPrefix(kind.prefix().to_owned())),
         }
+    }
+}
+
+impl TryFrom<Raw> for ConsAddress {
+    type Error = Error;
+
+    fn try_from(value: Raw) -> Result<Self, Self::Error> {
+        value.addr.parse()
+    }
+}
+
+impl From<ConsAddress> for Raw {
+    fn from(value: ConsAddress) -> Self {
+        let addr = value.to_string();
+        Raw { addr }
     }
 }
 
