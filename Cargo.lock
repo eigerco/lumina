@@ -1378,6 +1378,7 @@ dependencies = [
  "derive_more",
  "ruint-macro",
  "rustc_version",
+ "serde",
  "thiserror",
 ]
 

@@ -12,7 +12,7 @@ const_format = "0.2.31"
 cosmrs = "0.14.0"
 enum_dispatch = "0.3.12"
 nmt-rs = { workspace = true }
-ruint = "1.8.0"
+ruint = { version = "1.8.0", features = ["serde"] }
 serde = { version = "1.0.164", features = ["derive"] }
 sha2 = "0.10.7"
 tendermint = { workspace = true }
