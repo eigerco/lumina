@@ -8,5 +8,4 @@ pub use self::query_delegation::{
 };
 pub use self::tx::{Tx, TxResponse};
 
-pub type Balance = cosmrs::Coin;
 pub type Uint = ruint::aliases::U256;

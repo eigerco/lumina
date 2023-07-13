@@ -79,8 +79,8 @@ pub enum Error {
     #[error("Invalid address size: {0}")]
     InvalidAddressSize(usize),
 
-    #[error(transparent)]
-    Cosmos(#[from] cosmrs::ErrorReport),
+    #[error("Invalid address: {0}")]
+    InvalidAddress(String),
 }
 
 #[derive(Debug, thiserror::Error)]

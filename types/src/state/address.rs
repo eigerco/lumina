@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use cosmrs::AccountId;
+use bech32::{FromBase32, ToBase32};
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
 use tendermint::account::Id;
@@ -305,27 +305,20 @@ impl From<ConsAddress> for Raw {
 }
 
 fn address_to_string(addr: &impl AddressTrait) -> String {
-    // There are two reasons that AccountId can return an error:
-    //
-    // 1. The prefix can have upper case characters
-    // 2. The bytes length can be more than 255
-    //
-    // Both cases will never happen because we have full control at
-    // the values.
-    AccountId::new(addr.prefix(), addr.as_bytes())
-        .expect("malformed prefix or bytes")
-        .into()
+    let data_u5 = addr.as_bytes().to_base32();
+
+    // We have full control on the prefix, so we know this will not fail
+    bech32::encode(addr.prefix(), data_u5, bech32::Variant::Bech32).expect("Invalid prefix")
 }
 
 fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
-    let account_id = s.parse::<AccountId>()?;
+    let (hrp, data_u5, _) = bech32::decode(s).map_err(|_| Error::InvalidAddress(s.to_owned()))?;
+    let data = Vec::from_base32(&data_u5).map_err(|_| Error::InvalidAddress(s.to_owned()))?;
 
-    let kind = account_id.prefix().parse()?;
-
-    let bytes = account_id.to_bytes();
-    let bytes = bytes[..]
+    let kind = hrp.parse()?;
+    let bytes = data[..]
         .try_into()
-        .map_err(|_| Error::InvalidAddressSize(bytes.len()))?;
+        .map_err(|_| Error::InvalidAddressSize(data.len()))?;
 
     Ok((kind, Id::new(bytes)))
 }

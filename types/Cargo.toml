@@ -6,10 +6,10 @@ license = "Apache-2.0"
 
 [dependencies]
 base64 = "0.21.2"
+bech32 = "0.9.1"
 bytes = "1.4.0"
 celestia-proto = { workspace = true }
 const_format = "0.2.31"
-cosmrs = "0.14.0"
 enum_dispatch = "0.3.12"
 nmt-rs = { workspace = true }
 ruint = { version = "1.8.0", features = ["serde"] }
