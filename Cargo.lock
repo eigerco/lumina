@@ -166,14 +166,11 @@ name = "celestia-rpc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "celestia-proto",
  "celestia-types",
  "dotenvy",
  "http",
  "jsonrpsee",
  "rand",
- "tendermint",
- "tendermint-proto",
  "thiserror",
  "tokio",
 ]

@@ -1,6 +1,5 @@
-use celestia_types::{ExtendedHeader, SyncState};
+use celestia_types::{ExtendedHeader, Hash, SyncState};
 use jsonrpsee::proc_macros::rpc;
-use tendermint::hash::Hash;
 
 #[rpc(client)]
 pub trait Header {

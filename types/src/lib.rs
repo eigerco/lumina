@@ -13,6 +13,8 @@ pub mod trust_level;
 mod validate;
 mod validator_set;
 
+pub use tendermint::hash::Hash;
+
 pub use crate::blob::*;
 pub use crate::block::*;
 pub use crate::data_availability_header::*;
