@@ -7,9 +7,14 @@ const BASE64STRING: &str =
 const VEC_BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
 const PASCAL_CASE: &str = r#"#[serde(rename_all = "PascalCase")]"#;
+const OPTION_ANY: &str = r#"#[serde(with = "crate::serializers::option_any")]"#;
 
 pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.da.DataAvailabilityHeader", SERIALIZED),
+    (".cosmos.base.abci.v1beta1.ABCIMessageLog", SERIALIZED),
+    (".cosmos.base.abci.v1beta1.Attribute", SERIALIZED),
+    (".cosmos.base.abci.v1beta1.StringEvent", SERIALIZED),
+    (".cosmos.base.abci.v1beta1.TxResponse", SERIALIZED),
     (".header.pb.ExtendedHeader", SERIALIZED),
     (".share.p2p.shrex.nd.Proof", SERIALIZED),
     (".share.p2p.shrex.nd.Row", SERIALIZED),
@@ -25,6 +30,8 @@ pub static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
         ".celestia.da.DataAvailabilityHeader.column_roots",
         VEC_BASE64STRING,
     ),
+    (".cosmos.base.abci.v1beta1.TxResponse.tx", DEFAULT),
+    (".cosmos.base.abci.v1beta1.TxResponse.tx", OPTION_ANY),
     (".share.p2p.shrex.nd.Proof.nodes", VEC_BASE64STRING),
     (".share.p2p.shrex.nd.Proof.hashleaf", DEFAULT),
     (".share.p2p.shrex.nd.Proof.hashleaf", BASE64STRING),
@@ -50,11 +57,16 @@ fn main() -> Result<()> {
     config
         .include_file("mod.rs")
         .extern_path(".tendermint", "::tendermint_proto::v0_34")
+        // Comments in Google's protobuf are causing issues with cargo-test
+        .disable_comments([".google"])
         .compile_protos(
             &[
                 "vendor/celestia/da/data_availability_header.proto",
                 "vendor/header/pb/extended_header.proto",
                 "vendor/share/p2p/shrexnd/pb/share.proto",
+                "vendor/cosmos/base/v1beta1/coin.proto",
+                "vendor/cosmos/base/abci/v1beta1/abci.proto",
+                "vendor/cosmos/staking/v1beta1/query.proto",
             ],
             &["vendor"],
         )?;

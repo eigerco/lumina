@@ -1,6 +1,6 @@
 use celestia_types::state::{
     AccAddress, Address, Balance, QueryDelegationResponse, QueryRedelegationsResponse,
-    QueryUnbondingDelegationResponse, Tx, TxResponse, Uint, ValAddress,
+    QueryUnbondingDelegationResponse, RawTx, TxResponse, Uint, ValAddress,
 };
 use celestia_types::Blob;
 use jsonrpsee::proc_macros::rpc;
@@ -92,7 +92,7 @@ pub trait State {
 
     /// SubmitTx submits the given transaction/message to the Celestia network and blocks until the tx is included in a block.
     #[method(name = "state.SubmitTx")]
-    async fn state_submit_tx(&self, tx: &Tx) -> Result<TxResponse, Error>;
+    async fn state_submit_tx(&self, tx: &RawTx) -> Result<TxResponse, Error>;
 
     /// Transfer sends the given amount of coins from default wallet of the node to the given account address.
     #[method(name = "state.Transfer")]
