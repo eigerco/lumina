@@ -81,6 +81,12 @@ pub enum Error {
 
     #[error("Invalid address: {0}")]
     InvalidAddress(String),
+
+    #[error("Invalid balance denomination: {0}")]
+    InvalidBalanceDenomination(String),
+
+    #[error("Invalid balance amount: {0}")]
+    InvalidBalanceAmount(String),
 }
 
 #[derive(Debug, thiserror::Error)]
