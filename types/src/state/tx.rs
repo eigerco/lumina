@@ -1,3 +1,4 @@
+use celestia_proto::cosmos::base::abci::v1beta1::TxResponse as RawTxResponse;
 use serde::{Deserialize, Serialize};
 
 /// Raw TX data
@@ -10,5 +11,4 @@ pub struct RawTx {
     data: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TxResponse;
+pub type TxResponse = RawTxResponse;

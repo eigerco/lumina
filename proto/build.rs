@@ -8,38 +8,50 @@ const VEC_BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
 const PASCAL_CASE: &str = r#"#[serde(rename_all = "PascalCase")]"#;
 const OPTION_ANY: &str = r#"#[serde(with = "crate::serializers::option_any")]"#;
+const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_timestamp")]"#;
 
+#[rustfmt::skip]
 pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.da.DataAvailabilityHeader", SERIALIZED),
     (".cosmos.base.abci.v1beta1.ABCIMessageLog", SERIALIZED),
     (".cosmos.base.abci.v1beta1.Attribute", SERIALIZED),
     (".cosmos.base.abci.v1beta1.StringEvent", SERIALIZED),
     (".cosmos.base.abci.v1beta1.TxResponse", SERIALIZED),
+    (".cosmos.base.v1beta1.Coin", SERIALIZED),
+    (".cosmos.base.query.v1beta1.PageResponse", SERIALIZED),
+    (".cosmos.staking.v1beta1.QueryDelegationResponse", SERIALIZED),
+    (".cosmos.staking.v1beta1.DelegationResponse", SERIALIZED),
+    (".cosmos.staking.v1beta1.Delegation", SERIALIZED),
+    (".cosmos.staking.v1beta1.QueryRedelegationsResponse", SERIALIZED),
+    (".cosmos.staking.v1beta1.RedelegationResponse", SERIALIZED),
+    (".cosmos.staking.v1beta1.Redelegation", SERIALIZED),
+    (".cosmos.staking.v1beta1.RedelegationEntryResponse", SERIALIZED),
+    (".cosmos.staking.v1beta1.RedelegationEntry", SERIALIZED),
+    (".cosmos.staking.v1beta1.QueryUnbondingDelegationResponse", SERIALIZED),
+    (".cosmos.staking.v1beta1.UnbondingDelegation", SERIALIZED),
+    (".cosmos.staking.v1beta1.UnbondingDelegationEntry", SERIALIZED),
     (".header.pb.ExtendedHeader", SERIALIZED),
     (".share.p2p.shrex.nd.Proof", SERIALIZED),
     (".share.p2p.shrex.nd.Row", SERIALIZED),
     (".share.p2p.shrex.nd.Row", PASCAL_CASE),
 ];
 
+#[rustfmt::skip]
 pub static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
-    (
-        ".celestia.da.DataAvailabilityHeader.row_roots",
-        VEC_BASE64STRING,
-    ),
-    (
-        ".celestia.da.DataAvailabilityHeader.column_roots",
-        VEC_BASE64STRING,
-    ),
+    (".celestia.da.DataAvailabilityHeader.row_roots", VEC_BASE64STRING),
+    (".celestia.da.DataAvailabilityHeader.column_roots", VEC_BASE64STRING),
     (".cosmos.base.abci.v1beta1.TxResponse.tx", DEFAULT),
     (".cosmos.base.abci.v1beta1.TxResponse.tx", OPTION_ANY),
+    (".cosmos.base.query.v1beta1.PageResponse.next_key", BASE64STRING),
+    (".cosmos.staking.v1beta1.RedelegationEntry.completion_time", DEFAULT),
+    (".cosmos.staking.v1beta1.RedelegationEntry.completion_time", OPTION_TIMESTAMP),
+    (".cosmos.staking.v1beta1.UnbondingDelegationEntry.completion_time", DEFAULT),
+    (".cosmos.staking.v1beta1.UnbondingDelegationEntry.completion_time", OPTION_TIMESTAMP),
     (".share.p2p.shrex.nd.Proof.nodes", VEC_BASE64STRING),
     (".share.p2p.shrex.nd.Proof.hashleaf", DEFAULT),
     (".share.p2p.shrex.nd.Proof.hashleaf", BASE64STRING),
     // TODO: remove me  https://github.com/celestiaorg/celestia-node/issues/2427
-    (
-        ".share.p2p.shrex.nd.Proof.hashleaf",
-        r#"#[serde(rename = "leaf_hash")]"#,
-    ),
+    (".share.p2p.shrex.nd.Proof.hashleaf", r#"#[serde(rename = "leaf_hash")]"#),
     (".share.p2p.shrex.nd.Row.shares", VEC_BASE64STRING),
 ];
 
@@ -57,6 +69,14 @@ fn main() -> Result<()> {
     config
         .include_file("mod.rs")
         .extern_path(".tendermint", "::tendermint_proto::v0_34")
+        .extern_path(
+            ".google.protobuf.Timestamp",
+            "::tendermint_proto::google::protobuf::Timestamp",
+        )
+        .extern_path(
+            ".google.protobuf.Duration",
+            "::tendermint_proto::google::protobuf::Duration",
+        )
         // Comments in Google's protobuf are causing issues with cargo-test
         .disable_comments([".google"])
         .compile_protos(

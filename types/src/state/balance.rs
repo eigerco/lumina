@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
+use celestia_proto::cosmos::base::v1beta1::Coin as RawCoin;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Balance;
+pub type Balance = RawCoin;
