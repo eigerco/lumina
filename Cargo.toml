@@ -11,8 +11,8 @@ tendermint-proto = "0.32"
 
 [patch.crates-io]
 # `cosmrs` is using terndermint from crates.io, so we patch it with ours
-tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "2ea1d65" }
-tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "2ea1d65" }
+tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "89b463ae" }
+tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "89b463ae" }
 # Uncomment to apply local changes
 #tendermint = { path = "../celestia-tendermint-rs/tendermint" }
 #tendermint-proto = { path = "../celestia-tendermint-rs/proto" }

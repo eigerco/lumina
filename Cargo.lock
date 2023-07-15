@@ -1540,7 +1540,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=2ea1d65#2ea1d65b2cf4b7a00a0b3e0b17a43271e44d03c9"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=89b463ae#89b463ae3e7e2d3482d5330811e5b4a021c3ab66"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -1568,7 +1568,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=2ea1d65#2ea1d65b2cf4b7a00a0b3e0b17a43271e44d03c9"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=89b463ae#89b463ae3e7e2d3482d5330811e5b4a021c3ab66"
 dependencies = [
  "bytes",
  "flex-error",
