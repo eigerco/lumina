@@ -64,7 +64,7 @@ impl Namespace {
         Ok(Namespace(nmt_rs::NamespaceId(bytes)))
     }
 
-    pub(crate) fn new_unchecked(bytes: [u8; NS_SIZE]) -> Self {
+    pub(crate) const fn new_unchecked(bytes: [u8; NS_SIZE]) -> Self {
         Namespace(nmt_rs::NamespaceId(bytes))
     }
 
