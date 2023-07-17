@@ -43,7 +43,7 @@ impl TryFrom<RawFraudProof> for Proof {
     fn try_from(value: RawFraudProof) -> Result<Self, Self::Error> {
         match value.proof_type.as_str() {
             BadEncodingFraudProof::TYPE => {
-                let befp = BadEncodingFraudProof::decode_vec(&value.data).unwrap();
+                let befp = BadEncodingFraudProof::decode_vec(&value.data)?;
                 Ok(Proof::BadEncoding(befp))
             }
             _ => todo!(),
@@ -51,8 +51,8 @@ impl TryFrom<RawFraudProof> for Proof {
     }
 }
 
-impl From<Proof> for RawFraudProof {
-    fn from(value: Proof) -> Self {
+impl From<&Proof> for RawFraudProof {
+    fn from(value: &Proof) -> Self {
         match value {
             Proof::BadEncoding(befp) => {
                 let encoded: Result<_, Infallible> = befp.encode_vec();
@@ -70,7 +70,7 @@ impl Serialize for Proof {
     where
         S: Serializer,
     {
-        let raw: RawFraudProof = self.clone().try_into().map_err(serde::ser::Error::custom)?;
+        let raw: RawFraudProof = self.try_into().map_err(serde::ser::Error::custom)?;
         raw.serialize(serializer)
     }
 }
