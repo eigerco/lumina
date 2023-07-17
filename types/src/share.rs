@@ -33,28 +33,40 @@ pub struct NamespacedRow {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "RawShare", into = "RawShare")]
 pub struct Share {
-    pub namespace: Namespace,
-    pub data: Vec<u8>,
+    pub data: [u8; appconsts::SHARE_SIZE],
 }
 
 impl Share {
-    fn new(bytes: Vec<u8>) -> Result<Self> {
-        if bytes.len() != appconsts::SHARE_SIZE {
-            return Err(Error::InvalidShareSize(bytes.len()));
+    pub fn from_raw(data: &[u8]) -> Result<Self> {
+        if data.len() != appconsts::SHARE_SIZE {
+            return Err(Error::InvalidShareSize(data.len()));
         }
 
-        let (ns, data) = bytes.split_at(NS_SIZE);
+        // validate the namespace to later return it
+        // with the `new_unchecked`
+        Namespace::from_raw(&data[..NS_SIZE])?;
 
         Ok(Share {
-            namespace: Namespace::from_raw(ns)?,
-            data: data.to_vec(),
+            data: data.try_into().unwrap(),
         })
     }
 
+    pub fn namespace(&self) -> Namespace {
+        Namespace::new_unchecked(self.data[..NS_SIZE].try_into().unwrap())
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data[NS_SIZE..]
+    }
+
     pub fn to_vec(&self) -> Vec<u8> {
-        let mut bytes = self.namespace.as_bytes().to_vec();
-        bytes.extend_from_slice(&self.data);
-        bytes
+        self.as_ref().to_vec()
+    }
+}
+
+impl AsRef<[u8]> for Share {
+    fn as_ref(&self) -> &[u8] {
+        &self.data
     }
 }
 
@@ -95,7 +107,7 @@ impl TryFrom<RawShare> for Share {
     type Error = Error;
 
     fn try_from(value: RawShare) -> Result<Self, Self::Error> {
-        Share::new(value.data)
+        Share::from_raw(&value.data)
     }
 }
 
@@ -116,7 +128,7 @@ impl TryFrom<RawRow> for NamespacedRow {
         let shares = value
             .shares
             .into_iter()
-            .map(Share::new)
+            .map(|bytes| Share::from_raw(&bytes))
             .collect::<Result<Vec<_>>>()?;
 
         let proof: NamespaceProof = value
@@ -149,13 +161,13 @@ mod tests {
 
     #[test]
     fn share_should_have_correct_len() {
-        Share::new(vec![0; 0]).unwrap_err();
-        Share::new(vec![0; 100]).unwrap_err();
-        Share::new(vec![0; appconsts::SHARE_SIZE - 1]).unwrap_err();
-        Share::new(vec![0; appconsts::SHARE_SIZE + 1]).unwrap_err();
-        Share::new(vec![0; 2 * appconsts::SHARE_SIZE]).unwrap_err();
+        Share::from_raw(&[0; 0]).unwrap_err();
+        Share::from_raw(&[0; 100]).unwrap_err();
+        Share::from_raw(&[0; appconsts::SHARE_SIZE - 1]).unwrap_err();
+        Share::from_raw(&[0; appconsts::SHARE_SIZE + 1]).unwrap_err();
+        Share::from_raw(&[0; 2 * appconsts::SHARE_SIZE]).unwrap_err();
 
-        Share::new(vec![0; appconsts::SHARE_SIZE]).unwrap();
+        Share::from_raw(&vec![0; appconsts::SHARE_SIZE]).unwrap();
     }
 
     #[test]

@@ -31,8 +31,8 @@ async fn get_shares_by_namespace() {
         .await
         .unwrap();
 
-    let seq_len =
-        &ns_shares.rows[0].shares[0].data[SHARE_INFO_BYTES..SHARE_INFO_BYTES + SEQUENCE_LEN_BYTES];
+    let seq_len = &ns_shares.rows[0].shares[0].data()
+        [SHARE_INFO_BYTES..SHARE_INFO_BYTES + SEQUENCE_LEN_BYTES];
     let seq_len = u32::from_be_bytes(seq_len.try_into().unwrap());
     assert_eq!(seq_len as usize, data.len());
 
