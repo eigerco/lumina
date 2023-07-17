@@ -11,7 +11,7 @@ use tendermint_proto::Protobuf;
 
 use crate::bail_validation;
 use crate::consts::appconsts;
-use crate::fraud_proof::{FraudProof, ProofType};
+use crate::fraud_proof::FraudProof;
 use crate::nmt::NamespacedHash;
 use crate::nmt::{Namespace, NamespaceProof, NamespacedHashExt, NS_SIZE};
 use crate::rsmt2d::Axis;
@@ -43,7 +43,7 @@ pub struct BadEncodingFraudProof {
 }
 
 impl FraudProof for BadEncodingFraudProof {
-    const TYPE: ProofType<'static> = ProofType("badencoding");
+    const TYPE: &'static str = "badencoding";
 
     fn header_hash(&self) -> Hash {
         self.header_hash

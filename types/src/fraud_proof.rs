@@ -7,12 +7,8 @@ use tendermint_proto::Protobuf;
 
 use crate::{byzantine::BadEncodingFraudProof, Error, ExtendedHeader, Result};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ProofType<'a>(pub &'a str);
-
 pub trait FraudProof {
-    const TYPE: ProofType<'static>;
+    const TYPE: &'static str;
 
     // HeaderHash returns the block hash.
     fn header_hash(&self) -> Hash;
@@ -45,7 +41,7 @@ impl TryFrom<RawFraudProof> for Proof {
     type Error = Error;
 
     fn try_from(value: RawFraudProof) -> Result<Self, Self::Error> {
-        match ProofType(&value.proof_type) {
+        match value.proof_type.as_str() {
             BadEncodingFraudProof::TYPE => {
                 let befp = BadEncodingFraudProof::decode_vec(&value.data).unwrap();
                 Ok(Proof::BadEncoding(befp))
@@ -61,7 +57,7 @@ impl From<Proof> for RawFraudProof {
             Proof::BadEncoding(befp) => {
                 let encoded: Result<_, Infallible> = befp.encode_vec();
                 RawFraudProof {
-                    proof_type: BadEncodingFraudProof::TYPE.0.to_owned(),
+                    proof_type: BadEncodingFraudProof::TYPE.to_owned(),
                     data: encoded.unwrap(),
                 }
             }
