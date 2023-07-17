@@ -49,15 +49,9 @@ pub static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".cosmos.base.query.v1beta1.PageResponse.next_key", BASE64STRING),
     (".cosmos.staking.v1beta1.RedelegationEntry.completion_time", OPTION_TIMESTAMP),
     (".cosmos.staking.v1beta1.UnbondingDelegationEntry.completion_time", OPTION_TIMESTAMP),
-    (
-        ".share.eds.byzantine.pb.MerkleProof.nodes",
-        VEC_BASE64STRING,
-    ),
+    (".share.eds.byzantine.pb.MerkleProof.nodes", VEC_BASE64STRING),
     (".share.eds.byzantine.pb.MerkleProof.leaf_hash", DEFAULT),
-    (
-        ".share.eds.byzantine.pb.MerkleProof.leaf_hash",
-        BASE64STRING,
-    ),
+    (".share.eds.byzantine.pb.MerkleProof.leaf_hash", BASE64STRING),
     (".share.eds.byzantine.pb.BadEncoding.axis", QUOTED),
     (".share.p2p.shrex.nd.Proof.nodes", VEC_BASE64STRING),
     (".share.p2p.shrex.nd.Proof.hashleaf", DEFAULT),
