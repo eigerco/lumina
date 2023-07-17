@@ -102,10 +102,13 @@ impl FraudProof for BadEncodingFraudProof {
 
         // verify that Merkle proofs correspond to particular shares.
         for share in &self.shares {
-            let share_data = share.leaf.share.to_array();
             share
                 .proof
-                .verify_range(&root, &[share_data], share.leaf.namespace.into())
+                .verify_range(
+                    &root,
+                    &[share.leaf.share.as_ref()],
+                    share.leaf.namespace.into(),
+                )
                 .map_err(Error::RangeProofError)?;
         }
 
@@ -131,24 +134,22 @@ struct NmtLeaf {
 }
 
 impl NmtLeaf {
-    pub fn new(mut bytes: Vec<u8>) -> Result<Self> {
+    pub fn new(bytes: Vec<u8>) -> Result<Self> {
         if bytes.len() != appconsts::SHARE_SIZE + NS_SIZE {
             return Err(Error::InvalidNmtLeafSize(bytes.len()));
         }
 
-        let namespace = Namespace::from_raw(&bytes[..NS_SIZE])?;
-        bytes.drain(..NS_SIZE);
+        let (namespace, share) = bytes.split_at(NS_SIZE);
 
         Ok(Self {
-            namespace,
-            share: Share::new(bytes)?,
+            namespace: Namespace::from_raw(namespace)?,
+            share: Share::new(share)?,
         })
     }
 
     pub fn to_vec(&self) -> Vec<u8> {
         let mut bytes = self.namespace.as_bytes().to_vec();
-        bytes.extend_from_slice(self.share.namespace.as_bytes());
-        bytes.extend_from_slice(&self.share.data);
+        bytes.extend_from_slice(self.share.as_ref());
         bytes
     }
 }

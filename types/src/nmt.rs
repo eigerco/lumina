@@ -64,6 +64,10 @@ impl Namespace {
         Ok(Namespace(nmt_rs::NamespaceId(bytes)))
     }
 
+    pub(crate) fn new_unchecked(bytes: [u8; NS_SIZE]) -> Self {
+        Namespace(nmt_rs::NamespaceId(bytes))
+    }
+
     pub const fn const_v0(id: [u8; NS_ID_V0_SIZE]) -> Self {
         let mut bytes = [0u8; NS_SIZE];
         let start = NS_SIZE - NS_ID_V0_SIZE;
