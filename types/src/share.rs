@@ -37,7 +37,7 @@ pub struct Share {
 }
 
 impl Share {
-    pub fn new(data: &[u8]) -> Result<Self> {
+    pub fn from_raw(data: &[u8]) -> Result<Self> {
         if data.len() != appconsts::SHARE_SIZE {
             return Err(Error::InvalidShareSize(data.len()));
         }
@@ -104,7 +104,7 @@ impl TryFrom<RawShare> for Share {
     type Error = Error;
 
     fn try_from(value: RawShare) -> Result<Self, Self::Error> {
-        Share::new(&value.data)
+        Share::from_raw(&value.data)
     }
 }
 
@@ -125,7 +125,7 @@ impl TryFrom<RawRow> for NamespacedRow {
         let shares = value
             .shares
             .into_iter()
-            .map(|bytes| Share::new(&bytes))
+            .map(|bytes| Share::from_raw(&bytes))
             .collect::<Result<Vec<_>>>()?;
 
         let proof: NamespaceProof = value
@@ -158,13 +158,13 @@ mod tests {
 
     #[test]
     fn share_should_have_correct_len() {
-        Share::new(&[0; 0]).unwrap_err();
-        Share::new(&[0; 100]).unwrap_err();
-        Share::new(&[0; appconsts::SHARE_SIZE - 1]).unwrap_err();
-        Share::new(&[0; appconsts::SHARE_SIZE + 1]).unwrap_err();
-        Share::new(&[0; 2 * appconsts::SHARE_SIZE]).unwrap_err();
+        Share::from_raw(&[0; 0]).unwrap_err();
+        Share::from_raw(&[0; 100]).unwrap_err();
+        Share::from_raw(&[0; appconsts::SHARE_SIZE - 1]).unwrap_err();
+        Share::from_raw(&[0; appconsts::SHARE_SIZE + 1]).unwrap_err();
+        Share::from_raw(&[0; 2 * appconsts::SHARE_SIZE]).unwrap_err();
 
-        Share::new(&vec![0; appconsts::SHARE_SIZE]).unwrap();
+        Share::from_raw(&vec![0; appconsts::SHARE_SIZE]).unwrap();
     }
 
     #[test]

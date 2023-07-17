@@ -143,7 +143,7 @@ impl NmtLeaf {
 
         Ok(Self {
             namespace: Namespace::from_raw(namespace)?,
-            share: Share::new(share)?,
+            share: Share::from_raw(share)?,
         })
     }
 
