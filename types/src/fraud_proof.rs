@@ -46,7 +46,7 @@ impl TryFrom<RawFraudProof> for Proof {
                 let befp = BadEncodingFraudProof::decode_vec(&value.data)?;
                 Ok(Proof::BadEncoding(befp))
             }
-            proof_type => Err(Error::UnsupportedFraudProofType(proof_type.into())),
+            _ => Err(Error::UnsupportedFraudProofType(value.proof_type)),
         }
     }
 }
