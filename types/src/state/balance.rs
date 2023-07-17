@@ -133,7 +133,7 @@ mod tests {
         validate_denom("abc").unwrap();
         validate_denom("a01").unwrap();
         validate_denom("A01").unwrap();
-        validate_denom("aA01/._-").unwrap();
+        validate_denom("aAzZ09/:._-").unwrap();
     }
 
     #[test]
