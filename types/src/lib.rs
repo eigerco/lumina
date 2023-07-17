@@ -7,10 +7,13 @@ mod extended_header;
 pub mod nmt;
 mod rsmt2d;
 mod share;
+pub mod state;
 mod sync;
 pub mod trust_level;
 mod validate;
 mod validator_set;
+
+pub use tendermint::hash::Hash;
 
 pub use crate::blob::*;
 pub use crate::block::*;

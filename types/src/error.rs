@@ -72,6 +72,21 @@ pub enum Error {
 
     #[error("Nmt error: {0}")]
     Nmt(&'static str),
+
+    #[error("Invalid address prefix: {0}")]
+    InvalidAddressPrefix(String),
+
+    #[error("Invalid address size: {0}")]
+    InvalidAddressSize(usize),
+
+    #[error("Invalid address: {0}")]
+    InvalidAddress(String),
+
+    #[error("Invalid balance denomination: {0}")]
+    InvalidBalanceDenomination(String),
+
+    #[error("Invalid balance amount: {0}")]
+    InvalidBalanceAmount(String),
 }
 
 #[derive(Debug, thiserror::Error)]
