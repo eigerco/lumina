@@ -41,6 +41,7 @@ impl Share {
         if data.len() != appconsts::SHARE_SIZE {
             return Err(Error::InvalidShareSize(data.len()));
         }
+
         // validate the namespace to later return it
         // with the `new_unchecked`
         Namespace::from_raw(&data[..NS_SIZE])?;
