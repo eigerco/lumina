@@ -99,6 +99,9 @@ pub enum Error {
 
     #[error("Invalid balance amount: {0}")]
     InvalidBalanceAmount(String),
+
+    #[error("Unsupported fraud proof type: {0}")]
+    UnsupportedFraudProofType(String),
 }
 
 #[derive(Debug, thiserror::Error)]
