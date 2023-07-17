@@ -51,8 +51,7 @@ mod tests {
 
     #[derive(Serialize, Deserialize)]
     struct TxResponse {
-        #[serde(with = "super")]
-        #[serde(default)]
+        #[serde(default, with = "super")]
         tx: Option<Any>,
     }
 

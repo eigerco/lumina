@@ -7,8 +7,9 @@ const BASE64STRING: &str =
 const VEC_BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
 const PASCAL_CASE: &str = r#"#[serde(rename_all = "PascalCase")]"#;
-const OPTION_ANY: &str = r#"#[serde(with = "crate::serializers::option_any")]"#;
-const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_timestamp")]"#;
+const OPTION_ANY: &str = r#"#[serde(default, with = "crate::serializers::option_any")]"#;
+const OPTION_TIMESTAMP: &str =
+    r#"#[serde(default, with = "crate::serializers::option_timestamp")]"#;
 
 #[rustfmt::skip]
 pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
@@ -40,12 +41,9 @@ pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
 pub static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.da.DataAvailabilityHeader.row_roots", VEC_BASE64STRING),
     (".celestia.da.DataAvailabilityHeader.column_roots", VEC_BASE64STRING),
-    (".cosmos.base.abci.v1beta1.TxResponse.tx", DEFAULT),
     (".cosmos.base.abci.v1beta1.TxResponse.tx", OPTION_ANY),
     (".cosmos.base.query.v1beta1.PageResponse.next_key", BASE64STRING),
-    (".cosmos.staking.v1beta1.RedelegationEntry.completion_time", DEFAULT),
     (".cosmos.staking.v1beta1.RedelegationEntry.completion_time", OPTION_TIMESTAMP),
-    (".cosmos.staking.v1beta1.UnbondingDelegationEntry.completion_time", DEFAULT),
     (".cosmos.staking.v1beta1.UnbondingDelegationEntry.completion_time", OPTION_TIMESTAMP),
     (".share.p2p.shrex.nd.Proof.nodes", VEC_BASE64STRING),
     (".share.p2p.shrex.nd.Proof.hashleaf", DEFAULT),
