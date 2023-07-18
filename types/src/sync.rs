@@ -3,9 +3,7 @@ use tendermint::hash::Hash;
 use tendermint::time::Time;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
 pub struct SyncState {
-    #[serde(rename = "ID")]
     pub id: u64,
     pub height: u64,
     pub from_height: u64,
@@ -14,5 +12,5 @@ pub struct SyncState {
     pub to_hash: Hash,
     pub start: Time,
     pub end: Time,
-    // TODO: error
+    pub error: Option<String>,
 }
