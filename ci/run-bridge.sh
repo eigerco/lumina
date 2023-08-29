@@ -20,7 +20,7 @@ wait_for_provision() {
     sleep 0.1
   done
 
-  sleep 1 # let the validator finish writing
+  sleep 3 # let the validator finish setup
   echo "Validator is ready"
 }
 
