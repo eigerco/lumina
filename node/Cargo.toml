@@ -1,0 +1,30 @@
+[package]
+name = "celestia-node"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+celestia-proto = { workspace = true }
+celestia-rpc = { workspace = true }
+celestia-types = { workspace = true }
+tendermint-proto = { workspace = true }
+
+anyhow = "1.0.71"
+async-trait = "0.1.73"
+dotenvy = "0.15.7"
+futures = "0.3.28"
+libp2p = { version = "0.52.3", features = [
+  "request-response",
+  "identify",
+  "macros",
+  "tokio",
+  "ed25519",
+  "noise",
+  "yamux",
+  "tcp",
+  "ping",
+] }
+prost = "0.11.9"
+tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread"] }

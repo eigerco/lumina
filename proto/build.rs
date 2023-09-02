@@ -94,6 +94,7 @@ fn main() -> Result<()> {
                 "vendor/cosmos/base/v1beta1/coin.proto",
                 "vendor/cosmos/base/abci/v1beta1/abci.proto",
                 "vendor/cosmos/staking/v1beta1/query.proto",
+                "vendor/go-header/p2p/pb/header_request.proto",
             ],
             &["vendor"],
         )?;
