@@ -16,15 +16,16 @@ async-trait = "0.1.73"
 dotenvy = "0.15.7"
 futures = "0.3.28"
 libp2p = { version = "0.52.3", features = [
-  "request-response",
+  "ed25519",
+  "gossipsub",
   "identify",
   "macros",
-  "tokio",
-  "ed25519",
   "noise",
-  "yamux",
-  "tcp",
   "ping",
+  "request-response",
+  "tcp",
+  "tokio",
+  "yamux",
 ] }
-prost = "0.11.9"
+prost = "0.12.0"
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread"] }

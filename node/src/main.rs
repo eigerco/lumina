@@ -1,11 +1,12 @@
 use std::env;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use futures::StreamExt;
 use libp2p::{
     core::upgrade::Version,
+    gossipsub::{self, Hasher},
     identify,
-    identity::{self, PublicKey},
+    identity::{self, Keypair},
     noise, request_response,
     swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Transport,
@@ -36,9 +37,11 @@ async fn main() -> Result<()> {
         .authenticate(noise::Config::new(&local_key)?)
         .multiplex(yamux::Config::default())
         .boxed();
+
+    let header_sub_topic = gossipsub::IdentTopic::new(format!("/{NETWORK}/header-sub/v0.0.1"));
     let mut swarm = SwarmBuilder::with_tokio_executor(
         transport,
-        Behaviour::new(local_key.public()),
+        Behaviour::new(local_key, &header_sub_topic)?,
         local_peer_id,
     )
     .build();
@@ -104,6 +107,23 @@ async fn main() -> Result<()> {
                     _ => println!("Unhandled header_ex event: {event:?}"),
                 },
                 BehaviourEvent::KeepAlive(event) => println!("KeepAlive event: {event:?}"),
+                BehaviourEvent::Gossipsub(event) => match event {
+                    gossipsub::Event::Message {
+                        message_id,
+                        message,
+                        ..
+                    } => {
+                        if message.topic == header_sub_topic.hash() {
+                            let header = ExtendedHeader::decode(&message.data[..])?;
+                            println!("New header from header-sub: {header:?}");
+                        } else {
+                            println!(
+                                "New gossipsub message, id: {message_id}, message: {message:?}"
+                            );
+                        }
+                    }
+                    _ => println!("Unhandled gossipsub event: {event:?}"),
+                },
             },
             e => println!("other: {e:?}"),
         }
@@ -116,15 +136,33 @@ struct Behaviour {
     identify: identify::Behaviour,
     header_ex: exchange::ExchangeBehaviour,
     keep_alive: keep_alive::Behaviour,
+    gossipsub: gossipsub::Behaviour,
 }
 
 impl Behaviour {
-    fn new(pubkey: PublicKey) -> Self {
-        let identify = identify::Behaviour::new(identify::Config::new("".to_owned(), pubkey));
-        Self {
+    fn new(local_key: Keypair, topic: &gossipsub::Topic<impl Hasher>) -> Result<Self> {
+        let identify =
+            identify::Behaviour::new(identify::Config::new("".to_owned(), local_key.public()));
+
+        // Set the message authenticity - How we expect to publish messages
+        // Here we expect the publisher to sign the message with their key.
+        let message_authenticity = gossipsub::MessageAuthenticity::Signed(local_key);
+        // set default parameters for gossipsub
+        let gossipsub_config = gossipsub::Config::default();
+        // build a gossipsub network behaviour
+        let mut gossipsub: gossipsub::Behaviour =
+            gossipsub::Behaviour::new(message_authenticity, gossipsub_config)
+                .map_err(|err| anyhow!("Creating gossipsub behaviour: {err}"))?;
+        // subscribe to the topic
+        gossipsub
+            .subscribe(topic)
+            .context("Subscribing to the topic")?;
+
+        Ok(Self {
             identify,
+            gossipsub,
             header_ex: exchange::exchange_behaviour(NETWORK),
             keep_alive: keep_alive::Behaviour,
-        }
+        })
     }
 }
