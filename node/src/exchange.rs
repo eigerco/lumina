@@ -2,8 +2,7 @@ use std::io;
 
 use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
-use futures::prelude::*;
-use futures::{AsyncRead, AsyncWrite};
+use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::request_response::{self, Codec, ProtocolSupport};
 use libp2p::StreamProtocol;
 use prost::Message;
