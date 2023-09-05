@@ -32,5 +32,4 @@ wasm-bindgen-futures = "0.4.37"
 
 [dev-dependencies]
 celestia-rpc = { workspace = true }
-
 dotenvy = "0.15.7"

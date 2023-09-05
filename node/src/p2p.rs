@@ -74,7 +74,7 @@ struct Worker {
     cmd_rx: flume::Receiver<P2pCmd>,
 }
 
-#[allow(unused)]
+#[derive(Debug)]
 enum P2pCmd {
     NetworkInfo {
         respond_to: oneshot::Sender<NetworkInfo>,
@@ -146,12 +146,18 @@ impl P2p {
         todo!();
     }
 
+    async fn send_cmd(&self, cmd: P2pCmd) -> Result<()> {
+        self.cmd_tx
+            .send_async(cmd)
+            .await
+            .map_err(|_| P2pError::WorkerDied)
+    }
+
     pub async fn network_info(&self) -> Result<NetworkInfo> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx
-            .send_async(P2pCmd::NetworkInfo { respond_to: tx })
-            .await
-            .map_err(|_| P2pError::WorkerDied)?;
+
+        self.send_cmd(P2pCmd::NetworkInfo { respond_to: tx })
+            .await?;
         rx.await
             .map_err(|_| P2pError::CmdCancelled("NetworkInfo".to_owned()))
     }
@@ -168,12 +174,8 @@ impl Worker {
                     }
                 },
                 Some(cmd) = command_stream.next() => {
-                    match cmd {
-                        P2pCmd::NetworkInfo { respond_to } => {
-                            if respond_to.send(self.swarm.network_info()).is_err() {
-                                warn!("Couldn't send response for the network info cmd");
-                            }
-                        }
+                    if let Err(e) = self.on_command(cmd).await {
+                        warn!("Failure while handling command. (error: {e})");
                     }
                 }
             }
@@ -195,6 +197,18 @@ impl Worker {
                 BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await?,
             },
             _ => {}
+        }
+
+        Ok(())
+    }
+
+    async fn on_command(&mut self, cmd: P2pCmd) -> Result<()> {
+        trace!("{cmd:?}");
+
+        match cmd {
+            P2pCmd::NetworkInfo { respond_to } => {
+                let _ = respond_to.send(self.swarm.network_info());
+            }
         }
 
         Ok(())
