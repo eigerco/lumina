@@ -17,6 +17,7 @@ use tokio::select;
 use tokio::sync::RwLock;
 
 use crate::exchange;
+use crate::executor::{spawn, Executor};
 use crate::store::Store;
 use crate::utils::gossipsub_ident_topic;
 
@@ -100,7 +101,8 @@ impl P2p {
         };
 
         let mut swarm =
-            SwarmBuilder::with_tokio_executor(config.transport, behaviour, local_peer_id).build();
+            SwarmBuilder::with_executor(config.transport, behaviour, local_peer_id, Executor)
+                .build();
 
         for addr in config.listen_on {
             swarm.listen_on(addr)?;
@@ -110,7 +112,7 @@ impl P2p {
             swarm.dial(addr)?;
         }
 
-        tokio::spawn(async move {
+        spawn(async move {
             Worker {
                 swarm,
                 header_sub_topic_hash: header_sub_topic.hash(),
