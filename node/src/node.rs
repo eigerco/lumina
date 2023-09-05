@@ -74,11 +74,13 @@ impl Node {
 
 impl Worker {
     async fn run(&mut self) {
-        select! {
-            Some(_ev) = self.p2p.next_event() => {
-                // TODO: feed it to syncer
+        loop {
+            select! {
+                Some(_ev) = self.p2p.next_event() => {
+                    // TODO: feed it to syncer
+                }
+                // TODO: receive command from `Node` and handle it
             }
-            // TODO: receive command from `Node` and handle it
         }
     }
 }
