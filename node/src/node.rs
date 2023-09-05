@@ -13,6 +13,7 @@ use libp2p::{Multiaddr, PeerId};
 use tokio::select;
 use tokio::sync::RwLock;
 
+use crate::executor::spawn;
 use crate::p2p::{P2p, P2pConfig, P2pError};
 use crate::store::Store;
 use crate::syncer::Syncer;
@@ -64,7 +65,7 @@ impl Node {
             listen_on: config.listen_on,
         })?;
 
-        tokio::spawn(async move {
+        spawn(async move {
             Worker { store, syncer, p2p }.run().await;
         });
 
