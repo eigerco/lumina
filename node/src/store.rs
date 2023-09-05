@@ -5,3 +5,9 @@ impl Store {
         Store {}
     }
 }
+
+impl Default for Store {
+    fn default() -> Self {
+        Store::new()
+    }
+}
