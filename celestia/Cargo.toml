@@ -1,0 +1,19 @@
+[package]
+name = "celestia"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+celestia-node = { workspace = true }
+celestia-rpc = { workspace = true }
+
+anyhow = "1.0.71"
+dotenvy = "0.15.7"
+libp2p = { version = "0.52.3", features = [
+  "ed25519",
+  "noise",
+  "tcp",
+  "yamux",
+] }
+tokio = { version = "1.29.0", features = ["macros", "rt-multi-thread"] }

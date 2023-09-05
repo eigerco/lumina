@@ -1,13 +1,15 @@
 [workspace]
 resolver = "2"
-members = ["proto", "types", "rpc"]
+members = ["celestia", "node", "proto", "rpc", "types"]
 
 [workspace.dependencies]
+celestia-node = { version = "0.1.0", path = "node" }
 celestia-proto = { version = "0.1.0", path = "proto" }
+celestia-rpc = { version = "0.1.0", path = "rpc" }
 celestia-types = { version = "0.1.0", path = "types" }
 nmt-rs = { git = "https://github.com/eigerco/nmt-rs.git", rev = "5146800" }
-tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "dbb4434" }
-tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "dbb4434" }
+tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "19dc3da" }
+tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "19dc3da" }
 
 [patch.'https://github.com/eigerco/celestia-tendermint-rs.git']
 # Uncomment to apply local changes

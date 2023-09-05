@@ -9,9 +9,10 @@ http = "0.2.9"
 thiserror = "1.0.40"
 jsonrpsee = { version = "0.20", features = ["http-client", "ws-client", "macros"] }
 celestia-types = { workspace = true }
+serde = { version = "1.0.188", features = ["derive"] }
 
 [dev-dependencies]
 anyhow = "1.0.71"
 dotenvy = "0.15.7"
 rand = "0.8.5"
-tokio = { version = "1.29.0", features = ["rt", "macros"] }
+tokio = { version = "1.32.0", features = ["rt", "macros"] }
