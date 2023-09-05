@@ -1,28 +1,28 @@
 use std::io;
 
 use async_trait::async_trait;
+use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use futures::prelude::*;
 use futures::{AsyncRead, AsyncWrite};
 use libp2p::request_response::{self, Codec, ProtocolSupport};
 use libp2p::StreamProtocol;
 use prost::Message;
 
-use celestia_proto::p2p::pb::HeaderRequest;
-use celestia_proto::p2p::pb::HeaderResponse;
+use crate::utils::stream_protocol_id;
 
 /// Max request size in bytes
 const REQUEST_SIZE_MAXIMUM: u64 = 1024;
 /// Max response size in bytes
 const RESPONSE_SIZE_MAXIMUM: u64 = 10 * 1024 * 1024;
 
-pub type ExchangeBehaviour = request_response::Behaviour<HeaderCodec>;
+pub type Behaviour = request_response::Behaviour<HeaderCodec>;
+pub type Event = request_response::Event<HeaderRequest, HeaderResponse>;
 
-/// Create a new [`ExchangeBehaviour`]
-pub fn exchange_behaviour(network: &str) -> ExchangeBehaviour {
-    let protocol = format!("/{network}/header-ex/v0.0.3");
-    request_response::Behaviour::new(
+/// Create a new [`Behaviour`]
+pub fn new_behaviour(network: &str) -> Behaviour {
+    Behaviour::new(
         [(
-            StreamProtocol::try_from_owned(protocol).expect("starts from '/'"),
+            stream_protocol_id(network, "/header-ex/v0.0.3"),
             ProtocolSupport::Full,
         )],
         request_response::Config::default(),

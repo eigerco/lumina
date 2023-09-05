@@ -486,19 +486,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "celestia-node"
+name = "celestia"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "celestia-node",
+ "celestia-rpc",
+ "dotenvy",
+ "libp2p",
+ "tokio",
+]
+
+[[package]]
+name = "celestia-node"
+version = "0.1.0"
+dependencies = [
  "async-trait",
  "celestia-proto",
- "celestia-rpc",
  "celestia-types",
- "dotenvy",
  "futures",
  "libp2p",
+ "log",
  "prost",
  "tendermint-proto",
+ "thiserror",
  "tokio",
 ]
 
@@ -1713,7 +1724,6 @@ dependencies = [
  "libp2p-mdns",
  "libp2p-metrics",
  "libp2p-noise",
- "libp2p-ping",
  "libp2p-quic",
  "libp2p-request-response",
  "libp2p-swarm",
@@ -1893,7 +1903,6 @@ dependencies = [
  "libp2p-gossipsub",
  "libp2p-identify",
  "libp2p-identity",
- "libp2p-ping",
  "libp2p-swarm",
  "once_cell",
  "prometheus-client",
@@ -1922,24 +1931,6 @@ dependencies = [
  "thiserror",
  "x25519-dalek",
  "zeroize",
-]
-
-[[package]]
-name = "libp2p-ping"
-version = "0.43.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cd5ee3270229443a2b34b27ed0cb7470ef6b4a6e45e54e89a8771fa683bab48"
-dependencies = [
- "either",
- "futures",
- "futures-timer",
- "instant",
- "libp2p-core",
- "libp2p-identity",
- "libp2p-swarm",
- "log",
- "rand",
- "void",
 ]
 
 [[package]]
@@ -3566,6 +3557,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.32.0"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=19dc3da#19dc3dae78ee7e4dcde67881ab31af229ed133a2"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -3593,6 +3585,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.32.0"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=19dc3da#19dc3dae78ee7e4dcde67881ab31af229ed133a2"
 dependencies = [
  "bytes",
  "flex-error",
@@ -3608,18 +3601,18 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.47"
+version = "1.0.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97a802ec30afc17eee47b2855fc72e0c4cd62be9b4efe6591edde0ec5bd68d8f"
+checksum = "9d6d7a740b8a666a7e828dd00da9c0dc290dff53154ea77ac109281de90589b7"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.47"
+version = "1.0.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bb623b56e39ab7dcd4b1b98bb6c8f8d907ed255b18de254088016b27a8ee19b"
+checksum = "49922ecae66cc8a249b77e68d1d0623c1b2c514f0060c27cdc68bd62a1219d35"
 dependencies = [
  "proc-macro2",
  "quote",
