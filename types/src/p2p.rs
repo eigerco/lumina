@@ -1,4 +1,4 @@
-use libp2p::{Multiaddr, identity::ParseError};
+use libp2p::{identity::ParseError, Multiaddr};
 use serde::{de, de::Error, ser, Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 use std::collections::HashMap;
