@@ -19,7 +19,7 @@ use crate::store::Store;
 use crate::syncer::Syncer;
 
 pub struct Node {
-    // TODO
+    pub p2p: Arc<P2p>,
 }
 
 pub struct NodeConfig {
@@ -42,7 +42,7 @@ type Result<T, E = NodeError> = std::result::Result<T, E>;
 struct Worker {
     store: Arc<RwLock<Store>>,
     syncer: Syncer,
-    p2p: P2p,
+    p2p: Arc<P2p>,
 }
 
 #[allow(unused)]
@@ -56,20 +56,23 @@ impl Node {
         let store = Arc::new(RwLock::new(Store::new()));
         let syncer = Syncer::new(store.clone());
 
-        let p2p = P2p::new(P2pConfig {
+        let p2p = Arc::new(P2p::new(P2pConfig {
             transport: config.transport,
             store: store.clone(),
             network_id: config.network_id,
             local_keypair: config.local_keypair,
             bootstrap_peers: config.bootstrap_peers,
             listen_on: config.listen_on,
-        })?;
+        })?);
 
-        spawn(async move {
-            Worker { store, syncer, p2p }.run().await;
+        spawn({
+            let p2p = p2p.clone();
+            async move {
+                Worker { store, syncer, p2p }.run().await;
+            }
         });
 
-        Ok(Node {})
+        Ok(Node { p2p })
     }
 }
 

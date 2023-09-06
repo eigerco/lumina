@@ -2,16 +2,18 @@ use std::io;
 use std::sync::Arc;
 
 use celestia_types::ExtendedHeader;
+use futures::channel::oneshot;
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
 use libp2p::gossipsub::{self, SubscriptionError, TopicHash};
 use libp2p::identity::Keypair;
 use libp2p::swarm::{
-    keep_alive, DialError, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent, THandlerErr,
+    keep_alive, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder, SwarmEvent,
+    THandlerErr,
 };
 use libp2p::{identify, request_response, Multiaddr, PeerId, TransportError};
-use log::{trace, warn};
+use log::{error, trace, warn};
 use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::RwLock;
@@ -30,7 +32,9 @@ struct Behaviour {
     gossipsub: gossipsub::Behaviour,
 }
 
-pub struct P2p {}
+pub struct P2p {
+    cmd_tx: flume::Sender<P2pCmd>,
+}
 
 pub struct P2pConfig {
     pub transport: Boxed<(PeerId, StreamMuxerBox)>,
@@ -54,6 +58,12 @@ pub enum P2pError {
 
     #[error("Dial error: {0}")]
     Dial(#[from] DialError),
+
+    #[error("Command cancelled by worker: {0}")]
+    CmdCancelled(String),
+
+    #[error("Worker died")]
+    WorkerDied,
 }
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
@@ -61,10 +71,15 @@ type Result<T, E = P2pError> = std::result::Result<T, E>;
 struct Worker {
     swarm: Swarm<Behaviour>,
     header_sub_topic_hash: TopicHash,
+    cmd_rx: flume::Receiver<P2pCmd>,
 }
 
-#[allow(unused)]
-enum P2pCmd {}
+#[derive(Debug)]
+enum P2pCmd {
+    NetworkInfo {
+        respond_to: oneshot::Sender<NetworkInfo>,
+    },
+}
 
 #[allow(unused)]
 pub enum P2pEvent {}
@@ -112,8 +127,11 @@ impl P2p {
             swarm.dial(addr)?;
         }
 
+        let (cmd_tx, cmd_rx) = flume::bounded(16);
+
         spawn(async move {
             Worker {
+                cmd_rx,
                 swarm,
                 header_sub_topic_hash: header_sub_topic.hash(),
             }
@@ -121,16 +139,33 @@ impl P2p {
             .await;
         });
 
-        Ok(P2p {})
+        Ok(P2p { cmd_tx })
     }
 
     pub async fn next_event(&self) -> Option<P2pEvent> {
         todo!();
     }
+
+    async fn send_cmd(&self, cmd: P2pCmd) -> Result<()> {
+        self.cmd_tx
+            .send_async(cmd)
+            .await
+            .map_err(|_| P2pError::WorkerDied)
+    }
+
+    pub async fn network_info(&self) -> Result<NetworkInfo> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_cmd(P2pCmd::NetworkInfo { respond_to: tx })
+            .await?;
+        rx.await
+            .map_err(|_| P2pError::CmdCancelled("NetworkInfo".to_owned()))
+    }
 }
 
 impl Worker {
     async fn run(&mut self) {
+        let mut command_stream = self.cmd_rx.clone().into_stream().fuse();
         loop {
             select! {
                 ev = self.swarm.select_next_some() => {
@@ -138,7 +173,11 @@ impl Worker {
                         warn!("Failure while handling swarm event. (error: {e}, event: {ev:?})");
                     }
                 },
-                // TODO: receive command from `P2p` and handle it
+                Some(cmd) = command_stream.next() => {
+                    if let Err(e) = self.on_command(cmd).await {
+                        warn!("Failure while handling command. (error: {e})");
+                    }
+                }
             }
         }
     }
@@ -158,6 +197,18 @@ impl Worker {
                 BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await?,
             },
             _ => {}
+        }
+
+        Ok(())
+    }
+
+    async fn on_command(&mut self, cmd: P2pCmd) -> Result<()> {
+        trace!("{cmd:?}");
+
+        match cmd {
+            P2pCmd::NetworkInfo { respond_to } => {
+                let _ = respond_to.send(self.swarm.network_info());
+            }
         }
 
         Ok(())
