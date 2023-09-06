@@ -23,7 +23,6 @@ async fn add_remove_peer_test() {
     let (addr_info, task) = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
-    log::debug!("{addr_info:?}");
     let client = new_test_client(AuthLevel::Admin).await.unwrap();
 
     let initial_peers = client
@@ -82,7 +81,6 @@ async fn protect_unprotect_test() {
     let (addr_info, task) = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
-    log::debug!("{addr_info:?}");
     let client = new_test_client(AuthLevel::Admin).await.unwrap();
 
     client
@@ -140,7 +138,6 @@ async fn peer_block_unblock_test() {
     let (addr_info, task) = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
-    log::debug!("{addr_info:?}");
     let client = new_test_client(AuthLevel::Admin).await.unwrap();
 
     assert_eq!(
@@ -247,7 +244,6 @@ async fn peer_info_test() {
     let (addr_info, task) = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
-    log::debug!("{addr_info:?}");
     let client = new_test_client(AuthLevel::Admin).await.unwrap();
 
     client
