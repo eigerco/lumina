@@ -2,6 +2,7 @@ mod blob;
 pub mod client;
 mod error;
 mod header;
+#[cfg(feature = "libp2p")]
 pub mod p2p;
 mod share;
 mod state;

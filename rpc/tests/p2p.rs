@@ -1,6 +1,7 @@
 use crate::utils::client::{new_test_client, AuthLevel};
-use celestia_rpc::p2p;
 use celestia_rpc::prelude::*;
+use celestia_types::p2p;
+use libp2p::{identity, PeerId};
 use tokio::time::{sleep, Duration};
 
 pub mod utils;
@@ -19,7 +20,7 @@ async fn info_test() {
 
 #[tokio::test]
 async fn add_remove_peer_test() {
-    //! add and then remove a peer, testing outputs from `p2p.Peers` and `p2p.Connectedness`
+    // add and then remove a peer, testing outputs from `p2p.Peers` and `p2p.Connectedness`
     let (addr_info, task) = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
@@ -29,13 +30,13 @@ async fn add_remove_peer_test() {
         .p2p_peers()
         .await
         .expect("failed to get initial peer list");
-    assert!(initial_peers.contains(&addr_info.id) == false);
+    assert_eq!(initial_peers.contains(&addr_info.id), false);
 
     let connected_to_peer = client
         .p2p_connectedness(&addr_info.id)
         .await
         .expect("failed to check initial connection to peer");
-    assert!(connected_to_peer == p2p::Connectedness::NotConnected);
+    assert_eq!(connected_to_peer, p2p::Connectedness::NotConnected);
 
     client
         .p2p_connect(&addr_info)
@@ -53,7 +54,7 @@ async fn add_remove_peer_test() {
         .p2p_connectedness(&addr_info.id)
         .await
         .expect("failed to check connection to peer after connect request");
-    assert!(connected_to_peer == p2p::Connectedness::Connected);
+    assert_eq!(connected_to_peer, p2p::Connectedness::Connected);
 
     client
         .p2p_close_peer(&addr_info.id)
@@ -65,15 +66,15 @@ async fn add_remove_peer_test() {
         .p2p_peers()
         .await
         .expect("failed to get peer list after close peer request");
-    assert!(final_peers.contains(&addr_info.id) == false);
+    assert_eq!(final_peers.contains(&addr_info.id), false);
 
     task.abort();
 }
 
 #[tokio::test]
 async fn protect_unprotect_test() {
-    //! check whether reported protect status reacts correctly to protect/unprotect requests and
-    //! whether node takes tag into the account
+    // check whether reported protect status reacts correctly to protect/unprotect requests and
+    // whether node takes tag into the account
 
     const PROTECT_TAG: &str = "test-tag";
     const ANOTHER_PROTECT_TAG: &str = "test-tag-2";
@@ -89,13 +90,11 @@ async fn protect_unprotect_test() {
         .expect("request to connect to second node failed");
     rpc_call_delay().await;
 
-    assert_eq!(
-        client
-            .p2p_is_protected(&addr_info.id, PROTECT_TAG)
-            .await
-            .expect("failed to check initial protect status"),
-        false
-    );
+    let is_protected = client
+        .p2p_is_protected(&addr_info.id, PROTECT_TAG)
+        .await
+        .expect("failed to check initial protect status");
+    assert_eq!(is_protected, false);
 
     client
         .p2p_protect(&addr_info.id, PROTECT_TAG)
@@ -103,36 +102,31 @@ async fn protect_unprotect_test() {
         .expect("protect request failed");
     rpc_call_delay().await;
 
-    assert_eq!(
-        client
-            .p2p_is_protected(&addr_info.id, PROTECT_TAG)
-            .await
-            .expect("failed to check protect status after protect request"),
-        true
-    );
+    let is_protected = client
+        .p2p_is_protected(&addr_info.id, PROTECT_TAG)
+        .await
+        .expect("failed to check protect status after protect request");
+    assert_eq!(is_protected, true);
 
-    assert_eq!(
-        client
-            .p2p_is_protected(&addr_info.id, ANOTHER_PROTECT_TAG)
-            .await
-            .expect("failed to check protect status for another tag after protect request"),
-        false
-    );
+    let is_protected_another_tag = client
+        .p2p_is_protected(&addr_info.id, ANOTHER_PROTECT_TAG)
+        .await
+        .expect("failed to check protect status for another tag after protect request");
+    assert_eq!(is_protected_another_tag, false);
 
     client
         .p2p_unprotect(&addr_info.id, PROTECT_TAG)
         .await
         .expect("unprotect request failed");
-    assert_eq!(
-        client
-            .p2p_is_protected(&addr_info.id, PROTECT_TAG)
-            .await
-            .expect("failed to check protect status after unprotect reqest"),
-        false
-    );
+    let is_protected = client
+        .p2p_is_protected(&addr_info.id, PROTECT_TAG)
+        .await
+        .expect("failed to check protect status after unprotect reqest");
+    assert_eq!(is_protected, false);
 
     task.abort();
 }
+
 #[tokio::test]
 async fn peer_block_unblock_test() {
     let (addr_info, task) = utils::tiny_node::start_tiny_node()
@@ -140,14 +134,11 @@ async fn peer_block_unblock_test() {
         .expect("failed to spin up second node");
     let client = new_test_client(AuthLevel::Admin).await.unwrap();
 
-    assert_eq!(
-        client
-            .p2p_list_blocked_peers()
-            .await
-            .expect("failed to get blocked peer list")
-            .contains(&addr_info.id),
-        false
-    );
+    let blocked_peers = client
+        .p2p_list_blocked_peers()
+        .await
+        .expect("failed to get blocked peer list");
+    assert_eq!(blocked_peers.contains(&addr_info.id), false);
 
     client
         .p2p_block_peer(&addr_info.id)
@@ -155,14 +146,11 @@ async fn peer_block_unblock_test() {
         .expect("failed to block peer");
     rpc_call_delay().await;
 
-    assert_eq!(
-        client
-            .p2p_list_blocked_peers()
-            .await
-            .expect("failed to get blocked peer list")
-            .contains(&addr_info.id),
-        true
-    );
+    let blocked_peers = client
+        .p2p_list_blocked_peers()
+        .await
+        .expect("failed to get blocked peer list");
+    assert_eq!(blocked_peers.contains(&addr_info.id), true);
 
     client
         .p2p_unblock_peer(&addr_info.id)
@@ -170,14 +158,11 @@ async fn peer_block_unblock_test() {
         .expect("failed to block peer");
     rpc_call_delay().await;
 
-    assert_eq!(
-        client
-            .p2p_list_blocked_peers()
-            .await
-            .expect("failed to get blocked peer list")
-            .contains(&addr_info.id),
-        false
-    );
+    let blocked_peers = client
+        .p2p_list_blocked_peers()
+        .await
+        .expect("failed to get blocked peer list");
+    assert_eq!(blocked_peers.contains(&addr_info.id), false);
 
     task.abort();
 }
@@ -195,8 +180,6 @@ async fn bandwidth_stats_test() {
 
 #[tokio::test]
 async fn bandwidth_for_peer_test() {
-    use libp2p::{identity, PeerId};
-
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = p2p::PeerId(PeerId::from(local_key.public()));
 
@@ -252,13 +235,11 @@ async fn peer_info_test() {
         .expect("request to connect to second node failed");
     rpc_call_delay().await;
 
-    assert!(
-        client
-            .p2p_connectedness(&addr_info.id)
-            .await
-            .expect("failed to check connection to peer after connect request")
-            == p2p::Connectedness::Connected
-    );
+    let connectedness = client
+        .p2p_connectedness(&addr_info.id)
+        .await
+        .expect("failed to check connection to peer after connect request");
+    assert_eq!(connectedness, p2p::Connectedness::Connected);
 
     let peer_info = client
         .p2p_peer_info(&addr_info.id)

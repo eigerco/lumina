@@ -4,17 +4,25 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
+[features]
+default = ["libp2p"]
+libp2p = ["dep:libp2p", "dep:libp2p-identity"]
+
 [dependencies]
 base64 = "0.21.2"
 bech32 = "0.9.1"
+bs58 = "0.5.0"
 bytes = "1.4.0"
 celestia-proto = { workspace = true }
+cid = { version = "0.10.1", default-features = false, features = ["std"] }
 const_format = "0.2.31"
 enum_dispatch = "0.3.12"
-cid = { version = "0.10.1", default-features = false, features = ["std"] }
+libp2p = { version = "0.52.3", optional = true }
+libp2p-identity = { version = "0.2.3", optional = true }
 nmt-rs = { workspace = true }
 ruint = { version = "1.8.0", features = ["serde"] }
 serde = { version = "1.0.164", features = ["derive"] }
+serde_repr = "0.1"
 sha2 = "0.10.7"
 tendermint = { workspace = true }
 tendermint-proto = { workspace = true }

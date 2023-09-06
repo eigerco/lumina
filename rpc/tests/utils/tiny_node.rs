@@ -1,7 +1,7 @@
 //! Tiny p2p node without any defined behaviour celestia can connect to so that we can test RPC p2p
 //! calls
 
-use celestia_rpc::p2p;
+use celestia_types::p2p;
 use futures::StreamExt;
 use libp2p::{
     core::upgrade::Version,
@@ -39,31 +39,31 @@ impl Behaviour {
     }
 }
 
-pub async fn start_tiny_node() -> anyhow::Result<(p2p::AddrInfo, JoinHandle<()>)> {
-    async fn get_addresses<T: NetworkBehaviour>(swarm: &mut libp2p::Swarm<T>) -> Vec<Multiaddr> {
-        let mut addresses = vec![];
-        let timeout = sleep(NODE_ADDRESS_ACQUIRE_DELAY_TIME);
-        tokio::pin!(timeout);
+async fn wait_for_addresses<T: NetworkBehaviour>(swarm: &mut libp2p::Swarm<T>) -> Vec<Multiaddr> {
+    let mut addresses = vec![];
+    let timeout = sleep(NODE_ADDRESS_ACQUIRE_DELAY_TIME);
+    tokio::pin!(timeout);
 
-        loop {
-            tokio::select! {
-                swarm_ev = swarm.select_next_some() => {
-                    match swarm_ev {
-                        SwarmEvent::NewListenAddr { address, .. } => {
-                            addresses.push(address);
-                        },
-                        _ => (),
-                    }
-                },
-                () = &mut timeout => {
-                    break;
+    loop {
+        tokio::select! {
+            swarm_ev = swarm.select_next_some() => {
+                match swarm_ev {
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        addresses.push(address);
+                    },
+                    _ => (),
                 }
+            },
+            () = &mut timeout => {
+                break;
             }
         }
-
-        return addresses;
     }
 
+    return addresses;
+}
+
+pub async fn start_tiny_node() -> anyhow::Result<(p2p::AddrInfo, JoinHandle<()>)> {
     // Create identity
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
@@ -82,7 +82,7 @@ pub async fn start_tiny_node() -> anyhow::Result<(p2p::AddrInfo, JoinHandle<()>)
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
-    let addrs = get_addresses(&mut swarm).await;
+    let addrs = wait_for_addresses(&mut swarm).await;
 
     let task = tokio::task::spawn(async move {
         loop {

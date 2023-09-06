@@ -4,14 +4,15 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
+[features]
+default = ["libp2p"]
+libp2p = ["celestia-types/libp2p"]
+
 [dependencies]
 thiserror = "1.0.40"
 jsonrpsee = { version = "0.20", features = ["client-core", "macros"] }
 celestia-types = { workspace = true }
 serde = { version = "1.0.188", features = ["derive"] }
-libp2p = "0.52.3"
-libp2p-identity = "0.2.3"
-bs58 = "0.5.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 http = "0.2.9"
