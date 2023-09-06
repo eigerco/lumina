@@ -4,11 +4,15 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
+#[lib]
+#crate-type = ["cdylib"]
+
 [dependencies]
+anyhow = "1.0.71"
 celestia-node = { workspace = true }
 celestia-rpc = { workspace = true }
 
-anyhow = "1.0.71"
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dotenvy = "0.15.7"
 libp2p = { version = "0.52.3", features = [
   "ed25519",
