@@ -541,6 +541,7 @@ dependencies = [
  "futures",
  "http",
  "jsonrpsee",
+ "libp2p",
  "log",
  "rand",
  "serde",

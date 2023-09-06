@@ -6,13 +6,14 @@ license = "Apache-2.0"
 
 [features]
 default = ["libp2p"]
-libp2p = ["celestia-types/libp2p"]
+libp2p = ["dep:libp2p", "celestia-types/libp2p"]
 
 [dependencies]
-thiserror = "1.0.40"
-jsonrpsee = { version = "0.20", features = ["client-core", "macros"] }
 celestia-types = { workspace = true }
+jsonrpsee = { version = "0.20", features = ["client-core", "macros"] }
+libp2p = { version = "0.52.3", optional = true }
 serde = { version = "1.0.188", features = ["derive"] }
+thiserror = "1.0.40"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 http = "0.2.9"

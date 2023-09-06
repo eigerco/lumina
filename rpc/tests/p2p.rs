@@ -48,7 +48,7 @@ async fn add_remove_peer_test() {
         .p2p_peers()
         .await
         .expect("failed to get peer list after connect request");
-    assert!(peers.contains(&addr_info.id));
+    assert_eq!(peers.contains(&addr_info.id), true);
 
     let connected_to_peer = client
         .p2p_connectedness(&addr_info.id)
@@ -259,7 +259,7 @@ async fn pub_sub_peers_test() {
         .await
         .expect("failed to get topic peers");
 
-    assert!(peers.is_none())
+    assert_eq!(peers.is_none(), true)
 }
 
 #[tokio::test]
