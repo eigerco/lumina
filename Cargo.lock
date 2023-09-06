@@ -562,7 +562,6 @@ dependencies = [
  "const_format",
  "enum_dispatch",
  "libp2p",
- "libp2p-identity",
  "nmt-rs",
  "ruint",
  "serde",

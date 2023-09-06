@@ -1,4 +1,4 @@
-use libp2p::Multiaddr;
+use libp2p::{Multiaddr, identity::ParseError};
 use serde::{de, de::Error, ser, Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 use std::collections::HashMap;
@@ -40,7 +40,7 @@ pub enum PeerIdError {
     #[error("unable to decode base58 string")]
     Base58Error,
     #[error("libp2p error")]
-    Libp2pError(#[from] libp2p_identity::ParseError),
+    Libp2pError(#[from] ParseError),
 }
 
 #[derive(Debug, PartialEq, Eq)]
