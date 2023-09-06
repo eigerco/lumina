@@ -8,7 +8,7 @@ use libp2p::{core::upgrade::Version, identity, noise, tcp, yamux, Multiaddr, Tra
 const WS_URL: &str = "ws://localhost:26658";
 
 #[tokio::main]
-pub(crate) async fn run() -> Result<()> {
+pub async fn run() -> Result<()> {
     let _ = dotenvy::dotenv();
 
     // Get the address of the local bridge node

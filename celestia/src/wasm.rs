@@ -1,5 +1,5 @@
 use anyhow::Result;
 
-pub(crate) fn run() -> Result<()> {
+pub fn run() -> Result<()> {
     anyhow::bail!("Not implemented yet")
 }
