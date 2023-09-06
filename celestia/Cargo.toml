@@ -6,7 +6,6 @@ license = "Apache-2.0"
 
 [lib]
 crate-type = ["rlib", "cdylib"]
-path = "src/lib.rs"
 
 [dependencies]
 anyhow = "1.0.71"
