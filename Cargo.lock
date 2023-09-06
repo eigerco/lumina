@@ -544,6 +544,7 @@ dependencies = [
  "jsonrpsee",
  "libp2p",
  "libp2p-identity",
+ "log",
  "rand",
  "serde",
  "thiserror",
