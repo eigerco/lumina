@@ -47,11 +47,8 @@ async fn wait_for_addresses<T: NetworkBehaviour>(swarm: &mut libp2p::Swarm<T>) -
     loop {
         tokio::select! {
             swarm_ev = swarm.select_next_some() => {
-                match swarm_ev {
-                    SwarmEvent::NewListenAddr { address, .. } => {
-                        addresses.push(address);
-                    },
-                    _ => (),
+                if let SwarmEvent::NewListenAddr { address, .. } = swarm_ev  {
+                    addresses.push(address);
                 }
             },
             () = &mut timeout => {
@@ -60,7 +57,7 @@ async fn wait_for_addresses<T: NetworkBehaviour>(swarm: &mut libp2p::Swarm<T>) -
         }
     }
 
-    return addresses;
+    addresses
 }
 
 pub async fn start_tiny_node() -> anyhow::Result<(p2p::AddrInfo, JoinHandle<()>)> {
@@ -96,5 +93,5 @@ pub async fn start_tiny_node() -> anyhow::Result<(p2p::AddrInfo, JoinHandle<()>)
     };
     log::debug!("Listening addresses: {addr:?}");
 
-    return Ok((addr, task));
+    Ok((addr, task))
 }

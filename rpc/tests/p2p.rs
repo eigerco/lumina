@@ -30,7 +30,7 @@ async fn add_remove_peer_test() {
         .p2p_peers()
         .await
         .expect("failed to get initial peer list");
-    assert_eq!(initial_peers.contains(&addr_info.id), false);
+    assert!(!initial_peers.contains(&addr_info.id));
 
     let connected_to_peer = client
         .p2p_connectedness(&addr_info.id)
@@ -48,7 +48,7 @@ async fn add_remove_peer_test() {
         .p2p_peers()
         .await
         .expect("failed to get peer list after connect request");
-    assert_eq!(peers.contains(&addr_info.id), true);
+    assert!(peers.contains(&addr_info.id));
 
     let connected_to_peer = client
         .p2p_connectedness(&addr_info.id)
@@ -66,7 +66,7 @@ async fn add_remove_peer_test() {
         .p2p_peers()
         .await
         .expect("failed to get peer list after close peer request");
-    assert_eq!(final_peers.contains(&addr_info.id), false);
+    assert!(!final_peers.contains(&addr_info.id));
 
     task.abort();
 }
@@ -94,7 +94,7 @@ async fn protect_unprotect_test() {
         .p2p_is_protected(&addr_info.id, PROTECT_TAG)
         .await
         .expect("failed to check initial protect status");
-    assert_eq!(is_protected, false);
+    assert!(!is_protected);
 
     client
         .p2p_protect(&addr_info.id, PROTECT_TAG)
@@ -106,13 +106,13 @@ async fn protect_unprotect_test() {
         .p2p_is_protected(&addr_info.id, PROTECT_TAG)
         .await
         .expect("failed to check protect status after protect request");
-    assert_eq!(is_protected, true);
+    assert!(is_protected);
 
     let is_protected_another_tag = client
         .p2p_is_protected(&addr_info.id, ANOTHER_PROTECT_TAG)
         .await
         .expect("failed to check protect status for another tag after protect request");
-    assert_eq!(is_protected_another_tag, false);
+    assert!(!is_protected_another_tag);
 
     client
         .p2p_unprotect(&addr_info.id, PROTECT_TAG)
@@ -122,7 +122,7 @@ async fn protect_unprotect_test() {
         .p2p_is_protected(&addr_info.id, PROTECT_TAG)
         .await
         .expect("failed to check protect status after unprotect reqest");
-    assert_eq!(is_protected, false);
+    assert!(!is_protected);
 
     task.abort();
 }
@@ -138,7 +138,7 @@ async fn peer_block_unblock_test() {
         .p2p_list_blocked_peers()
         .await
         .expect("failed to get blocked peer list");
-    assert_eq!(blocked_peers.contains(&addr_info.id), false);
+    assert!(!blocked_peers.contains(&addr_info.id));
 
     client
         .p2p_block_peer(&addr_info.id)
@@ -150,7 +150,7 @@ async fn peer_block_unblock_test() {
         .p2p_list_blocked_peers()
         .await
         .expect("failed to get blocked peer list");
-    assert_eq!(blocked_peers.contains(&addr_info.id), true);
+    assert!(blocked_peers.contains(&addr_info.id));
 
     client
         .p2p_unblock_peer(&addr_info.id)
@@ -162,7 +162,7 @@ async fn peer_block_unblock_test() {
         .p2p_list_blocked_peers()
         .await
         .expect("failed to get blocked peer list");
-    assert_eq!(blocked_peers.contains(&addr_info.id), false);
+    assert!(!blocked_peers.contains(&addr_info.id));
 
     task.abort();
 }
@@ -259,7 +259,7 @@ async fn pub_sub_peers_test() {
         .await
         .expect("failed to get topic peers");
 
-    assert_eq!(peers.is_none(), true)
+    assert!(peers.is_none())
 }
 
 #[tokio::test]
