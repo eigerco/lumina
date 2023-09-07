@@ -21,7 +21,7 @@ async fn info_test() {
 #[tokio::test]
 async fn add_remove_peer_test() {
     // add and then remove a peer, testing outputs from `p2p.Peers` and `p2p.Connectedness`
-    let (addr_info, task) = utils::tiny_node::start_tiny_node()
+    let addr_info = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
     let client = new_test_client(AuthLevel::Admin).await.unwrap();
@@ -67,8 +67,6 @@ async fn add_remove_peer_test() {
         .await
         .expect("failed to get peer list after close peer request");
     assert!(!final_peers.contains(&addr_info.id));
-
-    task.abort();
 }
 
 #[tokio::test]
@@ -79,7 +77,7 @@ async fn protect_unprotect_test() {
     const PROTECT_TAG: &str = "test-tag";
     const ANOTHER_PROTECT_TAG: &str = "test-tag-2";
 
-    let (addr_info, task) = utils::tiny_node::start_tiny_node()
+    let addr_info = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
     let client = new_test_client(AuthLevel::Admin).await.unwrap();
@@ -123,13 +121,11 @@ async fn protect_unprotect_test() {
         .await
         .expect("failed to check protect status after unprotect reqest");
     assert!(!is_protected);
-
-    task.abort();
 }
 
 #[tokio::test]
 async fn peer_block_unblock_test() {
-    let (addr_info, task) = utils::tiny_node::start_tiny_node()
+    let addr_info = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
     let client = new_test_client(AuthLevel::Admin).await.unwrap();
@@ -163,8 +159,6 @@ async fn peer_block_unblock_test() {
         .await
         .expect("failed to get blocked peer list");
     assert!(!blocked_peers.contains(&addr_info.id));
-
-    task.abort();
 }
 
 #[tokio::test]
@@ -224,7 +218,7 @@ async fn nat_status_test() {
 
 #[tokio::test]
 async fn peer_info_test() {
-    let (addr_info, task) = utils::tiny_node::start_tiny_node()
+    let addr_info = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
     let client = new_test_client(AuthLevel::Admin).await.unwrap();
@@ -247,8 +241,6 @@ async fn peer_info_test() {
         .expect("failed to get peer info");
 
     assert_eq!(addr_info.id, peer_info.id);
-
-    task.abort();
 }
 
 #[tokio::test]

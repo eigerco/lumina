@@ -11,7 +11,6 @@ use libp2p::{
 };
 use tokio::{
     sync::mpsc,
-    task::JoinHandle,
     time::{sleep, Duration},
 };
 
@@ -33,7 +32,7 @@ impl Behaviour {
     }
 }
 
-pub async fn start_tiny_node() -> anyhow::Result<(p2p::AddrInfo, JoinHandle<()>)> {
+pub async fn start_tiny_node() -> anyhow::Result<p2p::AddrInfo> {
     // Create identity
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
@@ -53,7 +52,7 @@ pub async fn start_tiny_node() -> anyhow::Result<(p2p::AddrInfo, JoinHandle<()>)
 
     let (addr_tx, mut addr_rx) = mpsc::channel(32);
 
-    let task = tokio::task::spawn(async move {
+    tokio::task::spawn(async move {
         loop {
             if let Some(SwarmEvent::NewListenAddr { address, .. }) = swarm.next().await {
                 dbg!(&address);
@@ -79,5 +78,5 @@ pub async fn start_tiny_node() -> anyhow::Result<(p2p::AddrInfo, JoinHandle<()>)
     };
     log::debug!("Listening addresses: {addr:?}");
 
-    Ok((addr, task))
+    Ok(addr)
 }
