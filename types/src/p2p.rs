@@ -1,13 +1,13 @@
-use libp2p::Multiaddr;
+use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
-use serde_repr::Deserialize_repr;
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub struct AddrInfo {
     #[serde(rename = "ID")]
     pub id: PeerId,
-    #[serde(rename = "Addrs")]
     pub addrs: Vec<Multiaddr>,
 }
 
@@ -34,7 +34,7 @@ pub struct ResourceManagerStats {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PeerId(#[serde(with = "tendermint_proto::serializers::from_str")] pub libp2p::PeerId);
+pub struct PeerId(#[serde(with = "tendermint_proto::serializers::from_str")] pub libp2p_identity::PeerId);
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -45,7 +45,7 @@ pub struct BandwidthStats {
     pub rate_out: f32,
 }
 
-#[derive(Debug, PartialEq, Eq, Deserialize_repr)]
+#[derive(Debug, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum Connectedness {
     NotConnected = 0,
@@ -54,7 +54,7 @@ pub enum Connectedness {
     CannotConnect = 3,
 }
 
-#[derive(Debug, PartialEq, Eq, Deserialize_repr)]
+#[derive(Debug, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum Reachability {
     Unknown = 0,

@@ -6,12 +6,6 @@ use tokio::time::{sleep, Duration};
 
 pub mod utils;
 
-async fn rpc_call_delay() {
-    // delay for RPC calls like connect/close to let node finish the operation before we query it
-    // again. Below 150 ms I start getting intermittent failures.
-    sleep(Duration::from_millis(150)).await;
-}
-
 #[tokio::test]
 async fn info_test() {
     let client = new_test_client(AuthLevel::Admin).await.unwrap();
@@ -116,6 +110,8 @@ async fn protect_unprotect_test() {
         .p2p_unprotect(&addr_info.id, PROTECT_TAG)
         .await
         .expect("unprotect request failed");
+    rpc_call_delay().await;
+
     let is_protected = client
         .p2p_is_protected(&addr_info.id, PROTECT_TAG)
         .await
@@ -263,3 +259,10 @@ async fn resource_state_test() {
         .await
         .expect("failed to get resource state");
 }
+
+async fn rpc_call_delay() {
+    // delay for RPC calls like connect/close to let node finish the operation before we query it
+    // again. Below 150 ms I start getting intermittent failures.
+    sleep(Duration::from_millis(150)).await;
+}
+
