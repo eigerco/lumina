@@ -9,7 +9,6 @@ thiserror = "1.0.40"
 jsonrpsee = { version = "0.20", features = ["client-core", "macros"] }
 celestia-types = { workspace = true }
 serde = { version = "1.0.188", features = ["derive"] }
-libp2p = { version = "0.52.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 http = "0.2.9"
@@ -18,11 +17,12 @@ jsonrpsee = { version = "0.20", features = ["http-client", "ws-client"] }
 [dev-dependencies]
 anyhow = "1.0.71"
 dotenvy = "0.15.7"
+futures = "0.3.28"
+libp2p = "0.52.3"
+log = "0.4"
 rand = "0.8.5"
 tokio = { version = "1.32.0", features = ["rt", "macros"] }
-futures = "0.3.28"
-log = "0.4"
 
 [features]
 default = ["libp2p"]
-libp2p = ["dep:libp2p", "celestia-types/libp2p"]
+libp2p = ["celestia-types/libp2p"]
