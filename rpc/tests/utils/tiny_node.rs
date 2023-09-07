@@ -7,9 +7,10 @@ use libp2p::{
     core::upgrade::Version,
     identity, noise,
     swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Transport,
+    tcp, yamux, PeerId, Transport,
 };
 use tokio::{
+    sync::mpsc,
     task::JoinHandle,
     time::{sleep, Duration},
 };
@@ -32,27 +33,6 @@ impl Behaviour {
     }
 }
 
-async fn wait_for_addresses<T: NetworkBehaviour>(swarm: &mut libp2p::Swarm<T>) -> Vec<Multiaddr> {
-    let mut addresses = vec![];
-    let timeout = sleep(NODE_ADDRESS_ACQUIRE_DELAY_TIME);
-    tokio::pin!(timeout);
-
-    loop {
-        tokio::select! {
-            swarm_ev = swarm.select_next_some() => {
-                if let SwarmEvent::NewListenAddr { address, .. } = swarm_ev  {
-                    addresses.push(address);
-                }
-            },
-            () = &mut timeout => {
-                break;
-            }
-        }
-    }
-
-    addresses
-}
-
 pub async fn start_tiny_node() -> anyhow::Result<(p2p::AddrInfo, JoinHandle<()>)> {
     // Create identity
     let local_key = identity::Keypair::generate_ed25519();
@@ -71,13 +51,27 @@ pub async fn start_tiny_node() -> anyhow::Result<(p2p::AddrInfo, JoinHandle<()>)
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
-    let addrs = wait_for_addresses(&mut swarm).await;
+    let (addr_tx, mut addr_rx) = mpsc::channel(32);
 
     let task = tokio::task::spawn(async move {
         loop {
-            swarm.select_next_some().await;
+            if let Some(SwarmEvent::NewListenAddr { address, .. }) = swarm.next().await {
+                dbg!(&address);
+                if addr_tx.send(address).await.is_err() {
+                    log::warn!("received new addr after set startup time, unittests might not have all the node addresses");
+                }
+            }
         }
     });
+
+    // give node second to acquire addresses and then gather all the ones we received
+    sleep(NODE_ADDRESS_ACQUIRE_DELAY_TIME).await;
+    addr_rx.close();
+
+    let mut addrs = vec![];
+    while let Some(addr) = addr_rx.recv().await {
+        addrs.push(addr);
+    }
 
     let addr = p2p::AddrInfo {
         id: p2p::PeerId(local_peer_id),
