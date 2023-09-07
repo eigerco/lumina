@@ -5,9 +5,7 @@ use celestia_types::p2p;
 use futures::StreamExt;
 use libp2p::{
     core::upgrade::Version,
-    identify,
-    identity::{self, Keypair},
-    noise,
+    identity, noise,
     swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
@@ -23,17 +21,12 @@ const NODE_ADDRESS_ACQUIRE_DELAY_TIME: Duration = Duration::from_millis(100);
 /// Our network behaviour.
 #[derive(NetworkBehaviour)]
 struct Behaviour {
-    identify: identify::Behaviour,
     keep_alive: keep_alive::Behaviour,
 }
 
 impl Behaviour {
-    fn new(local_key: Keypair) -> Self {
-        let identify =
-            identify::Behaviour::new(identify::Config::new("".to_owned(), local_key.public()));
-
+    fn new() -> Self {
         Self {
-            identify,
             keep_alive: keep_alive::Behaviour,
         }
     }
@@ -74,8 +67,7 @@ pub async fn start_tiny_node() -> anyhow::Result<(p2p::AddrInfo, JoinHandle<()>)
         .boxed();
 
     let mut swarm =
-        SwarmBuilder::with_tokio_executor(transport, Behaviour::new(local_key), local_peer_id)
-            .build();
+        SwarmBuilder::with_tokio_executor(transport, Behaviour::new(), local_peer_id).build();
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 

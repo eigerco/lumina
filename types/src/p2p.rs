@@ -1,9 +1,7 @@
-use libp2p::{identity::ParseError, Multiaddr};
-use serde::{de, de::Error, ser, Deserialize, Serialize};
+use libp2p::Multiaddr;
+use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 use std::collections::HashMap;
-use std::str::FromStr;
-use thiserror::Error;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AddrInfo {
@@ -35,47 +33,8 @@ pub struct ResourceManagerStats {
     pub peers: HashMap<String, Stat>,
 }
 
-#[derive(Debug, Error)]
-pub enum PeerIdError {
-    #[error("unable to decode base58 string")]
-    Base58Error,
-    #[error("libp2p error")]
-    Libp2pError(#[from] ParseError),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct PeerId(pub libp2p::PeerId);
-
-impl<'de> Deserialize<'de> for PeerId {
-    fn deserialize<D>(deserializer: D) -> Result<PeerId, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        let s: String = Deserialize::deserialize(deserializer)?;
-        s.parse().map_err(D::Error::custom)
-    }
-}
-
-impl Serialize for PeerId {
-    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: ser::Serializer,
-    {
-        s.serialize_str(&self.0.to_base58())
-    }
-}
-
-impl FromStr for PeerId {
-    type Err = PeerIdError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let bytes = bs58::decode(s)
-            .into_vec()
-            .map_err(|_| PeerIdError::Base58Error)?;
-
-        Ok(Self(libp2p::PeerId::from_bytes(&bytes)?))
-    }
-}
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PeerId(#[serde(with = "tendermint_proto::serializers::from_str")] pub libp2p::PeerId);
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]

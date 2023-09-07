@@ -555,7 +555,6 @@ version = "0.1.0"
 dependencies = [
  "base64 0.21.3",
  "bech32",
- "bs58",
  "bytes",
  "celestia-proto",
  "cid",

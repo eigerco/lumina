@@ -14,12 +14,15 @@ pub trait P2P {
     #[method(name = "p2p.BandwidthStats")]
     async fn p2p_bandwidth_stats(&self) -> Result<BandwidthStats, Error>;
 
+    /// This method does not report errors due to a workaround to a go-jsonrpc bug, see https://github.com/eigerco/celestia-node-rs/issues/53
     #[method(name = "p2p.BlockPeer")]
     async fn p2p_block_peer(&self, peer_id: &PeerId);
 
+    /// This method does not report errors due to a workaround to a go-jsonrpc bug, see https://github.com/eigerco/celestia-node-rs/issues/53
     #[method(name = "p2p.ClosePeer")]
     async fn p2p_close_peer(&self, peer_id: &PeerId);
 
+    /// This method does not report errors due to a workaround to a go-jsonrpc bug, see https://github.com/eigerco/celestia-node-rs/issues/53
     #[method(name = "p2p.Connect")]
     async fn p2p_connect(&self, address: &AddrInfo);
 
@@ -44,6 +47,7 @@ pub trait P2P {
     #[method(name = "p2p.Peers")]
     async fn p2p_peers(&self) -> Result<Vec<PeerId>, Error>;
 
+    /// This method does not report errors due to a workaround to a go-jsonrpc bug, see https://github.com/eigerco/celestia-node-rs/issues/53
     #[method(name = "p2p.Protect")]
     async fn p2p_protect(&self, peer_id: &PeerId, tag: &str);
 
@@ -53,6 +57,7 @@ pub trait P2P {
     #[method(name = "p2p.ResourceState")]
     async fn p2p_resource_state(&self) -> Result<ResourceManagerStats, Error>;
 
+    /// This method does not report errors due to a workaround to a go-jsonrpc bug, see https://github.com/eigerco/celestia-node-rs/issues/53
     #[method(name = "p2p.UnblockPeer")]
     async fn p2p_unblock_peer(&self, peer_id: &PeerId);
 
