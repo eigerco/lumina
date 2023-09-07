@@ -273,7 +273,10 @@ mod tests {
             b64_decode("OBQQFb/BaYJ+fBd9qWCox8r2wzLXrzLddHN3BjWOllg=")
         );
 
-        let nmt_rs::NamespaceProof::AbsenceProof { leaf: Some(leaf), .. } = &*proof else {
+        let nmt_rs::NamespaceProof::AbsenceProof {
+            leaf: Some(leaf), ..
+        } = &*proof
+        else {
             unreachable!();
         };
 

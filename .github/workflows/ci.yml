@@ -18,7 +18,7 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Run clippy
-      run: cargo clippy --all -- -D warnings
+      run: cargo clippy --all --all-targets -- -D warnings
 
 
   fmt:

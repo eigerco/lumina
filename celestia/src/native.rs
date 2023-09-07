@@ -3,7 +3,7 @@ use std::env;
 use anyhow::{Context, Result};
 use celestia_node::node::{Node, NodeConfig};
 use celestia_rpc::prelude::*;
-use libp2p::{core::upgrade::Version, identity, noise, tcp, yamux, Multiaddr, Transport};
+use libp2p::{core::upgrade::Version, identity, noise, tcp, yamux, Transport};
 
 const WS_URL: &str = "ws://localhost:26658";
 
@@ -15,15 +15,11 @@ pub async fn run() -> Result<()> {
     let auth_token = env::var("CELESTIA_NODE_AUTH_TOKEN_ADMIN")?;
     let client = celestia_rpc::client::new_websocket(WS_URL, Some(&auth_token)).await?;
     let bridge_info = client.p2p_info().await?;
-    let bridge_maddrs: Vec<Multiaddr> = bridge_info
-        .addrs
-        .into_iter()
-        .map(|addr| addr.parse().context("Parsing addr failed"))
-        .collect::<Result<_>>()?;
     println!("bridge id: {:?}", bridge_info.id);
-    println!("bridge listens on: {bridge_maddrs:?}");
+    println!("bridge listens on: {:?}", bridge_info.addrs);
 
-    let bridge_ma = bridge_maddrs
+    let bridge_ma = bridge_info
+        .addrs
         .into_iter()
         .find(|ma| ma.protocol_stack().any(|protocol| protocol == "tcp"))
         .context("Bridge doesn't listen on tcp")?;

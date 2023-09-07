@@ -28,14 +28,9 @@ async fn get_bridge_tcp_ma() -> Multiaddr {
         .unwrap();
 
     let bridge_info = client.p2p_info().await.unwrap();
-    let bridge_maddrs: Vec<Multiaddr> = bridge_info
-        .addrs
-        .into_iter()
-        .map(|addr| addr.parse())
-        .collect::<Result<_, _>>()
-        .unwrap();
 
-    bridge_maddrs
+    bridge_info
+        .addrs
         .into_iter()
         .find(|ma| ma.protocol_stack().any(|protocol| protocol == "tcp"))
         .expect("Bridge doesn't listen on tcp")

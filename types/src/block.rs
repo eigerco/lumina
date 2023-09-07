@@ -270,7 +270,8 @@ mod tests {
             validator_address,
             timestamp,
             ..
-        } = commit.signatures[0].clone() else {
+        } = commit.signatures[0].clone()
+        else {
             unreachable!()
         };
         commit.signatures[0] = CommitSig::BlockIdFlagCommit {
