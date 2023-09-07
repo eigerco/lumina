@@ -2,7 +2,7 @@ use celestia_types::nmt::{Namespace, NS_ID_V0_SIZE};
 use rand::{Rng, RngCore};
 
 pub mod client;
-#[cfg(feature = "libp2p")]
+#[cfg(feature = "p2p")]
 pub mod tiny_node;
 
 fn ns_to_u128(ns: Namespace) -> u128 {

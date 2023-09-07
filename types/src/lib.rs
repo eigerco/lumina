@@ -7,7 +7,7 @@ mod error;
 mod extended_header;
 pub mod fraud_proof;
 pub mod nmt;
-#[cfg(feature = "libp2p")]
+#[cfg(feature = "p2p")]
 pub mod p2p;
 mod rsmt2d;
 mod share;
