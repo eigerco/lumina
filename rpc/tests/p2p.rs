@@ -265,4 +265,3 @@ async fn rpc_call_delay() {
     // again. Below 150 ms I start getting intermittent failures.
     sleep(Duration::from_millis(150)).await;
 }
-
