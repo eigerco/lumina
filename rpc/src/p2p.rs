@@ -51,6 +51,7 @@ pub trait P2P {
     #[method(name = "p2p.Protect")]
     async fn p2p_protect(&self, peer_id: &PeerId, tag: &str);
 
+    /// We might get null in response here, so Option is needed
     #[method(name = "p2p.PubSubPeers")]
     async fn p2p_pub_sub_peers(&self, topic: &str) -> Result<Option<Vec<PeerId>>, Error>;
 

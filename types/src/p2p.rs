@@ -34,7 +34,9 @@ pub struct ResourceManagerStats {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PeerId(#[serde(with = "tendermint_proto::serializers::from_str")] pub libp2p_identity::PeerId);
+pub struct PeerId(
+    #[serde(with = "tendermint_proto::serializers::from_str")] pub libp2p_identity::PeerId,
+);
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
