@@ -30,8 +30,8 @@ where
 }
 
 pub struct NodeConfig {
+    pub network_id: String,
     pub p2p_transport: Boxed<(PeerId, StreamMuxerBox)>,
-    pub p2p_network_id: String,
     pub p2p_local_keypair: Keypair,
     pub p2p_bootstrap_peers: Vec<Multiaddr>,
     pub p2p_listen_on: Vec<Multiaddr>,
@@ -58,8 +58,8 @@ where
 
         let p2p = Arc::new(
             P2pSrv::start(P2pArgs {
+                network_id: config.network_id,
                 transport: config.p2p_transport,
-                network_id: config.p2p_network_id,
                 local_keypair: config.p2p_local_keypair,
                 bootstrap_peers: config.p2p_bootstrap_peers,
                 listen_on: config.p2p_listen_on,

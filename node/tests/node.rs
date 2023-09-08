@@ -45,8 +45,8 @@ async fn connects_to_the_go_bridge_node() {
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
     let node = Node::new(NodeConfig {
+        network_id: "private".to_string(),
         p2p_transport: tcp_transport(&p2p_local_keypair),
-        p2p_network_id: "private".to_string(),
         p2p_local_keypair,
         p2p_bootstrap_peers: vec![bridge_ma],
         p2p_listen_on: vec![],

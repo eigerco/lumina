@@ -33,8 +33,8 @@ pub async fn run() -> Result<()> {
         .boxed();
 
     let _node = Node::new(NodeConfig {
+        network_id: "private".to_string(),
         p2p_transport,
-        p2p_network_id: "private".to_string(),
         p2p_local_keypair,
         p2p_bootstrap_peers: vec![bridge_ma],
         p2p_listen_on: vec![],
