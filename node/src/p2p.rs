@@ -13,10 +13,10 @@ use libp2p::swarm::{
     THandlerErr,
 };
 use libp2p::{identify, request_response, Multiaddr, PeerId, TransportError};
-use log::{error, trace, warn};
 use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::RwLock;
+use tracing::{instrument, warn};
 
 use crate::exchange;
 use crate::executor::{spawn, Executor};
@@ -182,12 +182,11 @@ impl Worker {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     async fn on_swarm_event(
         &mut self,
         ev: &SwarmEvent<BehaviourEvent, THandlerErr<Behaviour>>,
     ) -> Result<()> {
-        trace!("{ev:?}");
-
         #[allow(clippy::single_match)]
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {
@@ -202,9 +201,8 @@ impl Worker {
         Ok(())
     }
 
+    #[instrument(level = "trace", skip(self))]
     async fn on_command(&mut self, cmd: P2pCmd) -> Result<()> {
-        trace!("{cmd:?}");
-
         match cmd {
             P2pCmd::NetworkInfo { respond_to } => {
                 let _ = respond_to.send(self.swarm.network_info());
