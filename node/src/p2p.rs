@@ -54,6 +54,7 @@ pub struct P2pArgs {
     pub listen_on: Vec<Multiaddr>,
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub enum P2pCmd {
     NetworkInfo {

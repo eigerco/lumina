@@ -22,6 +22,7 @@ pub struct SyncerArgs<P2pSrv: P2pService> {
     pub store: Arc<RwLock<Store>>,
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub enum SyncerCmd {}
 
