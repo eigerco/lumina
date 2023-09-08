@@ -16,7 +16,7 @@ use libp2p::{identify, request_response, Multiaddr, PeerId, TransportError};
 use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::RwLock;
-use tracing::{instrument, warn};
+use tracing::{debug, instrument, warn};
 
 use crate::exchange;
 use crate::executor::{spawn, Executor};
@@ -227,15 +227,15 @@ impl Worker {
                         response,
                     },
             } => {
-                println!(
+                debug!(
                     "Response for request: {request_id}, from peer: {peer}, status: {:?}",
                     response.status_code()
                 );
                 let header = ExtendedHeader::decode(&response.body[..]).unwrap();
                 // TODO: Forward response back with one shot channel
-                println!("Header: {header:?}");
+                debug!("Header: {header:?}");
             }
-            _ => println!("Unhandled header_ex event: {ev:?}"),
+            _ => debug!("Unhandled header_ex event: {ev:?}"),
         }
 
         Ok(())
@@ -252,12 +252,12 @@ impl Worker {
                     let header = ExtendedHeader::decode(&message.data[..]).unwrap();
                     // TODO: produce event
 
-                    println!("New header from header-sub: {header:?}");
+                    debug!("New header from header-sub: {header:?}");
                 } else {
-                    println!("New gossipsub message, id: {message_id}, message: {message:?}");
+                    debug!("New gossipsub message, id: {message_id}, message: {message:?}");
                 }
             }
-            _ => println!("Unhandled gossipsub event: {ev:?}"),
+            _ => debug!("Unhandled gossipsub event: {ev:?}"),
         }
 
         Ok(())
