@@ -24,21 +24,23 @@ pub async fn run() -> Result<()> {
         .find(|ma| ma.protocol_stack().any(|protocol| protocol == "tcp"))
         .context("Bridge doesn't listen on tcp")?;
 
-    let local_keypair = identity::Keypair::generate_ed25519();
+    let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
-    let transport = tcp::tokio::Transport::default()
+    let p2p_transport = tcp::tokio::Transport::default()
         .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(&local_keypair)?)
+        .authenticate(noise::Config::new(&p2p_local_keypair)?)
         .multiplex(yamux::Config::default())
         .boxed();
 
     let _node = Node::new(NodeConfig {
-        transport,
         network_id: "private".to_string(),
-        local_keypair,
-        bootstrap_peers: vec![bridge_ma],
-        listen_on: vec!["/ip4/0.0.0.0/tcp/0".parse()?],
-    });
+        p2p_transport,
+        p2p_local_keypair,
+        p2p_bootstrap_peers: vec![bridge_ma],
+        p2p_listen_on: vec![],
+    })
+    .await
+    .unwrap();
 
     Ok(())
 }
