@@ -14,7 +14,7 @@ pub trait Service: Send + Sync {
     type Command;
     type Error;
 
-    async fn start(config: Self::Args) -> Result<Self, Self::Error>
+    async fn start(args: Self::Args) -> Result<Self, Self::Error>
     where
         Self: Sized;
 

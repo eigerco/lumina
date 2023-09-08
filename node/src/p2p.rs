@@ -37,9 +37,6 @@ pub enum P2pError {
     #[error("Dial error: {0}")]
     Dial(#[from] DialError),
 
-    #[error("Command cancelled by worker: {0}")]
-    CmdCancelled(String),
-
     #[error("Worker died")]
     WorkerDied,
 }
@@ -100,11 +97,8 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
 
         self.send_command(P2pCmd::NetworkInfo { respond_to: tx })
             .await?;
-        rx.await
-            .map_err(|_| P2pError::CmdCancelled("NetworkInfo".to_owned()))
+        rx.await.map_err(|_| P2pError::WorkerDied)
     }
-
-    // async fn subscribe_for_header_sub(&self) -> impl Stream<Item = ExtendedHeader>;
 }
 
 #[async_trait]
