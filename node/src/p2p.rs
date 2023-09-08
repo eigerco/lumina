@@ -1,27 +1,31 @@
+use std::collections::{HashMap, HashSet};
 use std::io;
 
 use async_trait::async_trait;
+use celestia_proto::p2p::pb::{HeaderRequest, StatusCode};
 use celestia_types::ExtendedHeader;
-use futures::channel::oneshot;
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
 use libp2p::gossipsub::{self, SubscriptionError, TopicHash};
 use libp2p::identity::Keypair;
+use libp2p::request_response::RequestId;
 use libp2p::swarm::{
     keep_alive, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder, SwarmEvent,
     THandlerErr,
 };
-use libp2p::{identify, request_response, Multiaddr, PeerId, TransportError};
+use libp2p::{identify, Multiaddr, PeerId, TransportError};
 use log::{error, trace, warn};
 use tendermint_proto::Protobuf;
 use tokio::select;
+use tokio::sync::oneshot;
 
 use crate::executor::{spawn, Executor};
-use crate::utils::gossipsub_ident_topic;
+use crate::utils::{gossipsub_ident_topic, OneshotSenderExt};
 use crate::{exchange, Service};
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
+type OneshotResultSender<T, E = P2pError> = oneshot::Sender<Result<T, E>>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum P2pError {
@@ -39,6 +43,15 @@ pub enum P2pError {
 
     #[error("Worker died")]
     WorkerDied,
+
+    #[error("Not connected to any peers")]
+    NoPeers,
+
+    #[error("Header not found")]
+    HeaderNotFound,
+
+    #[error("Unsupported header response")]
+    UnsupportedHeaderResponse,
 }
 
 #[derive(Debug)]
@@ -59,6 +72,10 @@ pub struct P2pArgs {
 pub enum P2pCmd {
     NetworkInfo {
         respond_to: oneshot::Sender<NetworkInfo>,
+    },
+    ExchangeHeaderRequest {
+        request: HeaderRequest,
+        respond_to: OneshotResultSender<ExtendedHeader>,
     },
 }
 
@@ -118,6 +135,8 @@ struct Worker {
     swarm: Swarm<Behaviour>,
     header_sub_topic_hash: TopicHash,
     cmd_rx: flume::Receiver<P2pCmd>,
+    exchange_reqs: HashMap<RequestId, OneshotResultSender<ExtendedHeader>>,
+    connected_peers: HashSet<PeerId>,
 }
 
 impl Worker {
@@ -166,20 +185,23 @@ impl Worker {
             cmd_rx,
             swarm,
             header_sub_topic_hash: header_sub_topic.hash(),
+            exchange_reqs: HashMap::new(),
+            connected_peers: HashSet::new(),
         })
     }
 
     async fn run(&mut self) {
-        let mut command_stream = self.cmd_rx.clone().into_stream().fuse();
+        let mut cmd_stream = self.cmd_rx.clone().into_stream().fuse();
+
         loop {
             select! {
                 ev = self.swarm.select_next_some() => {
-                    if let Err(e) = self.on_swarm_event(&ev).await {
-                        warn!("Failure while handling swarm event. (error: {e}, event: {ev:?})");
+                    if let Err(e) = self.on_swarm_event(ev).await {
+                        warn!("Failure while handling swarm event: {e}");
                     }
                 },
-                Some(cmd) = command_stream.next() => {
-                    if let Err(e) = self.on_command(cmd).await {
+                Some(cmd) = cmd_stream.next() => {
+                    if let Err(e) = self.on_cmd(cmd).await {
                         warn!("Failure while handling command. (error: {e})");
                     }
                 }
@@ -189,11 +211,10 @@ impl Worker {
 
     async fn on_swarm_event(
         &mut self,
-        ev: &SwarmEvent<BehaviourEvent, THandlerErr<Behaviour>>,
+        ev: SwarmEvent<BehaviourEvent, THandlerErr<Behaviour>>,
     ) -> Result<()> {
         trace!("{ev:?}");
 
-        #[allow(clippy::single_match)]
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {
                 BehaviourEvent::Identify(ev) => self.on_identify_event(ev).await?,
@@ -201,54 +222,80 @@ impl Worker {
                 BehaviourEvent::KeepAlive(_) => {}
                 BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await?,
             },
+            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                self.connected_peers.insert(peer_id);
+            }
+            SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                self.connected_peers.remove(&peer_id);
+            }
             _ => {}
         }
 
         Ok(())
     }
 
-    async fn on_command(&mut self, cmd: P2pCmd) -> Result<()> {
+    async fn on_cmd(&mut self, cmd: P2pCmd) -> Result<()> {
         trace!("{cmd:?}");
 
         match cmd {
             P2pCmd::NetworkInfo { respond_to } => {
-                let _ = respond_to.send(self.swarm.network_info());
+                respond_to.maybe_send(self.swarm.network_info());
+            }
+            P2pCmd::ExchangeHeaderRequest {
+                request,
+                respond_to,
+            } => {
+                self.on_exchange_header_request_cmd(request, respond_to)
+                    .await;
             }
         }
 
         Ok(())
     }
 
-    async fn on_identify_event(&mut self, _ev: &identify::Event) -> Result<()> {
+    async fn on_identify_event(&mut self, _ev: identify::Event) -> Result<()> {
         // TODO
         Ok(())
     }
 
-    async fn on_header_ex_event(&mut self, ev: &exchange::Event) -> Result<()> {
+    async fn on_header_ex_event(&mut self, ev: exchange::Event) -> Result<()> {
         match ev {
-            request_response::Event::Message {
-                peer,
+            exchange::Event::Message {
                 message:
-                    request_response::Message::Response {
+                    exchange::Message::Response {
                         request_id,
                         response,
                     },
+                ..
             } => {
-                println!(
-                    "Response for request: {request_id}, from peer: {peer}, status: {:?}",
-                    response.status_code()
-                );
-                let header = ExtendedHeader::decode(&response.body[..]).unwrap();
-                // TODO: Forward response back with one shot channel
-                println!("Header: {header:?}");
+                let res = match response.status_code() {
+                    StatusCode::Invalid => Err(P2pError::UnsupportedHeaderResponse),
+                    StatusCode::NotFound => Err(P2pError::HeaderNotFound),
+                    StatusCode::Ok => ExtendedHeader::decode(&response.body[..])
+                        .map_err(|_| P2pError::UnsupportedHeaderResponse),
+                };
+
+                trace!("Response: {res:?}");
+
+                let respond_to = self.exchange_reqs.remove(&request_id).unwrap();
+                respond_to.maybe_send(res);
             }
-            _ => println!("Unhandled header_ex event: {ev:?}"),
+
+            exchange::Event::InboundFailure { request_id, .. }
+            | exchange::Event::OutboundFailure { request_id, .. } => {
+                if let Some(respond_to) = self.exchange_reqs.remove(&request_id) {
+                    // TODO: should we actually report a connection error?
+                    respond_to.maybe_send(Err(P2pError::HeaderNotFound));
+                }
+            }
+
+            _ => {}
         }
 
         Ok(())
     }
 
-    async fn on_gossip_sub_event(&mut self, ev: &gossipsub::Event) -> Result<()> {
+    async fn on_gossip_sub_event(&mut self, ev: gossipsub::Event) -> Result<()> {
         match ev {
             gossipsub::Event::Message {
                 message_id,
@@ -268,5 +315,24 @@ impl Worker {
         }
 
         Ok(())
+    }
+
+    async fn on_exchange_header_request_cmd(
+        &mut self,
+        request: HeaderRequest,
+        respond_to: OneshotResultSender<ExtendedHeader>,
+    ) {
+        // TODO: choose the best peer
+        let Some(peer) = self.connected_peers.iter().next() else {
+            respond_to.maybe_send(Err(P2pError::NoPeers));
+            return;
+        };
+
+        let req_id = self
+            .swarm
+            .behaviour_mut()
+            .header_ex
+            .send_request(peer, request);
+        self.exchange_reqs.insert(req_id, respond_to);
     }
 }

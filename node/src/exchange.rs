@@ -5,7 +5,7 @@ use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::request_response::{self, Codec, ProtocolSupport};
 use libp2p::StreamProtocol;
-use prost::Message;
+use prost::Message as _;
 
 use crate::utils::stream_protocol_id;
 
@@ -16,6 +16,7 @@ const RESPONSE_SIZE_MAXIMUM: u64 = 10 * 1024 * 1024;
 
 pub type Behaviour = request_response::Behaviour<HeaderCodec>;
 pub type Event = request_response::Event<HeaderRequest, HeaderResponse>;
+pub type Message = request_response::Message<HeaderRequest, HeaderResponse>;
 
 /// Create a new [`Behaviour`]
 pub fn new_behaviour(network: &str) -> Behaviour {
