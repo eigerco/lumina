@@ -32,7 +32,10 @@ impl<P2pSrv: P2pService> Service for Syncer<P2pSrv> {
     type Error = SyncerError;
 
     async fn start(args: SyncerArgs<P2pSrv>) -> Result<Self, SyncerError> {
-        Ok(Self::new(args.store, args.p2p))
+        Ok(Self {
+            p2p: args.p2p,
+            store: args.store,
+        })
     }
 
     async fn stop(&self) -> Result<()> {
@@ -52,9 +55,3 @@ pub trait SyncerService<P2pSrv: P2pService>:
 
 #[async_trait]
 impl<P2pSrv: P2pService> SyncerService<P2pSrv> for Syncer<P2pSrv> {}
-
-impl<P2pSrv: P2pService> Syncer<P2pSrv> {
-    pub fn new(store: Arc<RwLock<Store>>, p2p: Arc<P2pSrv>) -> Self {
-        Syncer { store, p2p }
-    }
-}
