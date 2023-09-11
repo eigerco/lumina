@@ -95,7 +95,8 @@ impl Service for P2p {
     }
 
     async fn stop(&self) -> Result<()> {
-        todo!()
+        // TODO
+        Ok(())
     }
 
     async fn send_command(&self, cmd: P2pCmd) -> Result<()> {
