@@ -35,57 +35,54 @@ pub fn new_behaviour(network: &str) -> Behaviour {
 pub struct HeaderCodec;
 
 impl HeaderCodec {
-    async fn read_raw_messages<T, R>(io: &mut T, max_len: usize) -> io::Result<Vec<R>>
+    async fn read_raw_message<T, R>(
+        io: &mut T,
+        buf: &mut Vec<u8>,
+        max_len: usize,
+    ) -> io::Result<Option<R>>
     where
         T: AsyncRead + Unpin + Send,
         R: Message + Default,
     {
-        let mut messages = vec![];
-        let mut buf = Vec::with_capacity(512);
-        buf.resize(PROTOBUF_MAX_LENGTH_DELIMITER_LEN, 0);
-        'messages: loop {
-            let mut read = 0;
-            let len = loop {
-                match io.read(&mut buf[read..]).await? {
-                    0 => {
-                        // check if we're between Messages, in which case it's ok to stop
-                        if read == 0 {
-                            break 'messages;
-                        } else {
-                            return Err(io::Error::new(
-                                io::ErrorKind::UnexpectedEof,
-                                ReadHeaderError::StreamClosed,
-                            ));
-                        }
+        let mut read = 0;
+        let len = loop {
+            match io.read(&mut buf[read..]).await? {
+                0 => {
+                    // check if we're between Messages, in which case it's ok to stop
+                    if read == 0 {
+                        return Ok(None);
+                    } else {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            ReadHeaderError::StreamClosed,
+                        ));
                     }
-                    n => read += n,
-                };
-
-                if let Ok(len) = prost::decode_length_delimiter(&buf[..read]) {
-                    break len;
                 }
+                n => read += n,
             };
 
-            if len > max_len {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    ReadHeaderError::ResponseTooLarge(len),
-                ));
+            if let Ok(len) = prost::decode_length_delimiter(&buf[..read]) {
+                break len;
             }
+        };
 
-            let length_delimiter_len = length_delimiter_len(len);
-
-            let prev_buf_len = buf.len();
-            buf.resize(length_delimiter_len + len, 0);
-
-            if prev_buf_len < buf.len() {
-                // We need to read more
-                io.read_exact(&mut buf[read..]).await?;
-            }
-            messages.push(R::decode(&buf[length_delimiter_len..])?);
+        if len > max_len {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                ReadHeaderError::ResponseTooLarge(len),
+            ));
         }
 
-        Ok(messages)
+        let length_delimiter_len = length_delimiter_len(len);
+
+        let prev_buf_len = buf.len();
+        buf.resize(length_delimiter_len + len, 0);
+
+        if prev_buf_len < buf.len() {
+            // We need to read more
+            io.read_exact(&mut buf[read..]).await?;
+        }
+        Ok(Some(R::decode(&buf[length_delimiter_len..])?))
     }
 }
 
@@ -99,17 +96,15 @@ impl Codec for HeaderCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        HeaderCodec::read_raw_messages(io, REQUEST_SIZE_MAXIMUM)
+        let mut buf = Vec::with_capacity(512);
+        buf.resize(PROTOBUF_MAX_LENGTH_DELIMITER_LEN, 0);
+
+        HeaderCodec::read_raw_message(io, &mut buf, REQUEST_SIZE_MAXIMUM)
             .await
-            .and_then(|mut req| {
-                if req.is_empty() {
-                    Err(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        ReadHeaderError::StreamClosed,
-                    ))
-                } else {
-                    Ok(req.swap_remove(0))
-                }
+            .and_then(|maybe_msg| {
+                maybe_msg.ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::UnexpectedEof, ReadHeaderError::StreamClosed)
+                })
             })
     }
 
@@ -121,7 +116,19 @@ impl Codec for HeaderCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        HeaderCodec::read_raw_messages(io, RESPONSE_SIZE_MAXIMUM).await
+        let mut messages = vec![];
+        let mut buf = Vec::with_capacity(512);
+        buf.resize(PROTOBUF_MAX_LENGTH_DELIMITER_LEN, 0);
+        loop {
+            match HeaderCodec::read_raw_message(io, &mut buf, RESPONSE_SIZE_MAXIMUM).await {
+                Ok(None) => break,
+                Ok(Some(msg)) => messages.push(msg),
+                Err(e) => {
+                    return Err(e);
+                }
+            };
+        }
+        Ok(messages)
     }
 
     async fn write_request<T>(
