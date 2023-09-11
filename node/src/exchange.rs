@@ -48,7 +48,7 @@ impl HeaderCodec {
             let len = loop {
                 match io.read(&mut buf[read..]).await? {
                     0 => {
-                        // check if we're between Messages', in which case it's ok to stop
+                        // check if we're between Messages, in which case it's ok to stop
                         if read == 0 {
                             break 'messages;
                         } else {
