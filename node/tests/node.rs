@@ -1,6 +1,9 @@
 use std::{env, time::Duration};
 
-use celestia_node::node::{Node, NodeConfig};
+use celestia_node::{
+    node::{Node, NodeConfig},
+    p2p::P2pService,
+};
 use celestia_rpc::prelude::*;
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::Boxed, upgrade::Version},
@@ -39,20 +42,21 @@ async fn get_bridge_tcp_ma() -> Multiaddr {
 #[tokio::test]
 async fn connects_to_the_go_bridge_node() {
     let bridge_ma = get_bridge_tcp_ma().await;
-    let local_keypair = identity::Keypair::generate_ed25519();
+    let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
     let node = Node::new(NodeConfig {
-        transport: tcp_transport(&local_keypair),
         network_id: "private".to_string(),
-        local_keypair,
-        bootstrap_peers: vec![bridge_ma],
-        listen_on: vec![],
+        p2p_transport: tcp_transport(&p2p_local_keypair),
+        p2p_local_keypair,
+        p2p_bootstrap_peers: vec![bridge_ma],
+        p2p_listen_on: vec![],
     })
+    .await
     .unwrap();
 
     // wait for the node to connect to the bridge
     sleep(Duration::from_millis(50)).await;
 
-    let info = node.p2p.network_info().await.unwrap();
+    let info = node.p2p().network_info().await.unwrap();
     assert_eq!(info.num_peers(), 1);
 }
