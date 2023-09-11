@@ -18,7 +18,7 @@ const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
 const PROTOBUF_MAX_LENGTH_DELIMITER_LEN: usize = 10;
 
 pub type Behaviour = request_response::Behaviour<HeaderCodec>;
-pub type Event = request_response::Event<HeaderRequest, HeaderResponse>;
+pub type Event = request_response::Event<Vec<HeaderRequest>, Vec<HeaderResponse>>;
 
 /// Create a new [`Behaviour`]
 pub fn new_behaviour(network: &str) -> Behaviour {
@@ -35,63 +35,71 @@ pub fn new_behaviour(network: &str) -> Behaviour {
 pub struct HeaderCodec;
 
 impl HeaderCodec {
-    async fn read_raw_message<T, R>(io: &mut T, max_len: usize) -> io::Result<R>
+    async fn read_raw_messages<T, R>(io: &mut T, max_len: usize) -> io::Result<Vec<R>>
     where
         T: AsyncRead + Unpin + Send,
         R: Message + Default,
     {
-        let mut buf = bytes::BytesMut::with_capacity(512);
+        let mut messages = vec![];
+        let mut buf = Vec::with_capacity(512);
         buf.resize(PROTOBUF_MAX_LENGTH_DELIMITER_LEN, 0);
+        'messages: loop {
+            let mut read = 0;
+            let len = loop {
+                match io.read(&mut buf[read..]).await? {
+                    0 => {
+                        // check if we're between Messages', in which case it's ok to stop
+                        if read == 0 {
+                            break 'messages;
+                        } else {
+                            return Err(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                ReadHeaderError::StreamClosed,
+                            ));
+                        }
+                    }
+                    n => read += n,
+                };
 
-        let mut read = 0;
-        let len = loop {
-            match io.read(&mut buf[read..]).await? {
-                0 => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        ReadHeaderError::StreamClosed,
-                    ));
+                if let Ok(len) = prost::decode_length_delimiter(&buf[..read]) {
+                    break len;
                 }
-                n => read += n,
             };
 
-            if let Ok(len) = prost::decode_length_delimiter(&buf[..read]) {
-                break len;
+            if len > max_len {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    ReadHeaderError::ResponseTooLarge(len),
+                ));
             }
-        };
 
-        if len > max_len {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                ReadHeaderError::RequestTooLarge(len),
-            ));
+            let length_delimiter_len = length_delimiter_len(len);
+
+            let prev_buf_len = buf.len();
+            buf.resize(length_delimiter_len + len, 0);
+
+            if prev_buf_len < buf.len() {
+                // We need to read more
+                io.read_exact(&mut buf[read..]).await?;
+            }
+            messages.push(R::decode(&buf[length_delimiter_len..])?);
         }
 
-        let length_delimiter_len = length_delimiter_len(len);
-
-        let prev_buf_len = buf.len();
-        buf.resize(length_delimiter_len + len, 0);
-
-        if prev_buf_len < buf.len() {
-            // We need to read more
-            io.read_exact(&mut buf[read..]).await?;
-        }
-
-        Ok(R::decode(&buf[length_delimiter_len..])?)
+        Ok(messages)
     }
 }
 
 #[async_trait]
 impl Codec for HeaderCodec {
     type Protocol = StreamProtocol;
-    type Request = HeaderRequest;
-    type Response = HeaderResponse;
+    type Request = Vec<HeaderRequest>;
+    type Response = Vec<HeaderResponse>;
 
     async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Self::Request>
     where
         T: AsyncRead + Unpin + Send,
     {
-        HeaderCodec::read_raw_message(io, REQUEST_SIZE_MAXIMUM).await
+        HeaderCodec::read_raw_messages(io, REQUEST_SIZE_MAXIMUM).await
     }
 
     async fn read_response<T>(
@@ -102,22 +110,23 @@ impl Codec for HeaderCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        HeaderCodec::read_raw_message(io, RESPONSE_SIZE_MAXIMUM).await
+        HeaderCodec::read_raw_messages(io, RESPONSE_SIZE_MAXIMUM).await
     }
 
     async fn write_request<T>(
         &mut self,
         _: &Self::Protocol,
         io: &mut T,
-        req: Self::Request,
+        reqs: Self::Request,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let data = req.encode_length_delimited_to_vec();
+        for req in reqs {
+            let data = req.encode_length_delimited_to_vec();
 
-        io.write_all(data.as_ref()).await?;
-
+            io.write_all(data.as_ref()).await?;
+        }
         Ok(())
     }
 
@@ -125,14 +134,16 @@ impl Codec for HeaderCodec {
         &mut self,
         _: &Self::Protocol,
         io: &mut T,
-        resp: Self::Response,
+        resps: Self::Response,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let data = resp.encode_length_delimited_to_vec();
+        for resp in resps {
+            let data = resp.encode_length_delimited_to_vec();
 
-        io.write_all(data.as_ref()).await?;
+            io.write_all(data.as_ref()).await?;
+        }
 
         Ok(())
     }
@@ -143,7 +154,7 @@ pub enum ReadHeaderError {
     #[error("stream closed while trying to get header length")]
     StreamClosed,
     #[error("request too large: {0}")]
-    RequestTooLarge(usize),
+    ResponseTooLarge(usize),
 }
 
 #[cfg(test)]
@@ -176,7 +187,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(header_request, decoded_header_request);
+        assert_eq!(header_request, decoded_header_request[0]);
     }
 
     #[tokio::test]
@@ -197,7 +208,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(header_response, decoded_header_response);
+        assert_eq!(header_response, decoded_header_response[0]);
     }
 
     #[tokio::test]
@@ -224,7 +235,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             inner_err,
-            &ReadHeaderError::RequestTooLarge(too_long_message_len)
+            &ReadHeaderError::ResponseTooLarge(too_long_message_len)
         );
     }
 
@@ -253,19 +264,32 @@ mod tests {
             .unwrap();
         assert_eq!(
             inner_err,
-            &ReadHeaderError::RequestTooLarge(too_long_message_len)
+            &ReadHeaderError::ResponseTooLarge(too_long_message_len)
         );
     }
 
     #[tokio::test]
-    async fn test_decode_header_request_data() {
-        let data = b"9999888877776666555544443333222211110000";
-        let header_request = HeaderRequest {
+    async fn test_decode_header_double_request_data() {
+        let mut header_request_buffer = bytes::BytesMut::with_capacity(512);
+        let header_request0 = HeaderRequest {
             amount: 1,
-            data: Some(Data::Hash(data.to_vec())),
+            data: Some(Data::Hash(
+                b"9999888877776666555544443333222211110000".to_vec(),
+            )),
         };
-        let encoded_header_request = header_request.encode_length_delimited_to_vec();
-        let mut reader = Cursor::new(encoded_header_request.clone());
+        let header_request1 = HeaderRequest {
+            amount: 2,
+            data: Some(Data::Hash(
+                b"0000111122223333444455556666777788889999".to_vec(),
+            )),
+        };
+        header_request0
+            .encode_length_delimited(&mut header_request_buffer)
+            .unwrap();
+        header_request1
+            .encode_length_delimited(&mut header_request_buffer)
+            .unwrap();
+        let mut reader = Cursor::new(header_request_buffer);
 
         let stream_protocol = StreamProtocol::new("/foo/bar/v0.1");
         let mut codec = HeaderCodec {};
@@ -274,18 +298,28 @@ mod tests {
             .read_request(&stream_protocol, &mut reader)
             .await
             .unwrap();
-        assert_eq!(header_request, decoded_header_request);
+        assert_eq!(header_request0, decoded_header_request[0]);
+        assert_eq!(header_request1, decoded_header_request[1]);
     }
 
     #[tokio::test]
-    async fn test_decode_header_response_data() {
-        let data = b"9999888877776666555544443333222211110000";
-        let header_response = HeaderResponse {
-            body: data.to_vec(),
+    async fn test_decode_header_double_response_data() {
+        let mut header_response_buffer = bytes::BytesMut::with_capacity(512);
+        let header_response0 = HeaderResponse {
+            body: b"9999888877776666555544443333222211110000".to_vec(),
             status_code: 1,
         };
-        let encoded_header_response = header_response.encode_length_delimited_to_vec();
-        let mut reader = Cursor::new(encoded_header_response.clone());
+        let header_response1 = HeaderResponse {
+            body: b"0000111122223333444455556666777788889999".to_vec(),
+            status_code: 2,
+        };
+        header_response0
+            .encode_length_delimited(&mut header_response_buffer)
+            .unwrap();
+        header_response1
+            .encode_length_delimited(&mut header_response_buffer)
+            .unwrap();
+        let mut reader = Cursor::new(header_response_buffer);
 
         let stream_protocol = StreamProtocol::new("/foo/bar/v0.1");
         let mut codec = HeaderCodec {};
@@ -294,7 +328,8 @@ mod tests {
             .read_response(&stream_protocol, &mut reader)
             .await
             .unwrap();
-        assert_eq!(header_response, decoded_header_response);
+        assert_eq!(header_response0, decoded_header_response[0]);
+        assert_eq!(header_response1, decoded_header_response[1]);
     }
 
     #[tokio::test]
@@ -315,7 +350,7 @@ mod tests {
                 .read_request(&stream_protocol, &mut reader)
                 .await
                 .unwrap();
-            assert_eq!(header_request, decoded_header_request);
+            assert_eq!(header_request, decoded_header_request[0]);
         }
         {
             let mut reader =
@@ -325,7 +360,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(header_request, decoded_header_request);
+            assert_eq!(header_request, decoded_header_request[0]);
         }
         {
             let mut reader =
@@ -335,7 +370,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(header_request, decoded_header_request);
+            assert_eq!(header_request, decoded_header_request[0]);
         }
         {
             let mut reader =
@@ -345,7 +380,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(header_request, decoded_header_request);
+            assert_eq!(header_request, decoded_header_request[0]);
         }
     }
 
@@ -367,7 +402,7 @@ mod tests {
                 .read_response(&stream_protocol, &mut reader)
                 .await
                 .unwrap();
-            assert_eq!(header_response, decoded_header_response);
+            assert_eq!(header_response, decoded_header_response[0]);
         }
         {
             let mut reader =
@@ -377,7 +412,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(header_response, decoded_header_response);
+            assert_eq!(header_response, decoded_header_response[0]);
         }
         {
             let mut reader =
@@ -387,7 +422,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(header_response, decoded_header_response);
+            assert_eq!(header_response, decoded_header_response[0]);
         }
         {
             let mut reader =
@@ -397,7 +432,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(header_response, decoded_header_response);
+            assert_eq!(header_response, decoded_header_response[0]);
         }
     }
 

@@ -232,13 +232,15 @@ impl Worker {
                         response,
                     },
             } => {
-                debug!(
-                    "Response for request: {request_id}, from peer: {peer}, status: {:?}",
-                    response.status_code()
-                );
-                let header = ExtendedHeader::decode(&response.body[..]).unwrap();
-                // TODO: Forward response back with one shot channel
-                debug!("Header: {header:?}");
+                for r in response {
+                    println!(
+                        "Response for request: {request_id}, from peer: {peer}, status: {:?}",
+                        r.status_code()
+                    );
+                    let header = ExtendedHeader::decode(&r.body[..]).unwrap();
+                    // TODO: Forward response back with one shot channel
+                    println!("Header: {header:?}");
+                }
             }
             _ => debug!("Unhandled header_ex event: {ev:?}"),
         }
