@@ -515,6 +515,7 @@ dependencies = [
  "tendermint-proto",
  "thiserror",
  "tokio",
+ "void",
  "wasm-bindgen-futures",
 ]
 

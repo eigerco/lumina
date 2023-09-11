@@ -2,6 +2,8 @@ use libp2p::gossipsub::IdentTopic;
 use libp2p::StreamProtocol;
 use tokio::sync::oneshot;
 
+pub(crate) type OneshotResultSender<T, E> = oneshot::Sender<Result<T, E>>;
+
 pub(crate) fn stream_protocol_id(network: &str, protocol: &str) -> StreamProtocol {
     let protocol = protocol.trim_start_matches('/');
     let s = format!("/{network}/{protocol}");

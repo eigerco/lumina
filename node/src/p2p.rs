@@ -1,15 +1,14 @@
-use std::collections::{HashMap, HashSet};
 use std::io;
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use celestia_proto::p2p::pb::{HeaderRequest, StatusCode};
+use celestia_proto::p2p::pb::HeaderRequest;
 use celestia_types::ExtendedHeader;
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
 use libp2p::gossipsub::{self, SubscriptionError, TopicHash};
 use libp2p::identity::Keypair;
-use libp2p::request_response::RequestId;
 use libp2p::swarm::{
     keep_alive, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder, SwarmEvent,
     THandlerErr,
@@ -20,9 +19,11 @@ use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::oneshot;
 
+use crate::exchange::{ExchangeBehaviour, ExchangeConfig, ExchangeError};
 use crate::executor::{spawn, Executor};
+use crate::peer_book::PeerBook;
 use crate::utils::{gossipsub_ident_topic, OneshotSenderExt};
-use crate::{exchange, Service};
+use crate::Service;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 type OneshotResultSender<T, E = P2pError> = oneshot::Sender<Result<T, E>>;
@@ -43,9 +44,6 @@ pub enum P2pError {
 
     #[error("Worker died")]
     WorkerDied,
-
-    #[error("Not connected to any peers")]
-    NoPeers,
 
     #[error("Header not found")]
     HeaderNotFound,
@@ -75,7 +73,7 @@ pub enum P2pCmd {
     },
     ExchangeHeaderRequest {
         request: HeaderRequest,
-        respond_to: OneshotResultSender<ExtendedHeader>,
+        respond_to: OneshotResultSender<ExtendedHeader, ExchangeError>,
     },
 }
 
@@ -126,7 +124,7 @@ impl P2pService for P2p {}
 #[derive(NetworkBehaviour)]
 struct Behaviour {
     identify: identify::Behaviour,
-    header_ex: exchange::Behaviour,
+    header_ex: ExchangeBehaviour,
     keep_alive: keep_alive::Behaviour,
     gossipsub: gossipsub::Behaviour,
 }
@@ -135,12 +133,12 @@ struct Worker {
     swarm: Swarm<Behaviour>,
     header_sub_topic_hash: TopicHash,
     cmd_rx: flume::Receiver<P2pCmd>,
-    exchange_reqs: HashMap<RequestId, OneshotResultSender<ExtendedHeader>>,
-    connected_peers: HashSet<PeerId>,
+    peer_book: Arc<PeerBook>,
 }
 
 impl Worker {
     fn new(args: P2pArgs, cmd_rx: flume::Receiver<P2pCmd>) -> Result<Self, P2pError> {
+        let peer_book = Arc::new(PeerBook::new());
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
         let identify = identify::Behaviour::new(identify::Config::new(
@@ -163,10 +161,15 @@ impl Worker {
         let header_sub_topic = gossipsub_ident_topic(&args.network_id, "/header-sub/v0.0.1");
         gossipsub.subscribe(&header_sub_topic)?;
 
+        let header_ex = ExchangeBehaviour::new(ExchangeConfig {
+            network_id: &args.network_id,
+            peer_book: peer_book.clone(),
+        });
+
         let behaviour = Behaviour {
             identify,
             gossipsub,
-            header_ex: exchange::new_behaviour(&args.network_id),
+            header_ex,
             keep_alive: keep_alive::Behaviour,
         };
 
@@ -185,8 +188,7 @@ impl Worker {
             cmd_rx,
             swarm,
             header_sub_topic_hash: header_sub_topic.hash(),
-            exchange_reqs: HashMap::new(),
-            connected_peers: HashSet::new(),
+            peer_book,
         })
     }
 
@@ -218,15 +220,14 @@ impl Worker {
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {
                 BehaviourEvent::Identify(ev) => self.on_identify_event(ev).await?,
-                BehaviourEvent::HeaderEx(ev) => self.on_header_ex_event(ev).await?,
-                BehaviourEvent::KeepAlive(_) => {}
                 BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await?,
+                BehaviourEvent::HeaderEx(_) | BehaviourEvent::KeepAlive(_) => {}
             },
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                self.connected_peers.insert(peer_id);
+                self.peer_book.add(peer_id);
             }
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                self.connected_peers.remove(&peer_id);
+                self.peer_book.remove(peer_id);
             }
             _ => {}
         }
@@ -245,8 +246,10 @@ impl Worker {
                 request,
                 respond_to,
             } => {
-                self.on_exchange_header_request_cmd(request, respond_to)
-                    .await;
+                self.swarm
+                    .behaviour_mut()
+                    .header_ex
+                    .send_request(request, respond_to);
             }
         }
 
@@ -255,43 +258,6 @@ impl Worker {
 
     async fn on_identify_event(&mut self, _ev: identify::Event) -> Result<()> {
         // TODO
-        Ok(())
-    }
-
-    async fn on_header_ex_event(&mut self, ev: exchange::Event) -> Result<()> {
-        match ev {
-            exchange::Event::Message {
-                message:
-                    exchange::Message::Response {
-                        request_id,
-                        response,
-                    },
-                ..
-            } => {
-                let res = match response.status_code() {
-                    StatusCode::Invalid => Err(P2pError::UnsupportedHeaderResponse),
-                    StatusCode::NotFound => Err(P2pError::HeaderNotFound),
-                    StatusCode::Ok => ExtendedHeader::decode(&response.body[..])
-                        .map_err(|_| P2pError::UnsupportedHeaderResponse),
-                };
-
-                trace!("Response: {res:?}");
-
-                let respond_to = self.exchange_reqs.remove(&request_id).unwrap();
-                respond_to.maybe_send(res);
-            }
-
-            exchange::Event::InboundFailure { request_id, .. }
-            | exchange::Event::OutboundFailure { request_id, .. } => {
-                if let Some(respond_to) = self.exchange_reqs.remove(&request_id) {
-                    // TODO: should we actually report a connection error?
-                    respond_to.maybe_send(Err(P2pError::HeaderNotFound));
-                }
-            }
-
-            _ => {}
-        }
-
         Ok(())
     }
 
@@ -315,24 +281,5 @@ impl Worker {
         }
 
         Ok(())
-    }
-
-    async fn on_exchange_header_request_cmd(
-        &mut self,
-        request: HeaderRequest,
-        respond_to: OneshotResultSender<ExtendedHeader>,
-    ) {
-        // TODO: choose the best peer
-        let Some(peer) = self.connected_peers.iter().next() else {
-            respond_to.maybe_send(Err(P2pError::NoPeers));
-            return;
-        };
-
-        let req_id = self
-            .swarm
-            .behaviour_mut()
-            .header_ex
-            .send_request(peer, request);
-        self.exchange_reqs.insert(req_id, respond_to);
     }
 }

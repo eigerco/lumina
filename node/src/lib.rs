@@ -1,9 +1,12 @@
 use async_trait::async_trait;
 
 mod exchange;
+mod exchange_client;
+mod exchange_server;
 mod executor;
 pub mod node;
 pub mod p2p;
+pub mod peer_book;
 pub mod store;
 pub mod syncer;
 mod utils;
