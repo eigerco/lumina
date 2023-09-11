@@ -14,7 +14,7 @@ impl ExchangeServerHandler {
         &mut self,
         _request_id: RequestId,
         _request: HeaderRequest,
-        _respond_to: ResponseChannel<HeaderResponse>,
+        _respond_to: ResponseChannel<Vec<HeaderResponse>>,
     ) {
         // TODO
     }

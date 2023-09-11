@@ -29,6 +29,15 @@ impl PeerBook {
         inner.peers.remove(&peer);
     }
 
+    pub fn len(&self) -> usize {
+        let inner = self.inner.read().unwrap();
+        inner.peers.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn get_best(&self) -> Option<PeerId> {
         // TODO: Implement peer score and return the best.
         let inner = self.inner.read().unwrap();

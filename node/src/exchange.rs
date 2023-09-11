@@ -17,8 +17,9 @@ use prost::Message as _;
 
 use crate::exchange_client::ExchangeClientHandler;
 use crate::exchange_server::ExchangeServerHandler;
+use crate::p2p::P2pError;
 use crate::peer_book::PeerBook;
-use crate::utils::{stream_protocol_id, OneshotResultSender, OneshotSenderExt};
+use crate::utils::{stream_protocol_id, OneshotResultSender, OneshotResultSenderExt};
 
 /// Max request size in bytes
 const REQUEST_SIZE_MAXIMUM: u64 = 1024;
@@ -26,35 +27,23 @@ const REQUEST_SIZE_MAXIMUM: u64 = 1024;
 const RESPONSE_SIZE_MAXIMUM: u64 = 10 * 1024 * 1024;
 
 type ReqRespBehaviour = request_response::Behaviour<HeaderCodec>;
-type ReqRespEvent = request_response::Event<HeaderRequest, HeaderResponse>;
-type ReqRespMessage = request_response::Message<HeaderRequest, HeaderResponse>;
+type ReqRespEvent = request_response::Event<HeaderRequest, Vec<HeaderResponse>>;
+type ReqRespMessage = request_response::Message<HeaderRequest, Vec<HeaderResponse>>;
 
-#[derive(Debug, thiserror::Error)]
-pub enum ExchangeError {
-    #[error("Not connected to any peers")]
-    NoPeers,
-
-    #[error("Header not found")]
-    HeaderNotFound,
-
-    #[error("Unsupported header response")]
-    UnsupportedHeaderResponse,
-}
-
-pub struct ExchangeBehaviour {
+pub(crate) struct ExchangeBehaviour {
     req_resp: ReqRespBehaviour,
     peer_book: Arc<PeerBook>,
     client_handler: ExchangeClientHandler,
     server_handler: ExchangeServerHandler,
 }
 
-pub struct ExchangeConfig<'a> {
+pub(crate) struct ExchangeConfig<'a> {
     pub network_id: &'a str,
     pub peer_book: Arc<PeerBook>,
 }
 
 impl ExchangeBehaviour {
-    pub fn new(config: ExchangeConfig<'_>) -> Self {
+    pub(crate) fn new(config: ExchangeConfig<'_>) -> Self {
         ExchangeBehaviour {
             req_resp: ReqRespBehaviour::new(
                 [(
@@ -69,18 +58,27 @@ impl ExchangeBehaviour {
         }
     }
 
-    pub fn send_request(
+    pub(crate) fn send_request(
         &mut self,
         request: HeaderRequest,
-        respond_to: OneshotResultSender<ExtendedHeader, ExchangeError>,
+        respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
+        if request.amount == 0 {
+            // TODO: is this what celestia-node is doing?
+            respond_to.maybe_send_ok(Vec::new());
+            return;
+        }
+
         let Some(peer) = self.peer_book.get_best() else {
-            respond_to.maybe_send(Err(ExchangeError::NoPeers));
+            respond_to.maybe_send_err(P2pError::NoPeers);
             return;
         };
 
+        let amount = request.amount;
         let req_id = self.req_resp.send_request(&peer, request);
-        self.client_handler.on_request_initiated(req_id, respond_to);
+
+        self.client_handler
+            .on_request_initiated(req_id, amount, respond_to);
     }
 
     fn on_to_swarm(
@@ -211,13 +209,13 @@ impl NetworkBehaviour for ExchangeBehaviour {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct HeaderCodec;
+pub(crate) struct HeaderCodec;
 
 #[async_trait]
 impl Codec for HeaderCodec {
     type Protocol = StreamProtocol;
     type Request = HeaderRequest;
-    type Response = HeaderResponse;
+    type Response = Vec<HeaderResponse>;
 
     async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Self::Request>
     where
@@ -242,7 +240,8 @@ impl Codec for HeaderCodec {
 
         io.take(RESPONSE_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
 
-        Ok(HeaderResponse::decode_length_delimited(&vec[..])?)
+        // TODO
+        Ok(vec![HeaderResponse::decode_length_delimited(&vec[..])?])
     }
 
     async fn write_request<T>(
@@ -270,7 +269,8 @@ impl Codec for HeaderCodec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let data = resp.encode_length_delimited_to_vec();
+        // TODO
+        let data = resp[0].encode_length_delimited_to_vec();
 
         io.write_all(data.as_ref()).await?;
 

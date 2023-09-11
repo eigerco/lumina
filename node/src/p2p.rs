@@ -1,9 +1,10 @@
+use std::collections::VecDeque;
 use std::io;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use celestia_proto::p2p::pb::HeaderRequest;
-use celestia_types::ExtendedHeader;
+use celestia_proto::p2p::pb::{header_request, HeaderRequest};
+use celestia_types::{ExtendedHeader, Hash};
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
@@ -19,14 +20,13 @@ use tokio::select;
 use tokio::sync::oneshot;
 use tracing::{debug, instrument, warn};
 
-use crate::exchange::{ExchangeBehaviour, ExchangeConfig, ExchangeError};
+use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
 use crate::executor::{spawn, Executor};
 use crate::peer_book::PeerBook;
-use crate::utils::{gossipsub_ident_topic, OneshotSenderExt};
+use crate::utils::{gossipsub_ident_topic, OneshotResultSender, OneshotSenderExt};
 use crate::Service;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
-type OneshotResultSender<T, E = P2pError> = oneshot::Sender<Result<T, E>>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum P2pError {
@@ -45,11 +45,23 @@ pub enum P2pError {
     #[error("Worker died")]
     WorkerDied,
 
-    #[error("Header not found")]
-    HeaderNotFound,
+    #[error("Channel closed unexpectedly")]
+    ChannelClosedUnexpectedly,
 
-    #[error("Unsupported header response")]
-    UnsupportedHeaderResponse,
+    #[error("Not connected to any peers")]
+    NoPeers,
+
+    #[error("Exchange header not found")]
+    ExchangeHeaderNotFound,
+
+    #[error("Invalid exchange header")]
+    ExchangeHeaderInvalid,
+}
+
+impl From<oneshot::error::RecvError> for P2pError {
+    fn from(_value: oneshot::error::RecvError) -> Self {
+        P2pError::ChannelClosedUnexpectedly
+    }
 }
 
 #[derive(Debug)]
@@ -73,7 +85,10 @@ pub enum P2pCmd {
     },
     ExchangeHeaderRequest {
         request: HeaderRequest,
-        respond_to: OneshotResultSender<ExtendedHeader, ExchangeError>,
+        respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+    },
+    WaitConnected {
+        respond_to: oneshot::Sender<()>,
     },
 }
 
@@ -109,12 +124,74 @@ impl Service for P2p {
 
 #[async_trait]
 pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError> {
+    async fn wait_connected(&self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(P2pCmd::WaitConnected { respond_to: tx })
+            .await?;
+
+        Ok(rx.await?)
+    }
+
     async fn network_info(&self) -> Result<NetworkInfo> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::NetworkInfo { respond_to: tx })
             .await?;
-        rx.await.map_err(|_| P2pError::WorkerDied)
+
+        Ok(rx.await?)
+    }
+
+    async fn exchange_header_request(&self, request: HeaderRequest) -> Result<Vec<ExtendedHeader>> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(P2pCmd::ExchangeHeaderRequest {
+            request,
+            respond_to: tx,
+        })
+        .await?;
+
+        rx.await?
+    }
+
+    async fn get_header_range_by_height(
+        &self,
+        height: u64,
+        amount: u64,
+    ) -> Result<Vec<ExtendedHeader>> {
+        self.exchange_header_request(HeaderRequest {
+            data: Some(header_request::Data::Origin(height)),
+            amount,
+        })
+        .await
+    }
+
+    async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
+        self.get_header_range_by_height(height, 1)
+            .await?
+            .into_iter()
+            .next()
+            .ok_or(P2pError::ExchangeHeaderNotFound)
+    }
+
+    async fn get_header_range_by_hash(
+        &self,
+        hash: Hash,
+        amount: u64,
+    ) -> Result<Vec<ExtendedHeader>> {
+        self.exchange_header_request(HeaderRequest {
+            data: Some(header_request::Data::Hash(hash.as_bytes().to_vec())),
+            amount,
+        })
+        .await
+    }
+
+    async fn get_header_by_hash(&self, hash: Hash) -> Result<ExtendedHeader> {
+        self.get_header_range_by_hash(hash, 1)
+            .await?
+            .into_iter()
+            .next()
+            .ok_or(P2pError::ExchangeHeaderNotFound)
     }
 }
 
@@ -135,6 +212,7 @@ struct Worker {
     header_sub_topic_hash: TopicHash,
     cmd_rx: flume::Receiver<P2pCmd>,
     peer_book: Arc<PeerBook>,
+    wait_connected_tx: VecDeque<oneshot::Sender<()>>,
 }
 
 impl Worker {
@@ -190,6 +268,7 @@ impl Worker {
             swarm,
             header_sub_topic_hash: header_sub_topic.hash(),
             peer_book,
+            wait_connected_tx: VecDeque::new(),
         })
     }
 
@@ -225,6 +304,10 @@ impl Worker {
             },
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                 self.peer_book.add(peer_id);
+
+                for tx in self.wait_connected_tx.drain(..) {
+                    tx.maybe_send(());
+                }
             }
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                 self.peer_book.remove(peer_id);
@@ -249,6 +332,13 @@ impl Worker {
                     .behaviour_mut()
                     .header_ex
                     .send_request(request, respond_to);
+            }
+            P2pCmd::WaitConnected { respond_to } => {
+                if self.peer_book.is_empty() {
+                    self.wait_connected_tx.push_back(respond_to);
+                } else {
+                    respond_to.maybe_send(());
+                }
             }
         }
 
