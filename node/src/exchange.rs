@@ -405,7 +405,7 @@ mod tests {
     async fn test_chunky_async_read() {
         let read_data = "FOO123";
         let cur0 = Cursor::new(read_data);
-        let mut chunky = ChunkyAsyncRead::<_, 3>::new(cur0); // {inner: cur0};
+        let mut chunky = ChunkyAsyncRead::<_, 3>::new(cur0);
 
         let mut output_buffer: bytes::BytesMut = b"BAR987".as_ref().into();
 
