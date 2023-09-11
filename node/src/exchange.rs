@@ -54,7 +54,7 @@ pub struct ExchangeConfig<'a> {
 }
 
 impl ExchangeBehaviour {
-    pub fn new<'a>(config: ExchangeConfig<'a>) -> Self {
+    pub fn new(config: ExchangeConfig<'_>) -> Self {
         ExchangeBehaviour {
             req_resp: ReqRespBehaviour::new(
                 [(
@@ -200,14 +200,9 @@ impl NetworkBehaviour for ExchangeBehaviour {
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        loop {
-            match self.req_resp.poll(cx, params) {
-                Poll::Ready(ev) => {
-                    if let Some(ev) = self.on_to_swarm(ev) {
-                        return Poll::Ready(ev);
-                    }
-                }
-                Poll::Pending => break,
+        while let Poll::Ready(ev) = self.req_resp.poll(cx, params) {
+            if let Some(ev) = self.on_to_swarm(ev) {
+                return Poll::Ready(ev);
             }
         }
 

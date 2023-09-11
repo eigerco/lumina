@@ -14,10 +14,10 @@ use libp2p::swarm::{
     THandlerErr,
 };
 use libp2p::{identify, Multiaddr, PeerId, TransportError};
-use log::{error, trace, warn};
 use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::oneshot;
+use tracing::{debug, instrument, warn};
 
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig, ExchangeError};
 use crate::executor::{spawn, Executor};
@@ -211,12 +211,11 @@ impl Worker {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     async fn on_swarm_event(
         &mut self,
         ev: SwarmEvent<BehaviourEvent, THandlerErr<Behaviour>>,
     ) -> Result<()> {
-        trace!("{ev:?}");
-
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {
                 BehaviourEvent::Identify(ev) => self.on_identify_event(ev).await?,
@@ -235,9 +234,8 @@ impl Worker {
         Ok(())
     }
 
+    #[instrument(level = "trace", skip(self))]
     async fn on_cmd(&mut self, cmd: P2pCmd) -> Result<()> {
-        trace!("{cmd:?}");
-
         match cmd {
             P2pCmd::NetworkInfo { respond_to } => {
                 respond_to.maybe_send(self.swarm.network_info());
@@ -272,12 +270,12 @@ impl Worker {
                     let header = ExtendedHeader::decode(&message.data[..]).unwrap();
                     // TODO: produce event
 
-                    println!("New header from header-sub: {header:?}");
+                    debug!("New header from header-sub: {header:?}");
                 } else {
-                    println!("New gossipsub message, id: {message_id}, message: {message:?}");
+                    debug!("New gossipsub message, id: {message_id}, message: {message:?}");
                 }
             }
-            _ => println!("Unhandled gossipsub event: {ev:?}"),
+            _ => debug!("Unhandled gossipsub event: {ev:?}"),
         }
 
         Ok(())

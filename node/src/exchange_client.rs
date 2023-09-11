@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use celestia_proto::p2p::pb::{HeaderResponse, StatusCode};
 use celestia_types::ExtendedHeader;
 use libp2p::request_response::{OutboundFailure, RequestId};
-use log::trace;
 use tendermint_proto::Protobuf;
+use tracing::trace;
 
 use crate::exchange::ExchangeError;
 use crate::utils::{OneshotResultSender, OneshotSenderExt};
