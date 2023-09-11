@@ -5,6 +5,7 @@ use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::request_response::{self, Codec, ProtocolSupport};
 use libp2p::StreamProtocol;
+use prost::length_delimiter_len;
 use prost::Message;
 
 use crate::utils::stream_protocol_id;
@@ -13,6 +14,8 @@ use crate::utils::stream_protocol_id;
 const REQUEST_SIZE_MAXIMUM: u64 = 1024;
 /// Max response size in bytes
 const RESPONSE_SIZE_MAXIMUM: u64 = 10 * 1024 * 1024;
+/// Maximum length of the protobuf length delimiter in bytes
+const PROTOBUF_MAX_LENGTH_DELIMITER_LEN: usize = 10;
 
 pub type Behaviour = request_response::Behaviour<HeaderCodec>;
 pub type Event = request_response::Event<HeaderRequest, HeaderResponse>;
@@ -41,11 +44,49 @@ impl Codec for HeaderCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut vec = Vec::new();
+        let mut buf = bytes::BytesMut::with_capacity(512);
+        buf.resize(PROTOBUF_MAX_LENGTH_DELIMITER_LEN, 0);
 
-        io.take(REQUEST_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
+        let mut read = 0;
+        let len = loop {
+            match io.read(&mut buf[read..]).await? {
+                0 => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        ReadHeaderError::StreamClosed,
+                    ));
+                }
+                n => read += n,
+            };
 
-        Ok(HeaderRequest::decode_length_delimited(&vec[..])?)
+            if let Ok(len) = prost::decode_length_delimiter(&buf[..read]) {
+                break len;
+            }
+        };
+
+        // const value conversion, safe for 32bit and larger usize
+        if len
+            > REQUEST_SIZE_MAXIMUM
+                .try_into()
+                .expect("usize too small to hold REQUEST_SIZE_MAXIMUM value")
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                ReadHeaderError::RequestTooLarge(len),
+            ));
+        }
+
+        let length_delimiter_len = length_delimiter_len(len);
+
+        let prev_buf_len = buf.len();
+        buf.resize(length_delimiter_len + len, 0);
+
+        if prev_buf_len < buf.len() {
+            // We need to read more
+            io.read_exact(&mut buf[read..]).await?;
+        }
+
+        Ok(HeaderRequest::decode(&buf[length_delimiter_len..])?)
     }
 
     async fn read_response<T>(
@@ -94,4 +135,12 @@ impl Codec for HeaderCodec {
 
         Ok(())
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ReadHeaderError {
+    #[error("stream closed while trying to get header length")]
+    StreamClosed,
+    #[error("request too large: {0}")]
+    RequestTooLarge(usize),
 }
