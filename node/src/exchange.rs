@@ -18,7 +18,7 @@ const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
 const PROTOBUF_MAX_LENGTH_DELIMITER_LEN: usize = 10;
 
 pub type Behaviour = request_response::Behaviour<HeaderCodec>;
-pub type Event = request_response::Event<Vec<HeaderRequest>, Vec<HeaderResponse>>;
+pub type Event = request_response::Event<HeaderRequest, Vec<HeaderResponse>>;
 
 /// Create a new [`Behaviour`]
 pub fn new_behaviour(network: &str) -> Behaviour {
@@ -92,14 +92,25 @@ impl HeaderCodec {
 #[async_trait]
 impl Codec for HeaderCodec {
     type Protocol = StreamProtocol;
-    type Request = Vec<HeaderRequest>;
+    type Request = HeaderRequest;
     type Response = Vec<HeaderResponse>;
 
     async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Self::Request>
     where
         T: AsyncRead + Unpin + Send,
     {
-        HeaderCodec::read_raw_messages(io, REQUEST_SIZE_MAXIMUM).await
+        HeaderCodec::read_raw_messages(io, REQUEST_SIZE_MAXIMUM)
+            .await
+            .and_then(|mut req| {
+                if req.is_empty() {
+                    Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        ReadHeaderError::StreamClosed,
+                    ))
+                } else {
+                    Ok(req.swap_remove(0))
+                }
+            })
     }
 
     async fn read_response<T>(
@@ -117,16 +128,15 @@ impl Codec for HeaderCodec {
         &mut self,
         _: &Self::Protocol,
         io: &mut T,
-        reqs: Self::Request,
+        req: Self::Request,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
     {
-        for req in reqs {
-            let data = req.encode_length_delimited_to_vec();
+        let data = req.encode_length_delimited_to_vec();
 
-            io.write_all(data.as_ref()).await?;
-        }
+        io.write_all(data.as_ref()).await?;
+
         Ok(())
     }
 
@@ -187,7 +197,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(header_request, decoded_header_request[0]);
+        assert_eq!(header_request, decoded_header_request);
     }
 
     #[tokio::test]
@@ -269,40 +279,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_decode_header_double_request_data() {
-        let mut header_request_buffer = bytes::BytesMut::with_capacity(512);
-        let header_request0 = HeaderRequest {
-            amount: 1,
-            data: Some(Data::Hash(
-                b"9999888877776666555544443333222211110000".to_vec(),
-            )),
-        };
-        let header_request1 = HeaderRequest {
-            amount: 2,
-            data: Some(Data::Hash(
-                b"0000111122223333444455556666777788889999".to_vec(),
-            )),
-        };
-        header_request0
-            .encode_length_delimited(&mut header_request_buffer)
-            .unwrap();
-        header_request1
-            .encode_length_delimited(&mut header_request_buffer)
-            .unwrap();
-        let mut reader = Cursor::new(header_request_buffer);
-
-        let stream_protocol = StreamProtocol::new("/foo/bar/v0.1");
-        let mut codec = HeaderCodec {};
-
-        let decoded_header_request = codec
-            .read_request(&stream_protocol, &mut reader)
-            .await
-            .unwrap();
-        assert_eq!(header_request0, decoded_header_request[0]);
-        assert_eq!(header_request1, decoded_header_request[1]);
-    }
-
-    #[tokio::test]
     async fn test_decode_header_double_response_data() {
         let mut header_response_buffer = bytes::BytesMut::with_capacity(512);
         let header_response0 = HeaderResponse {
@@ -350,7 +326,7 @@ mod tests {
                 .read_request(&stream_protocol, &mut reader)
                 .await
                 .unwrap();
-            assert_eq!(header_request, decoded_header_request[0]);
+            assert_eq!(header_request, decoded_header_request);
         }
         {
             let mut reader =
@@ -360,7 +336,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(header_request, decoded_header_request[0]);
+            assert_eq!(header_request, decoded_header_request);
         }
         {
             let mut reader =
@@ -370,7 +346,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(header_request, decoded_header_request[0]);
+            assert_eq!(header_request, decoded_header_request);
         }
         {
             let mut reader =
@@ -380,7 +356,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(header_request, decoded_header_request[0]);
+            assert_eq!(header_request, decoded_header_request);
         }
     }
 
