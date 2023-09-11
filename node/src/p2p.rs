@@ -13,9 +13,9 @@ use libp2p::swarm::{
     THandlerErr,
 };
 use libp2p::{identify, request_response, Multiaddr, PeerId, TransportError};
-use log::{error, trace, warn};
 use tendermint_proto::Protobuf;
 use tokio::select;
+use tracing::{debug, instrument, warn};
 
 use crate::executor::{spawn, Executor};
 use crate::utils::gossipsub_ident_topic;
@@ -187,12 +187,11 @@ impl Worker {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     async fn on_swarm_event(
         &mut self,
         ev: &SwarmEvent<BehaviourEvent, THandlerErr<Behaviour>>,
     ) -> Result<()> {
-        trace!("{ev:?}");
-
         #[allow(clippy::single_match)]
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {
@@ -207,9 +206,8 @@ impl Worker {
         Ok(())
     }
 
+    #[instrument(level = "trace", skip(self))]
     async fn on_command(&mut self, cmd: P2pCmd) -> Result<()> {
-        trace!("{cmd:?}");
-
         match cmd {
             P2pCmd::NetworkInfo { respond_to } => {
                 let _ = respond_to.send(self.swarm.network_info());
@@ -234,15 +232,15 @@ impl Worker {
                         response,
                     },
             } => {
-                println!(
+                debug!(
                     "Response for request: {request_id}, from peer: {peer}, status: {:?}",
                     response.status_code()
                 );
                 let header = ExtendedHeader::decode(&response.body[..]).unwrap();
                 // TODO: Forward response back with one shot channel
-                println!("Header: {header:?}");
+                debug!("Header: {header:?}");
             }
-            _ => println!("Unhandled header_ex event: {ev:?}"),
+            _ => debug!("Unhandled header_ex event: {ev:?}"),
         }
 
         Ok(())
@@ -259,12 +257,12 @@ impl Worker {
                     let header = ExtendedHeader::decode(&message.data[..]).unwrap();
                     // TODO: produce event
 
-                    println!("New header from header-sub: {header:?}");
+                    debug!("New header from header-sub: {header:?}");
                 } else {
-                    println!("New gossipsub message, id: {message_id}, message: {message:?}");
+                    debug!("New gossipsub message, id: {message_id}, message: {message:?}");
                 }
             }
-            _ => println!("Unhandled gossipsub event: {ev:?}"),
+            _ => debug!("Unhandled gossipsub event: {ev:?}"),
         }
 
         Ok(())

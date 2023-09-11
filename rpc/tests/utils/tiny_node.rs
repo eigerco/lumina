@@ -13,6 +13,7 @@ use tokio::{
     sync::mpsc,
     time::{sleep, Duration},
 };
+use tracing::{debug, warn};
 
 // how long to wait during startup for node to start listening on interfaces, before we return a
 // list of addresses
@@ -36,7 +37,8 @@ pub async fn start_tiny_node() -> anyhow::Result<p2p::AddrInfo> {
     // Create identity
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    log::debug!("local peer id: {local_peer_id:?}");
+
+    debug!("local peer id: {local_peer_id:?}");
 
     // Setup swarm
     let transport = tcp::tokio::Transport::default()
@@ -55,9 +57,10 @@ pub async fn start_tiny_node() -> anyhow::Result<p2p::AddrInfo> {
     tokio::task::spawn(async move {
         loop {
             if let Some(SwarmEvent::NewListenAddr { address, .. }) = swarm.next().await {
-                dbg!(&address);
+                debug!("{address:?}");
+
                 if addr_tx.send(address).await.is_err() {
-                    log::warn!("received new addr after set startup time, unittests might not have all the node addresses");
+                    warn!("received new addr after set startup time, unittests might not have all the node addresses");
                 }
             }
         }
@@ -76,7 +79,8 @@ pub async fn start_tiny_node() -> anyhow::Result<p2p::AddrInfo> {
         id: p2p::PeerId(local_peer_id),
         addrs,
     };
-    log::debug!("Listening addresses: {addr:?}");
+
+    debug!("Listening addresses: {addr:?}");
 
     Ok(addr)
 }
