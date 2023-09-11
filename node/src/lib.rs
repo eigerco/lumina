@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-pub mod exchange;
+mod exchange;
 mod executor;
 pub mod node;
 pub mod p2p;
