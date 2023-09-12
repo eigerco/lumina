@@ -120,8 +120,6 @@ impl Codec for HeaderCodec {
         T: AsyncRead + Unpin + Send,
     {
         let mut buf = Vec::with_capacity(512);
-        //buf.resize(PROTOBUF_MAX_LENGTH_DELIMITER_LEN, 0);
-
         HeaderCodec::read_raw_message(io, &mut buf, REQUEST_SIZE_MAXIMUM)
             .await
             .and_then(|maybe_msg| {
@@ -142,7 +140,6 @@ impl Codec for HeaderCodec {
         let mut messages = vec![];
         let mut buf = Vec::with_capacity(512);
         loop {
-            //buf.resize(PROTOBUF_MAX_LENGTH_DELIMITER_LEN, 0);
             match HeaderCodec::read_raw_message(io, &mut buf, RESPONSE_SIZE_MAXIMUM).await {
                 Ok(None) => break,
                 Ok(Some(msg)) => messages.push(msg),
