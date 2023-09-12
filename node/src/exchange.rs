@@ -34,8 +34,18 @@ pub fn new_behaviour(network: &str) -> Behaviour {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HeaderCodec;
 
+#[derive(Debug, thiserror::Error, PartialEq)]
+pub enum ReadHeaderError {
+    #[error("stream closed while trying to get header length")]
+    StreamClosed,
+    #[error("varint overflow")]
+    VarintOverflow,
+    #[error("request too large: {0}")]
+    ResponseTooLarge(usize),
+}
+
 impl HeaderCodec {
-    async fn read_raw_message<T, R>(
+    async fn read_message<T, R>(
         io: &mut T,
         buf: &mut Vec<u8>,
         max_len: usize,
@@ -44,29 +54,29 @@ impl HeaderCodec {
         T: AsyncRead + Unpin + Send,
         R: Message + Default,
     {
-        let mut read = buf.len(); // buf might have data from previous iterations
+        let mut read_len = buf.len(); // buf might have data from previous iterations
 
-        if read < 512 {
+        if read_len < 512 {
             // resize to increase the chance of reading all the data in one go
             buf.resize(512, 0)
         }
 
         let data_len = loop {
-            if let Ok(len) = prost::decode_length_delimiter(&buf[..read]) {
+            if let Ok(len) = prost::decode_length_delimiter(&buf[..read_len]) {
                 break len;
             }
 
-            if read >= PROTOBUF_MAX_LENGTH_DELIMITER_LEN {
+            if read_len >= PROTOBUF_MAX_LENGTH_DELIMITER_LEN {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     ReadHeaderError::VarintOverflow,
                 ));
             }
 
-            match io.read(&mut buf[read..]).await? {
+            match io.read(&mut buf[read_len..]).await? {
                 0 => {
                     // check if we're between Messages, in which case it's ok to stop
-                    if read == 0 {
+                    if read_len == 0 {
                         return Ok(None);
                     } else {
                         return Err(io::Error::new(
@@ -75,15 +85,15 @@ impl HeaderCodec {
                         ));
                     }
                 }
-                n => read += n,
+                n => read_len += n,
             };
         };
 
-        // truncate buffer to the data that was actually read
-        buf.truncate(read);
+        // truncate buffer to the data that was actually read_len
+        buf.truncate(read_len);
 
         let length_delimiter_len = length_delimiter_len(data_len);
-        let single_message_length = length_delimiter_len + data_len;
+        let single_message_len = length_delimiter_len + data_len;
 
         if data_len > max_len {
             return Err(io::Error::new(
@@ -92,18 +102,19 @@ impl HeaderCodec {
             ));
         }
 
-        if read < single_message_length {
-            // we need to read more
-            buf.resize(single_message_length, 0);
-            io.read_exact(&mut buf[read..single_message_length]).await?;
+        if read_len < single_message_len {
+            // we need to read_len more
+            buf.resize(single_message_len, 0);
+            io.read_exact(&mut buf[read_len..single_message_len])
+                .await?;
         }
 
-        let val = R::decode(&buf[length_delimiter_len..single_message_length])?;
+        let val = R::decode(&buf[length_delimiter_len..single_message_len])?;
 
-        // we've read past one message when trying to get length delimiter, need to handle
-        // partially read data in the buffer
-        if single_message_length < read {
-            buf.drain(..single_message_length);
+        // we've read_len past one message when trying to get length delimiter, need to handle
+        // partially read_len data in the buffer
+        if single_message_len < read_len {
+            buf.drain(..single_message_len);
         } else {
             buf.clear();
         }
@@ -122,9 +133,9 @@ impl Codec for HeaderCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut buf = Vec::with_capacity(512);
+        let mut buf = Vec::new();
 
-        HeaderCodec::read_raw_message(io, &mut buf, REQUEST_SIZE_MAXIMUM)
+        HeaderCodec::read_message(io, &mut buf, REQUEST_SIZE_MAXIMUM)
             .await?
             .ok_or_else(|| {
                 io::Error::new(io::ErrorKind::UnexpectedEof, ReadHeaderError::StreamClosed)
@@ -140,9 +151,9 @@ impl Codec for HeaderCodec {
         T: AsyncRead + Unpin + Send,
     {
         let mut messages = vec![];
-        let mut buf = Vec::with_capacity(512);
+        let mut buf = Vec::new();
         loop {
-            match HeaderCodec::read_raw_message(io, &mut buf, RESPONSE_SIZE_MAXIMUM).await {
+            match HeaderCodec::read_message(io, &mut buf, RESPONSE_SIZE_MAXIMUM).await {
                 Ok(None) => break,
                 Ok(Some(msg)) => messages.push(msg),
                 Err(e) => {
@@ -188,16 +199,6 @@ impl Codec for HeaderCodec {
     }
 }
 
-#[derive(Debug, thiserror::Error, PartialEq)]
-pub enum ReadHeaderError {
-    #[error("stream closed while trying to get header length")]
-    StreamClosed,
-    #[error("varint overflow")]
-    VarintOverflow,
-    #[error("request too large: {0}")]
-    ResponseTooLarge(usize),
-}
-
 #[cfg(test)]
 mod tests {
     use super::{HeaderCodec, ReadHeaderError, REQUEST_SIZE_MAXIMUM, RESPONSE_SIZE_MAXIMUM};
@@ -241,7 +242,6 @@ mod tests {
         };
 
         let encoded_header_response = header_response.encode_length_delimited_to_vec();
-        //let mut reader = Cursor::new(encoded_header_response);
 
         let mut multi_msg = vec![];
         for _ in 0..MSG_COUNT {
@@ -294,7 +294,7 @@ mod tests {
     #[tokio::test]
     async fn test_decode_header_response_too_large() {
         let too_long_message_len = RESPONSE_SIZE_MAXIMUM + 1;
-        let mut length_delimiter_buffer = bytes::BytesMut::new();
+        let mut length_delimiter_buffer = BytesMut::new();
         encode_length_delimiter(too_long_message_len, &mut length_delimiter_buffer).unwrap();
         let mut reader = Cursor::new(length_delimiter_buffer);
 
@@ -339,7 +339,7 @@ mod tests {
 
         let mut buf = vec![];
         let decoding_error =
-            HeaderCodec::read_raw_message::<_, HeaderRequest>(&mut reader, &mut buf, 512)
+            HeaderCodec::read_message::<_, HeaderRequest>(&mut reader, &mut buf, 512)
                 .await
                 .expect_err("expected varint overflow");
 
@@ -354,7 +354,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_decode_header_double_response_data() {
-        let mut header_response_buffer = bytes::BytesMut::with_capacity(512);
+        let mut header_response_buffer = BytesMut::with_capacity(512);
         let header_response0 = HeaderResponse {
             body: b"9999888877776666555544443333222211110000".to_vec(),
             status_code: 1,
@@ -492,7 +492,7 @@ mod tests {
         let cur0 = Cursor::new(read_data);
         let mut chunky = ChunkyAsyncRead::<_, 3>::new(cur0);
 
-        let mut output_buffer: bytes::BytesMut = b"BAR987".as_ref().into();
+        let mut output_buffer: BytesMut = b"BAR987".as_ref().into();
 
         let _ = chunky.read(&mut output_buffer[..]).await.unwrap();
         assert_eq!(output_buffer, b"FOO987".as_ref());
@@ -514,15 +514,8 @@ mod tests {
             cx: &mut Context<'_>,
             buf: &mut [u8],
         ) -> Poll<Result<usize, Error>> {
-            let mut small_buf = [0u8; CHUNK_SIZE];
-            match Pin::new(&mut self.inner).poll_read(cx, &mut small_buf) {
-                Poll::Ready(Ok(read)) => {
-                    buf[..read].copy_from_slice(&small_buf[..read]);
-                    Poll::Ready(Ok(read))
-                }
-                ret @ Poll::Ready(Err(_)) => ret,
-                Poll::Pending => Poll::Pending,
-            }
+            let len = buf.len().min(CHUNK_SIZE);
+            Pin::new(&mut self.inner).poll_read(cx, &mut buf[..len])
         }
     }
 }

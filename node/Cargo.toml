@@ -10,7 +10,6 @@ celestia-types = { workspace = true }
 tendermint-proto = { workspace = true }
 
 async-trait = "0.1.73"
-bytes = "1.4.0"
 flume = { version = "0.11.0", default-features = false, features = ["async"] }
 futures = "0.3.28"
 libp2p = { version = "0.52.3", features = [
@@ -32,5 +31,6 @@ getrandom = { version = "0.2.10", features = ["js"] }
 wasm-bindgen-futures = "0.4.37"
 
 [dev-dependencies]
+bytes = "1.4.0"
 celestia-rpc = { workspace = true }
 dotenvy = "0.15.7"
