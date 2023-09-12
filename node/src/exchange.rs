@@ -144,7 +144,7 @@ impl ExchangeBehaviour {
             ReqRespEvent::InboundFailure {
                 request_id, error, ..
             } => {
-                self.server_handler.on_inbound_failure(request_id, error);
+                self.server_handler.on_failure(request_id, error);
             }
         }
     }

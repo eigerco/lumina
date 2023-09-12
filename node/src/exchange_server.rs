@@ -27,7 +27,7 @@ impl ExchangeServerHandler {
     }
 
     #[instrument(level = "trace", skip(self))]
-    pub(crate) fn on_inbound_failure(&mut self, request_id: RequestId, error: InboundFailure) {
+    pub(crate) fn on_failure(&mut self, request_id: RequestId, error: InboundFailure) {
         // TODO
     }
 }

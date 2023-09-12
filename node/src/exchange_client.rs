@@ -85,6 +85,8 @@ impl ExchangeClientHandler {
 
     #[instrument(level = "trace", skip(self))]
     pub(crate) fn on_failure(&mut self, request_id: RequestId, error: OutboundFailure) {
+        trace!("Outbound failure");
+
         if let Some(req_info) = self.reqs.remove(&request_id) {
             // TODO: should we actually report a connection error?
             req_info
