@@ -45,14 +45,14 @@ pub enum ReadHeaderError {
 }
 
 impl HeaderCodec {
-    async fn read_message<T, R>(
-        io: &mut T,
+    async fn read_message<R, T>(
+        reader: &mut R,
         buf: &mut Vec<u8>,
         max_len: usize,
-    ) -> io::Result<Option<R>>
+    ) -> io::Result<Option<T>>
     where
-        T: AsyncRead + Unpin + Send,
-        R: Message + Default,
+        R: AsyncRead + Unpin + Send,
+        T: Message + Default,
     {
         let mut read_len = buf.len(); // buf might have data from previous iterations
 
@@ -73,7 +73,7 @@ impl HeaderCodec {
                 ));
             }
 
-            match io.read(&mut buf[read_len..]).await? {
+            match reader.read(&mut buf[read_len..]).await? {
                 0 => {
                     // check if we're between Messages, in which case it's ok to stop
                     if read_len == 0 {
@@ -105,11 +105,12 @@ impl HeaderCodec {
         if read_len < single_message_len {
             // we need to read_len more
             buf.resize(single_message_len, 0);
-            io.read_exact(&mut buf[read_len..single_message_len])
+            reader
+                .read_exact(&mut buf[read_len..single_message_len])
                 .await?;
         }
 
-        let val = R::decode(&buf[length_delimiter_len..single_message_len])?;
+        let val = T::decode(&buf[length_delimiter_len..single_message_len])?;
 
         // we've read_len past one message when trying to get length delimiter, need to handle
         // partially read_len data in the buffer
