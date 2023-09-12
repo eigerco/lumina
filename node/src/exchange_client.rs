@@ -36,7 +36,7 @@ impl ExchangeClientHandler {
         self.reqs.insert(request_id, ReqInfo { amount, respond_to });
     }
 
-    #[instrument(level = "trace", skip(self, responses))]
+    #[instrument(level = "trace", skip(self, responses), fields(responses.len = responses.len()))]
     pub(crate) fn on_response_received(
         &mut self,
         request_id: RequestId,
@@ -45,6 +45,8 @@ impl ExchangeClientHandler {
         let Some(ReqInfo { amount, respond_to }) = self.reqs.remove(&request_id) else {
             return;
         };
+
+        trace!("Response received. Expected amount = {amount}");
 
         // Convert amount to usize
         let Ok(amount) = amount.try_into() else {

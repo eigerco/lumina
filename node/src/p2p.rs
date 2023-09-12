@@ -143,6 +143,10 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
     }
 
     async fn exchange_header_request(&self, request: HeaderRequest) -> Result<Vec<ExtendedHeader>> {
+        if request.amount == 0 {
+            return Ok(Vec::new());
+        }
+
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::ExchangeHeaderRequest {
@@ -166,6 +170,31 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         .await
     }
 
+    async fn get_verified_header_range_by_height(
+        &self,
+        height: u64,
+        amount: u64,
+    ) -> Result<Vec<ExtendedHeader>> {
+        let headers = self.get_header_range_by_height(height, amount).await?;
+        let trusted = &headers[0];
+
+        trusted
+            .validate()
+            .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
+
+        for untrusted in headers.iter().skip(1) {
+            untrusted
+                .validate()
+                .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
+
+            trusted
+                .verify(untrusted)
+                .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
+        }
+
+        Ok(headers)
+    }
+
     async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         self.get_header_range_by_height(height, 1)
             .await?
@@ -174,24 +203,15 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
             .ok_or(P2pError::ExchangeHeaderNotFound)
     }
 
-    async fn get_header_range_by_hash(
-        &self,
-        hash: Hash,
-        amount: u64,
-    ) -> Result<Vec<ExtendedHeader>> {
+    async fn get_header_by_hash(&self, hash: Hash) -> Result<ExtendedHeader> {
         self.exchange_header_request(HeaderRequest {
             data: Some(header_request::Data::Hash(hash.as_bytes().to_vec())),
-            amount,
+            amount: 1,
         })
-        .await
-    }
-
-    async fn get_header_by_hash(&self, hash: Hash) -> Result<ExtendedHeader> {
-        self.get_header_range_by_hash(hash, 1)
-            .await?
-            .into_iter()
-            .next()
-            .ok_or(P2pError::ExchangeHeaderNotFound)
+        .await?
+        .into_iter()
+        .next()
+        .ok_or(P2pError::ExchangeHeaderNotFound)
     }
 }
 
@@ -318,7 +338,6 @@ impl Worker {
         Ok(())
     }
 
-    #[instrument(level = "trace", skip(self))]
     async fn on_cmd(&mut self, cmd: P2pCmd) -> Result<()> {
         match cmd {
             P2pCmd::NetworkInfo { respond_to } => {

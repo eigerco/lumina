@@ -73,3 +73,23 @@ async fn get_single_header() {
 
     assert_eq!(header, header_by_hash);
 }
+
+#[tokio::test]
+async fn get_multiple_headers() {
+    let node = new_connected_node().await;
+
+    let headers = node.p2p().get_header_range_by_height(1, 3).await.unwrap();
+    assert_eq!(headers.len(), 3);
+}
+
+#[tokio::test]
+async fn get_multiple_verified_headers() {
+    let node = new_connected_node().await;
+
+    let headers = node
+        .p2p()
+        .get_verified_header_range_by_height(1, 3)
+        .await
+        .unwrap();
+    assert_eq!(headers.len(), 3);
+}
