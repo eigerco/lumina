@@ -46,7 +46,7 @@ impl HeaderCodec {
     {
         let mut read = buf.len(); // buf might have data from previous iterations
 
-        if buf.len() < 512 {
+        if read < 512 {
             // resize to increase the chance of reading all the data in one go
             buf.resize(512, 0)
         }
@@ -63,8 +63,6 @@ impl HeaderCodec {
                 ));
             }
 
-            buf.resize(PROTOBUF_MAX_LENGTH_DELIMITER_LEN, 0);
-
             match io.read(&mut buf[read..]).await? {
                 0 => {
                     // check if we're between Messages, in which case it's ok to stop
@@ -79,10 +77,11 @@ impl HeaderCodec {
                 }
                 n => read += n,
             };
-
-            // truncate buffer to the data that was actually read
-            buf.resize(read, 0);
         };
+
+        // truncate buffer to the data that was actually read
+        buf.truncate(read);
+
         let length_delimiter_len = length_delimiter_len(data_len);
         let single_message_length = length_delimiter_len + data_len;
 
