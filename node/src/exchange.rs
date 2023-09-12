@@ -45,7 +45,7 @@ impl HeaderCodec {
         R: Message + Default,
     {
         let mut read = buf.len(); // buf might have data from previous iterations
-        let len = loop {
+        let data_len = loop {
             if let Ok(len) = prost::decode_length_delimiter(&buf[..read]) {
                 break len;
             }
@@ -74,22 +74,20 @@ impl HeaderCodec {
                 n => read += n,
             };
 
-            // truncate buffer if we have less than PROTOBUF_MAX_LENGTH_DELIMITER_LEN bytes
-            // available
+            // truncate buffer to the data that was actually read
             buf.resize(read, 0);
         };
-        let length_delimiter_len = length_delimiter_len(len);
-        let single_message_length = length_delimiter_len + len;
-        let prev_buf_len = buf.len();
+        let length_delimiter_len = length_delimiter_len(data_len);
+        let single_message_length = length_delimiter_len + data_len;
 
-        if len > max_len {
+        if data_len > max_len {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
-                ReadHeaderError::ResponseTooLarge(len),
+                ReadHeaderError::ResponseTooLarge(data_len),
             ));
         }
 
-        if prev_buf_len < single_message_length {
+        if read < single_message_length {
             // we need to read more
             buf.resize(single_message_length, 0);
             io.read_exact(&mut buf[read..single_message_length]).await?;
@@ -99,7 +97,7 @@ impl HeaderCodec {
 
         // we've read past one message when trying to get length delimiter, need to handle
         // partially read data in the buffer
-        if len < prev_buf_len {
+        if single_message_length < read {
             buf.drain(..single_message_length);
         } else {
             buf.clear();
@@ -234,7 +232,7 @@ mod tests {
     async fn test_decode_multiple_small_header_response() {
         const MSG_COUNT: usize = 10;
         let header_response = HeaderResponse {
-            body: vec![],
+            body: vec![1, 2, 3],
             status_code: 1,
         };
 
