@@ -124,12 +124,11 @@ impl Codec for HeaderCodec {
         T: AsyncRead + Unpin + Send,
     {
         let mut buf = Vec::with_capacity(512);
+
         HeaderCodec::read_raw_message(io, &mut buf, REQUEST_SIZE_MAXIMUM)
-            .await
-            .and_then(|maybe_msg| {
-                maybe_msg.ok_or_else(|| {
-                    io::Error::new(io::ErrorKind::UnexpectedEof, ReadHeaderError::StreamClosed)
-                })
+            .await?
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::UnexpectedEof, ReadHeaderError::StreamClosed)
             })
     }
 
@@ -183,7 +182,7 @@ impl Codec for HeaderCodec {
         for resp in resps {
             let data = resp.encode_length_delimited_to_vec();
 
-            io.write_all(data.as_ref()).await?;
+            io.write_all(&data).await?;
         }
 
         Ok(())
