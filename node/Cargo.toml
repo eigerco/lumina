@@ -33,3 +33,10 @@ wasm-bindgen-futures = "0.4.37"
 [dev-dependencies]
 celestia-rpc = { workspace = true }
 dotenvy = "0.15.7"
+libp2p = { version = "0.52.3", features = [
+  "ed25519",
+  "noise",
+  "tcp",
+  "tokio",
+  "yamux",
+] }

@@ -1,4 +1,4 @@
-use std::{env, time::Duration};
+use std::env;
 
 use celestia_node::{
     node::{Node, NodeConfig},
@@ -10,7 +10,6 @@ use libp2p::{
     identity::{self, Keypair},
     noise, tcp, yamux, Multiaddr, PeerId, Transport,
 };
-use tokio::time::sleep;
 
 const WS_URL: &str = "ws://localhost:26658";
 
@@ -39,8 +38,7 @@ async fn get_bridge_tcp_ma() -> Multiaddr {
         .expect("Bridge doesn't listen on tcp")
 }
 
-#[tokio::test]
-async fn connects_to_the_go_bridge_node() {
+async fn new_connected_node() -> Node {
     let bridge_ma = get_bridge_tcp_ma().await;
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
@@ -54,9 +52,24 @@ async fn connects_to_the_go_bridge_node() {
     .await
     .unwrap();
 
-    // wait for the node to connect to the bridge
-    sleep(Duration::from_millis(50)).await;
+    node.p2p().wait_connected().await.unwrap();
 
+    node
+}
+
+#[tokio::test]
+async fn connects_to_the_go_bridge_node() {
+    let node = new_connected_node().await;
     let info = node.p2p().network_info().await.unwrap();
     assert_eq!(info.num_peers(), 1);
+}
+
+#[tokio::test]
+async fn get_single_header() {
+    let node = new_connected_node().await;
+
+    let header = node.p2p().get_header_by_height(1).await.unwrap();
+    let header_by_hash = node.p2p().get_header_by_hash(header.hash()).await.unwrap();
+
+    assert_eq!(header, header_by_hash);
 }
