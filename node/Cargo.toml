@@ -31,5 +31,6 @@ getrandom = { version = "0.2.10", features = ["js"] }
 wasm-bindgen-futures = "0.4.37"
 
 [dev-dependencies]
+bytes = "1.4.0"
 celestia-rpc = { workspace = true }
 dotenvy = "0.15.7"
