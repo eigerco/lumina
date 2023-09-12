@@ -46,6 +46,7 @@ impl HeaderCodec {
     {
         let mut read = buf.len(); // buf might have data from previous iterations
 
+
         if buf.len() < 512 {
             // resize to increase the chance of reading all the data in one go
             buf.resize(512, 0)
