@@ -25,13 +25,14 @@ impl ExchangeClientHandler {
         }
     }
 
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "trace", skip(self, respond_to))]
     pub(crate) fn on_request_initiated(
         &mut self,
         request_id: RequestId,
         amount: u64,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
+        trace!("Request initiated");
         self.reqs.insert(request_id, ReqInfo { amount, respond_to });
     }
 
@@ -83,7 +84,7 @@ impl ExchangeClientHandler {
     }
 
     #[instrument(level = "trace", skip(self))]
-    pub(crate) fn on_failure(&mut self, request_id: RequestId, _error: OutboundFailure) {
+    pub(crate) fn on_failure(&mut self, request_id: RequestId, error: OutboundFailure) {
         if let Some(req_info) = self.reqs.remove(&request_id) {
             // TODO: should we actually report a connection error?
             req_info

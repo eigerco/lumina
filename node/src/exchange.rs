@@ -12,11 +12,9 @@ use libp2p::swarm::{
     ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, PollParameters, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use libp2p::StreamProtocol;
 use libp2p::{Multiaddr, PeerId, StreamProtocol};
-use prost::length_delimiter_len;
-use prost::Message;
-use prost::{length_delimiter_len, Message as _};
+use prost::{length_delimiter_len, Message};
+use tracing::instrument;
 
 use crate::exchange_client::ExchangeClientHandler;
 use crate::exchange_server::ExchangeServerHandler;
@@ -63,7 +61,7 @@ impl ExchangeBehaviour {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(self, respond_to))]
+    #[instrument(level = "trace", skip(self, respond_to))]
     pub(crate) fn send_request(
         &mut self,
         request: HeaderRequest,
@@ -100,6 +98,7 @@ impl ExchangeBehaviour {
         }
     }
 
+    #[instrument(level = "trace", skip_all)]
     fn on_req_resp_event(&mut self, ev: ReqRespEvent) {
         match ev {
             // Received a response for an ongoing outbound request

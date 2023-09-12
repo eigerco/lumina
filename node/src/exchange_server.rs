@@ -11,12 +11,12 @@ impl ExchangeServerHandler {
         ExchangeServerHandler {}
     }
 
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "trace", skip(self, _respond_to))]
     pub(crate) fn on_request_received(
         &mut self,
         request_id: RequestId,
         request: HeaderRequest,
-        respond_to: ResponseChannel<Vec<HeaderResponse>>,
+        _respond_to: ResponseChannel<Vec<HeaderResponse>>,
     ) {
         // TODO
     }
