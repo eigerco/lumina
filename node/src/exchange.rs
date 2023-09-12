@@ -64,6 +64,12 @@ impl HeaderCodec {
             if let Ok(len) = prost::decode_length_delimiter(&buf[..read]) {
                 break len;
             }
+            if read >= PROTOBUF_MAX_LENGTH_DELIMITER_LEN {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    ReadHeaderError::VarintOverflow,
+                ));
+            }
         };
 
         if len > max_len {
@@ -170,6 +176,8 @@ impl Codec for HeaderCodec {
 pub enum ReadHeaderError {
     #[error("stream closed while trying to get header length")]
     StreamClosed,
+    #[error("varint overflow")]
+    VarintOverflow,
     #[error("request too large: {0}")]
     ResponseTooLarge(usize),
 }
@@ -261,7 +269,6 @@ mod tests {
         let too_long_message_len = RESPONSE_SIZE_MAXIMUM + 1;
         let mut length_delimiter_buffer = bytes::BytesMut::new();
         encode_length_delimiter(too_long_message_len, &mut length_delimiter_buffer).unwrap();
-        dbg!(&length_delimiter_buffer);
         let mut reader = Cursor::new(length_delimiter_buffer);
 
         let stream_protocol = StreamProtocol::new("/foo/bar/v0.1");
@@ -271,7 +278,6 @@ mod tests {
             .read_response(&stream_protocol, &mut reader)
             .await
             .expect_err("expected error for too large request");
-        dbg!(&decoding_error);
 
         assert_eq!(decoding_error.kind(), ErrorKind::Other);
         let inner_err = decoding_error
@@ -283,6 +289,42 @@ mod tests {
             inner_err,
             &ReadHeaderError::ResponseTooLarge(too_long_message_len)
         );
+    }
+
+    #[tokio::test]
+    async fn test_invalid_varint() {
+        // 10 consecutive bytes with continuation bit set + 1 byte, which is longer than allowed
+        //    for length delimiter
+        let varint = [
+            0b1000_0000,
+            0b1000_0000,
+            0b1000_0000,
+            0b1000_0000,
+            0b1000_0000,
+            0b1000_0000,
+            0b1000_0000,
+            0b1000_0000,
+            0b1000_0000,
+            0b1000_0000,
+            0b0000_0001,
+        ];
+        let mut reader = Cursor::new(varint);
+
+        let mut buf = Vec::with_capacity(512);
+        buf.resize(super::PROTOBUF_MAX_LENGTH_DELIMITER_LEN, 0);
+
+        let decoding_error =
+            HeaderCodec::read_raw_message::<_, HeaderRequest>(&mut reader, &mut buf, 512)
+                .await
+                .expect_err("expected varint overflow");
+
+        assert_eq!(decoding_error.kind(), ErrorKind::InvalidData);
+        let inner_err = decoding_error
+            .get_ref()
+            .unwrap()
+            .downcast_ref::<ReadHeaderError>()
+            .unwrap();
+        assert_eq!(inner_err, &ReadHeaderError::VarintOverflow);
     }
 
     #[tokio::test]
