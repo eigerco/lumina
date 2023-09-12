@@ -45,6 +45,12 @@ impl HeaderCodec {
         R: Message + Default,
     {
         let mut read = buf.len(); // buf might have data from previous iterations
+
+        if buf.len() < 512 {
+            // resize to increase the chance of reading all the data in one go
+            buf.resize(512, 0)
+        }
+
         let data_len = loop {
             if let Ok(len) = prost::decode_length_delimiter(&buf[..read]) {
                 break len;
