@@ -1,5 +1,6 @@
 use anyhow::Result;
 
-fn main() -> Result<()> {
-    celestia::run()
+#[tokio::main]
+async fn main() -> Result<()> {
+    celestia::run().await
 }

@@ -18,7 +18,7 @@ use prost::Message as _;
 use crate::exchange_client::ExchangeClientHandler;
 use crate::exchange_server::ExchangeServerHandler;
 use crate::p2p::P2pError;
-use crate::peer_book::PeerBook;
+use crate::peer_tracker::PeerTracker;
 use crate::utils::{stream_protocol_id, OneshotResultSender, OneshotResultSenderExt};
 
 /// Max request size in bytes
@@ -32,14 +32,14 @@ type ReqRespMessage = request_response::Message<HeaderRequest, Vec<HeaderRespons
 
 pub(crate) struct ExchangeBehaviour {
     req_resp: ReqRespBehaviour,
-    peer_book: Arc<PeerBook>,
+    peer_tracker: Arc<PeerTracker>,
     client_handler: ExchangeClientHandler,
     server_handler: ExchangeServerHandler,
 }
 
 pub(crate) struct ExchangeConfig<'a> {
     pub network_id: &'a str,
-    pub peer_book: Arc<PeerBook>,
+    pub peer_tracker: Arc<PeerTracker>,
 }
 
 impl ExchangeBehaviour {
@@ -52,12 +52,13 @@ impl ExchangeBehaviour {
                 )],
                 request_response::Config::default(),
             ),
-            peer_book: config.peer_book,
+            peer_tracker: config.peer_tracker,
             client_handler: ExchangeClientHandler::new(),
             server_handler: ExchangeServerHandler::new(),
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(self, respond_to))]
     pub(crate) fn send_request(
         &mut self,
         request: HeaderRequest,
@@ -69,7 +70,7 @@ impl ExchangeBehaviour {
             return;
         }
 
-        let Some(peer) = self.peer_book.get_best() else {
+        let Some(peer) = self.peer_tracker.get_best() else {
             respond_to.maybe_send_err(P2pError::NoPeers);
             return;
         };

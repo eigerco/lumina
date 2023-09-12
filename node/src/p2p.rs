@@ -22,7 +22,7 @@ use tracing::{debug, instrument, warn};
 
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
 use crate::executor::{spawn, Executor};
-use crate::peer_book::PeerBook;
+use crate::peer_tracker::PeerTracker;
 use crate::utils::{gossipsub_ident_topic, OneshotResultSender, OneshotSenderExt};
 use crate::Service;
 
@@ -211,13 +211,13 @@ struct Worker {
     swarm: Swarm<Behaviour>,
     header_sub_topic_hash: TopicHash,
     cmd_rx: flume::Receiver<P2pCmd>,
-    peer_book: Arc<PeerBook>,
+    peer_tracker: Arc<PeerTracker>,
     wait_connected_tx: VecDeque<oneshot::Sender<()>>,
 }
 
 impl Worker {
     fn new(args: P2pArgs, cmd_rx: flume::Receiver<P2pCmd>) -> Result<Self, P2pError> {
-        let peer_book = Arc::new(PeerBook::new());
+        let peer_tracker = Arc::new(PeerTracker::new());
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
         let identify = identify::Behaviour::new(identify::Config::new(
@@ -242,7 +242,7 @@ impl Worker {
 
         let header_ex = ExchangeBehaviour::new(ExchangeConfig {
             network_id: &args.network_id,
-            peer_book: peer_book.clone(),
+            peer_tracker: peer_tracker.clone(),
         });
 
         let behaviour = Behaviour {
@@ -267,7 +267,7 @@ impl Worker {
             cmd_rx,
             swarm,
             header_sub_topic_hash: header_sub_topic.hash(),
-            peer_book,
+            peer_tracker,
             wait_connected_tx: VecDeque::new(),
         })
     }
@@ -303,14 +303,14 @@ impl Worker {
                 BehaviourEvent::HeaderEx(_) | BehaviourEvent::KeepAlive(_) => {}
             },
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                self.peer_book.add(peer_id);
+                self.peer_tracker.add(peer_id);
 
                 for tx in self.wait_connected_tx.drain(..) {
                     tx.maybe_send(());
                 }
             }
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                self.peer_book.remove(peer_id);
+                self.peer_tracker.remove(peer_id);
             }
             _ => {}
         }
@@ -334,7 +334,7 @@ impl Worker {
                     .send_request(request, respond_to);
             }
             P2pCmd::WaitConnected { respond_to } => {
-                if self.peer_book.is_empty() {
+                if self.peer_tracker.is_empty() {
                     self.wait_connected_tx.push_back(respond_to);
                 } else {
                     respond_to.maybe_send(());

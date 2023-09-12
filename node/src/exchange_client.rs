@@ -25,6 +25,7 @@ impl ExchangeClientHandler {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub(crate) fn on_request_initiated(
         &mut self,
         request_id: RequestId,
@@ -81,6 +82,7 @@ impl ExchangeClientHandler {
         respond_to.maybe_send_ok(headers);
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub(crate) fn on_failure(&mut self, request_id: RequestId, _error: OutboundFailure) {
         if let Some(req_info) = self.reqs.remove(&request_id) {
             // TODO: should we actually report a connection error?

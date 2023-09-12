@@ -2,7 +2,7 @@ use libp2p::PeerId;
 use std::collections::HashSet;
 use std::sync::RwLock;
 
-pub struct PeerBook {
+pub struct PeerTracker {
     inner: RwLock<Inner>,
 }
 
@@ -10,9 +10,9 @@ struct Inner {
     peers: HashSet<PeerId>,
 }
 
-impl PeerBook {
+impl PeerTracker {
     pub fn new() -> Self {
-        PeerBook {
+        PeerTracker {
             inner: RwLock::new(Inner {
                 peers: HashSet::new(),
             }),
@@ -45,8 +45,8 @@ impl PeerBook {
     }
 }
 
-impl Default for PeerBook {
+impl Default for PeerTracker {
     fn default() -> Self {
-        PeerBook::new()
+        PeerTracker::new()
     }
 }

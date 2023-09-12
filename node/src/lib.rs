@@ -6,7 +6,7 @@ mod exchange_server;
 mod executor;
 pub mod node;
 pub mod p2p;
-pub mod peer_book;
+pub mod peer_tracker;
 pub mod store;
 pub mod syncer;
 mod utils;

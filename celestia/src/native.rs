@@ -9,7 +9,6 @@ use tracing::info;
 
 const WS_URL: &str = "ws://localhost:26658";
 
-#[tokio::main]
 pub async fn run() -> Result<()> {
     let _ = dotenvy::dotenv();
     let _guard = init_tracing();
