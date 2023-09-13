@@ -8,8 +8,9 @@ ENV CELESTIA_HOME=/root
 RUN apk update && apk add --no-cache bash jq
 
 # Copy in the binary
-COPY --from=ghcr.io/celestiaorg/celestia-node:4b96022 /bin/celestia /bin/celestia
-COPY --from=ghcr.io/celestiaorg/celestia-node:4b96022 /bin/cel-key /bin/cel-key
+# v0.11.0-rc13
+COPY --from=ghcr.io/celestiaorg/celestia-node:8ca777e /bin/celestia /bin/celestia
+COPY --from=ghcr.io/celestiaorg/celestia-node:8ca777e /bin/cel-key /bin/cel-key
 
 COPY ./run-bridge.sh /opt/entrypoint.sh
 

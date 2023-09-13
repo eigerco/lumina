@@ -9,6 +9,15 @@ use crate::consts::appconsts;
 use crate::nmt::Namespace;
 use crate::{bail_validation, Error, Result};
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct SubmitOptions {
+    // TODO: giving negative fees always results in insufficient fee err, but celestia
+    //       have it like so, should we do a u64 there?
+    pub fee: i64,
+    pub gas_limit: u64,
+}
+
 // NOTE: We don't use the `serde(try_from)` pattern for this type
 // becase JSON representation needs to have `commitment` field but
 // Protobuf definition doesn't.
