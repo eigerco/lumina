@@ -60,6 +60,7 @@ async fn new_connected_node() -> Node {
 #[tokio::test]
 async fn connects_to_the_go_bridge_node() {
     let node = new_connected_node().await;
+
     let info = node.p2p().network_info().await.unwrap();
     assert_eq!(info.num_peers(), 1);
 }
@@ -69,27 +70,42 @@ async fn get_single_header() {
     let node = new_connected_node().await;
 
     let header = node.p2p().get_header_by_height(1).await.unwrap();
-    let header_by_hash = node.p2p().get_header_by_hash(header.hash()).await.unwrap();
+    let header_by_hash = node.p2p().get_header(header.hash()).await.unwrap();
 
     assert_eq!(header, header_by_hash);
 }
 
 #[tokio::test]
-async fn get_multiple_headers() {
+async fn get_verified_headers() {
     let node = new_connected_node().await;
 
-    let headers = node.p2p().get_header_range_by_height(1, 3).await.unwrap();
-    assert_eq!(headers.len(), 3);
+    let from = node.p2p().get_header_by_height(1).await.unwrap();
+    let verified_headers = node
+        .p2p()
+        .get_verified_header_range(&from, 2)
+        .await
+        .unwrap();
+    assert_eq!(verified_headers.len(), 2);
+
+    let height2 = node.p2p().get_header_by_height(2).await.unwrap();
+    assert_eq!(verified_headers[0], height2);
+
+    let height3 = node.p2p().get_header_by_height(3).await.unwrap();
+    assert_eq!(verified_headers[1], height3);
 }
 
 #[tokio::test]
-async fn get_multiple_verified_headers() {
+async fn get_head() {
     let node = new_connected_node().await;
 
-    let headers = node
-        .p2p()
-        .get_verified_header_range_by_height(1, 3)
-        .await
-        .unwrap();
-    assert_eq!(headers.len(), 3);
+    let genesis = node.p2p().get_header_by_height(1).await.unwrap();
+    let head = node.p2p().get_head_header().await.unwrap();
+
+    genesis.verify(&head).unwrap();
+}
+
+#[tokio::test]
+async fn invalid_height() {
+    let node = new_connected_node().await;
+    node.p2p().get_header_by_height(0).await.unwrap_err();
 }

@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::io;
+use std::mem;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -56,6 +57,9 @@ pub enum P2pError {
 
     #[error("Invalid exchange header")]
     ExchangeHeaderInvalid,
+
+    #[error("Invalid height")]
+    InvalidHeight,
 }
 
 impl From<oneshot::error::RecvError> for P2pError {
@@ -158,52 +162,22 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         rx.await?
     }
 
-    async fn get_header_range_by_height(
-        &self,
-        height: u64,
-        amount: u64,
-    ) -> Result<Vec<ExtendedHeader>> {
+    async fn get_head_header(&self) -> Result<ExtendedHeader> {
+        // TODO: This must be send in parallel to multiple peers,
+        // compare their responses, and return the highest one.
+        //
+        // https://github.com/celestiaorg/go-header/blob/e50090545cc7e049d2f965d2b5c773eaa4a2c0b2/p2p/exchange.go#L357C2-L357C2
         self.exchange_header_request(HeaderRequest {
-            data: Some(header_request::Data::Origin(height)),
-            amount,
+            data: Some(header_request::Data::Origin(0)),
+            amount: 1,
         })
-        .await
+        .await?
+        .into_iter()
+        .next()
+        .ok_or(P2pError::ExchangeHeaderNotFound)
     }
 
-    async fn get_verified_header_range_by_height(
-        &self,
-        height: u64,
-        amount: u64,
-    ) -> Result<Vec<ExtendedHeader>> {
-        let headers = self.get_header_range_by_height(height, amount).await?;
-        let trusted = &headers[0];
-
-        trusted
-            .validate()
-            .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
-
-        for untrusted in headers.iter().skip(1) {
-            untrusted
-                .validate()
-                .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
-
-            trusted
-                .verify(untrusted)
-                .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
-        }
-
-        Ok(headers)
-    }
-
-    async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
-        self.get_header_range_by_height(height, 1)
-            .await?
-            .into_iter()
-            .next()
-            .ok_or(P2pError::ExchangeHeaderNotFound)
-    }
-
-    async fn get_header_by_hash(&self, hash: Hash) -> Result<ExtendedHeader> {
+    async fn get_header(&self, hash: Hash) -> Result<ExtendedHeader> {
         self.exchange_header_request(HeaderRequest {
             data: Some(header_request::Data::Hash(hash.as_bytes().to_vec())),
             amount: 1,
@@ -212,6 +186,48 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         .into_iter()
         .next()
         .ok_or(P2pError::ExchangeHeaderNotFound)
+    }
+
+    async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
+        if height == 0 {
+            return Err(P2pError::InvalidHeight);
+        }
+
+        self.exchange_header_request(HeaderRequest {
+            data: Some(header_request::Data::Origin(height)),
+            amount: 1,
+        })
+        .await?
+        .into_iter()
+        .next()
+        .ok_or(P2pError::ExchangeHeaderNotFound)
+    }
+
+    async fn get_verified_header_range(
+        &self,
+        from: &ExtendedHeader,
+        amount: u64,
+    ) -> Result<Vec<ExtendedHeader>> {
+        from.validate()
+            .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
+
+        let headers = self
+            .exchange_header_request(HeaderRequest {
+                data: Some(header_request::Data::Origin(from.height().value() + 1)),
+                amount,
+            })
+            .await?;
+
+        for untrusted in headers.iter() {
+            untrusted
+                .validate()
+                .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
+
+            from.verify(untrusted)
+                .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
+        }
+
+        Ok(headers)
     }
 }
 
@@ -325,7 +341,9 @@ impl Worker {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                 self.peer_tracker.add(peer_id);
 
-                for tx in self.wait_connected_tx.drain(..) {
+                // This vector is not going to be used later on so deallocate
+                // its internal memory by consuming it with mem::take.
+                for tx in mem::take(&mut self.wait_connected_tx) {
                     tx.maybe_send(());
                 }
             }
