@@ -7,7 +7,7 @@ use libp2p::request_response::{OutboundFailure, RequestId};
 use tendermint_proto::Protobuf;
 use tracing::{instrument, trace};
 
-use crate::exchange::utils::is_header_request_valid;
+use crate::exchange::utils::HeaderRequestExt;
 use crate::exchange::ReqRespBehaviour;
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
@@ -38,10 +38,12 @@ impl ExchangeClientHandler {
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
-        if !is_header_request_valid(&request) {
+        if !request.is_valid() {
             respond_to.maybe_send_err(P2pError::ExchangeHeaderInvalidRequest);
             return;
         }
+
+        // TODO: if case of head request, ask multiple peers and return best answer
 
         // Convert amount to usize
         let Ok(amount) = usize::try_from(request.amount) else {
