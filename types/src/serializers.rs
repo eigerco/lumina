@@ -47,10 +47,10 @@ pub(crate) mod none_as_negative_one {
 
             #[test]
             fn serialize_deserialize(x: Option<u64>) {
-                let serialized = serde_json::to_string(&x).unwrap();
-                let deserialized = serde_json::from_str(&serialized).unwrap();
+                let serialized = serde_json::to_string(&OptionU64(x)).unwrap();
+                let deserialized: OptionU64 = serde_json::from_str(&serialized).unwrap();
 
-                assert_eq!(x, deserialized);
+                assert_eq!(x, deserialized.0);
             }
         }
     }
