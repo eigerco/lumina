@@ -1,4 +1,4 @@
-pub const HASH_SIZE: usize = 32;
+pub const HASH_SIZE: usize = tendermint::hash::SHA256_HASH_SIZE;
 
 // celestia-core/types/genesis
 pub mod genesis {
