@@ -12,8 +12,6 @@ use crate::{bail_validation, Error, Result};
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct SubmitOptions {
-    // TODO: giving negative fees always results in insufficient fee err, but celestia
-    //       have it like so, should we do a u64 there?
     pub fee: i64,
     pub gas_limit: u64,
 }
