@@ -8,7 +8,7 @@ use tendermint_proto::Protobuf;
 use tracing::{instrument, trace};
 
 use crate::exchange::utils::HeaderRequestExt;
-use crate::exchange::ReqRespBehaviour;
+use crate::exchange::{ExchangeError, ReqRespBehaviour};
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
 use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
@@ -39,7 +39,7 @@ impl ExchangeClientHandler {
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
         if !request.is_valid() {
-            respond_to.maybe_send_err(P2pError::ExchangeHeaderInvalidRequest);
+            respond_to.maybe_send_err(ExchangeError::InvalidRequest);
             return;
         }
 
@@ -47,20 +47,19 @@ impl ExchangeClientHandler {
 
         // Convert amount to usize
         let Ok(amount) = usize::try_from(request.amount) else {
-            respond_to.maybe_send_err(P2pError::ExchangeHeaderInvalidRequest);
+            respond_to.maybe_send_err(ExchangeError::InvalidRequest);
             return;
         };
 
-        let Some(peer) = self.peer_tracker.get_best() else {
+        let Some(peer) = self.peer_tracker.best_peer() else {
             respond_to.maybe_send_err(P2pError::NoPeers);
             return;
         };
 
-        let request_id = req_resp.send_request(&peer, request);
+        let req_id = req_resp.send_request(&peer, request);
+        self.reqs.insert(req_id, ReqInfo { amount, respond_to });
 
         trace!("Request initiated");
-
-        self.reqs.insert(request_id, ReqInfo { amount, respond_to });
     }
 
     #[instrument(level = "trace", skip(self, responses), fields(responses.len = responses.len()))]
@@ -77,7 +76,7 @@ impl ExchangeClientHandler {
 
         if responses.len() != amount {
             // TODO: should we define a separate error for this case?
-            respond_to.maybe_send_err(P2pError::ExchangeHeaderInvalidResponse);
+            respond_to.maybe_send_err(ExchangeError::InvalidResponse);
             return;
         }
 
@@ -85,10 +84,10 @@ impl ExchangeClientHandler {
 
         for response in responses {
             let res = match response.status_code() {
-                StatusCode::Invalid => Err(P2pError::ExchangeHeaderInvalidResponse),
-                StatusCode::NotFound => Err(P2pError::ExchangeHeaderNotFound),
+                StatusCode::Invalid => Err(ExchangeError::InvalidResponse),
+                StatusCode::NotFound => Err(ExchangeError::HeaderNotFound),
                 StatusCode::Ok => ExtendedHeader::decode(&response.body[..])
-                    .map_err(|_| P2pError::ExchangeHeaderInvalidResponse),
+                    .map_err(|_| ExchangeError::InvalidResponse),
             };
 
             match res {
@@ -111,10 +110,9 @@ impl ExchangeClientHandler {
         trace!("Outbound failure");
 
         if let Some(req_info) = self.reqs.remove(&request_id) {
-            // TODO: should we actually report a connection error?
             req_info
                 .respond_to
-                .maybe_send_err(P2pError::ExchangeHeaderInvalidResponse);
+                .maybe_send_err(ExchangeError::OutboundFailure(error));
         }
     }
 }

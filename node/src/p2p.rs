@@ -25,6 +25,8 @@ use crate::peer_tracker::PeerTracker;
 use crate::utils::{gossipsub_ident_topic, OneshotResultSender, OneshotSenderExt};
 use crate::Service;
 
+pub use crate::exchange::ExchangeError;
+
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
@@ -50,14 +52,8 @@ pub enum P2pError {
     #[error("Not connected to any peers")]
     NoPeers,
 
-    #[error("Exchange header: Not found")]
-    ExchangeHeaderNotFound,
-
-    #[error("Exchange header: Invalid response")]
-    ExchangeHeaderInvalidResponse,
-
-    #[error("Exchange header: Invalid request")]
-    ExchangeHeaderInvalidRequest,
+    #[error("Exchange: Not found")]
+    Exchange(#[from] ExchangeError),
 }
 
 impl From<oneshot::error::RecvError> for P2pError {
@@ -168,7 +164,7 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         .await?
         .into_iter()
         .next()
-        .ok_or(P2pError::ExchangeHeaderNotFound)
+        .ok_or(ExchangeError::HeaderNotFound.into())
     }
 
     async fn get_header(&self, hash: Hash) -> Result<ExtendedHeader> {
@@ -179,7 +175,7 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         .await?
         .into_iter()
         .next()
-        .ok_or(P2pError::ExchangeHeaderNotFound)
+        .ok_or(ExchangeError::HeaderNotFound.into())
     }
 
     async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
@@ -190,7 +186,7 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         .await?
         .into_iter()
         .next()
-        .ok_or(P2pError::ExchangeHeaderNotFound)
+        .ok_or(ExchangeError::HeaderNotFound.into())
     }
 
     async fn get_verified_headers_range(
@@ -198,8 +194,7 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         from: &ExtendedHeader,
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
-        from.validate()
-            .map_err(|_| P2pError::ExchangeHeaderInvalidRequest)?;
+        from.validate().map_err(|_| ExchangeError::InvalidRequest)?;
 
         let headers = self
             .exchange_header_request(HeaderRequest {
@@ -211,10 +206,10 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         for untrusted in headers.iter() {
             untrusted
                 .validate()
-                .map_err(|_| P2pError::ExchangeHeaderInvalidResponse)?;
+                .map_err(|_| ExchangeError::InvalidResponse)?;
 
             from.verify(untrusted)
-                .map_err(|_| P2pError::ExchangeHeaderInvalidResponse)?;
+                .map_err(|_| ExchangeError::InvalidResponse)?;
         }
 
         Ok(headers)

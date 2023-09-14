@@ -40,7 +40,7 @@ where
     E: Send + 'static,
 {
     fn maybe_send_ok(self, val: T);
-    fn maybe_send_err(self, err: E);
+    fn maybe_send_err(self, err: impl Into<E>);
 }
 
 impl<T, E> OneshotResultSenderExt<T, E> for oneshot::Sender<Result<T, E>>
@@ -52,7 +52,7 @@ where
         let _ = self.send(Ok(val));
     }
 
-    fn maybe_send_err(self, err: E) {
-        let _ = self.send(Err(err));
+    fn maybe_send_err(self, err: impl Into<E>) {
+        let _ = self.send(Err(err.into()));
     }
 }

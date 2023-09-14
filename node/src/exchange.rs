@@ -6,13 +6,15 @@ use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use libp2p::core::Endpoint;
-use libp2p::request_response::{self, Codec, ProtocolSupport};
-use libp2p::swarm::{
-    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, PollParameters, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+use libp2p::{
+    core::Endpoint,
+    request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport},
+    swarm::{
+        ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, PollParameters,
+        THandlerInEvent, THandlerOutEvent, ToSwarm,
+    },
+    Multiaddr, PeerId, StreamProtocol,
 };
-use libp2p::{Multiaddr, PeerId, StreamProtocol};
 use prost::{length_delimiter_len, Message};
 use tracing::instrument;
 
@@ -46,6 +48,24 @@ pub(crate) struct ExchangeBehaviour {
 pub(crate) struct ExchangeConfig<'a> {
     pub network_id: &'a str,
     pub peer_tracker: Arc<PeerTracker>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ExchangeError {
+    #[error("Header not found")]
+    HeaderNotFound,
+
+    #[error("Invalid response")]
+    InvalidResponse,
+
+    #[error("Invalid request")]
+    InvalidRequest,
+
+    #[error("Inbound failure: {0}")]
+    InboundFailure(InboundFailure),
+
+    #[error("Outbound failure: {0}")]
+    OutboundFailure(OutboundFailure),
 }
 
 impl ExchangeBehaviour {

@@ -38,7 +38,7 @@ impl PeerTracker {
         self.len() == 0
     }
 
-    pub fn get_best(&self) -> Option<PeerId> {
+    pub fn best_peer(&self) -> Option<PeerId> {
         // TODO: Implement peer score and return the best.
         let inner = self.inner.read().unwrap();
         inner.peers.iter().next().copied()
