@@ -82,7 +82,7 @@ async fn get_verified_headers() {
     let from = node.p2p().get_header_by_height(1).await.unwrap();
     let verified_headers = node
         .p2p()
-        .get_verified_header_range(&from, 2)
+        .get_verified_headers_range(&from, 2)
         .await
         .unwrap();
     assert_eq!(verified_headers.len(), 2);
@@ -102,10 +102,4 @@ async fn get_head() {
     let head = node.p2p().get_head_header().await.unwrap();
 
     genesis.verify(&head).unwrap();
-}
-
-#[tokio::test]
-async fn invalid_height() {
-    let node = new_connected_node().await;
-    node.p2p().get_header_by_height(0).await.unwrap_err();
 }

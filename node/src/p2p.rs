@@ -1,6 +1,4 @@
-use std::collections::VecDeque;
 use std::io;
-use std::mem;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -52,14 +50,14 @@ pub enum P2pError {
     #[error("Not connected to any peers")]
     NoPeers,
 
-    #[error("Exchange header not found")]
+    #[error("Exchange header: Not found")]
     ExchangeHeaderNotFound,
 
-    #[error("Invalid exchange header")]
-    ExchangeHeaderInvalid,
+    #[error("Exchange header: Invalid response")]
+    ExchangeHeaderInvalidResponse,
 
-    #[error("Invalid height")]
-    InvalidHeight,
+    #[error("Exchange header: Invalid request")]
+    ExchangeHeaderInvalidRequest,
 }
 
 impl From<oneshot::error::RecvError> for P2pError {
@@ -147,10 +145,6 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
     }
 
     async fn exchange_header_request(&self, request: HeaderRequest) -> Result<Vec<ExtendedHeader>> {
-        if request.amount == 0 {
-            return Ok(Vec::new());
-        }
-
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::ExchangeHeaderRequest {
@@ -189,10 +183,6 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
     }
 
     async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
-        if height == 0 {
-            return Err(P2pError::InvalidHeight);
-        }
-
         self.exchange_header_request(HeaderRequest {
             data: Some(header_request::Data::Origin(height)),
             amount: 1,
@@ -203,13 +193,13 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         .ok_or(P2pError::ExchangeHeaderNotFound)
     }
 
-    async fn get_verified_header_range(
+    async fn get_verified_headers_range(
         &self,
         from: &ExtendedHeader,
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
         from.validate()
-            .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
+            .map_err(|_| P2pError::ExchangeHeaderInvalidRequest)?;
 
         let headers = self
             .exchange_header_request(HeaderRequest {
@@ -221,10 +211,10 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         for untrusted in headers.iter() {
             untrusted
                 .validate()
-                .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
+                .map_err(|_| P2pError::ExchangeHeaderInvalidResponse)?;
 
             from.verify(untrusted)
-                .map_err(|_| P2pError::ExchangeHeaderInvalid)?;
+                .map_err(|_| P2pError::ExchangeHeaderInvalidResponse)?;
         }
 
         Ok(headers)
@@ -248,7 +238,7 @@ struct Worker {
     header_sub_topic_hash: TopicHash,
     cmd_rx: flume::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
-    wait_connected_tx: VecDeque<oneshot::Sender<()>>,
+    wait_connected_tx: Option<Vec<oneshot::Sender<()>>>,
 }
 
 impl Worker {
@@ -304,7 +294,7 @@ impl Worker {
             swarm,
             header_sub_topic_hash: header_sub_topic.hash(),
             peer_tracker,
-            wait_connected_tx: VecDeque::new(),
+            wait_connected_tx: None,
         })
     }
 
@@ -341,9 +331,7 @@ impl Worker {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                 self.peer_tracker.add(peer_id);
 
-                // This vector is not going to be used later on so deallocate
-                // its internal memory by consuming it with mem::take.
-                for tx in mem::take(&mut self.wait_connected_tx) {
+                for tx in self.wait_connected_tx.take().into_iter().flatten() {
                     tx.maybe_send(());
                 }
             }
@@ -371,11 +359,7 @@ impl Worker {
                     .send_request(request, respond_to);
             }
             P2pCmd::WaitConnected { respond_to } => {
-                if self.peer_tracker.is_empty() {
-                    self.wait_connected_tx.push_back(respond_to);
-                } else {
-                    respond_to.maybe_send(());
-                }
+                self.on_wait_connected(respond_to);
             }
         }
 
@@ -407,5 +391,15 @@ impl Worker {
         }
 
         Ok(())
+    }
+
+    fn on_wait_connected(&mut self, respond_to: oneshot::Sender<()>) {
+        if self.peer_tracker.is_empty() {
+            self.wait_connected_tx
+                .get_or_insert_with(Vec::new)
+                .push(respond_to);
+        } else {
+            respond_to.maybe_send(());
+        }
     }
 }

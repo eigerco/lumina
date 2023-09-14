@@ -1,3 +1,5 @@
+pub const HASH_SIZE: usize = 32;
+
 // celestia-core/types/genesis
 pub mod genesis {
     pub const MAX_CHAIN_ID_LEN: usize = 50;

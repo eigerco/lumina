@@ -16,11 +16,15 @@ use libp2p::{Multiaddr, PeerId, StreamProtocol};
 use prost::{length_delimiter_len, Message};
 use tracing::instrument;
 
-use crate::exchange_client::ExchangeClientHandler;
-use crate::exchange_server::ExchangeServerHandler;
+mod client;
+mod server;
+mod utils;
+
+use crate::exchange::client::ExchangeClientHandler;
+use crate::exchange::server::ExchangeServerHandler;
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
-use crate::utils::{stream_protocol_id, OneshotResultSender, OneshotResultSenderExt};
+use crate::utils::{stream_protocol_id, OneshotResultSender};
 
 /// Max request size in bytes
 const REQUEST_SIZE_MAXIMUM: usize = 1024;
@@ -35,7 +39,6 @@ type ReqRespMessage = request_response::Message<HeaderRequest, Vec<HeaderRespons
 
 pub(crate) struct ExchangeBehaviour {
     req_resp: ReqRespBehaviour,
-    peer_tracker: Arc<PeerTracker>,
     client_handler: ExchangeClientHandler,
     server_handler: ExchangeServerHandler,
 }
@@ -55,8 +58,7 @@ impl ExchangeBehaviour {
                 )],
                 request_response::Config::default(),
             ),
-            peer_tracker: config.peer_tracker,
-            client_handler: ExchangeClientHandler::new(),
+            client_handler: ExchangeClientHandler::new(config.peer_tracker),
             server_handler: ExchangeServerHandler::new(),
         }
     }
@@ -67,22 +69,8 @@ impl ExchangeBehaviour {
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
-        if request.amount == 0 {
-            // TODO: is this what celestia-node is doing?
-            respond_to.maybe_send_ok(Vec::new());
-            return;
-        }
-
-        let Some(peer) = self.peer_tracker.get_best() else {
-            respond_to.maybe_send_err(P2pError::NoPeers);
-            return;
-        };
-
-        let amount = request.amount;
-        let req_id = self.req_resp.send_request(&peer, request);
-
         self.client_handler
-            .on_request_initiated(req_id, amount, respond_to);
+            .on_send_request(&mut self.req_resp, request, respond_to);
     }
 
     fn on_to_swarm(
