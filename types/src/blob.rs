@@ -7,13 +7,15 @@ mod commitment;
 pub use self::commitment::Commitment;
 use crate::consts::appconsts;
 use crate::nmt::Namespace;
+use crate::serializers::none_as_negative_one;
 use crate::{bail_validation, Error, Result};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct SubmitOptions {
-    pub fee: i64,
-    pub gas_limit: u64,
+    #[serde(with = "none_as_negative_one")]
+    pub fee: Option<u64>,
+    pub gas_limit: Option<u64>,
 }
 
 // NOTE: We don't use the `serde(try_from)` pattern for this type
