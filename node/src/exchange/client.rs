@@ -73,12 +73,6 @@ impl ExchangeClientHandler {
 
         trace!("Response received. Expected amount = {amount}");
 
-        // Convert amount to usize
-        let Ok(amount) = amount.try_into() else {
-            respond_to.maybe_send_err(P2pError::ExchangeHeaderInvalidResponse);
-            return;
-        };
-
         if responses.len() != amount {
             // TODO: should we define a separate error for this case?
             respond_to.maybe_send_err(P2pError::ExchangeHeaderInvalidResponse);
