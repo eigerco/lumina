@@ -99,7 +99,10 @@ async fn get_head() {
     let node = new_connected_node().await;
 
     let genesis = node.p2p().get_header_by_height(1).await.unwrap();
-    let head = node.p2p().get_head_header().await.unwrap();
 
-    genesis.verify(&head).unwrap();
+    let head1 = node.p2p().get_head_header().await.unwrap();
+    genesis.verify(&head1).unwrap();
+
+    let head2 = node.p2p().get_header_by_height(0).await.unwrap();
+    assert!(head1 == head2 || head1.verify(&head2).is_ok());
 }
