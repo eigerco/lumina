@@ -72,10 +72,5 @@ where
     C: ClientT + Sync,
 {
     let _guard = write_lock().await;
-    // TODO: do we need to test providing correct options for submitting?
-    let opts = SubmitOptions {
-        fee: 10000000,
-        gas_limit: 10000000,
-    };
-    client.blob_submit(blobs, opts).await
+    client.blob_submit(blobs, SubmitOptions::default()).await
 }
