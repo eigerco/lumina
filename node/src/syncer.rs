@@ -33,6 +33,7 @@ impl<P2pSrv: P2pService> Service for Syncer<P2pSrv> {
     type Error = SyncerError;
 
     async fn start(args: SyncerArgs<P2pSrv>) -> Result<Self, SyncerError> {
+        // TODO
         Ok(Self {
             p2p: args.p2p,
             store: args.store,
@@ -40,10 +41,12 @@ impl<P2pSrv: P2pService> Service for Syncer<P2pSrv> {
     }
 
     async fn stop(&self) -> Result<()> {
-        todo!()
+        // TODO
+        Ok(())
     }
 
     async fn send_command(&self, _cmd: SyncerCmd) -> Result<()> {
+        // TODO
         Ok(())
     }
 }

@@ -2,13 +2,13 @@ use std::env;
 
 use anyhow::{Context, Result};
 use celestia_node::node::{Node, NodeConfig};
+use celestia_node::p2p::P2pService;
 use celestia_rpc::prelude::*;
 use libp2p::{core::upgrade::Version, identity, noise, tcp, yamux, Multiaddr, Transport};
 use tracing::info;
 
 const WS_URL: &str = "ws://localhost:26658";
 
-#[tokio::main]
 pub async fn run() -> Result<()> {
     let _ = dotenvy::dotenv();
     let _guard = init_tracing();
@@ -22,7 +22,7 @@ pub async fn run() -> Result<()> {
         .multiplex(yamux::Config::default())
         .boxed();
 
-    let _node = Node::new(NodeConfig {
+    let node = Node::new(NodeConfig {
         network_id: "private".to_string(),
         p2p_transport,
         p2p_local_keypair,
@@ -31,6 +31,11 @@ pub async fn run() -> Result<()> {
     })
     .await
     .unwrap();
+
+    node.p2p().wait_connected().await?;
+
+    let header = node.p2p().get_header_by_height(1).await?;
+    info!("{header:?}");
 
     Ok(())
 }
