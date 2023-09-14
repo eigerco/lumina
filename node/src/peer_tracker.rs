@@ -1,47 +1,52 @@
+use dashmap::DashSet;
 use libp2p::PeerId;
-use std::collections::HashSet;
-use std::sync::RwLock;
 
 pub struct PeerTracker {
-    inner: RwLock<Inner>,
-}
-
-struct Inner {
-    peers: HashSet<PeerId>,
+    peers: DashSet<PeerId>,
 }
 
 impl PeerTracker {
     pub fn new() -> Self {
         PeerTracker {
-            inner: RwLock::new(Inner {
-                peers: HashSet::new(),
-            }),
+            peers: DashSet::new(),
         }
     }
 
     pub fn add(&self, peer: PeerId) {
-        let mut inner = self.inner.write().unwrap();
-        inner.peers.insert(peer);
+        self.peers.insert(peer);
     }
 
     pub fn remove(&self, peer: PeerId) {
-        let mut inner = self.inner.write().unwrap();
-        inner.peers.remove(&peer);
+        self.peers.remove(&peer);
     }
 
     pub fn len(&self) -> usize {
-        let inner = self.inner.read().unwrap();
-        inner.peers.len()
+        self.peers.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.peers.is_empty()
     }
 
     pub fn best_peer(&self) -> Option<PeerId> {
         // TODO: Implement peer score and return the best.
-        let inner = self.inner.read().unwrap();
-        inner.peers.iter().next().copied()
+        self.peers.iter().next().map(|v| v.key().to_owned())
+    }
+
+    pub fn best_n_peers(&self, limit: usize) -> Option<Vec<PeerId>> {
+        // TODO: Implement peer score and return the best N peers.
+        let peers = self
+            .peers
+            .iter()
+            .take(limit)
+            .map(|v| v.key().to_owned())
+            .collect::<Vec<_>>();
+
+        if peers.is_empty() {
+            None
+        } else {
+            Some(peers)
+        }
     }
 }
 

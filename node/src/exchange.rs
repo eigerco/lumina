@@ -116,17 +116,19 @@ impl ExchangeBehaviour {
                         request_id,
                         response,
                     },
-                ..
+                peer,
             } => {
                 self.client_handler
-                    .on_response_received(request_id, response);
+                    .on_response_received(peer, request_id, response);
             }
 
             // Failure while client requests
             ReqRespEvent::OutboundFailure {
-                request_id, error, ..
+                peer,
+                request_id,
+                error,
             } => {
-                self.client_handler.on_failure(request_id, error);
+                self.client_handler.on_failure(peer, request_id, error);
             }
 
             // Received new inbound request
@@ -137,22 +139,24 @@ impl ExchangeBehaviour {
                         request,
                         channel,
                     },
-                ..
+                peer,
             } => {
                 self.server_handler
-                    .on_request_received(request_id, request, channel);
+                    .on_request_received(peer, request_id, request, channel);
             }
 
             // Response to inbound request was sent
-            ReqRespEvent::ResponseSent { request_id, .. } => {
-                self.server_handler.on_response_sent(request_id);
+            ReqRespEvent::ResponseSent { peer, request_id } => {
+                self.server_handler.on_response_sent(peer, request_id);
             }
 
             // Failure while server responds
             ReqRespEvent::InboundFailure {
-                request_id, error, ..
+                peer,
+                request_id,
+                error,
             } => {
-                self.server_handler.on_failure(request_id, error);
+                self.server_handler.on_failure(peer, request_id, error);
             }
         }
     }
