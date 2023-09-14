@@ -7,7 +7,6 @@ const BASE64STRING: &str =
 const QUOTED: &str = r#"#[serde(with = "tendermint_proto::serializers::from_str")]"#;
 const VEC_BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
-const PASCAL_CASE: &str = r#"#[serde(rename_all = "PascalCase")]"#;
 const OPTION_ANY: &str = r#"#[serde(default, with = "crate::serializers::option_any")]"#;
 const OPTION_TIMESTAMP: &str =
     r#"#[serde(default, with = "crate::serializers::option_timestamp")]"#;
@@ -38,7 +37,6 @@ pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".share.eds.byzantine.pb.Share", SERIALIZED),
     (".share.p2p.shrex.nd.Proof", SERIALIZED),
     (".share.p2p.shrex.nd.Row", SERIALIZED),
-    (".share.p2p.shrex.nd.Row", PASCAL_CASE),
 ];
 
 #[rustfmt::skip]

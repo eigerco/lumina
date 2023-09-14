@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use celestia_rpc::client::{new_http, new_websocket};
 use celestia_rpc::prelude::*;
-use celestia_types::Blob;
+use celestia_types::{blob::SubmitOptions, Blob};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::Error;
 use jsonrpsee::http_client::HttpClient;
@@ -72,5 +72,10 @@ where
     C: ClientT + Sync,
 {
     let _guard = write_lock().await;
-    client.blob_submit(blobs).await
+    // TODO: do we need to test providing correct options for submitting?
+    let opts = SubmitOptions {
+        fee: 10000000,
+        gas_limit: 10000000,
+    };
+    client.blob_submit(blobs, opts).await
 }

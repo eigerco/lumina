@@ -1,4 +1,4 @@
-mod blob;
+pub mod blob;
 mod block;
 mod byzantine;
 pub mod consts;
@@ -19,7 +19,7 @@ mod validator_set;
 
 pub use tendermint::hash::Hash;
 
-pub use crate::blob::*;
+pub use crate::blob::{Blob, Commitment};
 pub use crate::block::*;
 pub use crate::data_availability_header::*;
 pub use crate::error::*;
