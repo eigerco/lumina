@@ -6,8 +6,13 @@ pub(crate) mod none_as_negative_one {
     where
         D: Deserializer<'de>,
     {
-        let value = Option::<i64>::deserialize(deserializer)?;
-        Ok(value.and_then(|x| if x > 0 { Some(x as u64) } else { None }))
+        let value = Option::<i128>::deserialize(deserializer)?;
+        let value = match value {
+            Some(..=-1) => None,
+            Some(x) => Some(u64::try_from(x).map_err(serde::de::Error::custom)?),
+            None => None,
+        };
+        Ok(value)
     }
 
     /// Serialize [`Option<u64>`] with `None` represented as `-1`
