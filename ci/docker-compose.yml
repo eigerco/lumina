@@ -1,6 +1,7 @@
 services:
   validator:
     image: validator
+    platform: "linux/amd64"
     build:
       context: .
       dockerfile: Dockerfile.validator
@@ -9,6 +10,7 @@ services:
 
   bridge:
     image: bridge
+    platform: "linux/amd64"
     build:
       context: .
       dockerfile: Dockerfile.bridge

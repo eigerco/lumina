@@ -27,12 +27,12 @@ generate_token() {
 }
 
 write_token() {
-  local auth_level="$1"
+  local auth_level=$(echo "$1" | tr '[:lower:]' '[:upper:]')
   local token="$2"
 
-  local var_name="CELESTIA_NODE_AUTH_TOKEN_${auth_level^^}"
+  local var_name="CELESTIA_NODE_AUTH_TOKEN_${auth_level}"
 
-  sed -i "s/.*$var_name.*/$var_name=$token/" "$DOTENV"
+  sed -i'' -e "s/.*$var_name.*/$var_name=$token/" "$DOTENV"
 }
 
 main() {
