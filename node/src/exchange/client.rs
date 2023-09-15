@@ -20,11 +20,11 @@ use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
 use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
 
-pub(super) struct ExchangeClientHandler<R = ReqRespBehaviour>
+pub(super) struct ExchangeClientHandler<S = ReqRespBehaviour>
 where
-    R: Request,
+    S: Sender,
 {
-    reqs: HashMap<R::Id, State>,
+    reqs: HashMap<S::RequestId, State>,
     peer_tracker: Arc<PeerTracker>,
 }
 
@@ -33,23 +33,23 @@ struct State {
     respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
 }
 
-pub(super) trait Request {
-    type Id: Hash + Eq + Debug;
+pub(super) trait Sender {
+    type RequestId: Hash + Eq + Debug;
 
-    fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> Self::Id;
+    fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> Self::RequestId;
 }
 
-impl Request for ReqRespBehaviour {
-    type Id = RequestId;
+impl Sender for ReqRespBehaviour {
+    type RequestId = RequestId;
 
     fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> RequestId {
         self.send_request(peer, request)
     }
 }
 
-impl<R> ExchangeClientHandler<R>
+impl<S> ExchangeClientHandler<S>
 where
-    R: Request,
+    S: Sender,
 {
     pub(super) fn new(peer_tracker: Arc<PeerTracker>) -> Self {
         ExchangeClientHandler {
@@ -58,10 +58,10 @@ where
         }
     }
 
-    #[instrument(level = "trace", skip(self, req_resp, respond_to))]
+    #[instrument(level = "trace", skip(self, sender, respond_to))]
     pub(super) fn on_send_request(
         &mut self,
-        req_resp: &mut R,
+        sender: &mut S,
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
@@ -71,9 +71,9 @@ where
         }
 
         if request.is_head_request() {
-            self.send_head_request(req_resp, request, respond_to);
+            self.send_head_request(sender, request, respond_to);
         } else {
-            self.send_request(req_resp, request, respond_to);
+            self.send_request(sender, request, respond_to);
         }
 
         trace!("Request initiated");
@@ -81,7 +81,7 @@ where
 
     fn send_request(
         &mut self,
-        req_resp: &mut R,
+        sender: &mut S,
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
@@ -96,7 +96,7 @@ where
             return;
         };
 
-        let req_id = req_resp.send_request(&peer, request.clone());
+        let req_id = sender.send_request(&peer, request.clone());
         let state = State {
             request,
             respond_to,
@@ -107,7 +107,7 @@ where
 
     fn send_head_request(
         &mut self,
-        req_resp: &mut R,
+        sender: &mut S,
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
@@ -124,7 +124,7 @@ where
         for peer in peers {
             let (tx, rx) = oneshot::channel();
 
-            let req_id = req_resp.send_request(&peer, request.clone());
+            let req_id = sender.send_request(&peer, request.clone());
             let state = State {
                 request: request.clone(),
                 respond_to: tx,
@@ -176,7 +176,7 @@ where
     pub(super) fn on_response_received(
         &mut self,
         peer: PeerId,
-        request_id: R::Id,
+        request_id: S::RequestId,
         responses: Vec<HeaderResponse>,
     ) {
         let Some(state) = self.reqs.remove(&request_id) else {
@@ -235,7 +235,7 @@ where
                 }
             }
 
-            // Check if header has the reuqested hash
+            // Check if header has the requested hash
             (Some(Data::Hash(hash)), 1) => {
                 if headers[0].hash().as_bytes() != hash {
                     return Err(ExchangeError::InvalidResponse);
@@ -249,7 +249,12 @@ where
     }
 
     #[instrument(level = "trace", skip(self))]
-    pub(super) fn on_failure(&mut self, peer: PeerId, request_id: R::Id, error: OutboundFailure) {
+    pub(super) fn on_failure(
+        &mut self,
+        peer: PeerId,
+        request_id: S::RequestId,
+        error: OutboundFailure,
+    ) {
         trace!("Outbound failure");
 
         if let Some(state) = self.reqs.remove(&request_id) {
@@ -697,10 +702,10 @@ mod tests {
         peer: PeerId,
     }
 
-    impl Request for MockReq {
-        type Id = MockReqId;
+    impl Sender for MockReq {
+        type RequestId = MockReqId;
 
-        fn send_request(&mut self, peer: &PeerId, _request: HeaderRequest) -> Self::Id {
+        fn send_request(&mut self, peer: &PeerId, _request: HeaderRequest) -> Self::RequestId {
             let id = MockReqId::new();
             self.reqs.push_back(MockReqInfo { id, peer: *peer });
             id
