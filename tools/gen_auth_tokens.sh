@@ -30,7 +30,7 @@ write_token() {
   local auth_level="$1"
   local token="$2"
 
-  local auth_level=$(echo "$auth_level" | tr '[:lower:]' '[:upper:]')
+  auth_level="$(echo "$auth_level" | tr '[:lower:]' '[:upper:]')"
 
   local var_name="CELESTIA_NODE_AUTH_TOKEN_${auth_level}"
 
