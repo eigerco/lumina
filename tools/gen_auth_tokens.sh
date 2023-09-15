@@ -30,9 +30,14 @@ write_token() {
   local auth_level="$1"
   local token="$2"
 
-  local var_name="CELESTIA_NODE_AUTH_TOKEN_${auth_level^^}"
+  auth_level="$(echo "$auth_level" | tr '[:lower:]' '[:upper:]')"
 
-  sed -i "s/.*$var_name.*/$var_name=$token/" "$DOTENV"
+  local var_name="CELESTIA_NODE_AUTH_TOKEN_${auth_level}"
+
+  sed -i.bak "s/.*$var_name.*/$var_name=$token/" "$DOTENV"
+  # there's no compatible way to tell sed not to do a backup file
+  # accept it and remove the file afterwards
+  rm "$DOTENV.bak"
 }
 
 main() {
