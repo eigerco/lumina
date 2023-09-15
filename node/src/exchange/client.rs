@@ -326,6 +326,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn request_range_responds_with_unsorted_headers() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 3), tx);
+
+        let expected = vec![
+            gen_header_response(7),
+            gen_header_response(5),
+            gen_header_response(6),
+        ];
+        let mut expected_headers = expected
+            .iter()
+            .map(|hdr| hdr.to_extended_header().unwrap())
+            .collect::<Vec<_>>();
+        expected_headers.sort_by_key(|hdr| hdr.height());
+
+        mock_req.send_n_responses(&mut handler, 1, expected);
+
+        let result = rx.await.unwrap().unwrap();
+        assert_eq!(result.len(), 3);
+        assert_eq!(result, expected_headers);
+    }
+
+    #[tokio::test]
     async fn request_range() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -651,6 +679,32 @@ mod tests {
         for height in 1..10 {
             mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(height)]);
         }
+
+        let result = rx.await.unwrap().unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], expected_header);
+    }
+
+    #[tokio::test]
+    async fn head_request_responds_with_multiple_headers() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
+
+        let expected = gen_header_response(5);
+        let expected_header = expected.to_extended_header().unwrap();
+
+        mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(5)]);
+        mock_req.send_n_responses(&mut handler, 2, vec![expected]);
+        mock_req.send_n_responses(
+            &mut handler,
+            7,
+            vec![gen_header_response(4), gen_header_response(5)],
+        );
 
         let result = rx.await.unwrap().unwrap();
         assert_eq!(result.len(), 1);
