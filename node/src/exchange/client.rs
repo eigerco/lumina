@@ -623,6 +623,7 @@ mod tests {
 
         mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(3)]);
         mock_req.send_n_responses(&mut handler, 2, vec![gen_header_response(4)]);
+        // this header also has height = 5 but has different hash
         mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(5)]);
         mock_req.send_n_responses(&mut handler, 2, vec![expected]);
         mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(6)]);
