@@ -650,6 +650,7 @@ mod tests {
         let expected = gen_header_response(5);
         let expected_header = expected.to_extended_header().unwrap();
 
+        // all headers have height = 5 but different hash
         mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(5)]);
         mock_req.send_n_responses(&mut handler, 2, vec![gen_header_response(5)]);
         mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(5)]);
