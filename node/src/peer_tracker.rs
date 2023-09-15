@@ -52,6 +52,7 @@ impl PeerTracker {
             .iter()
             .take(limit)
             .map(|v| v.key().to_owned())
+            // collect instead of returning an iter to not block the dashmap
             .collect::<Vec<_>>();
 
         if peers.is_empty() {
