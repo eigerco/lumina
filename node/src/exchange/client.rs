@@ -143,6 +143,8 @@ where
             let mut resps: Vec<_> = join_all(rxs)
                 .await
                 .into_iter()
+                // In case of HEAD all responses have only 1 header.
+                // This was already enforced by `decode_and_verify_responses`.
                 .filter_map(|v| v.ok()?.ok()?.into_iter().next())
                 .collect();
             let mut counter: HashMap<_, usize> = HashMap::new();
@@ -164,7 +166,7 @@ where
                 Reverse((resp.height(), num_of_peers))
             });
 
-            // Return the header with the maximum height that was received by at least 2 peers
+            // Return the header with the highest height that was received by at least 2 peers
             for resp in &resps {
                 if counter[&resp.hash()] >= MIN_HEAD_RESPONSES {
                     respond_to.maybe_send_ok(vec![resp.to_owned()]);
