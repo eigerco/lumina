@@ -34,7 +34,10 @@ write_token() {
 
   local var_name="CELESTIA_NODE_AUTH_TOKEN_${auth_level}"
 
-  ex "+%s/.*$var_name.*/$var_name=$token/" -scwq "$DOTENV"
+  sed -i.bak "s/.*$var_name.*/$var_name=$token/" "$DOTENV"
+  # there's no compatible way to tell sed not to do a backup file
+  # accept it and remove the file afterwards
+  rm "$DOTENV.bak"
 }
 
 main() {
