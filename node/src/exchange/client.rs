@@ -579,7 +579,7 @@ mod tests {
         ));
     }
 
-    /// Expects the highest heigh that was reported by at least 2 peers
+    /// Expects the highest height that was reported by at least 2 peers
     #[tokio::test]
     async fn head_best() {
         let peer_tracker = peer_tracker_with_n_peers(15);
