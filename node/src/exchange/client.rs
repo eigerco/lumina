@@ -283,7 +283,7 @@ mod tests {
     use tendermint::Time;
 
     #[tokio::test]
-    async fn request_heigh() {
+    async fn request_height() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
         let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
