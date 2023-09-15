@@ -21,9 +21,9 @@ use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
 
 pub(super) struct ExchangeClientHandler<R = ReqRespBehaviour>
 where
-    R: Req,
+    R: Request,
 {
-    reqs: HashMap<R::ReqId, ReqInfo>,
+    reqs: HashMap<R::Id, ReqInfo>,
     peer_tracker: Arc<PeerTracker>,
 }
 
@@ -32,14 +32,14 @@ struct ReqInfo {
     respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
 }
 
-pub(super) trait Req {
-    type ReqId: Hash + Eq + Debug;
+pub(super) trait Request {
+    type Id: Hash + Eq + Debug;
 
-    fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> Self::ReqId;
+    fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> Self::Id;
 }
 
-impl Req for ReqRespBehaviour {
-    type ReqId = RequestId;
+impl Request for ReqRespBehaviour {
+    type Id = RequestId;
 
     fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> RequestId {
         self.send_request(peer, request)
@@ -48,7 +48,7 @@ impl Req for ReqRespBehaviour {
 
 impl<R> ExchangeClientHandler<R>
 where
-    R: Req,
+    R: Request,
 {
     pub(super) fn new(peer_tracker: Arc<PeerTracker>) -> Self {
         ExchangeClientHandler {
@@ -170,7 +170,7 @@ where
     pub(super) fn on_response_received(
         &mut self,
         peer: PeerId,
-        request_id: R::ReqId,
+        request_id: R::Id,
         responses: Vec<HeaderResponse>,
     ) {
         let Some(ReqInfo { amount, respond_to }) = self.reqs.remove(&request_id) else {
@@ -184,6 +184,8 @@ where
             respond_to.maybe_send_err(ExchangeError::InvalidResponse);
             return;
         }
+
+        // TODO: should we make sure tahat range or the hash is matched to the requested ones?
 
         let mut headers = Vec::with_capacity(amount);
 
@@ -204,12 +206,7 @@ where
     }
 
     #[instrument(level = "trace", skip(self))]
-    pub(super) fn on_failure(
-        &mut self,
-        peer: PeerId,
-        request_id: R::ReqId,
-        error: OutboundFailure,
-    ) {
+    pub(super) fn on_failure(&mut self, peer: PeerId, request_id: R::Id, error: OutboundFailure) {
         trace!("Outbound failure");
 
         if let Some(req_info) = self.reqs.remove(&request_id) {
@@ -224,6 +221,9 @@ where
 mod tests {
     use super::*;
     use crate::exchange::utils::ExtendedHeaderExt;
+    use celestia_proto::p2p::pb::header_request::Data;
+    use celestia_proto::p2p::pb::StatusCode;
+    use celestia_types::consts::HASH_SIZE;
     use celestia_types::{DataAvailabilityHeader, Hash, ValidatorSet};
     use std::collections::VecDeque;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -231,6 +231,215 @@ mod tests {
     use tendermint::block::{Commit, Header, Id};
     use tendermint::hash::AppHash;
     use tendermint::Time;
+
+    #[tokio::test]
+    async fn request_heigh() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 1), tx);
+
+        let expected = gen_header_response(5);
+        let expected_header = expected.to_extended_header().unwrap();
+
+        mock_req.send_n_responses(&mut handler, 1, vec![expected]);
+
+        let result = rx.await.unwrap().unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], expected_header);
+    }
+
+    #[tokio::test]
+    async fn request_invalid_heigh() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 1), tx);
+
+        let response = HeaderResponse {
+            body: Vec::new(),
+            status_code: StatusCode::NotFound.into(),
+        };
+
+        mock_req.send_n_responses(&mut handler, 1, vec![response]);
+
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::HeaderNotFound)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn request_responds_invalid_status_code() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 1), tx);
+
+        let response = HeaderResponse {
+            body: Vec::new(),
+            status_code: StatusCode::Invalid.into(),
+        };
+
+        mock_req.send_n_responses(&mut handler, 1, vec![response]);
+
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn request_responds_unknown_status_code() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 1), tx);
+
+        let response = HeaderResponse {
+            body: Vec::new(),
+            status_code: 1234,
+        };
+
+        mock_req.send_n_responses(&mut handler, 1, vec![response]);
+
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn request_range() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 3), tx);
+
+        let expected = vec![
+            gen_header_response(5),
+            gen_header_response(6),
+            gen_header_response(7),
+        ];
+        let expected_headers = expected
+            .iter()
+            .map(|hdr| hdr.to_extended_header().unwrap())
+            .collect::<Vec<_>>();
+
+        mock_req.send_n_responses(&mut handler, 1, expected);
+
+        let result = rx.await.unwrap().unwrap();
+        assert_eq!(result.len(), 3);
+        assert_eq!(result, expected_headers);
+    }
+
+    #[tokio::test]
+    async fn request_range_returns_less_amount() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 2), tx);
+        mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(5)]);
+
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn invalid_requests() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        // Zero amount
+        let (tx, rx) = oneshot::channel();
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 0), tx);
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+        ));
+
+        // Head with zero amount
+        let (tx, rx) = oneshot::channel();
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 0), tx);
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+        ));
+
+        // Head with more than one amount
+        let (tx, rx) = oneshot::channel();
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 2), tx);
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+        ));
+
+        // Invalid hash
+        let (tx, rx) = oneshot::channel();
+        handler.on_send_request(
+            &mut mock_req,
+            HeaderRequest {
+                data: Some(Data::Hash(b"12".to_vec())),
+                amount: 1,
+            },
+            tx,
+        );
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+        ));
+
+        // Valid hash with more than one amount
+        let (tx, rx) = oneshot::channel();
+        handler.on_send_request(
+            &mut mock_req,
+            HeaderRequest {
+                data: Some(Data::Hash([0xff; HASH_SIZE].to_vec())),
+                amount: 2,
+            },
+            tx,
+        );
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+        ));
+
+        // No data
+        let (tx, rx) = oneshot::channel();
+        handler.on_send_request(
+            &mut mock_req,
+            HeaderRequest {
+                data: None,
+                amount: 2,
+            },
+            tx,
+        );
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+        ));
+    }
 
     /// Expects the highest heigh that was reported by at least 2 peers
     #[tokio::test]
@@ -249,7 +458,7 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(3)]);
         mock_req.send_n_responses(&mut handler, 2, vec![gen_header_response(4)]);
         mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(5)]);
-        mock_req.send_n_responses(&mut handler, 2, vec![expected.clone()]);
+        mock_req.send_n_responses(&mut handler, 2, vec![expected]);
         mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(6)]);
         mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(7)]);
         mock_req.send_n_failures(&mut handler, 1, OutboundFailure::Timeout);
@@ -274,7 +483,7 @@ mod tests {
         let expected = gen_header_response(10);
         let expected_header = expected.to_extended_header().unwrap();
 
-        mock_req.send_n_responses(&mut handler, 1, vec![expected.clone()]);
+        mock_req.send_n_responses(&mut handler, 1, vec![expected]);
 
         for height in 1..10 {
             mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(height)]);
@@ -317,7 +526,7 @@ mod tests {
         let expected = gen_header_response(10);
         let expected_header = expected.to_extended_header().unwrap();
 
-        mock_req.send_n_responses(&mut handler, 1, vec![expected.clone()]);
+        mock_req.send_n_responses(&mut handler, 1, vec![expected]);
 
         let result = rx.await.unwrap().unwrap();
         assert_eq!(result.len(), 1);
@@ -338,13 +547,13 @@ mod tests {
     }
 
     #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-    struct RequestId(u64);
+    struct MockReqId(u64);
 
-    impl RequestId {
-        fn new() -> RequestId {
+    impl MockReqId {
+        fn new() -> MockReqId {
             static NEXT: AtomicU64 = AtomicU64::new(0);
             let id = NEXT.fetch_add(1, Ordering::Relaxed);
-            RequestId(id)
+            MockReqId(id)
         }
     }
 
@@ -353,15 +562,15 @@ mod tests {
     }
 
     struct MockReqInfo {
-        id: RequestId,
+        id: MockReqId,
         peer: PeerId,
     }
 
-    impl Req for MockReq {
-        type ReqId = RequestId;
+    impl Request for MockReq {
+        type Id = MockReqId;
 
-        fn send_request(&mut self, peer: &PeerId, _request: HeaderRequest) -> Self::ReqId {
-            let id = RequestId::new();
+        fn send_request(&mut self, peer: &PeerId, _request: HeaderRequest) -> Self::Id {
+            let id = MockReqId::new();
             self.reqs.push_back(MockReqInfo { id, peer: *peer });
             id
         }
@@ -394,6 +603,12 @@ mod tests {
             for req in self.reqs.drain(..n) {
                 handler.on_failure(req.peer, req.id, error.clone());
             }
+        }
+    }
+
+    impl Drop for MockReq {
+        fn drop(&mut self) {
+            assert!(self.reqs.is_empty(), "Not all requests handled");
         }
     }
 
