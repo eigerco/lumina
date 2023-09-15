@@ -153,13 +153,13 @@ where
                 return;
             }
 
-            // Sort by height in descending order
-            resps.sort_by_key(|resp| Reverse(resp.height()));
-
             // Count peers per response
             for resp in &resps {
                 *counter.entry(resp.hash()).or_default() += 1;
             }
+
+            // Sort by height and then peers in descending order
+            resps.sort_by_key(|resp| Reverse((resp.height(), counter[&resp.hash()])));
 
             // Return the header with the maximum height that was received by at least 2 peers
             for resp in &resps {
@@ -169,7 +169,7 @@ where
                 }
             }
 
-            // Otherwise return the header with the maxium height
+            // Otherwise return the header with the maximum height
             respond_to.maybe_send_ok(vec![resps[0].to_owned()]);
         });
     }
@@ -601,6 +601,31 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(7)]);
         mock_req.send_n_failures(&mut handler, 1, OutboundFailure::Timeout);
         mock_req.send_n_failures(&mut handler, 1, OutboundFailure::ConnectionClosed);
+
+        let result = rx.await.unwrap().unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], expected_header);
+    }
+
+    /// Expects the highest height that was reported by at least 2 peers
+    #[tokio::test]
+    async fn head_highest_peers() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
+
+        let expected = gen_header_response(5);
+        let expected_header = expected.to_extended_header().unwrap();
+
+        mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(5)]);
+        mock_req.send_n_responses(&mut handler, 2, vec![gen_header_response(5)]);
+        mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(5)]);
+        mock_req.send_n_responses(&mut handler, 4, vec![expected]);
+        mock_req.send_n_responses(&mut handler, 2, vec![gen_header_response(5)]);
 
         let result = rx.await.unwrap().unwrap();
         assert_eq!(result.len(), 1);
