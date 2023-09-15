@@ -159,7 +159,10 @@ where
             }
 
             // Sort by height and then peers in descending order
-            resps.sort_by_key(|resp| Reverse((resp.height(), counter[&resp.hash()])));
+            resps.sort_unstable_by_key(|resp| {
+                let num_of_peers = counter[&resp.hash()];
+                Reverse((resp.height(), num_of_peers))
+            });
 
             // Return the header with the maximum height that was received by at least 2 peers
             for resp in &resps {
