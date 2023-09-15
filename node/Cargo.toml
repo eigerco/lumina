@@ -42,3 +42,5 @@ libp2p = { version = "0.52.3", features = [
   "tokio",
   "yamux",
 ] }
+rand = "0.8.5"
+tendermint = { workspace = true }

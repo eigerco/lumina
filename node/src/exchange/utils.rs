@@ -1,13 +1,33 @@
 use celestia_proto::p2p::pb::header_request::Data;
-use celestia_proto::p2p::pb::HeaderRequest;
+use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse, StatusCode};
 use celestia_types::consts::HASH_SIZE;
+use celestia_types::{ExtendedHeader, Hash};
+use tendermint_proto::Protobuf;
+
+use crate::exchange::ExchangeError;
 
 pub(super) trait HeaderRequestExt {
+    fn with_origin(origin: u64, amount: u64) -> HeaderRequest;
+    fn with_hash(hash: Hash) -> HeaderRequest;
     fn is_valid(&self) -> bool;
     fn is_head_request(&self) -> bool;
 }
 
 impl HeaderRequestExt for HeaderRequest {
+    fn with_origin(origin: u64, amount: u64) -> HeaderRequest {
+        HeaderRequest {
+            amount,
+            data: Some(Data::Origin(origin)),
+        }
+    }
+
+    fn with_hash(hash: Hash) -> HeaderRequest {
+        HeaderRequest {
+            amount: 1,
+            data: Some(Data::Hash(hash.as_bytes().to_vec())),
+        }
+    }
+
     fn is_valid(&self) -> bool {
         match (&self.data, self.amount) {
             (None, _) | (_, 0) => false,
@@ -19,6 +39,35 @@ impl HeaderRequestExt for HeaderRequest {
 
     fn is_head_request(&self) -> bool {
         matches!((&self.data, self.amount), (Some(Data::Origin(0)), 1))
+    }
+}
+
+pub(super) trait HeaderResponseExt {
+    fn to_extended_header(&self) -> Result<ExtendedHeader, ExchangeError>;
+}
+
+impl HeaderResponseExt for HeaderResponse {
+    fn to_extended_header(&self) -> Result<ExtendedHeader, ExchangeError> {
+        match self.status_code() {
+            StatusCode::Invalid => Err(ExchangeError::InvalidResponse),
+            StatusCode::NotFound => Err(ExchangeError::HeaderNotFound),
+            StatusCode::Ok => {
+                ExtendedHeader::decode(&self.body[..]).map_err(|_| ExchangeError::InvalidResponse)
+            }
+        }
+    }
+}
+
+pub(super) trait ExtendedHeaderExt {
+    fn to_header_response(&self) -> HeaderResponse;
+}
+
+impl ExtendedHeaderExt for ExtendedHeader {
+    fn to_header_response(&self) -> HeaderResponse {
+        HeaderResponse {
+            body: self.encode_vec().unwrap(),
+            status_code: StatusCode::Ok.into(),
+        }
     }
 }
 

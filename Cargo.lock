@@ -531,6 +531,8 @@ dependencies = [
  "getrandom 0.2.10",
  "libp2p",
  "prost",
+ "rand",
+ "tendermint",
  "tendermint-proto",
  "thiserror",
  "tokio",

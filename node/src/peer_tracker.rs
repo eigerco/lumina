@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use dashmap::DashSet;
 use libp2p::PeerId;
 
@@ -14,6 +16,16 @@ impl PeerTracker {
 
     pub fn add(&self, peer: PeerId) {
         self.peers.insert(peer);
+    }
+
+    pub fn add_many<I, P>(&self, peers: I)
+    where
+        I: IntoIterator<Item = P>,
+        P: Borrow<PeerId>,
+    {
+        for peer in peers {
+            self.add(*peer.borrow());
+        }
     }
 
     pub fn remove(&self, peer: PeerId) {
