@@ -45,21 +45,14 @@ impl PeerTracker {
         self.peers.iter().next().map(|v| v.key().to_owned())
     }
 
-    pub fn best_n_peers(&self, limit: usize) -> Option<Vec<PeerId>> {
+    pub fn best_n_peers(&self, limit: usize) -> Vec<PeerId> {
         // TODO: Implement peer score and return the best N peers.
-        let peers = self
-            .peers
+        self.peers
             .iter()
             .take(limit)
             .map(|v| v.key().to_owned())
             // collect instead of returning an iter to not block the dashmap
-            .collect::<Vec<_>>();
-
-        if peers.is_empty() {
-            None
-        } else {
-            Some(peers)
-        }
+            .collect()
     }
 }
 

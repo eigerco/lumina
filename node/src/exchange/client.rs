@@ -114,7 +114,9 @@ where
         const MAX_PEERS: usize = 10;
         const MIN_HEAD_RESPONSES: usize = 2;
 
-        let Some(peers) = self.peer_tracker.best_n_peers(MAX_PEERS) else {
+        let peers = self.peer_tracker.best_n_peers(MAX_PEERS);
+
+        if peers.is_empty() {
             respond_to.maybe_send_err(P2pError::NoPeers);
             return;
         };
