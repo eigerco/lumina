@@ -221,15 +221,14 @@ where
 
         headers.sort_unstable_by_key(|header| header.height());
 
-        match (&request.data, request.amount) {
-            (_, 0) => return Err(ExchangeError::InvalidResponse),
-
+        // TODO: verify against Store
+        match (&request.data, headers.len()) {
             // Allow HEAD requests to have any height in their response
-            (Some(Data::Origin(0)), _) => {}
+            (Some(Data::Origin(0)), 1) => {}
 
             // Check if all requested heights exist
-            (Some(Data::Origin(start)), amount) => {
-                for (header, height) in headers.iter().zip(*start..*start + amount) {
+            (Some(Data::Origin(start)), amount) if *start > 0 && amount > 0 => {
+                for (header, height) in headers.iter().zip(*start..*start + amount as u64) {
                     if header.height().value() != height {
                         return Err(ExchangeError::InvalidResponse);
                     }
