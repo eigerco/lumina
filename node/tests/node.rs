@@ -1,4 +1,5 @@
 use std::env;
+use std::time::Duration;
 
 use celestia_node::{
     node::{Node, NodeConfig},
@@ -10,6 +11,7 @@ use libp2p::{
     identity::{self, Keypair},
     noise, tcp, yamux, Multiaddr, PeerId, Transport,
 };
+use tokio::time::sleep;
 
 const WS_URL: &str = "ws://localhost:26658";
 
@@ -53,6 +55,17 @@ async fn new_connected_node() -> Node {
     .unwrap();
 
     node.p2p().wait_connected().await.unwrap();
+
+    // Wait until node reaches height 3
+    loop {
+        let head = node.p2p().get_head_header().await.unwrap();
+
+        if head.height().value() >= 3 {
+            break;
+        }
+
+        sleep(Duration::from_secs(1)).await;
+    }
 
     node
 }
