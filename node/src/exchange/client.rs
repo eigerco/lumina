@@ -197,11 +197,7 @@ where
 
         match self.decode_and_verify_responses(&state.request, &responses) {
             Ok(headers) => {
-                // TODO: Increase peer score.
-                //
-                // TODO: If we received a partial range of the requested one,
-                // we should send request for the remaining. We should
-                // respond only if we have the whole range.
+                // TODO: Increase peer score
                 state.respond_to.maybe_send_ok(headers);
             }
             Err(e) => {
@@ -216,7 +212,20 @@ where
         request: &HeaderRequest,
         responses: &[HeaderResponse],
     ) -> Result<Vec<ExtendedHeader>, ExchangeError> {
-        if responses.is_empty() {
+        let amount = usize::try_from(request.amount).expect("validated in send_request");
+
+        // TODO: If we received a partial range of the requested one,
+        // we should send request for the remaining. We should
+        // respond only if we have the whole range. When this
+        // is implemeted, the following check should be removed.
+        if responses.len() != amount {
+            // When server returns an error, it encodes it as one HeaderResponse.
+            // In that case propagate the decoded error.
+            if responses.len() == 1 {
+                responses[0].to_extended_header()?;
+            }
+
+            // Otherwise report it as InvalidResponse
             return Err(ExchangeError::InvalidResponse);
         }
 
@@ -537,6 +546,23 @@ mod tests {
         };
 
         mock_req.send_n_responses(&mut handler, 1, vec![response]);
+
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn request_range_responds_with_less_results() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 2), tx);
+        mock_req.send_n_responses(&mut handler, 1, vec![gen_header_response(5)]);
 
         assert!(matches!(
             rx.await,
