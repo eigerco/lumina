@@ -215,10 +215,19 @@ where
         let amount = usize::try_from(request.amount).expect("validated in send_request");
 
         if responses.len() != amount {
-            return Err(ExchangeError::InvalidResponse)?;
+            // When server returns an error, it encode it as one HeaderResponse.
+            // In that case propagate the decoded error.
+            if responses.len() == 1 {
+                responses[0].to_extended_header()?;
+            }
+
+            // Otherwise report it as InvalidResponse
+            //
+            // TODO: Should we relax this? Server can return a sub-range.
+            return Err(ExchangeError::InvalidResponse);
         }
 
-        let mut headers = Vec::with_capacity(amount);
+        let mut headers = Vec::with_capacity(responses.len());
 
         for response in responses {
             let header = response.to_extended_header()?;
@@ -383,6 +392,29 @@ mod tests {
         let result = rx.await.unwrap().unwrap();
         assert_eq!(result.len(), 3);
         assert_eq!(result, expected_headers);
+    }
+
+    #[tokio::test]
+    async fn request_range_responds_with_not_found() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 2), tx);
+
+        let response = HeaderResponse {
+            body: Vec::new(),
+            status_code: StatusCode::NotFound.into(),
+        };
+
+        mock_req.send_n_responses(&mut handler, 1, vec![response]);
+
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::HeaderNotFound)))
+        ));
     }
 
     #[tokio::test]
