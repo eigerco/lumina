@@ -52,7 +52,7 @@ pub enum P2pError {
     #[error("Not connected to any peers")]
     NoPeers,
 
-    #[error("Exchange: Not found")]
+    #[error("Exchange: {0}")]
     Exchange(#[from] ExchangeError),
 }
 
