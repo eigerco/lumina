@@ -215,7 +215,7 @@ where
         let amount = usize::try_from(request.amount).expect("validated in send_request");
 
         if responses.len() != amount {
-            // When server returns an error, it encode it as one HeaderResponse.
+            // When server returns an error, it encodes it as one HeaderResponse.
             // In that case propagate the decoded error.
             if responses.len() == 1 {
                 responses[0].to_extended_header()?;
