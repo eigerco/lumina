@@ -153,18 +153,7 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
     }
 
     async fn get_head_header(&self) -> Result<ExtendedHeader> {
-        // TODO: This must be send in parallel to multiple peers,
-        // compare their responses, and return the highest one.
-        //
-        // https://github.com/celestiaorg/go-header/blob/e50090545cc7e049d2f965d2b5c773eaa4a2c0b2/p2p/exchange.go#L357C2-L357C2
-        self.exchange_header_request(HeaderRequest {
-            data: Some(header_request::Data::Origin(0)),
-            amount: 1,
-        })
-        .await?
-        .into_iter()
-        .next()
-        .ok_or(ExchangeError::HeaderNotFound.into())
+        self.get_header_by_height(0).await
     }
 
     async fn get_header(&self, hash: Hash) -> Result<ExtendedHeader> {
