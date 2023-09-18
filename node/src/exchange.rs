@@ -21,8 +21,6 @@ use tracing::instrument;
 mod client;
 mod server;
 mod utils;
-pub use utils::ExtendedHeaderExt;
-
 use crate::exchange::client::ExchangeClientHandler;
 use crate::exchange::server::ExchangeServerHandler;
 use crate::p2p::P2pError;

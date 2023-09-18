@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
+use core::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
 use tendermint::block::header::Header;
 use tendermint::block::{Commit, Height};
@@ -28,7 +29,6 @@ pub struct ExtendedHeader {
     pub dah: DataAvailabilityHeader,
 }
 
-use core::fmt::{Display, Formatter};
 impl Display for ExtendedHeader {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "hash: {}; height: {}", self.hash(), self.height())

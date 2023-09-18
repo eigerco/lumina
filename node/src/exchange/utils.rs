@@ -1,13 +1,7 @@
-use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
 use celestia_proto::p2p::pb::header_request::Data;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse, StatusCode};
 use celestia_types::consts::HASH_SIZE;
-use celestia_types::{DataAvailabilityHeader, ValidatorSet};
 use celestia_types::{ExtendedHeader, Hash};
-use tendermint::block::header::Header;
-use tendermint::block::Commit;
-use tendermint::Time;
-use tendermint::{block::header::Version, AppHash};
 use tendermint_proto::Protobuf;
 
 use crate::exchange::ExchangeError;
@@ -64,63 +58,59 @@ impl HeaderResponseExt for HeaderResponse {
     }
 }
 
-pub trait ExtendedHeaderExt {
-    fn with_height(height: u64) -> ExtendedHeader;
-}
-
-impl ExtendedHeaderExt for ExtendedHeader {
-    fn with_height(height: u64) -> ExtendedHeader {
-        RawExtendedHeader {
-            header: Some(
-                Header {
-                    version: Version { block: 11, app: 1 },
-                    chain_id: "private".to_string().try_into().unwrap(),
-                    height: height.try_into().unwrap(),
-                    time: Time::now(),
-                    last_block_id: None,
-                    last_commit_hash: Hash::default(),
-                    data_hash: Hash::default(),
-                    validators_hash: Hash::default(),
-                    next_validators_hash: Hash::default(),
-                    consensus_hash: Hash::default(),
-                    app_hash: AppHash::default(),
-                    last_results_hash: Hash::default(),
-                    evidence_hash: Hash::default(),
-                    proposer_address: tendermint::account::Id::new([0; 20]),
-                }
-                .into(),
-            ),
-            commit: Some(
-                Commit {
-                    height: height.try_into().unwrap(),
-                    block_id: tendermint::block::Id {
-                        hash: Hash::Sha256(rand::random()),
-                        ..Default::default()
-                    },
+/*
+fn gen_extended_header(height: u64) -> ExtendedHeader {
+    RawExtendedHeader {
+        header: Some(
+            Header {
+                version: Version { block: 11, app: 1 },
+                chain_id: "private".to_string().try_into().unwrap(),
+                height: height.try_into().unwrap(),
+                time: Time::now(),
+                last_block_id: None,
+                last_commit_hash: Hash::default(),
+                data_hash: Hash::default(),
+                validators_hash: Hash::default(),
+                next_validators_hash: Hash::default(),
+                consensus_hash: Hash::default(),
+                app_hash: AppHash::default(),
+                last_results_hash: Hash::default(),
+                evidence_hash: Hash::default(),
+                proposer_address: tendermint::account::Id::new([0; 20]),
+            }
+            .into(),
+        ),
+        commit: Some(
+            Commit {
+                height: height.try_into().unwrap(),
+                block_id: tendermint::block::Id {
+                    hash: Hash::Sha256(rand::random()),
                     ..Default::default()
-                }
-                .into(),
-            ),
-            validator_set: Some(ValidatorSet::new(Vec::new(), None).into()),
-            dah: Some(
-                DataAvailabilityHeader {
-                    row_roots: Vec::new(),
-                    column_roots: Vec::new(),
-                    hash: [0; 32],
-                }
-                .into(),
-            ),
-        }
-        .try_into()
-        .unwrap()
+                },
+                ..Default::default()
+            }
+            .into(),
+        ),
+        validator_set: Some(ValidatorSet::new(Vec::new(), None).into()),
+        dah: Some(
+            DataAvailabilityHeader {
+                row_roots: Vec::new(),
+                column_roots: Vec::new(),
+                hash: [0; 32],
+            }
+            .into(),
+        ),
     }
+    .try_into()
+    .unwrap()
 }
+*/
 
-pub(super) trait ToHeaderResponse {
+pub(super) trait ExtendedHeaderExt {
     fn to_header_response(&self) -> HeaderResponse;
 }
 
-impl ToHeaderResponse for ExtendedHeader {
+impl ExtendedHeaderExt for ExtendedHeader {
     fn to_header_response(&self) -> HeaderResponse {
         HeaderResponse {
             body: self.encode_vec().unwrap(),
