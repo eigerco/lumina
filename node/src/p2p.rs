@@ -52,7 +52,7 @@ pub enum P2pError {
     #[error("Not connected to any peers")]
     NoPeers,
 
-    #[error("Exchange: Not found")]
+    #[error("Exchange: {0}")]
     Exchange(#[from] ExchangeError),
 }
 
@@ -189,6 +189,14 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         .ok_or(ExchangeError::HeaderNotFound.into())
     }
 
+    async fn get_headers_range(&self, height: u64, amount: u64) -> Result<Vec<ExtendedHeader>> {
+        self.exchange_header_request(HeaderRequest {
+            data: Some(header_request::Data::Origin(height)),
+            amount,
+        })
+        .await
+    }
+
     async fn get_verified_headers_range(
         &self,
         from: &ExtendedHeader,
@@ -197,10 +205,7 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
         from.validate().map_err(|_| ExchangeError::InvalidRequest)?;
 
         let headers = self
-            .exchange_header_request(HeaderRequest {
-                data: Some(header_request::Data::Origin(from.height().value() + 1)),
-                amount,
-            })
+            .get_headers_range(from.height().value() + 1, amount)
             .await?;
 
         for untrusted in headers.iter() {
