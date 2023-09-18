@@ -286,7 +286,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exchange::utils::{ToHeaderResponse, ExtendedHeaderExt};
+    use crate::exchange::utils::{ExtendedHeaderExt, ToHeaderResponse};
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::consts::HASH_SIZE;
@@ -424,7 +424,11 @@ mod tests {
         let (tx, rx) = oneshot::channel();
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 1), tx);
-        mock_req.send_n_responses(&mut handler, 1, vec![ExtendedHeader::with_height(4).to_header_response()]);
+        mock_req.send_n_responses(
+            &mut handler,
+            1,
+            vec![ExtendedHeader::with_height(4).to_header_response()],
+        );
 
         assert!(matches!(
             rx.await,
@@ -472,7 +476,11 @@ mod tests {
             tx,
         );
 
-        mock_req.send_n_responses(&mut handler, 1, vec![ExtendedHeader::with_height(5).to_header_response()]);
+        mock_req.send_n_responses(
+            &mut handler,
+            1,
+            vec![ExtendedHeader::with_height(5).to_header_response()],
+        );
 
         assert!(matches!(
             rx.await,
@@ -558,7 +566,11 @@ mod tests {
         let (tx, rx) = oneshot::channel();
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 2), tx);
-        mock_req.send_n_responses(&mut handler, 1, vec![ExtendedHeader::with_height(5).to_header_response()]);
+        mock_req.send_n_responses(
+            &mut handler,
+            1,
+            vec![ExtendedHeader::with_height(5).to_header_response()],
+        );
 
         assert!(matches!(
             rx.await,
@@ -656,13 +668,33 @@ mod tests {
         let expected_header = ExtendedHeader::with_height(5);
         let expected = expected_header.to_header_response();
 
-        mock_req.send_n_responses(&mut handler, 1, vec![ExtendedHeader::with_height(3).to_header_response()]);
-        mock_req.send_n_responses(&mut handler, 2, vec![ExtendedHeader::with_height(4).to_header_response()]);
+        mock_req.send_n_responses(
+            &mut handler,
+            1,
+            vec![ExtendedHeader::with_height(3).to_header_response()],
+        );
+        mock_req.send_n_responses(
+            &mut handler,
+            2,
+            vec![ExtendedHeader::with_height(4).to_header_response()],
+        );
         // this header also has height = 5 but has different hash
-        mock_req.send_n_responses(&mut handler, 1, vec![ExtendedHeader::with_height(5).to_header_response()]);
+        mock_req.send_n_responses(
+            &mut handler,
+            1,
+            vec![ExtendedHeader::with_height(5).to_header_response()],
+        );
         mock_req.send_n_responses(&mut handler, 2, vec![expected]);
-        mock_req.send_n_responses(&mut handler, 1, vec![ExtendedHeader::with_height(6).to_header_response()]);
-        mock_req.send_n_responses(&mut handler, 1, vec![ExtendedHeader::with_height(7).to_header_response()]);
+        mock_req.send_n_responses(
+            &mut handler,
+            1,
+            vec![ExtendedHeader::with_height(6).to_header_response()],
+        );
+        mock_req.send_n_responses(
+            &mut handler,
+            1,
+            vec![ExtendedHeader::with_height(7).to_header_response()],
+        );
         mock_req.send_n_failures(&mut handler, 1, OutboundFailure::Timeout);
         mock_req.send_n_failures(&mut handler, 1, OutboundFailure::ConnectionClosed);
 
@@ -686,11 +718,27 @@ mod tests {
         let expected = expected_header.to_header_response();
 
         // all headers have height = 5 but different hash
-        mock_req.send_n_responses(&mut handler, 1, vec![ExtendedHeader::with_height(5).to_header_response()]);
-        mock_req.send_n_responses(&mut handler, 2, vec![ExtendedHeader::with_height(5).to_header_response()]);
-        mock_req.send_n_responses(&mut handler, 1, vec![ExtendedHeader::with_height(5).to_header_response()]);
+        mock_req.send_n_responses(
+            &mut handler,
+            1,
+            vec![ExtendedHeader::with_height(5).to_header_response()],
+        );
+        mock_req.send_n_responses(
+            &mut handler,
+            2,
+            vec![ExtendedHeader::with_height(5).to_header_response()],
+        );
+        mock_req.send_n_responses(
+            &mut handler,
+            1,
+            vec![ExtendedHeader::with_height(5).to_header_response()],
+        );
         mock_req.send_n_responses(&mut handler, 4, vec![expected]);
-        mock_req.send_n_responses(&mut handler, 2, vec![ExtendedHeader::with_height(5).to_header_response()]);
+        mock_req.send_n_responses(
+            &mut handler,
+            2,
+            vec![ExtendedHeader::with_height(5).to_header_response()],
+        );
 
         let result = rx.await.unwrap().unwrap();
         assert_eq!(result.len(), 1);
@@ -714,7 +762,11 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 1, vec![expected]);
 
         for height in 1..10 {
-            mock_req.send_n_responses(&mut handler, 1, vec![ExtendedHeader::with_height(height).to_header_response()]);
+            mock_req.send_n_responses(
+                &mut handler,
+                1,
+                vec![ExtendedHeader::with_height(height).to_header_response()],
+            );
         }
 
         let result = rx.await.unwrap().unwrap();
@@ -735,12 +787,19 @@ mod tests {
         let expected_header = ExtendedHeader::with_height(5);
         let expected = expected_header.to_header_response();
 
-        mock_req.send_n_responses(&mut handler, 1, vec![ExtendedHeader::with_height(5).to_header_response()]);
+        mock_req.send_n_responses(
+            &mut handler,
+            1,
+            vec![ExtendedHeader::with_height(5).to_header_response()],
+        );
         mock_req.send_n_responses(&mut handler, 2, vec![expected]);
         mock_req.send_n_responses(
             &mut handler,
             7,
-            vec![ExtendedHeader::with_height(4).to_header_response(), ExtendedHeader::with_height(5).to_header_response()],
+            vec![
+                ExtendedHeader::with_height(4).to_header_response(),
+                ExtendedHeader::with_height(5).to_header_response(),
+            ],
         );
 
         let result = rx.await.unwrap().unwrap();
