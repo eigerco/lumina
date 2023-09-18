@@ -28,6 +28,13 @@ pub struct ExtendedHeader {
     pub dah: DataAvailabilityHeader,
 }
 
+use core::fmt::{Display, Formatter};
+impl Display for ExtendedHeader {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "hash: {}; height: {}", self.hash(), self.height())
+    }
+}
+
 impl ExtendedHeader {
     pub fn chain_id(&self) -> &Id {
         &self.header.chain_id

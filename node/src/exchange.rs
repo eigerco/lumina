@@ -21,11 +21,13 @@ use tracing::instrument;
 mod client;
 mod server;
 mod utils;
+pub use utils::ExtendedHeaderExt;
 
 use crate::exchange::client::ExchangeClientHandler;
 use crate::exchange::server::ExchangeServerHandler;
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
+use crate::store::Store;
 use crate::utils::{stream_protocol_id, OneshotResultSender};
 
 /// Max request size in bytes
@@ -48,6 +50,7 @@ pub(crate) struct ExchangeBehaviour {
 pub(crate) struct ExchangeConfig<'a> {
     pub network_id: &'a str,
     pub peer_tracker: Arc<PeerTracker>,
+    pub header_store: Arc<Store>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -79,7 +82,7 @@ impl ExchangeBehaviour {
                 request_response::Config::default(),
             ),
             client_handler: ExchangeClientHandler::new(config.peer_tracker),
-            server_handler: ExchangeServerHandler::new(),
+            server_handler: ExchangeServerHandler::new(config.header_store),
         }
     }
 

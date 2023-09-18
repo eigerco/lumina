@@ -3,15 +3,18 @@ use libp2p::{
     request_response::{InboundFailure, RequestId, ResponseChannel},
     PeerId,
 };
+use std::sync::Arc;
 use tracing::instrument;
 
+use crate::store::Store;
+
 pub(super) struct ExchangeServerHandler {
-    // TODO
+    _store: Arc<Store>,
 }
 
 impl ExchangeServerHandler {
-    pub(super) fn new() -> Self {
-        ExchangeServerHandler {}
+    pub(super) fn new(store: Arc<Store>) -> Self {
+        ExchangeServerHandler { _store: store }
     }
 
     #[instrument(level = "trace", skip(self, _respond_to))]

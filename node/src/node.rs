@@ -10,7 +10,6 @@ use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
-use tokio::sync::RwLock;
 
 use crate::p2p::{P2p, P2pArgs, P2pService};
 use crate::store::Store;
@@ -54,7 +53,7 @@ where
     SyncerSrv: SyncerService<P2pSrv>,
 {
     pub async fn new(config: NodeConfig) -> Result<Self, NodeError<P2pSrv, SyncerSrv>> {
-        let store = Arc::new(RwLock::new(Store::new()));
+        let store = Arc::new(Store::new());
 
         let p2p = Arc::new(
             P2pSrv::start(P2pArgs {
@@ -63,6 +62,7 @@ where
                 local_keypair: config.p2p_local_keypair,
                 bootstrap_peers: config.p2p_bootstrap_peers,
                 listen_on: config.p2p_listen_on,
+                store: store.clone(),
             })
             .await
             .map_err(NodeError::P2pService)?,

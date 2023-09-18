@@ -17,11 +17,12 @@ use libp2p::{identify, Multiaddr, PeerId, TransportError};
 use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::oneshot;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
 use crate::executor::{spawn, Executor};
 use crate::peer_tracker::PeerTracker;
+use crate::store::Store;
 use crate::utils::{gossipsub_ident_topic, OneshotResultSender, OneshotSenderExt};
 use crate::Service;
 
@@ -73,6 +74,7 @@ pub struct P2pArgs {
     pub local_keypair: Keypair,
     pub bootstrap_peers: Vec<Multiaddr>,
     pub listen_on: Vec<Multiaddr>,
+    pub store: Arc<Store>,
 }
 
 #[doc(hidden)]
@@ -269,6 +271,7 @@ impl Worker {
         let header_ex = ExchangeBehaviour::new(ExchangeConfig {
             network_id: &args.network_id,
             peer_tracker: peer_tracker.clone(),
+            header_store: args.store,
         });
 
         let behaviour = Behaviour {
@@ -337,6 +340,10 @@ impl Worker {
             }
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                 self.peer_tracker.remove(peer_id);
+            }
+            #[cfg(debug_assertions)]
+            SwarmEvent::NewListenAddr { address, .. } => {
+                info!("listening on: {address}");
             }
             _ => {}
         }

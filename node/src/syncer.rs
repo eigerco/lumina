@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::RwLock;
 
 use crate::{p2p::P2pService, store::Store, Service};
 
@@ -14,12 +13,12 @@ pub enum SyncerError {}
 #[derive(Debug)]
 pub struct Syncer<P2pSrv: P2pService> {
     p2p: Arc<P2pSrv>,
-    store: Arc<RwLock<Store>>,
+    store: Arc<Store>,
 }
 
 pub struct SyncerArgs<P2pSrv: P2pService> {
     pub p2p: Arc<P2pSrv>,
-    pub store: Arc<RwLock<Store>>,
+    pub store: Arc<Store>,
 }
 
 #[doc(hidden)]

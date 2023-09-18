@@ -286,7 +286,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exchange::utils::ExtendedHeaderExt;
+    use crate::exchange::utils::ToHeaderResponse;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::consts::HASH_SIZE;
