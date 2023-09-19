@@ -170,13 +170,11 @@ impl Store {
             return Err(StoreError::LostStoreHead);
         };
 
-        match self.headers.get(&head_hash) {
-            Some(v) => Ok(v.clone()),
-            None => {
-                error!("Header with hash {head_hash} for height {head_height} missing");
-                Err(StoreError::LostHash(head_hash))
-            }
-        }
+        self.headers
+            .get(&head_hash)
+            .as_deref()
+            .cloned()
+            .ok_or(StoreError::LostHash(head_hash))
     }
 
     pub fn exists_by_hash(&self, hash: &Hash) -> bool {
@@ -206,13 +204,11 @@ impl Store {
             return Err(StoreError::NotFound);
         };
 
-        match self.headers.get(&hash) {
-            Some(h) => Ok(h.clone()),
-            None => {
-                error!("Lost hash {hash} at height {height}");
-                Err(StoreError::LostHash(hash))
-            }
-        }
+        self.headers
+            .get(&hash)
+            .as_deref()
+            .cloned()
+            .ok_or(StoreError::LostHash(hash))
     }
 }
 

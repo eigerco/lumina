@@ -1,7 +1,7 @@
+use core::fmt::{Display, Formatter};
 use std::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
-use core::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
 use tendermint::block::header::Header;
 use tendermint::block::{Commit, Height};
