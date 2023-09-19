@@ -15,30 +15,35 @@ pub type WrappedStore = Arc<Box<dyn Store + Sync + Send>>;
 
 #[async_trait]
 pub trait Store: Send + Sync + Debug {
-    //fn start(&mut self);
-    //fn stop(&mut self);
+    async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader>;
+    async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
 
-    // what getters
-    fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader>;
-    fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
+    async fn height(&self) -> u64;
+    async fn has(&self, hash: &Hash) -> bool;
+    async fn has_at(&self, height: u64) -> bool;
 
-    fn height(&self) -> u64;
-    fn has(&self, hash: &Hash) -> bool;
-    fn has_at(&self, height: u64) -> bool;
-
-    fn append_single(&mut self, header: ExtendedHeader) -> Result<()>; //headers: Vec<ExtendedHeader>) -> Result<()>;
+    async fn append_single(&mut self, header: ExtendedHeader) -> Result<()>;
 }
 
+#[async_trait]
 trait StoreExt {
-    fn append<I: IntoIterator<Item = ExtendedHeader>>(&mut self, headers: I) -> Result<()>;
+    async fn append<I>(&mut self, headers: I) -> Result<()>
+    where
+        I: IntoIterator<Item = ExtendedHeader> + Send,
+        <I as IntoIterator>::IntoIter: Send;
 }
 
+#[async_trait]
 impl<S: Store> StoreExt for S {
-    fn append<I: IntoIterator<Item = ExtendedHeader>>(&mut self, headers: I) -> Result<()> {
+    async fn append<I: IntoIterator<Item = ExtendedHeader>>(&mut self, headers: I) -> Result<()>
+    where
+        I: IntoIterator<Item = ExtendedHeader> + Send,
+        <I as IntoIterator>::IntoIter: Send,
+    {
         let headers = headers.into_iter();
 
         for (idx, header) in headers.enumerate() {
-            if let Err(e) = self.append_single(header) {
+            if let Err(e) = self.append_single(header).await {
                 error!("error appending: {e}");
                 return Err(StoreError::ContinuousAppendFailedAt(idx));
             }
@@ -48,40 +53,29 @@ impl<S: Store> StoreExt for S {
     }
 }
 
-/*
-impl StoreBuilder for InMemoryStore {
-    fn empty() -> WrappedStore {
-        Arc::new(Box::new(Self::new()))
-    }
-
-    fn with_genesis(genesis: ExtendedHeader) -> WrappedStore {
-        Arc::new(Box::new(Self::with_genesis(genesis)))
-    }
-}
-*/
-
+#[async_trait]
 impl Store for InMemoryStore {
-    fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader, StoreError> {
+    async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader, StoreError> {
         self.get_by_hash(hash)
     }
 
-    fn get_by_height(&self, height: u64) -> Result<ExtendedHeader, StoreError> {
+    async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader, StoreError> {
         self.get_by_height(height)
     }
 
-    fn height(&self) -> u64 {
+    async fn height(&self) -> u64 {
         self.get_head_height()
     }
 
-    fn has(&self, hash: &Hash) -> bool {
+    async fn has(&self, hash: &Hash) -> bool {
         self.exists_by_hash(hash)
     }
 
-    fn has_at(&self, height: u64) -> bool {
+    async fn has_at(&self, height: u64) -> bool {
         self.exists_by_height(height)
     }
 
-    fn append_single(&mut self, header: ExtendedHeader) -> Result<()> {
+    async fn append_single(&mut self, header: ExtendedHeader) -> Result<()> {
         self.append_continuous(header)
     }
 }
