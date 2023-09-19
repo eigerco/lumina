@@ -1,71 +1,44 @@
+use async_trait::async_trait;
 use celestia_types::ExtendedHeader;
+use core::fmt::Debug;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use tendermint::Hash;
 use thiserror::Error;
 use tracing::{error, info, instrument};
 
-trait StoreTrait {
-    type Header;
-    type Hash;
-    type Error;
+type Result<T, E = StoreError> = std::result::Result<T, E>;
 
-    fn init(genesis: Self::Header) -> Self;
+pub type WrappedStore = Arc<Box<dyn Store + Sync + Send>>;
+
+#[async_trait]
+pub trait Store: Send + Sync + Debug {
     //fn start(&mut self);
     //fn stop(&mut self);
 
     // what getters
-    fn get_by_hash(&self, hash: &Self::Hash) -> Result<Self::Header, Self::Error>;
-    fn get_by_height(&self, height: u64) -> Result<Self::Header, Self::Error>;
+    fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader>;
+    fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
 
     fn height(&self) -> u64;
-    fn has(&self, hash: &Self::Hash) -> bool;
+    fn has(&self, hash: &Hash) -> bool;
     fn has_at(&self, height: u64) -> bool;
 
-    fn append<I: IntoIterator<Item = Self::Header>>(
-        &mut self,
-        headers: I,
-    ) -> Result<(), Self::Error>;
+    fn append_single(&mut self, header: ExtendedHeader) -> Result<()>; //headers: Vec<ExtendedHeader>) -> Result<()>;
 }
 
-impl StoreTrait for Store {
-    type Header = ExtendedHeader;
-    type Hash = Hash;
-    type Error = StoreError;
+trait StoreExt {
+    fn append<I: IntoIterator<Item = ExtendedHeader>>(&mut self, headers: I) -> Result<()>;
+}
 
-    fn init(genesis: Self::Header) -> Self {
-        Store::with_genesis(genesis)
-    }
-
-    fn get_by_hash(&self, hash: &Self::Hash) -> Result<Self::Header, Self::Error> {
-        self.get_by_hash(hash)
-    }
-
-    fn get_by_height(&self, height: u64) -> Result<Self::Header, Self::Error> {
-        self.get_by_height(height)
-    }
-
-    fn height(&self) -> u64 {
-        self.get_head_height()
-    }
-
-    fn has(&self, hash: &Self::Hash) -> bool {
-        self.exists_by_hash(hash)
-    }
-
-    fn has_at(&self, height: u64) -> bool {
-        self.exists_by_height(height)
-    }
-
-    fn append<I: IntoIterator<Item = Self::Header>>(
-        &mut self,
-        headers: I,
-    ) -> Result<(), Self::Error> {
+impl<S: Store> StoreExt for S {
+    fn append<I: IntoIterator<Item = ExtendedHeader>>(&mut self, headers: I) -> Result<()> {
         let headers = headers.into_iter();
 
         for (idx, header) in headers.enumerate() {
-            if let Err(e) = self.append_continuous(header) {
+            if let Err(e) = self.append_single(header) {
                 error!("error appending: {e}");
                 return Err(StoreError::ContinuousAppendFailedAt(idx));
             }
@@ -75,8 +48,46 @@ impl StoreTrait for Store {
     }
 }
 
+/*
+impl StoreBuilder for InMemoryStore {
+    fn empty() -> WrappedStore {
+        Arc::new(Box::new(Self::new()))
+    }
+
+    fn with_genesis(genesis: ExtendedHeader) -> WrappedStore {
+        Arc::new(Box::new(Self::with_genesis(genesis)))
+    }
+}
+*/
+
+impl Store for InMemoryStore {
+    fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader, StoreError> {
+        self.get_by_hash(hash)
+    }
+
+    fn get_by_height(&self, height: u64) -> Result<ExtendedHeader, StoreError> {
+        self.get_by_height(height)
+    }
+
+    fn height(&self) -> u64 {
+        self.get_head_height()
+    }
+
+    fn has(&self, hash: &Hash) -> bool {
+        self.exists_by_hash(hash)
+    }
+
+    fn has_at(&self, height: u64) -> bool {
+        self.exists_by_height(height)
+    }
+
+    fn append_single(&mut self, header: ExtendedHeader) -> Result<()> {
+        self.append_continuous(header)
+    }
+}
+
 #[derive(Debug)]
-pub struct Store {
+pub struct InMemoryStore {
     headers: DashMap<Hash, ExtendedHeader>,
     height_to_hash: DashMap<u64, Hash>,
     head_height: AtomicU64,
@@ -104,9 +115,9 @@ pub enum StoreError {
     LostHash(Hash),
 }
 
-impl Store {
+impl InMemoryStore {
     pub fn new() -> Self {
-        Store {
+        InMemoryStore {
             headers: DashMap::new(),
             height_to_hash: DashMap::new(),
             head_height: AtomicU64::new(0),
@@ -117,7 +128,7 @@ impl Store {
         let genesis_hash = genesis.hash();
         let genesis_height = genesis.height().value();
 
-        Store {
+        InMemoryStore {
             headers: DashMap::from_iter([(genesis_hash, genesis)]),
             height_to_hash: DashMap::from_iter([(genesis_height, genesis_hash)]),
             head_height: AtomicU64::new(genesis_height),
@@ -212,9 +223,9 @@ impl Store {
     }
 }
 
-impl Default for Store {
+impl Default for InMemoryStore {
     fn default() -> Self {
-        Store::new()
+        Self::new()
     }
 }
 
@@ -277,8 +288,8 @@ pub mod tests {
         .unwrap()
     }
 
-    pub fn gen_filled_store(height: u64) -> Store {
-        let s = Store::new();
+    pub fn gen_filled_store(height: u64) -> InMemoryStore {
+        let s = InMemoryStore::new();
 
         // block height is 1-indexed
         for height in 1..=height {
@@ -291,7 +302,7 @@ pub mod tests {
 
     #[test]
     fn test_empty_store() {
-        let s = Store::new();
+        let s = InMemoryStore::new();
         assert_eq!(s.get_head_height(), 0);
         assert_eq!(s.get_head(), Err(StoreError::NotFound));
         assert_eq!(s.get_by_height(1), Err(StoreError::NotFound));
@@ -303,7 +314,7 @@ pub mod tests {
 
     #[test]
     fn test_read_write() {
-        let s = Store::new();
+        let s = InMemoryStore::new();
         let header = gen_extended_header(1);
         s.append_continuous(header.clone()).unwrap();
         assert_eq!(s.get_head_height(), 1);

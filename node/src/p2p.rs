@@ -22,7 +22,7 @@ use tracing::{debug, info, instrument, warn};
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
 use crate::executor::{spawn, Executor};
 use crate::peer_tracker::PeerTracker;
-use crate::store::Store;
+use crate::store::WrappedStore;
 use crate::utils::{gossipsub_ident_topic, OneshotResultSender, OneshotSenderExt};
 use crate::Service;
 
@@ -74,7 +74,7 @@ pub struct P2pArgs {
     pub local_keypair: Keypair,
     pub bootstrap_peers: Vec<Multiaddr>,
     pub listen_on: Vec<Multiaddr>,
-    pub store: Arc<Store>,
+    pub store: WrappedStore,
 }
 
 #[doc(hidden)]

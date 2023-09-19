@@ -1,4 +1,4 @@
-use core::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
@@ -30,7 +30,7 @@ pub struct ExtendedHeader {
 }
 
 impl Display for ExtendedHeader {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "hash: {}; height: {}", self.hash(), self.height())
     }
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::{p2p::P2pService, store::Store, Service};
+use crate::{p2p::P2pService, store::WrappedStore, Service};
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
@@ -13,12 +13,12 @@ pub enum SyncerError {}
 #[derive(Debug)]
 pub struct Syncer<P2pSrv: P2pService> {
     p2p: Arc<P2pSrv>,
-    store: Arc<Store>,
+    store: WrappedStore,
 }
 
 pub struct SyncerArgs<P2pSrv: P2pService> {
     pub p2p: Arc<P2pSrv>,
-    pub store: Arc<Store>,
+    pub store: WrappedStore,
 }
 
 #[doc(hidden)]

@@ -12,7 +12,7 @@ use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
 
 use crate::p2p::{P2p, P2pArgs, P2pService};
-use crate::store::Store;
+use crate::store::{InMemoryStore, WrappedStore};
 use crate::syncer::{Syncer, SyncerArgs, SyncerService};
 
 #[derive(Debug, thiserror::Error)]
@@ -53,7 +53,7 @@ where
     SyncerSrv: SyncerService<P2pSrv>,
 {
     pub async fn new(config: NodeConfig) -> Result<Self, NodeError<P2pSrv, SyncerSrv>> {
-        let store = Arc::new(Store::new());
+        let store: WrappedStore = Arc::new(Box::new(InMemoryStore::new()));
 
         let p2p = Arc::new(
             P2pSrv::start(P2pArgs {
