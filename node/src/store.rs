@@ -10,10 +10,8 @@ use tracing::{info, instrument};
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
 
-pub type BoxedStore = Box<dyn Store + Sync + Send>;
-
 #[async_trait]
-pub trait Store: Debug {
+pub trait Store: Send + Sync + Debug {
     async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader>;
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
 

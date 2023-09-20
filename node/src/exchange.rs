@@ -40,13 +40,16 @@ type ReqRespBehaviour = request_response::Behaviour<HeaderCodec>;
 type ReqRespEvent = request_response::Event<HeaderRequest, Vec<HeaderResponse>>;
 type ReqRespMessage = request_response::Message<HeaderRequest, Vec<HeaderResponse>>;
 
-pub(crate) struct ExchangeBehaviour<S: Store + 'static> {
+pub(crate) struct ExchangeBehaviour<S>
+where
+    S: Store + 'static,
+{
     req_resp: ReqRespBehaviour,
     client_handler: ExchangeClientHandler,
     server_handler: ExchangeServerHandler<S>,
 }
 
-pub(crate) struct ExchangeConfig<'a, S: Store> {
+pub(crate) struct ExchangeConfig<'a, S> {
     pub network_id: &'a str,
     pub peer_tracker: Arc<PeerTracker>,
     pub header_store: Arc<S>,
@@ -70,7 +73,10 @@ pub enum ExchangeError {
     OutboundFailure(OutboundFailure),
 }
 
-impl<S: Store + 'static> ExchangeBehaviour<S> {
+impl<S> ExchangeBehaviour<S>
+where
+    S: Store + 'static,
+{
     pub(crate) fn new(config: ExchangeConfig<'_, S>) -> Self {
         ExchangeBehaviour {
             req_resp: ReqRespBehaviour::new(
@@ -164,7 +170,10 @@ impl<S: Store + 'static> ExchangeBehaviour<S> {
     }
 }
 
-impl<S: Store + 'static> NetworkBehaviour for ExchangeBehaviour<S> {
+impl<S> NetworkBehaviour for ExchangeBehaviour<S>
+where
+    S: Store + 'static,
+{
     type ConnectionHandler = <ReqRespBehaviour as NetworkBehaviour>::ConnectionHandler;
     type ToSwarm = ();
 

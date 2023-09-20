@@ -9,11 +9,17 @@ use tracing::instrument;
 
 use crate::store::Store;
 
-pub(super) struct ExchangeServerHandler<S: Store> {
+pub(super) struct ExchangeServerHandler<S>
+where
+    S: Store + 'static,
+{
     _store: Arc<S>,
 }
 
-impl<S: Store> ExchangeServerHandler<S> {
+impl<S> ExchangeServerHandler<S>
+where
+    S: Store + 'static,
+{
     pub(super) fn new(store: Arc<S>) -> Self {
         ExchangeServerHandler { _store: store }
     }

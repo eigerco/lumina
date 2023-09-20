@@ -4,7 +4,6 @@
 //! [`Store`]: crate::store::Store
 //! [`Syncer`]: crate::syncer::Syncer
 
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use libp2p::core::muxing::StreamMuxerBox;
@@ -13,15 +12,13 @@ use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
 
 use crate::p2p::{P2p, P2pArgs, P2pService};
-use crate::store::Store;
 use crate::syncer::{Syncer, SyncerArgs, SyncerService};
 
 #[derive(Debug, thiserror::Error)]
-pub enum NodeError<P2pSrv, SyncerSrv, S>
+pub enum NodeError<P2pSrv, SyncerSrv>
 where
-    S: Store,
-    P2pSrv: P2pService<S>,
-    SyncerSrv: SyncerService<P2pSrv, Store = S>,
+    P2pSrv: P2pService,
+    SyncerSrv: SyncerService<P2pSrv>,
 {
     #[error(transparent)]
     P2pService(P2pSrv::Error),
@@ -30,7 +27,7 @@ where
     SyncerService(SyncerSrv::Error),
 }
 
-pub struct NodeConfig<S: Store> {
+pub struct NodeConfig<S> {
     pub network_id: String,
     pub p2p_transport: Boxed<(PeerId, StreamMuxerBox)>,
     pub p2p_local_keypair: Keypair,
@@ -39,26 +36,25 @@ pub struct NodeConfig<S: Store> {
     pub store: S,
 }
 
-pub type Node<S> = GenericNode<P2p<S>, Syncer<P2p<S>, S>, S>;
+pub type Node<S> = GenericNode<P2p<S>, Syncer<P2p<S>>>;
 
-pub struct GenericNode<P2pSrv, SyncerSrv, S>
+pub struct GenericNode<P2pSrv, SyncerSrv>
 where
-    S: Store,
-    P2pSrv: P2pService<S>,
-    SyncerSrv: SyncerService<P2pSrv, Store = S>,
+    P2pSrv: P2pService,
+    SyncerSrv: SyncerService<P2pSrv>,
 {
     p2p: Arc<P2pSrv>,
     syncer: Arc<SyncerSrv>,
-    _store: PhantomData<S>,
 }
 
-impl<P2pSrv, SyncerSrv, S> GenericNode<P2pSrv, SyncerSrv, S>
+impl<P2pSrv, SyncerSrv> GenericNode<P2pSrv, SyncerSrv>
 where
-    S: Store,
-    P2pSrv: P2pService<S>,
-    SyncerSrv: SyncerService<P2pSrv, Store = S>,
+    P2pSrv: P2pService,
+    SyncerSrv: SyncerService<P2pSrv>,
 {
-    pub async fn new(config: NodeConfig<S>) -> Result<Self, NodeError<P2pSrv, SyncerSrv, S>> {
+    pub async fn new(
+        config: NodeConfig<P2pSrv::Store>,
+    ) -> Result<Self, NodeError<P2pSrv, SyncerSrv>> {
         let store = Arc::new(config.store);
 
         let p2p = Arc::new(
@@ -83,18 +79,14 @@ where
             .map_err(NodeError::SyncerService)?,
         );
 
-        Ok(GenericNode {
-            p2p,
-            syncer,
-            _store: PhantomData,
-        })
+        Ok(GenericNode { p2p, syncer })
     }
 
-    pub fn p2p(&self) -> &impl P2pService<S> {
+    pub fn p2p(&self) -> &impl P2pService {
         &*self.p2p
     }
 
-    pub fn syncer(&self) -> &impl SyncerService<P2pSrv, Store = S> {
+    pub fn syncer(&self) -> &impl SyncerService<P2pSrv> {
         &*self.syncer
     }
 }

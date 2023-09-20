@@ -95,7 +95,10 @@ pub enum P2pCmd {
 }
 
 #[async_trait]
-impl<S: Store + Sync + Send + 'static> Service for P2p<S> {
+impl<S> Service for P2p<S>
+where
+    S: Store + 'static,
+{
     type Command = P2pCmd;
     type Args = P2pArgs<S>;
     type Error = P2pError;
@@ -128,7 +131,11 @@ impl<S: Store + Sync + Send + 'static> Service for P2p<S> {
 }
 
 #[async_trait]
-pub trait P2pService<S>: Service<Args = P2pArgs<S>, Command = P2pCmd, Error = P2pError> {
+pub trait P2pService:
+    Service<Args = P2pArgs<Self::Store>, Command = P2pCmd, Error = P2pError>
+{
+    type Store: Store + Send + Sync;
+
     async fn wait_connected(&self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
 
@@ -218,7 +225,12 @@ pub trait P2pService<S>: Service<Args = P2pArgs<S>, Command = P2pCmd, Error = P2
 }
 
 #[async_trait]
-impl<S: Store + Sync + Send + 'static> P2pService<S> for P2p<S> {}
+impl<S> P2pService for P2p<S>
+where
+    S: Store + 'static,
+{
+    type Store = S;
+}
 
 /// Our network behaviour.
 #[derive(NetworkBehaviour)]
@@ -232,7 +244,10 @@ where
     gossipsub: gossipsub::Behaviour,
 }
 
-struct Worker<S: Store + 'static> {
+struct Worker<S>
+where
+    S: Store + 'static,
+{
     swarm: Swarm<Behaviour<S>>,
     header_sub_topic_hash: TopicHash,
     cmd_rx: flume::Receiver<P2pCmd>,
