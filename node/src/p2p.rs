@@ -134,7 +134,7 @@ where
 pub trait P2pService:
     Service<Args = P2pArgs<Self::Store>, Command = P2pCmd, Error = P2pError>
 {
-    type Store: Store + Send + Sync;
+    type Store: Store;
 
     async fn wait_connected(&self) -> Result<()> {
         let (tx, rx) = oneshot::channel();

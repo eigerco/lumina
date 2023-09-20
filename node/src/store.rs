@@ -1,9 +1,10 @@
+use std::fmt::Debug;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use async_trait::async_trait;
 use celestia_types::ExtendedHeader;
-use core::fmt::Debug;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use tendermint::Hash;
 use thiserror::Error;
 use tracing::{info, instrument};
@@ -20,19 +21,7 @@ pub trait Store: Send + Sync + Debug {
     async fn has_at(&self, height: u64) -> bool;
 
     async fn append_single(&mut self, header: ExtendedHeader) -> Result<()>;
-}
 
-#[async_trait]
-trait StoreExt {
-    async fn append<I>(&mut self, headers: I) -> Result<()>
-    where
-        I: IntoIterator<Item = ExtendedHeader> + Send,
-        <I as IntoIterator>::IntoIter: Send;
-}
-
-/*
-#[async_trait]
-impl<S: Store> StoreExt for S {
     async fn append<I: IntoIterator<Item = ExtendedHeader>>(&mut self, headers: I) -> Result<()>
     where
         I: IntoIterator<Item = ExtendedHeader> + Send,
@@ -41,8 +30,7 @@ impl<S: Store> StoreExt for S {
         let headers = headers.into_iter();
 
         for (idx, header) in headers.enumerate() {
-            if let Err(e) = self.append_single(header).await {
-                error!("error appending: {e}");
+            if self.append_single(header).await.is_err() {
                 return Err(StoreError::ContinuousAppendFailedAt(idx));
             }
         }
@@ -50,7 +38,6 @@ impl<S: Store> StoreExt for S {
         Ok(())
     }
 }
-*/
 
 #[async_trait]
 impl Store for InMemoryStore {
@@ -161,8 +148,6 @@ impl InMemoryStore {
 
         Ok(())
     }
-
-    //pub fn add(&self, header: ExtendedHeader) -> Result<(), StoreError> { }
 
     #[instrument(err)]
     pub fn get_head(&self) -> Result<ExtendedHeader, StoreError> {
