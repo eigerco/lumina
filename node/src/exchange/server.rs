@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use libp2p::{
     request_response::{InboundFailure, RequestId, ResponseChannel},
@@ -5,14 +7,14 @@ use libp2p::{
 };
 use tracing::instrument;
 
-use crate::store::WrappedStore;
+use crate::store::BoxedStore;
 
 pub(super) struct ExchangeServerHandler {
-    _store: WrappedStore,
+    _store: Arc<BoxedStore>,
 }
 
 impl ExchangeServerHandler {
-    pub(super) fn new(store: WrappedStore) -> Self {
+    pub(super) fn new(store: Arc<BoxedStore>) -> Self {
         ExchangeServerHandler { _store: store }
     }
 

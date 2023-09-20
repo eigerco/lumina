@@ -4,17 +4,16 @@ use core::fmt::Debug;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use tendermint::Hash;
 use thiserror::Error;
 use tracing::{error, info, instrument};
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
 
-pub type WrappedStore = Arc<Box<dyn Store + Sync + Send>>;
+pub type BoxedStore = Box<dyn Store + Sync + Send>;
 
 #[async_trait]
-pub trait Store: Send + Sync + Debug {
+pub trait Store: Debug {
     async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader>;
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
 
@@ -33,6 +32,7 @@ trait StoreExt {
         <I as IntoIterator>::IntoIter: Send;
 }
 
+/*
 #[async_trait]
 impl<S: Store> StoreExt for S {
     async fn append<I: IntoIterator<Item = ExtendedHeader>>(&mut self, headers: I) -> Result<()>
@@ -52,6 +52,7 @@ impl<S: Store> StoreExt for S {
         Ok(())
     }
 }
+*/
 
 #[async_trait]
 impl Store for InMemoryStore {
