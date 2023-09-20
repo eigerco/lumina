@@ -69,4 +69,4 @@ where
 }
 
 #[async_trait]
-impl<P2pSrv> SyncerService<P2pSrv> for Syncer<P2pSrv> where P2pSrv: P2pService {}
+impl<P2pSrv: P2pService> SyncerService<P2pSrv> for Syncer<P2pSrv> {}
