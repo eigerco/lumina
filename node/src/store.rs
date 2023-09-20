@@ -20,9 +20,9 @@ pub trait Store: Send + Sync + Debug {
     async fn has(&self, hash: &Hash) -> bool;
     async fn has_at(&self, height: u64) -> bool;
 
-    async fn append_single(&mut self, header: ExtendedHeader) -> Result<()>;
+    async fn append_single(&self, header: ExtendedHeader) -> Result<()>;
 
-    async fn append<I: IntoIterator<Item = ExtendedHeader>>(&mut self, headers: I) -> Result<()>
+    async fn append<I: IntoIterator<Item = ExtendedHeader>>(&self, headers: I) -> Result<()>
     where
         I: IntoIterator<Item = ExtendedHeader> + Send,
         <I as IntoIterator>::IntoIter: Send,
@@ -39,33 +39,6 @@ pub trait Store: Send + Sync + Debug {
     }
 }
 
-#[async_trait]
-impl Store for InMemoryStore {
-    async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader, StoreError> {
-        self.get_by_hash(hash)
-    }
-
-    async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader, StoreError> {
-        self.get_by_height(height)
-    }
-
-    async fn height(&self) -> u64 {
-        self.get_head_height()
-    }
-
-    async fn has(&self, hash: &Hash) -> bool {
-        self.exists_by_hash(hash)
-    }
-
-    async fn has_at(&self, height: u64) -> bool {
-        self.exists_by_height(height)
-    }
-
-    async fn append_single(&mut self, header: ExtendedHeader) -> Result<()> {
-        self.append_continuous(header)
-    }
-}
-
 #[derive(Debug)]
 pub struct InMemoryStore {
     headers: DashMap<Hash, ExtendedHeader>,
@@ -75,14 +48,15 @@ pub struct InMemoryStore {
 
 #[derive(Error, Debug, PartialEq)]
 pub enum StoreError {
-    // TODO: error consolidation again
     #[error("Hash {0} already exists in store")]
     HashExists(Hash),
+
     #[error("Height {0} already exists in store")]
     HeightExists(u64),
 
     #[error("Continuous append impossible")]
     NonContinuousAppend,
+
     #[error("Failed to apply header {0}")]
     ContinuousAppendFailedAt(usize),
 
@@ -91,6 +65,7 @@ pub enum StoreError {
 
     #[error("Store in inconsistent state, lost head")]
     LostStoreHead,
+
     #[error("Store in inconsistent state; height->hash mapping exists, {0} missing")]
     LostHash(Hash),
 }
@@ -199,6 +174,33 @@ impl InMemoryStore {
             .as_deref()
             .cloned()
             .ok_or(StoreError::LostHash(hash))
+    }
+}
+
+#[async_trait]
+impl Store for InMemoryStore {
+    async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader, StoreError> {
+        self.get_by_hash(hash)
+    }
+
+    async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader, StoreError> {
+        self.get_by_height(height)
+    }
+
+    async fn height(&self) -> u64 {
+        self.get_head_height()
+    }
+
+    async fn has(&self, hash: &Hash) -> bool {
+        self.exists_by_hash(hash)
+    }
+
+    async fn has_at(&self, height: u64) -> bool {
+        self.exists_by_height(height)
+    }
+
+    async fn append_single(&self, header: ExtendedHeader) -> Result<()> {
+        self.append_continuous(header)
     }
 }
 
