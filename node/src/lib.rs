@@ -8,7 +8,7 @@ pub mod peer_tracker;
 pub mod store;
 pub mod syncer;
 #[cfg(test)]
-pub mod test_utils;
+mod test_utils;
 mod utils;
 
 #[async_trait]
