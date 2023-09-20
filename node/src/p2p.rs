@@ -18,7 +18,7 @@ use libp2p::{identify, Multiaddr, PeerId, TransportError};
 use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::oneshot;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, instrument, warn};
 
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
 use crate::executor::{spawn, Executor};
@@ -355,10 +355,6 @@ where
             }
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                 self.peer_tracker.remove(peer_id);
-            }
-            #[cfg(debug_assertions)]
-            SwarmEvent::NewListenAddr { address, .. } => {
-                info!("listening on: {address}");
             }
             _ => {}
         }
