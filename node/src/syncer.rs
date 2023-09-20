@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::{p2p::P2pService, store::BoxedStore, Service};
+use crate::p2p::P2pService;
+use crate::store::Store;
+use crate::Service;
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
@@ -11,14 +13,22 @@ pub enum SyncerError {}
 
 #[allow(unused)]
 #[derive(Debug)]
-pub struct Syncer<P2pSrv: P2pService> {
+pub struct Syncer<P2pSrv, S>
+where
+    S: Store,
+    P2pSrv: P2pService<S>,
+{
     p2p: Arc<P2pSrv>,
-    store: Arc<BoxedStore>,
+    store: Arc<S>,
 }
 
-pub struct SyncerArgs<P2pSrv: P2pService> {
+pub struct SyncerArgs<P2pSrv, S>
+where
+    S: Store,
+    P2pSrv: P2pService<S>,
+{
     pub p2p: Arc<P2pSrv>,
-    pub store: Arc<BoxedStore>,
+    pub store: Arc<S>,
 }
 
 #[doc(hidden)]
@@ -26,12 +36,16 @@ pub struct SyncerArgs<P2pSrv: P2pService> {
 pub enum SyncerCmd {}
 
 #[async_trait]
-impl<P2pSrv: P2pService> Service for Syncer<P2pSrv> {
+impl<P2pSrv, S> Service for Syncer<P2pSrv, S>
+where
+    S: Store + Sync + Send,
+    P2pSrv: P2pService<S>,
+{
     type Command = SyncerCmd;
-    type Args = SyncerArgs<P2pSrv>;
+    type Args = SyncerArgs<P2pSrv, S>;
     type Error = SyncerError;
 
-    async fn start(args: SyncerArgs<P2pSrv>) -> Result<Self, SyncerError> {
+    async fn start(args: SyncerArgs<P2pSrv, S>) -> Result<Self, SyncerError> {
         // TODO
         Ok(Self {
             p2p: args.p2p,
@@ -51,10 +65,18 @@ impl<P2pSrv: P2pService> Service for Syncer<P2pSrv> {
 }
 
 #[async_trait]
-pub trait SyncerService<P2pSrv: P2pService>:
-    Service<Args = SyncerArgs<P2pSrv>, Command = SyncerCmd, Error = SyncerError>
+pub trait SyncerService<P2pSrv, S>:
+    Service<Args = SyncerArgs<P2pSrv, S>, Command = SyncerCmd, Error = SyncerError>
+where
+    S: Store,
+    P2pSrv: P2pService<S>,
 {
 }
 
 #[async_trait]
-impl<P2pSrv: P2pService> SyncerService<P2pSrv> for Syncer<P2pSrv> {}
+impl<P2pSrv, S> SyncerService<P2pSrv, S> for Syncer<P2pSrv, S>
+where
+    S: Store + Sync + Send,
+    P2pSrv: P2pService<S>,
+{
+}

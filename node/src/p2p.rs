@@ -1,4 +1,5 @@
 use std::io;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -22,7 +23,7 @@ use tracing::{debug, info, instrument, warn};
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
 use crate::executor::{spawn, Executor};
 use crate::peer_tracker::PeerTracker;
-use crate::store::BoxedStore;
+use crate::store::Store;
 use crate::utils::{gossipsub_ident_topic, OneshotResultSender, OneshotSenderExt};
 use crate::Service;
 
@@ -64,17 +65,18 @@ impl From<oneshot::error::RecvError> for P2pError {
 }
 
 #[derive(Debug)]
-pub struct P2p {
+pub struct P2p<S> {
     cmd_tx: flume::Sender<P2pCmd>,
+    _store: PhantomData<S>,
 }
 
-pub struct P2pArgs {
+pub struct P2pArgs<S> {
     pub transport: Boxed<(PeerId, StreamMuxerBox)>,
     pub network_id: String,
     pub local_keypair: Keypair,
     pub bootstrap_peers: Vec<Multiaddr>,
     pub listen_on: Vec<Multiaddr>,
-    pub store: Arc<BoxedStore>,
+    pub store: Arc<S>,
 }
 
 #[doc(hidden)]
@@ -93,12 +95,12 @@ pub enum P2pCmd {
 }
 
 #[async_trait]
-impl Service for P2p {
+impl<S: Store + Sync + Send + 'static> Service for P2p<S> {
     type Command = P2pCmd;
-    type Args = P2pArgs;
+    type Args = P2pArgs<S>;
     type Error = P2pError;
 
-    async fn start(args: P2pArgs) -> Result<Self, P2pError> {
+    async fn start(args: P2pArgs<S>) -> Result<Self, P2pError> {
         let (cmd_tx, cmd_rx) = flume::bounded(16);
         let mut worker = Worker::new(args, cmd_rx)?;
 
@@ -106,7 +108,10 @@ impl Service for P2p {
             worker.run().await;
         });
 
-        Ok(P2p { cmd_tx })
+        Ok(P2p {
+            cmd_tx,
+            _store: PhantomData,
+        })
     }
 
     async fn stop(&self) -> Result<()> {
@@ -123,7 +128,7 @@ impl Service for P2p {
 }
 
 #[async_trait]
-pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError> {
+pub trait P2pService<S>: Service<Args = P2pArgs<S>, Command = P2pCmd, Error = P2pError> {
     async fn wait_connected(&self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
 
@@ -213,27 +218,33 @@ pub trait P2pService: Service<Args = P2pArgs, Command = P2pCmd, Error = P2pError
 }
 
 #[async_trait]
-impl P2pService for P2p {}
+impl<S: Store + Sync + Send + 'static> P2pService<S> for P2p<S> {}
 
 /// Our network behaviour.
 #[derive(NetworkBehaviour)]
-struct Behaviour {
+struct Behaviour<S>
+where
+    S: Store + 'static,
+{
     identify: identify::Behaviour,
-    header_ex: ExchangeBehaviour,
+    header_ex: ExchangeBehaviour<S>,
     keep_alive: keep_alive::Behaviour,
     gossipsub: gossipsub::Behaviour,
 }
 
-struct Worker {
-    swarm: Swarm<Behaviour>,
+struct Worker<S: Store + 'static> {
+    swarm: Swarm<Behaviour<S>>,
     header_sub_topic_hash: TopicHash,
     cmd_rx: flume::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
     wait_connected_tx: Option<Vec<oneshot::Sender<()>>>,
 }
 
-impl Worker {
-    fn new(args: P2pArgs, cmd_rx: flume::Receiver<P2pCmd>) -> Result<Self, P2pError> {
+impl<S> Worker<S>
+where
+    S: Store + 'static,
+{
+    fn new(args: P2pArgs<S>, cmd_rx: flume::Receiver<P2pCmd>) -> Result<Self, P2pError> {
         let peer_tracker = Arc::new(PeerTracker::new());
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
@@ -312,7 +323,7 @@ impl Worker {
     #[instrument(level = "trace", skip(self))]
     async fn on_swarm_event(
         &mut self,
-        ev: SwarmEvent<BehaviourEvent, THandlerErr<Behaviour>>,
+        ev: SwarmEvent<BehaviourEvent<S>, THandlerErr<Behaviour<S>>>,
     ) -> Result<()> {
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {

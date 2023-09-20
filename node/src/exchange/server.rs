@@ -7,14 +7,14 @@ use libp2p::{
 };
 use tracing::instrument;
 
-use crate::store::BoxedStore;
+use crate::store::Store;
 
-pub(super) struct ExchangeServerHandler {
-    _store: Arc<BoxedStore>,
+pub(super) struct ExchangeServerHandler<S: Store> {
+    _store: Arc<S>,
 }
 
-impl ExchangeServerHandler {
-    pub(super) fn new(store: Arc<BoxedStore>) -> Self {
+impl<S: Store> ExchangeServerHandler<S> {
+    pub(super) fn new(store: Arc<S>) -> Self {
         ExchangeServerHandler { _store: store }
     }
 

@@ -4,6 +4,7 @@ use std::time::Duration;
 use celestia_node::{
     node::{Node, NodeConfig},
     p2p::P2pService,
+    store::InMemoryStore,
 };
 use celestia_rpc::prelude::*;
 use libp2p::{
@@ -40,9 +41,11 @@ async fn get_bridge_tcp_ma() -> Multiaddr {
         .expect("Bridge doesn't listen on tcp")
 }
 
-async fn new_connected_node() -> Node {
+async fn new_connected_node() -> Node<InMemoryStore> {
     let bridge_ma = get_bridge_tcp_ma().await;
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
+
+    let store = InMemoryStore::new();
 
     let node = Node::new(NodeConfig {
         network_id: "private".to_string(),
@@ -50,6 +53,7 @@ async fn new_connected_node() -> Node {
         p2p_local_keypair,
         p2p_bootstrap_peers: vec![bridge_ma],
         p2p_listen_on: vec![],
+        store,
     })
     .await
     .unwrap();

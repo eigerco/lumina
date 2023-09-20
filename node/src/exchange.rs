@@ -26,7 +26,7 @@ use crate::exchange::client::ExchangeClientHandler;
 use crate::exchange::server::ExchangeServerHandler;
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
-use crate::store::BoxedStore;
+use crate::store::Store;
 use crate::utils::{stream_protocol_id, OneshotResultSender};
 
 /// Max request size in bytes
@@ -40,16 +40,16 @@ type ReqRespBehaviour = request_response::Behaviour<HeaderCodec>;
 type ReqRespEvent = request_response::Event<HeaderRequest, Vec<HeaderResponse>>;
 type ReqRespMessage = request_response::Message<HeaderRequest, Vec<HeaderResponse>>;
 
-pub(crate) struct ExchangeBehaviour {
+pub(crate) struct ExchangeBehaviour<S: Store + 'static> {
     req_resp: ReqRespBehaviour,
     client_handler: ExchangeClientHandler,
-    server_handler: ExchangeServerHandler,
+    server_handler: ExchangeServerHandler<S>,
 }
 
-pub(crate) struct ExchangeConfig<'a> {
+pub(crate) struct ExchangeConfig<'a, S: Store> {
     pub network_id: &'a str,
     pub peer_tracker: Arc<PeerTracker>,
-    pub header_store: Arc<BoxedStore>,
+    pub header_store: Arc<S>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -70,8 +70,8 @@ pub enum ExchangeError {
     OutboundFailure(OutboundFailure),
 }
 
-impl ExchangeBehaviour {
-    pub(crate) fn new(config: ExchangeConfig<'_>) -> Self {
+impl<S: Store + 'static> ExchangeBehaviour<S> {
+    pub(crate) fn new(config: ExchangeConfig<'_, S>) -> Self {
         ExchangeBehaviour {
             req_resp: ReqRespBehaviour::new(
                 [(
@@ -164,7 +164,7 @@ impl ExchangeBehaviour {
     }
 }
 
-impl NetworkBehaviour for ExchangeBehaviour {
+impl<S: Store + 'static> NetworkBehaviour for ExchangeBehaviour<S> {
     type ConnectionHandler = <ReqRespBehaviour as NetworkBehaviour>::ConnectionHandler;
     type ToSwarm = ();
 
