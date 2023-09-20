@@ -4,7 +4,6 @@
 //! [`Store`]: crate::store::Store
 //! [`Syncer`]: crate::syncer::Syncer
 
-use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -22,16 +21,13 @@ pub enum NodeError<P2pSrv, SyncerSrv, S>
 where
     S: Store,
     P2pSrv: P2pService<S>,
-    SyncerSrv: SyncerService<P2pSrv, S>,
+    SyncerSrv: SyncerService<P2pSrv, Store = S>,
 {
     #[error(transparent)]
     P2pService(P2pSrv::Error),
 
     #[error(transparent)]
     SyncerService(SyncerSrv::Error),
-
-    #[error("should not happen")]
-    _Unreachable(Infallible, PhantomData<S>),
 }
 
 pub struct NodeConfig<S: Store> {
@@ -49,7 +45,7 @@ pub struct GenericNode<P2pSrv, SyncerSrv, S>
 where
     S: Store,
     P2pSrv: P2pService<S>,
-    SyncerSrv: SyncerService<P2pSrv, S>,
+    SyncerSrv: SyncerService<P2pSrv, Store = S>,
 {
     p2p: Arc<P2pSrv>,
     syncer: Arc<SyncerSrv>,
@@ -60,7 +56,7 @@ impl<P2pSrv, SyncerSrv, S> GenericNode<P2pSrv, SyncerSrv, S>
 where
     S: Store,
     P2pSrv: P2pService<S>,
-    SyncerSrv: SyncerService<P2pSrv, S>,
+    SyncerSrv: SyncerService<P2pSrv, Store = S>,
 {
     pub async fn new(config: NodeConfig<S>) -> Result<Self, NodeError<P2pSrv, SyncerSrv, S>> {
         let store = Arc::new(config.store);
@@ -98,7 +94,7 @@ where
         &*self.p2p
     }
 
-    pub fn syncer(&self) -> &impl SyncerService<P2pSrv, S> {
+    pub fn syncer(&self) -> &impl SyncerService<P2pSrv, Store = S> {
         &*self.syncer
     }
 }

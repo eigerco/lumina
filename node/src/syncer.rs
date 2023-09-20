@@ -65,18 +65,20 @@ where
 }
 
 #[async_trait]
-pub trait SyncerService<P2pSrv, S>:
-    Service<Args = SyncerArgs<P2pSrv, S>, Command = SyncerCmd, Error = SyncerError>
+pub trait SyncerService<P2pSrv>:
+    Service<Args = SyncerArgs<P2pSrv, Self::Store>, Command = SyncerCmd, Error = SyncerError>
 where
-    S: Store,
-    P2pSrv: P2pService<S>,
+    P2pSrv: P2pService<Self::Store>,
+    <Self as SyncerService<P2pSrv>>::Store: Store,
 {
+    type Store;
 }
 
 #[async_trait]
-impl<P2pSrv, S> SyncerService<P2pSrv, S> for Syncer<P2pSrv, S>
+impl<P2pSrv, S> SyncerService<P2pSrv> for Syncer<P2pSrv, S>
 where
     S: Store + Sync + Send,
     P2pSrv: P2pService<S>,
 {
+    type Store = S;
 }
