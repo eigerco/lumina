@@ -17,7 +17,7 @@ impl NamespacedHashExt for NamespacedHash {
     }
 
     fn to_vec(&self) -> Vec<u8> {
-        self.iter().copied().collect()
+        self.iter().collect()
     }
 
     fn to_array(&self) -> [u8; NAMESPACED_HASH_SIZE] {

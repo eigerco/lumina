@@ -23,11 +23,11 @@ pub struct DataAvailabilityHeader {
 
 impl DataAvailabilityHeader {
     pub fn row_root(&self, row: usize) -> Option<NamespacedHash> {
-        self.row_roots.get(row).copied()
+        self.row_roots.get(row).cloned()
     }
 
     pub fn column_root(&self, column: usize) -> Option<NamespacedHash> {
-        self.column_roots.get(column).copied()
+        self.column_roots.get(column).cloned()
     }
 }
 
@@ -177,8 +177,8 @@ mod tests {
 
         dah.validate_basic().unwrap();
 
-        dah.row_roots.push(dah.row_roots[0]);
-        dah.column_roots.push(dah.column_roots[0]);
+        dah.row_roots.push(dah.row_roots[0].clone());
+        dah.column_roots.push(dah.column_roots[0].clone());
 
         dah.validate_basic().unwrap_err();
     }
