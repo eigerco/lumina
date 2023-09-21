@@ -123,7 +123,7 @@ impl InMemoryStore {
 
     #[instrument(err)]
     pub fn get_head(&self) -> Result<ExtendedHeader, StoreError> {
-        let head_height = self.head_height.load(Ordering::Acquire);
+        let head_height = self.get_head_height();
         if head_height == 0 {
             return Err(StoreError::NotFound);
         }
