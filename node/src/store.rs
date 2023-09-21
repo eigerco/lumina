@@ -162,6 +162,10 @@ impl InMemoryStore {
 
     #[instrument(err)]
     pub fn get_by_height(&self, height: u64) -> Result<ExtendedHeader, StoreError> {
+        if !exists_by_height(height) {
+                return Err(StoreError::NotFound);        
+        }
+
         let Some(hash) = self.height_to_hash.get(&height).as_deref().copied() else {
             return Err(StoreError::NotFound);
         };
