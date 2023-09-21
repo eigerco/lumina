@@ -21,6 +21,7 @@ pub trait Store: Send + Sync + Debug {
     async fn has(&self, hash: &Hash) -> bool;
     async fn has_at(&self, height: u64) -> bool;
 
+    // TODO: should caller or the store verify and validate?
     /// append single header maintaining continuity from the genesis to the head of the store
     /// caller is responsible for validation and verification against current head
     async fn append_single_unverified(&self, header: ExtendedHeader) -> Result<()>;
