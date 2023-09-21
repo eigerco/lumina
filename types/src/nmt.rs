@@ -128,6 +128,14 @@ impl From<nmt_rs::NamespaceId<NS_SIZE>> for Namespace {
     }
 }
 
+impl std::ops::Deref for Namespace {
+    type Target = nmt_rs::NamespaceId<NS_SIZE>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl Serialize for Namespace {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
