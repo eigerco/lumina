@@ -29,15 +29,17 @@ extract_urls ../target/proto-vendor-src \
     https://github.com/celestiaorg/nmt/archive/refs/heads/master.tar.gz \
     https://github.com/cosmos/cosmos-proto/archive/refs/tags/v1.0.0-alpha4.tar.gz \
     https://github.com/cosmos/gogoproto/archive/refs/tags/v1.4.11.tar.gz \
-    https://github.com/celestiaorg/go-header/archive/refs/heads/main.tar.gz
+    https://github.com/celestiaorg/go-header/archive/refs/heads/main.tar.gz \
+    https://github.com/googleapis/googleapis/archive/refs/heads/master.tar.gz
+
+mkdir -p vendor
 
 rm -rf vendor/celestia
-mkdir -p vendor
 cp -r ../target/proto-vendor-src/celestia-app-main/proto/celestia vendor
 
 rm -rf vendor/go-header
-mkdir -p vendor/go-header/p2p/pb
-cp -r ../target/proto-vendor-src/go-header-main/p2p/pb/*.proto vendor/go-header/p2p/pb
+mkdir -p vendor/go-header/p2p
+cp -r ../target/proto-vendor-src/go-header-main/p2p/pb vendor/go-header/p2p
 
 rm -rf vendor/cosmos
 mkdir -p vendor/cosmos
@@ -48,9 +50,11 @@ cp -r ../target/proto-vendor-src/cosmos-proto-1.0.0-alpha4/proto/cosmos_proto ve
 
 rm -rf vendor/gogoproto
 mkdir -p vendor/gogoproto
-cp -r ../target/proto-vendor-src/gogoproto-1.4.11/gogoproto/gogo.proto vendor/gogoproto
+cp ../target/proto-vendor-src/gogoproto-1.4.11/gogoproto/gogo.proto vendor/gogoproto
 
-# TODO: create google dir
+rm -rf vendor/google
+mkdir -p vendor/google/api
+cp ../target/proto-vendor-src/googleapis-master/google/api/{annotations.proto,http.proto} vendor/google/api
 
 rm -rf vendor/header
 mkdir -p vendor/header
