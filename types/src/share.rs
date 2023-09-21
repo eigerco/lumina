@@ -231,7 +231,7 @@ mod tests {
                 "/////////////////////////////////////////////////////////////////////////////zgUEBW/wWmCfnwXfalgqMfK9sMy168y3XRzdwY1jpZY"
             ],
             "leaf_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAJLVUf6krS8362EAAAAAAAAAAAAAAAAAAAAAAAAAktVR/qStLzfrYeEAWUHOa+lE38pJyHstgGaqi9RXPhZtzUscK7iTUbQS",
-            "is_max_namespace_id_ignored": true
+            "is_max_namespace_ignored": true
         }"#;
 
         let proof: NamespaceProof =
@@ -316,7 +316,7 @@ mod tests {
                 "/////////////////////////////////////////////////////////////////////////////0WE8jz9lbFjpXWj9v7/QgdAxYEqy4ew9TMdqil/UFZm"
               ],
               "leaf_hash": null,
-              "is_max_namespace_id_ignored": true
+              "is_max_namespace_ignored": true
             }
           }
         ]"#;
