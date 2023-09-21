@@ -104,10 +104,8 @@ where
     }
 
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<(C, ResponseType)> {
-        while let Poll::Ready(ev) = Pin::new(&mut self.store_jobs).poll_next(cx) {
-            if let Some(response) = ev {
-                return Poll::Ready(response);
-            }
+        if let Poll::Ready(Some(response)) = Pin::new(&mut self.store_jobs).poll_next(cx) {
+            return Poll::Ready(response);
         }
 
         Poll::Pending
