@@ -89,8 +89,8 @@ impl FraudProof for BadEncodingFraudProof {
         }
 
         let root = match self.axis {
-            Axis::Row => merkle_row_roots[self.index],
-            Axis::Col => merkle_col_roots[self.index],
+            Axis::Row => merkle_row_roots[self.index].clone(),
+            Axis::Col => merkle_col_roots[self.index].clone(),
         };
 
         // verify if the root can be converted to a cid and back

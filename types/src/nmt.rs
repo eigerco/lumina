@@ -18,7 +18,7 @@ pub const NS_ID_V0_SIZE: usize = 10;
 pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
 pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
 impl Namespace {
@@ -125,6 +125,14 @@ impl From<Namespace> for nmt_rs::NamespaceId<NS_SIZE> {
 impl From<nmt_rs::NamespaceId<NS_SIZE>> for Namespace {
     fn from(value: nmt_rs::NamespaceId<NS_SIZE>) -> Self {
         Namespace(value)
+    }
+}
+
+impl std::ops::Deref for Namespace {
+    type Target = nmt_rs::NamespaceId<NS_SIZE>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
