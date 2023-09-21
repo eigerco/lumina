@@ -3,9 +3,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
 use celestia_types::ExtendedHeader;
+use celestia_types::Hash;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use celestia_types::Hash;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
