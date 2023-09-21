@@ -25,20 +25,23 @@ impl Commitment {
     ///
     /// [Message layout rationale]: https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/rationale/message_block_layout.md?plain=1#L12
     /// [Non-interactive default rules]: https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/rationale/message_block_layout.md?plain=1#L36
-    pub fn for_blob(
+    pub fn from_blob(
         namespace: Namespace,
         share_version: u8,
         blob_data: &[u8],
     ) -> Result<Commitment> {
         let shares = split_blob_to_shares(namespace, share_version, blob_data)?;
-        Self::for_shares(namespace, &shares)
+        Self::from_shares(namespace, &shares)
     }
 
     /// Generate the commitment for given shares.
     ///
     /// Shares are treated as the arbitrary byte blobs. No verification of their binary repr correctness
-    /// is made, not even if they belong to the provided namespace.
-    pub fn for_shares(namespace: Namespace, mut shares: &[impl AsRef<[u8]>]) -> Result<Commitment> {
+    /// is made, not even if they belong to the provided namespace. TODO: should we change that?
+    pub fn from_shares(
+        namespace: Namespace,
+        mut shares: &[impl AsRef<[u8]>],
+    ) -> Result<Commitment> {
         // the commitment is the root of a merkle mountain range with max tree size
         // determined by the number of roots required to create a share commitment
         // over that blob. The size of the tree is only increased if the number of
@@ -46,7 +49,7 @@ impl Commitment {
         let subtree_width = subtree_width(shares.len() as u64, appconsts::SUBTREE_ROOT_THRESHOLD);
         let tree_sizes = merkle_mountain_range_sizes(shares.len() as u64, subtree_width);
 
-        let mut leaf_sets: Vec<&[_]> = Vec::new();
+        let mut leaf_sets: Vec<&[_]> = Vec::with_capacity(tree_sizes.len());
 
         for size in tree_sizes {
             let (leafs, rest) = shares.split_at(size as usize);
@@ -55,7 +58,7 @@ impl Commitment {
         }
 
         // create the commitments by pushing each leaf set onto an nmt
-        let mut subtree_roots: Vec<RawNamespacedHash> = Vec::new();
+        let mut subtree_roots: Vec<RawNamespacedHash> = Vec::with_capacity(leaf_sets.len());
         for leaf_set in leaf_sets {
             // create the nmt
             let mut tree = Nmt::new();
