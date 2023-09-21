@@ -35,6 +35,9 @@ impl Commitment {
     }
 
     /// Generate the commitment for given shares.
+    ///
+    /// Shares are treated as the arbitrary byte blobs. No verification of their binary repr correctness
+    /// is made, not even if they belong to the provided namespace.
     pub fn for_shares(namespace: Namespace, mut shares: &[impl AsRef<[u8]>]) -> Result<Commitment> {
         // the commitment is the root of a merkle mountain range with max tree size
         // determined by the number of roots required to create a share commitment
