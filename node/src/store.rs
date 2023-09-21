@@ -7,7 +7,7 @@ use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use tendermint::Hash;
 use thiserror::Error;
-use tracing::{info, instrument};
+use tracing::{debug, instrument};
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
 
@@ -21,15 +21,19 @@ pub trait Store: Send + Sync + Debug {
     async fn has(&self, hash: &Hash) -> bool;
     async fn has_at(&self, height: u64) -> bool;
 
-    async fn append_single(&self, header: ExtendedHeader) -> Result<()>;
+    /// append single header maintaining continuity from the genesis to the head of the store
+    /// caller is responsible for validation and verification against current head
+    async fn append_single_unverified(&self, header: ExtendedHeader) -> Result<()>;
 
-    async fn append<I>(&self, headers: I) -> Result<()>
+    /// append a range of headers maintaining continuity from the genesis to the head of the store
+    /// caller is responsible for validation and verification
+    async fn append_unverified<I>(&self, headers: I) -> Result<()>
     where
         I: IntoIterator<Item = ExtendedHeader> + Send,
         <I as IntoIterator>::IntoIter: Send,
     {
         for header in headers.into_iter() {
-            self.append_single(header).await?;
+            self.append_single_unverified(header).await?;
         }
 
         Ok(())
@@ -41,6 +45,7 @@ pub struct InMemoryStore {
     headers: DashMap<Hash, ExtendedHeader>,
     height_to_hash: DashMap<u64, Hash>,
     head_height: AtomicU64,
+    genesis_height: AtomicU64,
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -53,6 +58,9 @@ pub enum StoreError {
 
     #[error("Failed to append header at height {1}, current head {0}")]
     NonContinuousAppend(u64, u64),
+
+    #[error("Failed to validate header at height {0}")]
+    HeaderChecksError(u64),
 
     #[error("Header not found in store")]
     NotFound,
@@ -70,17 +78,7 @@ impl InMemoryStore {
             headers: DashMap::new(),
             height_to_hash: DashMap::new(),
             head_height: AtomicU64::new(0),
-        }
-    }
-
-    pub fn with_genesis(genesis: ExtendedHeader) -> Self {
-        let genesis_hash = genesis.hash();
-        let genesis_height = genesis.height().value();
-
-        InMemoryStore {
-            headers: DashMap::from_iter([(genesis_hash, genesis)]),
-            height_to_hash: DashMap::from_iter([(genesis_height, genesis_hash)]),
-            head_height: AtomicU64::new(genesis_height),
+            genesis_height: AtomicU64::new(0),
         }
     }
 
@@ -88,8 +86,12 @@ impl InMemoryStore {
         self.head_height.load(Ordering::Acquire)
     }
 
+    pub fn get_genesis_height(&self) -> u64 {
+        self.genesis_height.load(Ordering::Acquire)
+    }
+
     #[instrument(err)]
-    pub fn append_continuous(&self, header: ExtendedHeader) -> Result<(), StoreError> {
+    pub fn append_single_unverified(&self, header: ExtendedHeader) -> Result<(), StoreError> {
         let hash = header.hash();
         let height = header.height();
 
@@ -105,14 +107,20 @@ impl InMemoryStore {
         if matches!(height_entry, Entry::Occupied(_)) {
             return Err(StoreError::HeightExists(height.into()));
         }
-        if self.get_head_height() + 1 != height.value() {
+        if self
+            .genesis_height
+            .compare_exchange(0, height.value(), Ordering::Acquire, Ordering::Acquire)
+            .is_ok()
+        {
+            // new genesis was set, head height will be updated below
+        } else if self.get_head_height() + 1 != height.value() {
             return Err(StoreError::NonContinuousAppend(
                 self.get_head_height(),
                 height.value(),
             ));
         }
 
-        info!("Will insert {hash} at {height}");
+        debug!("Inserting header {hash} with height {height}");
         hash_entry.insert(header);
         height_entry.insert(hash);
 
@@ -139,8 +147,8 @@ impl InMemoryStore {
             .ok_or(StoreError::LostHash(head_hash))
     }
 
-    pub fn exists_by_hash(&self, hash: &Hash) -> bool {
-        self.headers.get(hash).is_some()
+    pub fn contains_hash(&self, hash: &Hash) -> bool {
+        self.headers.contains_key(hash)
     }
 
     #[instrument(err)]
@@ -152,18 +160,16 @@ impl InMemoryStore {
             .ok_or(StoreError::NotFound)
     }
 
-    pub fn exists_by_height(&self, height: u64) -> bool {
-        let Some(hash) = self.height_to_hash.get(&height).as_deref().copied() else {
-            return false;
-        };
-
-        self.headers.get(&hash).is_some()
+    pub fn contains_height(&self, height: u64) -> bool {
+        height != 0
+            && height >= self.genesis_height.load(Ordering::Acquire)
+            && height <= self.get_head_height()
     }
 
     #[instrument(err)]
     pub fn get_by_height(&self, height: u64) -> Result<ExtendedHeader, StoreError> {
-        if !exists_by_height(height) {
-                return Err(StoreError::NotFound);        
+        if !self.contains_height(height) {
+            return Err(StoreError::NotFound);
         }
 
         let Some(hash) = self.height_to_hash.get(&height).as_deref().copied() else {
@@ -197,15 +203,15 @@ impl Store for InMemoryStore {
     }
 
     async fn has(&self, hash: &Hash) -> bool {
-        self.exists_by_hash(hash)
+        self.contains_hash(hash)
     }
 
     async fn has_at(&self, height: u64) -> bool {
-        self.exists_by_height(height)
+        self.contains_height(height)
     }
 
-    async fn append_single(&self, header: ExtendedHeader) -> Result<()> {
-        self.append_continuous(header)
+    async fn append_single_unverified(&self, header: ExtendedHeader) -> Result<()> {
+        self.append_single_unverified(header)
     }
 }
 
@@ -237,7 +243,7 @@ pub mod tests {
     fn test_read_write() {
         let s = InMemoryStore::new();
         let header = gen_extended_header(1);
-        s.append_continuous(header.clone()).unwrap();
+        s.append_single_unverified(header.clone()).unwrap();
         assert_eq!(s.get_head_height(), 1);
         assert_eq!(s.get_head().unwrap(), header);
         assert_eq!(s.get_by_height(1).unwrap(), header);
@@ -260,9 +266,9 @@ pub mod tests {
     fn test_duplicate_insert() {
         let s = gen_filled_store(100);
         let header = gen_extended_header(101);
-        assert_eq!(s.append_continuous(header.clone()), Ok(()));
+        assert_eq!(s.append_single_unverified(header.clone()), Ok(()));
         assert_eq!(
-            s.append_continuous(header.clone()),
+            s.append_single_unverified(header.clone()),
             Err(StoreError::HashExists(header.hash()))
         );
     }
@@ -270,7 +276,7 @@ pub mod tests {
     #[test]
     fn test_overwrite_height() {
         let s = gen_filled_store(100);
-        let insert_existing_result = s.append_continuous(gen_extended_header(30));
+        let insert_existing_result = s.append_single_unverified(gen_extended_header(30));
         assert_eq!(insert_existing_result, Err(StoreError::HeightExists(30)));
     }
 
@@ -279,7 +285,7 @@ pub mod tests {
         let s = gen_filled_store(100);
         let mut dup_header = s.get_by_height(33).unwrap();
         dup_header.header.height = Height::from(101u32);
-        let insert_existing_result = s.append_continuous(dup_header.clone());
+        let insert_existing_result = s.append_single_unverified(dup_header.clone());
         assert_eq!(
             insert_existing_result,
             Err(StoreError::HashExists(dup_header.hash()))
@@ -295,7 +301,7 @@ pub mod tests {
             gen_extended_header(13),
             gen_extended_header(14),
         ];
-        let insert_range_result = s.append(hs).await;
+        let insert_range_result = s.append_unverified(hs).await;
         assert_eq!(insert_range_result, Ok(()));
     }
 
@@ -303,9 +309,9 @@ pub mod tests {
     async fn test_append_gap_between_head() {
         let s = gen_filled_store(10);
         let upcoming_head = gen_extended_header(12);
-        let insert_existing_result = s.append_single(upcoming_head).await;
+        let insert_with_gap_result = s.append_single_unverified(upcoming_head);
         assert_eq!(
-            insert_existing_result,
+            insert_with_gap_result,
             Err(StoreError::NonContinuousAppend(10, 12))
         );
     }
@@ -321,10 +327,27 @@ pub mod tests {
             gen_extended_header(16),
         ];
 
-        let insert_existing_result = s.append(hs).await;
+        let insert_existing_result = s.append_unverified(hs).await;
         assert_eq!(
             insert_existing_result,
             Err(StoreError::NonContinuousAppend(13, 15))
         );
+    }
+
+    #[test]
+    fn test_genesis_with_height() {
+        let gen = gen_extended_header(10);
+        let s = InMemoryStore::new();
+        s.append_single_unverified(gen)
+            .expect("failed to set genesis with custom height");
+
+        let append_before_genesis_result = s.append_single_unverified(gen_extended_header(9));
+        assert_eq!(
+            append_before_genesis_result,
+            Err(StoreError::NonContinuousAppend(10, 9))
+        );
+
+        let append_after_genesis_result = s.append_single_unverified(gen_extended_header(11));
+        assert_eq!(append_after_genesis_result, Ok(()));
     }
 }

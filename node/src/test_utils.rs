@@ -60,7 +60,7 @@ pub fn gen_filled_store(height: u64) -> InMemoryStore {
 
     // block height is 1-indexed
     for height in 1..=height {
-        s.append_continuous(gen_extended_header(height))
+        s.append_single_unverified(gen_extended_header(height))
             .expect("inserting test data failed");
     }
 
