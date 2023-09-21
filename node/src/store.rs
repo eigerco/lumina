@@ -87,10 +87,6 @@ impl InMemoryStore {
         self.head_height.load(Ordering::Acquire)
     }
 
-    pub fn get_genesis_height(&self) -> u64 {
-        self.genesis_height.load(Ordering::Acquire)
-    }
-
     #[instrument(err)]
     pub fn append_single_unverified(&self, header: ExtendedHeader) -> Result<(), StoreError> {
         let hash = header.hash();
