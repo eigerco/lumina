@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use celestia_types::ExtendedHeader;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use tendermint::Hash;
+use celestia_types::Hash;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
