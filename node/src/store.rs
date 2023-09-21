@@ -15,6 +15,7 @@ type Result<T, E = StoreError> = std::result::Result<T, E>;
 pub trait Store: Send + Sync + Debug {
     async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader>;
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
+    async fn get_head(&self) -> Result<ExtendedHeader>;
 
     async fn height(&self) -> u64;
     async fn has(&self, hash: &Hash) -> bool;
@@ -22,17 +23,13 @@ pub trait Store: Send + Sync + Debug {
 
     async fn append_single(&self, header: ExtendedHeader) -> Result<()>;
 
-    async fn append<I: IntoIterator<Item = ExtendedHeader>>(&self, headers: I) -> Result<()>
+    async fn append<I>(&self, headers: I) -> Result<()>
     where
         I: IntoIterator<Item = ExtendedHeader> + Send,
         <I as IntoIterator>::IntoIter: Send,
     {
-        let headers = headers.into_iter();
-
-        for (idx, header) in headers.enumerate() {
-            if self.append_single(header).await.is_err() {
-                return Err(StoreError::ContinuousAppendFailedAt(idx));
-            }
+        for header in headers.into_iter() {
+            self.append_single(header).await?;
         }
 
         Ok(())
@@ -54,11 +51,8 @@ pub enum StoreError {
     #[error("Height {0} already exists in store")]
     HeightExists(u64),
 
-    #[error("Continuous append impossible")]
-    NonContinuousAppend,
-
-    #[error("Failed to apply header {0}")]
-    ContinuousAppendFailedAt(usize),
+    #[error("Failed to append header at height {1}, current head {0}")]
+    NonContinuousAppend(u64, u64),
 
     #[error("Header not found in store")]
     NotFound,
@@ -112,7 +106,10 @@ impl InMemoryStore {
             return Err(StoreError::HeightExists(height.into()));
         }
         if self.get_head_height() + 1 != height.value() {
-            return Err(StoreError::NonContinuousAppend);
+            return Err(StoreError::NonContinuousAppend(
+                self.get_head_height(),
+                height.value(),
+            ));
         }
 
         info!("Will insert {hash} at {height}");
@@ -179,12 +176,16 @@ impl InMemoryStore {
 
 #[async_trait]
 impl Store for InMemoryStore {
-    async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader, StoreError> {
+    async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
         self.get_by_hash(hash)
     }
 
-    async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader, StoreError> {
+    async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         self.get_by_height(height)
+    }
+
+    async fn get_head(&self) -> Result<ExtendedHeader> {
+        self.get_head()
     }
 
     async fn height(&self) -> u64 {
@@ -278,6 +279,48 @@ pub mod tests {
         assert_eq!(
             insert_existing_result,
             Err(StoreError::HashExists(dup_header.hash()))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_append_range() {
+        let s = gen_filled_store(10);
+        let hs = [
+            gen_extended_header(11),
+            gen_extended_header(12),
+            gen_extended_header(13),
+            gen_extended_header(14),
+        ];
+        let insert_range_result = s.append(hs).await;
+        assert_eq!(insert_range_result, Ok(()));
+    }
+
+    #[tokio::test]
+    async fn test_append_gap_between_head() {
+        let s = gen_filled_store(10);
+        let upcoming_head = gen_extended_header(12);
+        let insert_existing_result = s.append_single(upcoming_head).await;
+        assert_eq!(
+            insert_existing_result,
+            Err(StoreError::NonContinuousAppend(10, 12))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_non_continuous_append() {
+        let s = gen_filled_store(10);
+        let hs = [
+            gen_extended_header(11),
+            gen_extended_header(12),
+            gen_extended_header(13),
+            gen_extended_header(15),
+            gen_extended_header(16),
+        ];
+
+        let insert_existing_result = s.append(hs).await;
+        assert_eq!(
+            insert_existing_result,
+            Err(StoreError::NonContinuousAppend(13, 15))
         );
     }
 }
