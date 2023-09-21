@@ -42,7 +42,7 @@ pub enum AddressKind {
 }
 
 #[enum_dispatch]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub enum Address {
     AccAddress,
@@ -50,19 +50,19 @@ pub enum Address {
     ConsAddress,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct AccAddress {
     id: Id,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct ValAddress {
     id: Id,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct ConsAddress {
     id: Id,
