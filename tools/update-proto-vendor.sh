@@ -1,6 +1,7 @@
 #!/bin/bash
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")" || exit 1
+cd ../proto || exit 1
 set -x -e
 
 extract_urls() {
@@ -27,14 +28,20 @@ extract_urls ../target/proto-vendor-src \
     https://github.com/celestiaorg/cosmos-sdk/archive/refs/heads/release/v0.46.x-celestia.tar.gz \
     https://github.com/celestiaorg/nmt/archive/refs/heads/master.tar.gz \
     https://github.com/cosmos/cosmos-proto/archive/refs/tags/v1.0.0-alpha4.tar.gz \
-    https://github.com/cosmos/gogoproto/archive/refs/tags/v1.4.11.tar.gz
+    https://github.com/cosmos/gogoproto/archive/refs/tags/v1.4.11.tar.gz \
+    https://github.com/celestiaorg/go-header/archive/refs/heads/main.tar.gz
 
 rm -rf vendor/celestia
+mkdir -p vendor
 cp -r ../target/proto-vendor-src/celestia-app-main/proto/celestia vendor
+
+rm -rf vendor/go-header
+mkdir -p vendor/go-header/p2p/pb
+cp -r ../target/proto-vendor-src/go-header-main/p2p/pb/*.proto vendor/go-header/p2p/pb
 
 rm -rf vendor/cosmos
 mkdir -p vendor/cosmos
-cp -r ../target/proto-vendor-src/cosmos-sdk-release-v0.46.x-celestia/proto/cosmos/{base,staking} vendor/cosmos
+cp -r ../target/proto-vendor-src/cosmos-sdk-release-v0.46.x-celestia/proto/cosmos/{base,staking,crypto,tx} vendor/cosmos
 
 rm -rf vendor/cosmos_proto
 cp -r ../target/proto-vendor-src/cosmos-proto-1.0.0-alpha4/proto/cosmos_proto vendor
