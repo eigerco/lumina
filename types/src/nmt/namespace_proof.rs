@@ -68,8 +68,7 @@ impl TryFrom<RawProof> for NamespaceProof {
         let mut proof = NmtNamespaceProof::PresenceProof {
             proof: NmtProof {
                 siblings,
-                start: value.start as u32,
-                end: value.end as u32,
+                range: value.start as u32..value.end as u32,
             },
             ignore_max_ns: true,
         };

@@ -9,7 +9,7 @@ use tendermint::{crypto, merkle};
 use tendermint_proto::serializers::cow_str::CowStr;
 
 use crate::consts::appconsts;
-use crate::nmt::{Namespace, Nmt};
+use crate::nmt::{Namespace, NamespacedHashExt, Nmt};
 use crate::InfoByte;
 use crate::{Error, Result};
 
@@ -58,7 +58,7 @@ impl Commitment {
                     .map_err(Error::Nmt)?;
             }
             // add the root
-            subtree_roots.push(hash_to_bytes(tree.root()));
+            subtree_roots.push(tree.root().to_vec());
         }
 
         let hash = merkle::simple_hash_from_byte_vectors::<crypto::default::Sha256>(&subtree_roots);
@@ -184,10 +184,6 @@ fn merkle_mountain_range_sizes(mut total_size: u64, max_tree_size: u64) -> Vec<u
     }
 
     tree_sizes
-}
-
-fn hash_to_bytes<const NS_SIZE: usize>(hash: nmt_rs::NamespacedHash<NS_SIZE>) -> Vec<u8> {
-    hash.iter().copied().collect()
 }
 
 /// blob_min_square_size returns the minimum square size that can contain share_count

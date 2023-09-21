@@ -2399,7 +2399,7 @@ dependencies = [
 [[package]]
 name = "nmt-rs"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/nmt-rs.git?rev=5146800#514680024ae3bc389aba0e3c70d635ee6d437a0e"
+source = "git+https://github.com/Sovereign-Labs/nmt-rs.git?rev=d821332#d821332baa03aea625d23060dc239af57b9121f5"
 dependencies = [
  "bytes",
  "sha2 0.10.7",

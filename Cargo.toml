@@ -7,7 +7,7 @@ celestia-node = { version = "0.1.0", path = "node" }
 celestia-proto = { version = "0.1.0", path = "proto" }
 celestia-rpc = { version = "0.1.0", path = "rpc" }
 celestia-types = { version = "0.1.0", path = "types" }
-nmt-rs = { git = "https://github.com/eigerco/nmt-rs.git", rev = "5146800" }
+nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "d821332" }
 tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "19dc3da" }
 tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "19dc3da" }
 
