@@ -9,7 +9,7 @@ use tendermint::{crypto, merkle};
 use tendermint_proto::serializers::cow_str::CowStr;
 
 use crate::consts::appconsts;
-use crate::nmt::{Namespace, NamespacedHashExt, Nmt};
+use crate::nmt::{Namespace, NamespacedHashExt, Nmt, RawNamespacedHash};
 use crate::InfoByte;
 use crate::{Error, Result};
 
@@ -25,13 +25,17 @@ impl Commitment {
     ///
     /// [Message layout rationale]: https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/rationale/message_block_layout.md?plain=1#L12
     /// [Non-interactive default rules]: https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/rationale/message_block_layout.md?plain=1#L36
-    pub fn generate(
+    pub fn for_blob(
         namespace: Namespace,
         share_version: u8,
         blob_data: &[u8],
     ) -> Result<Commitment> {
         let shares = split_blob_to_shares(namespace, share_version, blob_data)?;
+        Self::for_shares(namespace, &shares)
+    }
 
+    /// Generate the commitment for given shares.
+    pub fn for_shares(namespace: Namespace, mut shares: &[impl AsRef<[u8]>]) -> Result<Commitment> {
         // the commitment is the root of a merkle mountain range with max tree size
         // determined by the number of roots required to create a share commitment
         // over that blob. The size of the tree is only increased if the number of
@@ -39,26 +43,25 @@ impl Commitment {
         let subtree_width = subtree_width(shares.len() as u64, appconsts::SUBTREE_ROOT_THRESHOLD);
         let tree_sizes = merkle_mountain_range_sizes(shares.len() as u64, subtree_width);
 
-        let mut shares = shares;
-        let mut leaf_sets: Vec<Vec<SparseShare>> = Vec::new();
+        let mut leaf_sets: Vec<&[_]> = Vec::new();
 
         for size in tree_sizes {
-            let left_shares = shares.split_off(size as usize);
-            leaf_sets.push(shares);
-            shares = left_shares;
+            let (leafs, rest) = shares.split_at(size as usize);
+            leaf_sets.push(leafs);
+            shares = rest;
         }
 
         // create the commitments by pushing each leaf set onto an nmt
-        let mut subtree_roots: Vec<Vec<u8>> = Vec::new();
+        let mut subtree_roots: Vec<RawNamespacedHash> = Vec::new();
         for leaf_set in leaf_sets {
             // create the nmt
             let mut tree = Nmt::new();
             for leaf_share in leaf_set {
-                tree.push_leaf(&leaf_share, namespace.into())
+                tree.push_leaf(leaf_share.as_ref(), namespace.into())
                     .map_err(Error::Nmt)?;
             }
             // add the root
-            subtree_roots.push(tree.root().to_vec());
+            subtree_roots.push(tree.root().to_array());
         }
 
         let hash = merkle::simple_hash_from_byte_vectors::<crypto::default::Sha256>(&subtree_roots);
