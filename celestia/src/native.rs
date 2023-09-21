@@ -3,6 +3,7 @@ use std::env;
 use anyhow::{Context, Result};
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::p2p::P2pService;
+use celestia_node::store::InMemoryStore;
 use celestia_rpc::prelude::*;
 use libp2p::{core::upgrade::Version, identity, noise, tcp, yamux, Multiaddr, Transport};
 use tracing::info;
@@ -12,6 +13,8 @@ const WS_URL: &str = "ws://localhost:26658";
 pub async fn run() -> Result<()> {
     let _ = dotenvy::dotenv();
     let _guard = init_tracing();
+
+    let store = InMemoryStore::new();
 
     let bridge_ma = fetch_bridge_multiaddr().await?;
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
@@ -28,6 +31,7 @@ pub async fn run() -> Result<()> {
         p2p_local_keypair,
         p2p_bootstrap_peers: vec![bridge_ma],
         p2p_listen_on: vec![],
+        store,
     })
     .await
     .unwrap();

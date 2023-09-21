@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
@@ -26,6 +27,12 @@ pub struct ExtendedHeader {
     pub commit: Commit,
     pub validator_set: ValidatorSet,
     pub dah: DataAvailabilityHeader,
+}
+
+impl Display for ExtendedHeader {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "hash: {}; height: {}", self.hash(), self.height())
+    }
 }
 
 impl ExtendedHeader {

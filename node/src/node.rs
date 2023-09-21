@@ -10,10 +10,8 @@ use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
-use tokio::sync::RwLock;
 
 use crate::p2p::{P2p, P2pArgs, P2pService};
-use crate::store::Store;
 use crate::syncer::{Syncer, SyncerArgs, SyncerService};
 
 #[derive(Debug, thiserror::Error)]
@@ -29,15 +27,16 @@ where
     SyncerService(SyncerSrv::Error),
 }
 
-pub struct NodeConfig {
+pub struct NodeConfig<S> {
     pub network_id: String,
     pub p2p_transport: Boxed<(PeerId, StreamMuxerBox)>,
     pub p2p_local_keypair: Keypair,
     pub p2p_bootstrap_peers: Vec<Multiaddr>,
     pub p2p_listen_on: Vec<Multiaddr>,
+    pub store: S,
 }
 
-pub type Node = GenericNode<P2p, Syncer<P2p>>;
+pub type Node<S> = GenericNode<P2p<S>, Syncer<P2p<S>>>;
 
 pub struct GenericNode<P2pSrv, SyncerSrv>
 where
@@ -53,8 +52,10 @@ where
     P2pSrv: P2pService,
     SyncerSrv: SyncerService<P2pSrv>,
 {
-    pub async fn new(config: NodeConfig) -> Result<Self, NodeError<P2pSrv, SyncerSrv>> {
-        let store = Arc::new(RwLock::new(Store::new()));
+    pub async fn new(
+        config: NodeConfig<P2pSrv::Store>,
+    ) -> Result<Self, NodeError<P2pSrv, SyncerSrv>> {
+        let store = Arc::new(config.store);
 
         let p2p = Arc::new(
             P2pSrv::start(P2pArgs {
@@ -63,6 +64,7 @@ where
                 local_keypair: config.p2p_local_keypair,
                 bootstrap_peers: config.p2p_bootstrap_peers,
                 listen_on: config.p2p_listen_on,
+                store: store.clone(),
             })
             .await
             .map_err(NodeError::P2pService)?,

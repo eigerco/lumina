@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::RwLock;
 
-use crate::{p2p::P2pService, store::Store, Service};
+use crate::p2p::P2pService;
+use crate::Service;
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
@@ -12,14 +12,20 @@ pub enum SyncerError {}
 
 #[allow(unused)]
 #[derive(Debug)]
-pub struct Syncer<P2pSrv: P2pService> {
+pub struct Syncer<P2pSrv>
+where
+    P2pSrv: P2pService,
+{
     p2p: Arc<P2pSrv>,
-    store: Arc<RwLock<Store>>,
+    store: Arc<P2pSrv::Store>,
 }
 
-pub struct SyncerArgs<P2pSrv: P2pService> {
+pub struct SyncerArgs<P2pSrv>
+where
+    P2pSrv: P2pService,
+{
     pub p2p: Arc<P2pSrv>,
-    pub store: Arc<RwLock<Store>>,
+    pub store: Arc<P2pSrv::Store>,
 }
 
 #[doc(hidden)]
@@ -27,7 +33,10 @@ pub struct SyncerArgs<P2pSrv: P2pService> {
 pub enum SyncerCmd {}
 
 #[async_trait]
-impl<P2pSrv: P2pService> Service for Syncer<P2pSrv> {
+impl<P2pSrv> Service for Syncer<P2pSrv>
+where
+    P2pSrv: P2pService,
+{
     type Command = SyncerCmd;
     type Args = SyncerArgs<P2pSrv>;
     type Error = SyncerError;
@@ -52,8 +61,10 @@ impl<P2pSrv: P2pService> Service for Syncer<P2pSrv> {
 }
 
 #[async_trait]
-pub trait SyncerService<P2pSrv: P2pService>:
+pub trait SyncerService<P2pSrv>:
     Service<Args = SyncerArgs<P2pSrv>, Command = SyncerCmd, Error = SyncerError>
+where
+    P2pSrv: P2pService,
 {
 }
 
