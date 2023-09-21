@@ -14,6 +14,7 @@ const OPTION_TIMESTAMP: &str =
 #[rustfmt::skip]
 pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.da.DataAvailabilityHeader", SERIALIZED),
+    (".celestia.blob.v1.MsgPayForBlobs", SERIALIZED),
     (".cosmos.base.abci.v1beta1.ABCIMessageLog", SERIALIZED),
     (".cosmos.base.abci.v1beta1.Attribute", SERIALIZED),
     (".cosmos.base.abci.v1beta1.StringEvent", SERIALIZED),
@@ -86,12 +87,15 @@ fn main() -> Result<()> {
         .compile_protos(
             &[
                 "vendor/celestia/da/data_availability_header.proto",
+                "vendor/celestia/blob/v1/tx.proto",
                 "vendor/header/pb/extended_header.proto",
                 "vendor/share/p2p/shrexnd/pb/share.proto",
                 "vendor/share/eds/byzantine/pb/share.proto",
                 "vendor/cosmos/base/v1beta1/coin.proto",
                 "vendor/cosmos/base/abci/v1beta1/abci.proto",
+                "vendor/cosmos/crypto/multisig/v1beta1/multisig.proto",
                 "vendor/cosmos/staking/v1beta1/query.proto",
+                "vendor/cosmos/tx/v1beta1/tx.proto",
                 "vendor/go-header/p2p/pb/header_request.proto",
             ],
             &["vendor"],
