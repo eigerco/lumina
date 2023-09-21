@@ -9,30 +9,47 @@ use celestia_types::Hash;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, Stream};
 use libp2p::{
-    request_response::{InboundFailure, RequestId},
+    request_response::{InboundFailure, RequestId, ResponseChannel},
     PeerId,
 };
 use tendermint::hash::Algorithm;
 use tracing::{instrument, trace};
 
 use crate::exchange::utils::{ExtendedHeaderExt, HeaderRequestExt, HeaderResponseExt};
-use crate::exchange::ResponseType;
+use crate::exchange::{ReqRespBehaviour, ResponseType};
 use crate::store::Store;
 
 type StoreJobType<C> = dyn Future<Output = (C, ResponseType)> + Send;
 
-pub(crate) struct ExchangeServerHandler<S, C>
+pub(super) struct ExchangeServerHandler<S, R = ReqRespBehaviour>
 where
     S: Store,
+    R: ResponseSender,
 {
     store: Arc<S>,
-    store_jobs: FuturesUnordered<Pin<Box<StoreJobType<C>>>>,
+    store_jobs: FuturesUnordered<Pin<Box<StoreJobType<R::Channel>>>>,
 }
 
-impl<S, C> ExchangeServerHandler<S, C>
+pub(super) trait ResponseSender {
+    type Channel: Send + 'static;
+
+    fn send_response(&mut self, channel: Self::Channel, response: ResponseType);
+}
+
+impl ResponseSender for ReqRespBehaviour {
+    type Channel = ResponseChannel<ResponseType>;
+
+    fn send_response(&mut self, channel: Self::Channel, response: ResponseType) {
+        // response was prepared specifically for the request, we can drop it
+        // in case of error we'll get Event::InboundFailure
+        let _ = self.send_response(channel, response);
+    }
+}
+
+impl<S, R> ExchangeServerHandler<S, R>
 where
     S: Store + 'static,
-    C: Send + 'static,
+    R: ResponseSender,
 {
     pub(super) fn new(store: Arc<S>) -> Self {
         ExchangeServerHandler {
@@ -47,7 +64,7 @@ where
         peer: PeerId,
         request_id: ID,
         request: HeaderRequest,
-        response_channel: C,
+        response_channel: R::Channel,
     ) where
         ID: Display + Debug,
     {
@@ -103,9 +120,11 @@ where
         Some((amount, data))
     }
 
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<(C, ResponseType)> {
-        if let Poll::Ready(Some(response)) = Pin::new(&mut self.store_jobs).poll_next(cx) {
-            return Poll::Ready(response);
+    pub fn poll(&mut self, cx: &mut Context<'_>, sender: &mut R) -> Poll<()> {
+        while let Poll::Ready(Some((channel, response))) =
+            Pin::new(&mut self.store_jobs).poll_next(cx)
+        {
+            sender.send_response(channel, response);
         }
 
         Poll::Pending
@@ -181,27 +200,29 @@ mod tests {
     use std::sync::Arc;
     use std::task::Context;
     use tendermint_proto::Protobuf;
+    use tokio::sync::oneshot;
 
     #[tokio::test]
     async fn request_header_test() {
         let store = Arc::new(gen_filled_store(3));
         let expected_genesis = store.get_by_height(1).unwrap();
         let mut handler = ExchangeServerHandler::new(store);
-        let channel = TestResponseChannel(1);
+        let (mut sender, receiver) = create_test_response_sender();
+        let mut cx = create_dummy_async_context();
 
         handler.on_request_received(
             PeerId::random(),
             "test",
             HeaderRequest::with_origin(1, 1),
-            channel,
+            (),
         );
 
-        let (received_channel, received_response) = wait_for_poll(&mut handler);
+        let _ = handler.poll(&mut cx, &mut sender);
 
-        assert_eq!(channel, received_channel);
-        assert_eq!(received_response.len(), 1);
-        assert_eq!(received_response[0].status_code, i32::from(StatusCode::Ok));
-        let decoded_header = ExtendedHeader::decode(&received_response[0].body[..]).unwrap();
+        let received = receiver.await.unwrap();
+        assert_eq!(received.len(), 1);
+        assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
+        let decoded_header = ExtendedHeader::decode(&received[0].body[..]).unwrap();
         assert_eq!(decoded_header, expected_genesis);
     }
 
@@ -210,21 +231,17 @@ mod tests {
         let store = Arc::new(gen_filled_store(4));
         let expected_head = store.get_head().unwrap();
         let mut handler = ExchangeServerHandler::new(store);
-        let channel = TestResponseChannel(1);
+        let (mut sender, receiver) = create_test_response_sender();
+        let mut cx = create_dummy_async_context();
 
-        handler.on_request_received(
-            PeerId::random(),
-            "test",
-            HeaderRequest::head_request(),
-            channel,
-        );
+        handler.on_request_received(PeerId::random(), "test", HeaderRequest::head_request(), ());
 
-        let (received_channel, received_response) = wait_for_poll(&mut handler);
+        let _ = handler.poll(&mut cx, &mut sender);
 
-        assert_eq!(channel, received_channel);
-        assert_eq!(received_response.len(), 1);
-        assert_eq!(received_response[0].status_code, i32::from(StatusCode::Ok));
-        let decoded_header = ExtendedHeader::decode(&received_response[0].body[..]).unwrap();
+        let received = receiver.await.unwrap();
+        assert_eq!(received.len(), 1);
+        assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
+        let decoded_header = ExtendedHeader::decode(&received[0].body[..]).unwrap();
         assert_eq!(decoded_header, expected_head);
     }
 
@@ -232,17 +249,19 @@ mod tests {
     async fn invalid_amount_request_test() {
         let store = Arc::new(gen_filled_store(1));
         let mut handler = ExchangeServerHandler::new(store);
+        let (mut sender, receiver) = create_test_response_sender();
+        let mut cx = create_dummy_async_context();
 
-        let channel = TestResponseChannel(1);
         handler.on_request_received(
             PeerId::random(),
             "test",
             HeaderRequest::with_origin(0, 0),
-            channel,
+            (),
         );
 
-        let (_, received) = wait_for_poll(&mut handler);
+        let _ = handler.poll(&mut cx, &mut sender);
 
+        let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Invalid));
     }
@@ -251,15 +270,18 @@ mod tests {
     async fn none_data_request_test() {
         let store = Arc::new(gen_filled_store(1));
         let mut handler = ExchangeServerHandler::new(store);
+        let (mut sender, receiver) = create_test_response_sender();
+        let mut cx = create_dummy_async_context();
 
         let request = HeaderRequest {
             data: None,
             amount: 1,
         };
-        let channel = TestResponseChannel(1);
-        handler.on_request_received(PeerId::random(), "test", request, channel);
+        handler.on_request_received(PeerId::random(), "test", request, ());
 
-        let (_, received) = wait_for_poll(&mut handler);
+        let _ = handler.poll(&mut cx, &mut sender);
+
+        let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Invalid));
     }
@@ -269,16 +291,19 @@ mod tests {
         let store = Arc::new(gen_filled_store(1));
         let stored_header = store.get_head().unwrap();
         let mut handler = ExchangeServerHandler::new(store);
+        let (mut sender, receiver) = create_test_response_sender();
+        let mut cx = create_dummy_async_context();
 
-        let channel = TestResponseChannel(1);
         handler.on_request_received(
             PeerId::random(),
             "test",
             HeaderRequest::with_hash(stored_header.hash()),
-            channel,
+            (),
         );
 
-        let (_, received) = wait_for_poll(&mut handler);
+        let _ = handler.poll(&mut cx, &mut sender);
+
+        let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
         let decoded_header = ExtendedHeader::decode(&received[0].body[..]).unwrap();
@@ -294,17 +319,18 @@ mod tests {
             store.get_by_height(7).unwrap(),
         ];
         let mut handler = ExchangeServerHandler::new(store);
-        let channel = TestResponseChannel(1);
+        let (mut sender, receiver) = create_test_response_sender();
+        let mut cx = create_dummy_async_context();
 
         let request = HeaderRequest {
             data: Some(Data::Origin(5)),
             amount: u64::try_from(expected_headers.len()).unwrap(),
         };
-        handler.on_request_received(PeerId::random(), "test", request, channel);
+        handler.on_request_received(PeerId::random(), "test", request, ());
 
-        let (_, received) = wait_for_poll(&mut handler);
+        let _ = handler.poll(&mut cx, &mut sender);
 
-        assert_eq!(received.len(), expected_headers.len());
+        let received = receiver.await.unwrap();
 
         for (rec, exp) in received.iter().zip(expected_headers.iter()) {
             assert_eq!(rec.status_code, i32::from(StatusCode::Ok));
@@ -322,12 +348,15 @@ mod tests {
 
         let mut handler = ExchangeServerHandler::new(store);
 
+        let (mut sender, receiver) = create_test_response_sender();
+        let mut cx = create_dummy_async_context();
+
         let request = HeaderRequest::with_origin(5, u64::try_from(expected_hashes.len()).unwrap());
-        let channel = TestResponseChannel(1);
-        handler.on_request_received(PeerId::random(), "test", request, channel);
+        handler.on_request_received(PeerId::random(), "test", request, ());
 
-        let (_, received) = wait_for_poll(&mut handler);
+        let _ = handler.poll(&mut cx, &mut sender);
 
+        let received = receiver.await.unwrap();
         assert_eq!(received.len(), expected_hashes.len());
 
         for (rec, (exp_status, exp_header)) in received
@@ -342,25 +371,26 @@ mod tests {
         }
     }
 
-    #[derive(Debug, PartialEq, Clone, Copy)]
-    struct TestResponseChannel(pub u64);
+    #[derive(Debug)]
+    struct TestResponseSender(pub Option<oneshot::Sender<ResponseType>>);
+
+    impl ResponseSender for TestResponseSender {
+        type Channel = ();
+
+        fn send_response(&mut self, _channel: Self::Channel, response: ResponseType) {
+            if let Some(sender) = self.0.take() {
+                let _ = sender.send(response);
+            }
+        }
+    }
+
+    fn create_test_response_sender() -> (TestResponseSender, oneshot::Receiver<ResponseType>) {
+        let (tx, rx) = oneshot::channel();
+        (TestResponseSender(Some(tx)), rx)
+    }
 
     fn create_dummy_async_context() -> Context<'static> {
         let waker = noop_waker_ref();
         Context::from_waker(waker)
-    }
-
-    fn wait_for_poll<S>(
-        handler: &mut ExchangeServerHandler<S, TestResponseChannel>,
-    ) -> (TestResponseChannel, ResponseType)
-    where
-        S: Store + 'static,
-    {
-        let mut cx = create_dummy_async_context();
-        loop {
-            if let Poll::Ready(r) = handler.poll(&mut cx) {
-                return r;
-            };
-        }
     }
 }

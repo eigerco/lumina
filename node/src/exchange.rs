@@ -2,7 +2,6 @@ use std::io;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use crate::exchange::request_response::ResponseChannel;
 use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
@@ -49,7 +48,7 @@ where
 {
     req_resp: ReqRespBehaviour,
     client_handler: ExchangeClientHandler,
-    server_handler: ExchangeServerHandler<S, ResponseChannel<ResponseType>>,
+    server_handler: ExchangeServerHandler<S>,
 }
 
 pub(crate) struct ExchangeConfig<'a, S> {
@@ -234,12 +233,7 @@ where
                 return Poll::Ready(ev);
             }
         }
-
-        while let Poll::Ready((channel, response)) = self.server_handler.poll(cx) {
-            // response was prepared specifically for the request, we can drop it
-            // in case of error we'll get Event::InboundFailure
-            self.req_resp.send_response(channel, response).ok();
-        }
+        let _ = self.server_handler.poll(cx, &mut self.req_resp);
 
         Poll::Pending
     }

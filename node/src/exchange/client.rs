@@ -22,7 +22,7 @@ use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
 
 pub(super) struct ExchangeClientHandler<S = ReqRespBehaviour>
 where
-    S: Sender,
+    S: RequestSender,
 {
     reqs: HashMap<S::RequestId, State>,
     peer_tracker: Arc<PeerTracker>,
@@ -33,13 +33,13 @@ struct State {
     respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
 }
 
-pub(super) trait Sender {
+pub(super) trait RequestSender {
     type RequestId: Hash + Eq + Debug;
 
     fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> Self::RequestId;
 }
 
-impl Sender for ReqRespBehaviour {
+impl RequestSender for ReqRespBehaviour {
     type RequestId = RequestId;
 
     fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> RequestId {
@@ -49,7 +49,7 @@ impl Sender for ReqRespBehaviour {
 
 impl<S> ExchangeClientHandler<S>
 where
-    S: Sender,
+    S: RequestSender,
 {
     pub(super) fn new(peer_tracker: Arc<PeerTracker>) -> Self {
         ExchangeClientHandler {
@@ -880,7 +880,7 @@ mod tests {
         peer: PeerId,
     }
 
-    impl Sender for MockReq {
+    impl RequestSender for MockReq {
         type RequestId = MockReqId;
 
         fn send_request(&mut self, peer: &PeerId, _request: HeaderRequest) -> Self::RequestId {
