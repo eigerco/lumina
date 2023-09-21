@@ -1,6 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
-use celestia_proto::share::p2p::shrex::nd::Proof as RawProof;
+use celestia_proto::proof::pb::Proof as RawProof;
 use nmt_rs::simple_merkle::proof::Proof as NmtProof;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
@@ -23,6 +23,13 @@ impl NamespaceProof {
         match &self.0 {
             NmtNamespaceProof::AbsenceProof { leaf, .. } => leaf.as_ref(),
             _ => None,
+        }
+    }
+
+    pub fn max_ns_ignored(&self) -> bool {
+        match &self.0 {
+            NmtNamespaceProof::AbsenceProof { ignore_max_ns, .. }
+            | NmtNamespaceProof::PresenceProof { ignore_max_ns, .. } => *ignore_max_ns,
         }
     }
 }
@@ -71,11 +78,11 @@ impl TryFrom<RawProof> for NamespaceProof {
                 start: value.start as u32,
                 end: value.end as u32,
             },
-            ignore_max_ns: true,
+            ignore_max_ns: value.is_max_namespace_ignored,
         };
 
-        if !value.hashleaf.is_empty() {
-            proof.convert_to_absence_proof(NamespacedHash::from_raw(&value.hashleaf)?);
+        if !value.leaf_hash.is_empty() {
+            proof.convert_to_absence_proof(NamespacedHash::from_raw(&value.leaf_hash)?);
         }
 
         Ok(NamespaceProof(proof))
@@ -88,7 +95,8 @@ impl From<NamespaceProof> for RawProof {
             start: value.start_idx() as i64,
             end: value.end_idx() as i64,
             nodes: value.siblings().iter().map(|hash| hash.to_vec()).collect(),
-            hashleaf: value.leaf().map(|hash| hash.to_vec()).unwrap_or_default(),
+            leaf_hash: value.leaf().map(|hash| hash.to_vec()).unwrap_or_default(),
+            is_max_namespace_ignored: value.max_ns_ignored(),
         }
     }
 }
