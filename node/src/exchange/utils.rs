@@ -6,9 +6,13 @@ use tendermint_proto::Protobuf;
 
 use crate::exchange::ExchangeError;
 
+const INVALID_REQUEST_MSG: &str = "invalid request";
+const NOT_FOUND_MSG: &str = "not found";
+
 pub(super) trait HeaderRequestExt {
     fn with_origin(origin: u64, amount: u64) -> HeaderRequest;
     fn with_hash(hash: Hash) -> HeaderRequest;
+    fn head_request() -> HeaderRequest;
     fn is_valid(&self) -> bool;
     fn is_head_request(&self) -> bool;
 }
@@ -28,6 +32,10 @@ impl HeaderRequestExt for HeaderRequest {
         }
     }
 
+    fn head_request() -> HeaderRequest {
+        HeaderRequest::with_origin(0, 1)
+    }
+
     fn is_valid(&self) -> bool {
         match (&self.data, self.amount) {
             (None, _) | (_, 0) => false,
@@ -44,6 +52,9 @@ impl HeaderRequestExt for HeaderRequest {
 
 pub(super) trait HeaderResponseExt {
     fn to_extended_header(&self) -> Result<ExtendedHeader, ExchangeError>;
+
+    fn not_found() -> HeaderResponse;
+    fn invalid() -> HeaderResponse;
 }
 
 impl HeaderResponseExt for HeaderResponse {
@@ -54,6 +65,20 @@ impl HeaderResponseExt for HeaderResponse {
             StatusCode::Ok => {
                 ExtendedHeader::decode(&self.body[..]).map_err(|_| ExchangeError::InvalidResponse)
             }
+        }
+    }
+
+    // TODO: how forthcoming should we be with errors and description?
+    fn not_found() -> HeaderResponse {
+        HeaderResponse {
+            body: NOT_FOUND_MSG.as_bytes().to_vec(),
+            status_code: StatusCode::NotFound.into(),
+        }
+    }
+    fn invalid() -> HeaderResponse {
+        HeaderResponse {
+            status_code: StatusCode::Invalid.into(),
+            body: INVALID_REQUEST_MSG.as_bytes().to_vec(),
         }
     }
 }

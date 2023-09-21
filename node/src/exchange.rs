@@ -2,6 +2,7 @@ use std::io;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+use crate::exchange::request_response::ResponseChannel;
 use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
@@ -36,9 +37,11 @@ const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
 /// Maximum length of the protobuf length delimiter in bytes
 const PROTOBUF_MAX_LENGTH_DELIMITER_LEN: usize = 10;
 
+type RequestType = HeaderRequest;
+type ResponseType = Vec<HeaderResponse>;
 type ReqRespBehaviour = request_response::Behaviour<HeaderCodec>;
-type ReqRespEvent = request_response::Event<HeaderRequest, Vec<HeaderResponse>>;
-type ReqRespMessage = request_response::Message<HeaderRequest, Vec<HeaderResponse>>;
+type ReqRespEvent = request_response::Event<RequestType, ResponseType>;
+type ReqRespMessage = request_response::Message<RequestType, ResponseType>;
 
 pub(crate) struct ExchangeBehaviour<S>
 where
@@ -46,7 +49,7 @@ where
 {
     req_resp: ReqRespBehaviour,
     client_handler: ExchangeClientHandler,
-    server_handler: ExchangeServerHandler<S>,
+    server_handler: ExchangeServerHandler<S, ResponseChannel<ResponseType>>,
 }
 
 pub(crate) struct ExchangeConfig<'a, S> {
@@ -230,6 +233,12 @@ where
             if let Some(ev) = self.on_to_swarm(ev) {
                 return Poll::Ready(ev);
             }
+        }
+
+        while let Poll::Ready((channel, response)) = self.server_handler.poll(cx) {
+            // response was prepared specifically for the request, we can drop it
+            // in case of error we'll get Event::InboundFailure
+            self.req_resp.send_response(channel, response).ok();
         }
 
         Poll::Pending
