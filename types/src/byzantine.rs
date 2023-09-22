@@ -1,7 +1,5 @@
 use celestia_proto::share::eds::byzantine::pb::BadEncoding as RawBadEncodingFraudProof;
-use celestia_proto::share::eds::byzantine::pb::MerkleProof as RawEdsProof;
 use celestia_proto::share::eds::byzantine::pb::Share as RawShareWithProof;
-use celestia_proto::share::p2p::shrex::nd::Proof as RawShrexProof;
 use cid::multihash::MultihashGeneric;
 use cid::CidGeneric;
 use serde::{Deserialize, Serialize};
@@ -161,7 +159,7 @@ impl TryFrom<RawShareWithProof> for ShareWithProof {
         let leaf = NmtLeaf::new(value.data)?;
 
         let proof = value.proof.ok_or(Error::MissingProof)?;
-        let proof = NamespaceProof::try_from(eds_proof_to_shrex(proof))?;
+        let proof = NamespaceProof::try_from(proof)?;
 
         if proof.is_of_absence() {
             return Err(Error::WrongProofType);
@@ -173,10 +171,9 @@ impl TryFrom<RawShareWithProof> for ShareWithProof {
 
 impl From<ShareWithProof> for RawShareWithProof {
     fn from(value: ShareWithProof) -> Self {
-        let proof = RawShrexProof::from(value.proof);
         RawShareWithProof {
             data: value.leaf.to_vec(),
-            proof: Some(shrex_proof_to_eds(proof)),
+            proof: Some(value.proof.into()),
         }
     }
 }
@@ -210,24 +207,6 @@ impl From<BadEncodingFraudProof> for RawBadEncodingFraudProof {
             index: value.index as u32,
             axis: value.axis as i32,
         }
-    }
-}
-
-fn eds_proof_to_shrex(eds_proof: RawEdsProof) -> RawShrexProof {
-    RawShrexProof {
-        start: eds_proof.start,
-        end: eds_proof.end,
-        nodes: eds_proof.nodes,
-        hashleaf: eds_proof.leaf_hash,
-    }
-}
-
-fn shrex_proof_to_eds(shrex_proof: RawShrexProof) -> RawEdsProof {
-    RawEdsProof {
-        start: shrex_proof.start,
-        end: shrex_proof.end,
-        nodes: shrex_proof.nodes,
-        leaf_hash: shrex_proof.hashleaf,
     }
 }
 

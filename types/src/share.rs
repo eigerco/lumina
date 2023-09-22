@@ -1,4 +1,4 @@
-use celestia_proto::share::p2p::shrex::nd::Row as RawRow;
+use celestia_proto::share::p2p::shrex::nd::NamespaceRowResponse as RawNamespacedRow;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
@@ -17,7 +17,7 @@ pub struct NamespacedShares {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(try_from = "RawRow", into = "RawRow")]
+#[serde(try_from = "RawNamespacedRow", into = "RawNamespacedRow")]
 pub struct NamespacedRow {
     pub shares: Vec<Share>,
     pub proof: NamespaceProof,
@@ -119,12 +119,12 @@ impl From<Share> for RawShare {
     }
 }
 
-impl Protobuf<RawRow> for NamespacedRow {}
+impl Protobuf<RawNamespacedRow> for NamespacedRow {}
 
-impl TryFrom<RawRow> for NamespacedRow {
+impl TryFrom<RawNamespacedRow> for NamespacedRow {
     type Error = Error;
 
-    fn try_from(value: RawRow) -> Result<Self, Self::Error> {
+    fn try_from(value: RawNamespacedRow) -> Result<Self, Self::Error> {
         let shares = value
             .shares
             .into_iter()
@@ -145,9 +145,9 @@ impl TryFrom<RawRow> for NamespacedRow {
     }
 }
 
-impl From<NamespacedRow> for RawRow {
-    fn from(value: NamespacedRow) -> RawRow {
-        RawRow {
+impl From<NamespacedRow> for RawNamespacedRow {
+    fn from(value: NamespacedRow) -> RawNamespacedRow {
+        RawNamespacedRow {
             shares: value.shares.iter().map(|share| share.to_vec()).collect(),
             proof: Some(value.proof.into()),
         }
@@ -231,7 +231,7 @@ mod tests {
                 "/////////////////////////////////////////////////////////////////////////////zgUEBW/wWmCfnwXfalgqMfK9sMy168y3XRzdwY1jpZY"
             ],
             "leaf_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAJLVUf6krS8362EAAAAAAAAAAAAAAAAAAAAAAAAAktVR/qStLzfrYeEAWUHOa+lE38pJyHstgGaqi9RXPhZtzUscK7iTUbQS",
-            "is_max_namespace_id_ignored": true
+            "is_max_namespace_ignored": true
         }"#;
 
         let proof: NamespaceProof =
@@ -316,7 +316,7 @@ mod tests {
                 "/////////////////////////////////////////////////////////////////////////////0WE8jz9lbFjpXWj9v7/QgdAxYEqy4ew9TMdqil/UFZm"
               ],
               "leaf_hash": null,
-              "is_max_namespace_id_ignored": true
+              "is_max_namespace_ignored": true
             }
           }
         ]"#;
