@@ -1,5 +1,4 @@
 use std::fmt::{Debug, Display};
-use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -7,7 +6,7 @@ use std::task::{Context, Poll};
 use celestia_proto::p2p::pb::{header_request, HeaderRequest, HeaderResponse};
 use celestia_types::Hash;
 use futures::stream::FuturesUnordered;
-use futures::{FutureExt, Stream};
+use futures::{future::BoxFuture, FutureExt, Stream};
 use libp2p::{
     request_response::{InboundFailure, RequestId, ResponseChannel},
     PeerId,
@@ -19,15 +18,13 @@ use crate::exchange::utils::{ExtendedHeaderExt, HeaderRequestExt, HeaderResponse
 use crate::exchange::{ReqRespBehaviour, ResponseType};
 use crate::store::Store;
 
-type StoreJobType<C> = dyn Future<Output = (C, ResponseType)> + Send;
-
 pub(super) struct ExchangeServerHandler<S, R = ReqRespBehaviour>
 where
     S: Store,
     R: ResponseSender,
 {
     store: Arc<S>,
-    store_jobs: FuturesUnordered<Pin<Box<StoreJobType<R::Channel>>>>,
+    store_jobs: FuturesUnordered<BoxFuture<'static, (R::Channel, ResponseType)>>,
 }
 
 pub(super) trait ResponseSender {
@@ -135,10 +132,11 @@ async fn handle_request_current_head<S, C>(store: Arc<S>, channel: C) -> (C, Res
 where
     S: Store,
 {
-    let response = match store.get_head().await {
-        Ok(head) => head.to_header_response(),
-        Err(_) => HeaderResponse::not_found(),
-    };
+    let response = store
+        .get_head()
+        .await
+        .map(|head| head.to_header_response())
+        .unwrap_or_else(|_| HeaderResponse::not_found());
 
     (channel, vec![response])
 }
@@ -151,10 +149,11 @@ where
         return (channel, vec![HeaderResponse::invalid()]);
     };
 
-    let response = match store.get_by_hash(&hash).await {
-        Ok(head) => head.to_header_response(),
-        Err(_) => HeaderResponse::not_found(),
-    };
+    let response = store
+        .get_by_hash(&hash)
+        .await
+        .map(|head| head.to_header_response())
+        .unwrap_or_else(|_| HeaderResponse::not_found());
 
     (channel, vec![response])
 }
@@ -170,10 +169,11 @@ where
 {
     let mut responses = vec![];
     for i in origin..origin + amount {
-        let response = match store.get_by_height(i).await {
-            Ok(head) => head.to_header_response(),
-            Err(_) => HeaderResponse::not_found(),
-        };
+        let response = store
+            .get_by_height(i)
+            .await
+            .map(|head| head.to_header_response())
+            .unwrap_or_else(|_| HeaderResponse::not_found());
         responses.push(response);
     }
 
