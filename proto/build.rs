@@ -2,13 +2,12 @@ use anyhow::Result;
 
 const SERIALIZED: &str = r#"#[derive(::serde::Deserialize, ::serde::Serialize)] #[serde(default)]"#;
 const BASE64STRING: &str =
-    r#"#[serde(default, with = "tendermint_proto::serializers::bytes::base64string")]"#;
+    r#"#[serde(with = "tendermint_proto::serializers::bytes::base64string")]"#;
 const QUOTED: &str = r#"#[serde(with = "tendermint_proto::serializers::from_str")]"#;
 const VEC_BASE64STRING: &str =
-    r#"#[serde(default, with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
-const OPTION_ANY: &str = r#"#[serde(default, with = "crate::serializers::option_any")]"#;
-const OPTION_TIMESTAMP: &str =
-    r#"#[serde(default, with = "crate::serializers::option_timestamp")]"#;
+    r#"#[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
+const OPTION_ANY: &str = r#"#[serde(with = "crate::serializers::option_any")]"#;
+const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_timestamp")]"#;
 
 #[rustfmt::skip]
 pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
