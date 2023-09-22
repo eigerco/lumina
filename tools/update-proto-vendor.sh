@@ -1,8 +1,9 @@
 #!/bin/bash
 
-cd -- "$(dirname -- "${BASH_SOURCE[0]}")" || exit 1
-cd ../proto || exit 1
-set -x -e
+set -xeuo pipefail
+
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+cd ../proto
 
 extract_urls() {
     local dir="$1"
