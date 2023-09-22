@@ -64,7 +64,7 @@ cp -r ../target/proto-vendor-src/celestia-node-main/header/pb vendor/header
 rm -rf vendor/share
 mkdir -p vendor/share
 for pb_dir in ../target/proto-vendor-src/celestia-node-main/share/*/*/pb; do
-    out_dir="${pb_dir#${pb_dir%/*/*/*}}"
+    out_dir="${pb_dir#"${pb_dir%/*/*/*}"}"
     out_dir="vendor/share/${out_dir%/*}"
     mkdir -p "$out_dir"
     cp -r "$pb_dir" "$out_dir"
