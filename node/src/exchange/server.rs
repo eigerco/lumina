@@ -24,7 +24,7 @@ where
     R: ResponseSender,
 {
     store: Arc<S>,
-    store_jobs: FuturesUnordered<BoxFuture<'static, (R::Channel, ResponseType)>>,
+    futures: FuturesUnordered<BoxFuture<'static, (R::Channel, ResponseType)>>,
 }
 
 pub(super) trait ResponseSender {
@@ -51,40 +51,36 @@ where
     pub(super) fn new(store: Arc<S>) -> Self {
         ExchangeServerHandler {
             store,
-            store_jobs: FuturesUnordered::new(),
+            futures: FuturesUnordered::new(),
         }
     }
 
     #[instrument(level = "trace", skip(self, response_channel))]
-    pub(super) fn on_request_received<ID>(
+    pub(super) fn on_request_received<Id>(
         &mut self,
         peer: PeerId,
-        request_id: ID,
+        request_id: Id,
         request: HeaderRequest,
         response_channel: R::Channel,
     ) where
-        ID: Display + Debug,
+        Id: Display + Debug,
     {
-        let Some((amount, data)) = self.parse_request(request) else {
-            self.store_jobs
-                .push(handle_invalid_request(response_channel).boxed());
+        let Some((amount, data)) = parse_request(request) else {
+            self.handle_invalid_request(response_channel);
             return;
         };
 
-        let store_job = match data {
+        match data {
             header_request::Data::Origin(0) => {
-                handle_request_current_head(self.store.clone(), response_channel).boxed()
+                self.handle_request_current_head(response_channel);
             }
             header_request::Data::Origin(height) => {
-                handle_request_by_height(self.store.clone(), response_channel, height, amount)
-                    .boxed()
+                self.handle_request_by_height(response_channel, height, amount);
             }
             header_request::Data::Hash(hash) => {
-                handle_request_by_hash(self.store.clone(), response_channel, hash).boxed()
+                self.handle_request_by_hash(response_channel, hash);
             }
         };
-
-        self.store_jobs.push(store_job);
     }
 
     pub(super) fn on_response_sent(&mut self, peer: PeerId, request_id: RequestId) {
@@ -101,90 +97,87 @@ where
         trace!("on_failure; request_id: {request_id}, peer: {peer}, error: {error:?}");
     }
 
-    fn parse_request(&self, request: HeaderRequest) -> Option<(u64, header_request::Data)> {
-        if !request.is_valid() {
-            return None;
-        }
-
-        let HeaderRequest {
-            amount,
-            data: Some(data),
-        } = request
-        else {
-            return None;
-        };
-
-        Some((amount, data))
-    }
-
     pub fn poll(&mut self, cx: &mut Context<'_>, sender: &mut R) -> Poll<()> {
-        while let Poll::Ready(Some((channel, response))) =
-            Pin::new(&mut self.store_jobs).poll_next(cx)
+        while let Poll::Ready(Some((channel, response))) = Pin::new(&mut self.futures).poll_next(cx)
         {
             sender.send_response(channel, response);
         }
 
         Poll::Pending
     }
-}
 
-async fn handle_request_current_head<S, C>(store: Arc<S>, channel: C) -> (C, ResponseType)
-where
-    S: Store,
-{
-    let response = store
-        .get_head()
-        .await
-        .map(|head| head.to_header_response())
-        .unwrap_or_else(|_| HeaderResponse::not_found());
+    fn handle_request_current_head(&mut self, channel: R::Channel) {
+        let store = self.store.clone();
+        let fut = async move {
+            let response = store
+                .get_head()
+                .await
+                .map(|head| head.to_header_response())
+                .unwrap_or_else(|_| HeaderResponse::not_found());
 
-    (channel, vec![response])
-}
-
-async fn handle_request_by_hash<S, C>(store: Arc<S>, channel: C, hash: Vec<u8>) -> (C, ResponseType)
-where
-    S: Store,
-{
-    let Ok(hash) = Hash::from_bytes(Algorithm::Sha256, &hash) else {
-        return (channel, vec![HeaderResponse::invalid()]);
-    };
-
-    let response = store
-        .get_by_hash(&hash)
-        .await
-        .map(|head| head.to_header_response())
-        .unwrap_or_else(|_| HeaderResponse::not_found());
-
-    (channel, vec![response])
-}
-
-async fn handle_request_by_height<S, C>(
-    store: Arc<S>,
-    channel: C,
-    origin: u64,
-    amount: u64,
-) -> (C, ResponseType)
-where
-    S: Store,
-{
-    let mut responses = vec![];
-    for i in origin..origin + amount {
-        let response = store
-            .get_by_height(i)
-            .await
-            .map(|head| head.to_header_response())
-            .unwrap_or_else(|_| HeaderResponse::not_found());
-        responses.push(response);
+            (channel, vec![response])
+        };
+        self.futures.push(fut.boxed());
     }
 
-    (channel, responses)
+    fn handle_request_by_hash(&mut self, channel: R::Channel, hash: Vec<u8>) {
+        let store = self.store.clone();
+        let fut = async move {
+            let Ok(hash) = Hash::from_bytes(Algorithm::Sha256, &hash) else {
+                return (channel, vec![HeaderResponse::invalid()]);
+            };
+
+            let response = store
+                .get_by_hash(&hash)
+                .await
+                .map(|head| head.to_header_response())
+                .unwrap_or_else(|_| HeaderResponse::not_found());
+
+            (channel, vec![response])
+        };
+
+        self.futures.push(fut.boxed());
+    }
+
+    fn handle_request_by_height(&mut self, channel: R::Channel, origin: u64, amount: u64) {
+        let store = self.store.clone();
+
+        let fut = async move {
+            let mut responses = vec![];
+            for i in origin..origin + amount {
+                let response = store
+                    .get_by_height(i)
+                    .await
+                    .map(|head| head.to_header_response())
+                    .unwrap_or_else(|_| HeaderResponse::not_found());
+                responses.push(response);
+            }
+
+            (channel, responses)
+        };
+        self.futures.push(fut.boxed());
+    }
+
+    fn handle_invalid_request(&self, channel: R::Channel) {
+        let fut = async { (channel, vec![HeaderResponse::invalid()]) };
+        self.futures.push(fut.boxed());
+    }
 }
 
-async fn handle_invalid_request<C>(channel: C) -> (C, ResponseType)
-where
-    C: Send,
-{
-    (channel, vec![HeaderResponse::invalid()])
+fn parse_request(request: HeaderRequest) -> Option<(u64, header_request::Data)> {
+    if !request.is_valid() {
+        return None;
+    }
+
+    let HeaderRequest {
+        amount,
+        data: Some(data),
+    } = request
+    else {
+        return None;
+    };
+
+    Some((amount, data))
 }
 
 #[cfg(test)]

@@ -228,14 +228,20 @@ where
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        while let Poll::Ready(ev) = self.req_resp.poll(cx, params) {
-            if let Some(ev) = self.on_to_swarm(ev) {
-                return Poll::Ready(ev);
-            }
-        }
-        let _ = self.server_handler.poll(cx, &mut self.req_resp);
+        loop {
+            while let Poll::Ready(ev) = self.req_resp.poll(cx, params) {
+                if let Some(ev) = self.on_to_swarm(ev) {
+                    return Poll::Ready(ev);
+                }
 
-        Poll::Pending
+                continue;
+            }
+            if self.server_handler.poll(cx, &mut self.req_resp).is_ready() {
+                continue;
+            }
+
+            return Poll::Pending;
+        }
     }
 }
 
