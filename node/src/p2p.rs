@@ -419,6 +419,9 @@ where
 
         debug!("New header from header-sub ({header})");
         // TODO: inform syncer about it
+        //
+        // TODO: Verify header against store. If it's verified propagate
+        // it to other peers. If not, discard it.
     }
 }
 
