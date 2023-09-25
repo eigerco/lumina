@@ -81,18 +81,6 @@ impl PeerTracker {
         }
     }
 
-    pub fn clear_addresses(&self, peer: PeerId) {
-        let mut state = self.get(peer);
-
-        state.addrs.clear();
-        state.addrs.shrink_to_fit();
-
-        // Downgrade state. Note that we do not downgrade a connected peer.
-        if state.state == PeerState::AddressesFound {
-            state.state = PeerState::Discovered;
-        }
-    }
-
     pub fn connected(&self, peer: PeerId, address: impl Into<Option<Multiaddr>>) {
         let mut state = self.get(peer);
 
