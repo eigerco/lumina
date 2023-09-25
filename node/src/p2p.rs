@@ -6,19 +6,21 @@ use async_trait::async_trait;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_types::{ExtendedHeader, Hash};
 use futures::StreamExt;
-use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::transport::Boxed;
-use libp2p::gossipsub::{self, SubscriptionError, TopicHash};
-use libp2p::identity::Keypair;
-use libp2p::swarm::{
-    keep_alive, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder, SwarmEvent,
-    THandlerErr,
+use libp2p::{
+    core::{muxing::StreamMuxerBox, transport::Boxed},
+    gossipsub::{self, SubscriptionError, TopicHash},
+    identify,
+    identity::Keypair,
+    swarm::{
+        keep_alive, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder, SwarmEvent,
+        THandlerErr,
+    },
+    Multiaddr, PeerId, TransportError,
 };
-use libp2p::{identify, Multiaddr, PeerId, TransportError};
 use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::oneshot;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, instrument, trace, warn};
 
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
 use crate::executor::{spawn, Executor};
@@ -268,20 +270,8 @@ where
             args.local_keypair.public(),
         ));
 
-        // Set the message authenticity - How we expect to publish messages
-        // Here we expect the publisher to sign the message with their key.
-        let message_authenticity =
-            gossipsub::MessageAuthenticity::Signed(args.local_keypair.clone());
-        // set default parameters for gossipsub
-        let gossipsub_config = gossipsub::Config::default();
-        // build a gossipsub network behaviour
-        let mut gossipsub: gossipsub::Behaviour =
-            gossipsub::Behaviour::new(message_authenticity, gossipsub_config)
-                .map_err(P2pError::GossipsubInit)?;
-
-        // subscribe to the topic
         let header_sub_topic = gossipsub_ident_topic(&args.network_id, "/header-sub/v0.0.1");
-        gossipsub.subscribe(&header_sub_topic)?;
+        let gossipsub = init_gossipsub(&args, [&header_sub_topic])?;
 
         let header_ex = ExchangeBehaviour::new(ExchangeConfig {
             network_id: &args.network_id,
@@ -389,23 +379,17 @@ where
         Ok(())
     }
 
+    #[instrument(level = "trace", skip(self))]
     async fn on_gossip_sub_event(&mut self, ev: gossipsub::Event) -> Result<()> {
         match ev {
-            gossipsub::Event::Message {
-                message_id,
-                message,
-                ..
-            } => {
+            gossipsub::Event::Message { message, .. } => {
                 if message.topic == self.header_sub_topic_hash {
-                    let header = ExtendedHeader::decode(&message.data[..]).unwrap();
-                    // TODO: produce event
-
-                    debug!("New header from header-sub: {header:?}");
+                    self.on_header_sub_message(&message.data[..]);
                 } else {
-                    debug!("New gossipsub message, id: {message_id}, message: {message:?}");
+                    trace!("Unhandled gossipsub message");
                 }
             }
-            _ => debug!("Unhandled gossipsub event: {ev:?}"),
+            _ => trace!("Unhandled gossipsub event"),
         }
 
         Ok(())
@@ -420,4 +404,40 @@ where
             respond_to.maybe_send(());
         }
     }
+
+    #[instrument(skip_all)]
+    fn on_header_sub_message(&mut self, data: &[u8]) {
+        let Ok(header) = ExtendedHeader::decode(data) else {
+            trace!("Malformed header from header-sub");
+            return;
+        };
+
+        if let Err(e) = header.validate() {
+            trace!("Invalid header from header-sub ({e})");
+            return;
+        }
+
+        debug!("New header from header-sub ({header})");
+        // TODO: inform syncer about it
+    }
+}
+
+fn init_gossipsub<'a, S>(
+    args: &'a P2pArgs<S>,
+    topics: impl IntoIterator<Item = &'a gossipsub::IdentTopic>,
+) -> Result<gossipsub::Behaviour> {
+    // Set the message authenticity - How we expect to publish messages
+    // Here we expect the publisher to sign the message with their key.
+    let message_authenticity = gossipsub::MessageAuthenticity::Signed(args.local_keypair.clone());
+
+    // build a gossipsub network behaviour
+    let mut gossipsub: gossipsub::Behaviour =
+        gossipsub::Behaviour::new(message_authenticity, gossipsub::Config::default())
+            .map_err(P2pError::GossipsubInit)?;
+
+    for topic in topics {
+        gossipsub.subscribe(topic)?;
+    }
+
+    Ok(gossipsub)
 }
