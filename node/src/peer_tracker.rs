@@ -1,56 +1,163 @@
 use std::borrow::Borrow;
 
-use dashmap::DashSet;
-use libp2p::PeerId;
+use dashmap::mapref::entry::Entry;
+use dashmap::mapref::one::RefMut;
+use dashmap::DashMap;
+use libp2p::{identify, Multiaddr, PeerId};
 
+#[derive(Debug)]
 pub struct PeerTracker {
-    peers: DashSet<PeerId>,
+    peers: DashMap<PeerId, InnerState>,
+}
+
+#[derive(Debug)]
+struct InnerState {
+    addrs: Vec<Multiaddr>,
+    state: PeerState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PeerState {
+    Discovered,
+    AddressesFound,
+    Connected,
+    Identified,
+}
+
+impl InnerState {
+    fn is_connected(&self) -> bool {
+        matches!(self.state, PeerState::Connected | PeerState::Identified)
+    }
 }
 
 impl PeerTracker {
     pub fn new() -> Self {
         PeerTracker {
-            peers: DashSet::new(),
+            peers: DashMap::new(),
         }
     }
 
-    pub fn add(&self, peer: PeerId) {
-        self.peers.insert(peer);
+    pub fn maybe_discovered(&self, peer: PeerId) -> bool {
+        match self.peers.entry(peer) {
+            Entry::Vacant(entry) => {
+                entry.insert(InnerState {
+                    addrs: Vec::new(),
+                    state: PeerState::Discovered,
+                });
+                true
+            }
+            Entry::Occupied(_) => false,
+        }
     }
 
-    pub fn add_many<I, P>(&self, peers: I)
+    /// Get the `InnerState` of the peer.
+    ///
+    /// If peer is not found it is added as `PeerState::Discovered`.
+    fn get(&self, peer: PeerId) -> RefMut<PeerId, InnerState> {
+        self.peers.entry(peer).or_insert_with(|| InnerState {
+            addrs: Vec::new(),
+            state: PeerState::Discovered,
+        })
+    }
+
+    pub fn add_addresses<I, A>(&self, peer: PeerId, addrs: I)
     where
-        I: IntoIterator<Item = P>,
-        P: Borrow<PeerId>,
+        I: IntoIterator<Item = A>,
+        A: Borrow<Multiaddr>,
     {
-        for peer in peers {
-            self.add(*peer.borrow());
+        let mut state = self.get(peer);
+
+        for addr in addrs {
+            let addr = addr.borrow();
+
+            if !state.addrs.contains(addr) {
+                state.addrs.push(addr.to_owned());
+            }
         }
+
+        // Upgrade state
+        if state.state == PeerState::Discovered && !state.addrs.is_empty() {
+            state.state = PeerState::AddressesFound;
+        }
+    }
+
+    pub fn clear_addresses(&self, peer: PeerId) {
+        let mut state = self.get(peer);
+
+        state.addrs.clear();
+        state.addrs.shrink_to_fit();
+
+        // Downgrade state. Note that we do not downgrade a connected peer.
+        if state.state == PeerState::AddressesFound {
+            state.state = PeerState::Discovered;
+        }
+    }
+
+    pub fn connected(&self, peer: PeerId, address: impl Into<Option<Multiaddr>>) {
+        let mut state = self.get(peer);
+
+        if let Some(address) = address.into() {
+            if !state.addrs.contains(&address) {
+                state.addrs.push(address);
+            }
+        }
+
+        state.state = PeerState::Connected;
+    }
+
+    pub fn disconnected(&self, peer: PeerId) {
+        let mut state = self.get(peer);
+
+        if state.addrs.is_empty() {
+            state.state = PeerState::Discovered;
+        } else {
+            state.state = PeerState::AddressesFound;
+        }
+    }
+
+    pub fn identified(&self, peer: PeerId, info: &identify::Info) {
+        let mut state = self.get(peer);
+
+        for addr in &info.listen_addrs {
+            if !state.addrs.contains(addr) {
+                state.addrs.push(addr.to_owned());
+            }
+        }
+
+        state.state = PeerState::Identified
+    }
+
+    pub fn is_anyone_connected(&self) -> bool {
+        self.peers.iter().any(|pair| pair.value().is_connected())
+    }
+
+    pub fn is_connected(&self, peer: PeerId) -> bool {
+        self.get(peer).is_connected()
+    }
+
+    pub fn addresses(&self, peer: PeerId) -> Vec<Multiaddr> {
+        self.get(peer).addrs.clone()
     }
 
     pub fn remove(&self, peer: PeerId) {
         self.peers.remove(&peer);
     }
 
-    pub fn len(&self) -> usize {
-        self.peers.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.peers.is_empty()
-    }
-
     pub fn best_peer(&self) -> Option<PeerId> {
         // TODO: Implement peer score and return the best.
-        self.peers.iter().next().map(|v| v.key().to_owned())
+        self.peers
+            .iter()
+            .find(|pair| pair.value().is_connected())
+            .map(|pair| pair.key().to_owned())
     }
 
     pub fn best_n_peers(&self, limit: usize) -> Vec<PeerId> {
         // TODO: Implement peer score and return the best N peers.
         self.peers
             .iter()
+            .filter(|pair| pair.value().is_connected())
             .take(limit)
-            .map(|v| v.key().to_owned())
+            .map(|pair| pair.key().to_owned())
             // collect instead of returning an iter to not block the dashmap
             .collect()
     }

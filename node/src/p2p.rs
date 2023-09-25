@@ -7,7 +7,7 @@ use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_types::{ExtendedHeader, Hash};
 use futures::StreamExt;
 use libp2p::{
-    core::{muxing::StreamMuxerBox, transport::Boxed},
+    core::{muxing::StreamMuxerBox, transport::Boxed, ConnectedPoint, Endpoint},
     gossipsub::{self, SubscriptionError, TopicHash},
     identify,
     identity::Keypair,
@@ -20,7 +20,7 @@ use libp2p::{
 use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::oneshot;
-use tracing::{debug, instrument, trace, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
 use crate::executor::{spawn, Executor};
@@ -54,7 +54,7 @@ pub enum P2pError {
     ChannelClosedUnexpectedly,
 
     #[error("Not connected to any peers")]
-    NoPeers,
+    NoConnectedPeers,
 
     #[error("Exchange: {0}")]
     Exchange(#[from] ExchangeError),
@@ -325,7 +325,6 @@ where
         }
     }
 
-    #[instrument(level = "trace", skip(self))]
     async fn on_swarm_event(
         &mut self,
         ev: SwarmEvent<BehaviourEvent<S>, THandlerErr<Behaviour<S>>>,
@@ -336,15 +335,13 @@ where
                 BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await?,
                 BehaviourEvent::HeaderEx(_) | BehaviourEvent::KeepAlive(_) => {}
             },
-            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                self.peer_tracker.add(peer_id);
-
-                for tx in self.wait_connected_tx.take().into_iter().flatten() {
-                    tx.maybe_send(());
-                }
+            SwarmEvent::ConnectionEstablished {
+                peer_id, endpoint, ..
+            } => {
+                self.on_peer_connected(peer_id, endpoint);
             }
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                self.peer_tracker.remove(peer_id);
+                self.on_peer_disconnected(peer_id);
             }
             _ => {}
         }
@@ -374,8 +371,16 @@ where
         Ok(())
     }
 
-    async fn on_identify_event(&mut self, _ev: identify::Event) -> Result<()> {
-        // TODO
+    #[instrument(level = "trace", skip(self))]
+    async fn on_identify_event(&mut self, ev: identify::Event) -> Result<()> {
+        match ev {
+            identify::Event::Received { peer_id, info } => {
+                // Inform peer tracker
+                self.peer_tracker.identified(peer_id, &info);
+            }
+            _ => trace!("Unhandled identify event"),
+        }
+
         Ok(())
     }
 
@@ -383,6 +388,11 @@ where
     async fn on_gossip_sub_event(&mut self, ev: gossipsub::Event) -> Result<()> {
         match ev {
             gossipsub::Event::Message { message, .. } => {
+                // We may discovered a new peer
+                if let Some(peer) = message.source {
+                    self.on_peer_discovered(peer);
+                }
+
                 if message.topic == self.header_sub_topic_hash {
                     self.on_header_sub_message(&message.data[..]);
                 } else {
@@ -395,13 +405,52 @@ where
         Ok(())
     }
 
+    #[instrument(skip_all, fields(peer_id = %peer_id))]
+    fn on_peer_discovered(&mut self, peer_id: PeerId) {
+        if !self.peer_tracker.maybe_discovered(peer_id) {
+            return;
+        }
+
+        debug!("Peer discovered");
+    }
+
+    #[instrument(skip_all, fields(peer_id = %peer_id))]
+    fn on_peer_connected(&mut self, peer_id: PeerId, endpoint: ConnectedPoint) {
+        info!("Peer connected");
+
+        // Inform PeerTracker about the dialed address.
+        //
+        // We do this because Kademlia commands Swarm to
+        // dial a peer and we may not have that address
+        // in PeerTracker.
+        let dialed_addr = match endpoint {
+            ConnectedPoint::Dialer {
+                address,
+                role_override: Endpoint::Dialer,
+            } => Some(address),
+            _ => None,
+        };
+
+        self.peer_tracker.connected(peer_id, dialed_addr);
+
+        for tx in self.wait_connected_tx.take().into_iter().flatten() {
+            tx.maybe_send(());
+        }
+    }
+
+    #[instrument(skip_all, fields(peer_id = %peer_id))]
+    fn on_peer_disconnected(&mut self, peer_id: PeerId) {
+        info!("Peer disconnected");
+        self.peer_tracker.disconnected(peer_id);
+    }
+
     fn on_wait_connected(&mut self, respond_to: oneshot::Sender<()>) {
-        if self.peer_tracker.is_empty() {
+        if self.peer_tracker.is_anyone_connected() {
+            respond_to.maybe_send(());
+        } else {
             self.wait_connected_tx
                 .get_or_insert_with(Vec::new)
                 .push(respond_to);
-        } else {
-            respond_to.maybe_send(());
         }
     }
 
