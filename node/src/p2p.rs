@@ -7,10 +7,13 @@ use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_types::{ExtendedHeader, Hash};
 use futures::StreamExt;
 use libp2p::{
+    autonat,
     core::{muxing::StreamMuxerBox, transport::Boxed, ConnectedPoint, Endpoint},
     gossipsub::{self, SubscriptionError, TopicHash},
     identify,
     identity::Keypair,
+    kad::{record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent},
+    ping,
     swarm::{
         keep_alive, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder, SwarmEvent,
         THandlerErr,
@@ -26,7 +29,10 @@ use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
 use crate::executor::{spawn, Executor};
 use crate::peer_tracker::PeerTracker;
 use crate::store::Store;
-use crate::utils::{gossipsub_ident_topic, OneshotResultSender, OneshotSenderExt};
+use crate::utils::{
+    celestia_protocol_id, gossipsub_ident_topic, MultiaddrExt, OneshotResultSender,
+    OneshotSenderExt,
+};
 use crate::Service;
 
 pub use crate::exchange::ExchangeError;
@@ -240,10 +246,13 @@ struct Behaviour<S>
 where
     S: Store + 'static,
 {
+    autonat: autonat::Behaviour,
+    keep_alive: keep_alive::Behaviour,
+    ping: ping::Behaviour,
     identify: identify::Behaviour,
     header_ex: ExchangeBehaviour<S>,
-    keep_alive: keep_alive::Behaviour,
     gossipsub: gossipsub::Behaviour,
+    kademlia: Kademlia<MemoryStore>,
 }
 
 struct Worker<S>
@@ -265,6 +274,10 @@ where
         let peer_tracker = Arc::new(PeerTracker::new());
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
+        let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
+        let keep_alive = keep_alive::Behaviour;
+        let ping = ping::Behaviour::new(ping::Config::default());
+
         let identify = identify::Behaviour::new(identify::Config::new(
             String::new(),
             args.local_keypair.public(),
@@ -273,6 +286,8 @@ where
         let header_sub_topic = gossipsub_ident_topic(&args.network_id, "/header-sub/v0.0.1");
         let gossipsub = init_gossipsub(&args, [&header_sub_topic])?;
 
+        let kademlia = init_kademlia(&args)?;
+
         let header_ex = ExchangeBehaviour::new(ExchangeConfig {
             network_id: &args.network_id,
             peer_tracker: peer_tracker.clone(),
@@ -280,10 +295,13 @@ where
         });
 
         let behaviour = Behaviour {
+            autonat,
+            keep_alive,
+            ping,
             identify,
             gossipsub,
             header_ex,
-            keep_alive: keep_alive::Behaviour,
+            kademlia,
         };
 
         let mut swarm =
@@ -333,7 +351,11 @@ where
             SwarmEvent::Behaviour(ev) => match ev {
                 BehaviourEvent::Identify(ev) => self.on_identify_event(ev).await?,
                 BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await?,
-                BehaviourEvent::HeaderEx(_) | BehaviourEvent::KeepAlive(_) => {}
+                BehaviourEvent::Kademlia(ev) => self.on_kademlia_event(ev).await?,
+                BehaviourEvent::Autonat(_)
+                | BehaviourEvent::KeepAlive(_)
+                | BehaviourEvent::Ping(_)
+                | BehaviourEvent::HeaderEx(_) => {}
             },
             SwarmEvent::ConnectionEstablished {
                 peer_id, endpoint, ..
@@ -375,8 +397,18 @@ where
     async fn on_identify_event(&mut self, ev: identify::Event) -> Result<()> {
         match ev {
             identify::Event::Received { peer_id, info } => {
+                let kademlia = &mut self.swarm.behaviour_mut().kademlia;
+
                 // Inform peer tracker
                 self.peer_tracker.identified(peer_id, &info);
+
+                // Inform Kademlia
+                for addr in info.listen_addrs {
+                    kademlia.add_address(&peer_id, addr);
+                }
+
+                // Start a deeper lookup for other peers
+                kademlia.get_closest_peers(peer_id);
             }
             _ => trace!("Unhandled identify event"),
         }
@@ -405,6 +437,27 @@ where
         Ok(())
     }
 
+    #[instrument(level = "trace", skip(self))]
+    async fn on_kademlia_event(&mut self, ev: KademliaEvent) -> Result<()> {
+        match ev {
+            KademliaEvent::RoutingUpdated {
+                peer, addresses, ..
+            } => {
+                self.peer_tracker.add_addresses(peer, addresses.iter());
+            }
+            KademliaEvent::UnroutablePeer { peer } => {
+                // Kademlia does know the address of the peer, but we might have
+                // it in PeerTracker
+                for addr in self.peer_tracker.addresses(peer) {
+                    self.swarm.behaviour_mut().kademlia.add_address(&peer, addr);
+                }
+            }
+            _ => trace!("Unhandled Kademlia event"),
+        }
+
+        Ok(())
+    }
+
     #[instrument(skip_all, fields(peer_id = %peer_id))]
     fn on_peer_discovered(&mut self, peer_id: PeerId) {
         if !self.peer_tracker.maybe_discovered(peer_id) {
@@ -412,6 +465,12 @@ where
         }
 
         debug!("Peer discovered");
+
+        // Initiate deeper lookup
+        self.swarm
+            .behaviour_mut()
+            .kademlia
+            .get_closest_peers(peer_id);
     }
 
     #[instrument(skip_all, fields(peer_id = %peer_id))]
@@ -492,4 +551,29 @@ fn init_gossipsub<'a, S>(
     }
 
     Ok(gossipsub)
+}
+
+fn init_kademlia<S>(args: &P2pArgs<S>) -> Result<Kademlia<MemoryStore>> {
+    let local_peer_id = PeerId::from(args.local_keypair.public());
+    let mut config = KademliaConfig::default();
+
+    let protocol_id = celestia_protocol_id(&args.network_id, "/kad/1.0.0");
+
+    config.set_protocol_names(vec![protocol_id]);
+
+    let mut kad = Kademlia::with_config(local_peer_id, MemoryStore::new(local_peer_id), config);
+
+    for addr in &args.bootstrap_peers {
+        if let Some(peer_id) = addr.peer_id() {
+            kad.add_address(&peer_id, addr.to_owned());
+        }
+    }
+
+    // Peer multiaddress may not contain the peer. This is not fatal
+    // because after we join to a bootstrap peer we initiate `get_closest_peers`.
+    if let Err(e) = kad.bootstrap() {
+        warn!("Failed to start Kademlia boostrap: {e}");
+    }
+
+    Ok(kad)
 }
