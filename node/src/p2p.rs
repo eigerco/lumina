@@ -420,8 +420,8 @@ where
 
         // Inform PeerTracker about the dialed address.
         //
-        // We do this because Kademlia commands Swarm to
-        // dial a peer and we may not have that address
+        // We do this because Kademlia send commands to Swarm
+        // for dialing a peer and we may not have that address
         // in PeerTracker.
         let dialed_addr = match endpoint {
             ConnectedPoint::Dialer {
