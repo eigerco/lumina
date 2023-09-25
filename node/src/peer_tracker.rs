@@ -7,24 +7,24 @@ use libp2p::{identify, Multiaddr, PeerId};
 
 #[derive(Debug)]
 pub struct PeerTracker {
-    peers: DashMap<PeerId, InnerState>,
+    peers: DashMap<PeerId, PeerInfo>,
 }
 
 #[derive(Debug)]
-struct InnerState {
+struct PeerInfo {
     addrs: Vec<Multiaddr>,
     state: PeerState,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PeerState {
+enum PeerState {
     Discovered,
     AddressesFound,
     Connected,
     Identified,
 }
 
-impl InnerState {
+impl PeerInfo {
     fn is_connected(&self) -> bool {
         matches!(self.state, PeerState::Connected | PeerState::Identified)
     }
@@ -40,7 +40,7 @@ impl PeerTracker {
     pub fn maybe_discovered(&self, peer: PeerId) -> bool {
         match self.peers.entry(peer) {
             Entry::Vacant(entry) => {
-                entry.insert(InnerState {
+                entry.insert(PeerInfo {
                     addrs: Vec::new(),
                     state: PeerState::Discovered,
                 });
@@ -50,11 +50,11 @@ impl PeerTracker {
         }
     }
 
-    /// Get the `InnerState` of the peer.
+    /// Get the `PeerInfo` of the peer.
     ///
     /// If peer is not found it is added as `PeerState::Discovered`.
-    fn get(&self, peer: PeerId) -> RefMut<PeerId, InnerState> {
-        self.peers.entry(peer).or_insert_with(|| InnerState {
+    fn get(&self, peer: PeerId) -> RefMut<PeerId, PeerInfo> {
+        self.peers.entry(peer).or_insert_with(|| PeerInfo {
             addrs: Vec::new(),
             state: PeerState::Discovered,
         })
