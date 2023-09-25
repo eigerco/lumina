@@ -92,7 +92,7 @@ where
         };
 
         let Some(peer) = self.peer_tracker.best_peer() else {
-            respond_to.maybe_send_err(P2pError::NoPeers);
+            respond_to.maybe_send_err(P2pError::NoConnectedPeers);
             return;
         };
 
@@ -117,7 +117,7 @@ where
         let peers = self.peer_tracker.best_n_peers(MAX_PEERS);
 
         if peers.is_empty() {
-            respond_to.maybe_send_err(P2pError::NoPeers);
+            respond_to.maybe_send_err(P2pError::NoConnectedPeers);
             return;
         };
 
@@ -857,7 +857,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
 
-        assert!(matches!(rx.await, Ok(Err(P2pError::NoPeers))));
+        assert!(matches!(rx.await, Ok(Err(P2pError::NoConnectedPeers))));
     }
 
     #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -926,13 +926,13 @@ mod tests {
         }
     }
 
-    fn gen_n_peers(n: usize) -> Vec<PeerId> {
-        (0..n).map(|_| PeerId::random()).collect()
-    }
-
     fn peer_tracker_with_n_peers(amount: usize) -> Arc<PeerTracker> {
         let peers = Arc::new(PeerTracker::new());
-        peers.add_many(gen_n_peers(amount));
+
+        for _ in 0..amount {
+            peers.connected(PeerId::random(), None);
+        }
+
         peers
     }
 }
