@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct AddrInfo {
     #[serde(rename = "ID")]
@@ -11,7 +11,7 @@ pub struct AddrInfo {
     pub addrs: Vec<Multiaddr>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Stat {
     pub num_streams_inbound: u32,
@@ -23,7 +23,7 @@ pub struct Stat {
     pub memory: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct ResourceManagerStats {
     pub system: Stat,
@@ -50,7 +50,7 @@ impl From<PeerId> for libp2p_identity::PeerId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct BandwidthStats {
     pub total_in: f32,
@@ -59,7 +59,7 @@ pub struct BandwidthStats {
     pub rate_out: f32,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum Connectedness {
     NotConnected = 0,
@@ -68,7 +68,7 @@ pub enum Connectedness {
     CannotConnect = 3,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum Reachability {
     Unknown = 0,
