@@ -158,7 +158,7 @@ async fn peer_discovery() {
 
     // Node2
     //
-    // This node connects to Node1 and will discover Node3 and Bridge node.
+    // This node connects to Node1 and will discover Bridge node.
     let node2_keypair = identity::Keypair::generate_ed25519();
     let node2_peer_id = PeerId::from(node2_keypair.public());
     let node2 = Node::new(NodeConfig {
