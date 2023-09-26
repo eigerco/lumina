@@ -12,7 +12,8 @@ use libp2p::{
     gossipsub::{self, SubscriptionError, TopicHash},
     identify,
     identity::Keypair,
-    kad::{record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent},
+    kad::{record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent, Mode},
+    multiaddr::Protocol,
     ping,
     swarm::{
         keep_alive, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder, SwarmEvent,
@@ -99,6 +100,12 @@ pub enum P2pCmd {
     },
     WaitConnected {
         respond_to: oneshot::Sender<()>,
+    },
+    Listeners {
+        respond_to: oneshot::Sender<Vec<Multiaddr>>,
+    },
+    ConnectedPeers {
+        respond_to: oneshot::Sender<Vec<PeerId>>,
     },
 }
 
@@ -229,6 +236,24 @@ pub trait P2pService:
         }
 
         Ok(headers)
+    }
+
+    async fn listeners(&self) -> Result<Vec<Multiaddr>> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(P2pCmd::Listeners { respond_to: tx })
+            .await?;
+
+        Ok(rx.await?)
+    }
+
+    async fn connected_peers(&self) -> Result<Vec<PeerId>> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(P2pCmd::ConnectedPeers { respond_to: tx })
+            .await?;
+
+        Ok(rx.await?)
     }
 }
 
@@ -387,6 +412,25 @@ where
             }
             P2pCmd::WaitConnected { respond_to } => {
                 self.on_wait_connected(respond_to);
+            }
+            P2pCmd::Listeners { respond_to } => {
+                let local_peer_id = self.swarm.local_peer_id().to_owned();
+                let listeners = self
+                    .swarm
+                    .listeners()
+                    .cloned()
+                    .map(|mut ma| {
+                        if !ma.protocol_stack().any(|protocol| protocol == "p2p") {
+                            ma.push(Protocol::P2p(local_peer_id))
+                        }
+                        ma
+                    })
+                    .collect();
+
+                respond_to.maybe_send(listeners);
+            }
+            P2pCmd::ConnectedPeers { respond_to } => {
+                respond_to.maybe_send(self.peer_tracker.connected_peers());
             }
         }
 
@@ -567,6 +611,10 @@ fn init_kademlia<S>(args: &P2pArgs<S>) -> Result<Kademlia<MemoryStore>> {
         if let Some(peer_id) = addr.peer_id() {
             kad.add_address(&peer_id, addr.to_owned());
         }
+    }
+
+    if !args.listen_on.is_empty() {
+        kad.set_mode(Some(Mode::Server));
     }
 
     // Peer multiaddress may not contain the peer. This is not fatal

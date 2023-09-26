@@ -131,6 +131,14 @@ impl PeerTracker {
         self.peers.remove(&peer);
     }
 
+    pub fn connected_peers(&self) -> Vec<PeerId> {
+        self.peers
+            .iter()
+            .filter(|pair| pair.value().is_connected())
+            .map(|pair| pair.key().to_owned())
+            .collect()
+    }
+
     pub fn best_peer(&self) -> Option<PeerId> {
         // TODO: Implement peer score and return the best.
         self.peers

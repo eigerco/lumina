@@ -33,10 +33,22 @@ pub struct ResourceManagerStats {
     pub peers: HashMap<String, Stat>,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PeerId(
     #[serde(with = "tendermint_proto::serializers::from_str")] pub libp2p_identity::PeerId,
 );
+
+impl From<libp2p_identity::PeerId> for PeerId {
+    fn from(value: libp2p_identity::PeerId) -> Self {
+        PeerId(value)
+    }
+}
+
+impl From<PeerId> for libp2p_identity::PeerId {
+    fn from(value: PeerId) -> Self {
+        value.0
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
