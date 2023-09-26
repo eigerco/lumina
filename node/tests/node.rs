@@ -184,7 +184,7 @@ async fn peer_discovery() {
         p2p_transport: tcp_transport(&node3_keypair),
         p2p_local_keypair: node3_keypair,
         p2p_bootstrap_peers: node1_addrs.clone(),
-        p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
+        p2p_listen_on: vec![],
         store: InMemoryStore::new(),
     })
     .await
