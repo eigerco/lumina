@@ -563,7 +563,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn request_range_responds_with_less_results() {
+    async fn request_range_responds_with_smaller_one() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
         let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
@@ -573,6 +573,31 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 2), tx);
         mock_req.send_n_responses(&mut handler, 1, vec![header5.to_header_response()]);
+
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn request_range_responds_with_bigger_one() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 2), tx);
+
+        let (header4, key) = gen_height(4);
+        let headers = gen_next_amount(&header4, 3, &key);
+        let response = headers
+            .iter()
+            .map(|header| header.to_header_response())
+            .collect::<Vec<_>>();
+
+        mock_req.send_n_responses(&mut handler, 1, response);
 
         assert!(matches!(
             rx.await,
