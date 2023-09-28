@@ -25,7 +25,7 @@ pub fn gen_next_amount(
 
     for _ in 0..amount {
         let header = headers.last().unwrap_or(header);
-        headers.push(header.generate_next(&key));
+        headers.push(header.generate_next(key));
     }
 
     headers

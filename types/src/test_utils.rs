@@ -17,7 +17,7 @@ use crate::{DataAvailabilityHeader, ExtendedHeader, ValidatorSet};
 pub type SigningKey = ed25519_consensus::SigningKey;
 
 pub fn generate_ed25519_key() -> SigningKey {
-    SigningKey::new(&mut rand::thread_rng())
+    SigningKey::new(rand::thread_rng())
 }
 
 impl ExtendedHeader {
@@ -145,7 +145,7 @@ impl ExtendedHeader {
             chain_id: self.header.chain_id.clone(),
             height: self.header.height.increment(),
             time: Time::now(),
-            last_block_id: Some(self.commit.block_id.clone()),
+            last_block_id: Some(self.commit.block_id),
             last_commit_hash: Hash::default_sha256(),
             data_hash: dah.hash(),
             validators_hash: self.validator_set.hash(),
