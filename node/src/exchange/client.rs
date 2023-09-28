@@ -240,23 +240,20 @@ where
 
         headers.sort_unstable_by_key(|header| header.height());
 
-        // NOTE: Verification against store is done in the syncer
+        // NOTE: Verification is done only in `get_verified_headers_range` and
+        // Syncer passes the `from` parameter from Store.
         match (&request.data, headers.len()) {
             // Allow HEAD requests to have any height in their response
             (Some(Data::Origin(0)), 1) => {}
 
-            // Headers are already validated individualy in `to_extended_header`
-            // but we need to verify that they are indeed a valid chain.
+            // Make sure that starting header is the requested one and that
+            // there are no gaps in the chain
             (Some(Data::Origin(start)), amount) if *start > 0 && amount > 0 => {
-                let first = headers.first().expect("empty headers vector");
-
-                if first.height().value() != *start {
-                    return Err(ExchangeError::InvalidResponse);
+                for (header, height) in headers.iter().zip(*start..*start + amount as u64) {
+                    if header.height().value() != height {
+                        return Err(ExchangeError::InvalidResponse);
+                    }
                 }
-
-                first
-                    .verify_adjacent_range(&headers[1..])
-                    .map_err(|_| ExchangeError::InvalidResponse)?;
             }
 
             // Check if header has the requested hash

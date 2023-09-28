@@ -208,14 +208,6 @@ pub trait P2pService:
         .ok_or(ExchangeError::HeaderNotFound.into())
     }
 
-    async fn get_headers_range(&self, height: u64, amount: u64) -> Result<Vec<ExtendedHeader>> {
-        self.exchange_header_request(HeaderRequest {
-            data: Some(header_request::Data::Origin(height)),
-            amount,
-        })
-        .await
-    }
-
     async fn get_verified_headers_range(
         &self,
         from: &ExtendedHeader,
@@ -223,14 +215,16 @@ pub trait P2pService:
     ) -> Result<Vec<ExtendedHeader>> {
         from.validate().map_err(|_| ExchangeError::InvalidRequest)?;
 
+        let height = from.height().value() + 1;
+
         let headers = self
-            .get_headers_range(from.height().value() + 1, amount)
+            .exchange_header_request(HeaderRequest {
+                data: Some(header_request::Data::Origin(height)),
+                amount,
+            })
             .await?;
 
-        // Exchange client returned us a verified chain of headers
-        // so the only thing that is left to be done here is to verify
-        // `headers[0]` with `from`.
-        from.verify(&headers[0])
+        from.verify_adjacent_range(&headers)
             .map_err(|_| ExchangeError::InvalidResponse)?;
 
         Ok(headers)
