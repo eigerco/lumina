@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
-use celestia_types::{ExtendedHeader, Hash};
+use celestia_types::hash::Hash;
+use celestia_types::ExtendedHeader;
 use futures::StreamExt;
 use libp2p::{
     autonat,
@@ -226,14 +227,11 @@ pub trait P2pService:
             .get_headers_range(from.height().value() + 1, amount)
             .await?;
 
-        for untrusted in headers.iter() {
-            untrusted
-                .validate()
-                .map_err(|_| ExchangeError::InvalidResponse)?;
-
-            from.verify(untrusted)
-                .map_err(|_| ExchangeError::InvalidResponse)?;
-        }
+        // Exchange client returned us a verified chain of headers
+        // so the only thing that is left to be done here is to verify
+        // `headers[0]` with `from`.
+        from.verify(&headers[0])
+            .map_err(|_| ExchangeError::InvalidResponse)?;
 
         Ok(headers)
     }

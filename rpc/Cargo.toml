@@ -5,10 +5,10 @@ edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
-thiserror = "1.0.40"
-jsonrpsee = { version = "0.20", features = ["client-core", "macros"] }
 celestia-types = { workspace = true }
+jsonrpsee = { version = "0.20", features = ["client-core", "macros"] }
 serde = { version = "1.0.188", features = ["derive"] }
+thiserror = "1.0.40"
 tracing = "0.1.37"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

@@ -6,6 +6,7 @@ mod data_availability_header;
 mod error;
 mod extended_header;
 pub mod fraud_proof;
+pub mod hash;
 pub mod nmt;
 #[cfg(feature = "p2p")]
 pub mod p2p;
@@ -14,11 +15,13 @@ pub(crate) mod serializers;
 mod share;
 pub mod state;
 mod sync;
+#[cfg(feature = "test-utils")]
+pub mod test_utils;
 pub mod trust_level;
 mod validate;
 mod validator_set;
 
-pub use tendermint::hash::Hash;
+pub type Height = tendermint::block::Height;
 
 pub use crate::blob::{Blob, Commitment};
 pub use crate::block::*;

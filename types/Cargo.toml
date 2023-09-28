@@ -9,9 +9,9 @@ base64 = "0.21.2"
 bech32 = "0.9.1"
 bytes = "1.4.0"
 celestia-proto = { workspace = true }
+cid = { version = "0.10.1", default-features = false, features = ["std"] }
 const_format = "0.2.31"
 enum_dispatch = "0.3.12"
-cid = { version = "0.10.1", default-features = false, features = ["std"] }
 libp2p-identity = { version = "0.2.3", optional = true }
 multiaddr = { version = "0.18.0", optional = true }
 nmt-rs = { workspace = true }
@@ -22,11 +22,14 @@ sha2 = "0.10.7"
 tendermint = { workspace = true }
 tendermint-proto = { workspace = true }
 thiserror = "1.0.40"
+ed25519-consensus = { version = "2.1.0", optional = true }
+rand = { version = "0.8.5", optional = true }
 
 [dev-dependencies]
-serde_json = "1.0.97"
 proptest = "1.2.0"
+serde_json = "1.0.97"
 
 [features]
 default = ["p2p"]
 p2p = ["dep:libp2p-identity", "dep:multiaddr", "dep:serde_repr"]
+test-utils = ["tendermint/rust-crypto", "dep:ed25519-consensus", "dep:rand"]
