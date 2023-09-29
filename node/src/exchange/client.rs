@@ -308,7 +308,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 1), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
         let expected_header = gen.next();
         let expected = expected_header.to_header_response();
 
@@ -327,7 +327,7 @@ mod tests {
 
         let (tx, rx) = oneshot::channel();
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
         let expected_header = gen.next();
         let expected = expected_header.to_header_response();
 
@@ -354,7 +354,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 3), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
         let expected_headers = gen.next_many(3);
         let expected = expected_headers
             .iter()
@@ -378,7 +378,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 3), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
         let header5 = gen.next();
         let header6 = gen.next();
         let header7 = gen.next();
@@ -430,7 +430,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 1), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(3);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(3);
         let header4 = gen.next();
 
         mock_req.send_n_responses(&mut handler, 1, vec![header4.to_header_response()]);
@@ -451,7 +451,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 3), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
         let header5 = gen.next();
         let _header6 = gen.next();
         let header7 = gen.next();
@@ -486,7 +486,7 @@ mod tests {
             tx,
         );
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
         let header5 = gen.next();
 
         mock_req.send_n_responses(&mut handler, 1, vec![header5.to_header_response()]);
@@ -576,7 +576,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 2), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
         let header5 = gen.next();
 
         mock_req.send_n_responses(&mut handler, 1, vec![header5.to_header_response()]);
@@ -597,7 +597,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 2), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
         let headers = gen.next_many(3);
         let response = headers
             .iter()
@@ -699,7 +699,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(2);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(2);
         let header3 = gen.next();
         let header4 = gen.next();
         let header5 = gen.next();
@@ -737,7 +737,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(3);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(3);
         let header4 = gen.next();
         let expected_header = gen.next();
         let expected = expected_header.to_header_response();
@@ -807,7 +807,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(3);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(3);
         let header4 = gen.next();
         let header5 = gen.next();
         let header6 = gen.next();
@@ -861,7 +861,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_skipped(9);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(9);
         let expected_header = gen.next();
         let expected = expected_header.to_header_response();
 

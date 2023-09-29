@@ -47,7 +47,7 @@ impl ExtendedHeaderGenerator {
     /// let mut gen = ExtendedHeaderGenerator::new();
     /// gen.skip(amount);
     /// ```
-    pub fn new_skipped(amount: u64) -> ExtendedHeaderGenerator {
+    pub fn new_from_height(amount: u64) -> ExtendedHeaderGenerator {
         let mut gen = ExtendedHeaderGenerator::new();
         gen.skip(amount);
         gen
@@ -384,14 +384,14 @@ mod tests {
 
     #[test]
     fn new_and_skipped() {
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
         let header5 = gen.next();
         assert_eq!(header5.height().value(), 5);
     }
 
     #[test]
     fn generate_next_of() {
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
 
         let header5 = gen.next();
         let header6 = gen.next();
@@ -408,7 +408,7 @@ mod tests {
 
     #[test]
     fn generate_next_many_of() {
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
 
         let header5 = gen.next();
         let header6 = gen.next();
@@ -428,7 +428,7 @@ mod tests {
 
     #[test]
     fn gen_next_after_next_many_of() {
-        let mut gen = ExtendedHeaderGenerator::new_skipped(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
 
         let header5 = gen.next();
         let another_header_6_to_10 = gen.next_many_of(&header5, 5);
