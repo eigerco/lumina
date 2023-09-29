@@ -23,7 +23,7 @@ use libp2p::{
 };
 use tendermint_proto::Protobuf;
 use tokio::select;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, info, instrument, trace, warn};
 
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
@@ -75,7 +75,7 @@ impl From<oneshot::error::RecvError> for P2pError {
 
 #[derive(Debug)]
 pub struct P2p<S> {
-    cmd_tx: flume::Sender<P2pCmd>,
+    cmd_tx: mpsc::Sender<P2pCmd>,
     _store: PhantomData<S>,
 }
 
@@ -119,7 +119,7 @@ where
     type Error = P2pError;
 
     async fn start(args: P2pArgs<S>) -> Result<Self, P2pError> {
-        let (cmd_tx, cmd_rx) = flume::bounded(16);
+        let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let mut worker = Worker::new(args, cmd_rx)?;
 
         spawn(async move {
@@ -139,7 +139,7 @@ where
 
     async fn send_command(&self, cmd: P2pCmd) -> Result<()> {
         self.cmd_tx
-            .send_async(cmd)
+            .send(cmd)
             .await
             .map_err(|_| P2pError::WorkerDied)
     }
@@ -286,7 +286,7 @@ where
 {
     swarm: Swarm<Behaviour<S>>,
     header_sub_topic_hash: TopicHash,
-    cmd_rx: flume::Receiver<P2pCmd>,
+    cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
     wait_connected_tx: Option<Vec<oneshot::Sender<()>>>,
 }
@@ -295,7 +295,7 @@ impl<S> Worker<S>
 where
     S: Store + 'static,
 {
-    fn new(args: P2pArgs<S>, cmd_rx: flume::Receiver<P2pCmd>) -> Result<Self, P2pError> {
+    fn new(args: P2pArgs<S>, cmd_rx: mpsc::Receiver<P2pCmd>) -> Result<Self, P2pError> {
         let peer_tracker = Arc::new(PeerTracker::new());
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
@@ -350,8 +350,6 @@ where
     }
 
     async fn run(&mut self) {
-        let mut cmd_stream = self.cmd_rx.clone().into_stream().fuse();
-
         loop {
             select! {
                 ev = self.swarm.select_next_some() => {
@@ -359,7 +357,7 @@ where
                         warn!("Failure while handling swarm event: {e}");
                     }
                 },
-                Some(cmd) = cmd_stream.next() => {
+                Some(cmd) = self.cmd_rx.recv() => {
                     if let Err(e) = self.on_cmd(cmd).await {
                         warn!("Failure while handling command. (error: {e})");
                     }
