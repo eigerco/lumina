@@ -248,8 +248,6 @@ fn generate_genesis(chain_id: &chain::Id, signing_key: &SigningKey) -> ExtendedH
 
     hash_and_sign(&mut header, signing_key);
 
-    header.validate().expect("invalid genesis header generated");
-
     header
 }
 
@@ -300,7 +298,6 @@ fn generate_next(current: &ExtendedHeader, signing_key: &SigningKey) -> Extended
 
     hash_and_sign(&mut header, signing_key);
 
-    header.validate().expect("invalid header generated");
     current.verify(&header).expect("invalid header generated");
 
     header
@@ -318,12 +315,19 @@ fn hash_and_sign(header: &mut ExtendedHeader, signing_key: &SigningKey) {
         .unwrap();
     let sig = signing_key.sign(&vote_sign).to_bytes();
 
-    if let CommitSig::BlockIdFlagCommit {
-        ref mut signature, ..
-    } = header.commit.signatures[0]
-    {
-        *signature = Some(Signature::new(sig).unwrap().unwrap());
+    match header.commit.signatures[0] {
+        CommitSig::BlockIdFlagAbsent => {}
+        CommitSig::BlockIdFlagNil {
+            ref mut signature, ..
+        }
+        | CommitSig::BlockIdFlagCommit {
+            ref mut signature, ..
+        } => {
+            *signature = Some(Signature::new(sig).unwrap().unwrap());
+        }
     }
+
+    header.validate().expect("invalid header generated");
 }
 
 #[cfg(test)]
