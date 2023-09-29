@@ -745,23 +745,23 @@ mod tests {
         mock_req.send_n_responses(
             &mut handler,
             1,
-            vec![gen.another_of(&header5).to_header_response()],
+            vec![gen.another_of(&expected_header).to_header_response()],
         );
         mock_req.send_n_responses(
             &mut handler,
             2,
-            vec![gen.another_of(&header5).to_header_response()],
+            vec![gen.another_of(&expected_header).to_header_response()],
         );
         mock_req.send_n_responses(
             &mut handler,
             1,
-            vec![gen.another_of(&header5).to_header_response()],
+            vec![gen.another_of(&expected_header).to_header_response()],
         );
         mock_req.send_n_responses(&mut handler, 4, vec![expected]);
         mock_req.send_n_responses(
             &mut handler,
             2,
-            vec![gen.another_of(&header5).to_header_response()],
+            vec![gen.another_of(&expected_header).to_header_response()],
         );
 
         let result = rx.await.unwrap().unwrap();
