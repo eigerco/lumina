@@ -39,7 +39,7 @@ impl ExtendedHeaderGenerator {
         }
     }
 
-    /// Creates new `ExtendedHeaderGenerator` and skip an amount of headers.
+    /// Creates new `ExtendedHeaderGenerator` starting from specified height.
     ///
     /// This is equivalent to:
     ///
@@ -47,9 +47,9 @@ impl ExtendedHeaderGenerator {
     /// let mut gen = ExtendedHeaderGenerator::new();
     /// gen.skip(amount);
     /// ```
-    pub fn new_from_height(amount: u64) -> ExtendedHeaderGenerator {
+    pub fn new_from_height(height: u64) -> ExtendedHeaderGenerator {
         let mut gen = ExtendedHeaderGenerator::new();
-        gen.skip(amount);
+        gen.skip(height);
         gen
     }
 
