@@ -6,7 +6,9 @@ use tendermint::{chain, Hash, Vote};
 use crate::consts::{genesis::MAX_CHAIN_ID_LEN, version};
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
-const GENESIS_HEIGHT: u64 = 1;
+pub(crate) const GENESIS_HEIGHT: u64 = 1;
+
+pub type Height = tendermint::block::Height;
 
 impl ValidateBasic for Header {
     fn validate_basic(&self) -> Result<(), ValidationError> {
@@ -30,9 +32,18 @@ impl ValidateBasic for Header {
             bail_validation!("height == 0")
         }
 
-        if self.last_block_id.is_none() && self.height.value() != GENESIS_HEIGHT {
+        if self.height.value() == GENESIS_HEIGHT && self.last_block_id.is_some() {
+            bail_validation!("last_block_id == Some() at height {GENESIS_HEIGHT}");
+        }
+
+        if self.height.value() != GENESIS_HEIGHT && self.last_block_id.is_none() {
             bail_validation!("last_block_id == None at height {}", self.height)
         }
+
+        // NOTE: We do not validate `Hash` fields because they are type safe.
+        // In Go implementation the validation passes if their length is 0 or 32.
+        //
+        // NOTE: We do not validate `app_hash` because if can be anything
 
         Ok(())
     }
@@ -137,6 +148,7 @@ fn is_zero(id: &Id) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hash::HashExt;
 
     fn sample_commit() -> Commit {
         serde_json::from_str(r#"{
@@ -228,6 +240,18 @@ mod tests {
     fn header_validate_missing_last_block_id() {
         let mut header = sample_header();
         header.height = 2u32.into();
+
+        header.validate_basic().unwrap_err();
+    }
+
+    #[test]
+    fn header_validate_genesis_with_last_block_id() {
+        let mut header = sample_header();
+
+        header.last_block_id = Some(Id {
+            hash: Hash::default_sha256(),
+            ..Id::default()
+        });
 
         header.validate_basic().unwrap_err();
     }

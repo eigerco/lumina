@@ -7,12 +7,17 @@ pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
 pub type RawNamespacedHash = [u8; NAMESPACED_HASH_SIZE];
 
 pub trait NamespacedHashExt {
+    fn empty_root() -> NamespacedHash;
     fn from_raw(bytes: &[u8]) -> Result<NamespacedHash>;
     fn to_vec(&self) -> Vec<u8>;
     fn to_array(&self) -> RawNamespacedHash;
 }
 
 impl NamespacedHashExt for NamespacedHash {
+    fn empty_root() -> NamespacedHash {
+        nmt_rs::NamespacedHash::<NS_SIZE>::EMPTY_ROOT
+    }
+
     fn from_raw(bytes: &[u8]) -> Result<NamespacedHash> {
         Ok(bytes.try_into()?)
     }

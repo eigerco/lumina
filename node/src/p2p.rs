@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
-use celestia_types::{ExtendedHeader, Hash};
+use celestia_types::hash::Hash;
+use celestia_types::ExtendedHeader;
 use futures::StreamExt;
 use libp2p::{
     autonat,
@@ -207,14 +208,6 @@ pub trait P2pService:
         .ok_or(ExchangeError::HeaderNotFound.into())
     }
 
-    async fn get_headers_range(&self, height: u64, amount: u64) -> Result<Vec<ExtendedHeader>> {
-        self.exchange_header_request(HeaderRequest {
-            data: Some(header_request::Data::Origin(height)),
-            amount,
-        })
-        .await
-    }
-
     async fn get_verified_headers_range(
         &self,
         from: &ExtendedHeader,
@@ -222,18 +215,17 @@ pub trait P2pService:
     ) -> Result<Vec<ExtendedHeader>> {
         from.validate().map_err(|_| ExchangeError::InvalidRequest)?;
 
+        let height = from.height().value() + 1;
+
         let headers = self
-            .get_headers_range(from.height().value() + 1, amount)
+            .exchange_header_request(HeaderRequest {
+                data: Some(header_request::Data::Origin(height)),
+                amount,
+            })
             .await?;
 
-        for untrusted in headers.iter() {
-            untrusted
-                .validate()
-                .map_err(|_| ExchangeError::InvalidResponse)?;
-
-            from.verify(untrusted)
-                .map_err(|_| ExchangeError::InvalidResponse)?;
-        }
+        from.verify_adjacent_range(&headers)
+            .map_err(|_| ExchangeError::InvalidResponse)?;
 
         Ok(headers)
     }

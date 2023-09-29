@@ -580,7 +580,7 @@ dependencies = [
  "libp2p",
  "prost",
  "rand",
- "tendermint",
+ "serde_json",
  "tendermint-proto",
  "thiserror",
  "tokio",
@@ -629,11 +629,13 @@ dependencies = [
  "celestia-proto",
  "cid",
  "const_format",
+ "ed25519-consensus",
  "enum_dispatch",
  "libp2p-identity",
  "multiaddr",
  "nmt-rs",
  "proptest",
+ "rand",
  "ruint",
  "serde",
  "serde_json",
@@ -1052,7 +1054,9 @@ dependencies = [
  "curve25519-dalek-ng",
  "hex",
  "rand_core 0.6.4",
+ "serde",
  "sha2 0.9.9",
+ "thiserror",
  "zeroize",
 ]
 
@@ -3570,9 +3574,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.105"
+version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "693151e1ac27563d6dbcec9dee9fbd5da8539b20fa14ad3752b2e6d363ace360"
+checksum = "6b420ce6e3d8bd882e9b243c6eed35dbc9a6110c9769e74b584e0d68d1f20c65"
 dependencies = [
  "itoa",
  "ryu",

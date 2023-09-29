@@ -1,4 +1,5 @@
-use celestia_types::{ExtendedHeader, Hash, SyncState};
+use celestia_types::hash::Hash;
+use celestia_types::{ExtendedHeader, SyncState};
 use jsonrpsee::proc_macros::rpc;
 
 #[rpc(client)]
