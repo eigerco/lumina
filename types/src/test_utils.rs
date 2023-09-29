@@ -256,7 +256,7 @@ fn generate_next(current: &ExtendedHeader, signing_key: &SigningKey) -> Extended
 
     let mut header = ExtendedHeader {
         header: Header {
-            version: current.header.version.clone(),
+            version: current.header.version,
             chain_id: current.header.chain_id.clone(),
             height: current.header.height.increment(),
             time: Time::now(),
