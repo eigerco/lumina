@@ -66,7 +66,7 @@ impl ExtendedHeaderGenerator {
     }
 
     /// Generates the next header.
-    #[allow(clippy::should-implement-trait)]
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> ExtendedHeader {
         let header = match self.current_header {
             Some(ref header) => generate_next(header, &self.key),
