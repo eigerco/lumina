@@ -707,7 +707,7 @@ mod tests {
         let header7 = gen.next();
 
         // this header also has height = 5 but has different hash
-        let another_header5 = gen.next_of(&header4);
+        let another_header5 = gen.another_of(&header5);
 
         let expected_header = header5;
         let expected = expected_header.to_header_response();
@@ -737,8 +737,7 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
-        let header4 = gen.next();
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
         let expected_header = gen.next();
         let expected = expected_header.to_header_response();
 
@@ -746,23 +745,23 @@ mod tests {
         mock_req.send_n_responses(
             &mut handler,
             1,
-            vec![gen.next_of(&header4).to_header_response()],
+            vec![gen.another_of(&header5).to_header_response()],
         );
         mock_req.send_n_responses(
             &mut handler,
             2,
-            vec![gen.next_of(&header4).to_header_response()],
+            vec![gen.another_of(&header5).to_header_response()],
         );
         mock_req.send_n_responses(
             &mut handler,
             1,
-            vec![gen.next_of(&header4).to_header_response()],
+            vec![gen.another_of(&header5).to_header_response()],
         );
         mock_req.send_n_responses(&mut handler, 4, vec![expected]);
         mock_req.send_n_responses(
             &mut handler,
             2,
-            vec![gen.next_of(&header4).to_header_response()],
+            vec![gen.another_of(&header5).to_header_response()],
         );
 
         let result = rx.await.unwrap().unwrap();
@@ -807,14 +806,13 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
 
-        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
-        let header4 = gen.next();
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
         let header5 = gen.next();
         let header6 = gen.next();
         let header7 = gen.next();
 
         // this header also has height = 5 but has different hash
-        let another_header5 = gen.next_of(&header4);
+        let another_header5 = gen.another_of(&header5);
 
         let expected_header = header5;
         let expected = expected_header.to_header_response();

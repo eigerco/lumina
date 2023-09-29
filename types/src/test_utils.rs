@@ -2,7 +2,7 @@ use ed25519_consensus::SigningKey;
 use tendermint::{
     block::{
         header::{Header, Version},
-        Commit, CommitSig,
+        parts, Commit, CommitSig,
     },
     chain,
     public_key::PublicKey,
@@ -119,6 +119,22 @@ impl ExtendedHeaderGenerator {
         headers
     }
 
+    /// Generates the another header of the same height but different hash.
+    ///
+    /// ```ignore
+    /// let mut gen = ExtendedHeaderGenerator::new();
+    /// let header1 = gen.next();
+    /// let header2 = gen.next();
+    /// let another_header2 = gen.another_of(&header2);
+    /// ```
+    ///
+    /// # Note
+    ///
+    /// This method does not change the state of `ExtendedHeaderGenerator`.
+    pub fn another_of(&self, header: &ExtendedHeader) -> ExtendedHeader {
+        generate_another_of(header, &self.key)
+    }
+
     /// Skips an amount of headers.
     pub fn skip(&mut self, amount: u64) {
         for _ in 0..amount {
@@ -211,7 +227,7 @@ fn generate_genesis(chain_id: &chain::Id, signing_key: &SigningKey) -> ExtendedH
         round: 0_u16.into(),
         block_id: tendermint::block::Id {
             hash: header.hash(),
-            part_set_header: tendermint::block::parts::Header::new(1, Hash::Sha256(rand::random()))
+            part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
                 .expect("invalid PartSetHeader"),
         },
         signatures: vec![CommitSig::BlockIdFlagCommit {
@@ -280,7 +296,7 @@ fn generate_next(current: &ExtendedHeader, signing_key: &SigningKey) -> Extended
         round: 0_u16.into(),
         block_id: tendermint::block::Id {
             hash: header.hash(),
-            part_set_header: tendermint::block::parts::Header::new(1, Hash::Sha256(rand::random()))
+            part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
                 .expect("invalid PartSetHeader"),
         },
         signatures: vec![CommitSig::BlockIdFlagCommit {
@@ -313,6 +329,31 @@ fn generate_next(current: &ExtendedHeader, signing_key: &SigningKey) -> Extended
     header
 }
 
+fn generate_another_of(header: &ExtendedHeader, signing_key: &SigningKey) -> ExtendedHeader {
+    let mut header = header.to_owned();
+
+    header.header.consensus_hash = Hash::Sha256(rand::random());
+    header.commit.block_id.part_set_header =
+        parts::Header::new(1, Hash::Sha256(rand::random())).expect("invalid PartSetHeader");
+
+    header.commit.block_id.hash = header.header.hash();
+
+    let vote_sign = header
+        .commit
+        .vote_sign_bytes(&header.header.chain_id, 0)
+        .unwrap();
+    let sig = signing_key.sign(&vote_sign).to_bytes();
+
+    if let CommitSig::BlockIdFlagCommit {
+        ref mut signature, ..
+    } = header.commit.signatures[0]
+    {
+        *signature = Some(Signature::new(sig).unwrap().unwrap());
+    }
+
+    header
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -328,7 +369,7 @@ mod tests {
         assert_eq!(height2.height().value(), 2);
 
         let another_height2 = gen.next_of(&genesis);
-        assert_eq!(height2.height().value(), 2);
+        assert_eq!(another_height2.height().value(), 2);
 
         genesis.verify(&height2).unwrap();
         genesis.verify(&another_height2).unwrap();
@@ -439,5 +480,18 @@ mod tests {
         assert_eq!(header6.height().value(), 6);
         assert_eq!(another_header_6_to_10[0].height().value(), 6);
         assert_ne!(header6.hash(), another_header_6_to_10[0].hash());
+    }
+
+    #[test]
+    fn generate_another_of() {
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+
+        let header5 = gen.next();
+        let header6 = gen.next();
+
+        let another_header6 = gen.another_of(&header6);
+
+        header5.verify(&header6).unwrap();
+        header5.verify(&another_header6).unwrap();
     }
 }
