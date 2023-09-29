@@ -41,28 +41,14 @@ impl ExtendedHeaderGenerator {
 
     /// Creates new `ExtendedHeaderGenerator` starting from specified height.
     ///
-    /// This is equivalent to:
-    ///
     /// ```ignore
-    /// let mut gen = ExtendedHeaderGenerator::new();
-    /// gen.skip(amount);
+    /// let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+    /// let header5 = gen.next();
     /// ```
     pub fn new_from_height(height: u64) -> ExtendedHeaderGenerator {
         let mut gen = ExtendedHeaderGenerator::new();
-        gen.skip(height);
+        gen.skip(height.saturating_sub(1));
         gen
-    }
-
-    /// Returns the current header.
-    pub fn current_header(&self) -> &ExtendedHeader {
-        self.current_header
-            .as_ref()
-            .expect("genesis not constructed yet")
-    }
-
-    /// Returns the current header height.
-    pub fn current_height(&self) -> u64 {
-        self.current_header().height().value()
     }
 
     /// Generates the next header.
@@ -383,15 +369,23 @@ mod tests {
     }
 
     #[test]
-    fn new_and_skipped() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
+    fn new_from_height() {
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
         let header5 = gen.next();
         assert_eq!(header5.height().value(), 5);
+
+        let mut gen = ExtendedHeaderGenerator::new_from_height(1);
+        let header1 = gen.next();
+        assert_eq!(header1.height().value(), 1);
+
+        let mut gen = ExtendedHeaderGenerator::new_from_height(0);
+        let header1 = gen.next();
+        assert_eq!(header1.height().value(), 1);
     }
 
     #[test]
     fn generate_next_of() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
 
         let header5 = gen.next();
         let header6 = gen.next();
@@ -408,7 +402,7 @@ mod tests {
 
     #[test]
     fn generate_next_many_of() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
 
         let header5 = gen.next();
         let header6 = gen.next();
@@ -428,7 +422,7 @@ mod tests {
 
     #[test]
     fn gen_next_after_next_many_of() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(4);
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
 
         let header5 = gen.next();
         let another_header_6_to_10 = gen.next_many_of(&header5, 5);
