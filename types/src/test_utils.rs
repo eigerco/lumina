@@ -23,7 +23,7 @@ pub fn generate_ed25519_key() -> SigningKey {
 impl ExtendedHeader {
     /// Generates header of height 1 for testing purposes only.
     ///
-    /// **WARNING: DO NOT USE IT FOR PRODUCTION**
+    /// **WARNING: DO NOT USE IT IN PRODUCTION**
     ///
     /// # Panics
     ///
@@ -124,7 +124,7 @@ impl ExtendedHeader {
 
     /// Generates the next header (`self.height + 1`) for testing purposes only.
     ///
-    /// **WARNING: DO NOT USE IT FOR PRODUCTION**
+    /// **WARNING: DO NOT USE IT IN PRODUCTION**
     ///
     /// # Panics
     ///
