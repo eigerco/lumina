@@ -114,13 +114,13 @@ impl ExtendedHeaderGenerator {
     /// let mut gen = ExtendedHeaderGenerator::new();
     /// let header1 = gen.next();
     /// let headers_2_to_12 = gen.next_many(10);
-    /// let another_headers_2_to_12 = gen.next_of_many(&header1, 10);
+    /// let another_headers_2_to_12 = gen.next_many_of(&header1, 10);
     /// ```
     ///
     /// # Note
     ///
     /// This method does not change the state of `ExtendedHeaderGenerator`.
-    pub fn next_of_many(&self, header: &ExtendedHeader, amount: u64) -> Vec<ExtendedHeader> {
+    pub fn next_many_of(&self, header: &ExtendedHeader, amount: u64) -> Vec<ExtendedHeader> {
         let mut headers = Vec::with_capacity(amount as usize);
 
         for _ in 0..amount {
@@ -388,13 +388,13 @@ mod tests {
     }
 
     #[test]
-    fn generate_next_of_many() {
+    fn generate_next_many_of() {
         let mut gen = ExtendedHeaderGenerator::new_skipped(4);
 
         let header5 = gen.next();
         let header6 = gen.next();
         let _header7 = gen.next();
-        let another_header_6_to_10 = gen.next_of_many(&header5, 5);
+        let another_header_6_to_10 = gen.next_many_of(&header5, 5);
 
         header5.verify(&header6).unwrap();
         header5
@@ -408,12 +408,12 @@ mod tests {
     }
 
     #[test]
-    fn gen_next_after_next_of_many() {
+    fn gen_next_after_next_many_of() {
         let mut gen = ExtendedHeaderGenerator::new_skipped(4);
 
         let header5 = gen.next();
-        let another_header_6_to_10 = gen.next_of_many(&header5, 5);
-        // `next_of` and `next_of_many` does not change the state of the
+        let another_header_6_to_10 = gen.next_many_of(&header5, 5);
+        // `next_of` and `next_many_of` does not change the state of the
         // generator, so `next` must return height 6 header.
         let header6 = gen.next();
 
