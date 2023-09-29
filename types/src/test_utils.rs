@@ -61,7 +61,7 @@ impl ExtendedHeaderGenerator {
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> ExtendedHeader {
         let header = match self.current_header {
-            Some(ref header) => generate_next(header, &self.key),
+            Some(ref header) => generate_next(1, header, &self.key),
             None => generate_new(GENESIS_HEIGHT, &self.chain_id, &self.key),
         };
 
@@ -95,7 +95,7 @@ impl ExtendedHeaderGenerator {
     ///
     /// This method does not change the state of `ExtendedHeaderGenerator`.
     pub fn next_of(&self, header: &ExtendedHeader) -> ExtendedHeader {
-        generate_next(header, &self.key)
+        generate_next(1, header, &self.key)
     }
 
     /// Generates the next amount of headers of the provided header.
@@ -151,9 +151,16 @@ impl ExtendedHeaderGenerator {
 
     /// Skips an amount of headers.
     pub fn skip(&mut self, amount: u64) {
-        for _ in 0..amount {
-            self.next();
+        if amount == 0 {
+            return;
         }
+
+        let header = match self.current_header {
+            Some(ref header) => generate_next(amount, header, &self.key),
+            None => generate_new(amount, &self.chain_id, &self.key),
+        };
+
+        self.current_header = Some(header.clone());
     }
 
     /// Create a "forked" generator for "forking" the chain.
@@ -269,16 +276,36 @@ fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> 
     header
 }
 
-fn generate_next(current: &ExtendedHeader, signing_key: &SigningKey) -> ExtendedHeader {
+fn generate_next(
+    increment: u64,
+    current: &ExtendedHeader,
+    signing_key: &SigningKey,
+) -> ExtendedHeader {
+    assert!(increment > 0);
+
     let validator_address = current.validator_set.validators()[0].address;
+
+    let height = (current.header.height.value() + increment)
+        .try_into()
+        .unwrap();
+
+    let last_block_id = if increment == 1 {
+        Some(current.commit.block_id)
+    } else {
+        Some(tendermint::block::Id {
+            hash: Hash::Sha256(rand::random()),
+            part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
+                .expect("invalid PartSetHeader"),
+        })
+    };
 
     let mut header = ExtendedHeader {
         header: Header {
             version: current.header.version,
             chain_id: current.header.chain_id.clone(),
-            height: current.header.height.increment(),
+            height,
             time: Time::now(),
-            last_block_id: Some(current.commit.block_id),
+            last_block_id,
             last_commit_hash: Hash::default_sha256(),
             data_hash: Hash::None,
             validators_hash: Hash::None,
@@ -294,7 +321,7 @@ fn generate_next(current: &ExtendedHeader, signing_key: &SigningKey) -> Extended
             proposer_address: validator_address,
         },
         commit: Commit {
-            height: current.header.height.increment(),
+            height,
             round: 0_u16.into(),
             block_id: tendermint::block::Id {
                 hash: Hash::None,
@@ -401,6 +428,40 @@ mod tests {
 
         assert_eq!(genesis.height().value(), 1);
         assert_eq!(header5.height().value(), 5);
+        genesis.verify(&header5).unwrap();
+    }
+
+    #[test]
+    fn new_and_skip() {
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        gen.skip(3);
+        let header4 = gen.next();
+        let header5 = gen.next();
+
+        assert_eq!(header4.height().value(), 4);
+        assert_eq!(header5.height().value(), 5);
+        header4.verify(&header5).unwrap();
+
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        gen.skip(1);
+        let header2 = gen.next();
+        let header3 = gen.next();
+
+        assert_eq!(header2.height().value(), 2);
+        assert_eq!(header3.height().value(), 3);
+        header2.verify(&header3).unwrap();
+
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        gen.skip(0);
+        let genesis = gen.next();
+        let header2 = gen.next();
+
+        assert_eq!(genesis.height().value(), 1);
+        assert_eq!(header2.height().value(), 2);
+        genesis.verify(&header2).unwrap();
     }
 
     #[test]
