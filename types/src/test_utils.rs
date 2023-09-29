@@ -29,7 +29,6 @@ impl ExtendedHeaderGenerator {
     /// Creates new `ExtendedHeaderGenerator`.
     pub fn new() -> ExtendedHeaderGenerator {
         let chain_id: chain::Id = "private".try_into().unwrap();
-
         let key = SigningKey::new(rand::thread_rng());
 
         ExtendedHeaderGenerator {
@@ -46,8 +45,15 @@ impl ExtendedHeaderGenerator {
     /// let header5 = gen.next();
     /// ```
     pub fn new_from_height(height: u64) -> ExtendedHeaderGenerator {
+        let prev_height = height.saturating_sub(1);
         let mut gen = ExtendedHeaderGenerator::new();
-        gen.skip(height.saturating_sub(1));
+
+        gen.current_header = if prev_height == 0 {
+            None
+        } else {
+            Some(generate_new(prev_height, &gen.chain_id, &gen.key))
+        };
+
         gen
     }
 
@@ -56,7 +62,7 @@ impl ExtendedHeaderGenerator {
     pub fn next(&mut self) -> ExtendedHeader {
         let header = match self.current_header {
             Some(ref header) => generate_next(header, &self.key),
-            None => generate_genesis(&self.chain_id, &self.key),
+            None => generate_new(GENESIS_HEIGHT, &self.chain_id, &self.key),
         };
 
         self.current_header = Some(header.clone());
@@ -178,11 +184,23 @@ impl Default for ExtendedHeaderGenerator {
     }
 }
 
-fn generate_genesis(chain_id: &chain::Id, signing_key: &SigningKey) -> ExtendedHeader {
+fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> ExtendedHeader {
+    assert!(height >= GENESIS_HEIGHT);
+
     let pub_key_bytes = signing_key.verification_key().to_bytes();
     let pub_key = PublicKey::from_raw_ed25519(&pub_key_bytes).unwrap();
 
     let validator_address = tendermint::account::Id::new(rand::random());
+
+    let last_block_id = if height == GENESIS_HEIGHT {
+        None
+    } else {
+        Some(tendermint::block::Id {
+            hash: Hash::Sha256(rand::random()),
+            part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
+                .expect("invalid PartSetHeader"),
+        })
+    };
 
     let validator_set = ValidatorSet::new(
         vec![tendermint::validator::Info {
@@ -208,9 +226,9 @@ fn generate_genesis(chain_id: &chain::Id, signing_key: &SigningKey) -> ExtendedH
                 app: 1,
             },
             chain_id: chain_id.clone(),
-            height: GENESIS_HEIGHT.try_into().unwrap(),
+            height: height.try_into().unwrap(),
             time: Time::now(),
-            last_block_id: None,
+            last_block_id,
             last_commit_hash: Hash::default_sha256(),
             data_hash: Hash::None,
             validators_hash: Hash::None,
@@ -226,7 +244,7 @@ fn generate_genesis(chain_id: &chain::Id, signing_key: &SigningKey) -> ExtendedH
             proposer_address: validator_address,
         },
         commit: Commit {
-            height: GENESIS_HEIGHT.try_into().unwrap(),
+            height: height.try_into().unwrap(),
             round: 0_u16.into(),
             block_id: tendermint::block::Id {
                 hash: Hash::None,
