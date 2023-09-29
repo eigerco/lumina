@@ -140,11 +140,23 @@ impl ExtendedHeaderGenerator {
         }
     }
 
-    /// Create a new generator for "forking" the chain.
+    /// Create a "forked" generator for "forking" the chain.
+    ///
+    /// ```ignore
+    /// let mut gen_chain1 = ExtendedHeaderGenerator::new();
+    ///
+    /// let header1 = gen_chain1.next();
+    /// let header2 = gen_chain1.next();
+    ///
+    /// let mut gen_chain2 = gen_chain1.fork();
+    ///
+    /// let header3_chain1 = gen_chain1.next();
+    /// let header3_chain2 = gen_chain2.next();
+    /// ```
     ///
     /// # Note
     ///
-    /// This is the same as clone, but name describes the intention.
+    /// This is the same as clone, but the name describes the intention.
     pub fn fork(&self) -> ExtendedHeaderGenerator {
         self.clone()
     }
