@@ -35,7 +35,7 @@ impl DataAvailabilityHeader {
             .row_roots
             .iter()
             .chain(self.column_roots.iter())
-            .map(|root| root.to_vec())
+            .map(|root| root.to_array())
             .collect();
 
         Hash::Sha256(simple_hash_from_byte_vectors::<Sha256>(&all_roots))

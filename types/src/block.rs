@@ -8,6 +8,8 @@ use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
 pub(crate) const GENESIS_HEIGHT: u64 = 1;
 
+pub type Height = tendermint::block::Height;
+
 impl ValidateBasic for Header {
     fn validate_basic(&self) -> Result<(), ValidationError> {
         if self.version.block != version::BLOCK_PROTOCOL {
@@ -31,7 +33,7 @@ impl ValidateBasic for Header {
         }
 
         if self.height.value() == GENESIS_HEIGHT && self.last_block_id.is_some() {
-            bail_validation!("last_block_id == Some at height {GENESIS_HEIGHT}");
+            bail_validation!("last_block_id == Some() at height {GENESIS_HEIGHT}");
         }
 
         if self.height.value() != GENESIS_HEIGHT && self.last_block_id.is_none() {
@@ -146,6 +148,7 @@ fn is_zero(id: &Id) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hash::HashExt;
 
     fn sample_commit() -> Commit {
         serde_json::from_str(r#"{
@@ -237,6 +240,18 @@ mod tests {
     fn header_validate_missing_last_block_id() {
         let mut header = sample_header();
         header.height = 2u32.into();
+
+        header.validate_basic().unwrap_err();
+    }
+
+    #[test]
+    fn header_validate_genesis_with_last_block_id() {
+        let mut header = sample_header();
+
+        header.last_block_id = Some(Id {
+            hash: Hash::default_sha256(),
+            ..Id::default()
+        });
 
         header.validate_basic().unwrap_err();
     }

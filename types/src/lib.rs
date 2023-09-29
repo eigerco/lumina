@@ -21,8 +21,6 @@ pub mod trust_level;
 mod validate;
 mod validator_set;
 
-pub type Height = tendermint::block::Height;
-
 pub use crate::blob::{Blob, Commitment};
 pub use crate::block::*;
 pub use crate::data_availability_header::*;
