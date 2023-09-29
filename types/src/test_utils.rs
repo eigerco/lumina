@@ -132,7 +132,15 @@ impl ExtendedHeaderGenerator {
     ///
     /// This method does not change the state of `ExtendedHeaderGenerator`.
     pub fn another_of(&self, header: &ExtendedHeader) -> ExtendedHeader {
-        generate_another_of(header, &self.key)
+        let mut header = header.to_owned();
+
+        header.header.consensus_hash = Hash::Sha256(rand::random());
+        header.commit.block_id.part_set_header =
+            parts::Header::new(1, Hash::Sha256(rand::random())).expect("invalid PartSetHeader");
+
+        rehash_and_sign(&mut header, &self.key);
+
+        header
     }
 
     /// Skips an amount of headers.
@@ -329,13 +337,8 @@ fn generate_next(current: &ExtendedHeader, signing_key: &SigningKey) -> Extended
     header
 }
 
-fn generate_another_of(header: &ExtendedHeader, signing_key: &SigningKey) -> ExtendedHeader {
-    let mut header = header.to_owned();
-
-    header.header.consensus_hash = Hash::Sha256(rand::random());
-    header.commit.block_id.part_set_header =
-        parts::Header::new(1, Hash::Sha256(rand::random())).expect("invalid PartSetHeader");
-
+fn rehash_and_sign(header: &mut ExtendedHeader, signing_key: &SigningKey) {
+    header.header.data_hash = header.dah.hash();
     header.commit.block_id.hash = header.header.hash();
 
     let vote_sign = header
@@ -350,8 +353,6 @@ fn generate_another_of(header: &ExtendedHeader, signing_key: &SigningKey) -> Ext
     {
         *signature = Some(Signature::new(sig).unwrap().unwrap());
     }
-
-    header
 }
 
 #[cfg(test)]
