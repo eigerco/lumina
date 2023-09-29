@@ -66,6 +66,7 @@ impl ExtendedHeaderGenerator {
     }
 
     /// Generates the next header.
+    #[allow(clippy::should-implement-trait)]
     pub fn next(&mut self) -> ExtendedHeader {
         let header = match self.current_header {
             Some(ref header) => generate_next(header, &self.key),
@@ -146,6 +147,12 @@ impl ExtendedHeaderGenerator {
     /// This is the same as clone, but name describes the intention.
     pub fn fork(&self) -> ExtendedHeaderGenerator {
         self.clone()
+    }
+}
+
+impl Default for ExtendedHeaderGenerator {
+    fn default() -> Self {
+        ExtendedHeaderGenerator::new()
     }
 }
 
