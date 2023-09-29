@@ -138,7 +138,7 @@ impl ExtendedHeaderGenerator {
         header.commit.block_id.part_set_header =
             parts::Header::new(1, Hash::Sha256(rand::random())).expect("invalid PartSetHeader");
 
-        rehash_and_sign(&mut header, &self.key);
+        hash_and_sign(&mut header, &self.key);
 
         header
     }
@@ -201,66 +201,52 @@ fn generate_genesis(chain_id: &chain::Id, signing_key: &SigningKey) -> ExtendedH
         }),
     );
 
-    let dah = DataAvailabilityHeader {
-        row_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-        column_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-    };
-
-    let header = Header {
-        version: Version {
-            block: version::BLOCK_PROTOCOL,
-            app: 1,
+    let mut header = ExtendedHeader {
+        header: Header {
+            version: Version {
+                block: version::BLOCK_PROTOCOL,
+                app: 1,
+            },
+            chain_id: chain_id.clone(),
+            height: GENESIS_HEIGHT.try_into().unwrap(),
+            time: Time::now(),
+            last_block_id: None,
+            last_commit_hash: Hash::default_sha256(),
+            data_hash: Hash::None,
+            validators_hash: Hash::None,
+            next_validators_hash: Hash::None,
+            consensus_hash: Hash::Sha256(rand::random()),
+            app_hash: Hash::default_sha256()
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .unwrap(),
+            last_results_hash: Hash::default_sha256(),
+            evidence_hash: Hash::default_sha256(),
+            proposer_address: validator_address,
         },
-        chain_id: chain_id.clone(),
-        height: GENESIS_HEIGHT.try_into().unwrap(),
-        time: Time::now(),
-        last_block_id: None,
-        last_commit_hash: Hash::default_sha256(),
-        data_hash: dah.hash(),
-        validators_hash: validator_set.hash(),
-        next_validators_hash: validator_set.hash(),
-        consensus_hash: Hash::Sha256(rand::random()),
-        app_hash: Hash::default_sha256()
-            .as_bytes()
-            .to_vec()
-            .try_into()
-            .unwrap(),
-        last_results_hash: Hash::default_sha256(),
-        evidence_hash: Hash::default_sha256(),
-        proposer_address: validator_address,
-    };
-
-    let mut commit = Commit {
-        height: GENESIS_HEIGHT.try_into().unwrap(),
-        round: 0_u16.into(),
-        block_id: tendermint::block::Id {
-            hash: header.hash(),
-            part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
-                .expect("invalid PartSetHeader"),
+        commit: Commit {
+            height: GENESIS_HEIGHT.try_into().unwrap(),
+            round: 0_u16.into(),
+            block_id: tendermint::block::Id {
+                hash: Hash::None,
+                part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
+                    .expect("invalid PartSetHeader"),
+            },
+            signatures: vec![CommitSig::BlockIdFlagCommit {
+                validator_address,
+                timestamp: Time::now(),
+                signature: None,
+            }],
         },
-        signatures: vec![CommitSig::BlockIdFlagCommit {
-            validator_address,
-            timestamp: Time::now(),
-            signature: None,
-        }],
-    };
-
-    let vote_sign = commit.vote_sign_bytes(chain_id, 0).unwrap();
-    let sig = signing_key.sign(&vote_sign).to_bytes();
-
-    if let CommitSig::BlockIdFlagCommit {
-        ref mut signature, ..
-    } = commit.signatures[0]
-    {
-        *signature = Some(Signature::new(sig).unwrap().unwrap());
-    }
-
-    let header = ExtendedHeader {
-        header,
-        commit,
         validator_set,
-        dah,
+        dah: DataAvailabilityHeader {
+            row_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
+            column_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
+        },
     };
+
+    hash_and_sign(&mut header, signing_key);
 
     header.validate().expect("invalid genesis header generated");
 
@@ -270,66 +256,49 @@ fn generate_genesis(chain_id: &chain::Id, signing_key: &SigningKey) -> ExtendedH
 fn generate_next(current: &ExtendedHeader, signing_key: &SigningKey) -> ExtendedHeader {
     let validator_address = current.validator_set.validators()[0].address;
 
-    let dah = DataAvailabilityHeader {
-        row_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-        column_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-    };
-
-    let header = Header {
-        version: Version {
-            block: version::BLOCK_PROTOCOL,
-            app: 1,
+    let mut header = ExtendedHeader {
+        header: Header {
+            version: current.header.version.clone(),
+            chain_id: current.header.chain_id.clone(),
+            height: current.header.height.increment(),
+            time: Time::now(),
+            last_block_id: Some(current.commit.block_id),
+            last_commit_hash: Hash::default_sha256(),
+            data_hash: Hash::None,
+            validators_hash: Hash::None,
+            next_validators_hash: Hash::None,
+            consensus_hash: Hash::Sha256(rand::random()),
+            app_hash: Hash::default_sha256()
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .unwrap(),
+            last_results_hash: Hash::default_sha256(),
+            evidence_hash: Hash::default_sha256(),
+            proposer_address: validator_address,
         },
-        chain_id: current.header.chain_id.clone(),
-        height: current.header.height.increment(),
-        time: Time::now(),
-        last_block_id: Some(current.commit.block_id),
-        last_commit_hash: Hash::default_sha256(),
-        data_hash: dah.hash(),
-        validators_hash: current.validator_set.hash(),
-        next_validators_hash: current.validator_set.hash(),
-        consensus_hash: Hash::Sha256(rand::random()),
-        app_hash: Hash::default_sha256()
-            .as_bytes()
-            .to_vec()
-            .try_into()
-            .unwrap(),
-        last_results_hash: Hash::default_sha256(),
-        evidence_hash: Hash::default_sha256(),
-        proposer_address: validator_address,
-    };
-
-    let mut commit = Commit {
-        height: current.header.height.increment(),
-        round: 0_u16.into(),
-        block_id: tendermint::block::Id {
-            hash: header.hash(),
-            part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
-                .expect("invalid PartSetHeader"),
+        commit: Commit {
+            height: current.header.height.increment(),
+            round: 0_u16.into(),
+            block_id: tendermint::block::Id {
+                hash: Hash::None,
+                part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
+                    .expect("invalid PartSetHeader"),
+            },
+            signatures: vec![CommitSig::BlockIdFlagCommit {
+                validator_address,
+                timestamp: Time::now(),
+                signature: None,
+            }],
         },
-        signatures: vec![CommitSig::BlockIdFlagCommit {
-            validator_address,
-            timestamp: Time::now(),
-            signature: None,
-        }],
-    };
-
-    let vote_sign = commit.vote_sign_bytes(&current.header.chain_id, 0).unwrap();
-    let sig = signing_key.sign(&vote_sign).to_bytes();
-
-    if let CommitSig::BlockIdFlagCommit {
-        ref mut signature, ..
-    } = commit.signatures[0]
-    {
-        *signature = Some(Signature::new(sig).unwrap().unwrap());
-    }
-
-    let header = ExtendedHeader {
-        header,
-        commit,
         validator_set: current.validator_set.clone(),
-        dah,
+        dah: DataAvailabilityHeader {
+            row_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
+            column_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
+        },
     };
+
+    hash_and_sign(&mut header, signing_key);
 
     header.validate().expect("invalid header generated");
     current.verify(&header).expect("invalid header generated");
@@ -337,7 +306,9 @@ fn generate_next(current: &ExtendedHeader, signing_key: &SigningKey) -> Extended
     header
 }
 
-fn rehash_and_sign(header: &mut ExtendedHeader, signing_key: &SigningKey) {
+fn hash_and_sign(header: &mut ExtendedHeader, signing_key: &SigningKey) {
+    header.header.validators_hash = header.validator_set.hash();
+    header.header.next_validators_hash = header.validator_set.hash();
     header.header.data_hash = header.dah.hash();
     header.commit.block_id.hash = header.header.hash();
 
