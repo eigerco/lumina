@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use celestia_proto::p2p::pb::{header_request, HeaderRequest, HeaderResponse};
-use celestia_types::Hash;
+use celestia_types::hash::Hash;
 use futures::stream::FuturesUnordered;
 use futures::{future::BoxFuture, FutureExt, Stream};
 use libp2p::{
@@ -184,7 +184,7 @@ fn parse_request(request: HeaderRequest) -> Option<(u64, header_request::Data)> 
 mod tests {
     use super::*;
     use crate::exchange::utils::HeaderRequestExt;
-    use crate::test_utils::gen_filled_store;
+    use crate::store::tests::gen_filled_store;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::{HeaderRequest, StatusCode};
     use celestia_types::ExtendedHeader;
@@ -197,9 +197,9 @@ mod tests {
 
     #[tokio::test]
     async fn request_header_test() {
-        let store = Arc::new(gen_filled_store(3));
+        let (store, _) = gen_filled_store(3);
         let expected_genesis = store.get_by_height(1).unwrap();
-        let mut handler = ExchangeServerHandler::new(store);
+        let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
         let mut cx = create_dummy_async_context();
 
@@ -221,9 +221,9 @@ mod tests {
 
     #[tokio::test]
     async fn request_head_test() {
-        let store = Arc::new(gen_filled_store(4));
+        let (store, _) = gen_filled_store(4);
         let expected_head = store.get_head().unwrap();
-        let mut handler = ExchangeServerHandler::new(store);
+        let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
         let mut cx = create_dummy_async_context();
 
@@ -240,8 +240,8 @@ mod tests {
 
     #[tokio::test]
     async fn invalid_amount_request_test() {
-        let store = Arc::new(gen_filled_store(1));
-        let mut handler = ExchangeServerHandler::new(store);
+        let (store, _) = gen_filled_store(1);
+        let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
         let mut cx = create_dummy_async_context();
 
@@ -261,8 +261,8 @@ mod tests {
 
     #[tokio::test]
     async fn none_data_request_test() {
-        let store = Arc::new(gen_filled_store(1));
-        let mut handler = ExchangeServerHandler::new(store);
+        let (store, _) = gen_filled_store(1);
+        let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
         let mut cx = create_dummy_async_context();
 
@@ -281,9 +281,9 @@ mod tests {
 
     #[tokio::test]
     async fn request_hash_test() {
-        let store = Arc::new(gen_filled_store(1));
+        let (store, _) = gen_filled_store(1);
         let stored_header = store.get_head().unwrap();
-        let mut handler = ExchangeServerHandler::new(store);
+        let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
         let mut cx = create_dummy_async_context();
 
@@ -305,13 +305,13 @@ mod tests {
 
     #[tokio::test]
     async fn request_range_test() {
-        let store = Arc::new(gen_filled_store(10));
+        let (store, _) = gen_filled_store(10);
         let expected_headers = [
             store.get_by_height(5).unwrap(),
             store.get_by_height(6).unwrap(),
             store.get_by_height(7).unwrap(),
         ];
-        let mut handler = ExchangeServerHandler::new(store);
+        let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
         let mut cx = create_dummy_async_context();
 
@@ -334,12 +334,12 @@ mod tests {
 
     #[tokio::test]
     async fn request_range_behond_head_test() {
-        let store = Arc::new(gen_filled_store(5));
+        let (store, _) = gen_filled_store(5);
         let expected_hashes = [store.get_by_height(5).ok(), None, None];
         let expected_status_codes = [StatusCode::Ok, StatusCode::NotFound, StatusCode::NotFound];
         assert_eq!(expected_hashes.len(), expected_status_codes.len());
 
-        let mut handler = ExchangeServerHandler::new(store);
+        let mut handler = ExchangeServerHandler::new(Arc::new(store));
 
         let (mut sender, receiver) = create_test_response_sender();
         let mut cx = create_dummy_async_context();

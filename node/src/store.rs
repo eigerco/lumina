@@ -362,7 +362,7 @@ pub mod tests {
         s.append_single_unverified(header6).unwrap();
     }
 
-    fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
+    pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
         let s = InMemoryStore::new();
         let mut gen = ExtendedHeaderGenerator::new();
 
