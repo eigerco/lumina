@@ -1,7 +1,8 @@
 use celestia_proto::p2p::pb::header_request::Data;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse, StatusCode};
 use celestia_types::consts::HASH_SIZE;
-use celestia_types::{ExtendedHeader, Hash};
+use celestia_types::hash::Hash;
+use celestia_types::ExtendedHeader;
 use tendermint_proto::Protobuf;
 
 use crate::exchange::ExchangeError;
@@ -60,7 +61,14 @@ impl HeaderResponseExt for HeaderResponse {
             StatusCode::Invalid => Err(ExchangeError::InvalidResponse),
             StatusCode::NotFound => Err(ExchangeError::HeaderNotFound),
             StatusCode::Ok => {
-                ExtendedHeader::decode(&self.body[..]).map_err(|_| ExchangeError::InvalidResponse)
+                let header = ExtendedHeader::decode(&self.body[..])
+                    .map_err(|_| ExchangeError::InvalidResponse)?;
+
+                header
+                    .validate()
+                    .map_err(|_| ExchangeError::InvalidResponse)?;
+
+                Ok(header)
             }
         }
     }

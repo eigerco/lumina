@@ -1,12 +1,19 @@
 use libp2p::gossipsub::IdentTopic;
-use libp2p::StreamProtocol;
+use libp2p::multiaddr::{Multiaddr, Protocol};
+use libp2p::{PeerId, StreamProtocol};
 use tokio::sync::oneshot;
 
-pub(crate) fn stream_protocol_id(network: &str, protocol: &str) -> StreamProtocol {
+pub(crate) fn protocol_id(network: &str, protocol: &str) -> StreamProtocol {
     let network = network.trim_matches('/');
     let protocol = protocol.trim_matches('/');
     let s = format!("/{network}/{protocol}");
     StreamProtocol::try_from_owned(s).expect("does not start from '/'")
+}
+
+pub(crate) fn celestia_protocol_id(network: &str, protocol: &str) -> StreamProtocol {
+    let network = network.trim_matches('/');
+    let network = format!("/celestia/{network}");
+    protocol_id(&network, protocol)
 }
 
 pub(crate) fn gossipsub_ident_topic(network: &str, topic: &str) -> IdentTopic {
@@ -54,5 +61,18 @@ where
 
     fn maybe_send_err(self, err: impl Into<E>) {
         let _ = self.send(Err(err.into()));
+    }
+}
+
+pub(crate) trait MultiaddrExt {
+    fn peer_id(&self) -> Option<PeerId>;
+}
+
+impl MultiaddrExt for Multiaddr {
+    fn peer_id(&self) -> Option<PeerId> {
+        self.iter().find_map(|proto| match proto {
+            Protocol::P2p(peer_id) => Some(peer_id),
+            _ => None,
+        })
     }
 }

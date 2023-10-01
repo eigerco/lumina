@@ -32,7 +32,8 @@ pub struct Blob {
 
 impl Blob {
     pub fn new(namespace: Namespace, data: Vec<u8>) -> Result<Blob> {
-        let commitment = Commitment::generate(namespace, appconsts::SHARE_VERSION_ZERO, &data[..])?;
+        let commitment =
+            Commitment::from_blob(namespace, appconsts::SHARE_VERSION_ZERO, &data[..])?;
 
         Ok(Blob {
             namespace,
@@ -44,7 +45,7 @@ impl Blob {
 
     pub fn validate(&self) -> Result<()> {
         let computed_commitment =
-            Commitment::generate(self.namespace, self.share_version, &self.data)?;
+            Commitment::from_blob(self.namespace, self.share_version, &self.data)?;
 
         if self.commitment != computed_commitment {
             bail_validation!("blob commitment != localy computed commitment")
@@ -66,7 +67,7 @@ impl TryFrom<RawBlob> for Blob {
     fn try_from(value: RawBlob) -> Result<Self, Self::Error> {
         let namespace = Namespace::new(value.namespace_version as u8, &value.namespace_id)?;
         let commitment =
-            Commitment::generate(namespace, value.share_version as u8, &value.data[..])?;
+            Commitment::from_blob(namespace, value.share_version as u8, &value.data[..])?;
 
         Ok(Blob {
             commitment,

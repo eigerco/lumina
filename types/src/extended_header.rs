@@ -74,10 +74,10 @@ impl ExtendedHeader {
         }
 
         // ensure data root from raw header matches computed root
-        if Hash::Sha256(self.dah.hash) != self.header.data_hash {
+        if self.dah.hash() != self.header.data_hash {
             bail_validation!(
                 "dah hash ({}) != header dah hash ({})",
-                Hash::Sha256(self.dah.hash),
+                self.dah.hash(),
                 self.header.data_hash,
             )
         }
@@ -176,6 +176,46 @@ impl ExtendedHeader {
 
         Ok(())
     }
+
+    pub fn verify_range(&self, untrusted: &[ExtendedHeader]) -> Result<()> {
+        let mut trusted = self;
+
+        for (i, untrusted) in untrusted.iter().enumerate() {
+            // All headers in `untrusted` must be adjacent to their previous
+            // one. However we do not check if the first untrusted is adjacent
+            // to `self`. This check is done in `verify_adjacent_range`.
+            if i != 0 && trusted.height().increment() != untrusted.height() {
+                bail_verification!(
+                    "untrusted header height ({}) not adjacent to the current trusted ({})",
+                    untrusted.height(),
+                    trusted.height(),
+                );
+            }
+
+            untrusted.validate()?;
+            trusted.verify(untrusted)?;
+            trusted = untrusted;
+        }
+
+        Ok(())
+    }
+
+    pub fn verify_adjacent_range(&self, untrusted: &[ExtendedHeader]) -> Result<()> {
+        if untrusted.is_empty() {
+            return Ok(());
+        }
+
+        // Check is first untrusted is adjacent to `self`.
+        if self.height().increment() != untrusted[0].height() {
+            bail_verification!(
+                "untrusted header height ({}) not adjacent to the current trusted ({})",
+                untrusted[0].height(),
+                self.height(),
+            );
+        }
+
+        self.verify_range(untrusted)
+    }
 }
 
 impl Protobuf<RawExtendedHeader> for ExtendedHeader {}
@@ -249,6 +289,11 @@ mod tests {
         serde_json::from_str(s).unwrap()
     }
 
+    fn sample_eh_chain_3_block_1_to_256() -> Vec<ExtendedHeader> {
+        let s = include_str!("../test_data/chain3/extended_header_block_1_to_256.json");
+        serde_json::from_str(s).unwrap()
+    }
+
     #[test]
     fn validate_correct() {
         sample_eh_chain_1_block_1().validate().unwrap();
@@ -271,7 +316,7 @@ mod tests {
     #[test]
     fn validate_dah_hash_mismatch() {
         let mut eh = sample_eh_chain_1_block_27();
-        eh.dah.hash = [0; 32];
+        eh.header.data_hash = Hash::Sha256([0; 32]);
 
         eh.validate().unwrap_err();
     }
@@ -380,5 +425,76 @@ mod tests {
 
         eh_block_27.header.time = Time::now().checked_add(Duration::from_secs(60)).unwrap();
         eh_block_1.verify(&eh_block_27).unwrap_err();
+    }
+
+    #[test]
+    fn verify_range() {
+        let eh_chain = sample_eh_chain_3_block_1_to_256();
+
+        eh_chain[0].verify_range(&eh_chain[1..]).unwrap();
+        eh_chain[0].verify_range(&eh_chain[..]).unwrap_err();
+        eh_chain[0].verify_range(&eh_chain[10..]).unwrap();
+
+        eh_chain[10].verify_range(&eh_chain[11..]).unwrap();
+        eh_chain[10].verify_range(&eh_chain[100..]).unwrap();
+        eh_chain[10].verify_range(&eh_chain[..9]).unwrap_err();
+        eh_chain[10].verify_range(&eh_chain[10..]).unwrap_err();
+    }
+
+    #[test]
+    fn verify_range_missing_height() {
+        let eh_chain = sample_eh_chain_3_block_1_to_256();
+
+        let mut headers = eh_chain[10..15].to_vec();
+        headers.remove(2);
+        eh_chain[0].verify_range(&headers).unwrap_err();
+    }
+
+    #[test]
+    fn verify_range_duplicate_height() {
+        let eh_chain = sample_eh_chain_3_block_1_to_256();
+
+        let mut headers = eh_chain[10..15].to_vec();
+        headers.insert(2, eh_chain[12].clone());
+        eh_chain[0].verify_range(&headers).unwrap_err();
+    }
+
+    #[test]
+    fn verify_range_invalid_header_in_middle() {
+        let eh_chain = sample_eh_chain_3_block_1_to_256();
+
+        let mut headers = eh_chain[10..15].to_vec();
+
+        headers[2].header.time = headers[2]
+            .header
+            .time
+            .checked_add(Duration::from_millis(1))
+            .unwrap();
+
+        eh_chain[0].verify_range(&headers).unwrap_err();
+    }
+
+    #[test]
+    fn verify_adjacent_range() {
+        let eh_chain = sample_eh_chain_3_block_1_to_256();
+
+        eh_chain[0].verify_adjacent_range(&eh_chain[1..]).unwrap();
+        eh_chain[0]
+            .verify_adjacent_range(&eh_chain[..])
+            .unwrap_err();
+        eh_chain[0]
+            .verify_adjacent_range(&eh_chain[10..])
+            .unwrap_err();
+
+        eh_chain[10].verify_adjacent_range(&eh_chain[11..]).unwrap();
+        eh_chain[10]
+            .verify_adjacent_range(&eh_chain[100..])
+            .unwrap_err();
+        eh_chain[10]
+            .verify_adjacent_range(&eh_chain[..9])
+            .unwrap_err();
+        eh_chain[10]
+            .verify_adjacent_range(&eh_chain[10..])
+            .unwrap_err();
     }
 }

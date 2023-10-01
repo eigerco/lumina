@@ -27,7 +27,7 @@ use crate::exchange::server::ExchangeServerHandler;
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
 use crate::store::Store;
-use crate::utils::{stream_protocol_id, OneshotResultSender};
+use crate::utils::{protocol_id, OneshotResultSender};
 
 /// Max request size in bytes
 const REQUEST_SIZE_MAXIMUM: usize = 1024;
@@ -83,7 +83,7 @@ where
         ExchangeBehaviour {
             req_resp: ReqRespBehaviour::new(
                 [(
-                    stream_protocol_id(config.network_id, "/header-ex/v0.0.3"),
+                    protocol_id(config.network_id, "/header-ex/v0.0.3"),
                     ProtocolSupport::Full,
                 )],
                 request_response::Config::default(),
@@ -206,6 +206,31 @@ where
             peer,
             addr,
             role_override,
+        )
+    }
+
+    fn handle_pending_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<(), ConnectionDenied> {
+        self.req_resp
+            .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)
+    }
+
+    fn handle_pending_outbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        addresses: &[Multiaddr],
+        effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        self.req_resp.handle_pending_outbound_connection(
+            connection_id,
+            maybe_peer,
+            addresses,
+            effective_role,
         )
     }
 

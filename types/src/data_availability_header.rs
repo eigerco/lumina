@@ -1,12 +1,13 @@
 use celestia_proto::celestia::da::DataAvailabilityHeader as RawDataAvailabilityHeader;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use tendermint::merkle::{simple_hash_from_byte_vectors, Hash};
+use tendermint::merkle::simple_hash_from_byte_vectors;
 use tendermint_proto::Protobuf;
 
 use crate::consts::data_availability_header::{
     MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
 };
+use crate::hash::Hash;
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
@@ -18,16 +19,26 @@ use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 pub struct DataAvailabilityHeader {
     pub row_roots: Vec<NamespacedHash>,
     pub column_roots: Vec<NamespacedHash>,
-    pub hash: Hash,
 }
 
 impl DataAvailabilityHeader {
     pub fn row_root(&self, row: usize) -> Option<NamespacedHash> {
-        self.row_roots.get(row).copied()
+        self.row_roots.get(row).cloned()
     }
 
     pub fn column_root(&self, column: usize) -> Option<NamespacedHash> {
-        self.column_roots.get(column).copied()
+        self.column_roots.get(column).cloned()
+    }
+
+    pub fn hash(&self) -> Hash {
+        let all_roots: Vec<_> = self
+            .row_roots
+            .iter()
+            .chain(self.column_roots.iter())
+            .map(|root| root.to_array())
+            .collect();
+
+        Hash::Sha256(simple_hash_from_byte_vectors::<Sha256>(&all_roots))
     }
 }
 
@@ -37,13 +48,6 @@ impl TryFrom<RawDataAvailabilityHeader> for DataAvailabilityHeader {
     type Error = Error;
 
     fn try_from(value: RawDataAvailabilityHeader) -> Result<Self, Self::Error> {
-        let all_roots: Vec<_> = value
-            .row_roots
-            .iter()
-            .chain(value.column_roots.iter())
-            .collect();
-        let hash = simple_hash_from_byte_vectors::<Sha256>(&all_roots);
-
         Ok(DataAvailabilityHeader {
             row_roots: value
                 .row_roots
@@ -55,7 +59,6 @@ impl TryFrom<RawDataAvailabilityHeader> for DataAvailabilityHeader {
                 .iter()
                 .map(|bytes| NamespacedHash::from_raw(bytes))
                 .collect::<Result<Vec<_>>>()?,
-            hash,
         })
     }
 }
@@ -177,8 +180,8 @@ mod tests {
 
         dah.validate_basic().unwrap();
 
-        dah.row_roots.push(dah.row_roots[0]);
-        dah.column_roots.push(dah.column_roots[0]);
+        dah.row_roots.push(dah.row_roots[0].clone());
+        dah.column_roots.push(dah.column_roots[0].clone());
 
         dah.validate_basic().unwrap_err();
     }
