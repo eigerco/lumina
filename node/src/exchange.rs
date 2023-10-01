@@ -229,7 +229,7 @@ where
         params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         loop {
-            while let Poll::Ready(ev) = self.req_resp.poll(cx, params) {
+            if let Poll::Ready(ev) = self.req_resp.poll(cx, params) {
                 if let Some(ev) = self.on_to_swarm(ev) {
                     return Poll::Ready(ev);
                 }
