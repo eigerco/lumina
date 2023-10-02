@@ -162,9 +162,11 @@ where
     }
 
     fn handle_invalid_request(&self, channel: R::Channel) {
-        let _ = self
-            .tx
-            .blocking_send((channel, vec![HeaderResponse::invalid()]));
+        let tx = self.tx.clone();
+
+        spawn(async move {
+            let _ = tx.send((channel, vec![HeaderResponse::invalid()])).await;
+        })
     }
 }
 
@@ -192,10 +194,9 @@ mod tests {
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::{HeaderRequest, StatusCode};
     use celestia_types::ExtendedHeader;
-    use futures::task::noop_waker_ref;
     use libp2p::PeerId;
+    use std::future::poll_fn;
     use std::sync::Arc;
-    use std::task::Context;
     use tendermint_proto::Protobuf;
     use tokio::sync::oneshot;
 
@@ -208,8 +209,7 @@ mod tests {
 
         handler.on_request_received(PeerId::random(), "test", HeaderRequest::head_request(), ());
 
-        futures::future::poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
-        //std::future::poll_fn(|cx| handler.poll2(cx)).await;
+        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
@@ -224,7 +224,6 @@ mod tests {
         let expected_genesis = store.get_by_height(1).unwrap();
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
-        //let mut cx = create_dummy_async_context();
 
         handler.on_request_received(
             PeerId::random(),
@@ -233,9 +232,7 @@ mod tests {
             (),
         );
 
-        //tokio::task::yield_now().await;
-        //let _ = handler.poll(&mut cx, &mut sender);
-        std::future::poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
+        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
@@ -249,7 +246,6 @@ mod tests {
         let (store, _) = gen_filled_store(1);
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
-        let mut cx = create_dummy_async_context();
 
         handler.on_request_received(
             PeerId::random(),
@@ -258,8 +254,7 @@ mod tests {
             (),
         );
 
-        tokio::task::yield_now().await;
-        let _ = handler.poll(&mut cx, &mut sender);
+        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
@@ -271,7 +266,6 @@ mod tests {
         let (store, _) = gen_filled_store(1);
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
-        let mut cx = create_dummy_async_context();
 
         let request = HeaderRequest {
             data: None,
@@ -279,8 +273,7 @@ mod tests {
         };
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        tokio::task::yield_now().await;
-        let _ = handler.poll(&mut cx, &mut sender);
+        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
@@ -293,7 +286,6 @@ mod tests {
         let stored_header = store.get_head().unwrap();
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
-        let mut cx = create_dummy_async_context();
 
         handler.on_request_received(
             PeerId::random(),
@@ -302,8 +294,7 @@ mod tests {
             (),
         );
 
-        tokio::task::yield_now().await;
-        let _ = handler.poll(&mut cx, &mut sender);
+        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
@@ -322,7 +313,6 @@ mod tests {
         ];
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
-        let mut cx = create_dummy_async_context();
 
         let request = HeaderRequest {
             data: Some(Data::Origin(5)),
@@ -330,8 +320,7 @@ mod tests {
         };
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        tokio::task::yield_now().await;
-        let _ = handler.poll(&mut cx, &mut sender);
+        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
 
         let received = receiver.await.unwrap();
 
@@ -352,13 +341,11 @@ mod tests {
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
 
         let (mut sender, receiver) = create_test_response_sender();
-        let mut cx = create_dummy_async_context();
 
         let request = HeaderRequest::with_origin(5, u64::try_from(expected_hashes.len()).unwrap());
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        tokio::task::yield_now().await;
-        let _ = handler.poll(&mut cx, &mut sender);
+        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), expected_hashes.len());
@@ -391,10 +378,5 @@ mod tests {
     fn create_test_response_sender() -> (TestResponseSender, oneshot::Receiver<ResponseType>) {
         let (tx, rx) = oneshot::channel();
         (TestResponseSender(Some(tx)), rx)
-    }
-
-    fn create_dummy_async_context() -> Context<'static> {
-        let waker = noop_waker_ref();
-        Context::from_waker(waker)
     }
 }
