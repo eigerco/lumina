@@ -22,7 +22,6 @@ use libp2p::{
     },
     Multiaddr, PeerId, TransportError,
 };
-use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, info, instrument, trace, warn};
@@ -549,15 +548,10 @@ where
 
     #[instrument(skip_all)]
     fn on_header_sub_message(&mut self, data: &[u8]) {
-        let Ok(header) = ExtendedHeader::decode(data) else {
-            trace!("Malformed header from header-sub");
+        let Ok(header) = ExtendedHeader::decode_and_validate(data) else {
+            trace!("Malformed or invalid header from header-sub");
             return;
         };
-
-        if let Err(e) = header.validate() {
-            trace!("Invalid header from header-sub ({e})");
-            return;
-        }
 
         debug!("New header from header-sub ({header})");
         // TODO: inform syncer about it

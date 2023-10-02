@@ -15,7 +15,7 @@ pub(crate) mod serializers;
 mod share;
 pub mod state;
 mod sync;
-#[cfg(feature = "test-utils")]
+#[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 pub mod trust_level;
 mod validate;
