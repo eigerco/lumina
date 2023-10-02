@@ -59,7 +59,8 @@ pub trait Store: Send + Sync + Debug {
             Ok(head) => {
                 head.verify(&header)?;
             }
-            Err(StoreError::EmptyStore) => {}
+            // Empty store, we can not verify
+            Err(StoreError::NotFound) => {}
             Err(e) => return Err(e),
         }
 
@@ -74,7 +75,8 @@ pub trait Store: Send + Sync + Debug {
             Ok(head) => {
                 head.verify_adjacent_range(&headers)?;
             }
-            Err(StoreError::EmptyStore) => {}
+            // Empty store, we can not verify
+            Err(StoreError::NotFound) => {}
             Err(e) => return Err(e),
         }
 
@@ -112,9 +114,6 @@ pub enum StoreError {
     #[error("Store in inconsistent state; height->hash mapping exists, {0} missing")]
     LostHash(Hash),
 
-    #[error("Store does not contain any headers")]
-    EmptyStore,
-
     #[error(transparent)]
     CelestiaTypes(#[from] celestia_types::Error),
 }
@@ -133,7 +132,7 @@ impl InMemoryStore {
         let height = self.head_height.load(Ordering::Acquire);
 
         if height == 0 {
-            Err(StoreError::EmptyStore)
+            Err(StoreError::NotFound)
         } else {
             Ok(height)
         }
@@ -267,8 +266,8 @@ pub mod tests {
     #[test]
     fn test_empty_store() {
         let s = InMemoryStore::new();
-        assert!(matches!(s.get_head_height(), Err(StoreError::EmptyStore)));
-        assert!(matches!(s.get_head(), Err(StoreError::EmptyStore)));
+        assert!(matches!(s.get_head_height(), Err(StoreError::NotFound)));
+        assert!(matches!(s.get_head(), Err(StoreError::NotFound)));
         assert!(matches!(s.get_by_height(1), Err(StoreError::NotFound)));
         assert!(matches!(
             s.get_by_hash(&Hash::Sha256([0; 32])),
