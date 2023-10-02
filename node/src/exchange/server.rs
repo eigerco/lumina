@@ -1,12 +1,10 @@
 use std::fmt::{Debug, Display};
-use std::pin::Pin;
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use celestia_proto::p2p::pb::{header_request, HeaderRequest, HeaderResponse};
 use celestia_types::hash::Hash;
-use futures::stream::FuturesUnordered;
-use futures::{future::BoxFuture, FutureExt, Stream};
 use libp2p::{
     request_response::{InboundFailure, RequestId, ResponseChannel},
     PeerId,
@@ -24,7 +22,9 @@ where
     R: ResponseSender,
 {
     store: Arc<S>,
-    futures: FuturesUnordered<BoxFuture<'static, (R::Channel, ResponseType)>>,
+
+    rx: mpsc::Receiver<(R::Channel, ResponseType)>,
+    tx: mpsc::Sender<(R::Channel, ResponseType)>,
 }
 
 pub(super) trait ResponseSender {
@@ -49,10 +49,8 @@ where
     R: ResponseSender,
 {
     pub(super) fn new(store: Arc<S>) -> Self {
-        ExchangeServerHandler {
-            store,
-            futures: FuturesUnordered::new(),
-        }
+        let (tx, rx) = mpsc::channel();
+        ExchangeServerHandler { store, rx, tx }
     }
 
     #[instrument(level = "trace", skip(self, response_channel))]
@@ -97,10 +95,12 @@ where
         trace!("on_failure; request_id: {request_id}, peer: {peer}, error: {error:?}");
     }
 
-    pub fn poll(&mut self, cx: &mut Context<'_>, sender: &mut R) -> Poll<()> {
-        while let Poll::Ready(Some((channel, response))) = Pin::new(&mut self.futures).poll_next(cx)
-        {
+    pub fn poll(&mut self, _: &mut Context<'_>, sender: &mut R) -> Poll<()> {
+        println!(".");
+
+        while let Ok((channel, response)) = self.rx.try_recv() {
             sender.send_response(channel, response);
+            //return Poll::Ready(());
         }
 
         Poll::Pending
@@ -108,41 +108,47 @@ where
 
     fn handle_request_current_head(&mut self, channel: R::Channel) {
         let store = self.store.clone();
-        let fut = async move {
+        let tx = self.tx.clone();
+        println!("head");
+
+        let j = tokio::spawn(async move {
+            println!("inhead");
             let response = store
                 .get_head()
                 .await
                 .map(|head| head.to_header_response())
                 .unwrap_or_else(|_| HeaderResponse::not_found());
 
-            (channel, vec![response])
-        };
-        self.futures.push(fut.boxed());
+            println!("got res");
+            let _ = tx.send((channel, vec![response]));
+        });
+
+        println!("{j:?}");
     }
 
     fn handle_request_by_hash(&mut self, channel: R::Channel, hash: Vec<u8>) {
         let store = self.store.clone();
-        let fut = async move {
-            let Ok(hash) = Hash::from_bytes(Algorithm::Sha256, &hash) else {
-                return (channel, vec![HeaderResponse::invalid()]);
+        let tx = self.tx.clone();
+        tokio::spawn(async move {
+            let response = if let Ok(hash) = Hash::from_bytes(Algorithm::Sha256, &hash) {
+                store
+                    .get_by_hash(&hash)
+                    .await
+                    .map(|head| head.to_header_response())
+                    .unwrap_or_else(|_| HeaderResponse::not_found())
+            } else {
+                HeaderResponse::invalid()
             };
 
-            let response = store
-                .get_by_hash(&hash)
-                .await
-                .map(|head| head.to_header_response())
-                .unwrap_or_else(|_| HeaderResponse::not_found());
-
-            (channel, vec![response])
-        };
-
-        self.futures.push(fut.boxed());
+            let _ = tx.send((channel, vec![response]));
+        });
     }
 
     fn handle_request_by_height(&mut self, channel: R::Channel, origin: u64, amount: u64) {
         let store = self.store.clone();
+        let tx = self.tx.clone();
 
-        let fut = async move {
+        tokio::spawn(async move {
             let mut responses = vec![];
             for i in origin..origin + amount {
                 let response = store
@@ -153,14 +159,12 @@ where
                 responses.push(response);
             }
 
-            (channel, responses)
-        };
-        self.futures.push(fut.boxed());
+            let _ = tx.send((channel, responses));
+        });
     }
 
     fn handle_invalid_request(&self, channel: R::Channel) {
-        let fut = async { (channel, vec![HeaderResponse::invalid()]) };
-        self.futures.push(fut.boxed());
+        let _ = self.tx.send((channel, vec![HeaderResponse::invalid()]));
     }
 }
 
@@ -210,6 +214,7 @@ mod tests {
             (),
         );
 
+        tokio::task::yield_now().await;
         let _ = handler.poll(&mut cx, &mut sender);
 
         let received = receiver.await.unwrap();
@@ -229,6 +234,7 @@ mod tests {
 
         handler.on_request_received(PeerId::random(), "test", HeaderRequest::head_request(), ());
 
+        tokio::task::yield_now().await;
         let _ = handler.poll(&mut cx, &mut sender);
 
         let received = receiver.await.unwrap();
@@ -252,6 +258,7 @@ mod tests {
             (),
         );
 
+        tokio::task::yield_now().await;
         let _ = handler.poll(&mut cx, &mut sender);
 
         let received = receiver.await.unwrap();
@@ -272,6 +279,7 @@ mod tests {
         };
         handler.on_request_received(PeerId::random(), "test", request, ());
 
+        tokio::task::yield_now().await;
         let _ = handler.poll(&mut cx, &mut sender);
 
         let received = receiver.await.unwrap();
@@ -294,6 +302,7 @@ mod tests {
             (),
         );
 
+        tokio::task::yield_now().await;
         let _ = handler.poll(&mut cx, &mut sender);
 
         let received = receiver.await.unwrap();
@@ -321,6 +330,7 @@ mod tests {
         };
         handler.on_request_received(PeerId::random(), "test", request, ());
 
+        tokio::task::yield_now().await;
         let _ = handler.poll(&mut cx, &mut sender);
 
         let received = receiver.await.unwrap();
@@ -347,6 +357,7 @@ mod tests {
         let request = HeaderRequest::with_origin(5, u64::try_from(expected_hashes.len()).unwrap());
         handler.on_request_received(PeerId::random(), "test", request, ());
 
+        tokio::task::yield_now().await;
         let _ = handler.poll(&mut cx, &mut sender);
 
         let received = receiver.await.unwrap();
@@ -371,6 +382,7 @@ mod tests {
         type Channel = ();
 
         fn send_response(&mut self, _channel: Self::Channel, response: ResponseType) {
+            println!("sending");
             if let Some(sender) = self.0.take() {
                 let _ = sender.send(response);
             }
