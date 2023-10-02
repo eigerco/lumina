@@ -1,5 +1,4 @@
 use std::fmt::{Debug, Display};
-use std::sync::mpsc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -10,10 +9,12 @@ use libp2p::{
     PeerId,
 };
 use tendermint::hash::Algorithm;
+use tokio::sync::mpsc;
 use tracing::{instrument, trace};
 
 use crate::exchange::utils::{ExtendedHeaderExt, HeaderRequestExt, HeaderResponseExt};
 use crate::exchange::{ReqRespBehaviour, ResponseType};
+use crate::executor::spawn;
 use crate::store::Store;
 
 pub(super) struct ExchangeServerHandler<S, R = ReqRespBehaviour>
@@ -49,7 +50,7 @@ where
     R: ResponseSender,
 {
     pub(super) fn new(store: Arc<S>) -> Self {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::channel(32);
         ExchangeServerHandler { store, rx, tx }
     }
 
@@ -95,12 +96,14 @@ where
         trace!("on_failure; request_id: {request_id}, peer: {peer}, error: {error:?}");
     }
 
-    pub fn poll(&mut self, _: &mut Context<'_>, sender: &mut R) -> Poll<()> {
-        println!(".");
-
-        while let Ok((channel, response)) = self.rx.try_recv() {
+    pub fn poll(&mut self, cx: &mut Context<'_>, sender: &mut R) -> Poll<()>
+    where
+        <R as ResponseSender>::Channel: std::fmt::Debug,
+    {
+        let pol = self.rx.poll_recv(cx);
+        if let Poll::Ready(Some((channel, response))) = pol {
             sender.send_response(channel, response);
-            //return Poll::Ready(());
+            return Poll::Ready(());
         }
 
         Poll::Pending
@@ -109,27 +112,22 @@ where
     fn handle_request_current_head(&mut self, channel: R::Channel) {
         let store = self.store.clone();
         let tx = self.tx.clone();
-        println!("head");
 
-        let j = tokio::spawn(async move {
-            println!("inhead");
+        spawn(async move {
             let response = store
                 .get_head()
                 .await
                 .map(|head| head.to_header_response())
                 .unwrap_or_else(|_| HeaderResponse::not_found());
 
-            println!("got res");
-            let _ = tx.send((channel, vec![response]));
+            let _ = tx.send((channel, vec![response])).await;
         });
-
-        println!("{j:?}");
     }
 
     fn handle_request_by_hash(&mut self, channel: R::Channel, hash: Vec<u8>) {
         let store = self.store.clone();
         let tx = self.tx.clone();
-        tokio::spawn(async move {
+        spawn(async move {
             let response = if let Ok(hash) = Hash::from_bytes(Algorithm::Sha256, &hash) {
                 store
                     .get_by_hash(&hash)
@@ -140,7 +138,7 @@ where
                 HeaderResponse::invalid()
             };
 
-            let _ = tx.send((channel, vec![response]));
+            let _ = tx.send((channel, vec![response])).await;
         });
     }
 
@@ -148,7 +146,7 @@ where
         let store = self.store.clone();
         let tx = self.tx.clone();
 
-        tokio::spawn(async move {
+        spawn(async move {
             let mut responses = vec![];
             for i in origin..origin + amount {
                 let response = store
@@ -159,12 +157,14 @@ where
                 responses.push(response);
             }
 
-            let _ = tx.send((channel, responses));
+            let _ = tx.send((channel, responses)).await;
         });
     }
 
     fn handle_invalid_request(&self, channel: R::Channel) {
-        let _ = self.tx.send((channel, vec![HeaderResponse::invalid()]));
+        let _ = self
+            .tx
+            .blocking_send((channel, vec![HeaderResponse::invalid()]));
     }
 }
 
@@ -200,12 +200,31 @@ mod tests {
     use tokio::sync::oneshot;
 
     #[tokio::test]
+    async fn request_head_test() {
+        let (store, _) = gen_filled_store(4);
+        let expected_head = store.get_head().unwrap();
+        let mut handler = ExchangeServerHandler::new(Arc::new(store));
+        let (mut sender, receiver) = create_test_response_sender();
+
+        handler.on_request_received(PeerId::random(), "test", HeaderRequest::head_request(), ());
+
+        futures::future::poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
+        //std::future::poll_fn(|cx| handler.poll2(cx)).await;
+
+        let received = receiver.await.unwrap();
+        assert_eq!(received.len(), 1);
+        assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
+        let decoded_header = ExtendedHeader::decode(&received[0].body[..]).unwrap();
+        assert_eq!(decoded_header, expected_head);
+    }
+
+    #[tokio::test]
     async fn request_header_test() {
         let (store, _) = gen_filled_store(3);
         let expected_genesis = store.get_by_height(1).unwrap();
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
         let (mut sender, receiver) = create_test_response_sender();
-        let mut cx = create_dummy_async_context();
+        //let mut cx = create_dummy_async_context();
 
         handler.on_request_received(
             PeerId::random(),
@@ -214,34 +233,15 @@ mod tests {
             (),
         );
 
-        tokio::task::yield_now().await;
-        let _ = handler.poll(&mut cx, &mut sender);
+        //tokio::task::yield_now().await;
+        //let _ = handler.poll(&mut cx, &mut sender);
+        std::future::poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
         let decoded_header = ExtendedHeader::decode(&received[0].body[..]).unwrap();
         assert_eq!(decoded_header, expected_genesis);
-    }
-
-    #[tokio::test]
-    async fn request_head_test() {
-        let (store, _) = gen_filled_store(4);
-        let expected_head = store.get_head().unwrap();
-        let mut handler = ExchangeServerHandler::new(Arc::new(store));
-        let (mut sender, receiver) = create_test_response_sender();
-        let mut cx = create_dummy_async_context();
-
-        handler.on_request_received(PeerId::random(), "test", HeaderRequest::head_request(), ());
-
-        tokio::task::yield_now().await;
-        let _ = handler.poll(&mut cx, &mut sender);
-
-        let received = receiver.await.unwrap();
-        assert_eq!(received.len(), 1);
-        assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
-        let decoded_header = ExtendedHeader::decode(&received[0].body[..]).unwrap();
-        assert_eq!(decoded_header, expected_head);
     }
 
     #[tokio::test]
@@ -382,7 +382,6 @@ mod tests {
         type Channel = ();
 
         fn send_response(&mut self, _channel: Self::Channel, response: ResponseType) {
-            println!("sending");
             if let Some(sender) = self.0.take() {
                 let _ = sender.send(response);
             }

@@ -52,6 +52,7 @@ pub(super) trait HeaderResponseExt {
     fn to_extended_header(&self) -> Result<ExtendedHeader, ExchangeError>;
 
     fn not_found() -> HeaderResponse;
+
     fn invalid() -> HeaderResponse;
 }
 
@@ -65,13 +66,13 @@ impl HeaderResponseExt for HeaderResponse {
         }
     }
 
-    // TODO: how forthcoming should we be with errors and description?
     fn not_found() -> HeaderResponse {
         HeaderResponse {
             status_code: StatusCode::NotFound.into(),
             body: vec![],
         }
     }
+
     fn invalid() -> HeaderResponse {
         HeaderResponse {
             status_code: StatusCode::Invalid.into(),
