@@ -145,6 +145,7 @@ impl ExtendedHeaderGenerator {
             parts::Header::new(1, Hash::Sha256(rand::random())).expect("invalid PartSetHeader");
 
         hash_and_sign(&mut header, &self.key);
+        header.validate().expect("invalid header generated");
 
         header
     }
@@ -191,25 +192,34 @@ impl Default for ExtendedHeaderGenerator {
     }
 }
 
-fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> ExtendedHeader {
-    assert!(height >= GENESIS_HEIGHT);
+/// Invalidate the provided header.
+///
+/// This can be combined with [`unverify`]
+pub fn invalidate(header: &mut ExtendedHeader) {
+    // One way of invalidate `ExtendedHeader` but still passes the
+    // verification check, is to clear `dah` but keep `data_hash` unchanged.
+    header.dah.row_roots.clear();
+    header.dah.column_roots.clear();
 
-    let pub_key_bytes = signing_key.verification_key().to_bytes();
+    header.validate().unwrap_err();
+}
+
+/// Unverify the provided header.
+///
+/// This can be combined with [`invalidate`].
+pub fn unverify(header: &mut ExtendedHeader) {
+    let was_invalidated = header.validate().is_err();
+
+    // One way to unverify `ExtendedHeader` but still passes the
+    // validation check, is to sign it with a new key.
+    let key = SigningKey::new(rand::thread_rng());
+    let pub_key_bytes = key.verification_key().to_bytes();
     let pub_key = PublicKey::from_raw_ed25519(&pub_key_bytes).unwrap();
-
     let validator_address = tendermint::account::Id::new(rand::random());
 
-    let last_block_id = if height == GENESIS_HEIGHT {
-        None
-    } else {
-        Some(tendermint::block::Id {
-            hash: Hash::Sha256(rand::random()),
-            part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
-                .expect("invalid PartSetHeader"),
-        })
-    };
+    header.header.proposer_address = validator_address;
 
-    let validator_set = ValidatorSet::new(
+    header.validator_set = ValidatorSet::new(
         vec![tendermint::validator::Info {
             address: validator_address,
             pub_key,
@@ -225,6 +235,32 @@ fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> 
             proposer_priority: 0_i64.into(),
         }),
     );
+
+    hash_and_sign(header, &key);
+
+    if was_invalidated {
+        invalidate(header);
+    } else {
+        header.validate().expect("invalid header generated");
+    }
+}
+
+fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> ExtendedHeader {
+    assert!(height >= GENESIS_HEIGHT);
+
+    let pub_key_bytes = signing_key.verification_key().to_bytes();
+    let pub_key = PublicKey::from_raw_ed25519(&pub_key_bytes).unwrap();
+    let validator_address = tendermint::account::Id::new(rand::random());
+
+    let last_block_id = if height == GENESIS_HEIGHT {
+        None
+    } else {
+        Some(tendermint::block::Id {
+            hash: Hash::Sha256(rand::random()),
+            part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
+                .expect("invalid PartSetHeader"),
+        })
+    };
 
     let mut header = ExtendedHeader {
         header: Header {
@@ -264,7 +300,22 @@ fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> 
                 signature: None,
             }],
         },
-        validator_set,
+        validator_set: ValidatorSet::new(
+            vec![tendermint::validator::Info {
+                address: validator_address,
+                pub_key,
+                power: 5000_u32.into(),
+                name: None,
+                proposer_priority: 0_i64.into(),
+            }],
+            Some(tendermint::validator::Info {
+                address: validator_address,
+                pub_key,
+                power: 5000_u32.into(),
+                name: None,
+                proposer_priority: 0_i64.into(),
+            }),
+        ),
         dah: DataAvailabilityHeader {
             row_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
             column_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
@@ -272,6 +323,7 @@ fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> 
     };
 
     hash_and_sign(&mut header, signing_key);
+    header.validate().expect("invalid header generated");
 
     header
 }
@@ -342,7 +394,7 @@ fn generate_next(
     };
 
     hash_and_sign(&mut header, signing_key);
-
+    header.validate().expect("invalid header generated");
     current.verify(&header).expect("invalid header generated");
 
     header
@@ -371,8 +423,6 @@ fn hash_and_sign(header: &mut ExtendedHeader, signing_key: &SigningKey) {
             *signature = Some(Signature::new(sig).unwrap().unwrap());
         }
     }
-
-    header.validate().expect("invalid header generated");
 }
 
 #[cfg(test)]
@@ -548,5 +598,75 @@ mod tests {
 
         header5.verify(&header6).unwrap();
         header5.verify(&another_header6).unwrap();
+    }
+
+    #[test]
+    fn invalidate_header() {
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+
+        let header5 = gen.next();
+        let mut header6 = gen.next();
+        let mut header7 = gen.next();
+
+        invalidate(&mut header6);
+
+        // Check that can be called multiple times
+        invalidate(&mut header7);
+        invalidate(&mut header7);
+        invalidate(&mut header7);
+
+        header6.validate().unwrap_err();
+        header5.verify(&header6).unwrap();
+
+        header7.validate().unwrap_err();
+        header5.verify(&header7).unwrap();
+    }
+
+    #[test]
+    fn unverify_header() {
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+
+        let header5 = gen.next();
+        let mut header6 = gen.next();
+        let mut header7 = gen.next();
+
+        unverify(&mut header6);
+
+        // Check that can be called multiple times
+        unverify(&mut header7);
+        unverify(&mut header7);
+        unverify(&mut header7);
+
+        header6.validate().unwrap();
+        header5.verify(&header6).unwrap_err();
+
+        header7.validate().unwrap();
+        header5.verify(&header7).unwrap_err();
+    }
+
+    #[test]
+    fn invalidate_and_unverify_header() {
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+
+        let header5 = gen.next();
+        let mut header6 = gen.next();
+
+        invalidate(&mut header6);
+        unverify(&mut header6);
+
+        header6.validate().unwrap_err();
+        header5.verify(&header6).unwrap_err();
+
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+
+        let header5 = gen.next();
+        let mut header6 = gen.next();
+
+        // check different order too
+        unverify(&mut header6);
+        invalidate(&mut header6);
+
+        header6.validate().unwrap_err();
+        header5.verify(&header6).unwrap_err();
     }
 }

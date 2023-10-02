@@ -36,6 +36,13 @@ impl Display for ExtendedHeader {
 }
 
 impl ExtendedHeader {
+    /// Decode and then validate header.
+    pub fn decode_and_validate(bytes: &[u8]) -> Result<Self> {
+        let header = ExtendedHeader::decode(bytes)?;
+        header.validate()?;
+        Ok(header)
+    }
+
     pub fn chain_id(&self) -> &Id {
         &self.header.chain_id
     }
@@ -59,6 +66,7 @@ impl ExtendedHeader {
             .unwrap_or_default()
     }
 
+    /// Validate header.
     pub fn validate(&self) -> Result<()> {
         self.header.validate_basic()?;
         self.commit.validate_basic()?;
@@ -110,6 +118,7 @@ impl ExtendedHeader {
         Ok(())
     }
 
+    /// Verify an untrusted header.
     pub fn verify(&self, untrusted: &ExtendedHeader) -> Result<()> {
         if untrusted.height() <= self.height() {
             bail_verification!(
@@ -177,6 +186,13 @@ impl ExtendedHeader {
         Ok(())
     }
 
+    /// Verify a chain of untrusted headers.
+    ///
+    /// # Note
+    ///
+    /// This method does not do validation for optimization purposes.
+    /// Validation should be done from before and ideally with
+    /// [`ExtendedHeader::decode_and_validate`].
     pub fn verify_range(&self, untrusted: &[ExtendedHeader]) -> Result<()> {
         let mut trusted = self;
 
@@ -192,7 +208,6 @@ impl ExtendedHeader {
                 );
             }
 
-            untrusted.validate()?;
             trusted.verify(untrusted)?;
             trusted = untrusted;
         }
@@ -200,6 +215,13 @@ impl ExtendedHeader {
         Ok(())
     }
 
+    /// Verify a chain of untrusted headers make sure that are adjacent to `self`.
+    ///
+    /// # Note
+    ///
+    /// This method does not do validation for optimization purposes.
+    /// Validation should be done from before and ideally with
+    /// [`ExtendedHeader::decode_and_validate`].
     pub fn verify_adjacent_range(&self, untrusted: &[ExtendedHeader]) -> Result<()> {
         if untrusted.is_empty() {
             return Ok(());
@@ -255,9 +277,19 @@ impl From<ExtendedHeader> for RawExtendedHeader {
     }
 }
 
+/// Convenient utility for validating multiple headers.
+pub fn validate_headers(headers: &[ExtendedHeader]) -> Result<()> {
+    for header in headers {
+        header.validate()?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::{invalidate, unverify};
 
     fn sample_eh_chain_1_block_1() -> ExtendedHeader {
         let s = include_str!("../test_data/chain1/extended_header_block_1.json");
@@ -428,6 +460,25 @@ mod tests {
     }
 
     #[test]
+    fn validate_multiple_headers() {
+        let mut eh_chain = sample_eh_chain_3_block_1_to_256();
+
+        validate_headers(&eh_chain).unwrap();
+
+        // Non-continuous headers are allowed
+        eh_chain.remove(2);
+        validate_headers(&eh_chain).unwrap();
+
+        // Bad headers are allowed
+        unverify(&mut eh_chain[2]);
+        validate_headers(&eh_chain).unwrap();
+
+        // Invalid header are not allowed
+        invalidate(&mut eh_chain[3]);
+        validate_headers(&eh_chain).unwrap_err();
+    }
+
+    #[test]
     fn verify_range() {
         let eh_chain = sample_eh_chain_3_block_1_to_256();
 
@@ -460,18 +511,25 @@ mod tests {
     }
 
     #[test]
-    fn verify_range_invalid_header_in_middle() {
+    fn verify_range_bad_header_in_middle() {
         let eh_chain = sample_eh_chain_3_block_1_to_256();
 
         let mut headers = eh_chain[10..15].to_vec();
 
-        headers[2].header.time = headers[2]
-            .header
-            .time
-            .checked_add(Duration::from_millis(1))
-            .unwrap();
+        unverify(&mut headers[2]);
 
         eh_chain[0].verify_range(&headers).unwrap_err();
+    }
+
+    #[test]
+    fn verify_range_allow_invalid_header_in_middle() {
+        let eh_chain = sample_eh_chain_3_block_1_to_256();
+
+        let mut headers = eh_chain[10..15].to_vec();
+
+        invalidate(&mut headers[2]);
+
+        eh_chain[0].verify_range(&headers).unwrap();
     }
 
     #[test]
