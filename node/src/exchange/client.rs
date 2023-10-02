@@ -294,7 +294,7 @@ mod tests {
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::consts::HASH_SIZE;
     use celestia_types::hash::Hash;
-    use celestia_types::test_utils::ExtendedHeaderGenerator;
+    use celestia_types::test_utils::{invalidate, unverify, ExtendedHeaderGenerator};
     use std::collections::VecDeque;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -613,6 +613,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn respond_with_invalid_header() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 1), tx);
+
+        // Exchange client must return a validated header.
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let mut invalid_header5 = gen.next();
+        invalidate(&mut invalid_header5);
+
+        mock_req.send_n_responses(&mut handler, 1, vec![invalid_header5.to_header_response()]);
+
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn respond_with_allowed_bad_header() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 2), tx);
+
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+
+        // Exchange client must not verify the headers, this is done only
+        // in `get_verified_headers_range` which is used later on in `Syncer`.
+        let mut expected_headers = gen.next_many(2);
+        unverify(&mut expected_headers[1]);
+
+        let expected = expected_headers
+            .iter()
+            .map(|header| header.to_header_response())
+            .collect::<Vec<_>>();
+
+        mock_req.send_n_responses(&mut handler, 1, expected);
+
+        let result = rx.await.unwrap().unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result, expected_headers);
+    }
+
+    #[tokio::test]
     async fn invalid_requests() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -828,6 +880,55 @@ mod tests {
         let result = rx.await.unwrap().unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_header);
+    }
+
+    #[tokio::test]
+    async fn head_request_responds_with_invalid_headers() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
+
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let header5 = gen.next();
+
+        let mut invalid_header5 = gen.another_of(&header5);
+        invalidate(&mut invalid_header5);
+
+        let expected_header = header5;
+        let expected = expected_header.to_header_response();
+
+        mock_req.send_n_responses(&mut handler, 9, vec![invalid_header5.to_header_response()]);
+        mock_req.send_n_responses(&mut handler, 1, vec![expected]);
+
+        let result = rx.await.unwrap().unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], expected_header);
+    }
+
+    #[tokio::test]
+    async fn head_request_responds_only_with_invalid_headers() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
+
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let mut invalid_header5 = gen.next();
+        invalidate(&mut invalid_header5);
+
+        mock_req.send_n_responses(&mut handler, 10, vec![invalid_header5.to_header_response()]);
+
+        assert!(matches!(
+            rx.await,
+            Ok(Err(P2pError::Exchange(ExchangeError::HeaderNotFound)))
+        ));
     }
 
     #[tokio::test]

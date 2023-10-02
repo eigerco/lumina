@@ -26,7 +26,9 @@ tendermint-proto = { workspace = true }
 thiserror = "1.0.40"
 
 [dev-dependencies]
+ed25519-consensus = "2.1.0"
 proptest = "1.2.0"
+rand = "0.8.5"
 serde_json = "1.0.97"
 
 [features]

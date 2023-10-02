@@ -52,16 +52,8 @@ impl HeaderResponseExt for HeaderResponse {
         match self.status_code() {
             StatusCode::Invalid => Err(ExchangeError::InvalidResponse),
             StatusCode::NotFound => Err(ExchangeError::HeaderNotFound),
-            StatusCode::Ok => {
-                let header = ExtendedHeader::decode(&self.body[..])
-                    .map_err(|_| ExchangeError::InvalidResponse)?;
-
-                header
-                    .validate()
-                    .map_err(|_| ExchangeError::InvalidResponse)?;
-
-                Ok(header)
-            }
+            StatusCode::Ok => ExtendedHeader::decode_and_validate(&self.body[..])
+                .map_err(|_| ExchangeError::InvalidResponse),
         }
     }
 }
