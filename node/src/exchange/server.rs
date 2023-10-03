@@ -146,6 +146,11 @@ where
         let tx = self.tx.clone();
 
         spawn(async move {
+            if !store.has_at(origin).await {
+                let _ = tx.send((channel, vec![HeaderResponse::not_found()])).await;
+                return;
+            }
+
             let amount = amount.min(MAX_HEADERS_AMOUNT_RESPONSE);
             let mut responses = Vec::with_capacity(amount as usize);
 
