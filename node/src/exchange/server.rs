@@ -8,14 +8,15 @@ use libp2p::{
     request_response::{InboundFailure, RequestId, ResponseChannel},
     PeerId,
 };
-use tendermint::hash::Algorithm;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, error::TrySendError};
 use tracing::{instrument, trace};
 
 use crate::exchange::utils::{ExtendedHeaderExt, HeaderRequestExt, HeaderResponseExt};
 use crate::exchange::{ReqRespBehaviour, ResponseType};
 use crate::executor::spawn;
 use crate::store::Store;
+
+const MAX_HEADERS_AMOUNT_RESPONSE: u64 = 512;
 
 pub(super) struct ExchangeServerHandler<S, R = ReqRespBehaviour>
 where
@@ -96,10 +97,7 @@ where
         trace!("on_failure; request_id: {request_id}, peer: {peer}, error: {error:?}");
     }
 
-    pub fn poll(&mut self, cx: &mut Context<'_>, sender: &mut R) -> Poll<()>
-    where
-        <R as ResponseSender>::Channel: std::fmt::Debug,
-    {
+    pub fn poll(&mut self, cx: &mut Context<'_>, sender: &mut R) -> Poll<()> {
         if let Poll::Ready(Some((channel, response))) = self.rx.poll_recv(cx) {
             sender.send_response(channel, response);
             return Poll::Ready(());
@@ -124,18 +122,20 @@ where
     }
 
     fn handle_request_by_hash(&mut self, channel: R::Channel, hash: Vec<u8>) {
+        let Ok(hash) = hash.try_into().map(Hash::Sha256) else {
+            self.handle_invalid_request(channel);
+            return;
+        };
+
         let store = self.store.clone();
         let tx = self.tx.clone();
+
         spawn(async move {
-            let response = if let Ok(hash) = Hash::from_bytes(Algorithm::Sha256, &hash) {
-                store
-                    .get_by_hash(&hash)
-                    .await
-                    .map(|head| head.to_header_response())
-                    .unwrap_or_else(|_| HeaderResponse::not_found())
-            } else {
-                HeaderResponse::invalid()
-            };
+            let response = store
+                .get_by_hash(&hash)
+                .await
+                .map(|head| head.to_header_response())
+                .unwrap_or_else(|_| HeaderResponse::not_found());
 
             let _ = tx.send((channel, vec![response])).await;
         });
@@ -146,14 +146,18 @@ where
         let tx = self.tx.clone();
 
         spawn(async move {
-            let mut responses = vec![];
+            let amount = amount.min(MAX_HEADERS_AMOUNT_RESPONSE);
+            let mut responses = Vec::with_capacity(amount as usize);
+
             for i in origin..origin + amount {
-                let response = store
-                    .get_by_height(i)
-                    .await
-                    .map(|head| head.to_header_response())
-                    .unwrap_or_else(|_| HeaderResponse::not_found());
-                responses.push(response);
+                match store.get_by_height(i).await {
+                    Ok(h) => responses.push(h.to_header_response()),
+                    Err(_) => break,
+                }
+            }
+
+            if responses.is_empty() {
+                responses.push(HeaderResponse::not_found());
             }
 
             let _ = tx.send((channel, responses)).await;
@@ -161,11 +165,15 @@ where
     }
 
     fn handle_invalid_request(&self, channel: R::Channel) {
-        let tx = self.tx.clone();
+        if let Err(TrySendError::Full(response)) =
+            self.tx.try_send((channel, vec![HeaderResponse::invalid()]))
+        {
+            let tx = self.tx.clone();
 
-        spawn(async move {
-            let _ = tx.send((channel, vec![HeaderResponse::invalid()])).await;
-        })
+            spawn(async move {
+                let _ = tx.send(response).await;
+            });
+        }
     }
 }
 
@@ -253,7 +261,7 @@ mod tests {
             (),
         );
 
-        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
+        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
@@ -272,7 +280,7 @@ mod tests {
         };
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
+        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
@@ -293,7 +301,7 @@ mod tests {
             (),
         );
 
-        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
+        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
@@ -319,7 +327,7 @@ mod tests {
         };
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
+        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
 
         let received = receiver.await.unwrap();
 
@@ -331,20 +339,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn request_range_behond_head_test() {
+    async fn request_range_beyond_head_test() {
         let (store, _) = gen_filled_store(5);
-        let expected_hashes = [store.get_by_height(5).ok(), None, None];
-        let expected_status_codes = [StatusCode::Ok, StatusCode::NotFound, StatusCode::NotFound];
+        let expected_hashes = [store.get_by_height(5).ok()];
+        let expected_status_codes = [StatusCode::Ok];
         assert_eq!(expected_hashes.len(), expected_status_codes.len());
 
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
-
         let (mut sender, receiver) = create_test_response_sender();
 
         let request = HeaderRequest::with_origin(5, u64::try_from(expected_hashes.len()).unwrap());
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
+        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), expected_hashes.len());

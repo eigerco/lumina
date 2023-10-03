@@ -581,7 +581,6 @@ dependencies = [
  "prost",
  "rand",
  "serde_json",
- "tendermint",
  "tendermint-proto",
  "thiserror",
  "tokio",
