@@ -100,8 +100,7 @@ where
     where
         <R as ResponseSender>::Channel: std::fmt::Debug,
     {
-        let pol = self.rx.poll_recv(cx);
-        if let Poll::Ready(Some((channel, response))) = pol {
+        if let Poll::Ready(Some((channel, response))) = self.rx.poll_recv(cx) {
             sender.send_response(channel, response);
             return Poll::Ready(());
         }
@@ -232,7 +231,7 @@ mod tests {
             (),
         );
 
-        poll_fn(move |cx| -> Poll<()> { handler.poll(cx, &mut sender) }).await;
+        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
 
         let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
