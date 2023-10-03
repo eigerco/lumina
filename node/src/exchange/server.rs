@@ -98,12 +98,14 @@ where
     }
 
     pub fn poll(&mut self, cx: &mut Context<'_>, sender: &mut R) -> Poll<()> {
-        if let Poll::Ready(Some((channel, response))) = self.rx.poll_recv(cx) {
-            sender.send_response(channel, response);
-            return Poll::Ready(());
-        }
+        loop {
+            if let Poll::Ready(Some((channel, response))) = self.rx.poll_recv(cx) {
+                sender.send_response(channel, response);
+                continue;
+            }
 
-        Poll::Pending
+            return Poll::Pending;
+        }
     }
 
     fn handle_request_current_head(&mut self, channel: R::Channel) {
@@ -210,6 +212,7 @@ mod tests {
     use std::future::poll_fn;
     use std::sync::Arc;
     use tendermint_proto::Protobuf;
+    use tokio::select;
     use tokio::sync::oneshot;
 
     #[tokio::test]
@@ -221,9 +224,11 @@ mod tests {
 
         handler.on_request_received(PeerId::random(), "test", HeaderRequest::head_request(), ());
 
-        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
+        let received = select! {
+            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
+            r = receiver => { r.unwrap() }
+        };
 
-        let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
         let decoded_header = ExtendedHeader::decode(&received[0].body[..]).unwrap();
@@ -244,9 +249,11 @@ mod tests {
             (),
         );
 
-        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
+        let received = select! {
+            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
+            r = receiver => { r.unwrap() }
+        };
 
-        let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
         let decoded_header = ExtendedHeader::decode(&received[0].body[..]).unwrap();
@@ -266,9 +273,11 @@ mod tests {
             (),
         );
 
-        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
+        let received = select! {
+            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
+            r = receiver => { r.unwrap() }
+        };
 
-        let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Invalid));
     }
@@ -285,9 +294,11 @@ mod tests {
         };
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
+        let received = select! {
+            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
+            r = receiver => { r.unwrap() }
+        };
 
-        let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Invalid));
     }
@@ -306,9 +317,11 @@ mod tests {
             (),
         );
 
-        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
+        let received = select! {
+            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
+            r = receiver => { r.unwrap() }
+        };
 
-        let received = receiver.await.unwrap();
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
         let decoded_header = ExtendedHeader::decode(&received[0].body[..]).unwrap();
@@ -332,9 +345,10 @@ mod tests {
         };
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
-
-        let received = receiver.await.unwrap();
+        let received = select! {
+            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
+            r = receiver => { r.unwrap() }
+        };
 
         for (rec, exp) in received.iter().zip(expected_headers.iter()) {
             assert_eq!(rec.status_code, i32::from(StatusCode::Ok));
@@ -356,11 +370,12 @@ mod tests {
         let request = HeaderRequest::with_origin(5, u64::try_from(expected_hashes.len()).unwrap());
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        poll_fn(move |cx| handler.poll(cx, &mut sender)).await;
+        let received = select! {
+            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
+            r = receiver => { r.unwrap() }
+        };
 
-        let received = receiver.await.unwrap();
         assert_eq!(received.len(), expected_hashes.len());
-
         for (rec, (exp_status, exp_header)) in received
             .iter()
             .zip(expected_status_codes.iter().zip(expected_hashes.iter()))
