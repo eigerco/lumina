@@ -36,9 +36,11 @@ const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
 /// Maximum length of the protobuf length delimiter in bytes
 const PROTOBUF_MAX_LENGTH_DELIMITER_LEN: usize = 10;
 
+type RequestType = HeaderRequest;
+type ResponseType = Vec<HeaderResponse>;
 type ReqRespBehaviour = request_response::Behaviour<HeaderCodec>;
-type ReqRespEvent = request_response::Event<HeaderRequest, Vec<HeaderResponse>>;
-type ReqRespMessage = request_response::Message<HeaderRequest, Vec<HeaderResponse>>;
+type ReqRespEvent = request_response::Event<RequestType, ResponseType>;
+type ReqRespMessage = request_response::Message<RequestType, ResponseType>;
 
 pub(crate) struct ExchangeBehaviour<S>
 where
@@ -251,13 +253,20 @@ where
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        while let Poll::Ready(ev) = self.req_resp.poll(cx, params) {
-            if let Some(ev) = self.on_to_swarm(ev) {
-                return Poll::Ready(ev);
-            }
-        }
+        loop {
+            if let Poll::Ready(ev) = self.req_resp.poll(cx, params) {
+                if let Some(ev) = self.on_to_swarm(ev) {
+                    return Poll::Ready(ev);
+                }
 
-        Poll::Pending
+                continue;
+            }
+            if self.server_handler.poll(cx, &mut self.req_resp).is_ready() {
+                continue;
+            }
+
+            return Poll::Pending;
+        }
     }
 }
 
