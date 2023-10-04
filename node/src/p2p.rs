@@ -17,8 +17,8 @@ use libp2p::{
     multiaddr::Protocol,
     ping,
     swarm::{
-        keep_alive, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder, SwarmEvent,
-        THandlerErr,
+        keep_alive, ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder,
+        SwarmEvent, THandlerErr,
     },
     Multiaddr, PeerId, TransportError,
 };
@@ -29,6 +29,7 @@ use tracing::{debug, info, instrument, trace, warn};
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
 use crate::executor::{spawn, Executor};
 use crate::peer_tracker::PeerTracker;
+use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::Store;
 use crate::utils::{
     celestia_protocol_id, gossipsub_ident_topic, MultiaddrExt, OneshotResultSender,
@@ -77,6 +78,7 @@ impl From<oneshot::error::RecvError> for P2pError {
 pub struct P2p<S> {
     cmd_tx: mpsc::Sender<P2pCmd>,
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
+    peer_tracker_info_watcher: watch::Receiver<PeerTrackerInfo>,
     _store: PhantomData<S>,
 }
 
@@ -99,9 +101,6 @@ pub enum P2pCmd {
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     },
-    WaitConnected {
-        respond_to: oneshot::Sender<()>,
-    },
     Listeners {
         respond_to: oneshot::Sender<Vec<Multiaddr>>,
     },
@@ -122,7 +121,11 @@ where
     async fn start(args: P2pArgs<S>) -> Result<Self, P2pError> {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (header_sub_tx, header_sub_rx) = watch::channel(None);
-        let mut worker = Worker::new(args, cmd_rx, header_sub_tx)?;
+
+        let peer_tracker = Arc::new(PeerTracker::new());
+        let peer_tracker_info_watcher = peer_tracker.info_watcher();
+
+        let mut worker = Worker::new(args, cmd_rx, header_sub_tx, peer_tracker)?;
 
         spawn(async move {
             worker.run().await;
@@ -131,6 +134,7 @@ where
         Ok(P2p {
             cmd_tx,
             header_sub_watcher: header_sub_rx,
+            peer_tracker_info_watcher,
             _store: PhantomData,
         })
     }
@@ -155,14 +159,22 @@ pub trait P2pService:
     type Store: Store;
 
     fn new_header_sub_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>>;
+    fn peer_tracker_info_watcher(&self) -> watch::Receiver<PeerTrackerInfo>;
 
     async fn wait_connected(&self) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
+        self.peer_tracker_info_watcher()
+            .wait_for(|info| info.num_connected_peers > 0)
+            .await
+            .map(drop)
+            .map_err(|_| P2pError::WorkerDied)
+    }
 
-        self.send_command(P2pCmd::WaitConnected { respond_to: tx })
-            .await?;
-
-        Ok(rx.await?)
+    async fn wait_connected_trusted(&self) -> Result<()> {
+        self.peer_tracker_info_watcher()
+            .wait_for(|info| info.num_connected_trusted_peers > 0)
+            .await
+            .map(drop)
+            .map_err(|_| P2pError::WorkerDied)
     }
 
     async fn network_info(&self) -> Result<NetworkInfo> {
@@ -263,6 +275,10 @@ where
     fn new_header_sub_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
         self.header_sub_watcher.clone()
     }
+
+    fn peer_tracker_info_watcher(&self) -> watch::Receiver<PeerTrackerInfo> {
+        self.peer_tracker_info_watcher.clone()
+    }
 }
 
 /// Our network behaviour.
@@ -288,7 +304,6 @@ where
     header_sub_topic_hash: TopicHash,
     cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
-    wait_connected_tx: Option<Vec<oneshot::Sender<()>>>,
     header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
     store: Arc<S>,
 }
@@ -301,8 +316,8 @@ where
         args: P2pArgs<S>,
         cmd_rx: mpsc::Receiver<P2pCmd>,
         header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
+        peer_tracker: Arc<PeerTracker>,
     ) -> Result<Self, P2pError> {
-        let peer_tracker = Arc::new(PeerTracker::new());
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
         let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
@@ -343,6 +358,10 @@ where
         }
 
         for addr in args.bootstrap_peers {
+            // Bootstrap peers are always trusted
+            if let Some(peer_id) = addr.peer_id() {
+                peer_tracker.trusted(peer_id);
+            }
             swarm.dial(addr)?;
         }
 
@@ -351,7 +370,6 @@ where
             swarm,
             header_sub_topic_hash: header_sub_topic.hash(),
             peer_tracker,
-            wait_connected_tx: None,
             header_sub_watcher,
             store: args.store.clone(),
         })
@@ -389,12 +407,19 @@ where
                 | BehaviourEvent::HeaderEx(_) => {}
             },
             SwarmEvent::ConnectionEstablished {
-                peer_id, endpoint, ..
+                peer_id,
+                connection_id,
+                endpoint,
+                ..
             } => {
-                self.on_peer_connected(peer_id, endpoint);
+                self.on_peer_connected(peer_id, connection_id, endpoint);
             }
-            SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                self.on_peer_disconnected(peer_id);
+            SwarmEvent::ConnectionClosed {
+                peer_id,
+                connection_id,
+                ..
+            } => {
+                self.on_peer_disconnected(peer_id, connection_id);
             }
             _ => {}
         }
@@ -415,9 +440,6 @@ where
                     .behaviour_mut()
                     .header_ex
                     .send_request(request, respond_to);
-            }
-            P2pCmd::WaitConnected { respond_to } => {
-                self.on_wait_connected(respond_to);
             }
             P2pCmd::Listeners { respond_to } => {
                 let local_peer_id = self.swarm.local_peer_id().to_owned();
@@ -536,7 +558,12 @@ where
     }
 
     #[instrument(skip_all, fields(peer_id = %peer_id))]
-    fn on_peer_connected(&mut self, peer_id: PeerId, endpoint: ConnectedPoint) {
+    fn on_peer_connected(
+        &mut self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        endpoint: ConnectedPoint,
+    ) {
         info!("Peer connected");
 
         // Inform PeerTracker about the dialed address.
@@ -552,26 +579,14 @@ where
             _ => None,
         };
 
-        self.peer_tracker.connected(peer_id, dialed_addr);
-
-        for tx in self.wait_connected_tx.take().into_iter().flatten() {
-            tx.maybe_send(());
-        }
+        self.peer_tracker
+            .connected(peer_id, connection_id, dialed_addr);
     }
 
     #[instrument(skip_all, fields(peer_id = %peer_id))]
-    fn on_peer_disconnected(&mut self, peer_id: PeerId) {
-        info!("Peer disconnected");
-        self.peer_tracker.disconnected(peer_id);
-    }
-
-    fn on_wait_connected(&mut self, respond_to: oneshot::Sender<()>) {
-        if self.peer_tracker.is_anyone_connected() {
-            respond_to.maybe_send(());
-        } else {
-            self.wait_connected_tx
-                .get_or_insert_with(Vec::new)
-                .push(respond_to);
+    fn on_peer_disconnected(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
+        if self.peer_tracker.maybe_disconnected(peer_id, connection_id) {
+            info!("Peer disconnected");
         }
     }
 

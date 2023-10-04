@@ -3,17 +3,30 @@ use std::borrow::Borrow;
 use dashmap::mapref::entry::Entry;
 use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
-use libp2p::{identify, Multiaddr, PeerId};
+use libp2p::{identify, swarm::ConnectionId, Multiaddr, PeerId};
+use smallvec::SmallVec;
+use tokio::sync::watch;
 
 #[derive(Debug)]
 pub struct PeerTracker {
     peers: DashMap<PeerId, PeerInfo>,
+    info_tx: watch::Sender<PeerTrackerInfo>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PeerTrackerInfo {
+    /// Number of the connected peers
+    pub num_connected_peers: u64,
+    /// Number of the connected trusted peers
+    pub num_connected_trusted_peers: u64,
 }
 
 #[derive(Debug)]
 struct PeerInfo {
-    addrs: Vec<Multiaddr>,
     state: PeerState,
+    addrs: SmallVec<[Multiaddr; 4]>,
+    connections: SmallVec<[ConnectionId; 1]>,
+    trusted: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,15 +47,26 @@ impl PeerTracker {
     pub fn new() -> Self {
         PeerTracker {
             peers: DashMap::new(),
+            info_tx: watch::channel(PeerTrackerInfo::default()).0,
         }
+    }
+
+    pub fn info(&self) -> PeerTrackerInfo {
+        self.info_tx.borrow().to_owned()
+    }
+
+    pub fn info_watcher(&self) -> watch::Receiver<PeerTrackerInfo> {
+        self.info_tx.subscribe()
     }
 
     pub fn maybe_discovered(&self, peer: PeerId) -> bool {
         match self.peers.entry(peer) {
             Entry::Vacant(entry) => {
                 entry.insert(PeerInfo {
-                    addrs: Vec::new(),
                     state: PeerState::Discovered,
+                    addrs: SmallVec::new(),
+                    connections: SmallVec::new(),
+                    trusted: false,
                 });
                 true
             }
@@ -55,8 +79,10 @@ impl PeerTracker {
     /// If peer is not found it is added as `PeerState::Discovered`.
     fn get(&self, peer: PeerId) -> RefMut<PeerId, PeerInfo> {
         self.peers.entry(peer).or_insert_with(|| PeerInfo {
-            addrs: Vec::new(),
             state: PeerState::Discovered,
+            addrs: SmallVec::new(),
+            connections: SmallVec::new(),
+            trusted: false,
         })
     }
 
@@ -81,49 +107,81 @@ impl PeerTracker {
         }
     }
 
-    pub fn connected(&self, peer: PeerId, address: impl Into<Option<Multiaddr>>) {
-        let mut state = self.get(peer);
+    /// Adds a peer as trusted or not.
+    pub fn trusted(&self, peer: PeerId) {
+        self.get(peer).value_mut().trusted = true;
+    }
+
+    /// Inform PeerTracker that there is a new connection for a peer
+    pub fn connected(
+        &self,
+        peer: PeerId,
+        connection_id: ConnectionId,
+        address: impl Into<Option<Multiaddr>>,
+    ) {
+        let mut peer_info = self.get(peer);
 
         if let Some(address) = address.into() {
-            if !state.addrs.contains(&address) {
-                state.addrs.push(address);
+            if !peer_info.addrs.contains(&address) {
+                peer_info.addrs.push(address);
             }
         }
 
-        state.state = PeerState::Connected;
-    }
+        peer_info.state = PeerState::Connected;
+        peer_info.connections.push(connection_id);
 
-    pub fn disconnected(&self, peer: PeerId) {
-        let mut state = self.get(peer);
-
-        if state.addrs.is_empty() {
-            state.state = PeerState::Discovered;
-        } else {
-            state.state = PeerState::AddressesFound;
+        // If this is the first connection from the peer
+        if peer_info.connections.len() == 1 {
+            increase_connected_peers(&self.info_tx, peer_info.trusted);
         }
     }
 
+    /// Inform PeerTracker that a connection of a peer got disconnected
+    ///
+    /// Returns `true` if there are no other connections by the peer
+    pub fn maybe_disconnected(&self, peer: PeerId, connection_id: ConnectionId) -> bool {
+        let mut peer_info = self.get(peer);
+
+        peer_info.connections.retain(|id| *id != connection_id);
+
+        // If this is the last connection from the peer
+        if peer_info.connections.is_empty() {
+            decrease_connected_peers(&self.info_tx, peer_info.trusted);
+
+            if peer_info.addrs.is_empty() {
+                peer_info.state = PeerState::Discovered;
+            } else {
+                peer_info.state = PeerState::AddressesFound;
+            }
+
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Inform PeerTracker that we got [`indentify::Info`] for a peer
     pub fn identified(&self, peer: PeerId, info: &identify::Info) {
-        let mut state = self.get(peer);
+        let mut peer_info = self.get(peer);
 
         for addr in &info.listen_addrs {
-            if !state.addrs.contains(addr) {
-                state.addrs.push(addr.to_owned());
+            if !peer_info.addrs.contains(addr) {
+                peer_info.addrs.push(addr.to_owned());
             }
         }
 
-        state.state = PeerState::Identified
+        peer_info.state = PeerState::Identified;
     }
 
     pub fn is_anyone_connected(&self) -> bool {
-        self.peers.iter().any(|pair| pair.value().is_connected())
+        self.info_tx.borrow().num_connected_peers > 0
     }
 
     pub fn is_connected(&self, peer: PeerId) -> bool {
         self.get(peer).is_connected()
     }
 
-    pub fn addresses(&self, peer: PeerId) -> Vec<Multiaddr> {
+    pub fn addresses(&self, peer: PeerId) -> SmallVec<[Multiaddr; 4]> {
         self.get(peer).addrs.clone()
     }
 
@@ -157,10 +215,40 @@ impl PeerTracker {
             // collect instead of returning an iter to not block the dashmap
             .collect()
     }
+
+    pub fn trusted_n_peers(&self, limit: usize) -> Vec<PeerId> {
+        self.peers
+            .iter()
+            .filter(|pair| pair.value().is_connected() && pair.value().trusted)
+            .take(limit)
+            .map(|pair| pair.key().to_owned())
+            // collect instead of returning an iter to not block the dashmap
+            .collect()
+    }
 }
 
 impl Default for PeerTracker {
     fn default() -> Self {
         PeerTracker::new()
     }
+}
+
+fn increase_connected_peers(info_tx: &watch::Sender<PeerTrackerInfo>, trusted: bool) {
+    info_tx.send_modify(|tracker_info| {
+        tracker_info.num_connected_peers += 1;
+
+        if trusted {
+            tracker_info.num_connected_trusted_peers += 1;
+        }
+    });
+}
+
+fn decrease_connected_peers(info_tx: &watch::Sender<PeerTrackerInfo>, trusted: bool) {
+    info_tx.send_modify(|tracker_info| {
+        tracker_info.num_connected_peers -= 1;
+
+        if trusted {
+            tracker_info.num_connected_trusted_peers -= 1;
+        }
+    });
 }
