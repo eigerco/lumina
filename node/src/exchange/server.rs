@@ -205,6 +205,7 @@ mod tests {
     use super::*;
     use crate::exchange::utils::HeaderRequestExt;
     use crate::store::tests::gen_filled_store;
+    use crate::store::InMemoryStore;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::{HeaderRequest, StatusCode};
     use celestia_types::ExtendedHeader;
@@ -220,14 +221,10 @@ mod tests {
         let (store, _) = gen_filled_store(4);
         let expected_head = store.get_head().unwrap();
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
-        let (mut sender, receiver) = create_test_response_sender();
 
         handler.on_request_received(PeerId::random(), "test", HeaderRequest::head_request(), ());
 
-        let received = select! {
-            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
-            r = receiver => { r.unwrap() }
-        };
+        let received = poll_handler_for_result(&mut handler).await;
 
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
@@ -240,7 +237,6 @@ mod tests {
         let (store, _) = gen_filled_store(3);
         let expected_genesis = store.get_by_height(1).unwrap();
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
-        let (mut sender, receiver) = create_test_response_sender();
 
         handler.on_request_received(
             PeerId::random(),
@@ -249,10 +245,7 @@ mod tests {
             (),
         );
 
-        let received = select! {
-            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
-            r = receiver => { r.unwrap() }
-        };
+        let received = poll_handler_for_result(&mut handler).await;
 
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
@@ -264,7 +257,6 @@ mod tests {
     async fn invalid_amount_request_test() {
         let (store, _) = gen_filled_store(1);
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
-        let (mut sender, receiver) = create_test_response_sender();
 
         handler.on_request_received(
             PeerId::random(),
@@ -273,10 +265,7 @@ mod tests {
             (),
         );
 
-        let received = select! {
-            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
-            r = receiver => { r.unwrap() }
-        };
+        let received = poll_handler_for_result(&mut handler).await;
 
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Invalid));
@@ -286,7 +275,6 @@ mod tests {
     async fn none_data_request_test() {
         let (store, _) = gen_filled_store(1);
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
-        let (mut sender, receiver) = create_test_response_sender();
 
         let request = HeaderRequest {
             data: None,
@@ -294,10 +282,7 @@ mod tests {
         };
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        let received = select! {
-            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
-            r = receiver => { r.unwrap() }
-        };
+        let received = poll_handler_for_result(&mut handler).await;
 
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Invalid));
@@ -308,7 +293,6 @@ mod tests {
         let (store, _) = gen_filled_store(1);
         let stored_header = store.get_head().unwrap();
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
-        let (mut sender, receiver) = create_test_response_sender();
 
         handler.on_request_received(
             PeerId::random(),
@@ -317,10 +301,7 @@ mod tests {
             (),
         );
 
-        let received = select! {
-            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
-            r = receiver => { r.unwrap() }
-        };
+        let received = poll_handler_for_result(&mut handler).await;
 
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
@@ -337,7 +318,6 @@ mod tests {
             store.get_by_height(7).unwrap(),
         ];
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
-        let (mut sender, receiver) = create_test_response_sender();
 
         let request = HeaderRequest {
             data: Some(Data::Origin(5)),
@@ -345,10 +325,7 @@ mod tests {
         };
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        let received = select! {
-            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
-            r = receiver => { r.unwrap() }
-        };
+        let received = poll_handler_for_result(&mut handler).await;
 
         for (rec, exp) in received.iter().zip(expected_headers.iter()) {
             assert_eq!(rec.status_code, i32::from(StatusCode::Ok));
@@ -365,15 +342,11 @@ mod tests {
         assert_eq!(expected_hashes.len(), expected_status_codes.len());
 
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
-        let (mut sender, receiver) = create_test_response_sender();
 
-        let request = HeaderRequest::with_origin(5, u64::try_from(expected_hashes.len()).unwrap());
+        let request = HeaderRequest::with_origin(5, 10);
         handler.on_request_received(PeerId::random(), "test", request, ());
 
-        let received = select! {
-            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
-            r = receiver => { r.unwrap() }
-        };
+        let received = poll_handler_for_result(&mut handler).await;
 
         assert_eq!(received.len(), expected_hashes.len());
         for (rec, (exp_status, exp_header)) in received
@@ -401,8 +374,19 @@ mod tests {
         }
     }
 
-    fn create_test_response_sender() -> (TestResponseSender, oneshot::Receiver<ResponseType>) {
-        let (tx, rx) = oneshot::channel();
-        (TestResponseSender(Some(tx)), rx)
+    // helper which waits for result over the test channel, while continously polling the handler
+    // needed because `ExchangeServerHandler::poll` never returns `Ready`
+    async fn poll_handler_for_result(
+        handler: &mut ExchangeServerHandler<InMemoryStore, TestResponseSender>,
+    ) -> Vec<HeaderResponse> {
+        let (tx, receiver) = oneshot::channel();
+        let mut sender = TestResponseSender(Some(tx));
+
+        let result = select! {
+            _ = poll_fn(move |cx| handler.poll(cx, &mut sender)) => panic!("shouldn't return"),
+            r = receiver => { r.unwrap() }
+        };
+
+        result
     }
 }
