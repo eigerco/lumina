@@ -148,17 +148,18 @@ where
         let tx = self.tx.clone();
 
         spawn(async move {
-            if !store.has_at(origin).await {
-                let _ = tx.send((channel, vec![HeaderResponse::not_found()])).await;
-                return;
-            }
-
             let amount = amount.min(MAX_HEADERS_AMOUNT_RESPONSE);
-            let mut responses = Vec::with_capacity(amount as usize);
+            let mut responses = vec![];
 
             for i in origin..origin + amount {
                 match store.get_by_height(i).await {
-                    Ok(h) => responses.push(h.to_header_response()),
+                    Ok(h) => {
+                        if responses.is_empty() {
+                            responses.reserve_exact(amount as usize);
+                        }
+
+                        responses.push(h.to_header_response());
+                    }
                     Err(_) => break,
                 }
             }
