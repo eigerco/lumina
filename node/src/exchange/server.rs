@@ -165,6 +165,7 @@ where
             }
 
             if responses.is_empty() {
+                responses.reserve_exact(1);
                 responses.push(HeaderResponse::not_found());
             }
 
