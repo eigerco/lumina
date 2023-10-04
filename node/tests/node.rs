@@ -3,8 +3,9 @@ use std::time::Duration;
 
 use celestia_node::{
     node::{Node, NodeConfig},
-    p2p::P2pService,
-    store::InMemoryStore,
+    p2p::{ExchangeError, P2pError, P2pService},
+    store::{InMemoryStore, Store},
+    test_utils::gen_filled_store,
 };
 use celestia_rpc::prelude::*;
 use libp2p::{
@@ -49,17 +50,10 @@ async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
 
 async fn new_connected_node() -> Node<InMemoryStore> {
     let (_, bridge_ma) = fetch_bridge_info().await;
-    let p2p_local_keypair = identity::Keypair::generate_ed25519();
-
-    let store = InMemoryStore::new();
 
     let node = Node::new(NodeConfig {
-        network_id: "private".to_string(),
-        p2p_transport: tcp_transport(&p2p_local_keypair),
-        p2p_local_keypair,
         p2p_bootstrap_peers: vec![bridge_ma],
-        p2p_listen_on: vec![],
-        store,
+        ..test_node_config()
     })
     .await
     .unwrap();
@@ -142,12 +136,9 @@ async fn peer_discovery() {
     let node1_keypair = identity::Keypair::generate_ed25519();
     let node1_peer_id = PeerId::from(node1_keypair.public());
     let node1 = Node::new(NodeConfig {
-        network_id: "private".to_string(),
-        p2p_transport: tcp_transport(&node1_keypair),
-        p2p_local_keypair: node1_keypair,
         p2p_bootstrap_peers: vec![bridge_ma],
         p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
-        store: InMemoryStore::new(),
+        ..with_keypair(node1_keypair)
     })
     .await
     .unwrap();
@@ -162,12 +153,9 @@ async fn peer_discovery() {
     let node2_keypair = identity::Keypair::generate_ed25519();
     let node2_peer_id = PeerId::from(node2_keypair.public());
     let node2 = Node::new(NodeConfig {
-        network_id: "private".to_string(),
-        p2p_transport: tcp_transport(&node2_keypair),
-        p2p_local_keypair: node2_keypair,
         p2p_bootstrap_peers: node1_addrs.clone(),
         p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
-        store: InMemoryStore::new(),
+        ..with_keypair(node2_keypair)
     })
     .await
     .unwrap();
@@ -180,12 +168,8 @@ async fn peer_discovery() {
     let node3_keypair = identity::Keypair::generate_ed25519();
     let node3_peer_id = PeerId::from(node3_keypair.public());
     let node3 = Node::new(NodeConfig {
-        network_id: "private".to_string(),
-        p2p_transport: tcp_transport(&node3_keypair),
-        p2p_local_keypair: node3_keypair,
         p2p_bootstrap_peers: node1_addrs.clone(),
-        p2p_listen_on: vec![],
-        store: InMemoryStore::new(),
+        ..with_keypair(node3_keypair)
     })
     .await
     .unwrap();
@@ -212,4 +196,237 @@ async fn peer_discovery() {
     assert!(connected_peers.iter().any(|peer| *peer == bridge_peer_id));
     assert!(connected_peers.iter().any(|peer| *peer == node1_peer_id));
     assert!(connected_peers.iter().any(|peer| *peer == node2_peer_id));
+}
+
+#[tokio::test]
+async fn client_server_test() {
+    // Server Node
+    let (server_store, mut header_generator) = gen_filled_store(0);
+    let server_headers = header_generator.next_many(20);
+    server_store
+        .append_unchecked(server_headers.clone())
+        .await
+        .unwrap();
+
+    let server = Node::new(NodeConfig {
+        store: server_store,
+        ..listen_localhost()
+    })
+    .await
+    .unwrap();
+
+    // give server a sec to breathe, otherwise occiasionally client has problems with connecting
+    sleep(Duration::from_millis(100)).await;
+    let server_addrs = server.p2p().listeners().await.unwrap();
+
+    // Client node
+    let client = Node::new(NodeConfig {
+        p2p_bootstrap_peers: server_addrs.clone(),
+        ..test_node_config()
+    })
+    .await
+    .unwrap();
+
+    client.p2p().wait_connected().await.unwrap();
+
+    // request head (with one peer)
+    let received_head = client.p2p().get_head_header().await.unwrap();
+    assert_eq!(server_headers.last().unwrap(), &received_head);
+
+    // request by hash
+    let received_header_by_height = client.p2p().get_header_by_height(10).await.unwrap();
+    assert_eq!(server_headers[9], received_header_by_height);
+
+    // request genesis by height
+    let received_genesis = client.p2p().get_header_by_height(1).await.unwrap();
+    assert_eq!(server_headers.first().unwrap(), &received_genesis);
+
+    // request entire store range
+    let received_all_headers = client
+        .p2p()
+        .get_verified_headers_range(&received_genesis, 19)
+        .await
+        .unwrap();
+    assert_eq!(server_headers[1..], received_all_headers);
+
+    // reqest more headers than available in store
+    let out_of_bounds = client
+        .p2p()
+        .get_verified_headers_range(&received_genesis, 20)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        out_of_bounds,
+        P2pError::Exchange(ExchangeError::InvalidResponse)
+    ));
+
+    // request unknown hash
+    let unstored_header = header_generator.next_of(&server_headers[0]);
+    let unexpected_hash = client
+        .p2p()
+        .get_header(unstored_header.hash())
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        unexpected_hash,
+        P2pError::Exchange(ExchangeError::HeaderNotFound)
+    ));
+
+    // request unknown height
+    let unexpected_height = client.p2p().get_header_by_height(21).await.unwrap_err();
+    assert!(matches!(
+        unexpected_height,
+        P2pError::Exchange(ExchangeError::HeaderNotFound)
+    ));
+}
+
+#[tokio::test]
+async fn multiple_peers_test() {
+    let (server_store, mut header_generator) = gen_filled_store(0);
+    let common_server_headers = header_generator.next_many(20);
+    server_store
+        .append_unchecked(common_server_headers.clone())
+        .await
+        .unwrap();
+
+    // Server group A, nodes with synced stores
+    let mut servers = vec![
+        Node::new(NodeConfig {
+            store: server_store.clone(),
+            ..listen_localhost()
+        })
+        .await
+        .unwrap(),
+        Node::new(NodeConfig {
+            store: server_store.clone(),
+            ..listen_localhost()
+        })
+        .await
+        .unwrap(),
+        Node::new(NodeConfig {
+            store: server_store.clone(),
+            ..listen_localhost()
+        })
+        .await
+        .unwrap(),
+    ];
+
+    // Server group B, single node with additional headers
+    let additional_server_headers = header_generator.next_many(5);
+    server_store
+        .append_unchecked(additional_server_headers)
+        .await
+        .unwrap();
+
+    servers.push(
+        Node::new(NodeConfig {
+            store: server_store.clone(),
+            ..listen_localhost()
+        })
+        .await
+        .unwrap(),
+    );
+
+    // give server a sec to breathe, otherwise occiasionally client has problems with connecting
+    sleep(Duration::from_millis(100)).await;
+
+    let mut server_addrs = vec![];
+    for s in servers {
+        server_addrs.extend_from_slice(&s.p2p().listeners().await.unwrap()[..]);
+    }
+
+    // Client Node
+    let client = Node::new(NodeConfig {
+        p2p_bootstrap_peers: server_addrs,
+        ..test_node_config()
+    })
+    .await
+    .unwrap();
+
+    client.p2p().wait_connected().await.unwrap();
+
+    let network_head = client.p2p().get_head_header().await.unwrap();
+    assert_eq!(common_server_headers.last().unwrap(), &network_head);
+}
+
+#[tokio::test]
+async fn test_replaced_header() {
+    // Server node, header at height 11 shouldn't pass verification as it's been replaced
+    let (server_store, mut header_generator) = gen_filled_store(0);
+    let mut server_headers = header_generator.next_many(20);
+    let replaced_header = header_generator.another_of(&server_headers[10]);
+    server_headers[10] = replaced_header.clone();
+
+    server_store
+        .append_unchecked(server_headers.clone())
+        .await
+        .unwrap();
+
+    let server = Node::new(NodeConfig {
+        store: server_store,
+        ..listen_localhost()
+    })
+    .await
+    .unwrap();
+
+    // give server a sec to breathe, otherwise occiasionally client has problems with connecting
+    sleep(Duration::from_millis(100)).await;
+    let server_addrs = server.p2p().listeners().await.unwrap();
+
+    let node2 = Node::new(NodeConfig {
+        p2p_bootstrap_peers: server_addrs,
+        ..listen_localhost()
+    })
+    .await
+    .unwrap();
+
+    node2.p2p().wait_connected().await.unwrap();
+
+    let replaced_header_in_range = node2
+        .p2p()
+        .get_verified_headers_range(&server_headers[9], 5)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        replaced_header_in_range,
+        P2pError::Exchange(ExchangeError::InvalidResponse)
+    ));
+
+    let requested_replaced_header = node2
+        .p2p()
+        .get_verified_headers_range(&replaced_header, 1)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        requested_replaced_header,
+        P2pError::Exchange(ExchangeError::InvalidResponse)
+    ));
+}
+
+// helpers to use with struct update syntax to avoid spelling out all the details
+fn test_node_config() -> NodeConfig<InMemoryStore> {
+    let node_keypair = identity::Keypair::generate_ed25519();
+    NodeConfig {
+        network_id: "private".to_string(),
+        p2p_transport: tcp_transport(&node_keypair),
+        p2p_local_keypair: node_keypair,
+        p2p_bootstrap_peers: vec![],
+        p2p_listen_on: vec![],
+        store: InMemoryStore::new(),
+    }
+}
+
+fn listen_localhost() -> NodeConfig<InMemoryStore> {
+    NodeConfig {
+        p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
+        ..test_node_config()
+    }
+}
+
+fn with_keypair(keypair: Keypair) -> NodeConfig<InMemoryStore> {
+    NodeConfig {
+        p2p_transport: tcp_transport(&keypair),
+        p2p_local_keypair: keypair,
+        ..test_node_config()
+    }
 }

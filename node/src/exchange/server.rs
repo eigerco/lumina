@@ -206,8 +206,8 @@ fn parse_request(request: HeaderRequest) -> Option<(u64, header_request::Data)> 
 mod tests {
     use super::*;
     use crate::exchange::utils::HeaderRequestExt;
-    use crate::store::tests::gen_filled_store;
     use crate::store::InMemoryStore;
+    use crate::test_utils::gen_filled_store;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::{HeaderRequest, StatusCode};
     use celestia_types::ExtendedHeader;

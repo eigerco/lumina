@@ -257,9 +257,21 @@ impl Default for InMemoryStore {
     }
 }
 
+#[cfg(any(test, feature = "test-utils"))]
+impl Clone for InMemoryStore {
+    fn clone(&self) -> Self {
+        InMemoryStore {
+            headers: self.headers.clone(),
+            height_to_hash: self.height_to_hash.clone(),
+            head_height: AtomicU64::new(self.head_height.load(Ordering::Acquire)),
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::test_utils::gen_filled_store;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::Height;
 
@@ -389,19 +401,5 @@ pub mod tests {
             s.append_single_unchecked(header5),
             Err(StoreError::NonContinuousAppend(0, 5))
         ));
-    }
-
-    pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
-        let s = InMemoryStore::new();
-        let mut gen = ExtendedHeaderGenerator::new();
-
-        let headers = gen.next_many(amount);
-
-        for header in headers {
-            s.append_single_unchecked(header)
-                .expect("inserting test data failed");
-        }
-
-        (s, gen)
     }
 }
