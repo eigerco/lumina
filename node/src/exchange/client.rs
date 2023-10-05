@@ -295,6 +295,7 @@ mod tests {
     use celestia_types::consts::HASH_SIZE;
     use celestia_types::hash::Hash;
     use celestia_types::test_utils::{invalidate, unverify, ExtendedHeaderGenerator};
+    use libp2p::swarm::ConnectionId;
     use std::collections::VecDeque;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -1053,8 +1054,10 @@ mod tests {
     fn peer_tracker_with_n_peers(amount: usize) -> Arc<PeerTracker> {
         let peers = Arc::new(PeerTracker::new());
 
-        for _ in 0..amount {
-            peers.connected(PeerId::random(), None);
+        for i in 0..amount {
+            let peer = PeerId::random();
+            peers.set_trusted(peer);
+            peers.set_connected(peer, ConnectionId::new_unchecked(i), None);
         }
 
         peers
