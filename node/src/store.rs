@@ -257,7 +257,6 @@ impl Default for InMemoryStore {
     }
 }
 
-#[cfg(any(test, feature = "test-utils"))]
 impl Clone for InMemoryStore {
     fn clone(&self) -> Self {
         InMemoryStore {
