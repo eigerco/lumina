@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use celestia_node::{
     node::{Node, NodeConfig},
-    p2p::P2pService,
     store::InMemoryStore,
 };
 use celestia_rpc::prelude::*;
@@ -55,6 +54,7 @@ async fn new_connected_node() -> Node<InMemoryStore> {
 
     let node = Node::new(NodeConfig {
         network_id: "private".to_string(),
+        genesis_hash: None,
         p2p_transport: tcp_transport(&p2p_local_keypair),
         p2p_local_keypair,
         p2p_bootstrap_peers: vec![bridge_ma],
@@ -143,6 +143,7 @@ async fn peer_discovery() {
     let node1_peer_id = PeerId::from(node1_keypair.public());
     let node1 = Node::new(NodeConfig {
         network_id: "private".to_string(),
+        genesis_hash: None,
         p2p_transport: tcp_transport(&node1_keypair),
         p2p_local_keypair: node1_keypair,
         p2p_bootstrap_peers: vec![bridge_ma],
@@ -163,6 +164,7 @@ async fn peer_discovery() {
     let node2_peer_id = PeerId::from(node2_keypair.public());
     let node2 = Node::new(NodeConfig {
         network_id: "private".to_string(),
+        genesis_hash: None,
         p2p_transport: tcp_transport(&node2_keypair),
         p2p_local_keypair: node2_keypair,
         p2p_bootstrap_peers: node1_addrs.clone(),
@@ -181,6 +183,7 @@ async fn peer_discovery() {
     let node3_peer_id = PeerId::from(node3_keypair.public());
     let node3 = Node::new(NodeConfig {
         network_id: "private".to_string(),
+        genesis_hash: None,
         p2p_transport: tcp_transport(&node3_keypair),
         p2p_local_keypair: node3_keypair,
         p2p_bootstrap_peers: node1_addrs.clone(),

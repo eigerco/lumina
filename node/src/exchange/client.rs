@@ -20,6 +20,8 @@ use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
 use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
 
+const MAX_PEERS: usize = 10;
+
 pub(super) struct ExchangeClientHandler<S = ReqRespBehaviour>
 where
     S: RequestSender,
@@ -111,15 +113,15 @@ where
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
-        const MAX_PEERS: usize = 10;
         const MIN_HEAD_RESPONSES: usize = 2;
 
-        let peers = self.peer_tracker.best_n_peers(MAX_PEERS);
+        // For now HEAD is requested from trusted peers only!
+        let peers = self.peer_tracker.trusted_n_peers(MAX_PEERS);
 
         if peers.is_empty() {
             respond_to.maybe_send_err(P2pError::NoConnectedPeers);
             return;
-        };
+        }
 
         let mut rxs = Vec::with_capacity(peers.len());
 
@@ -175,7 +177,8 @@ where
             }
 
             // Otherwise return the header with the maximum height
-            respond_to.maybe_send_ok(vec![resps[0].to_owned()]);
+            let resp = resps.into_iter().next().expect("no reposnes");
+            respond_to.maybe_send_ok(vec![resp]);
         });
     }
 
