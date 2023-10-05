@@ -710,7 +710,7 @@ fn listening_test_node_config() -> NodeConfig<InMemoryStore> {
     }
 }
 
-fn test_node_with_keypair_config(keypair: Keypair) -> NodeConfig<InMemoryStore> {
+fn test_node_config_with_keypair(keypair: Keypair) -> NodeConfig<InMemoryStore> {
     NodeConfig {
         p2p_transport: tcp_transport(&keypair),
         p2p_local_keypair: keypair,
