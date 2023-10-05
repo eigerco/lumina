@@ -1056,8 +1056,8 @@ mod tests {
 
         for i in 0..amount {
             let peer = PeerId::random();
-            peers.trusted(peer);
-            peers.connected(peer, ConnectionId::new_unchecked(i), None);
+            peers.set_trusted(peer);
+            peers.set_connected(peer, ConnectionId::new_unchecked(i), None);
         }
 
         peers

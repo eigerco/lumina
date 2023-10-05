@@ -360,7 +360,7 @@ where
         for addr in args.bootstrap_peers {
             // Bootstrap peers are always trusted
             if let Some(peer_id) = addr.peer_id() {
-                peer_tracker.trusted(peer_id);
+                peer_tracker.set_trusted(peer_id);
             }
             swarm.dial(addr)?;
         }
@@ -472,7 +472,7 @@ where
                 let kademlia = &mut self.swarm.behaviour_mut().kademlia;
 
                 // Inform peer tracker
-                self.peer_tracker.identified(peer_id, &info);
+                self.peer_tracker.set_identified(peer_id, &info);
 
                 // Inform Kademlia
                 for addr in info.listen_addrs {
@@ -544,7 +544,7 @@ where
 
     #[instrument(skip_all, fields(peer_id = %peer_id))]
     fn peer_maybe_discovered(&mut self, peer_id: PeerId) {
-        if !self.peer_tracker.maybe_discovered(peer_id) {
+        if !self.peer_tracker.set_maybe_discovered(peer_id) {
             return;
         }
 
@@ -580,12 +580,15 @@ where
         };
 
         self.peer_tracker
-            .connected(peer_id, connection_id, dialed_addr);
+            .set_connected(peer_id, connection_id, dialed_addr);
     }
 
     #[instrument(skip_all, fields(peer_id = %peer_id))]
     fn on_peer_disconnected(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
-        if self.peer_tracker.maybe_disconnected(peer_id, connection_id) {
+        if self
+            .peer_tracker
+            .set_maybe_disconnected(peer_id, connection_id)
+        {
             info!("Peer disconnected");
         }
     }
