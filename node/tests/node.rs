@@ -7,7 +7,9 @@ use celestia_node::{
     store::{InMemoryStore, Store},
     test_utils::gen_filled_store,
 };
+use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_rpc::prelude::*;
+use celestia_types::test_utils::{invalidate, unverify};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::Boxed, upgrade::Version},
     identity::{self, Keypair},
@@ -138,7 +140,7 @@ async fn peer_discovery() {
     let node1 = Node::new(NodeConfig {
         p2p_bootstrap_peers: vec![bridge_ma],
         p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
-        ..with_keypair(node1_keypair)
+        ..test_node_with_keypair_config(node1_keypair)
     })
     .await
     .unwrap();
@@ -155,7 +157,7 @@ async fn peer_discovery() {
     let node2 = Node::new(NodeConfig {
         p2p_bootstrap_peers: node1_addrs.clone(),
         p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
-        ..with_keypair(node2_keypair)
+        ..test_node_with_keypair_config(node2_keypair)
     })
     .await
     .unwrap();
@@ -169,7 +171,7 @@ async fn peer_discovery() {
     let node3_peer_id = PeerId::from(node3_keypair.public());
     let node3 = Node::new(NodeConfig {
         p2p_bootstrap_peers: node1_addrs.clone(),
-        ..with_keypair(node3_keypair)
+        ..test_node_with_keypair_config(node3_keypair)
     })
     .await
     .unwrap();
@@ -210,7 +212,7 @@ async fn client_server_test() {
 
     let server = Node::new(NodeConfig {
         store: server_store,
-        ..listen_localhost()
+        ..listening_test_node_config()
     })
     .await
     .unwrap();
@@ -233,9 +235,18 @@ async fn client_server_test() {
     let received_head = client.p2p().get_head_header().await.unwrap();
     assert_eq!(server_headers.last().unwrap(), &received_head);
 
-    // request by hash
+    // request by height
     let received_header_by_height = client.p2p().get_header_by_height(10).await.unwrap();
     assert_eq!(server_headers[9], received_header_by_height);
+
+    // request by hash
+    let expected_header = &server_headers[15];
+    let received_header_by_hash = client
+        .p2p()
+        .get_header(expected_header.hash())
+        .await
+        .unwrap();
+    assert_eq!(expected_header, &received_header_by_hash);
 
     // request genesis by height
     let received_genesis = client.p2p().get_header_by_height(1).await.unwrap();
@@ -281,7 +292,71 @@ async fn client_server_test() {
 }
 
 #[tokio::test]
-async fn multiple_peers_test() {
+async fn client_server_invalid_requests_test() {
+    // Server Node
+    let server = Node::new(NodeConfig {
+        store: gen_filled_store(20).0,
+        ..listening_test_node_config()
+    })
+    .await
+    .unwrap();
+
+    // give server a sec to breathe, otherwise occiasionally client has problems with connecting
+    sleep(Duration::from_millis(100)).await;
+    let server_addrs = server.p2p().listeners().await.unwrap();
+
+    // Client node
+    let client = Node::new(NodeConfig {
+        p2p_bootstrap_peers: server_addrs.clone(),
+        ..test_node_config()
+    })
+    .await
+    .unwrap();
+
+    client.p2p().wait_connected().await.unwrap();
+
+    let none_data = client
+        .p2p()
+        .exchange_header_request(HeaderRequest {
+            data: None,
+            amount: 1,
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        none_data,
+        P2pError::Exchange(ExchangeError::InvalidRequest)
+    ));
+
+    let zero_amount = client
+        .p2p()
+        .exchange_header_request(HeaderRequest {
+            data: Some(header_request::Data::Origin(5)),
+            amount: 0,
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        zero_amount,
+        P2pError::Exchange(ExchangeError::InvalidRequest)
+    ));
+
+    let malformed_hash = client
+        .p2p()
+        .exchange_header_request(HeaderRequest {
+            data: Some(header_request::Data::Hash(vec![0; 31])),
+            amount: 1,
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        malformed_hash,
+        P2pError::Exchange(ExchangeError::InvalidRequest)
+    ));
+}
+
+#[tokio::test]
+async fn head_selection_with_multiple_peers() {
     let (server_store, mut header_generator) = gen_filled_store(0);
     let common_server_headers = header_generator.next_many(20);
     server_store
@@ -293,19 +368,19 @@ async fn multiple_peers_test() {
     let mut servers = vec![
         Node::new(NodeConfig {
             store: server_store.clone(),
-            ..listen_localhost()
+            ..listening_test_node_config()
         })
         .await
         .unwrap(),
         Node::new(NodeConfig {
             store: server_store.clone(),
-            ..listen_localhost()
+            ..listening_test_node_config()
         })
         .await
         .unwrap(),
         Node::new(NodeConfig {
             store: server_store.clone(),
-            ..listen_localhost()
+            ..listening_test_node_config()
         })
         .await
         .unwrap(),
@@ -314,14 +389,14 @@ async fn multiple_peers_test() {
     // Server group B, single node with additional headers
     let additional_server_headers = header_generator.next_many(5);
     server_store
-        .append_unchecked(additional_server_headers)
+        .append_unchecked(additional_server_headers.clone())
         .await
         .unwrap();
 
     servers.push(
         Node::new(NodeConfig {
             store: server_store.clone(),
-            ..listen_localhost()
+            ..listening_test_node_config()
         })
         .await
         .unwrap(),
@@ -338,22 +413,58 @@ async fn multiple_peers_test() {
     // Client Node
     let client = Node::new(NodeConfig {
         p2p_bootstrap_peers: server_addrs,
-        ..test_node_config()
+        ..listening_test_node_config()
     })
     .await
     .unwrap();
 
     client.p2p().wait_connected().await.unwrap();
 
+    // give client node a sec to breathe, otherwise occiasionally rogue node has problems with connecting
+    sleep(Duration::from_millis(100)).await;
+    let client_addr = client.p2p().listeners().await.unwrap();
+
+    // Rogue node, connects to client so isn't trusted
+    let rogue_node = Node::new(NodeConfig {
+        store: gen_filled_store(26).0,
+        p2p_bootstrap_peers: client_addr.clone(),
+        ..listening_test_node_config()
+    })
+    .await
+    .unwrap();
+
+    rogue_node.p2p().wait_connected().await.unwrap();
+    // small delay needed for client to include rogue_node in head selection process
+    sleep(Duration::from_millis(50)).await;
+
+    // client should prefer heighest head received from 2+ peers
     let network_head = client.p2p().get_head_header().await.unwrap();
     assert_eq!(common_server_headers.last().unwrap(), &network_head);
+
+    // new node from group B joins, head should go up
+    let new_b_node = Node::new(NodeConfig {
+        store: server_store.clone(),
+        p2p_bootstrap_peers: client_addr,
+        ..test_node_config()
+    })
+    .await
+    .unwrap();
+
+    new_b_node.p2p().wait_connected().await.unwrap();
+    // small delay needed for client to include new_b_node in head selection process
+    sleep(Duration::from_millis(50)).await;
+
+    // now 2 nodes agree on head with height 25
+    let network_head = client.p2p().get_head_header().await.unwrap();
+    assert_eq!(additional_server_headers.last().unwrap(), &network_head);
 }
 
 #[tokio::test]
-async fn test_replaced_header() {
-    // Server node, header at height 11 shouldn't pass verification as it's been replaced
+async fn replaced_header_server_store_test() {
+    // Server node, header at height 11 shouldn't pass verification as it's been tampered with
     let (server_store, mut header_generator) = gen_filled_store(0);
     let mut server_headers = header_generator.next_many(20);
+    // replaced header still pases verification and validation against itself
     let replaced_header = header_generator.another_of(&server_headers[10]);
     server_headers[10] = replaced_header.clone();
 
@@ -364,7 +475,7 @@ async fn test_replaced_header() {
 
     let server = Node::new(NodeConfig {
         store: server_store,
-        ..listen_localhost()
+        ..listening_test_node_config()
     })
     .await
     .unwrap();
@@ -373,34 +484,210 @@ async fn test_replaced_header() {
     sleep(Duration::from_millis(100)).await;
     let server_addrs = server.p2p().listeners().await.unwrap();
 
-    let node2 = Node::new(NodeConfig {
+    let client = Node::new(NodeConfig {
         p2p_bootstrap_peers: server_addrs,
-        ..listen_localhost()
+        ..listening_test_node_config()
     })
     .await
     .unwrap();
 
-    node2.p2p().wait_connected().await.unwrap();
+    client.p2p().wait_connected().await.unwrap();
 
-    let replaced_header_in_range = node2
+    let tampered_header_in_range = client
         .p2p()
         .get_verified_headers_range(&server_headers[9], 5)
         .await
         .unwrap_err();
     assert!(matches!(
-        replaced_header_in_range,
+        tampered_header_in_range,
         P2pError::Exchange(ExchangeError::InvalidResponse)
     ));
 
-    let requested_replaced_header = node2
+    let requested_from_tampered_header = client
         .p2p()
         .get_verified_headers_range(&replaced_header, 1)
         .await
         .unwrap_err();
     assert!(matches!(
-        requested_replaced_header,
+        requested_from_tampered_header,
         P2pError::Exchange(ExchangeError::InvalidResponse)
     ));
+
+    // non-validating requests should still accept responses
+    let tampered_header_in_range = client
+        .p2p()
+        .exchange_header_request(HeaderRequest {
+            data: Some(header_request::Data::Origin(8)),
+            amount: 5,
+        })
+        .await
+        .unwrap();
+    assert_eq!(tampered_header_in_range, server_headers[7..12]);
+
+    let requested_tampered_header = client
+        .p2p()
+        .get_header(replaced_header.hash())
+        .await
+        .unwrap();
+    assert_eq!(requested_tampered_header, replaced_header);
+
+    let network_head = client.p2p().get_head_header().await.unwrap();
+    assert_eq!(server_headers.last().unwrap(), &network_head);
+}
+
+#[tokio::test]
+async fn invalidated_header_server_store_test() {
+    // Server node, header at height 11 shouldn't pass verification as it's been tampered with
+    let (server_store, mut header_generator) = gen_filled_store(0);
+    let mut server_headers = header_generator.next_many(20);
+    invalidate(&mut server_headers[10]);
+
+    server_store
+        .append_unchecked(server_headers.clone())
+        .await
+        .unwrap();
+
+    let server = Node::new(NodeConfig {
+        store: server_store,
+        ..listening_test_node_config()
+    })
+    .await
+    .unwrap();
+
+    // give server a sec to breathe, otherwise occiasionally client has problems with connecting
+    sleep(Duration::from_millis(100)).await;
+    let server_addrs = server.p2p().listeners().await.unwrap();
+
+    let client = Node::new(NodeConfig {
+        p2p_bootstrap_peers: server_addrs,
+        ..listening_test_node_config()
+    })
+    .await
+    .unwrap();
+
+    client.p2p().wait_connected().await.unwrap();
+
+    let invalidated_header_in_range = client
+        .p2p()
+        .get_verified_headers_range(&server_headers[9], 5)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        invalidated_header_in_range,
+        P2pError::Exchange(ExchangeError::InvalidResponse)
+    ));
+
+    let requested_from_invalidated_header = client
+        .p2p()
+        .get_verified_headers_range(&server_headers[10], 3)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        requested_from_invalidated_header,
+        P2pError::Exchange(ExchangeError::InvalidRequest)
+    ));
+
+    // received ExtendedHeaders are validated during conversion from HeaderResponse
+    let tampered_header_in_range = client
+        .p2p()
+        .exchange_header_request(HeaderRequest {
+            data: Some(header_request::Data::Origin(8)),
+            amount: 5,
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        tampered_header_in_range,
+        P2pError::Exchange(ExchangeError::InvalidResponse)
+    ));
+
+    let requested_tampered_header = client
+        .p2p()
+        .get_header(server_headers[10].hash())
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        requested_tampered_header,
+        P2pError::Exchange(ExchangeError::InvalidResponse)
+    ));
+
+    // requests for non-invalidated headers should still pass
+    let valid_header = client.p2p().get_header_by_height(10).await.unwrap();
+    assert_eq!(server_headers[9], valid_header);
+}
+
+#[tokio::test]
+async fn unverified_header_server_store_test() {
+    // Server node, header at height 11 shouldn't pass verification as it's been tampered with
+    let (server_store, mut header_generator) = gen_filled_store(0);
+    let mut server_headers = header_generator.next_many(20);
+    unverify(&mut server_headers[10]);
+
+    server_store
+        .append_unchecked(server_headers.clone())
+        .await
+        .unwrap();
+
+    let server = Node::new(NodeConfig {
+        store: server_store,
+        ..listening_test_node_config()
+    })
+    .await
+    .unwrap();
+
+    // give server a sec to breathe, otherwise occiasionally client has problems with connecting
+    sleep(Duration::from_millis(100)).await;
+    let server_addrs = server.p2p().listeners().await.unwrap();
+
+    let client = Node::new(NodeConfig {
+        p2p_bootstrap_peers: server_addrs,
+        ..listening_test_node_config()
+    })
+    .await
+    .unwrap();
+
+    client.p2p().wait_connected().await.unwrap();
+
+    let tampered_header_in_range = client
+        .p2p()
+        .get_verified_headers_range(&server_headers[9], 5)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        tampered_header_in_range,
+        P2pError::Exchange(ExchangeError::InvalidResponse)
+    ));
+
+    let requested_from_tampered_header = client
+        .p2p()
+        .get_verified_headers_range(&server_headers[10], 3)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        requested_from_tampered_header,
+        P2pError::Exchange(ExchangeError::InvalidResponse)
+    ));
+
+    // non-verifying requests should still accept responses
+    let tampered_header_in_range = client
+        .p2p()
+        .exchange_header_request(HeaderRequest {
+            data: Some(header_request::Data::Origin(8)),
+            amount: 5,
+        })
+        .await
+        .unwrap();
+    assert_eq!(tampered_header_in_range, server_headers[7..12]);
+
+    let requested_tampered_header = client
+        .p2p()
+        .get_header(server_headers[10].hash())
+        .await
+        .unwrap();
+    assert_eq!(requested_tampered_header, server_headers[10]);
+
+    let network_head = client.p2p().get_head_header().await.unwrap();
+    assert_eq!(server_headers.last().unwrap(), &network_head);
 }
 
 // helpers to use with struct update syntax to avoid spelling out all the details
@@ -416,14 +703,14 @@ fn test_node_config() -> NodeConfig<InMemoryStore> {
     }
 }
 
-fn listen_localhost() -> NodeConfig<InMemoryStore> {
+fn listening_test_node_config() -> NodeConfig<InMemoryStore> {
     NodeConfig {
         p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
         ..test_node_config()
     }
 }
 
-fn with_keypair(keypair: Keypair) -> NodeConfig<InMemoryStore> {
+fn test_node_with_keypair_config(keypair: Keypair) -> NodeConfig<InMemoryStore> {
     NodeConfig {
         p2p_transport: tcp_transport(&keypair),
         p2p_local_keypair: keypair,
