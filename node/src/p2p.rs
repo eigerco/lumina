@@ -627,7 +627,7 @@ where
 
         let updated = self.header_sub_watcher.send_if_modified(move |state| {
             let Some(known_header) = state else {
-                info!("HeaderSub not initialized yet");
+                debug!("HeaderSub not initialized yet");
                 return false;
             };
 
