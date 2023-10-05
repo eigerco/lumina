@@ -135,15 +135,11 @@ impl PeerTracker {
             }
         }
 
-        // This is needed to avoid downgrading `Identified` state to `Connected`
-        if !peer_info.is_connected() {
-            peer_info.state = PeerState::Connected;
-        }
-
         peer_info.connections.push(connection_id);
 
-        // If this is the first connection from the peer
-        if peer_info.connections.len() == 1 {
+        // If peer was not already connected from before
+        if !peer_info.is_connected() {
+            peer_info.state = PeerState::Connected;
             increment_connected_peers(&self.info_tx, peer_info.trusted);
         }
     }
@@ -158,14 +154,13 @@ impl PeerTracker {
 
         // If this is the last connection from the peer
         if peer_info.connections.is_empty() {
-            decrement_connected_peers(&self.info_tx, peer_info.trusted);
-
             if peer_info.addrs.is_empty() {
                 peer_info.state = PeerState::Discovered;
             } else {
                 peer_info.state = PeerState::AddressesFound;
             }
 
+            decrement_connected_peers(&self.info_tx, peer_info.trusted);
             true
         } else {
             false
