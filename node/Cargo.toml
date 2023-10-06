@@ -23,6 +23,7 @@ libp2p = { version = "0.52.3", features = [
   "kad",
 ] }
 prost = "0.12.0"
+rand = "0.8.5"
 smallvec = { version = "1.11.1", features = ["union", "const_generics"] }
 thiserror = "1.0.48"
 tokio = { version = "1.32.0", features = ["macros", "sync"] }
@@ -39,9 +40,9 @@ send_wrapper = { version = "0.6.0", features = ["futures"] }
 
 [dev-dependencies]
 bytes = "1.4.0"
+celestia-node = { workspace = true, features = ["test-utils"] }
 celestia-rpc = { workspace = true }
 celestia-types = { workspace = true, features = ["test-utils"] }
-celestia-node = { workspace = true, features = ["test-utils"] }
 dotenvy = "0.15.7"
 libp2p = { version = "0.52.3", features = [
   "ed25519",
@@ -50,7 +51,6 @@ libp2p = { version = "0.52.3", features = [
   "tokio",
   "yamux",
 ] }
-rand = "0.8.5"
 serde_json = "1.0.107"
 
 [features]

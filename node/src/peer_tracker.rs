@@ -4,6 +4,7 @@ use dashmap::mapref::entry::Entry;
 use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
 use libp2p::{identify, swarm::ConnectionId, Multiaddr, PeerId};
+use rand::seq::SliceRandom;
 use smallvec::SmallVec;
 use tokio::sync::watch;
 
@@ -207,10 +208,17 @@ impl PeerTracker {
     /// Returns one of the best peers.
     pub fn best_peer(&self) -> Option<PeerId> {
         // TODO: Implement peer score and return the best.
-        self.peers
+        let mut peers = self
+            .peers
             .iter()
-            .find(|pair| pair.value().is_connected())
+            .filter(|pair| pair.value().is_connected())
+            .take(128)
             .map(|pair| pair.key().to_owned())
+            .collect::<SmallVec<[_; 128]>>();
+
+        peers.shuffle(&mut rand::thread_rng());
+
+        peers.get(0).copied()
     }
 
     /// Returns up to N amount of best peers.
