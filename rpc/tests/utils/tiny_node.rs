@@ -6,7 +6,7 @@ use futures::StreamExt;
 use libp2p::{
     core::upgrade::Version,
     identity, noise,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    swarm::{dummy, NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Transport,
 };
 use tokio::{
@@ -22,13 +22,13 @@ const NODE_ADDRESS_ACQUIRE_DELAY_TIME: Duration = Duration::from_millis(100);
 /// Our network behaviour.
 #[derive(NetworkBehaviour)]
 struct Behaviour {
-    keep_alive: keep_alive::Behaviour,
+    dummy: dummy::Behaviour,
 }
 
 impl Behaviour {
     fn new() -> Self {
         Self {
-            keep_alive: keep_alive::Behaviour,
+            dummy: dummy::Behaviour,
         }
     }
 }
@@ -47,8 +47,9 @@ pub async fn start_tiny_node() -> anyhow::Result<p2p::AddrInfo> {
         .multiplex(yamux::Config::default())
         .boxed();
 
-    let mut swarm =
-        SwarmBuilder::with_tokio_executor(transport, Behaviour::new(), local_peer_id).build();
+    let mut swarm = SwarmBuilder::with_tokio_executor(transport, Behaviour::new(), local_peer_id)
+        .idle_connection_timeout(Duration::from_secs(u64::MAX))
+        .build();
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 

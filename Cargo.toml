@@ -19,6 +19,3 @@ tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.gi
 [patch.'https://github.com/eigerco/nmt-rs.git']
 # Uncomment to apply local changes
 #nmt-rs = { path = "../nmt-rs" }
-
-[patch.crates-io]
-#libp2p = { path = "/home/oblique/git/rust-libp2p/libp2p" }
