@@ -5,25 +5,13 @@ use celestia_node::{
     node::{Node, NodeConfig},
     p2p::P2pService,
     store::InMemoryStore,
+    test_utils::{test_node_config, test_node_config_with_keypair},
 };
 use celestia_rpc::prelude::*;
-use libp2p::{
-    core::{muxing::StreamMuxerBox, transport::Boxed, upgrade::Version},
-    identity::{self, Keypair},
-    multiaddr::Protocol,
-    noise, tcp, yamux, Multiaddr, PeerId, Transport,
-};
+use libp2p::{identity, multiaddr::Protocol, Multiaddr, PeerId};
 use tokio::time::sleep;
 
 const WS_URL: &str = "ws://localhost:26658";
-
-fn tcp_transport(local_keypair: &Keypair) -> Boxed<(PeerId, StreamMuxerBox)> {
-    tcp::tokio::Transport::default()
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(local_keypair).unwrap())
-        .multiplex(yamux::Config::default())
-        .boxed()
-}
 
 async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
     let _ = dotenvy::dotenv();
@@ -49,17 +37,10 @@ async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
 
 async fn new_connected_node() -> Node<InMemoryStore> {
     let (_, bridge_ma) = fetch_bridge_info().await;
-    let p2p_local_keypair = identity::Keypair::generate_ed25519();
-
-    let store = InMemoryStore::new();
 
     let node = Node::new(NodeConfig {
-        network_id: "private".to_string(),
-        p2p_transport: tcp_transport(&p2p_local_keypair),
-        p2p_local_keypair,
         p2p_bootstrap_peers: vec![bridge_ma],
-        p2p_listen_on: vec![],
-        store,
+        ..test_node_config()
     })
     .await
     .unwrap();
@@ -142,12 +123,9 @@ async fn peer_discovery() {
     let node1_keypair = identity::Keypair::generate_ed25519();
     let node1_peer_id = PeerId::from(node1_keypair.public());
     let node1 = Node::new(NodeConfig {
-        network_id: "private".to_string(),
-        p2p_transport: tcp_transport(&node1_keypair),
-        p2p_local_keypair: node1_keypair,
         p2p_bootstrap_peers: vec![bridge_ma],
         p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
-        store: InMemoryStore::new(),
+        ..test_node_config_with_keypair(node1_keypair)
     })
     .await
     .unwrap();
@@ -162,12 +140,9 @@ async fn peer_discovery() {
     let node2_keypair = identity::Keypair::generate_ed25519();
     let node2_peer_id = PeerId::from(node2_keypair.public());
     let node2 = Node::new(NodeConfig {
-        network_id: "private".to_string(),
-        p2p_transport: tcp_transport(&node2_keypair),
-        p2p_local_keypair: node2_keypair,
         p2p_bootstrap_peers: node1_addrs.clone(),
         p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
-        store: InMemoryStore::new(),
+        ..test_node_config_with_keypair(node2_keypair)
     })
     .await
     .unwrap();
@@ -180,12 +155,8 @@ async fn peer_discovery() {
     let node3_keypair = identity::Keypair::generate_ed25519();
     let node3_peer_id = PeerId::from(node3_keypair.public());
     let node3 = Node::new(NodeConfig {
-        network_id: "private".to_string(),
-        p2p_transport: tcp_transport(&node3_keypair),
-        p2p_local_keypair: node3_keypair,
         p2p_bootstrap_peers: node1_addrs.clone(),
-        p2p_listen_on: vec![],
-        store: InMemoryStore::new(),
+        ..test_node_config_with_keypair(node3_keypair)
     })
     .await
     .unwrap();
