@@ -376,14 +376,12 @@ where
 
     async fn run(&mut self) {
         let mut interval = Interval::new(Duration::from_secs(60)).await;
-        let mut first_report = false;
+        let mut first_report_showed = false;
 
         loop {
-            if !first_report {
-                if self.peer_tracker.info().num_connected_peers > 0 {
-                    self.report();
-                    first_report = true;
-                }
+            if !first_report_showed && self.peer_tracker.info().num_connected_peers > 0 {
+                self.report();
+                first_report_showed = true;
             }
 
             select! {
