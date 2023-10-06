@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::time::Duration;
 
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
@@ -7,7 +8,7 @@ use tokio::select;
 use tokio::sync::{mpsc, watch};
 use tracing::{info, instrument, warn};
 
-use crate::executor::spawn;
+use crate::executor::{spawn, Interval};
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
 
@@ -125,10 +126,16 @@ where
             warn!("Intialization of subjective head failed: {e}. Trying again.");
         }
 
+        let mut interval = Interval::new(Duration::from_secs(60)).await;
+
         self.fetch_next_batch().await;
+        self.report().await;
 
         loop {
             select! {
+                _ = interval.tick() => {
+                    self.report().await;
+                }
                 _ = self.header_sub_watcher.changed() => {
                     self.on_header_sub_message().await;
                     self.fetch_next_batch().await;
@@ -142,6 +149,19 @@ where
                 }
             }
         }
+    }
+
+    #[instrument(skip_all)]
+    async fn report(&mut self) {
+        let head = self.store.head_height().await.unwrap_or(0);
+        let subjective_head = self.subjective_head_height.unwrap_or(0);
+
+        let ongoing_batch = self
+            .ongoing_batch
+            .map(|(start, end)| format!("[{start}, {end}]"))
+            .unwrap_or_else(|| "None".to_string());
+
+        info!("syncing: {head}/{subjective_head}, ongoing batch: {ongoing_batch}",);
     }
 
     #[instrument(skip_all)]

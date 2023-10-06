@@ -1,6 +1,7 @@
 use std::io;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::time::Duration;
 
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_types::hash::Hash;
@@ -26,6 +27,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
+use crate::executor::Interval;
 use crate::executor::{spawn, Executor};
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
@@ -373,7 +375,17 @@ where
     }
 
     async fn run(&mut self) {
+        let mut interval = Interval::new(Duration::from_secs(60)).await;
+        let mut first_report = false;
+
         loop {
+            if !first_report {
+                if self.peer_tracker.info().num_connected_peers > 0 {
+                    self.report();
+                    first_report = true;
+                }
+            }
+
             select! {
                 ev = self.swarm.select_next_some() => {
                     if let Err(e) = self.on_swarm_event(ev).await {
@@ -384,6 +396,9 @@ where
                     if let Err(e) = self.on_cmd(cmd).await {
                         warn!("Failure while handling command. (error: {e})");
                     }
+                }
+                _ = interval.tick() => {
+                    self.report();
                 }
             }
         }
@@ -463,6 +478,16 @@ where
         }
 
         Ok(())
+    }
+
+    #[instrument(skip_all)]
+    fn report(&mut self) {
+        let tracker_info = self.peer_tracker.info();
+
+        info!(
+            "peers: {}, trusted peers: {}",
+            tracker_info.num_connected_peers, tracker_info.num_connected_trusted_peers,
+        );
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -564,7 +589,7 @@ where
         connection_id: ConnectionId,
         endpoint: ConnectedPoint,
     ) {
-        info!("Peer connected");
+        debug!("Peer connected");
 
         // Inform PeerTracker about the dialed address.
         //
@@ -589,7 +614,7 @@ where
             .peer_tracker
             .set_maybe_disconnected(peer_id, connection_id)
         {
-            info!("Peer disconnected");
+            debug!("Peer disconnected");
         }
     }
 

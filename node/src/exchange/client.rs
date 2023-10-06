@@ -3,15 +3,19 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time::Duration;
 
 use celestia_proto::p2p::pb::header_request::Data;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
 use futures::future::join_all;
+use instant::Instant;
 use libp2p::request_response::{OutboundFailure, RequestId};
 use libp2p::PeerId;
+use smallvec::SmallVec;
 use tokio::sync::oneshot;
-use tracing::{instrument, trace};
+use tracing::{instrument, trace, warn};
 
 use crate::exchange::utils::{HeaderRequestExt, HeaderResponseExt};
 use crate::exchange::{ExchangeError, ReqRespBehaviour};
@@ -21,6 +25,7 @@ use crate::peer_tracker::PeerTracker;
 use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
 
 const MAX_PEERS: usize = 10;
+const TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(super) struct ExchangeClientHandler<S = ReqRespBehaviour>
 where
@@ -33,10 +38,11 @@ where
 struct State {
     request: HeaderRequest,
     respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+    started_at: Instant,
 }
 
 pub(super) trait RequestSender {
-    type RequestId: Hash + Eq + Debug;
+    type RequestId: Clone + Copy + Hash + Eq + Debug;
 
     fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> Self::RequestId;
 }
@@ -102,6 +108,7 @@ where
         let state = State {
             request,
             respond_to,
+            started_at: Instant::now(),
         };
 
         self.reqs.insert(req_id, state);
@@ -132,6 +139,7 @@ where
             let state = State {
                 request: request.clone(),
                 respond_to: tx,
+                started_at: Instant::now(),
             };
 
             self.reqs.insert(req_id, state);
@@ -286,6 +294,34 @@ where
                 .respond_to
                 .maybe_send_err(ExchangeError::OutboundFailure(error));
         }
+    }
+
+    #[instrument(skip_all)]
+    fn prune_timedout_requests(&mut self) {
+        let mut timedout_reqs = SmallVec::<[_; 32]>::new();
+
+        for (req_id, state) in self.reqs.iter() {
+            if state.started_at.elapsed() >= TIMEOUT {
+                timedout_reqs.push(*req_id);
+            }
+        }
+
+        if !timedout_reqs.is_empty() {
+            warn!("{} requests timed out", timedout_reqs.len());
+        }
+
+        for req_id in timedout_reqs {
+            if let Some(state) = self.reqs.remove(&req_id) {
+                state
+                    .respond_to
+                    .maybe_send_err(ExchangeError::OutboundFailure(OutboundFailure::Timeout));
+            }
+        }
+    }
+
+    pub(super) fn poll(&mut self, _cx: &mut Context) -> Poll<()> {
+        self.prune_timedout_requests();
+        Poll::Pending
     }
 }
 
