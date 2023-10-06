@@ -119,6 +119,13 @@ enum P2pCmd {
         head: Box<ExtendedHeader>,
         respond_to: OneshotResultSender<(), P2pError>,
     },
+    LocalPeerId {
+        respond_to: oneshot::Sender<PeerId>,
+    },
+    SetTrustedPeer {
+        peer_id: PeerId,
+        is_trusted: bool,
+    },
 }
 
 impl<S> P2p<S>
@@ -283,6 +290,23 @@ where
 
         Ok(rx.await?)
     }
+
+    pub async fn local_peer_id(&self) -> Result<PeerId> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(P2pCmd::LocalPeerId { respond_to: tx })
+            .await?;
+
+        Ok(rx.await?)
+    }
+
+    pub async fn set_trusted_peer(&self, peer_id: PeerId, is_trusted: bool) -> Result<()> {
+        self.send_command(P2pCmd::SetTrustedPeer {
+            peer_id,
+            is_trusted,
+        })
+        .await
+    }
 }
 
 /// Our network behaviour.
@@ -360,7 +384,7 @@ where
         for addr in args.bootstrap_peers {
             // Bootstrap peers are always trusted
             if let Some(peer_id) = addr.peer_id() {
-                peer_tracker.set_trusted(peer_id);
+                peer_tracker.set_trusted(peer_id, true);
             }
             swarm.dial(addr)?;
         }
@@ -472,6 +496,18 @@ where
             P2pCmd::InitHeaderSub { head, respond_to } => {
                 let res = self.on_init_header_sub(*head).await;
                 respond_to.maybe_send(res);
+            }
+            P2pCmd::LocalPeerId { respond_to } => {
+                let peer_id = *self.swarm.local_peer_id();
+                respond_to.maybe_send(peer_id);
+            }
+            P2pCmd::SetTrustedPeer {
+                peer_id,
+                is_trusted,
+            } => {
+                if *self.swarm.local_peer_id() != peer_id {
+                    self.peer_tracker.set_trusted(peer_id, is_trusted);
+                }
             }
         }
 

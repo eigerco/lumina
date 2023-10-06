@@ -117,8 +117,8 @@ impl PeerTracker {
     }
 
     /// Sets peer as trusted.
-    pub fn set_trusted(&self, peer: PeerId) {
-        self.get(peer).value_mut().trusted = true;
+    pub fn set_trusted(&self, peer: PeerId, is_trusted: bool) {
+        self.get(peer).value_mut().trusted = is_trusted;
     }
 
     /// Sets peer as connected.
