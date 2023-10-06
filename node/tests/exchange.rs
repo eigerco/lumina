@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use celestia_node::{
     node::{Node, NodeConfig},
-    p2p::{ExchangeError, P2pError, P2pService},
+    p2p::{ExchangeError, P2pError},
     store::Store,
     test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
 };
