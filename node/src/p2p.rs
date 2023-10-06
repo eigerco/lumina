@@ -16,8 +16,8 @@ use libp2p::{
     multiaddr::Protocol,
     ping,
     swarm::{
-        keep_alive, ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder,
-        SwarmEvent, THandlerErr,
+        ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder, SwarmEvent,
+        THandlerErr,
     },
     Multiaddr, PeerId, TransportError,
 };
@@ -290,7 +290,6 @@ where
     S: Store + 'static,
 {
     autonat: autonat::Behaviour,
-    keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     header_ex: ExchangeBehaviour<S>,
@@ -322,7 +321,6 @@ where
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
         let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
-        let keep_alive = keep_alive::Behaviour;
         let ping = ping::Behaviour::new(ping::Config::default());
 
         let identify = identify::Behaviour::new(identify::Config::new(
@@ -343,7 +341,6 @@ where
 
         let behaviour = Behaviour {
             autonat,
-            keep_alive,
             ping,
             identify,
             gossipsub,
@@ -402,7 +399,6 @@ where
                 BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await,
                 BehaviourEvent::Kademlia(ev) => self.on_kademlia_event(ev).await?,
                 BehaviourEvent::Autonat(_)
-                | BehaviourEvent::KeepAlive(_)
                 | BehaviourEvent::Ping(_)
                 | BehaviourEvent::HeaderEx(_) => {}
             },
