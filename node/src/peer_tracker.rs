@@ -207,14 +207,16 @@ impl PeerTracker {
 
     /// Returns one of the best peers.
     pub fn best_peer(&self) -> Option<PeerId> {
+        const MAX_PEER_SAMPLE: usize = 128;
+
         // TODO: Implement peer score and return the best.
         let mut peers = self
             .peers
             .iter()
             .filter(|pair| pair.value().is_connected())
-            .take(128)
+            .take(MAX_PEER_SAMPLE)
             .map(|pair| pair.key().to_owned())
-            .collect::<SmallVec<[_; 128]>>();
+            .collect::<SmallVec<[_; MAX_PEER_SAMPLE]>>();
 
         peers.shuffle(&mut rand::thread_rng());
 

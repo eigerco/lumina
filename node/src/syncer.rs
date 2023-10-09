@@ -16,7 +16,7 @@ use crate::utils::OneshotSenderExt;
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
-const MAX_HEADERS_PER_TIME: u64 = 512;
+const MAX_HEADERS_IN_BATCH: u64 = 512;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncerError {
@@ -124,8 +124,8 @@ where
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     genesis_hash: Option<Hash>,
     subjective_head_height: Option<u64>,
-    response_tx: mpsc::Sender<Result<Vec<ExtendedHeader>, P2pError>>,
-    response_rx: mpsc::Receiver<Result<Vec<ExtendedHeader>, P2pError>>,
+    headers_tx: mpsc::Sender<Result<Vec<ExtendedHeader>, P2pError>>,
+    headers_rx: mpsc::Receiver<Result<Vec<ExtendedHeader>, P2pError>>,
     ongoing_batch: Option<(u64, u64)>,
 }
 
@@ -135,7 +135,7 @@ where
 {
     fn new(args: SyncerArgs<S>, cmd_rx: mpsc::Receiver<SyncerCmd>) -> Result<Self> {
         let header_sub_watcher = args.p2p.header_sub_watcher();
-        let (response_tx, response_rx) = mpsc::channel(1);
+        let (headers_tx, headers_rx) = mpsc::channel(1);
 
         Ok(Worker {
             cmd_rx,
@@ -144,26 +144,26 @@ where
             header_sub_watcher,
             genesis_hash: args.genesis_hash,
             subjective_head_height: None,
-            response_tx,
-            response_rx,
+            headers_tx,
+            headers_rx,
             ongoing_batch: None,
         })
     }
 
     async fn run(&mut self) {
-        let mut interval = Interval::new(Duration::from_secs(60)).await;
+        let mut report_interval = Interval::new(Duration::from_secs(60)).await;
         let mut try_init_result = self.spawn_try_init().fuse();
 
         loop {
             select! {
+                _ = report_interval.tick() => {
+                    self.report().await;
+                }
                 Ok(network_head_height) = &mut try_init_result => {
                     info!("Setting initial subjective head to {network_head_height}");
                     self.subjective_head_height = Some(network_head_height);
 
                     self.fetch_next_batch().await;
-                    self.report().await;
-                }
-                _ = interval.tick() => {
                     self.report().await;
                 }
                 _ = self.header_sub_watcher.changed() => {
@@ -173,7 +173,7 @@ where
                 Some(cmd) = self.cmd_rx.recv() => {
                     self.on_cmd(cmd).await;
                 }
-                Some(res) = self.response_rx.recv() => {
+                Some(res) = self.headers_rx.recv() => {
                     self.on_fetch_next_batch_result(res).await;
                     self.fetch_next_batch().await;
                 }
@@ -240,7 +240,7 @@ where
 
     #[instrument(skip_all)]
     async fn on_header_sub_message(&mut self) {
-        // If subjective head then do nothing.
+        // If subjective head isn't set, do nothing.
         // We do this to avoid some edge cases.
         if self.subjective_head_height.is_none() {
             return;
@@ -260,7 +260,7 @@ where
                 if store_head_height + 1 == new_head_height {
                     // Header is already verified by HeaderSub
                     if self.store.append_single_unchecked(new_head).await.is_ok() {
-                        info!("Added {new_head_height} from HeaderSub");
+                        info!("Added header {new_head_height} from HeaderSub");
                     }
                 }
             }
@@ -292,7 +292,7 @@ where
 
         let amount = subjective_head_height
             .saturating_sub(local_head.height().value())
-            .min(MAX_HEADERS_PER_TIME);
+            .min(MAX_HEADERS_IN_BATCH);
 
         if amount == 0 {
             // Nothing to schedule
@@ -305,7 +305,7 @@ where
         self.ongoing_batch = Some((start, end));
         info!("Fetching batch {start} until {end}");
 
-        let tx = self.response_tx.clone();
+        let tx = self.headers_tx.clone();
         let p2p = self.p2p.clone();
 
         spawn(async move {
@@ -454,7 +454,7 @@ mod tests {
 
         // New HEAD was received by HeaderSub (height 27)
         let header27 = gen.next();
-        p2p_mock.accounce_new_head(header27.clone());
+        p2p_mock.announce_new_head(header27.clone());
         // Height 27 is adjacent to the last header of Store, so it is appended
         // immediately
         assert_syncing(&syncer, &store, 27, 27).await;
@@ -462,7 +462,7 @@ mod tests {
 
         // New HEAD was received by HeaderSub (height 30)
         let header_28_30 = gen.next_many(3);
-        p2p_mock.accounce_new_head(header_28_30[2].clone());
+        p2p_mock.announce_new_head(header_28_30[2].clone());
         assert_syncing(&syncer, &store, 27, 30).await;
 
         // New HEAD is not adjacent to store, so Syncer requests a range
@@ -477,7 +477,7 @@ mod tests {
 
         // New HEAD was received by HeaderSub (height 1058)
         let mut headers = gen.next_many(1028);
-        p2p_mock.accounce_new_head(headers.last().cloned().unwrap());
+        p2p_mock.announce_new_head(headers.last().cloned().unwrap());
         assert_syncing(&syncer, &store, 30, 1058).await;
 
         // Syncer requested the first batch ([31, 542])
@@ -492,7 +492,7 @@ mod tests {
 
         // Still syncing, but new HEAD arrived (height 1059)
         headers.push(gen.next());
-        p2p_mock.accounce_new_head(headers.last().cloned().unwrap());
+        p2p_mock.announce_new_head(headers.last().cloned().unwrap());
         assert_syncing(&syncer, &store, 542, 1059).await;
 
         // Syncer requested the second batch ([543, 1054])

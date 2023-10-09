@@ -418,16 +418,13 @@ where
     }
 
     async fn run(&mut self) {
-        let mut interval = Interval::new(Duration::from_secs(60)).await;
-        let mut first_report_showed = false;
+        let mut report_interval = Interval::new(Duration::from_secs(60)).await;
 
         loop {
-            if !first_report_showed && self.peer_tracker.info().num_connected_peers > 0 {
-                self.report();
-                first_report_showed = true;
-            }
-
             select! {
+                _ = report_interval.tick() => {
+                    self.report();
+                }
                 ev = self.swarm.select_next_some() => {
                     if let Err(e) = self.on_swarm_event(ev).await {
                         warn!("Failure while handling swarm event: {e}");
@@ -437,9 +434,6 @@ where
                     if let Err(e) = self.on_cmd(cmd).await {
                         warn!("Failure while handling command. (error: {e})");
                     }
-                }
-                _ = interval.tick() => {
-                    self.report();
                 }
             }
         }

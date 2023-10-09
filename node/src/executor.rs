@@ -3,7 +3,7 @@ use std::pin::Pin;
 
 use libp2p::swarm;
 
-pub(crate) use self::imp::*;
+pub(crate) use self::imp::{spawn, Interval};
 
 pub(crate) struct Executor;
 

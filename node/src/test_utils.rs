@@ -91,7 +91,7 @@ impl MockP2pHandle {
         });
     }
 
-    pub fn accounce_new_head(&self, header: ExtendedHeader) {
+    pub fn announce_new_head(&self, header: ExtendedHeader) {
         self.header_sub_tx.send_replace(Some(header));
     }
 
