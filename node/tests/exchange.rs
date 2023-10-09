@@ -264,7 +264,7 @@ async fn head_selection_with_multiple_peers() {
 
     // Head requests are send only to trusted peers, so we add
     // `new_b_node` as trusted.
-    let new_b_peer_id = new_b_node.p2p().local_peer_id().await.unwrap();
+    let new_b_peer_id = new_b_node.p2p().local_peer_id().to_owned();
     client
         .p2p()
         .set_trusted_peer(new_b_peer_id, true)

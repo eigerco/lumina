@@ -55,26 +55,20 @@ where
     pub async fn new(config: NodeConfig<S>) -> Result<Self> {
         let store = Arc::new(config.store);
 
-        let p2p = Arc::new(
-            P2p::start(P2pArgs {
-                network_id: config.network_id,
-                transport: config.p2p_transport,
-                local_keypair: config.p2p_local_keypair,
-                bootstrap_peers: config.p2p_bootstrap_peers,
-                listen_on: config.p2p_listen_on,
-                store: store.clone(),
-            })
-            .await?,
-        );
+        let p2p = Arc::new(P2p::start(P2pArgs {
+            network_id: config.network_id,
+            transport: config.p2p_transport,
+            local_keypair: config.p2p_local_keypair,
+            bootstrap_peers: config.p2p_bootstrap_peers,
+            listen_on: config.p2p_listen_on,
+            store: store.clone(),
+        })?);
 
-        let syncer = Arc::new(
-            Syncer::start(SyncerArgs {
-                genesis_hash: config.genesis_hash,
-                store: store.clone(),
-                p2p: p2p.clone(),
-            })
-            .await?,
-        );
+        let syncer = Arc::new(Syncer::start(SyncerArgs {
+            genesis_hash: config.genesis_hash,
+            store: store.clone(),
+            p2p: p2p.clone(),
+        })?);
 
         Ok(Node { p2p, syncer })
     }

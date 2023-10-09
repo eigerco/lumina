@@ -85,6 +85,7 @@ where
     cmd_tx: mpsc::Sender<P2pCmd>,
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     peer_tracker_info_watcher: watch::Receiver<PeerTrackerInfo>,
+    local_peer_id: PeerId,
     _store: PhantomData<S>,
 }
 
@@ -101,7 +102,7 @@ where
 }
 
 #[derive(Debug)]
-enum P2pCmd {
+pub(crate) enum P2pCmd {
     NetworkInfo {
         respond_to: oneshot::Sender<NetworkInfo>,
     },
@@ -119,9 +120,6 @@ enum P2pCmd {
         head: Box<ExtendedHeader>,
         respond_to: OneshotResultSender<(), P2pError>,
     },
-    LocalPeerId {
-        respond_to: oneshot::Sender<PeerId>,
-    },
     SetTrustedPeer {
         peer_id: PeerId,
         is_trusted: bool,
@@ -132,7 +130,9 @@ impl<S> P2p<S>
 where
     S: Store,
 {
-    pub async fn start(args: P2pArgs<S>) -> Result<Self, P2pError> {
+    pub fn start(args: P2pArgs<S>) -> Result<Self, P2pError> {
+        let local_peer_id = PeerId::from(args.local_keypair.public());
+
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (header_sub_tx, header_sub_rx) = watch::channel(None);
 
@@ -149,13 +149,41 @@ where
             cmd_tx,
             header_sub_watcher: header_sub_rx,
             peer_tracker_info_watcher,
+            local_peer_id,
             _store: PhantomData,
         })
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn mocked() -> (Self, crate::test_utils::MockP2pHandle) {
+        let (cmd_tx, cmd_rx) = mpsc::channel(16);
+        let (header_sub_tx, header_sub_rx) = watch::channel(None);
+        let (peer_tracker_tx, peer_tracker_rx) = watch::channel(PeerTrackerInfo::default());
+
+        let p2p = P2p {
+            cmd_tx,
+            header_sub_watcher: header_sub_rx,
+            peer_tracker_info_watcher: peer_tracker_rx,
+            local_peer_id: PeerId::random(),
+            _store: PhantomData,
+        };
+
+        let handle = crate::test_utils::MockP2pHandle {
+            cmd_rx,
+            header_sub_tx,
+            peer_tracker_tx,
+        };
+
+        (p2p, handle)
     }
 
     pub async fn stop(&self) -> Result<()> {
         // TODO
         Ok(())
+    }
+
+    pub fn local_peer_id(&self) -> &PeerId {
+        &self.local_peer_id
     }
 
     async fn send_command(&self, cmd: P2pCmd) -> Result<()> {
@@ -286,15 +314,6 @@ where
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::ConnectedPeers { respond_to: tx })
-            .await?;
-
-        Ok(rx.await?)
-    }
-
-    pub async fn local_peer_id(&self) -> Result<PeerId> {
-        let (tx, rx) = oneshot::channel();
-
-        self.send_command(P2pCmd::LocalPeerId { respond_to: tx })
             .await?;
 
         Ok(rx.await?)
@@ -497,10 +516,6 @@ where
                 let res = self.on_init_header_sub(*head).await;
                 respond_to.maybe_send(res);
             }
-            P2pCmd::LocalPeerId { respond_to } => {
-                let peer_id = *self.swarm.local_peer_id();
-                respond_to.maybe_send(peer_id);
-            }
             P2pCmd::SetTrustedPeer {
                 peer_id,
                 is_trusted,
@@ -528,10 +543,10 @@ where
     async fn on_identify_event(&mut self, ev: identify::Event) -> Result<()> {
         match ev {
             identify::Event::Received { peer_id, info } => {
-                let kademlia = &mut self.swarm.behaviour_mut().kademlia;
-
                 // Inform peer tracker
                 self.peer_tracker.set_identified(peer_id, &info);
+
+                let kademlia = &mut self.swarm.behaviour_mut().kademlia;
 
                 // Inform Kademlia
                 for addr in info.listen_addrs {
