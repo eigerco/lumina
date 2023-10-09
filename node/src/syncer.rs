@@ -206,13 +206,13 @@ where
     fn spawn_try_init(&self) -> oneshot::Receiver<u64> {
         let p2p = self.p2p.clone();
         let store = self.store.clone();
-        let genesis_hash = self.genesis_hash.clone();
+        let genesis_hash = self.genesis_hash;
         let (tx, rx) = oneshot::channel();
 
         spawn(
             async move {
                 loop {
-                    match try_init(&p2p, &store, genesis_hash.as_ref()).await {
+                    match try_init(&p2p, &store, genesis_hash).await {
                         Ok(height) => {
                             tx.maybe_send(height);
                             return;
@@ -337,7 +337,7 @@ where
     }
 }
 
-async fn try_init<S>(p2p: &P2p<S>, store: &S, genesis_hash: Option<&Hash>) -> Result<u64>
+async fn try_init<S>(p2p: &P2p<S>, store: &S, genesis_hash: Option<Hash>) -> Result<u64>
 where
     S: Store,
 {
@@ -346,7 +346,7 @@ where
     // IF store is empty, intialize it with genesis
     if store.head_height().await.is_err() {
         let genesis = match genesis_hash {
-            Some(hash) => p2p.get_header(hash.to_owned()).await?,
+            Some(hash) => p2p.get_header(hash).await?,
             None => {
                 warn!("Genesis hash is not set, requesting height 1.");
                 p2p.get_header_by_height(1).await?
