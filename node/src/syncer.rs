@@ -4,9 +4,10 @@ use std::time::Duration;
 
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use futures::FutureExt;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
-use tracing::{info, instrument, warn};
+use tracing::{info, info_span, instrument, warn, Instrument};
 
 use crate::executor::{spawn, Interval};
 use crate::p2p::{P2p, P2pError};
@@ -150,17 +151,18 @@ where
     }
 
     async fn run(&mut self) {
-        while let Err(e) = self.try_init().await {
-            warn!("Intialization of subjective head failed: {e}. Trying again.");
-        }
-
         let mut interval = Interval::new(Duration::from_secs(60)).await;
-
-        self.fetch_next_batch().await;
-        self.report().await;
+        let mut try_init_result = self.spawn_try_init().fuse();
 
         loop {
             select! {
+                Ok(network_head_height) = &mut try_init_result => {
+                    info!("Setting initial subjective head to {network_head_height}");
+                    self.subjective_head_height = Some(network_head_height);
+
+                    self.fetch_next_batch().await;
+                    self.report().await;
+                }
                 _ = interval.tick() => {
                     self.report().await;
                 }
@@ -201,32 +203,30 @@ where
         info!("syncing: {local_head}/{subjective_head}, ongoing batch: {ongoing_batch}",);
     }
 
-    #[instrument(skip_all)]
-    async fn try_init(&mut self) -> Result<()> {
-        self.p2p.wait_connected_trusted().await?;
+    fn spawn_try_init(&self) -> oneshot::Receiver<u64> {
+        let p2p = self.p2p.clone();
+        let store = self.store.clone();
+        let genesis_hash = self.genesis_hash.clone();
+        let (tx, rx) = oneshot::channel();
 
-        // IF store is empty, intialize it with genesis
-        if self.store.head_height().await.is_err() {
-            let genesis = match self.genesis_hash {
-                Some(hash) => self.p2p.get_header(hash).await?,
-                None => {
-                    warn!("Genesis hash is not set, requesting height 1.");
-                    self.p2p.get_header_by_height(1).await?
+        spawn(
+            async move {
+                loop {
+                    match try_init(&p2p, &store, genesis_hash.as_ref()).await {
+                        Ok(height) => {
+                            tx.maybe_send(height);
+                            return;
+                        }
+                        Err(e) => {
+                            warn!("Intialization of subjective head failed: {e}. Trying again.")
+                        }
+                    }
                 }
-            };
+            }
+            .instrument(info_span!("try_init")),
+        );
 
-            self.store.append_single_unchecked(genesis).await?;
-        }
-
-        let network_head = self.p2p.get_head_header().await?;
-        let network_head_height = network_head.height().value();
-
-        self.subjective_head_height = Some(network_head_height);
-        self.p2p.init_header_sub(network_head).await?;
-
-        info!("Setting initial subjective head to {network_head_height}");
-
-        Ok(())
+        rx
     }
 
     async fn on_cmd(&mut self, cmd: SyncerCmd) {
@@ -240,6 +240,12 @@ where
 
     #[instrument(skip_all)]
     async fn on_header_sub_message(&mut self) {
+        // If subjective head then do nothing.
+        // We do this to avoid some edge cases.
+        if self.subjective_head_height.is_none() {
+            return;
+        }
+
         let Some(new_head) = self.header_sub_watcher.borrow().to_owned() else {
             // Nothing to do
             return;
@@ -329,6 +335,34 @@ where
             warn!("Failed to store batch {start} until {end}: {e}");
         }
     }
+}
+
+async fn try_init<S>(p2p: &P2p<S>, store: &S, genesis_hash: Option<&Hash>) -> Result<u64>
+where
+    S: Store,
+{
+    p2p.wait_connected_trusted().await?;
+
+    // IF store is empty, intialize it with genesis
+    if store.head_height().await.is_err() {
+        let genesis = match genesis_hash {
+            Some(hash) => p2p.get_header(hash.to_owned()).await?,
+            None => {
+                warn!("Genesis hash is not set, requesting height 1.");
+                p2p.get_header_by_height(1).await?
+            }
+        };
+
+        // Store genesis
+        store.append_single_unchecked(genesis).await?;
+    }
+
+    let network_head = p2p.get_head_header().await?;
+    let network_head_height = network_head.height().value();
+
+    p2p.init_header_sub(network_head).await?;
+
+    Ok(network_head_height)
 }
 
 #[cfg(test)]
