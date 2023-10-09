@@ -41,7 +41,7 @@ send_wrapper = { version = "0.6.0", features = ["futures"] }
 [dev-dependencies]
 bytes = "1.4.0"
 celestia-node = { workspace = true, features = ["test-utils"] }
-celestia-rpc = { workspace = true }
+celestia-rpc = { workspace = true, features = ["p2p"] }
 celestia-types = { workspace = true, features = ["test-utils"] }
 dotenvy = "0.15.7"
 libp2p = { version = "0.52.3", features = [
