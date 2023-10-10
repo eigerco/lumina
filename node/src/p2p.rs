@@ -1,8 +1,8 @@
 use std::io;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::time::Duration;
 
-use async_trait::async_trait;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
@@ -27,6 +27,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
 use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
+use crate::executor::Interval;
 use crate::executor::{spawn, Executor};
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
@@ -35,7 +36,6 @@ use crate::utils::{
     celestia_protocol_id, gossipsub_ident_topic, MultiaddrExt, OneshotResultSender,
     OneshotSenderExt,
 };
-use crate::Service;
 
 pub use crate::exchange::ExchangeError;
 
@@ -66,6 +66,9 @@ pub enum P2pError {
 
     #[error("Exchange: {0}")]
     Exchange(#[from] ExchangeError),
+
+    #[error("HeaderSub already initialized")]
+    HeaderSubAlreadyInitialized,
 }
 
 impl From<oneshot::error::RecvError> for P2pError {
@@ -75,14 +78,21 @@ impl From<oneshot::error::RecvError> for P2pError {
 }
 
 #[derive(Debug)]
-pub struct P2p<S> {
+pub struct P2p<S>
+where
+    S: Store + 'static,
+{
     cmd_tx: mpsc::Sender<P2pCmd>,
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     peer_tracker_info_watcher: watch::Receiver<PeerTrackerInfo>,
+    local_peer_id: PeerId,
     _store: PhantomData<S>,
 }
 
-pub struct P2pArgs<S> {
+pub struct P2pArgs<S>
+where
+    S: Store + 'static,
+{
     pub transport: Boxed<(PeerId, StreamMuxerBox)>,
     pub network_id: String,
     pub local_keypair: Keypair,
@@ -91,9 +101,8 @@ pub struct P2pArgs<S> {
     pub store: Arc<S>,
 }
 
-#[doc(hidden)]
 #[derive(Debug)]
-pub enum P2pCmd {
+pub(crate) enum P2pCmd {
     NetworkInfo {
         respond_to: oneshot::Sender<NetworkInfo>,
     },
@@ -107,18 +116,23 @@ pub enum P2pCmd {
     ConnectedPeers {
         respond_to: oneshot::Sender<Vec<PeerId>>,
     },
+    InitHeaderSub {
+        head: Box<ExtendedHeader>,
+        respond_to: OneshotResultSender<(), P2pError>,
+    },
+    SetPeerTrust {
+        peer_id: PeerId,
+        is_trusted: bool,
+    },
 }
 
-#[async_trait]
-impl<S> Service for P2p<S>
+impl<S> P2p<S>
 where
-    S: Store + 'static,
+    S: Store,
 {
-    type Command = P2pCmd;
-    type Args = P2pArgs<S>;
-    type Error = P2pError;
+    pub fn start(args: P2pArgs<S>) -> Result<Self, P2pError> {
+        let local_peer_id = PeerId::from(args.local_keypair.public());
 
-    async fn start(args: P2pArgs<S>) -> Result<Self, P2pError> {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (header_sub_tx, header_sub_rx) = watch::channel(None);
 
@@ -135,13 +149,41 @@ where
             cmd_tx,
             header_sub_watcher: header_sub_rx,
             peer_tracker_info_watcher,
+            local_peer_id,
             _store: PhantomData,
         })
     }
 
-    async fn stop(&self) -> Result<()> {
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn mocked() -> (Self, crate::test_utils::MockP2pHandle) {
+        let (cmd_tx, cmd_rx) = mpsc::channel(16);
+        let (header_sub_tx, header_sub_rx) = watch::channel(None);
+        let (peer_tracker_tx, peer_tracker_rx) = watch::channel(PeerTrackerInfo::default());
+
+        let p2p = P2p {
+            cmd_tx,
+            header_sub_watcher: header_sub_rx,
+            peer_tracker_info_watcher: peer_tracker_rx,
+            local_peer_id: PeerId::random(),
+            _store: PhantomData,
+        };
+
+        let handle = crate::test_utils::MockP2pHandle {
+            cmd_rx,
+            header_sub_tx,
+            peer_tracker_tx,
+        };
+
+        (p2p, handle)
+    }
+
+    pub async fn stop(&self) -> Result<()> {
         // TODO
         Ok(())
+    }
+
+    pub fn local_peer_id(&self) -> &PeerId {
+        &self.local_peer_id
     }
 
     async fn send_command(&self, cmd: P2pCmd) -> Result<()> {
@@ -150,18 +192,28 @@ where
             .await
             .map_err(|_| P2pError::WorkerDied)
     }
-}
 
-#[async_trait]
-pub trait P2pService:
-    Service<Args = P2pArgs<Self::Store>, Command = P2pCmd, Error = P2pError>
-{
-    type Store: Store;
+    pub fn header_sub_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
+        self.header_sub_watcher.clone()
+    }
 
-    fn new_header_sub_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>>;
-    fn peer_tracker_info_watcher(&self) -> watch::Receiver<PeerTrackerInfo>;
+    pub fn peer_tracker_info_watcher(&self) -> watch::Receiver<PeerTrackerInfo> {
+        self.peer_tracker_info_watcher.clone()
+    }
 
-    async fn wait_connected(&self) -> Result<()> {
+    pub async fn init_header_sub(&self, head: ExtendedHeader) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(P2pCmd::InitHeaderSub {
+            head: Box::new(head),
+            respond_to: tx,
+        })
+        .await?;
+
+        rx.await?
+    }
+
+    pub async fn wait_connected(&self) -> Result<()> {
         self.peer_tracker_info_watcher()
             .wait_for(|info| info.num_connected_peers > 0)
             .await
@@ -169,7 +221,7 @@ pub trait P2pService:
             .map_err(|_| P2pError::WorkerDied)
     }
 
-    async fn wait_connected_trusted(&self) -> Result<()> {
+    pub async fn wait_connected_trusted(&self) -> Result<()> {
         self.peer_tracker_info_watcher()
             .wait_for(|info| info.num_connected_trusted_peers > 0)
             .await
@@ -177,7 +229,7 @@ pub trait P2pService:
             .map_err(|_| P2pError::WorkerDied)
     }
 
-    async fn network_info(&self) -> Result<NetworkInfo> {
+    pub async fn network_info(&self) -> Result<NetworkInfo> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::NetworkInfo { respond_to: tx })
@@ -186,7 +238,10 @@ pub trait P2pService:
         Ok(rx.await?)
     }
 
-    async fn exchange_header_request(&self, request: HeaderRequest) -> Result<Vec<ExtendedHeader>> {
+    pub async fn exchange_header_request(
+        &self,
+        request: HeaderRequest,
+    ) -> Result<Vec<ExtendedHeader>> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::ExchangeHeaderRequest {
@@ -198,11 +253,11 @@ pub trait P2pService:
         rx.await?
     }
 
-    async fn get_head_header(&self) -> Result<ExtendedHeader> {
+    pub async fn get_head_header(&self) -> Result<ExtendedHeader> {
         self.get_header_by_height(0).await
     }
 
-    async fn get_header(&self, hash: Hash) -> Result<ExtendedHeader> {
+    pub async fn get_header(&self, hash: Hash) -> Result<ExtendedHeader> {
         self.exchange_header_request(HeaderRequest {
             data: Some(header_request::Data::Hash(hash.as_bytes().to_vec())),
             amount: 1,
@@ -213,7 +268,7 @@ pub trait P2pService:
         .ok_or(ExchangeError::HeaderNotFound.into())
     }
 
-    async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
+    pub async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         self.exchange_header_request(HeaderRequest {
             data: Some(header_request::Data::Origin(height)),
             amount: 1,
@@ -224,7 +279,7 @@ pub trait P2pService:
         .ok_or(ExchangeError::HeaderNotFound.into())
     }
 
-    async fn get_verified_headers_range(
+    pub async fn get_verified_headers_range(
         &self,
         from: &ExtendedHeader,
         amount: u64,
@@ -246,7 +301,7 @@ pub trait P2pService:
         Ok(headers)
     }
 
-    async fn listeners(&self) -> Result<Vec<Multiaddr>> {
+    pub async fn listeners(&self) -> Result<Vec<Multiaddr>> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::Listeners { respond_to: tx })
@@ -255,7 +310,7 @@ pub trait P2pService:
         Ok(rx.await?)
     }
 
-    async fn connected_peers(&self) -> Result<Vec<PeerId>> {
+    pub async fn connected_peers(&self) -> Result<Vec<PeerId>> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::ConnectedPeers { respond_to: tx })
@@ -263,21 +318,13 @@ pub trait P2pService:
 
         Ok(rx.await?)
     }
-}
 
-#[async_trait]
-impl<S> P2pService for P2p<S>
-where
-    S: Store + 'static,
-{
-    type Store = S;
-
-    fn new_header_sub_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
-        self.header_sub_watcher.clone()
-    }
-
-    fn peer_tracker_info_watcher(&self) -> watch::Receiver<PeerTrackerInfo> {
-        self.peer_tracker_info_watcher.clone()
+    pub async fn set_peer_trust(&self, peer_id: PeerId, is_trusted: bool) -> Result<()> {
+        self.send_command(P2pCmd::SetPeerTrust {
+            peer_id,
+            is_trusted,
+        })
+        .await
     }
 }
 
@@ -304,12 +351,11 @@ where
     cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
     header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
-    store: Arc<S>,
 }
 
 impl<S> Worker<S>
 where
-    S: Store + 'static,
+    S: Store,
 {
     fn new(
         args: P2pArgs<S>,
@@ -357,7 +403,7 @@ where
         for addr in args.bootstrap_peers {
             // Bootstrap peers are always trusted
             if let Some(peer_id) = addr.peer_id() {
-                peer_tracker.set_trusted(peer_id);
+                peer_tracker.set_trusted(peer_id, true);
             }
             swarm.dial(addr)?;
         }
@@ -368,13 +414,17 @@ where
             header_sub_topic_hash: header_sub_topic.hash(),
             peer_tracker,
             header_sub_watcher,
-            store: args.store.clone(),
         })
     }
 
     async fn run(&mut self) {
+        let mut report_interval = Interval::new(Duration::from_secs(60)).await;
+
         loop {
             select! {
+                _ = report_interval.tick() => {
+                    self.report();
+                }
                 ev = self.swarm.select_next_some() => {
                     if let Err(e) = self.on_swarm_event(ev).await {
                         warn!("Failure while handling swarm event: {e}");
@@ -456,19 +506,41 @@ where
             P2pCmd::ConnectedPeers { respond_to } => {
                 respond_to.maybe_send(self.peer_tracker.connected_peers());
             }
+            P2pCmd::InitHeaderSub { head, respond_to } => {
+                let res = self.on_init_header_sub(*head).await;
+                respond_to.maybe_send(res);
+            }
+            P2pCmd::SetPeerTrust {
+                peer_id,
+                is_trusted,
+            } => {
+                if *self.swarm.local_peer_id() != peer_id {
+                    self.peer_tracker.set_trusted(peer_id, is_trusted);
+                }
+            }
         }
 
         Ok(())
+    }
+
+    #[instrument(skip_all)]
+    fn report(&mut self) {
+        let tracker_info = self.peer_tracker.info();
+
+        info!(
+            "peers: {}, trusted peers: {}",
+            tracker_info.num_connected_peers, tracker_info.num_connected_trusted_peers,
+        );
     }
 
     #[instrument(level = "trace", skip(self))]
     async fn on_identify_event(&mut self, ev: identify::Event) -> Result<()> {
         match ev {
             identify::Event::Received { peer_id, info } => {
-                let kademlia = &mut self.swarm.behaviour_mut().kademlia;
-
                 // Inform peer tracker
                 self.peer_tracker.set_identified(peer_id, &info);
+
+                let kademlia = &mut self.swarm.behaviour_mut().kademlia;
 
                 // Inform Kademlia
                 for addr in info.listen_addrs {
@@ -560,7 +632,7 @@ where
         connection_id: ConnectionId,
         endpoint: ConnectedPoint,
     ) {
-        info!("Peer connected");
+        debug!("Peer connected");
 
         // Inform PeerTracker about the dialed address.
         //
@@ -585,7 +657,26 @@ where
             .peer_tracker
             .set_maybe_disconnected(peer_id, connection_id)
         {
-            info!("Peer disconnected");
+            debug!("Peer disconnected");
+        }
+    }
+
+    #[instrument(skip_all)]
+    async fn on_init_header_sub(&mut self, head: ExtendedHeader) -> Result<()> {
+        let updated = self.header_sub_watcher.send_if_modified(move |state| {
+            if state.is_none() {
+                *state = Some(head);
+                true
+            } else {
+                false
+            }
+        });
+
+        if updated {
+            trace!("HeaderSub initialized");
+            Ok(())
+        } else {
+            Err(P2pError::HeaderSubAlreadyInitialized)
         }
     }
 
@@ -598,25 +689,15 @@ where
 
         trace!("Received header from header-sub ({header})");
 
-        // We care only for headers newer than head
-        let Ok(head) = self.store.get_head().await else {
-            trace!("Store not initialized yet. Ignore header from header-sub ({header}).");
-            return gossipsub::MessageAcceptance::Ignore;
-        };
+        let updated = self.header_sub_watcher.send_if_modified(move |state| {
+            let Some(known_header) = state else {
+                debug!("HeaderSub not initialized yet");
+                return false;
+            };
 
-        // Verify header
-        if head.verify(&header).is_err() {
-            trace!("Verification failed. Ignore header from header-sub ({header}).");
-            return gossipsub::MessageAcceptance::Ignore;
-        }
-
-        // Update it only if needed
-        let updated = self.header_sub_watcher.send_if_modified(|state| {
-            if let Some(known_header) = state {
-                if known_header.height() >= header.height() {
-                    trace!("Header-sub already up-to-date. Ignore header ({header}).");
-                    return false;
-                }
+            if known_header.verify(&header).is_err() {
+                trace!("Failed to verify HeaderSub header. Ignoring {header}");
+                return false;
             }
 
             debug!("New header from header-sub ({header})");
@@ -635,7 +716,10 @@ where
 fn init_gossipsub<'a, S>(
     args: &'a P2pArgs<S>,
     topics: impl IntoIterator<Item = &'a gossipsub::IdentTopic>,
-) -> Result<gossipsub::Behaviour> {
+) -> Result<gossipsub::Behaviour>
+where
+    S: Store,
+{
     // Set the message authenticity - How we expect to publish messages
     // Here we expect the publisher to sign the message with their key.
     let message_authenticity = gossipsub::MessageAuthenticity::Signed(args.local_keypair.clone());
@@ -657,7 +741,10 @@ fn init_gossipsub<'a, S>(
     Ok(gossipsub)
 }
 
-fn init_kademlia<S>(args: &P2pArgs<S>) -> Result<Kademlia<MemoryStore>> {
+fn init_kademlia<S>(args: &P2pArgs<S>) -> Result<Kademlia<MemoryStore>>
+where
+    S: Store,
+{
     let local_peer_id = PeerId::from(args.local_keypair.public());
     let mut config = KademliaConfig::default();
 

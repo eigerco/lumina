@@ -261,6 +261,11 @@ where
 
                 continue;
             }
+
+            if self.client_handler.poll(cx).is_ready() {
+                continue;
+            }
+
             if self.server_handler.poll(cx, &mut self.req_resp).is_ready() {
                 continue;
             }

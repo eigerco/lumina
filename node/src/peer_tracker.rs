@@ -4,6 +4,7 @@ use dashmap::mapref::entry::Entry;
 use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
 use libp2p::{identify, swarm::ConnectionId, Multiaddr, PeerId};
+use rand::seq::SliceRandom;
 use smallvec::SmallVec;
 use tokio::sync::watch;
 
@@ -116,8 +117,8 @@ impl PeerTracker {
     }
 
     /// Sets peer as trusted.
-    pub fn set_trusted(&self, peer: PeerId) {
-        self.get(peer).value_mut().trusted = true;
+    pub fn set_trusted(&self, peer: PeerId, is_trusted: bool) {
+        self.get(peer).value_mut().trusted = is_trusted;
     }
 
     /// Sets peer as connected.
@@ -206,11 +207,20 @@ impl PeerTracker {
 
     /// Returns one of the best peers.
     pub fn best_peer(&self) -> Option<PeerId> {
+        const MAX_PEER_SAMPLE: usize = 128;
+
         // TODO: Implement peer score and return the best.
-        self.peers
+        let mut peers = self
+            .peers
             .iter()
-            .find(|pair| pair.value().is_connected())
+            .filter(|pair| pair.value().is_connected())
+            .take(MAX_PEER_SAMPLE)
             .map(|pair| pair.key().to_owned())
+            .collect::<SmallVec<[_; MAX_PEER_SAMPLE]>>();
+
+        peers.shuffle(&mut rand::thread_rng());
+
+        peers.get(0).copied()
     }
 
     /// Returns up to N amount of best peers.

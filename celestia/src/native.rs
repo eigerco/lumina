@@ -2,11 +2,11 @@ use std::env;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use celestia_node::node::{Node, NodeConfig};
-use celestia_node::p2p::P2pService;
 use celestia_node::store::sled_store::SledStore;
 use celestia_rpc::prelude::*;
+use celestia_types::hash::Hash;
 use clap::{Parser, ValueEnum};
 use libp2p::{
     core::upgrade::Version, dns::TokioDnsConfig, identity, multiaddr::Protocol, noise, tcp, yamux,
@@ -62,6 +62,7 @@ pub async fn run() -> Result<()> {
     };
 
     let network_id = network_id(args.network).to_owned();
+    let genesis_hash = network_genesis(args.network)?;
 
     let p2p_transport = TokioDnsConfig::system(tcp::tokio::Transport::new(tcp::Config::default()))?
         .upgrade(Version::V1Lazy)
@@ -71,6 +72,7 @@ pub async fn run() -> Result<()> {
 
     let node = Node::new(NodeConfig {
         network_id,
+        genesis_hash,
         p2p_transport,
         p2p_local_keypair,
         p2p_bootstrap_peers,
@@ -78,9 +80,9 @@ pub async fn run() -> Result<()> {
         store,
     })
     .await
-    .unwrap();
+    .context("Failed to start node")?;
 
-    node.p2p().wait_connected().await?;
+    node.p2p().wait_connected_trusted().await?;
 
     // We have nothing else to do, but we want to keep main alive
     loop {
@@ -94,6 +96,22 @@ fn network_id(network: Network) -> &'static str {
         Network::Mocha => "mocha-4",
         Network::Private => "private",
     }
+}
+
+fn network_genesis(network: Network) -> Result<Option<Hash>> {
+    let hex = match network {
+        Network::Arabica => "5904E55478BA4B3002EE885621E007A2A6A2399662841912219AECD5D5CBE393",
+        Network::Mocha => "B93BBE20A0FBFDF955811B6420F8433904664D45DB4BF51022BE4200C1A1680D",
+        Network::Private => return Ok(None),
+    };
+
+    let bytes = hex::decode(hex).context("Failed to decode genesis hash")?;
+    let array = bytes
+        .try_into()
+        .ok()
+        .context("Failed to decode genesis hash")?;
+
+    Ok(Some(Hash::Sha256(array)))
 }
 
 async fn network_bootnodes(network: Network) -> Result<Vec<Multiaddr>> {

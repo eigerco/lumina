@@ -10,8 +10,10 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 celestia-node = { workspace = true }
 celestia-rpc = { workspace = true }
+celestia-types = { workspace = true }
 
 anyhow = "1.0.71"
+hex = "0.4.3"
 tracing = "0.1.37"
 tracing-appender = "0.2.2"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
