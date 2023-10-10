@@ -297,20 +297,20 @@ where
     }
 
     #[instrument(skip_all)]
-    fn prune_timedout_requests(&mut self) {
-        let mut timedout_reqs = SmallVec::<[_; 32]>::new();
+    fn prune_expired_requests(&mut self) {
+        let mut expired_reqs = SmallVec::<[_; 32]>::new();
 
         for (req_id, state) in self.reqs.iter() {
             if state.started_at.elapsed() >= TIMEOUT {
-                timedout_reqs.push(*req_id);
+                expired_reqs.push(*req_id);
             }
         }
 
-        if !timedout_reqs.is_empty() {
-            warn!("{} requests timed out", timedout_reqs.len());
+        if !expired_reqs.is_empty() {
+            warn!("{} requests timed out", expired_reqs.len());
         }
 
-        for req_id in timedout_reqs {
+        for req_id in expired_reqs {
             if let Some(state) = self.reqs.remove(&req_id) {
                 state
                     .respond_to
@@ -320,7 +320,7 @@ where
     }
 
     pub(super) fn poll(&mut self, _cx: &mut Context) -> Poll<()> {
-        self.prune_timedout_requests();
+        self.prune_expired_requests();
         Poll::Pending
     }
 }
