@@ -6,29 +6,33 @@
 
 use std::sync::Arc;
 
+use celestia_types::hash::Hash;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
 
-use crate::p2p::{P2p, P2pArgs, P2pService};
-use crate::syncer::{Syncer, SyncerArgs, SyncerService};
+use crate::p2p::{P2p, P2pArgs, P2pError};
+use crate::store::Store;
+use crate::syncer::{Syncer, SyncerArgs, SyncerError};
+
+type Result<T, E = NodeError> = std::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
-pub enum NodeError<P2pSrv, SyncerSrv>
-where
-    P2pSrv: P2pService,
-    SyncerSrv: SyncerService<P2pSrv>,
-{
+pub enum NodeError {
     #[error(transparent)]
-    P2pService(P2pSrv::Error),
+    P2p(#[from] P2pError),
 
     #[error(transparent)]
-    SyncerService(SyncerSrv::Error),
+    Syncer(#[from] SyncerError),
 }
 
-pub struct NodeConfig<S> {
+pub struct NodeConfig<S>
+where
+    S: Store + 'static,
+{
     pub network_id: String,
+    pub genesis_hash: Option<Hash>,
     pub p2p_transport: Boxed<(PeerId, StreamMuxerBox)>,
     pub p2p_local_keypair: Keypair,
     pub p2p_bootstrap_peers: Vec<Multiaddr>,
@@ -36,57 +40,44 @@ pub struct NodeConfig<S> {
     pub store: S,
 }
 
-pub type Node<S> = GenericNode<P2p<S>, Syncer<P2p<S>>>;
-
-pub struct GenericNode<P2pSrv, SyncerSrv>
+pub struct Node<S>
 where
-    P2pSrv: P2pService,
-    SyncerSrv: SyncerService<P2pSrv>,
+    S: Store + 'static,
 {
-    p2p: Arc<P2pSrv>,
-    syncer: Arc<SyncerSrv>,
+    p2p: Arc<P2p<S>>,
+    syncer: Arc<Syncer<S>>,
 }
 
-impl<P2pSrv, SyncerSrv> GenericNode<P2pSrv, SyncerSrv>
+impl<S> Node<S>
 where
-    P2pSrv: P2pService,
-    SyncerSrv: SyncerService<P2pSrv>,
+    S: Store,
 {
-    pub async fn new(
-        config: NodeConfig<P2pSrv::Store>,
-    ) -> Result<Self, NodeError<P2pSrv, SyncerSrv>> {
+    pub async fn new(config: NodeConfig<S>) -> Result<Self> {
         let store = Arc::new(config.store);
 
-        let p2p = Arc::new(
-            P2pSrv::start(P2pArgs {
-                network_id: config.network_id,
-                transport: config.p2p_transport,
-                local_keypair: config.p2p_local_keypair,
-                bootstrap_peers: config.p2p_bootstrap_peers,
-                listen_on: config.p2p_listen_on,
-                store: store.clone(),
-            })
-            .await
-            .map_err(NodeError::P2pService)?,
-        );
+        let p2p = Arc::new(P2p::start(P2pArgs {
+            network_id: config.network_id,
+            transport: config.p2p_transport,
+            local_keypair: config.p2p_local_keypair,
+            bootstrap_peers: config.p2p_bootstrap_peers,
+            listen_on: config.p2p_listen_on,
+            store: store.clone(),
+        })?);
 
-        let syncer = Arc::new(
-            SyncerSrv::start(SyncerArgs {
-                store: store.clone(),
-                p2p: p2p.clone(),
-            })
-            .await
-            .map_err(NodeError::SyncerService)?,
-        );
+        let syncer = Arc::new(Syncer::start(SyncerArgs {
+            genesis_hash: config.genesis_hash,
+            store: store.clone(),
+            p2p: p2p.clone(),
+        })?);
 
-        Ok(GenericNode { p2p, syncer })
+        Ok(Node { p2p, syncer })
     }
 
-    pub fn p2p(&self) -> &impl P2pService {
-        &*self.p2p
+    pub fn p2p(&self) -> &P2p<S> {
+        &self.p2p
     }
 
-    pub fn syncer(&self) -> &impl SyncerService<P2pSrv> {
-        &*self.syncer
+    pub fn syncer(&self) -> &Syncer<S> {
+        &self.syncer
     }
 }

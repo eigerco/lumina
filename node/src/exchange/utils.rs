@@ -50,9 +50,7 @@ impl HeaderRequestExt for HeaderRequest {
 
 pub(super) trait HeaderResponseExt {
     fn to_extended_header(&self) -> Result<ExtendedHeader, ExchangeError>;
-
     fn not_found() -> HeaderResponse;
-
     fn invalid() -> HeaderResponse;
 }
 

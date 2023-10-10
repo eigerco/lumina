@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use celestia_node::{
     node::{Node, NodeConfig},
-    p2p::{ExchangeError, P2pError, P2pService},
+    p2p::{ExchangeError, P2pError},
     store::Store,
     test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
 };
@@ -218,7 +218,7 @@ async fn head_selection_with_multiple_peers() {
     sleep(Duration::from_millis(100)).await;
 
     let mut server_addrs = vec![];
-    for s in servers {
+    for s in &servers {
         server_addrs.extend_from_slice(&s.p2p().listeners().await.unwrap()[..]);
     }
 
@@ -261,6 +261,15 @@ async fn head_selection_with_multiple_peers() {
     })
     .await
     .unwrap();
+
+    // Head requests are send only to trusted peers, so we add
+    // `new_b_node` as trusted.
+    let new_b_peer_id = new_b_node.p2p().local_peer_id().to_owned();
+    client
+        .p2p()
+        .set_peer_trust(new_b_peer_id, true)
+        .await
+        .unwrap();
 
     new_b_node.p2p().wait_connected().await.unwrap();
     // small delay needed for client to include new_b_node in head selection process

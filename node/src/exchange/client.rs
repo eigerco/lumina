@@ -3,15 +3,19 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time::Duration;
 
 use celestia_proto::p2p::pb::header_request::Data;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
 use futures::future::join_all;
+use instant::Instant;
 use libp2p::request_response::{OutboundFailure, RequestId};
 use libp2p::PeerId;
+use smallvec::SmallVec;
 use tokio::sync::oneshot;
-use tracing::{instrument, trace};
+use tracing::{instrument, trace, warn};
 
 use crate::exchange::utils::{HeaderRequestExt, HeaderResponseExt};
 use crate::exchange::{ExchangeError, ReqRespBehaviour};
@@ -19,6 +23,9 @@ use crate::executor::spawn;
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
 use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
+
+const MAX_PEERS: usize = 10;
+const TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(super) struct ExchangeClientHandler<S = ReqRespBehaviour>
 where
@@ -31,10 +38,11 @@ where
 struct State {
     request: HeaderRequest,
     respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+    started_at: Instant,
 }
 
 pub(super) trait RequestSender {
-    type RequestId: Hash + Eq + Debug;
+    type RequestId: Clone + Copy + Hash + Eq + Debug;
 
     fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> Self::RequestId;
 }
@@ -100,6 +108,7 @@ where
         let state = State {
             request,
             respond_to,
+            started_at: Instant::now(),
         };
 
         self.reqs.insert(req_id, state);
@@ -111,15 +120,15 @@ where
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
-        const MAX_PEERS: usize = 10;
         const MIN_HEAD_RESPONSES: usize = 2;
 
-        let peers = self.peer_tracker.best_n_peers(MAX_PEERS);
+        // For now HEAD is requested from trusted peers only!
+        let peers = self.peer_tracker.trusted_n_peers(MAX_PEERS);
 
         if peers.is_empty() {
             respond_to.maybe_send_err(P2pError::NoConnectedPeers);
             return;
-        };
+        }
 
         let mut rxs = Vec::with_capacity(peers.len());
 
@@ -130,6 +139,7 @@ where
             let state = State {
                 request: request.clone(),
                 respond_to: tx,
+                started_at: Instant::now(),
             };
 
             self.reqs.insert(req_id, state);
@@ -175,7 +185,8 @@ where
             }
 
             // Otherwise return the header with the maximum height
-            respond_to.maybe_send_ok(vec![resps[0].to_owned()]);
+            let resp = resps.into_iter().next().expect("no reposnes");
+            respond_to.maybe_send_ok(vec![resp]);
         });
     }
 
@@ -283,6 +294,34 @@ where
                 .respond_to
                 .maybe_send_err(ExchangeError::OutboundFailure(error));
         }
+    }
+
+    #[instrument(skip_all)]
+    fn prune_expired_requests(&mut self) {
+        let mut expired_reqs = SmallVec::<[_; 32]>::new();
+
+        for (req_id, state) in self.reqs.iter() {
+            if state.started_at.elapsed() >= TIMEOUT {
+                expired_reqs.push(*req_id);
+            }
+        }
+
+        if !expired_reqs.is_empty() {
+            warn!("{} requests timed out", expired_reqs.len());
+        }
+
+        for req_id in expired_reqs {
+            if let Some(state) = self.reqs.remove(&req_id) {
+                state
+                    .respond_to
+                    .maybe_send_err(ExchangeError::OutboundFailure(OutboundFailure::Timeout));
+            }
+        }
+    }
+
+    pub(super) fn poll(&mut self, _cx: &mut Context) -> Poll<()> {
+        self.prune_expired_requests();
+        Poll::Pending
     }
 }
 
@@ -1056,7 +1095,7 @@ mod tests {
 
         for i in 0..amount {
             let peer = PeerId::random();
-            peers.set_trusted(peer);
+            peers.set_trusted(peer, true);
             peers.set_connected(peer, ConnectionId::new_unchecked(i), None);
         }
 
