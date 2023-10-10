@@ -6,7 +6,7 @@ use libp2p::{
     noise, tcp, yamux, PeerId, Transport,
 };
 
-use crate::{node::NodeConfig, store::InMemoryStore};
+use crate::{node::NodeConfig, store::in_memory_store::InMemoryStore};
 
 pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
     let s = InMemoryStore::new();

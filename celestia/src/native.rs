@@ -1,10 +1,11 @@
 use std::env;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{bail, Result};
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::p2p::P2pService;
-use celestia_node::store::InMemoryStore;
+use celestia_node::store::sled_store::SledStore;
 use celestia_rpc::prelude::*;
 use clap::{Parser, ValueEnum};
 use libp2p::{
@@ -27,6 +28,9 @@ struct Args {
     /// Bootnode
     #[arg(short, long = "bootnode")]
     bootnodes: Vec<Multiaddr>,
+
+    #[arg(short, long = "store")]
+    store: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -42,7 +46,12 @@ pub async fn run() -> Result<()> {
     let args = Args::parse();
     let _guard = init_tracing();
 
-    let store = InMemoryStore::new();
+    let store = if let Some(db_path) = args.store {
+        SledStore::new(db_path)?
+    } else {
+        SledStore::new_in_memory()?
+    };
+    info!("Initialised store with head: {:?}", store.get_head());
 
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
