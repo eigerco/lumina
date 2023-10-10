@@ -267,7 +267,7 @@ async fn head_selection_with_multiple_peers() {
     let new_b_peer_id = new_b_node.p2p().local_peer_id().to_owned();
     client
         .p2p()
-        .set_trusted_peer(new_b_peer_id, true)
+        .set_peer_trust(new_b_peer_id, true)
         .await
         .unwrap();
 

@@ -120,7 +120,7 @@ pub(crate) enum P2pCmd {
         head: Box<ExtendedHeader>,
         respond_to: OneshotResultSender<(), P2pError>,
     },
-    SetTrustedPeer {
+    SetPeerTrust {
         peer_id: PeerId,
         is_trusted: bool,
     },
@@ -319,8 +319,8 @@ where
         Ok(rx.await?)
     }
 
-    pub async fn set_trusted_peer(&self, peer_id: PeerId, is_trusted: bool) -> Result<()> {
-        self.send_command(P2pCmd::SetTrustedPeer {
+    pub async fn set_peer_trust(&self, peer_id: PeerId, is_trusted: bool) -> Result<()> {
+        self.send_command(P2pCmd::SetPeerTrust {
             peer_id,
             is_trusted,
         })
@@ -510,7 +510,7 @@ where
                 let res = self.on_init_header_sub(*head).await;
                 respond_to.maybe_send(res);
             }
-            P2pCmd::SetTrustedPeer {
+            P2pCmd::SetPeerTrust {
                 peer_id,
                 is_trusted,
             } => {
