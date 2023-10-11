@@ -447,6 +447,26 @@ pub mod tests {
         }
     }
 
+    #[test]
+    fn test_separate_stores() {
+        let (store0, mut gen0) = gen_filled_store(10, None);
+        let store1 = store0.clone();
+        let mut gen1 = gen0.fork();
+
+        for h in gen0.next_many(5) {
+            store0.append_single_unchecked(&h).unwrap()
+        }
+        for h in gen1.next_many(6) {
+            store1.append_single_unchecked(&h).unwrap();
+        }
+
+        assert_eq!(store0.get_by_height(10).unwrap(), store1.get_by_height(10).unwrap());
+        assert_ne!(store0.get_by_height(11).unwrap(), store1.get_by_height(11).unwrap());
+
+        assert_eq!(store0.head_height().unwrap(), 15);
+        assert_eq!(store1.head_height().unwrap(), 16);
+    }
+
     pub fn gen_filled_store(
         amount: u64,
         path: Option<&Path>,
