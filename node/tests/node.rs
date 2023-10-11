@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use celestia_node::{
     node::{Node, NodeConfig},
-    store::in_memory_store::InMemoryStore,
+    store::InMemoryStore,
     test_utils::{test_node_config, test_node_config_with_keypair},
 };
 use celestia_rpc::prelude::*;

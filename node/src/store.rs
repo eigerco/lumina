@@ -1,13 +1,18 @@
 use std::fmt::Debug;
+use std::io;
 
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::{validate_headers, ExtendedHeader};
 use thiserror::Error;
 
-pub mod in_memory_store;
+pub use in_memory_store::InMemoryStore;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod sled_store;
+pub use sled_store::SledStore;
+
+mod in_memory_store;
+#[cfg(not(target_arch = "wasm32"))]
+mod sled_store;
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
 
@@ -115,4 +120,10 @@ pub enum StoreError {
 
     #[error("Persistent storage reported unrecoverable error: {0}")]
     BackingStoreError(String),
+
+    #[error("Received error from executor: {0}")]
+    ExecutorError(String),
+
+    #[error("Received io error from persistent storage: {0}")]
+    IoError(#[from] io::Error),
 }

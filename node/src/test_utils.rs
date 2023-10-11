@@ -16,7 +16,7 @@ use crate::{
     node::NodeConfig,
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
-    store::in_memory_store::InMemoryStore,
+    store::InMemoryStore,
     utils::OneshotResultSender,
 };
 

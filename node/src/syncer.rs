@@ -369,7 +369,7 @@ where
 mod tests {
     use super::*;
     use crate::{
-        store::in_memory_store::InMemoryStore,
+        store::InMemoryStore,
         test_utils::{gen_filled_store, MockP2pHandle},
     };
     use celestia_types::test_utils::ExtendedHeaderGenerator;
