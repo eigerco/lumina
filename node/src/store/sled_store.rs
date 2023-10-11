@@ -460,8 +460,14 @@ pub mod tests {
             store1.append_single_unchecked(&h).unwrap();
         }
 
-        assert_eq!(store0.get_by_height(10).unwrap(), store1.get_by_height(10).unwrap());
-        assert_ne!(store0.get_by_height(11).unwrap(), store1.get_by_height(11).unwrap());
+        assert_eq!(
+            store0.get_by_height(10).unwrap(),
+            store1.get_by_height(10).unwrap()
+        );
+        assert_ne!(
+            store0.get_by_height(11).unwrap(),
+            store1.get_by_height(11).unwrap()
+        );
 
         assert_eq!(store0.head_height().unwrap(), 15);
         assert_eq!(store1.head_height().unwrap(), 16);

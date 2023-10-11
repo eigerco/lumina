@@ -47,7 +47,6 @@ pub async fn run() -> Result<()> {
     let args = Args::parse();
     let _guard = init_tracing();
 
-
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
     let p2p_bootstrap_peers = if args.bootnodes.is_empty() {
