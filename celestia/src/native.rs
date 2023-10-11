@@ -47,12 +47,6 @@ pub async fn run() -> Result<()> {
     let args = Args::parse();
     let _guard = init_tracing();
 
-    let store = if let Some(db_path) = args.store {
-        SledStore::new_in_path(db_path)?
-    } else {
-        SledStore::new()?
-    };
-    info!("Initialised store with head: {:?}", store.get_head());
 
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
@@ -64,6 +58,13 @@ pub async fn run() -> Result<()> {
 
     let network_id = network_id(args.network).to_owned();
     let genesis_hash = network_genesis(args.network)?;
+
+    let store = if let Some(db_path) = args.store {
+        SledStore::new_in_path(db_path)?
+    } else {
+        SledStore::new(&network_id)?
+    };
+    info!("Initialised store with head: {:?}", store.get_head());
 
     let p2p_transport = TokioDnsConfig::system(tcp::tokio::Transport::new(tcp::Config::default()))?
         .upgrade(Version::V1Lazy)

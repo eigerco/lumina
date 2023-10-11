@@ -1,17 +1,15 @@
 use std::convert::Infallible;
-use std::env::temp_dir;
 use std::io;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use directories::ProjectDirs;
-use rand::distributions::{Alphanumeric, DistString};
-use rand::thread_rng;
 use sled::transaction::{ConflictableTransactionError, TransactionError};
 use sled::{Db, Error as SledError, Transactional, Tree};
+use tempdir::TempDir;
 use tendermint_proto::Protobuf;
 use tracing::debug;
 
@@ -30,19 +28,21 @@ pub struct SledStore {
 }
 
 impl SledStore {
-    pub fn new() -> sled::Result<Self> {
+    pub fn new(network_id: &str) -> sled::Result<Self> {
         let Some(project_dirs) = ProjectDirs::from("co", "eiger", "celestia") else {
             return Err(sled::Error::Io(io::Error::new(
                 io::ErrorKind::Other,
                 "Failed to get cache directory",
             )));
         };
+        let mut db_path = project_dirs.cache_dir().to_owned();
+        db_path.push(network_id);
 
-        Self::new_in_path(project_dirs.cache_dir())
+        Self::new_in_path(db_path)
     }
 
     pub fn new_temp() -> sled::Result<Self> {
-        let tmp_path = temp_db_dir();
+        let tmp_path = TempDir::new("celestia")?.into_path();
 
         let db = sled::Config::default()
             .path(tmp_path)
@@ -183,15 +183,6 @@ impl From<SledError> for StoreError {
     }
 }
 
-// generate random 16 character alphanumeric name in OS temp_dir. Not guaranteed to be unique
-fn temp_db_dir() -> PathBuf {
-    let random_db_name = Alphanumeric.sample_string(&mut thread_rng(), 16);
-    let mut tmp_path = temp_dir();
-    tmp_path.push(random_db_name);
-
-    tmp_path
-}
-
 #[async_trait]
 impl Store for SledStore {
     async fn get_head(&self) -> Result<ExtendedHeader> {
@@ -263,11 +254,11 @@ fn height_to_key(height: u64) -> [u8; 8] {
     height.to_be_bytes()
 }
 
-// clone existing store to new in-memory one
+// clone existing store to a new temporary store
 #[cfg(feature = "test-utils")]
 impl Clone for SledStore {
     fn clone(&self) -> Self {
-        let clone = SledStore::new().unwrap();
+        let clone = SledStore::new_temp().unwrap();
         clone.db.import(self.db.export());
         clone
     }
@@ -409,8 +400,8 @@ pub mod tests {
 
     #[test]
     fn test_store_persistence() {
-        let db_dir = temp_db_dir();
-        let (original_store, mut gen) = gen_filled_store(0, Some(db_dir.as_ref()));
+        let db_dir = TempDir::new("celestia.test").unwrap();
+        let (original_store, mut gen) = gen_filled_store(0, Some(db_dir.path()));
         let mut original_headers = gen.next_many(20);
 
         for h in &original_headers {
@@ -420,7 +411,7 @@ pub mod tests {
         }
         drop(original_store);
 
-        let reopened_store = SledStore::new_in_path(&db_dir).expect("failed to reopen store");
+        let reopened_store = SledStore::new_in_path(db_dir.path()).expect("failed to reopen store");
 
         assert_eq!(
             original_headers.last().unwrap().height().value(),
@@ -443,7 +434,7 @@ pub mod tests {
 
         original_headers.append(&mut new_headers);
 
-        let reopened_store = SledStore::new_in_path(&db_dir).expect("failed to reopen store");
+        let reopened_store = SledStore::new_in_path(db_dir.path()).expect("failed to reopen store");
         assert_eq!(
             original_headers.last().unwrap().height().value(),
             reopened_store.head_height().unwrap()
