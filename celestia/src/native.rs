@@ -29,6 +29,7 @@ struct Args {
     #[arg(short, long = "bootnode")]
     bootnodes: Vec<Multiaddr>,
 
+    /// Persistent header store path
     #[arg(short, long = "store")]
     store: Option<PathBuf>,
 }
@@ -47,9 +48,9 @@ pub async fn run() -> Result<()> {
     let _guard = init_tracing();
 
     let store = if let Some(db_path) = args.store {
-        SledStore::new(db_path)?
+        SledStore::new_in_path(db_path)?
     } else {
-        SledStore::new_in_memory()?
+        SledStore::new()?
     };
     info!("Initialised store with head: {:?}", store.get_head());
 

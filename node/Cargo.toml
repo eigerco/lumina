@@ -30,10 +30,11 @@ tokio = { version = "1.32.0", features = ["macros", "sync"] }
 tracing = "0.1.37"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+directories = "5.0.1"
 # Upgrading this dependency invalidates existing persistent dbs.
 # Those can be restored by migrating between versions:
 # https://docs.rs/sled/latest/sled/struct.Db.html#examples-1
-sled = "0.34"
+sled = "0.34.7"
 tokio = { version = "1.32.0", features = ["rt-multi-thread"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

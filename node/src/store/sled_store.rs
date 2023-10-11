@@ -1,10 +1,15 @@
 use std::convert::Infallible;
+use std::env::temp_dir;
+use std::io;
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use directories::ProjectDirs;
+use rand::distributions::{Alphanumeric, DistString};
+use rand::thread_rng;
 use sled::transaction::{ConflictableTransactionError, TransactionError};
 use sled::{Db, Error as SledError, Transactional, Tree};
 use tendermint_proto::Protobuf;
@@ -25,16 +30,33 @@ pub struct SledStore {
 }
 
 impl SledStore {
-    pub fn new<P>(path: P) -> sled::Result<Self>
+    pub fn new() -> sled::Result<Self> {
+        let Some(project_dirs) = ProjectDirs::from("co", "eiger", "celestia") else {
+            return Err(sled::Error::Io(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to get cache directory",
+            )));
+        };
+
+        Self::new_in_path(project_dirs.cache_dir())
+    }
+
+    pub fn new_temp() -> sled::Result<Self> {
+        let tmp_path = temp_db_dir();
+
+        let db = sled::Config::default()
+            .path(tmp_path)
+            .temporary(true)
+            .create_new(true) // make sure we fail if db is already there
+            .open()?;
+        Self::init(db)
+    }
+
+    pub fn new_in_path<P>(path: P) -> sled::Result<Self>
     where
         P: AsRef<Path>,
     {
         let db = sled::open(path)?;
-        Self::init(db)
-    }
-
-    pub fn new_in_memory() -> sled::Result<Self> {
-        let db = sled::Config::default().temporary(true).open()?;
         Self::init(db)
     }
 
@@ -139,10 +161,10 @@ impl SledStore {
 // we can report contained StoreError directly, otherwise transpose Sled error as StoreError
 impl From<TransactionError<StoreError>> for StoreError {
     fn from(error: TransactionError<StoreError>) -> StoreError {
-        type T = TransactionError<StoreError>;
+        type E = TransactionError<StoreError>;
         match error {
-            T::Abort(store_error) => store_error,
-            T::Storage(sled_error) => sled_error.into(),
+            E::Abort(store_error) => store_error,
+            E::Storage(sled_error) => sled_error.into(),
         }
     }
 }
@@ -159,6 +181,15 @@ impl From<SledError> for StoreError {
             | e @ SledError::Io(_) => StoreError::BackingStoreError(e.to_string()),
         }
     }
+}
+
+// generate random 16 character alphanumeric name in OS temp_dir. Not guaranteed to be unique
+fn temp_db_dir() -> PathBuf {
+    let random_db_name = Alphanumeric.sample_string(&mut thread_rng(), 16);
+    let mut tmp_path = temp_dir();
+    tmp_path.push(random_db_name);
+
+    tmp_path
 }
 
 #[async_trait]
@@ -236,7 +267,7 @@ fn height_to_key(height: u64) -> [u8; 8] {
 #[cfg(feature = "test-utils")]
 impl Clone for SledStore {
     fn clone(&self) -> Self {
-        let clone = SledStore::new_in_memory().unwrap();
+        let clone = SledStore::new().unwrap();
         clone.db.import(self.db.export());
         clone
     }
@@ -250,7 +281,7 @@ pub mod tests {
 
     #[test]
     fn test_empty_store() {
-        let s = SledStore::new_in_memory().unwrap();
+        let s = SledStore::new_temp().unwrap();
         assert!(matches!(s.head_height(), Err(StoreError::NotFound)));
         assert!(matches!(s.get_head(), Err(StoreError::NotFound)));
         assert!(matches!(s.get_by_height(1), Err(StoreError::NotFound)));
@@ -262,7 +293,7 @@ pub mod tests {
 
     #[test]
     fn test_read_write() {
-        let s = SledStore::new_in_memory().unwrap();
+        let s = SledStore::new_temp().unwrap();
         let mut gen = ExtendedHeaderGenerator::new();
 
         let header = gen.next();
@@ -276,7 +307,7 @@ pub mod tests {
 
     #[test]
     fn test_pregenerated_data() {
-        let (s, _) = gen_filled_store(100);
+        let (s, _) = gen_filled_store(100, None);
         assert_eq!(s.head_height().unwrap(), 100);
         let head = s.get_head().unwrap();
         assert_eq!(s.get_by_height(100).unwrap(), head);
@@ -288,7 +319,7 @@ pub mod tests {
 
     #[test]
     fn test_duplicate_insert() {
-        let (s, mut gen) = gen_filled_store(100);
+        let (s, mut gen) = gen_filled_store(100, None);
         let header101 = gen.next();
         s.append_single_unchecked(&header101.clone()).unwrap();
         assert!(matches!(
@@ -299,7 +330,7 @@ pub mod tests {
 
     #[test]
     fn test_overwrite_height() {
-        let (s, gen) = gen_filled_store(100);
+        let (s, gen) = gen_filled_store(100, None);
 
         // Height 30 with different hash
         let header29 = s.get_by_height(29).unwrap();
@@ -314,7 +345,7 @@ pub mod tests {
 
     #[test]
     fn test_overwrite_hash() {
-        let (s, _) = gen_filled_store(100);
+        let (s, _) = gen_filled_store(100, None);
         let mut dup_header = s.get_by_height(33).unwrap();
         dup_header.header.height = Height::from(101u32);
         let insert_existing_result = s.append_single_unchecked(&dup_header.clone());
@@ -326,7 +357,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_append_range() {
-        let (s, mut gen) = gen_filled_store(10);
+        let (s, mut gen) = gen_filled_store(10, None);
         let hs = gen.next_many(4);
         s.append_unchecked(hs).await.unwrap();
         s.get_by_height(14).unwrap();
@@ -334,7 +365,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_append_gap_between_head() {
-        let (s, mut gen) = gen_filled_store(10);
+        let (s, mut gen) = gen_filled_store(10, None);
 
         // height 11
         gen.next();
@@ -350,7 +381,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_non_continuous_append() {
-        let (s, mut gen) = gen_filled_store(10);
+        let (s, mut gen) = gen_filled_store(10, None);
         let mut hs = gen.next_many(6);
 
         // remove height 14
@@ -368,7 +399,7 @@ pub mod tests {
         let mut gen = ExtendedHeaderGenerator::new_from_height(5);
         let header5 = gen.next();
 
-        let s = SledStore::new_in_memory().unwrap();
+        let s = SledStore::new_temp().unwrap();
 
         assert!(matches!(
             s.append_single_unchecked(&header5),
@@ -376,8 +407,65 @@ pub mod tests {
         ));
     }
 
-    pub fn gen_filled_store(amount: u64) -> (SledStore, ExtendedHeaderGenerator) {
-        let s = SledStore::new_in_memory().unwrap();
+    #[test]
+    fn test_store_persistence() {
+        let db_dir = temp_db_dir();
+        let (original_store, mut gen) = gen_filled_store(0, Some(db_dir.as_ref()));
+        let mut original_headers = gen.next_many(20);
+
+        for h in &original_headers {
+            original_store
+                .append_single_unchecked(h)
+                .expect("inserting test data failed");
+        }
+        drop(original_store);
+
+        let reopened_store = SledStore::new_in_path(&db_dir).expect("failed to reopen store");
+
+        assert_eq!(
+            original_headers.last().unwrap().height().value(),
+            reopened_store.head_height().unwrap()
+        );
+        for original_header in &original_headers {
+            let stored_header = reopened_store
+                .get_by_height(original_header.height().value())
+                .unwrap();
+            assert_eq!(original_header, &stored_header);
+        }
+
+        let mut new_headers = gen.next_many(10);
+        for h in &new_headers {
+            reopened_store
+                .append_single_unchecked(h)
+                .expect("failed to insert data");
+        }
+        drop(reopened_store);
+
+        original_headers.append(&mut new_headers);
+
+        let reopened_store = SledStore::new_in_path(&db_dir).expect("failed to reopen store");
+        assert_eq!(
+            original_headers.last().unwrap().height().value(),
+            reopened_store.head_height().unwrap()
+        );
+        for original_header in &original_headers {
+            let stored_header = reopened_store
+                .get_by_height(original_header.height().value())
+                .unwrap();
+            assert_eq!(original_header, &stored_header);
+        }
+    }
+
+    pub fn gen_filled_store(
+        amount: u64,
+        path: Option<&Path>,
+    ) -> (SledStore, ExtendedHeaderGenerator) {
+        let s = if let Some(path) = path {
+            SledStore::new_in_path(path).unwrap()
+        } else {
+            SledStore::new_temp().unwrap()
+        };
+
         let mut gen = ExtendedHeaderGenerator::new();
 
         let headers = gen.next_many(amount);
