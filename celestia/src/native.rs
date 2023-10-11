@@ -64,7 +64,7 @@ pub async fn run() -> Result<()> {
     } else {
         SledStore::new(&network_id)?
     };
-    info!("Initialised store with head: {:?}", store.get_head());
+    info!("Initialised store with head: {:?}", store.head_height());
 
     let p2p_transport = TokioDnsConfig::system(tcp::tokio::Transport::new(tcp::Config::default()))?
         .upgrade(Version::V1Lazy)
