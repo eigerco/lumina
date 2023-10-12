@@ -125,10 +125,10 @@ async fn get_shares_by_namespace_wrong_roots() {
 
     blob_submit(&client, &[blob]).await.unwrap();
 
-    let genesis_dah = client.header_get_by_height(1).await.unwrap();
+    let genesis = client.header_get_by_height(1).await.unwrap();
 
     let ns_shares = client
-        .share_get_shares_by_namespace(&genesis_dah, namespace)
+        .share_get_shares_by_namespace(&genesis, namespace)
         .await
         .unwrap();
 
