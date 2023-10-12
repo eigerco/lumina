@@ -20,14 +20,10 @@ async fn get_shares_by_namespace() {
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
-    let dah = client
-        .header_get_by_height(submitted_height)
-        .await
-        .unwrap()
-        .dah;
+    let header = client.header_get_by_height(submitted_height).await.unwrap();
 
     let ns_shares = client
-        .share_get_shares_by_namespace(&dah, namespace)
+        .share_get_shares_by_namespace(&header, namespace)
         .await
         .unwrap();
 
@@ -62,13 +58,9 @@ async fn get_shares_by_namespace_wrong_ns() {
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
-    let dah = client
-        .header_get_by_height(submitted_height)
-        .await
-        .unwrap()
-        .dah;
+    let header = client.header_get_by_height(submitted_height).await.unwrap();
 
-    let root_hash = dah.row_root(0).unwrap();
+    let root_hash = header.dah.row_root(0).unwrap();
     let min_ns = root_hash.min_namespace().into();
     let max_ns = root_hash.max_namespace().into();
 
@@ -82,7 +74,7 @@ async fn get_shares_by_namespace_wrong_ns() {
     // check the case where we receive absence proof
     let random_ns = random_ns_range(min_ns, max_ns);
     let ns_shares = client
-        .share_get_shares_by_namespace(&dah, random_ns)
+        .share_get_shares_by_namespace(&header, random_ns)
         .await
         .unwrap();
     assert_eq!(ns_shares.rows.len(), 1);
@@ -107,20 +99,16 @@ async fn get_shares_by_namespace_wrong_ns_out_of_range() {
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
-    let dah = client
-        .header_get_by_height(submitted_height)
-        .await
-        .unwrap()
-        .dah;
+    let header = client.header_get_by_height(submitted_height).await.unwrap();
 
-    let root_hash = dah.row_root(0).unwrap();
+    let root_hash = header.dah.row_root(0).unwrap();
     let min_ns = root_hash.min_namespace().into();
 
     // check the case where namespace is outside of the root hash range
     let zero = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     let random_ns = random_ns_range(zero, min_ns);
     let ns_shares = client
-        .share_get_shares_by_namespace(&dah, random_ns)
+        .share_get_shares_by_namespace(&header, random_ns)
         .await
         .unwrap();
 
@@ -137,10 +125,10 @@ async fn get_shares_by_namespace_wrong_roots() {
 
     blob_submit(&client, &[blob]).await.unwrap();
 
-    let genesis_dah = client.header_get_by_height(1).await.unwrap().dah;
+    let genesis = client.header_get_by_height(1).await.unwrap();
 
     let ns_shares = client
-        .share_get_shares_by_namespace(&genesis_dah, namespace)
+        .share_get_shares_by_namespace(&genesis, namespace)
         .await
         .unwrap();
 
@@ -156,21 +144,9 @@ async fn get_eds() {
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
-    let dah = client
-        .header_get_by_height(submitted_height)
-        .await
-        .unwrap()
-        .dah;
+    let header = client.header_get_by_height(submitted_height).await.unwrap();
 
-    let _eds = client.share_get_eds(&dah).await.unwrap();
+    let _eds = client.share_get_eds(&header).await.unwrap();
 
     // TODO: validate
-}
-
-#[tokio::test]
-async fn probability_of_availability() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
-
-    client.share_probability_of_availability().await.unwrap();
-    // TODO: any way to validate it?
 }
