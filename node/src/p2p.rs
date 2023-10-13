@@ -32,6 +32,7 @@ use crate::executor::{spawn, Executor};
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::Store;
+use crate::transport::new_transport;
 use crate::utils::{
     celestia_protocol_id, gossipsub_ident_topic, MultiaddrExt, OneshotResultSender,
     OneshotSenderExt,
@@ -51,6 +52,12 @@ pub enum P2pError {
 
     #[error("Transport error: {0}")]
     Transport(#[from] TransportError<io::Error>),
+
+    #[error("Failed to initialize DNS: {0}")]
+    InitDns(io::Error),
+
+    #[error("Failed to initialize noise: {0}")]
+    InitNoise(String),
 
     #[error("Dial error: {0}")]
     Dial(#[from] DialError),
@@ -93,7 +100,6 @@ pub struct P2pArgs<S>
 where
     S: Store + 'static,
 {
-    pub transport: Boxed<(PeerId, StreamMuxerBox)>,
     pub network_id: String,
     pub local_keypair: Keypair,
     pub bootstrap_peers: Vec<Multiaddr>,
@@ -132,6 +138,7 @@ where
 {
     pub fn start(args: P2pArgs<S>) -> Result<Self, P2pError> {
         let local_peer_id = PeerId::from(args.local_keypair.public());
+        let transport = new_transport(&args.local_keypair)?;
 
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (header_sub_tx, header_sub_rx) = watch::channel(None);
@@ -139,7 +146,7 @@ where
         let peer_tracker = Arc::new(PeerTracker::new());
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
 
-        let mut worker = Worker::new(args, cmd_rx, header_sub_tx, peer_tracker)?;
+        let mut worker = Worker::new(args, transport, cmd_rx, header_sub_tx, peer_tracker)?;
 
         spawn(async move {
             worker.run().await;
@@ -359,6 +366,7 @@ where
 {
     fn new(
         args: P2pArgs<S>,
+        transport: Boxed<(PeerId, StreamMuxerBox)>,
         cmd_rx: mpsc::Receiver<P2pCmd>,
         header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
         peer_tracker: Arc<PeerTracker>,
@@ -394,7 +402,7 @@ where
         };
 
         let mut swarm =
-            SwarmBuilder::with_executor(args.transport, behaviour, local_peer_id, Executor).build();
+            SwarmBuilder::with_executor(transport, behaviour, local_peer_id, Executor).build();
 
         for addr in args.listen_on {
             swarm.listen_on(addr)?;

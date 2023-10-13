@@ -1978,6 +1978,7 @@ dependencies = [
  "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-tcp",
+ "libp2p-webtransport-websys",
  "libp2p-yamux",
  "multiaddr",
  "pin-project",
@@ -2362,6 +2363,27 @@ dependencies = [
  "thiserror",
  "x509-parser",
  "yasna",
+]
+
+[[package]]
+name = "libp2p-webtransport-websys"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "960d77008a7977104a3d3c23d25aa38604135679b220980ade03d5985c73e9f0"
+dependencies = [
+ "futures",
+ "js-sys",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-noise",
+ "log",
+ "multiaddr",
+ "multihash 0.19.1",
+ "send_wrapper",
+ "thiserror",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
