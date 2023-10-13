@@ -29,7 +29,7 @@ jobs:
       run: cargo fmt -- --check
 
 
-  build-wasm:
+  test-wasm:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
@@ -46,8 +46,23 @@ jobs:
         toolchain: stable
         target: wasm32-unknown-unknown
 
+    - name: Install wasm-pack
+      uses: taiki-e/cache-cargo-install-action@v1
+      with:
+        tool: wasm-pack@0.12.1
+
+    - name: Install chromedriver # we don't specify chrome version to match whatever's installed
+      uses: nanasess/setup-chromedriver@v2
+
     - name: Build (wasm32-unknown-unknown)
       run: cargo build --all --target=wasm32-unknown-unknown
+
+# TODO: fix test build for wasm
+#    - name: Run tests
+#      run: cargo test --target wasm32-unknown-unknown
+
+    - name: Run browser tests
+      run: wasm-pack test --headless --chrome node
 
 
   test:

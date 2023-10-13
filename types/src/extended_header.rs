@@ -9,6 +9,7 @@ use tendermint::chain::id::Id;
 use tendermint::{validator, Hash, Time};
 use tendermint_proto::Protobuf;
 
+use crate::time::now;
 use crate::trust_level::DEFAULT_TRUST_LEVEL;
 use crate::validator_set::ValidatorSetExt;
 use crate::{
@@ -144,7 +145,7 @@ impl ExtendedHeader {
             );
         }
 
-        let now = Time::now();
+        let now = now();
         let valid_until = now.checked_add(VERIFY_CLOCK_DRIFT).unwrap();
 
         if !untrusted.time().before(valid_until) {

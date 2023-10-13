@@ -6,13 +6,14 @@ use tendermint::{
     },
     chain,
     public_key::PublicKey,
-    Signature, Time,
+    Signature,
 };
 
 use crate::block::{CommitExt, GENESIS_HEIGHT};
 use crate::consts::version;
 use crate::hash::{Hash, HashExt};
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
+use crate::time::now;
 use crate::{DataAvailabilityHeader, ExtendedHeader, ValidatorSet};
 
 #[derive(Debug, Clone)]
@@ -270,7 +271,7 @@ fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> 
             },
             chain_id: chain_id.clone(),
             height: height.try_into().unwrap(),
-            time: Time::now(),
+            time: now(),
             last_block_id,
             last_commit_hash: Hash::default_sha256(),
             data_hash: Hash::None,
@@ -296,7 +297,7 @@ fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> 
             },
             signatures: vec![CommitSig::BlockIdFlagCommit {
                 validator_address,
-                timestamp: Time::now(),
+                timestamp: now(),
                 signature: None,
             }],
         },
@@ -356,7 +357,7 @@ fn generate_next(
             version: current.header.version,
             chain_id: current.header.chain_id.clone(),
             height,
-            time: Time::now(),
+            time: now(),
             last_block_id,
             last_commit_hash: Hash::default_sha256(),
             data_hash: Hash::None,
@@ -382,7 +383,7 @@ fn generate_next(
             },
             signatures: vec![CommitSig::BlockIdFlagCommit {
                 validator_address,
-                timestamp: Time::now(),
+                timestamp: now(),
                 signature: None,
             }],
         },

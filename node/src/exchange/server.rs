@@ -217,7 +217,12 @@ mod tests {
     use tokio::select;
     use tokio::sync::oneshot;
 
-    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    use tokio::test as async_test;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as async_test;
+
+    #[async_test]
     async fn request_head_test() {
         let (store, _) = gen_filled_store(4);
         let expected_head = store.get_head().unwrap();
@@ -233,7 +238,7 @@ mod tests {
         assert_eq!(decoded_header, expected_head);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn request_header_test() {
         let (store, _) = gen_filled_store(3);
         let expected_genesis = store.get_by_height(1).unwrap();
@@ -254,7 +259,7 @@ mod tests {
         assert_eq!(decoded_header, expected_genesis);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn invalid_amount_request_test() {
         let (store, _) = gen_filled_store(1);
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
@@ -272,7 +277,7 @@ mod tests {
         assert_eq!(received[0].status_code, i32::from(StatusCode::Invalid));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn none_data_request_test() {
         let (store, _) = gen_filled_store(1);
         let mut handler = ExchangeServerHandler::new(Arc::new(store));
@@ -289,7 +294,7 @@ mod tests {
         assert_eq!(received[0].status_code, i32::from(StatusCode::Invalid));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn request_hash_test() {
         let (store, _) = gen_filled_store(1);
         let stored_header = store.get_head().unwrap();
@@ -310,7 +315,7 @@ mod tests {
         assert_eq!(decoded_header, stored_header);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn request_range_test() {
         let (store, _) = gen_filled_store(10);
         let expected_headers = [
@@ -335,7 +340,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn request_range_beyond_head_test() {
         let (store, _) = gen_filled_store(5);
         let expected_hashes = [store.get_by_height(5).ok()];

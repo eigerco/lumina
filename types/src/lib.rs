@@ -17,6 +17,7 @@ pub mod state;
 mod sync;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
+mod time;
 pub mod trust_level;
 mod validate;
 mod validator_set;

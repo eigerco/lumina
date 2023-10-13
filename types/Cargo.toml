@@ -24,6 +24,7 @@ sha2 = "0.10.7"
 tendermint = { workspace = true, features = ["std", "rust-crypto"] }
 tendermint-proto = { workspace = true }
 thiserror = "1.0.40"
+instant = { version = "0.1.12", features = ["wasm-bindgen"] }
 
 [dev-dependencies]
 ed25519-consensus = "2.1.0"
