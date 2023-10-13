@@ -17,7 +17,7 @@ use libp2p::{
     Multiaddr, PeerId, StreamProtocol,
 };
 use prost::Message;
-use std::mem;
+use std::mem::{self, MaybeUninit};
 use tracing::debug;
 use tracing::instrument;
 
@@ -379,7 +379,8 @@ where
     let mut buf = Vec::with_capacity(limit);
 
     loop {
-        let read_buf: &mut [u8] = unsafe { mem::transmute(buf.spare_capacity_mut()) };
+        let read_buf_unint: &mut [MaybeUninit<u8>] = buf.spare_capacity_mut();
+        let read_buf: &mut [u8] = unsafe { mem::transmute(read_buf_unint) };
 
         if read_buf.is_empty() {
             // No empty space. Buffer is full.
