@@ -291,6 +291,10 @@ impl Codec for HeaderCodec {
     {
         let data = read_up_to(io, REQUEST_SIZE_MAXIMUM).await?;
 
+        if data.len() >= REQUEST_SIZE_MAXIMUM {
+            debug!("Message filled the whole buffer (len: {})", data.len());
+        }
+
         parse_header_request(&data)
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid request"))
     }
@@ -304,6 +308,10 @@ impl Codec for HeaderCodec {
         T: AsyncRead + Unpin + Send,
     {
         let data = read_up_to(io, RESPONSE_SIZE_MAXIMUM).await?;
+
+        if data.len() >= RESPONSE_SIZE_MAXIMUM {
+            debug!("Message filled the whole buffer (len: {})", data.len());
+        }
 
         let mut data = &data[..];
         let mut msgs = Vec::new();
@@ -353,6 +361,7 @@ impl Codec for HeaderCodec {
             if resp.encode_length_delimited(&mut buf).is_err() {
                 // Error on encoding means the buffer is full.
                 // We will send a partial response back.
+                debug!("Sending partial response");
                 break;
             }
         }
@@ -408,7 +417,7 @@ fn parse_header_response(buf: &[u8]) -> Option<(HeaderResponse, &[u8])> {
     let (len, rest) = parse_delimiter(buf)?;
 
     if rest.len() < len {
-        debug!("Message is too long: {len}");
+        debug!("Message is incomplete: {len}");
         return None;
     }
 
@@ -423,7 +432,7 @@ fn parse_header_request(buf: &[u8]) -> Option<HeaderRequest> {
     let (len, rest) = parse_delimiter(buf)?;
 
     if rest.len() < len {
-        debug!("Message is too long: {len}");
+        debug!("Message is incomplete: {len}");
         return None;
     }
 
