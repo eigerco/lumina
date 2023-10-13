@@ -591,7 +591,6 @@ dependencies = [
  "tendermint-proto",
  "thiserror",
  "tokio",
- "tokio-util",
  "tracing",
  "wasm-bindgen-futures",
 ]

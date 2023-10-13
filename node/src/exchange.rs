@@ -4,10 +4,9 @@ use std::task::{Context, Poll};
 use tracing::warn;
 
 use async_trait::async_trait;
-use bytes::{BufMut, BytesMut};
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
-use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::{
     core::Endpoint,
     request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport},
@@ -18,8 +17,7 @@ use libp2p::{
     Multiaddr, PeerId, StreamProtocol,
 };
 use prost::Message;
-use tokio::io::AsyncReadExt;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
+use std::mem;
 use tracing::debug;
 use tracing::instrument;
 
@@ -291,18 +289,9 @@ impl Codec for HeaderCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut io = io.compat();
-        let mut buf = BytesMut::with_capacity(REQUEST_SIZE_MAXIMUM).limit(REQUEST_SIZE_MAXIMUM);
+        let data = read_up_to(io, REQUEST_SIZE_MAXIMUM).await?;
 
-        while let Ok(len) = io.read_buf(&mut buf).await {
-            if len == 0 {
-                break;
-            }
-        }
-
-        let data = &buf.into_inner()[..];
-
-        parse_header_request(data)
+        parse_header_request(&data)
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid request"))
     }
 
@@ -314,19 +303,12 @@ impl Codec for HeaderCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut io = io.compat();
-        let mut buf = BytesMut::with_capacity(RESPONSE_SIZE_MAXIMUM).limit(RESPONSE_SIZE_MAXIMUM);
+        let data = read_up_to(io, RESPONSE_SIZE_MAXIMUM).await?;
 
-        while let Ok(len) = io.read_buf(&mut buf).await {
-            if len == 0 {
-                break;
-            }
-        }
-
-        let mut data = &buf.into_inner()[..];
+        let mut data = &data[..];
         let mut msgs = Vec::new();
 
-        while let Some((header, rest)) = parse_header_response(data) {
+        while let Some((header, rest)) = parse_header_response(&data) {
             msgs.push(header);
             data = rest;
         }
@@ -347,7 +329,7 @@ impl Codec for HeaderCodec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let mut buf = BytesMut::with_capacity(REQUEST_SIZE_MAXIMUM);
+        let mut buf = Vec::with_capacity(REQUEST_SIZE_MAXIMUM);
 
         let _ = req.encode_length_delimited(&mut buf);
 
@@ -365,7 +347,7 @@ impl Codec for HeaderCodec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let mut buf = BytesMut::with_capacity(RESPONSE_SIZE_MAXIMUM);
+        let mut buf = Vec::with_capacity(RESPONSE_SIZE_MAXIMUM);
 
         for resp in resps {
             if resp.encode_length_delimited(&mut buf).is_err() {
@@ -379,6 +361,35 @@ impl Codec for HeaderCodec {
 
         Ok(())
     }
+}
+
+async fn read_up_to<T>(io: &mut T, limit: usize) -> io::Result<Vec<u8>>
+where
+    T: AsyncRead + Unpin + Send,
+{
+    let mut buf = Vec::with_capacity(limit);
+
+    loop {
+        let read_buf: &mut [u8] = unsafe { mem::transmute(buf.spare_capacity_mut()) };
+
+        if read_buf.is_empty() {
+            // No empty space. Buffer is full.
+            break;
+        }
+
+        let len = io.read(read_buf).await?;
+
+        if len == 0 {
+            // EOF
+            break;
+        }
+
+        unsafe {
+            buf.set_len(buf.len() + len);
+        }
+    }
+
+    Ok(buf)
 }
 
 fn parse_delimiter(mut buf: &[u8]) -> Option<(usize, &[u8])> {
