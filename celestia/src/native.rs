@@ -59,9 +59,9 @@ pub async fn run() -> Result<()> {
     let genesis_hash = network_genesis(args.network)?;
 
     let store = if let Some(db_path) = args.store {
-        SledStore::new_in_path(db_path)?
+        SledStore::new_in_path(db_path).await?
     } else {
-        SledStore::new(&network_id)?
+        SledStore::new(network_id.clone()).await?
     };
     info!(
         "Initialised store with head height: {:?}",
