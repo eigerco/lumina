@@ -7,10 +7,7 @@ use celestia_node::store::InMemoryStore;
 use celestia_rpc::prelude::*;
 use celestia_types::hash::Hash;
 use clap::{Parser, ValueEnum};
-use libp2p::{
-    core::upgrade::Version, dns::TokioDnsConfig, identity, multiaddr::Protocol, noise, tcp, yamux,
-    Multiaddr, Transport,
-};
+use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use tokio::time::sleep;
 use tracing::info;
 
@@ -55,16 +52,9 @@ pub async fn run() -> Result<()> {
     let network_id = network_id(args.network).to_owned();
     let genesis_hash = network_genesis(args.network)?;
 
-    let p2p_transport = TokioDnsConfig::system(tcp::tokio::Transport::new(tcp::Config::default()))?
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(&p2p_local_keypair)?)
-        .multiplex(yamux::Config::default())
-        .boxed();
-
     let node = Node::new(NodeConfig {
         network_id,
         genesis_hash,
-        p2p_transport,
         p2p_local_keypair,
         p2p_bootstrap_peers,
         p2p_listen_on: args.listen_addrs,

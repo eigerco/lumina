@@ -7,10 +7,8 @@
 use std::sync::Arc;
 
 use celestia_types::hash::Hash;
-use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::transport::Boxed;
 use libp2p::identity::Keypair;
-use libp2p::{Multiaddr, PeerId};
+use libp2p::Multiaddr;
 
 use crate::p2p::{P2p, P2pArgs, P2pError};
 use crate::store::Store;
@@ -33,7 +31,6 @@ where
 {
     pub network_id: String,
     pub genesis_hash: Option<Hash>,
-    pub p2p_transport: Boxed<(PeerId, StreamMuxerBox)>,
     pub p2p_local_keypair: Keypair,
     pub p2p_bootstrap_peers: Vec<Multiaddr>,
     pub p2p_listen_on: Vec<Multiaddr>,
@@ -57,7 +54,6 @@ where
 
         let p2p = Arc::new(P2p::start(P2pArgs {
             network_id: config.network_id,
-            transport: config.p2p_transport,
             local_keypair: config.p2p_local_keypair,
             bootstrap_peers: config.p2p_bootstrap_peers,
             listen_on: config.p2p_listen_on,

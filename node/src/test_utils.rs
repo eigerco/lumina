@@ -2,11 +2,7 @@ use std::time::Duration;
 
 use celestia_proto::p2p::pb::{header_request::Data, HeaderRequest};
 use celestia_types::{hash::Hash, test_utils::ExtendedHeaderGenerator, ExtendedHeader};
-use libp2p::{
-    core::{muxing::StreamMuxerBox, transport::Boxed, upgrade::Version},
-    identity::{self, Keypair},
-    noise, tcp, yamux, PeerId, Transport,
-};
+use libp2p::identity::{self, Keypair};
 use tokio::{
     sync::{mpsc, watch},
     time::timeout,
@@ -34,21 +30,12 @@ pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator)
     (s, gen)
 }
 
-fn tcp_transport(local_keypair: &Keypair) -> Boxed<(PeerId, StreamMuxerBox)> {
-    tcp::tokio::Transport::default()
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(local_keypair).unwrap())
-        .multiplex(yamux::Config::default())
-        .boxed()
-}
-
 // helpers to use with struct update syntax to avoid spelling out all the details
 pub fn test_node_config() -> NodeConfig<InMemoryStore> {
     let node_keypair = identity::Keypair::generate_ed25519();
     NodeConfig {
         network_id: "private".to_string(),
         genesis_hash: None,
-        p2p_transport: tcp_transport(&node_keypair),
         p2p_local_keypair: node_keypair,
         p2p_bootstrap_peers: vec![],
         p2p_listen_on: vec![],
@@ -65,7 +52,6 @@ pub fn listening_test_node_config() -> NodeConfig<InMemoryStore> {
 
 pub fn test_node_config_with_keypair(keypair: Keypair) -> NodeConfig<InMemoryStore> {
     NodeConfig {
-        p2p_transport: tcp_transport(&keypair),
         p2p_local_keypair: keypair,
         ..test_node_config()
     }
