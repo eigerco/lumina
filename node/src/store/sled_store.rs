@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -67,10 +67,11 @@ impl SledStore {
 
     pub async fn new_in_path<P>(path: P) -> Result<Self>
     where
-        P: Into<PathBuf> + Send + 'static,
+        P: AsRef<Path>,
     {
+        let path = path.as_ref().to_owned();
         spawn_blocking(move || {
-            let db = sled::open(path.into())?;
+            let db = sled::open(path)?;
             Self::init(db)
         })
         .await?
@@ -455,7 +456,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_store_persistence() {
         let db_dir = TempDir::new("celestia.test").unwrap();
-        let (original_store, mut gen) = gen_filled_store(0, Some(db_dir.path().to_owned())).await;
+        let (original_store, mut gen) = gen_filled_store(0, Some(db_dir.path())).await;
         let mut original_headers = gen.next_many(20);
 
         for h in &original_headers {
@@ -466,7 +467,7 @@ pub mod tests {
         }
         drop(original_store);
 
-        let reopened_store = SledStore::new_in_path(db_dir.path().to_owned())
+        let reopened_store = SledStore::new_in_path(db_dir.path())
             .await
             .expect("failed to reopen store");
 
@@ -542,7 +543,7 @@ pub mod tests {
 
     pub async fn gen_filled_store(
         amount: u64,
-        path: Option<PathBuf>,
+        path: Option<&Path>,
     ) -> (SledStore, ExtendedHeaderGenerator) {
         let s = if let Some(path) = path {
             SledStore::new_in_path(path).await.unwrap()
