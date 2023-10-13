@@ -1,4 +1,3 @@
-use std::future::poll_fn;
 use std::io;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -7,7 +6,7 @@ use tracing::warn;
 use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
-use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::{
     core::Endpoint,
     request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport},
@@ -18,8 +17,6 @@ use libp2p::{
     Multiaddr, PeerId, StreamProtocol,
 };
 use prost::Message;
-use std::mem::MaybeUninit;
-use std::pin::Pin;
 use tracing::debug;
 use tracing::instrument;
 
@@ -378,32 +375,28 @@ async fn read_up_to<T>(io: &mut T, limit: usize) -> io::Result<Vec<u8>>
 where
     T: AsyncRead + Unpin + Send,
 {
-    let mut buf = Vec::with_capacity(limit);
+    let mut buf = Vec::new();
+    let mut read_len = 0;
+
+    buf.resize(limit, 0);
 
     loop {
-        if buf.len() == buf.capacity() {
+        if read_len == buf.len() {
             // No empty space. Buffer is full.
             break;
         }
 
-        // We can not keep references from pointer pointer casting across awaits
-        // so we u poll_fn and poll_read instead.
-        let len = poll_fn(|cx| {
-            let read_buf =
-                unsafe { &mut *(buf.spare_capacity_mut() as *mut [MaybeUninit<u8>] as *mut [u8]) };
-            Pin::new(&mut *io).poll_read(cx, read_buf)
-        })
-        .await?;
+        let len = io.read(&mut buf[read_len..]).await?;
 
         if len == 0 {
             // EOF
             break;
         }
 
-        unsafe {
-            buf.set_len(buf.len() + len);
-        }
+        read_len += len;
     }
+
+    buf.truncate(read_len);
 
     Ok(buf)
 }
