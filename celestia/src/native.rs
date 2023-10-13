@@ -63,8 +63,10 @@ pub async fn run() -> Result<()> {
     } else {
         SledStore::new(&network_id)?
     };
-    //let store = celestia_node::store::in_memory_store::InMemoryStore::new();
-    //info!("Initialised store with head: {:?}", store.head_height());
+    info!(
+        "Initialised store with head height: {:?}",
+        store.head_height().await
+    );
 
     let p2p_transport = TokioDnsConfig::system(tcp::tokio::Transport::new(tcp::Config::default()))?
         .upgrade(Version::V1Lazy)
@@ -87,12 +89,7 @@ pub async fn run() -> Result<()> {
     node.p2p().wait_connected_trusted().await?;
 
     // We have nothing else to do, but we want to keep main alive
-    let header = node.p2p().get_header_by_height(26625).await?;
-
     loop {
-        let now = std::time::Instant::now();
-        node.p2p().get_verified_headers_range(&header, 512).await?;
-        println!("Took {:?}", now.elapsed());
         sleep(Duration::from_secs(1)).await;
     }
 }
