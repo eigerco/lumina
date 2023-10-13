@@ -308,7 +308,7 @@ impl Codec for HeaderCodec {
         let mut data = &data[..];
         let mut msgs = Vec::new();
 
-        while let Some((header, rest)) = parse_header_response(&data) {
+        while let Some((header, rest)) = parse_header_response(data) {
             msgs.push(header);
             data = rest;
         }
