@@ -53,13 +53,11 @@ pub enum P2pError {
     #[error("Transport error: {0}")]
     Transport(#[from] TransportError<io::Error>),
 
-    #[cfg(not(target_arch = "wasm32"))]
     #[error("Failed to initialize DNS: {0}")]
     InitDns(io::Error),
 
-    #[cfg(not(target_arch = "wasm32"))]
     #[error("Failed to initialize noise: {0}")]
-    InitNoise(#[from] libp2p::noise::Error),
+    InitNoise(String),
 
     #[error("Dial error: {0}")]
     Dial(#[from] DialError),

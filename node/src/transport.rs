@@ -46,6 +46,12 @@ mod imp {
 
         Ok(transport.boxed())
     }
+
+    impl From<noise::Error> for P2pError {
+        fn from(e: noise::Error) -> Self {
+            P2pError::InitNoise(e.to_string())
+        }
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
