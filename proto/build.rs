@@ -8,7 +8,6 @@ const VEC_BASE64STRING: &str =
     r#"#[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
 const OPTION_ANY: &str = r#"#[serde(with = "crate::serializers::option_any")]"#;
 const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_timestamp")]"#;
-const DEFAULT_TRUE: &str = r#"#[serde(default = "crate::defaults::default_true")]"#;
 
 #[rustfmt::skip]
 pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
@@ -49,8 +48,6 @@ pub static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".share.eds.byzantine.pb.BadEncoding.axis", QUOTED),
     (".proof.pb.Proof.nodes", VEC_BASE64STRING),
     (".proof.pb.Proof.leaf_hash", BASE64STRING),
-    // TODO: delete after testnets use node >= 0.11.0-rc14
-    (".proof.pb.Proof.is_max_namespace_ignored", DEFAULT_TRUE),
     (".share.p2p.shrex.nd.NamespaceRowResponse.shares", VEC_BASE64STRING),
 ];
 

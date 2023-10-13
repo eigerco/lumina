@@ -206,7 +206,6 @@ fn parse_request(request: HeaderRequest) -> Option<(u64, header_request::Data)> 
 mod tests {
     use super::*;
     use crate::exchange::utils::HeaderRequestExt;
-    use crate::store::InMemoryStore;
     use crate::test_utils::gen_filled_store;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::{HeaderRequest, StatusCode};
@@ -378,9 +377,12 @@ mod tests {
 
     // helper which waits for result over the test channel, while continously polling the handler
     // needed because `ExchangeServerHandler::poll` never returns `Ready`
-    async fn poll_handler_for_result(
-        handler: &mut ExchangeServerHandler<InMemoryStore, TestResponseSender>,
-    ) -> Vec<HeaderResponse> {
+    async fn poll_handler_for_result<S>(
+        handler: &mut ExchangeServerHandler<S, TestResponseSender>,
+    ) -> Vec<HeaderResponse>
+    where
+        S: Store + 'static,
+    {
         let (tx, receiver) = oneshot::channel();
         let mut sender = TestResponseSender(Some(tx));
 

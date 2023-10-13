@@ -1,9 +1,10 @@
 use std::env;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use celestia_node::node::{Node, NodeConfig};
-use celestia_node::store::InMemoryStore;
+use celestia_node::store::SledStore;
 use celestia_rpc::prelude::*;
 use celestia_types::hash::Hash;
 use clap::{Parser, ValueEnum};
@@ -24,6 +25,10 @@ struct Args {
     /// Bootnode
     #[arg(short, long = "bootnode")]
     bootnodes: Vec<Multiaddr>,
+
+    /// Persistent header store path
+    #[arg(short, long = "store")]
+    store: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -39,8 +44,6 @@ pub async fn run() -> Result<()> {
     let args = Args::parse();
     let _guard = init_tracing();
 
-    let store = InMemoryStore::new();
-
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
     let p2p_bootstrap_peers = if args.bootnodes.is_empty() {
@@ -51,6 +54,16 @@ pub async fn run() -> Result<()> {
 
     let network_id = network_id(args.network).to_owned();
     let genesis_hash = network_genesis(args.network)?;
+
+    let store = if let Some(db_path) = args.store {
+        SledStore::new_in_path(db_path).await?
+    } else {
+        SledStore::new(network_id.clone()).await?
+    };
+    info!(
+        "Initialised store with head height: {:?}",
+        store.head_height().await
+    );
 
     let node = Node::new(NodeConfig {
         network_id,
