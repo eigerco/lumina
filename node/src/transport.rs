@@ -56,7 +56,7 @@ mod imp {
     pub(crate) fn new_transport(
         keypair: &Keypair,
     ) -> Result<Boxed<(PeerId, StreamMuxerBox)>, P2pError> {
-        let config = webtransport_websys::Config::new(&keypair);
+        let config = webtransport_websys::Config::new(keypair);
         let transport = webtransport_websys::Transport::new(config);
         Ok(transport.boxed())
     }
