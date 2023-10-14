@@ -118,7 +118,26 @@ impl PeerTracker {
 
     /// Sets peer as trusted.
     pub fn set_trusted(&self, peer: PeerId, is_trusted: bool) {
-        self.get(peer).value_mut().trusted = is_trusted;
+        let mut peer_info = self.get(peer);
+
+        if peer_info.trusted == is_trusted {
+            // Nothing to be done
+            return;
+        }
+
+        peer_info.trusted = is_trusted;
+
+        // If peer was already connected, then `num_connected_trusted_peers`
+        // needs to be adjusted based on the new information.
+        if peer_info.is_connected() {
+            self.info_tx.send_modify(|tracker_info| {
+                if is_trusted {
+                    tracker_info.num_connected_trusted_peers += 1;
+                } else {
+                    tracker_info.num_connected_trusted_peers -= 1;
+                }
+            });
+        }
     }
 
     /// Sets peer as connected.
@@ -271,4 +290,72 @@ fn decrement_connected_peers(info_tx: &watch::Sender<PeerTrackerInfo>, trusted: 
             tracker_info.num_connected_trusted_peers -= 1;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trust_before_connect() {
+        let tracker = PeerTracker::new();
+        let mut watcher = tracker.info_watcher();
+        let peer = PeerId::random();
+
+        assert!(!watcher.has_changed().unwrap());
+
+        tracker.set_trusted(peer, true);
+        assert!(!watcher.has_changed().unwrap());
+
+        tracker.set_connected(peer, ConnectionId::new_unchecked(1), None);
+        assert!(watcher.has_changed().unwrap());
+        let info = watcher.borrow_and_update().to_owned();
+        assert_eq!(info.num_connected_peers, 1);
+        assert_eq!(info.num_connected_trusted_peers, 1);
+    }
+
+    #[test]
+    fn trust_after_connect() {
+        let tracker = PeerTracker::new();
+        let mut watcher = tracker.info_watcher();
+        let peer = PeerId::random();
+
+        assert!(!watcher.has_changed().unwrap());
+
+        tracker.set_connected(peer, ConnectionId::new_unchecked(1), None);
+        assert!(watcher.has_changed().unwrap());
+        let info = watcher.borrow_and_update().to_owned();
+        assert_eq!(info.num_connected_peers, 1);
+        assert_eq!(info.num_connected_trusted_peers, 0);
+
+        tracker.set_trusted(peer, true);
+        assert!(watcher.has_changed().unwrap());
+        let info = watcher.borrow_and_update().to_owned();
+        assert_eq!(info.num_connected_peers, 1);
+        assert_eq!(info.num_connected_trusted_peers, 1);
+    }
+
+    #[test]
+    fn untrust_after_connect() {
+        let tracker = PeerTracker::new();
+        let mut watcher = tracker.info_watcher();
+        let peer = PeerId::random();
+
+        assert!(!watcher.has_changed().unwrap());
+
+        tracker.set_trusted(peer, true);
+        assert!(!watcher.has_changed().unwrap());
+
+        tracker.set_connected(peer, ConnectionId::new_unchecked(1), None);
+        assert!(watcher.has_changed().unwrap());
+        let info = watcher.borrow_and_update().to_owned();
+        assert_eq!(info.num_connected_peers, 1);
+        assert_eq!(info.num_connected_trusted_peers, 1);
+
+        tracker.set_trusted(peer, false);
+        assert!(watcher.has_changed().unwrap());
+        let info = watcher.borrow_and_update().to_owned();
+        assert_eq!(info.num_connected_peers, 1);
+        assert_eq!(info.num_connected_trusted_peers, 0);
+    }
 }
