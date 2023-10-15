@@ -375,10 +375,8 @@ async fn read_up_to<T>(io: &mut T, limit: usize) -> io::Result<Vec<u8>>
 where
     T: AsyncRead + Unpin + Send,
 {
-    let mut buf = Vec::new();
+    let mut buf = vec![0u8; limit];
     let mut read_len = 0;
-
-    buf.resize(limit, 0);
 
     loop {
         if read_len == buf.len() {
