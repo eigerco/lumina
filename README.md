@@ -13,7 +13,7 @@ Supported features:
 
 ## Building and running celestia-node
 
-```
+```bash
 # install dependencies
 sudo apt-get install -y build-essential curl git protobuf-compiler
 
