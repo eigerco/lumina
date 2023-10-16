@@ -274,22 +274,6 @@ async fn decode_and_verify_responses(
     }
 
     let amount = usize::try_from(request.amount).expect("validated in send_request");
-
-    // TODO: If we received a partial range of the requested one,
-    // we should send request for the remaining. We should
-    // respond only if we have the whole range. When this
-    // is implemeted, the following check should be removed.
-    if responses.len() != amount {
-        // When server returns an error, it encodes it as one HeaderResponse.
-        // In that case propagate the decoded error.
-        if responses.len() == 1 {
-            responses[0].to_extended_header()?;
-        }
-
-        // Otherwise report it as InvalidResponse
-        return Err(ExchangeError::InvalidResponse);
-    }
-
     let mut headers = Vec::with_capacity(responses.len());
 
     for responses in responses.chunks(VALIDATIONS_PER_YIELD) {
