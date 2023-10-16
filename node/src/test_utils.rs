@@ -37,7 +37,7 @@ pub fn test_node_config() -> NodeConfig<InMemoryStore> {
         network_id: "private".to_string(),
         genesis_hash: None,
         p2p_local_keypair: node_keypair,
-        p2p_bootstrap_peers: vec![],
+        p2p_bootnodes: vec![],
         p2p_listen_on: vec![],
         store: InMemoryStore::new(),
     }
