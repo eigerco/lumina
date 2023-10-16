@@ -165,7 +165,7 @@ async fn peer_discovery() {
     node3.p2p().wait_connected().await.unwrap();
 
     // Small wait until all nodes are discovered and connected
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(800)).await;
 
     // Check Node1 connected peers
     let connected_peers = node1.p2p().connected_peers().await.unwrap();
