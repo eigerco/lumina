@@ -73,15 +73,12 @@ async fn client_server() {
     // reqest more headers than available in store
     // TODO: this reflects _current_ behaviour. once sessions are implemented it'll keep retrying
     // and this test will need to be changed
-    let out_of_bounds = client
+    let partial_response = client
         .p2p()
         .get_verified_headers_range(&received_genesis, 20)
         .await
-        .unwrap_err();
-    assert!(matches!(
-        out_of_bounds,
-        P2pError::Exchange(ExchangeError::InvalidResponse)
-    ));
+        .unwrap();
+    assert_eq!(partial_response.len(), 19);
 
     // request unknown hash
     let unstored_header = header_generator.next_of(&server_headers[0]);

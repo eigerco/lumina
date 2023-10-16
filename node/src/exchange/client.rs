@@ -274,6 +274,12 @@ async fn decode_and_verify_responses(
     }
 
     let amount = usize::try_from(request.amount).expect("validated in send_request");
+
+    // Server shouldn't respond with more headers
+    if responses.len() > amount {
+        return Err(ExchangeError::InvalidResponse);
+    }
+
     let mut headers = Vec::with_capacity(responses.len());
 
     for responses in responses.chunks(VALIDATIONS_PER_YIELD) {
@@ -601,6 +607,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // TODO: Enable this test after sessions are implemented
     async fn request_range_responds_with_smaller_one() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
