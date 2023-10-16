@@ -3,7 +3,7 @@ use std::io;
 
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
-use celestia_types::{validate_headers, ExtendedHeader};
+use celestia_types::ExtendedHeader;
 use thiserror::Error;
 
 pub use in_memory_store::InMemoryStore;
@@ -13,6 +13,8 @@ pub use sled_store::SledStore;
 mod in_memory_store;
 #[cfg(not(target_arch = "wasm32"))]
 mod sled_store;
+
+use crate::utils::validate_headers;
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
 
@@ -74,7 +76,7 @@ pub trait Store: Send + Sync + Debug {
 
     /// Append a range of headers maintaining continuity from the genesis to the head.
     async fn append(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        validate_headers(&headers)?;
+        validate_headers(&headers).await?;
 
         match self.get_head().await {
             Ok(head) => {

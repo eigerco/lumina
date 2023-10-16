@@ -156,7 +156,9 @@ impl ExtendedHeader {
             );
         }
 
-        // If we are verifying an adjacent header
+        // Optimization: If we are verifying an adjacent header we can avoid
+        // `verify_commit_light_trusting` because we can just check the hash
+        // of next validators and last header.
         if self.height().increment() == untrusted.height() {
             if untrusted.header.validators_hash != self.header.next_validators_hash {
                 bail_verification!(
@@ -275,15 +277,6 @@ impl From<ExtendedHeader> for RawExtendedHeader {
             dah: Some(value.dah.into()),
         }
     }
-}
-
-/// Convenient utility for validating multiple headers.
-pub fn validate_headers(headers: &[ExtendedHeader]) -> Result<()> {
-    for header in headers {
-        header.validate()?;
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -457,25 +450,6 @@ mod tests {
 
         eh_block_27.header.time = Time::now().checked_add(Duration::from_secs(60)).unwrap();
         eh_block_1.verify(&eh_block_27).unwrap_err();
-    }
-
-    #[test]
-    fn validate_multiple_headers() {
-        let mut eh_chain = sample_eh_chain_3_block_1_to_256();
-
-        validate_headers(&eh_chain).unwrap();
-
-        // Non-continuous headers are allowed
-        eh_chain.remove(2);
-        validate_headers(&eh_chain).unwrap();
-
-        // Bad headers are allowed
-        unverify(&mut eh_chain[2]);
-        validate_headers(&eh_chain).unwrap();
-
-        // Invalid header are not allowed
-        invalidate(&mut eh_chain[3]);
-        validate_headers(&eh_chain).unwrap_err();
     }
 
     #[test]

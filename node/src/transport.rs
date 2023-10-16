@@ -20,7 +20,14 @@ mod imp {
     pub(crate) fn new_transport(
         keypair: &Keypair,
     ) -> Result<Boxed<(PeerId, StreamMuxerBox)>, P2pError> {
-        let quic_transport = quic::tokio::Transport::new(quic::Config::new(keypair));
+        let quic_transport = {
+            let mut config = quic::Config::new(keypair);
+
+            // Celestia uses draft 29
+            config.support_draft_29 = true;
+
+            quic::tokio::Transport::new(config)
+        };
 
         let tcp_transport = {
             let mut yamux_config = yamux::Config::default();
