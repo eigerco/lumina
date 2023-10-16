@@ -1,5 +1,42 @@
 # Rust Celestia node
 
+Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in the browser-based environments.
+
+Supported features:
+- [x] Synchronize and verify `ExtendedHeader`s from genesis to the network head
+- [x] Header exchange (`header-ex`) client and server
+- [x] Listening for, verifying and redistributing extended headers on gossip protocol (`header-sub`)
+- [x] Persistent store for Headers
+- [x] Integration tests with Go implementation
+- [ ] Data Availability Sampling
+- [ ] Creating, distributing, and listening for Fraud proofs
+
+## Building and running celestia-node
+
+```
+# install dependencies
+sudo apt-get install -y build-essential curl git protobuf-compiler
+
+# install rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# open a new terminal or run
+source "$HOME/.cargo/env"
+
+# clone the repository
+git clone https://github.com/eigerco/celestia-node-rs
+cd celestia-node-rs
+
+# install celestia-node
+cargo install --path celestia
+
+# run celestia node
+celestia-node --network mocha
+
+# check out help for more configuration options
+celestia-node --help
+```
+
 ## Running Go celestia node for integration
 
 Follow [this guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)
@@ -20,7 +57,7 @@ To get the JWT token for the account with coins (coins will be transferred in bl
 export CELESTIA_NODE_AUTH_TOKEN=$(docker-compose -f ci/docker-compose.yml exec bridge celestia bridge auth admin --p2p.network private)
 ```
 
-Accessing json RPC api with `celestia` cli:
+Accessing json RPC api with Go `celestia` cli:
 ```bash
 celestia rpc blob Submit 0x0c204d39600fddd3 '"Hello world"' --print-request
 ```
@@ -41,5 +78,5 @@ Generate authentication tokens for the tests
 
 Run tests
 ```
-cargo test -p celestia-rpc
+cargo test
 ```
