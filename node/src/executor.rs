@@ -3,7 +3,7 @@ use std::pin::Pin;
 
 use libp2p::swarm;
 
-pub(crate) use self::imp::{spawn, Interval};
+pub(crate) use self::imp::{spawn, yield_now, Interval};
 
 pub(crate) struct Executor;
 
@@ -15,9 +15,8 @@ impl swarm::Executor for Executor {
 
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
-    use std::time::Duration;
-
     use super::*;
+    use std::time::Duration;
 
     pub(crate) fn spawn<F>(future: F)
     where
@@ -44,6 +43,8 @@ mod imp {
             self.0.tick().await;
         }
     }
+
+    pub(crate) use tokio::task::yield_now;
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -52,6 +53,8 @@ mod imp {
     use futures::StreamExt;
     use gloo_timers::future::IntervalStream;
     use send_wrapper::SendWrapper;
+    use std::future::poll_fn;
+    use std::task::Poll;
     use std::time::Duration;
 
     pub(crate) fn spawn<F>(future: F)
@@ -75,5 +78,20 @@ mod imp {
         pub(crate) async fn tick(&mut self) {
             self.0.next().await;
         }
+    }
+
+    pub(crate) async fn yield_now() {
+        let mut yielded = false;
+
+        poll_fn(|cx| {
+            if yielded {
+                return Poll::Ready(());
+            }
+
+            cx.waker().wake_by_ref();
+            yielded = true;
+            Poll::Pending
+        })
+        .await;
     }
 }

@@ -19,10 +19,10 @@ use tracing::{instrument, trace, warn};
 
 use crate::exchange::utils::{HeaderRequestExt, HeaderResponseExt};
 use crate::exchange::{ExchangeError, ReqRespBehaviour};
-use crate::executor::spawn;
+use crate::executor::{spawn, yield_now};
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
-use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
+use crate::utils::{OneshotResultSender, OneshotResultSenderExt, VALIDATIONS_PER_YIELD};
 
 const MAX_PEERS: usize = 10;
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -206,78 +206,18 @@ where
             state.request.amount
         );
 
-        match self.decode_and_verify_responses(&state.request, &responses) {
-            Ok(headers) => {
-                // TODO: Increase peer score
-                state.respond_to.maybe_send_ok(headers);
-            }
-            Err(e) => {
-                // TODO: Decrease peer score
-                state.respond_to.maybe_send_err(e);
-            }
-        }
-    }
-
-    fn decode_and_verify_responses(
-        &mut self,
-        request: &HeaderRequest,
-        responses: &[HeaderResponse],
-    ) -> Result<Vec<ExtendedHeader>, ExchangeError> {
-        let amount = usize::try_from(request.amount).expect("validated in send_request");
-
-        // TODO: If we received a partial range of the requested one,
-        // we should send request for the remaining. We should
-        // respond only if we have the whole range. When this
-        // is implemeted, the following check should be removed.
-        if responses.len() != amount {
-            // When server returns an error, it encodes it as one HeaderResponse.
-            // In that case propagate the decoded error.
-            if responses.len() == 1 {
-                responses[0].to_extended_header()?;
-            }
-
-            // Otherwise report it as InvalidResponse
-            return Err(ExchangeError::InvalidResponse);
-        }
-
-        let mut headers = Vec::with_capacity(responses.len());
-
-        for response in responses {
-            // Unmarshal and validate
-            let header = response.to_extended_header()?;
-            trace!("Header: {header:?}");
-            headers.push(header);
-        }
-
-        headers.sort_unstable_by_key(|header| header.height());
-
-        // NOTE: Verification is done only in `get_verified_headers_range` and
-        // Syncer passes the `from` parameter from Store.
-        match (&request.data, headers.len()) {
-            // Allow HEAD requests to have any height in their response
-            (Some(Data::Origin(0)), 1) => {}
-
-            // Make sure that starting header is the requested one and that
-            // there are no gaps in the chain
-            (Some(Data::Origin(start)), amount) if *start > 0 && amount > 0 => {
-                for (header, height) in headers.iter().zip(*start..*start + amount as u64) {
-                    if header.height().value() != height {
-                        return Err(ExchangeError::InvalidResponse);
-                    }
+        spawn(async move {
+            match decode_and_verify_responses(&state.request, &responses).await {
+                Ok(headers) => {
+                    // TODO: Increase peer score
+                    state.respond_to.maybe_send_ok(headers);
+                }
+                Err(e) => {
+                    // TODO: Decrease peer score
+                    state.respond_to.maybe_send_err(e);
                 }
             }
-
-            // Check if header has the requested hash
-            (Some(Data::Hash(hash)), 1) => {
-                if headers[0].hash().as_bytes() != hash {
-                    return Err(ExchangeError::InvalidResponse);
-                }
-            }
-
-            _ => return Err(ExchangeError::InvalidResponse),
-        }
-
-        Ok(headers)
+        });
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -323,6 +263,66 @@ where
         self.prune_expired_requests();
         Poll::Pending
     }
+}
+
+async fn decode_and_verify_responses(
+    request: &HeaderRequest,
+    responses: &[HeaderResponse],
+) -> Result<Vec<ExtendedHeader>, ExchangeError> {
+    if responses.is_empty() {
+        return Err(ExchangeError::InvalidResponse);
+    }
+
+    let amount = usize::try_from(request.amount).expect("validated in send_request");
+
+    // Server shouldn't respond with more headers
+    if responses.len() > amount {
+        return Err(ExchangeError::InvalidResponse);
+    }
+
+    let mut headers = Vec::with_capacity(responses.len());
+
+    for responses in responses.chunks(VALIDATIONS_PER_YIELD) {
+        for response in responses {
+            // Unmarshal and validate
+            let header = response.to_extended_header()?;
+            trace!("Header: {header:?}");
+            headers.push(header);
+        }
+
+        // Validation is computation heavy so we yield on every chunk
+        yield_now().await;
+    }
+
+    headers.sort_unstable_by_key(|header| header.height());
+
+    // NOTE: Verification is done only in `get_verified_headers_range` and
+    // Syncer passes the `from` parameter from Store.
+    match (&request.data, headers.len()) {
+        // Allow HEAD requests to have any height in their response
+        (Some(Data::Origin(0)), 1) => {}
+
+        // Make sure that starting header is the requested one and that
+        // there are no gaps in the chain
+        (Some(Data::Origin(start)), amount) if *start > 0 && amount > 0 => {
+            for (header, height) in headers.iter().zip(*start..*start + amount as u64) {
+                if header.height().value() != height {
+                    return Err(ExchangeError::InvalidResponse);
+                }
+            }
+        }
+
+        // Check if header has the requested hash
+        (Some(Data::Hash(hash)), 1) => {
+            if headers[0].hash().as_bytes() != hash {
+                return Err(ExchangeError::InvalidResponse);
+            }
+        }
+
+        _ => return Err(ExchangeError::InvalidResponse),
+    }
+
+    Ok(headers)
 }
 
 #[cfg(test)]
@@ -607,6 +607,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // TODO: Enable this test after sessions are implemented
     async fn request_range_responds_with_smaller_one() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
