@@ -76,6 +76,9 @@ pub enum P2pError {
 
     #[error("HeaderSub already initialized")]
     HeaderSubAlreadyInitialized,
+
+    #[error("Bootnode multiaddrs without peer ID: {0:?}")]
+    BootnodeAddrsWithoutPeerId(Vec<Multiaddr>),
 }
 
 impl From<oneshot::error::RecvError> for P2pError {
@@ -102,7 +105,7 @@ where
 {
     pub network_id: String,
     pub local_keypair: Keypair,
-    pub bootstrap_peers: Vec<Multiaddr>,
+    pub bootnodes: Vec<Multiaddr>,
     pub listen_on: Vec<Multiaddr>,
     pub store: Arc<S>,
 }
@@ -136,7 +139,9 @@ impl<S> P2p<S>
 where
     S: Store,
 {
-    pub fn start(args: P2pArgs<S>) -> Result<Self, P2pError> {
+    pub fn start(args: P2pArgs<S>) -> Result<Self> {
+        validate_bootnode_addrs(&args.bootnodes)?;
+
         let local_peer_id = PeerId::from(args.local_keypair.public());
         let transport = new_transport(&args.local_keypair)?;
 
@@ -408,7 +413,7 @@ where
             swarm.listen_on(addr)?;
         }
 
-        for addr in args.bootstrap_peers {
+        for addr in args.bootnodes {
             // Bootstrap peers are always trusted
             if let Some(peer_id) = addr.peer_id() {
                 peer_tracker.set_trusted(peer_id, true);
@@ -721,6 +726,22 @@ where
     }
 }
 
+fn validate_bootnode_addrs(addrs: &[Multiaddr]) -> Result<(), P2pError> {
+    let mut invalid_addrs = Vec::new();
+
+    for addr in addrs {
+        if addr.peer_id().is_none() {
+            invalid_addrs.push(addr.to_owned());
+        }
+    }
+
+    if invalid_addrs.is_empty() {
+        Ok(())
+    } else {
+        Err(P2pError::BootnodeAddrsWithoutPeerId(invalid_addrs))
+    }
+}
+
 fn init_gossipsub<'a, S>(
     args: &'a P2pArgs<S>,
     topics: impl IntoIterator<Item = &'a gossipsub::IdentTopic>,
@@ -762,7 +783,7 @@ where
 
     let mut kad = Kademlia::with_config(local_peer_id, MemoryStore::new(local_peer_id), config);
 
-    for addr in &args.bootstrap_peers {
+    for addr in &args.bootnodes {
         if let Some(peer_id) = addr.peer_id() {
             kad.add_address(&peer_id, addr.to_owned());
         }

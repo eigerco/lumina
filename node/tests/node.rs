@@ -38,7 +38,7 @@ async fn new_connected_node() -> Node<InMemoryStore> {
     let (_, bridge_ma) = fetch_bridge_info().await;
 
     let node = Node::new(NodeConfig {
-        p2p_bootstrap_peers: vec![bridge_ma],
+        p2p_bootnodes: vec![bridge_ma],
         ..test_node_config()
     })
     .await
@@ -122,7 +122,7 @@ async fn peer_discovery() {
     let node1_keypair = identity::Keypair::generate_ed25519();
     let node1_peer_id = PeerId::from(node1_keypair.public());
     let node1 = Node::new(NodeConfig {
-        p2p_bootstrap_peers: vec![bridge_ma],
+        p2p_bootnodes: vec![bridge_ma],
         p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
         ..test_node_config_with_keypair(node1_keypair)
     })
@@ -139,7 +139,7 @@ async fn peer_discovery() {
     let node2_keypair = identity::Keypair::generate_ed25519();
     let node2_peer_id = PeerId::from(node2_keypair.public());
     let node2 = Node::new(NodeConfig {
-        p2p_bootstrap_peers: node1_addrs.clone(),
+        p2p_bootnodes: node1_addrs.clone(),
         p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
         ..test_node_config_with_keypair(node2_keypair)
     })
@@ -154,7 +154,7 @@ async fn peer_discovery() {
     let node3_keypair = identity::Keypair::generate_ed25519();
     let node3_peer_id = PeerId::from(node3_keypair.public());
     let node3 = Node::new(NodeConfig {
-        p2p_bootstrap_peers: node1_addrs.clone(),
+        p2p_bootnodes: node1_addrs.clone(),
         ..test_node_config_with_keypair(node3_keypair)
     })
     .await

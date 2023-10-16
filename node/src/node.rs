@@ -32,7 +32,7 @@ where
     pub network_id: String,
     pub genesis_hash: Option<Hash>,
     pub p2p_local_keypair: Keypair,
-    pub p2p_bootstrap_peers: Vec<Multiaddr>,
+    pub p2p_bootnodes: Vec<Multiaddr>,
     pub p2p_listen_on: Vec<Multiaddr>,
     pub store: S,
 }
@@ -55,7 +55,7 @@ where
         let p2p = Arc::new(P2p::start(P2pArgs {
             network_id: config.network_id,
             local_keypair: config.p2p_local_keypair,
-            bootstrap_peers: config.p2p_bootstrap_peers,
+            bootnodes: config.p2p_bootnodes,
             listen_on: config.p2p_listen_on,
             store: store.clone(),
         })?);
