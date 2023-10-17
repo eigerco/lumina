@@ -585,6 +585,7 @@ dependencies = [
  "gloo-timers",
  "instant",
  "libp2p",
+ "pin-project",
  "prost",
  "rand 0.8.5",
  "rexie",
@@ -602,6 +603,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
+ "web-sys",
 ]
 
 [[package]]

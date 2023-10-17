@@ -42,8 +42,8 @@ impl IndexedDbStore {
         Ok(Self(Arc::new(SendWrapper::new(rexie))))
     }
 
-    pub async fn new() -> rexie::Result<Self> {
-        Self::new_with_name("CELESTIA").await
+    pub async fn new(network_id: String) -> rexie::Result<Self> {
+        Self::new_with_name(&network_id).await
     }
 
     pub async fn clear(self) -> rexie::Result<()> {

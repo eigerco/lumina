@@ -3,12 +3,10 @@ use std::time::Duration;
 use celestia_proto::p2p::pb::{header_request::Data, HeaderRequest};
 use celestia_types::{hash::Hash, test_utils::ExtendedHeaderGenerator, ExtendedHeader};
 use libp2p::identity::{self, Keypair};
-use tokio::{
-    sync::{mpsc, watch},
-    time::timeout,
-};
+use tokio::sync::{mpsc, watch};
 
 use crate::{
+    executor::timeout,
     node::NodeConfig,
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
