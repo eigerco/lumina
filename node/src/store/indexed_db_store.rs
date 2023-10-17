@@ -24,7 +24,7 @@ struct ExtendedHeaderEntry {
 
 // SendWrapper usage is safe in wasm because we're running on single thread
 #[derive(Debug)]
-pub struct IndexedDbStore(Arc<SendWrapper<Rexie>>);
+pub struct IndexedDbStore(SendWrapper<Rexie>);
 
 impl IndexedDbStore {
     pub async fn new_with_name(name: &str) -> rexie::Result<Self> {
@@ -39,10 +39,10 @@ impl IndexedDbStore {
             )
             .build()
             .await?;
-        Ok(Self(Arc::new(SendWrapper::new(rexie))))
+        Ok(Self(SendWrapper::new(rexie)))
     }
 
-    pub async fn new(network_id: String) -> rexie::Result<Self> {
+    pub async fn new(network_id: &str) -> rexie::Result<Self> {
         Self::new_with_name(&network_id).await
     }
 
