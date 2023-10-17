@@ -76,7 +76,7 @@ mod imp {
         pub(crate) async fn new(dur: Duration) -> Self {
             // If duration was less than a millisecond, then make
             // it 1 millisecond.
-            let millis = u32::try_from(dur.as_millis().max(100)).unwrap_or(u32::MAX);
+            let millis = u32::try_from(dur.as_millis().max(1)).unwrap_or(u32::MAX);
 
             Interval(SendWrapper::new(IntervalStream::new(millis)))
         }

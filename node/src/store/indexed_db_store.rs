@@ -56,12 +56,15 @@ impl IndexedDbStore {
             .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
 
         let store = tx.store(HEADER_STORE_NAME)?;
-        let get_result = header_store.get_all(None, Some(1), None, Some(Direction::Prev));
 
-        let get_result = header_get_result.await?;
-        let key_value_result = header_get_result.first().ok_or(StoreError::NotFound)?;
+        let (_, raw_value) = store
+            .get_all(None, Some(1), None, Some(Direction::Prev))
+            .await?
+            .first()
+            .ok_or(StoreError::NotFound)?
+            .to_owned();
 
-        let entry: ExtendedHeaderEntry = from_value(key_value_result.1.clone())?;
+        let entry: ExtendedHeaderEntry = from_value(raw_value)?;
 
         Ok(entry.header)
     }
@@ -79,8 +82,7 @@ impl IndexedDbStore {
 
         let height_key = to_value(&height)?;
 
-        let header_get_result = height_index.get(&height_key);
-        let header_get_result = header_get_result.await?;
+        let header_get_result = height_index.get(&height_key).await?;
 
         // querying unset key returns empty value
         if header_get_result.is_falsy() {
@@ -101,8 +103,7 @@ impl IndexedDbStore {
 
         let hash_key = to_value(&hash)?;
 
-        let header_get_result = hash_index.get(&hash_key);
-        let header_get_result = header_get_result.await?;
+        let header_get_result = hash_index.get(&hash_key).await?;
 
         if header_get_result.is_falsy() {
             return Err(StoreError::NotFound);
@@ -493,17 +494,10 @@ pub mod tests {
     #[named]
     #[wasm_bindgen_test]
     async fn test_delete_db() {
-        let (original_store, mut gen) = gen_filled_store(1, function_name!()).await;
-        let mut original_headers = gen.next_many(20);
+        let (original_store, _) = gen_filled_store(3, function_name!()).await;
+        assert_eq!(original_store.get_head_height().await.unwrap(), 3);
 
-        for h in &original_headers {
-            original_store
-                .append_single_unchecked(h.clone())
-                .await
-                .expect("inserting test data failed");
-        }
-
-        original_store.delete_db().await;
+        original_store.delete_db().await.unwrap();
 
         let same_name_store = IndexedDbStore::new_with_name(function_name!())
             .await
