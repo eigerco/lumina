@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
@@ -5,6 +7,7 @@ use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
+use tendermint_proto::Protobuf;
 
 use crate::store::{Result, Store, StoreError};
 
@@ -17,7 +20,7 @@ const HEIGHT_INDEX_NAME: &str = "height";
 struct ExtendedHeaderEntry {
     height: u64,
     hash: Hash,
-    header: ExtendedHeader,
+    header: Vec<u8>,
 }
 
 // SendWrapper usage is safe in wasm because we're running on single thread
@@ -63,7 +66,8 @@ impl IndexedDbStore {
 
         let entry: ExtendedHeaderEntry = from_value(raw_value)?;
 
-        Ok(entry.header)
+        ExtendedHeader::decode(entry.header.as_ref())
+            .map_err(|e| StoreError::CelestiaTypes(e.into()))
     }
 
     pub async fn get_head_height(&self) -> Result<u64> {
@@ -88,7 +92,8 @@ impl IndexedDbStore {
 
         let header_entry: ExtendedHeaderEntry = from_value(header_get_result)?;
 
-        Ok(header_entry.header)
+        ExtendedHeader::decode(header_entry.header.as_ref())
+            .map_err(|e| StoreError::CelestiaTypes(e.into()))
     }
 
     pub async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
@@ -108,7 +113,8 @@ impl IndexedDbStore {
 
         let header_entry: ExtendedHeaderEntry = from_value(header_get_result)?;
 
-        Ok(header_entry.header)
+        ExtendedHeader::decode(header_entry.header.as_ref())
+            .map_err(|e| StoreError::CelestiaTypes(e.into()))
     }
 
     pub async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
@@ -149,10 +155,13 @@ impl IndexedDbStore {
             return Err(StoreError::HashExists(hash));
         }
 
+        // make sure Result is Infallible, we unwrap it later
+        let serialized_header: std::result::Result<_, Infallible> = header.encode_vec();
+
         let header_entry = ExtendedHeaderEntry {
             height: header.height().value(),
             hash: header.hash(),
-            header,
+            header: serialized_header.unwrap(),
         };
 
         let jsvalue_header = to_value(&header_entry)?;
