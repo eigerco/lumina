@@ -158,7 +158,6 @@ where
             select! {
                 _ = report_interval.tick() => {
                     self.report().await;
-                    return;
                 }
                 Ok(network_head_height) = &mut try_init_result => {
                     info!("Setting initial subjective head to {network_head_height}");
