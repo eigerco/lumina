@@ -4,7 +4,7 @@ use std::pin::Pin;
 use libp2p::swarm;
 
 #[allow(unused_imports)]
-pub(crate) use self::imp::{sleep, spawn, timeout, Elapsed, Interval};
+pub(crate) use self::imp::{sleep, spawn, timeout, yield_now, Elapsed, Interval};
 
 pub(crate) struct Executor;
 
@@ -16,11 +16,11 @@ impl swarm::Executor for Executor {
 
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
+    use super::*;
     use std::time::Duration;
+
     pub(crate) use tokio::time::error::Elapsed;
     pub(crate) use tokio::time::{sleep, timeout};
-
-    use super::*;
 
     pub(crate) fn spawn<F>(future: F)
     where
@@ -47,16 +47,18 @@ mod imp {
             self.0.tick().await;
         }
     }
+
+    pub(crate) use tokio::task::yield_now;
 }
 
 #[cfg(target_arch = "wasm32")]
 mod imp {
     use super::*;
     use futures::StreamExt;
-    use gloo_timers::future::IntervalStream;
-    use gloo_timers::future::TimeoutFuture;
+    use gloo_timers::future::{IntervalStream, TimeoutFuture};
     use pin_project::pin_project;
     use send_wrapper::SendWrapper;
+    use std::future::poll_fn;
     use std::pin::Pin;
     use std::task::{Context, Poll};
     use std::time::Duration;
@@ -129,5 +131,20 @@ mod imp {
                 Poll::Pending => Poll::Pending,
             }
         }
+    }
+
+    pub(crate) async fn yield_now() {
+        let mut yielded = false;
+
+        poll_fn(|cx| {
+            if yielded {
+                return Poll::Ready(());
+            }
+
+            cx.waker().wake_by_ref();
+            yielded = true;
+            Poll::Pending
+        })
+        .await;
     }
 }

@@ -35,7 +35,7 @@ async fn client_server() {
 
     // Client node
     let client = Node::new(NodeConfig {
-        p2p_bootstrap_peers: server_addrs.clone(),
+        p2p_bootnodes: server_addrs.clone(),
         ..test_node_config()
     })
     .await
@@ -75,15 +75,12 @@ async fn client_server() {
     // reqest more headers than available in store
     // TODO: this reflects _current_ behaviour. once sessions are implemented it'll keep retrying
     // and this test will need to be changed
-    let out_of_bounds = client
+    let partial_response = client
         .p2p()
         .get_verified_headers_range(&received_genesis, 20)
         .await
-        .unwrap_err();
-    assert!(matches!(
-        out_of_bounds,
-        P2pError::Exchange(ExchangeError::InvalidResponse)
-    ));
+        .unwrap();
+    assert_eq!(partial_response.len(), 19);
 
     // request unknown hash
     let unstored_header = header_generator.next_of(&server_headers[0]);
@@ -121,7 +118,7 @@ async fn client_server_invalid_requests() {
 
     // Client node
     let client = Node::new(NodeConfig {
-        p2p_bootstrap_peers: server_addrs.clone(),
+        p2p_bootnodes: server_addrs.clone(),
         ..test_node_config()
     })
     .await
@@ -226,7 +223,7 @@ async fn head_selection_with_multiple_peers() {
 
     // Client Node
     let client = Node::new(NodeConfig {
-        p2p_bootstrap_peers: server_addrs,
+        p2p_bootnodes: server_addrs,
         ..listening_test_node_config()
     })
     .await
@@ -241,7 +238,7 @@ async fn head_selection_with_multiple_peers() {
     // Rogue node, connects to client so isn't trusted
     let rogue_node = Node::new(NodeConfig {
         store: gen_filled_store(26).0,
-        p2p_bootstrap_peers: client_addr.clone(),
+        p2p_bootnodes: client_addr.clone(),
         ..listening_test_node_config()
     })
     .await
@@ -258,7 +255,7 @@ async fn head_selection_with_multiple_peers() {
     // new node from group B joins, head should go up
     let new_b_node = Node::new(NodeConfig {
         store: server_store.clone(),
-        p2p_bootstrap_peers: client_addr,
+        p2p_bootnodes: client_addr,
         ..test_node_config()
     })
     .await
@@ -308,7 +305,7 @@ async fn replaced_header_server_store() {
     let server_addrs = server.p2p().listeners().await.unwrap();
 
     let client = Node::new(NodeConfig {
-        p2p_bootstrap_peers: server_addrs,
+        p2p_bootnodes: server_addrs,
         ..listening_test_node_config()
     })
     .await
@@ -382,7 +379,7 @@ async fn invalidated_header_server_store() {
     let server_addrs = server.p2p().listeners().await.unwrap();
 
     let client = Node::new(NodeConfig {
-        p2p_bootstrap_peers: server_addrs,
+        p2p_bootnodes: server_addrs,
         ..listening_test_node_config()
     })
     .await
@@ -463,7 +460,7 @@ async fn unverified_header_server_store() {
     let server_addrs = server.p2p().listeners().await.unwrap();
 
     let client = Node::new(NodeConfig {
-        p2p_bootstrap_peers: server_addrs,
+        p2p_bootnodes: server_addrs,
         ..listening_test_node_config()
     })
     .await
