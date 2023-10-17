@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
@@ -46,8 +44,10 @@ impl IndexedDbStore {
         Self::new_with_name(&network_id).await
     }
 
-    pub async fn clear(self) -> rexie::Result<()> {
-        Rexie::delete(&self.0.name()).await
+    pub async fn delete_db(self) -> rexie::Result<()> {
+        let name = self.0.name();
+        self.0.take().close();
+        Rexie::delete(&name).await
     }
 
     pub async fn get_head(&self) -> Result<ExtendedHeader> {
@@ -55,15 +55,15 @@ impl IndexedDbStore {
             .0
             .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
 
-        let header_store = tx.store(HEADER_STORE_NAME)?;
-        let header_get_result = header_store.get_all(None, Some(1), None, Some(Direction::Prev));
+        let store = tx.store(HEADER_STORE_NAME)?;
+        let get_result = header_store.get_all(None, Some(1), None, Some(Direction::Prev));
 
-        let header_get_result = header_get_result.await?;
+        let get_result = header_get_result.await?;
         let key_value_result = header_get_result.first().ok_or(StoreError::NotFound)?;
 
-        let header_entry: ExtendedHeaderEntry = from_value(key_value_result.1.clone())?;
+        let entry: ExtendedHeaderEntry = from_value(key_value_result.1.clone())?;
 
-        Ok(header_entry.header)
+        Ok(entry.header)
     }
 
     pub async fn get_head_height(&self) -> Result<u64> {
@@ -488,6 +488,31 @@ pub mod tests {
                 .unwrap();
             assert_eq!(original_header, &stored_header);
         }
+    }
+
+    #[named]
+    #[wasm_bindgen_test]
+    async fn test_delete_db() {
+        let (original_store, mut gen) = gen_filled_store(1, function_name!()).await;
+        let mut original_headers = gen.next_many(20);
+
+        for h in &original_headers {
+            original_store
+                .append_single_unchecked(h.clone())
+                .await
+                .expect("inserting test data failed");
+        }
+
+        original_store.delete_db().await;
+
+        let same_name_store = IndexedDbStore::new_with_name(function_name!())
+            .await
+            .expect("creating test store failed");
+
+        assert!(matches!(
+            same_name_store.get_head_height().await,
+            Err(StoreError::NotFound)
+        ));
     }
 
     // open IndexedDB with unique per-test name to avoid interference and make cleanup easier

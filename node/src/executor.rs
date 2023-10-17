@@ -3,6 +3,7 @@ use std::pin::Pin;
 
 use libp2p::swarm;
 
+#[allow(unused_imports)]
 pub(crate) use self::imp::{sleep, spawn, timeout, Elapsed, Interval};
 
 pub(crate) struct Executor;
@@ -51,17 +52,14 @@ mod imp {
 #[cfg(target_arch = "wasm32")]
 mod imp {
     use super::*;
-    use futures::{FutureExt, StreamExt};
+    use futures::StreamExt;
     use gloo_timers::future::IntervalStream;
     use gloo_timers::future::TimeoutFuture;
     use pin_project::pin_project;
     use send_wrapper::SendWrapper;
-    use std::future::Future;
     use std::pin::Pin;
-    use std::time::Duration;
-    use tokio::select;
     use std::task::{Context, Poll};
-    use std::future::poll_fn;
+    use std::time::Duration;
 
     pub(crate) use gloo_timers::future::sleep;
 
@@ -133,5 +131,3 @@ mod imp {
         }
     }
 }
-
-
