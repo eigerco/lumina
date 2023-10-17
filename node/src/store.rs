@@ -132,4 +132,7 @@ pub enum StoreError {
 
     #[error("Received io error from persistent storage: {0}")]
     IoError(#[from] io::Error),
+
+    #[error("Error opening store: {0}")]
+    OpenFailed(String),
 }

@@ -38,15 +38,16 @@ impl SledStore {
     pub async fn new(network_id: String) -> Result<Self> {
         spawn_blocking(move || {
             let Some(project_dirs) = ProjectDirs::from("co", "eiger", "celestia") else {
-                return Err(StoreError::BackingStoreError(
+                return Err(StoreError::OpenFailed(
                     "Unable to get system cache path to open header store".to_string(),
                 ));
             };
             let mut db_path = project_dirs.cache_dir().to_owned();
             db_path.push(network_id);
 
-            let db = sled::open(db_path)?;
-            Self::init(db)
+            sled::open(db_path)
+                .and_then(Self::init)
+                .map_err(|e| StoreError::OpenFailed(e.to_string()))
         })
         .await?
     }
@@ -55,14 +56,15 @@ impl SledStore {
         spawn_blocking(move || {
             let tmp_path = TempDir::new("celestia")?.into_path();
 
-            let db = sled::Config::default()
+            sled::Config::default()
                 .path(tmp_path)
                 .temporary(true)
                 .create_new(true) // make sure we fail if db is already there
-                .open()?;
-            Self::init(db)
+                .open()
+                .and_then(Self::init)
         })
         .await?
+        .map_err(|e| StoreError::OpenFailed(e.to_string()))
     }
 
     pub async fn new_in_path<P>(path: P) -> Result<Self>
@@ -75,10 +77,11 @@ impl SledStore {
             Self::init(db)
         })
         .await?
+        .map_err(|e| StoreError::OpenFailed(e.to_string()))
     }
 
     // `open_tree` might be blocking, make sure to call this from `spawn_blocking` or similar
-    fn init(db: Db) -> Result<Self> {
+    fn init(db: Db) -> sled::Result<Self> {
         let headers = db.open_tree(HASH_TREE_ID)?;
         let height_to_hash = db.open_tree(HEIGHT_TO_HASH_TREE_ID)?;
 

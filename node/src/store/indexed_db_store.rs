@@ -25,7 +25,7 @@ struct ExtendedHeaderEntry {
 pub struct IndexedDbStore(SendWrapper<Rexie>);
 
 impl IndexedDbStore {
-    pub async fn new_with_name(name: &str) -> rexie::Result<Self> {
+    pub async fn new(name: &str) -> Result<IndexedDbStore> {
         let rexie = Rexie::builder(name)
             .version(DB_VERSION)
             .add_object_store(
@@ -36,12 +36,9 @@ impl IndexedDbStore {
                     .add_index(Index::new(HEIGHT_INDEX_NAME, "height").unique(true)),
             )
             .build()
-            .await?;
+            .await
+            .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
         Ok(Self(SendWrapper::new(rexie)))
-    }
-
-    pub async fn new(network_id: &str) -> rexie::Result<Self> {
-        Self::new_with_name(&network_id).await
     }
 
     pub async fn delete_db(self) -> rexie::Result<()> {
@@ -412,7 +409,7 @@ pub mod tests {
     #[named]
     #[wasm_bindgen_test]
     async fn test_large_db() {
-        let s = IndexedDbStore::new_with_name(function_name!())
+        let s = IndexedDbStore::new(function_name!())
             .await
             .expect("creating test store failed");
 
@@ -447,7 +444,7 @@ pub mod tests {
         }
         drop(original_store);
 
-        let reopened_store = IndexedDbStore::new_with_name(function_name!())
+        let reopened_store = IndexedDbStore::new(function_name!())
             .await
             .expect("failed to reopen store");
 
@@ -474,7 +471,7 @@ pub mod tests {
 
         original_headers.append(&mut new_headers);
 
-        let reopened_store = IndexedDbStore::new_with_name(function_name!())
+        let reopened_store = IndexedDbStore::new(function_name!())
             .await
             .expect("failed to reopen store");
 
@@ -499,7 +496,7 @@ pub mod tests {
 
         original_store.delete_db().await.unwrap();
 
-        let same_name_store = IndexedDbStore::new_with_name(function_name!())
+        let same_name_store = IndexedDbStore::new(function_name!())
             .await
             .expect("creating test store failed");
 
@@ -515,7 +512,7 @@ pub mod tests {
         name: &str,
     ) -> (IndexedDbStore, ExtendedHeaderGenerator) {
         Rexie::delete(name).await.unwrap();
-        let s = IndexedDbStore::new_with_name(name)
+        let s = IndexedDbStore::new(name)
             .await
             .expect("creating test store failed");
         let mut gen = ExtendedHeaderGenerator::new();
