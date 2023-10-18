@@ -7,7 +7,6 @@ use celestia_types::ExtendedHeader;
 use futures::FutureExt;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
-use tokio_util::sync::{CancellationToken, DropGuard};
 use tracing::{info, info_span, instrument, warn, Instrument};
 
 use crate::executor::{spawn, Interval};
@@ -50,7 +49,6 @@ where
     S: Store + 'static,
 {
     cmd_tx: mpsc::Sender<SyncerCmd>,
-    drop_guard: DropGuard,
     _store: PhantomData<S>,
 }
 
@@ -82,8 +80,7 @@ where
 {
     pub fn start(args: SyncerArgs<S>) -> Result<Self> {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
-        let cancellation_token = CancellationToken::new();
-        let mut worker = Worker::new(args, cmd_rx, cancellation_token.clone())?;
+        let mut worker = Worker::new(args, cmd_rx)?;
 
         spawn(async move {
             worker.run().await;
@@ -91,7 +88,6 @@ where
 
         Ok(Syncer {
             cmd_tx,
-            drop_guard: cancellation_token.drop_guard(),
             _store: PhantomData,
         })
     }
@@ -123,7 +119,6 @@ where
     S: Store + 'static,
 {
     cmd_rx: mpsc::Receiver<SyncerCmd>,
-    cancellation_token: CancellationToken,
     p2p: Arc<P2p<S>>,
     store: Arc<S>,
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
@@ -138,17 +133,12 @@ impl<S> Worker<S>
 where
     S: Store,
 {
-    fn new(
-        args: SyncerArgs<S>,
-        cmd_rx: mpsc::Receiver<SyncerCmd>,
-        cancellation_token: CancellationToken,
-    ) -> Result<Self> {
+    fn new(args: SyncerArgs<S>, cmd_rx: mpsc::Receiver<SyncerCmd>) -> Result<Self> {
         let header_sub_watcher = args.p2p.header_sub_watcher();
         let (headers_tx, headers_rx) = mpsc::channel(1);
 
         Ok(Worker {
             cmd_rx,
-            cancellation_token,
             p2p: args.p2p,
             store: args.store,
             header_sub_watcher,
@@ -180,15 +170,16 @@ where
                     self.on_header_sub_message().await;
                     self.fetch_next_batch().await;
                 }
-                Some(cmd) = self.cmd_rx.recv() => {
-                    self.on_cmd(cmd).await;
+                cmd = self.cmd_rx.recv() => {
+                    if let Some(cmd) = cmd {
+                        self.on_cmd(cmd).await;
+                    } else {
+                        return;
+                    }
                 }
                 Some(res) = self.headers_rx.recv() => {
                     self.on_fetch_next_batch_result(res).await;
                     self.fetch_next_batch().await;
-                }
-                _ = self.cancellation_token.cancelled() => {
-                    return;
                 }
             }
         }
