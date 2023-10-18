@@ -648,7 +648,6 @@ dependencies = [
  "const_format",
  "ed25519-consensus",
  "enum_dispatch",
- "instant",
  "libp2p-identity",
  "multiaddr",
  "nmt-rs",
@@ -4170,7 +4169,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=1f8b574#1f8b574809a43b892f4beb59b887919b484fe232"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=ef58b85#ef58b85e3e8b35b0f94b822d3996613539dcddd7"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -4178,6 +4177,7 @@ dependencies = [
  "ed25519-consensus",
  "flex-error",
  "futures",
+ "instant",
  "num-traits",
  "once_cell",
  "prost",
@@ -4198,7 +4198,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=1f8b574#1f8b574809a43b892f4beb59b887919b484fe232"
+source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=ef58b85#ef58b85e3e8b35b0f94b822d3996613539dcddd7"
 dependencies = [
  "bytes",
  "flex-error",
