@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::convert::Infallible;
 
 use async_trait::async_trait;
@@ -23,9 +24,12 @@ struct ExtendedHeaderEntry {
     header: Vec<u8>,
 }
 
-// SendWrapper usage is safe in wasm because we're running on single thread
+// SendWrapper usage is safe in wasm because we're running on a single thread
 #[derive(Debug)]
-pub struct IndexedDbStore(SendWrapper<Rexie>);
+pub struct IndexedDbStore {
+    head: SendWrapper<RefCell<Option<ExtendedHeader>>>,
+    db: SendWrapper<Rexie>,
+}
 
 impl IndexedDbStore {
     pub async fn new(name: &str) -> Result<IndexedDbStore> {
@@ -41,79 +45,81 @@ impl IndexedDbStore {
             .build()
             .await
             .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
-        Ok(Self(SendWrapper::new(rexie)))
+
+        let db_head = match get_head_from_database(&rexie).await {
+            Ok(v) => Ok(Some(v)),
+            Err(StoreError::NotFound) => Ok(None),
+            Err(e) => Err(e),
+        }?;
+
+        Ok(Self {
+            head: SendWrapper::new(RefCell::new(db_head)),
+            db: SendWrapper::new(rexie),
+        })
     }
 
     pub async fn delete_db(self) -> rexie::Result<()> {
-        let name = self.0.name();
-        self.0.take().close();
+        let name = self.db.name();
+        self.db.take().close();
         Rexie::delete(&name).await
     }
 
-    pub async fn get_head(&self) -> Result<ExtendedHeader> {
-        let tx = self
-            .0
-            .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
-
-        let store = tx.store(HEADER_STORE_NAME)?;
-
-        let (_, raw_value) = store
-            .get_all(None, Some(1), None, Some(Direction::Prev))
-            .await?
-            .first()
-            .ok_or(StoreError::NotFound)?
-            .to_owned();
-
-        let entry: ExtendedHeaderEntry = from_value(raw_value)?;
-
-        ExtendedHeader::decode(entry.header.as_ref())
-            .map_err(|e| StoreError::CelestiaTypes(e.into()))
+    pub fn get_head(&self) -> Result<ExtendedHeader> {
+        // this shouldn't panic, we don't borrow across await points and wasm is single threaded
+        self.head.borrow().clone().ok_or(StoreError::NotFound)
     }
 
-    pub async fn get_head_height(&self) -> Result<u64> {
-        self.get_head().await.map(|h| h.height().value())
+    pub fn get_head_height(&self) -> Result<u64> {
+        // this shouldn't panic, we don't borrow across await points and wasm is single threaded
+        self.head
+            .borrow()
+            .as_ref()
+            .map(|h| h.height().value())
+            .ok_or(StoreError::NotFound)
     }
 
     pub async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
+        // quick check with contains_height, which uses cached head
+        if !self.contains_height(height) {
+            return Err(StoreError::NotFound);
+        }
+
         let tx = self
-            .0
+            .db
             .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
         let header_store = tx.store(HEADER_STORE_NAME)?;
         let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
 
         let height_key = to_value(&height)?;
 
-        let header_get_result = height_index.get(&height_key).await?;
+        let header_entry = height_index.get(&height_key).await?;
 
         // querying unset key returns empty value
-        if header_get_result.is_falsy() {
-            return Err(StoreError::NotFound);
+        if header_entry.is_falsy() {
+            return Err(StoreError::LostHeight(height));
         }
 
-        let header_entry: ExtendedHeaderEntry = from_value(header_get_result)?;
-
-        ExtendedHeader::decode(header_entry.header.as_ref())
+        let serialized_header = from_value::<ExtendedHeaderEntry>(header_entry)?.header;
+        ExtendedHeader::decode(serialized_header.as_ref())
             .map_err(|e| StoreError::CelestiaTypes(e.into()))
     }
 
     pub async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
         let tx = self
-            .0
+            .db
             .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
         let header_store = tx.store(HEADER_STORE_NAME)?;
         let hash_index = header_store.index(HASH_INDEX_NAME)?;
 
         let hash_key = to_value(&hash)?;
+        let header_entry = hash_index.get(&hash_key).await?;
 
-        let header_get_result = hash_index.get(&hash_key).await?;
-
-        if header_get_result.is_falsy() {
+        if header_entry.is_falsy() {
             return Err(StoreError::NotFound);
         }
 
-        let header_entry: ExtendedHeaderEntry = from_value(header_get_result)?;
-
-        ExtendedHeader::decode(header_entry.header.as_ref())
+        let serialized_header = from_value::<ExtendedHeaderEntry>(header_entry)?.header;
+        ExtendedHeader::decode(serialized_header.as_ref())
             .map_err(|e| StoreError::CelestiaTypes(e.into()))
     }
 
@@ -121,7 +127,7 @@ impl IndexedDbStore {
         let height = header.height().value();
         let hash = header.hash();
 
-        let head_height = self.get_head_height().await.unwrap_or(0);
+        let head_height = self.get_head_height().unwrap_or(0);
 
         // A light check before checking the whole map
         if head_height > 0 && height <= head_height {
@@ -134,7 +140,7 @@ impl IndexedDbStore {
         }
 
         let tx = self
-            .0
+            .db
             .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadWrite)?;
         let header_store = tx.store(HEADER_STORE_NAME)?;
 
@@ -170,12 +176,15 @@ impl IndexedDbStore {
 
         tx.commit().await?;
 
+        // this shouldn't panic, we don't borrow across await points and wasm is single threaded
+        self.head.replace(Some(header));
+
         Ok(())
     }
 
     pub async fn contains_hash(&self, hash: &Hash) -> Result<bool> {
         let tx = self
-            .0
+            .db
             .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
 
         let header_store = tx.store(HEADER_STORE_NAME)?;
@@ -188,27 +197,19 @@ impl IndexedDbStore {
         Ok(hash_count > 0)
     }
 
-    pub async fn contains_height(&self, height: u64) -> Result<bool> {
-        let tx = self
-            .0
-            .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
+    pub fn contains_height(&self, height: u64) -> bool {
+        let Ok(head_height) = self.get_head_height() else {
+            return false;
+        };
 
-        let header_store = tx.store(HEADER_STORE_NAME)?;
-        let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
-
-        let height_key = KeyRange::only(&to_value(&height)?)?;
-
-        let height_count = height_index.count(Some(&height_key)).await?;
-
-        Ok(height_count > 0)
+        height <= head_height
     }
 }
 
 #[async_trait]
 impl Store for IndexedDbStore {
     async fn get_head(&self) -> Result<ExtendedHeader> {
-        let fut = SendWrapper::new(self.get_head());
-        fut.await
+        self.get_head()
     }
 
     async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
@@ -222,8 +223,7 @@ impl Store for IndexedDbStore {
     }
 
     async fn head_height(&self) -> Result<u64> {
-        let fut = SendWrapper::new(self.get_head_height());
-        fut.await
+        self.get_head_height()
     }
 
     async fn has(&self, hash: &Hash) -> bool {
@@ -232,8 +232,7 @@ impl Store for IndexedDbStore {
     }
 
     async fn has_at(&self, height: u64) -> bool {
-        let fut = SendWrapper::new(self.contains_height(height));
-        fut.await.unwrap_or(false)
+        self.contains_height(height)
     }
 
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
@@ -258,6 +257,24 @@ impl From<serde_wasm_bindgen::Error> for StoreError {
     }
 }
 
+async fn get_head_from_database(db: &Rexie) -> Result<ExtendedHeader> {
+    let tx = db.transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
+    let store = tx.store(HEADER_STORE_NAME)?;
+
+    let store_head = store
+        .get_all(None, Some(1), None, Some(Direction::Prev))
+        .await?
+        .first()
+        .ok_or(StoreError::NotFound)?
+        .1
+        .to_owned();
+
+    let serialized_header = from_value::<ExtendedHeaderEntry>(store_head)?.header;
+
+    ExtendedHeader::decode(serialized_header.as_ref())
+        .map_err(|e| StoreError::CelestiaTypes(e.into()))
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -272,11 +289,8 @@ pub mod tests {
     #[wasm_bindgen_test]
     async fn test_empty_store() {
         let s = gen_filled_store(0, function_name!()).await.0;
-        assert!(matches!(
-            s.get_head_height().await,
-            Err(StoreError::NotFound)
-        ));
-        assert!(matches!(s.get_head().await, Err(StoreError::NotFound)));
+        assert!(matches!(s.get_head_height(), Err(StoreError::NotFound)));
+        assert!(matches!(s.get_head(), Err(StoreError::NotFound)));
         assert!(matches!(
             s.get_by_height(1).await,
             Err(StoreError::NotFound)
@@ -295,8 +309,8 @@ pub mod tests {
         let header = gen.next();
 
         s.append_single_unchecked(header.clone()).await.unwrap();
-        assert_eq!(s.get_head_height().await.unwrap(), 1);
-        assert_eq!(s.get_head().await.unwrap(), header);
+        assert_eq!(s.get_head_height().unwrap(), 1);
+        assert_eq!(s.get_head().unwrap(), header);
         assert_eq!(s.get_by_height(1).await.unwrap(), header);
         assert_eq!(s.get_by_hash(&header.hash()).await.unwrap(), header);
     }
@@ -305,8 +319,8 @@ pub mod tests {
     #[wasm_bindgen_test]
     async fn test_pregenerated_data() {
         let (s, _) = gen_filled_store(100, function_name!()).await;
-        assert_eq!(s.get_head_height().await.unwrap(), 100);
-        let head = s.get_head().await.unwrap();
+        assert_eq!(s.get_head_height().unwrap(), 100);
+        let head = s.get_head().unwrap();
         assert_eq!(s.get_by_height(100).await.unwrap(), head);
         assert!(matches!(
             s.get_by_height(101).await,
@@ -422,7 +436,7 @@ pub mod tests {
             .await
             .expect("creating test store failed");
 
-        let next_height = s.get_head_height().await.unwrap_or(0) + 1;
+        let next_height = s.get_head_height().unwrap_or(0) + 1;
 
         let mut gen = ExtendedHeaderGenerator::new_from_height(next_height);
 
@@ -433,10 +447,7 @@ pub mod tests {
         }
 
         let expected_height = next_height + 1_000;
-        assert_eq!(
-            s.get_head().await.unwrap().height().value(),
-            expected_height
-        );
+        assert_eq!(s.get_head().unwrap().height().value(), expected_height);
     }
 
     #[named]
@@ -501,7 +512,7 @@ pub mod tests {
     #[wasm_bindgen_test]
     async fn test_delete_db() {
         let (original_store, _) = gen_filled_store(3, function_name!()).await;
-        assert_eq!(original_store.get_head_height().await.unwrap(), 3);
+        assert_eq!(original_store.get_head_height().unwrap(), 3);
 
         original_store.delete_db().await.unwrap();
 
@@ -510,7 +521,7 @@ pub mod tests {
             .expect("creating test store failed");
 
         assert!(matches!(
-            same_name_store.get_head_height().await,
+            same_name_store.get_head_height(),
             Err(StoreError::NotFound)
         ));
     }
