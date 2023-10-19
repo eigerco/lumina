@@ -327,6 +327,9 @@ fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
 mod tests {
     use super::*;
 
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     const ADDR1: [u8; 20] = [
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
     ];

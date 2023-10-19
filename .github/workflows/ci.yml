@@ -58,6 +58,8 @@ jobs:
       run: cargo build --all --target=wasm32-unknown-unknown
 
     - name: Run browser tests
+      run: wasm-pack test --node proto
+      run: wasm-pack test --node types
       run: wasm-pack test --headless --chrome node
 
 

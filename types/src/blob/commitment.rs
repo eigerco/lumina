@@ -258,6 +258,9 @@ fn round_down_to_power_of_2(x: NonZeroU64) -> Option<u64> {
 mod tests {
     use super::*;
 
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     #[test]
     fn test_single_sparse_share() {
         let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();

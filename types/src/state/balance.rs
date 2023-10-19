@@ -86,6 +86,9 @@ fn validate_denom(denom: &str) -> Result<()> {
 mod tests {
     use super::*;
 
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     #[test]
     fn deserialize_balance() {
         let s = r#"{"denom":"abcd","amount":"1234"}"#;

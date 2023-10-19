@@ -215,6 +215,9 @@ mod tests {
     use super::*;
     use crate::fraud_proof::Proof;
 
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     fn honest_befp() -> (BadEncodingFraudProof, ExtendedHeader) {
         let befp_json = include_str!("../test_data/fraud/honest_bad_encoding_fraud_proof.json");
         let eh_json = include_str!("../test_data/fraud/honest_bad_encoding_extended_header.json");
@@ -223,6 +226,7 @@ mod tests {
         (proof, serde_json::from_str(eh_json).unwrap())
     }
 
+    #[cfg(not(target_arch = "wasm32"))] // related to ignored validate_fake_befp test, see below
     fn fake_befp() -> (BadEncodingFraudProof, ExtendedHeader) {
         let befp_json = include_str!("../test_data/fraud/fake_bad_encoding_fraud_proof.json");
         let eh_json = include_str!("../test_data/fraud/fake_bad_encoding_extended_header.json");
@@ -269,6 +273,7 @@ mod tests {
         proof.validate(&eh).unwrap_err();
     }
 
+    #[cfg(not(target_arch = "wasm32"))] // wasm_bindgen_test doesn't seem to support #[ignore]
     #[test]
     #[ignore = "TODO: we can't catch fake proofs without rebuilding the row using reedsolomon"]
     fn validate_fake_befp() {
