@@ -57,10 +57,6 @@ jobs:
     - name: Build (wasm32-unknown-unknown)
       run: cargo build --all --target=wasm32-unknown-unknown
 
-# TODO: fix test build for wasm
-#    - name: Run tests
-#      run: cargo test --target wasm32-unknown-unknown
-
     - name: Run browser tests
       run: wasm-pack test --headless --chrome node
 
