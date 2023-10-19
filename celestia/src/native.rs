@@ -60,10 +60,10 @@ pub async fn run() -> Result<()> {
     } else {
         SledStore::new(network_id.clone()).await?
     };
-    info!(
-        "Initialised store with head height: {:?}",
-        store.head_height().await
-    );
+
+    if let Ok(store_height) = store.head_height().await {
+        info!("Initialised store with head height: {store_height}");
+    }
 
     let node = Node::new(NodeConfig {
         network_id,

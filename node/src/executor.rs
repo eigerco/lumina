@@ -2,6 +2,8 @@ use std::future::Future;
 use std::pin::Pin;
 
 use libp2p::swarm;
+use tokio::select;
+use tokio_util::sync::CancellationToken;
 
 pub(crate) use self::imp::{spawn, yield_now, Interval};
 
@@ -11,6 +13,19 @@ impl swarm::Executor for Executor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
         spawn(future)
     }
+}
+
+/// Spawn a task and that can be stopped by the `cancelation_token`.
+pub(crate) fn spawn_cancellable<F>(cancelation_token: CancellationToken, future: F)
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    spawn(async move {
+        select! {
+            _ = cancelation_token.cancelled() => {}
+            _ = future => {}
+        }
+    });
 }
 
 #[cfg(not(target_arch = "wasm32"))]

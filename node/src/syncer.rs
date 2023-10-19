@@ -2,14 +2,17 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
+use backoff::backoff::Backoff;
+use backoff::ExponentialBackoffBuilder;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use futures::FutureExt;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
-use tracing::{info, info_span, instrument, warn, Instrument};
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
-use crate::executor::{spawn, Interval};
+use crate::executor::{spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
@@ -49,6 +52,7 @@ where
     S: Store + 'static,
 {
     cmd_tx: mpsc::Sender<SyncerCmd>,
+    cancellation_token: CancellationToken,
     _store: PhantomData<S>,
 }
 
@@ -79,21 +83,23 @@ where
     S: Store,
 {
     pub fn start(args: SyncerArgs<S>) -> Result<Self> {
+        let cancellation_token = CancellationToken::new();
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
-        let mut worker = Worker::new(args, cmd_rx)?;
+        let mut worker = Worker::new(args, cancellation_token.child_token(), cmd_rx)?;
 
         spawn(async move {
             worker.run().await;
         });
 
         Ok(Syncer {
+            cancellation_token,
             cmd_tx,
             _store: PhantomData,
         })
     }
 
     pub async fn stop(&self) -> Result<()> {
-        // TODO
+        self.cancellation_token.cancel();
         Ok(())
     }
 
@@ -114,10 +120,20 @@ where
     }
 }
 
+impl<S> Drop for Syncer<S>
+where
+    S: Store,
+{
+    fn drop(&mut self) {
+        self.cancellation_token.cancel();
+    }
+}
+
 struct Worker<S>
 where
     S: Store + 'static,
 {
+    cancellation_token: CancellationToken,
     cmd_rx: mpsc::Receiver<SyncerCmd>,
     p2p: Arc<P2p<S>>,
     store: Arc<S>,
@@ -133,11 +149,16 @@ impl<S> Worker<S>
 where
     S: Store,
 {
-    fn new(args: SyncerArgs<S>, cmd_rx: mpsc::Receiver<SyncerCmd>) -> Result<Self> {
+    fn new(
+        args: SyncerArgs<S>,
+        cancellation_token: CancellationToken,
+        cmd_rx: mpsc::Receiver<SyncerCmd>,
+    ) -> Result<Self> {
         let header_sub_watcher = args.p2p.header_sub_watcher();
         let (headers_tx, headers_rx) = mpsc::channel(1);
 
         Ok(Worker {
+            cancellation_token,
             cmd_rx,
             p2p: args.p2p,
             store: args.store,
@@ -151,19 +172,86 @@ where
     }
 
     async fn run(&mut self) {
+        if let Ok(store_height) = self.store.head_height().await {
+            info!("Setting initial subjective head to {store_height}");
+            self.subjective_head_height = Some(store_height);
+        }
+
+        loop {
+            if self.cancellation_token.is_cancelled() {
+                break;
+            }
+
+            self.connecting_event_loop().await;
+
+            if self.cancellation_token.is_cancelled() {
+                break;
+            }
+
+            self.connected_event_loop().await;
+        }
+
+        debug!("Syncer stopped");
+    }
+
+    /// The responsibility of this event loop is to await a trusted peer to
+    /// connect and get the network head, while accepting commands.
+    async fn connecting_event_loop(&mut self) {
+        debug!("Entering connecting_event_loop");
+
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
         let mut try_init_result = self.spawn_try_init().fuse();
 
+        self.report().await;
+
         loop {
             select! {
+                _ = self.cancellation_token.cancelled() => {
+                    break;
+                }
                 _ = report_interval.tick() => {
                     self.report().await;
                 }
                 Ok(network_head_height) = &mut try_init_result => {
-                    info!("Setting initial subjective head to {network_head_height}");
-                    self.subjective_head_height = Some(network_head_height);
+                    match self.subjective_head_height {
+                        Some(height) if network_head_height > height => {
+                            info!("Updating subjective head to {network_head_height}");
+                            self.subjective_head_height = Some(network_head_height);
+                        }
+                        Some(height) if network_head_height == height => {}
+                        Some(height) => {
+                            warn!("Network head ({network_head_height}) is smaller than the subjective head ({height})");
+                        }
+                        None => {
+                            info!("Setting initial subjective head to {network_head_height}");
+                            self.subjective_head_height = Some(network_head_height);
+                        }
+                    }
+                    break;
+                }
+                Some(cmd) = self.cmd_rx.recv() => {
+                    self.on_cmd(cmd).await;
+                }
+            }
+        }
+    }
 
-                    self.fetch_next_batch().await;
+    /// The reponsibility of this event loop is to start the syncing process,
+    /// handles events from HeaderSub, and accept commands.
+    async fn connected_event_loop(&mut self) {
+        debug!("Entering connected_event_loop");
+
+        let mut report_interval = Interval::new(Duration::from_secs(60)).await;
+        let peer_tracker_info_watcher = self.p2p.peer_tracker_info_watcher();
+
+        self.report().await;
+
+        loop {
+            select! {
+                _ = self.cancellation_token.cancelled() => {
+                    break;
+                }
+                _ = report_interval.tick() => {
                     self.report().await;
                 }
                 _ = self.header_sub_watcher.changed() => {
@@ -174,7 +262,14 @@ where
                     self.on_cmd(cmd).await;
                 }
                 Some(res) = self.headers_rx.recv() => {
+                    let is_err = res.is_err();
                     self.on_fetch_next_batch_result(res).await;
+
+                    if is_err && peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
+                        warn!("All peers disconnected");
+                        break;
+                    }
+
                     self.fetch_next_batch().await;
                 }
             }
@@ -209,21 +304,33 @@ where
         let genesis_hash = self.genesis_hash;
         let (tx, rx) = oneshot::channel();
 
-        spawn(
-            async move {
-                loop {
-                    match try_init(&p2p, &store, genesis_hash).await {
-                        Ok(height) => {
-                            tx.maybe_send(height);
-                            return;
-                        }
-                        Err(e) => {
-                            warn!("Intialization of subjective head failed: {e}. Trying again.")
-                        }
+        let fut = async move {
+            let mut backoff = ExponentialBackoffBuilder::default()
+                .with_max_interval(Duration::from_secs(60))
+                .with_max_elapsed_time(None)
+                .build();
+
+            loop {
+                match try_init(&p2p, &store, genesis_hash).await {
+                    Ok(network_height) => {
+                        tx.maybe_send(network_height);
+                        break;
+                    }
+                    Err(e) => {
+                        let sleep_dur = backoff
+                            .next_backoff()
+                            .expect("backoff never stops retrying");
+
+                        warn!("Intialization of subjective head failed: {e}. Trying again in {sleep_dur:?}.");
+                        tokio::time::sleep(sleep_dur).await;
                     }
                 }
             }
-            .instrument(info_span!("try_init")),
+        };
+
+        spawn_cancellable(
+            self.cancellation_token.child_token(),
+            fut.instrument(info_span!("try_init")),
         );
 
         rx
@@ -308,7 +415,7 @@ where
         let tx = self.headers_tx.clone();
         let p2p = self.p2p.clone();
 
-        spawn(async move {
+        spawn_cancellable(self.cancellation_token.child_token(), async move {
             let res = p2p.get_verified_headers_range(&local_head, amount).await;
             let _ = tx.send(res).await;
         });
