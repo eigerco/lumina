@@ -57,9 +57,13 @@ jobs:
     - name: Build (wasm32-unknown-unknown)
       run: cargo build --all --target=wasm32-unknown-unknown
 
-    - name: Run browser tests
+    - name: Test proto crate
       run: wasm-pack test --node proto
+
+    - name: Test types crate
       run: wasm-pack test --node types
+
+    - name: Test node crate
       run: wasm-pack test --headless --chrome node
 
 
