@@ -284,6 +284,9 @@ mod tests {
     use super::*;
     use crate::test_utils::{invalidate, unverify};
 
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     fn sample_eh_chain_1_block_1() -> ExtendedHeader {
         let s = include_str!("../test_data/chain1/extended_header_block_1.json");
         serde_json::from_str(s).unwrap()

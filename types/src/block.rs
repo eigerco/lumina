@@ -150,6 +150,9 @@ mod tests {
     use super::*;
     use crate::hash::HashExt;
 
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     fn sample_commit() -> Commit {
         serde_json::from_str(r#"{
           "height": 1,

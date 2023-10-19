@@ -429,6 +429,9 @@ fn hash_and_sign(header: &mut ExtendedHeader, signing_key: &SigningKey) {
 mod tests {
     use super::*;
 
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     #[test]
     fn generate_blocks() {
         let mut gen = ExtendedHeaderGenerator::new();

@@ -159,6 +159,9 @@ mod tests {
     use super::*;
     use base64::prelude::*;
 
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     #[test]
     fn share_should_have_correct_len() {
         Share::from_raw(&[0; 0]).unwrap_err();
