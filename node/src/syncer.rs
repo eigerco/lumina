@@ -12,7 +12,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
-use crate::executor::{spawn, spawn_cancellable, Interval};
+use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
@@ -244,6 +244,7 @@ where
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
         let peer_tracker_info_watcher = self.p2p.peer_tracker_info_watcher();
 
+        self.fetch_next_batch().await;
         self.report().await;
 
         loop {
@@ -326,7 +327,7 @@ where
                             .expect("backoff never stops retrying");
 
                         warn!("Intialization of subjective head failed: {e}. Trying again in {sleep_dur:?}.");
-                        tokio::time::sleep(sleep_dur).await;
+                        sleep(sleep_dur).await;
                     }
                 }
             }

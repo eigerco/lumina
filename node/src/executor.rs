@@ -78,8 +78,6 @@ mod imp {
     use std::task::{Context, Poll};
     use std::time::Duration;
 
-    pub(crate) use gloo_timers::future::sleep;
-
     pub(crate) fn spawn<F>(future: F)
     where
         F: Future<Output = ()> + Send + 'static,
@@ -106,6 +104,7 @@ mod imp {
     #[derive(Debug)]
     pub(crate) struct Elapsed;
 
+    #[allow(dead_code)]
     pub(crate) fn timeout<F>(duration: Duration, future: F) -> Timeout<F>
     where
         F: Future,
@@ -117,6 +116,12 @@ mod imp {
             value: future,
             delay,
         }
+    }
+
+    pub(crate) async fn sleep(duration: Duration) {
+        let millis = u32::try_from(duration.as_millis().max(1)).unwrap_or(u32::MAX);
+        let delay = SendWrapper::new(TimeoutFuture::new(millis));
+        delay.await;
     }
 
     #[pin_project]
