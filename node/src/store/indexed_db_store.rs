@@ -19,6 +19,7 @@ const HEIGHT_INDEX_NAME: &str = "height";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ExtendedHeaderEntry {
+    // We use those fields as indexes, names need to match ones in `add_index`
     height: u64,
     hash: Hash,
     header: Vec<u8>,
@@ -39,6 +40,7 @@ impl IndexedDbStore {
                 ObjectStore::new(HEADER_STORE_NAME)
                     .key_path("id")
                     .auto_increment(true)
+                    // These need to match names in `ExtendedHeaderEntry`
                     .add_index(Index::new(HASH_INDEX_NAME, "hash").unique(true))
                     .add_index(Index::new(HEIGHT_INDEX_NAME, "height").unique(true)),
             )
@@ -47,8 +49,8 @@ impl IndexedDbStore {
             .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
 
         let db_head = match get_head_from_database(&rexie).await {
-            Ok(v) => Ok(Some(v)),
-            Err(StoreError::NotFound) => Ok(None),
+            Ok(v) => Some(v),
+            Err(StoreError::NotFound) => None,
             Err(e) => return Err(e),
         };
 
