@@ -453,7 +453,12 @@ mod tests {
     use std::io::ErrorKind;
     use std::pin::Pin;
 
-    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    use tokio::test as async_test;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as async_test;
+
+    #[async_test]
     async fn test_decode_header_request_empty() {
         let header_request = HeaderRequest {
             amount: 0,
@@ -475,7 +480,7 @@ mod tests {
         assert_eq!(header_request, decoded_header_request);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn test_decode_multiple_small_header_response() {
         const MSG_COUNT: usize = 10;
         let header_response = HeaderResponse {
@@ -505,7 +510,7 @@ mod tests {
         assert_eq!(decoded_header_response.len(), MSG_COUNT);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn test_decode_header_request_too_large() {
         let too_long_message_len = REQUEST_SIZE_MAXIMUM + 1;
         let mut length_delimiter_buffer = BytesMut::new();
@@ -523,7 +528,7 @@ mod tests {
         assert_eq!(decoding_error.kind(), ErrorKind::Other);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn test_decode_header_response_too_large() {
         let too_long_message_len = RESPONSE_SIZE_MAXIMUM + 1;
         let mut length_delimiter_buffer = BytesMut::new();
@@ -571,7 +576,7 @@ mod tests {
         assert!(matches!(parse_delimiter(&varint), Some((0, []))));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn test_decode_header_double_response_data() {
         let mut header_response_buffer = BytesMut::with_capacity(512);
         let header_response0 = HeaderResponse {
@@ -601,7 +606,7 @@ mod tests {
         assert_eq!(header_response1, decoded_header_response[1]);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn test_decode_header_request_chunked_data() {
         let data = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         let header_request = HeaderRequest {
@@ -653,7 +658,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn test_decode_header_response_chunked_data() {
         let data = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         let header_response = HeaderResponse {
@@ -705,7 +710,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn test_chunky_async_read() {
         let read_data = "FOO123";
         let cur0 = Cursor::new(read_data);

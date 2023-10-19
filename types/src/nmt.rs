@@ -168,6 +168,9 @@ impl<'de> Deserialize<'de> for Namespace {
 mod tests {
     use super::*;
 
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     #[test]
     fn namespace_id_8_bytes() {
         let nid = Namespace::new_v0(&[1, 2, 3, 4, 5, 6, 7, 8]).unwrap();

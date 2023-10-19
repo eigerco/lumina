@@ -170,8 +170,12 @@ where
                     self.on_header_sub_message().await;
                     self.fetch_next_batch().await;
                 }
-                Some(cmd) = self.cmd_rx.recv() => {
-                    self.on_cmd(cmd).await;
+                cmd = self.cmd_rx.recv() => {
+                    if let Some(cmd) = cmd {
+                        self.on_cmd(cmd).await;
+                    } else {
+                        return;
+                    }
                 }
                 Some(res) = self.headers_rx.recv() => {
                     self.on_fetch_next_batch_result(res).await;
@@ -369,14 +373,19 @@ where
 mod tests {
     use super::*;
     use crate::{
+        executor::sleep,
         store::InMemoryStore,
         test_utils::{gen_filled_store, MockP2pHandle},
     };
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use std::time::Duration;
-    use tokio::time::sleep;
 
-    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    use tokio::test as async_test;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as async_test;
+
+    #[async_test]
     async fn init_without_genesis_hash() {
         let (mock, mut handle) = P2p::mocked();
         let mut gen = ExtendedHeaderGenerator::new();
@@ -416,7 +425,7 @@ mod tests {
         handle.expect_no_cmd().await;
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn init_with_genesis_hash() {
         let mut gen = ExtendedHeaderGenerator::new();
         let genesis = gen.next();
@@ -428,7 +437,7 @@ mod tests {
         p2p_mock.expect_no_cmd().await;
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn syncing() {
         let mut gen = ExtendedHeaderGenerator::new();
         let genesis = gen.next();
@@ -519,7 +528,7 @@ mod tests {
         p2p_mock.expect_no_cmd().await;
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn start_with_filled_store() {
         let (p2p, mut p2p_mock) = P2p::mocked();
         let (store, mut gen) = gen_filled_store(25);

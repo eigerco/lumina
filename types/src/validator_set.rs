@@ -161,6 +161,9 @@ mod tests {
 
     use tendermint_proto::v0_34::types::ValidatorSet as RawValidatorSet;
 
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     fn sample_commit() -> block::Commit {
         serde_json::from_str(r#"{
           "height": 1,

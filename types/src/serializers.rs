@@ -26,8 +26,12 @@ pub(crate) mod none_as_negative_one {
 
     #[cfg(test)]
     mod tests {
+        #[cfg(not(target_arch = "wasm32"))]
         use proptest::prelude::*;
         use serde::{Deserialize, Serialize};
+
+        #[cfg(target_arch = "wasm32")]
+        use wasm_bindgen_test::wasm_bindgen_test as test;
 
         #[derive(Serialize, Deserialize, PartialEq, Eq)]
         #[serde(transparent)]
@@ -41,6 +45,7 @@ pub(crate) mod none_as_negative_one {
             assert_eq!(&serialized, "-1");
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
         proptest! {
             #[test]
             fn deserialize_negative(x in i64::MIN..0) {

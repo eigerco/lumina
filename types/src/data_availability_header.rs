@@ -110,6 +110,9 @@ impl ValidateBasic for DataAvailabilityHeader {
 mod tests {
     use super::*;
 
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     fn sample_dah() -> DataAvailabilityHeader {
         serde_json::from_str(r#"{
           "row_roots": [

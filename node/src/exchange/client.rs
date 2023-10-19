@@ -338,7 +338,12 @@ mod tests {
     use std::collections::VecDeque;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    use tokio::test as async_test;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as async_test;
+
+    #[async_test]
     async fn request_height() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -359,7 +364,7 @@ mod tests {
         assert_eq!(result[0], expected_header);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn request_hash() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -384,7 +389,7 @@ mod tests {
         assert_eq!(result[0], expected_header);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn request_range() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -408,7 +413,7 @@ mod tests {
         assert_eq!(result, expected_headers);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn request_range_responds_with_unsorted_headers() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -437,7 +442,7 @@ mod tests {
         assert_eq!(result, expected_headers);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn request_range_responds_with_not_found() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -460,7 +465,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn respond_with_another_height() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -481,7 +486,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn respond_with_bad_range() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -512,7 +517,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn respond_with_bad_hash() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -537,7 +542,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn request_unavailable_heigh() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -560,7 +565,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn respond_with_invalid_status_code() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -583,7 +588,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn respond_with_unknown_status_code() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -606,8 +611,9 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     #[ignore] // TODO: Enable this test after sessions are implemented
+    #[cfg(not(target_arch = "wasm32"))] // wasm_bindgen_test doesn't seem to support #[ignore]
     async fn request_range_responds_with_smaller_one() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -628,7 +634,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn request_range_responds_with_bigger_one() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -653,7 +659,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn respond_with_invalid_header() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -676,7 +682,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn respond_with_allowed_bad_header() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -705,7 +711,7 @@ mod tests {
         assert_eq!(result, expected_headers);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn invalid_requests() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -782,7 +788,7 @@ mod tests {
     }
 
     /// Expects the highest height that was reported by at least 2 peers
-    #[tokio::test]
+    #[async_test]
     async fn head_best() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -820,7 +826,7 @@ mod tests {
     }
 
     /// Expects the highest height that was reported by at least 2 peers
-    #[tokio::test]
+    #[async_test]
     async fn head_highest_peers() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -863,7 +869,7 @@ mod tests {
     }
 
     /// Expects the highest height
-    #[tokio::test]
+    #[async_test]
     async fn head_highest_height() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -889,7 +895,7 @@ mod tests {
         assert_eq!(result[0], expected_header);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn head_request_responds_with_multiple_headers() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -923,7 +929,7 @@ mod tests {
         assert_eq!(result[0], expected_header);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn head_request_responds_with_invalid_headers() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -950,7 +956,7 @@ mod tests {
         assert_eq!(result[0], expected_header);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn head_request_responds_only_with_invalid_headers() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -972,7 +978,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn head_request_responds_with_only_failures() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -991,7 +997,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn head_request_with_one_peer() {
         let peer_tracker = peer_tracker_with_n_peers(1);
         let mut mock_req = MockReq::new();
@@ -1012,7 +1018,7 @@ mod tests {
         assert_eq!(result[0], expected_header);
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn head_request_with_no_peers() {
         let peer_tracker = peer_tracker_with_n_peers(0);
         let mut mock_req = MockReq::new();
