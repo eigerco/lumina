@@ -49,8 +49,8 @@ impl IndexedDbStore {
         let db_head = match get_head_from_database(&rexie).await {
             Ok(v) => Ok(Some(v)),
             Err(StoreError::NotFound) => Ok(None),
-            Err(e) => Err(e),
-        }?;
+            Err(e) => return Err(e),
+        };
 
         Ok(Self {
             head: SendWrapper::new(RefCell::new(db_head)),
