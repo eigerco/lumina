@@ -413,7 +413,7 @@ where
         }
 
         if self.p2p.peer_tracker_info().num_connected_peers == 0 {
-            // No connected peers. We can do the request.
+            // No connected peers. We can't do the request.
             // This will be recovered by `run`.
             return;
         }
