@@ -27,10 +27,12 @@ rand = "0.8.5"
 smallvec = { version = "1.11.1", features = ["union", "const_generics"] }
 thiserror = "1.0.48"
 tokio = { version = "1.32.0", features = ["macros", "sync"] }
+tokio-util = "0.7.9"
 tracing = "0.1.37"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 directories = "5.0.1"
+backoff = { version = "0.4.0", features = ["tokio"] }
 # Upgrading this dependency invalidates existing persistent dbs.
 # Those can be restored by migrating between versions:
 # https://docs.rs/sled/latest/sled/struct.Db.html#examples-1
@@ -47,6 +49,7 @@ libp2p = { version = "0.52.3", features = [
 ] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+backoff = { version = "0.4.0", features = ["wasm-bindgen"] }
 getrandom = { version = "0.2.10", features = ["js"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 rexie = "0.5.0"

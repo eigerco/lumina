@@ -2,6 +2,8 @@ use std::future::Future;
 use std::pin::Pin;
 
 use libp2p::swarm;
+use tokio::select;
+use tokio_util::sync::CancellationToken;
 
 #[allow(unused_imports)]
 pub(crate) use self::imp::{sleep, spawn, timeout, yield_now, Elapsed, Interval};
@@ -12,6 +14,22 @@ impl swarm::Executor for Executor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
         spawn(future)
     }
+}
+
+/// Spawn a cancellable task.
+///
+/// This will cancel the task in the highest layer and should not be used
+/// if cancellation must happen in a point.
+pub(crate) fn spawn_cancellable<F>(cancelation_token: CancellationToken, future: F)
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    spawn(async move {
+        select! {
+            _ = cancelation_token.cancelled() => {}
+            _ = future => {}
+        }
+    });
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -63,8 +81,6 @@ mod imp {
     use std::task::{Context, Poll};
     use std::time::Duration;
 
-    pub(crate) use gloo_timers::future::sleep;
-
     pub(crate) fn spawn<F>(future: F)
     where
         F: Future<Output = ()> + Send + 'static,
@@ -91,6 +107,7 @@ mod imp {
     #[derive(Debug)]
     pub(crate) struct Elapsed;
 
+    #[allow(dead_code)]
     pub(crate) fn timeout<F>(duration: Duration, future: F) -> Timeout<F>
     where
         F: Future,
@@ -102,6 +119,12 @@ mod imp {
             value: future,
             delay,
         }
+    }
+
+    pub(crate) async fn sleep(duration: Duration) {
+        let millis = u32::try_from(duration.as_millis().max(1)).unwrap_or(u32::MAX);
+        let delay = SendWrapper::new(TimeoutFuture::new(millis));
+        delay.await;
     }
 
     #[pin_project]

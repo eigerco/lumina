@@ -2,14 +2,17 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
+use backoff::backoff::Backoff;
+use backoff::ExponentialBackoffBuilder;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use futures::FutureExt;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
-use tracing::{info, info_span, instrument, warn, Instrument};
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
-use crate::executor::{spawn, Interval};
+use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
@@ -17,6 +20,7 @@ use crate::utils::OneshotSenderExt;
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
 const MAX_HEADERS_IN_BATCH: u64 = 512;
+const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncerError {
@@ -49,6 +53,7 @@ where
     S: Store + 'static,
 {
     cmd_tx: mpsc::Sender<SyncerCmd>,
+    cancellation_token: CancellationToken,
     _store: PhantomData<S>,
 }
 
@@ -79,22 +84,25 @@ where
     S: Store,
 {
     pub fn start(args: SyncerArgs<S>) -> Result<Self> {
+        let cancellation_token = CancellationToken::new();
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
-        let mut worker = Worker::new(args, cmd_rx)?;
+        let mut worker = Worker::new(args, cancellation_token.child_token(), cmd_rx)?;
 
         spawn(async move {
             worker.run().await;
         });
 
         Ok(Syncer {
+            cancellation_token,
             cmd_tx,
             _store: PhantomData,
         })
     }
 
-    pub async fn stop(&self) -> Result<()> {
-        // TODO
-        Ok(())
+    pub fn stop(&self) {
+        // Singal the Worker to stop.
+        // TODO: Should we wait for the Worker to stop?
+        self.cancellation_token.cancel();
     }
 
     async fn send_command(&self, cmd: SyncerCmd) -> Result<()> {
@@ -114,10 +122,20 @@ where
     }
 }
 
+impl<S> Drop for Syncer<S>
+where
+    S: Store,
+{
+    fn drop(&mut self) {
+        self.cancellation_token.cancel();
+    }
+}
+
 struct Worker<S>
 where
     S: Store + 'static,
 {
+    cancellation_token: CancellationToken,
     cmd_rx: mpsc::Receiver<SyncerCmd>,
     p2p: Arc<P2p<S>>,
     store: Arc<S>,
@@ -126,18 +144,29 @@ where
     subjective_head_height: Option<u64>,
     headers_tx: mpsc::Sender<Result<Vec<ExtendedHeader>, P2pError>>,
     headers_rx: mpsc::Receiver<Result<Vec<ExtendedHeader>, P2pError>>,
-    ongoing_batch: Option<(u64, u64)>,
+    ongoing_batch: Option<Ongoing>,
+}
+
+struct Ongoing {
+    start: u64,
+    end: u64,
+    cancellation_token: CancellationToken,
 }
 
 impl<S> Worker<S>
 where
     S: Store,
 {
-    fn new(args: SyncerArgs<S>, cmd_rx: mpsc::Receiver<SyncerCmd>) -> Result<Self> {
+    fn new(
+        args: SyncerArgs<S>,
+        cancellation_token: CancellationToken,
+        cmd_rx: mpsc::Receiver<SyncerCmd>,
+    ) -> Result<Self> {
         let header_sub_watcher = args.p2p.header_sub_watcher();
         let (headers_tx, headers_rx) = mpsc::channel(1);
 
         Ok(Worker {
+            cancellation_token,
             cmd_rx,
             p2p: args.p2p,
             store: args.store,
@@ -151,37 +180,104 @@ where
     }
 
     async fn run(&mut self) {
+        loop {
+            if self.cancellation_token.is_cancelled() {
+                break;
+            }
+
+            self.connecting_event_loop().await;
+
+            if self.cancellation_token.is_cancelled() {
+                break;
+            }
+
+            self.connected_event_loop().await;
+        }
+
+        debug!("Syncer stopped");
+    }
+
+    /// The responsibility of this event loop is to await a trusted peer to
+    /// connect and get the network head, while accepting commands.
+    async fn connecting_event_loop(&mut self) {
+        debug!("Entering connecting_event_loop");
+
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
         let mut try_init_result = self.spawn_try_init().fuse();
 
+        self.report().await;
+
         loop {
             select! {
+                _ = self.cancellation_token.cancelled() => {
+                    break;
+                }
                 _ = report_interval.tick() => {
                     self.report().await;
                 }
                 Ok(network_head_height) = &mut try_init_result => {
                     info!("Setting initial subjective head to {network_head_height}");
                     self.subjective_head_height = Some(network_head_height);
+                    break;
+                }
+                Some(cmd) = self.cmd_rx.recv() => {
+                    self.on_cmd(cmd).await;
+                }
+            }
+        }
+    }
 
-                    self.fetch_next_batch().await;
+    /// The reponsibility of this event loop is to start the syncing process,
+    /// handles events from HeaderSub, and accept commands.
+    async fn connected_event_loop(&mut self) {
+        debug!("Entering connected_event_loop");
+
+        let mut report_interval = Interval::new(Duration::from_secs(60)).await;
+        let mut peer_tracker_info_watcher = self.p2p.peer_tracker_info_watcher();
+
+        // Check if connection status changed before creating the watcher
+        if peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
+            warn!("All peers disconnected");
+            return;
+        }
+
+        self.fetch_next_batch().await;
+        self.report().await;
+
+        loop {
+            select! {
+                _ = self.cancellation_token.cancelled() => {
+                    break;
+                }
+                _ = peer_tracker_info_watcher.changed() => {
+                    if peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
+                        warn!("All peers disconnected");
+                        break;
+                    }
+                }
+                _ = report_interval.tick() => {
                     self.report().await;
                 }
                 _ = self.header_sub_watcher.changed() => {
                     self.on_header_sub_message().await;
                     self.fetch_next_batch().await;
                 }
-                cmd = self.cmd_rx.recv() => {
-                    if let Some(cmd) = cmd {
-                        self.on_cmd(cmd).await;
-                    } else {
-                        return;
-                    }
+                Some(cmd) = self.cmd_rx.recv() => {
+                    self.on_cmd(cmd).await;
                 }
                 Some(res) = self.headers_rx.recv() => {
                     self.on_fetch_next_batch_result(res).await;
                     self.fetch_next_batch().await;
                 }
             }
+        }
+
+        if let Some(ongoing) = self.ongoing_batch.take() {
+            warn!(
+                "Cancelling fetching of [{}, {}]",
+                ongoing.start, ongoing.end
+            );
+            ongoing.cancellation_token.cancel();
         }
     }
 
@@ -201,7 +297,8 @@ where
 
         let ongoing_batch = self
             .ongoing_batch
-            .map(|(start, end)| format!("[{start}, {end}]"))
+            .as_ref()
+            .map(|ongoing| format!("[{}, {}]", ongoing.start, ongoing.end))
             .unwrap_or_else(|| "None".to_string());
 
         info!("syncing: {local_head}/{subjective_head}, ongoing batch: {ongoing_batch}",);
@@ -213,21 +310,33 @@ where
         let genesis_hash = self.genesis_hash;
         let (tx, rx) = oneshot::channel();
 
-        spawn(
-            async move {
-                loop {
-                    match try_init(&p2p, &store, genesis_hash).await {
-                        Ok(height) => {
-                            tx.maybe_send(height);
-                            return;
-                        }
-                        Err(e) => {
-                            warn!("Intialization of subjective head failed: {e}. Trying again.")
-                        }
+        let fut = async move {
+            let mut backoff = ExponentialBackoffBuilder::default()
+                .with_max_interval(TRY_INIT_BACKOFF_MAX_INTERVAL)
+                .with_max_elapsed_time(None)
+                .build();
+
+            loop {
+                match try_init(&p2p, &store, genesis_hash).await {
+                    Ok(network_height) => {
+                        tx.maybe_send(network_height);
+                        break;
+                    }
+                    Err(e) => {
+                        let sleep_dur = backoff
+                            .next_backoff()
+                            .expect("backoff never stops retrying");
+
+                        warn!("Intialization of subjective head failed: {e}. Trying again in {sleep_dur:?}.");
+                        sleep(sleep_dur).await;
                     }
                 }
             }
-            .instrument(info_span!("try_init")),
+        };
+
+        spawn_cancellable(
+            self.cancellation_token.child_token(),
+            fut.instrument(info_span!("try_init")),
         );
 
         rx
@@ -303,16 +412,27 @@ where
             return;
         }
 
+        if self.p2p.peer_tracker_info().num_connected_peers == 0 {
+            // No connected peers. We can't do the request.
+            // This will be recovered by `run`.
+            return;
+        }
+
         let start = local_head.height().value() + 1;
         let end = start + amount - 1;
+        let cancellation_token = self.cancellation_token.child_token();
 
-        self.ongoing_batch = Some((start, end));
+        self.ongoing_batch = Some(Ongoing {
+            start,
+            end,
+            cancellation_token: cancellation_token.clone(),
+        });
         info!("Fetching batch {start} until {end}");
 
         let tx = self.headers_tx.clone();
         let p2p = self.p2p.clone();
 
-        spawn(async move {
+        spawn_cancellable(cancellation_token, async move {
             let res = p2p.get_verified_headers_range(&local_head, amount).await;
             let _ = tx.send(res).await;
         });
@@ -320,10 +440,13 @@ where
 
     #[instrument(skip_all)]
     async fn on_fetch_next_batch_result(&mut self, res: Result<Vec<ExtendedHeader>, P2pError>) {
-        let Some((start, end)) = self.ongoing_batch.take() else {
+        let Some(ongoing) = self.ongoing_batch.take() else {
             warn!("No batch was scheduled, however result was received. Discarding it.");
             return;
         };
+
+        let start = ongoing.start;
+        let end = ongoing.end;
 
         let headers = match res {
             Ok(headers) => headers,
@@ -581,6 +704,73 @@ mod tests {
         assert_syncing(&syncer, &store, 545, 545).await;
 
         // Syncer is fulling synced and awaiting for events
+        p2p_mock.expect_no_cmd().await;
+    }
+
+    #[async_test]
+    async fn stop_syncer() {
+        let mut gen = ExtendedHeaderGenerator::new();
+        let genesis = gen.next();
+
+        let (syncer, _store, mut p2p_mock) =
+            initialized_syncer(genesis.clone(), genesis.clone()).await;
+
+        // Genesis == HEAD, so nothing else is produced.
+        p2p_mock.expect_no_cmd().await;
+
+        syncer.stop();
+        // Wait for Worker to stop
+        sleep(Duration::from_millis(1)).await;
+        assert!(matches!(
+            syncer.info().await.unwrap_err(),
+            SyncerError::WorkerDied
+        ));
+    }
+
+    #[async_test]
+    async fn all_peers_disconnected() {
+        let mut gen = ExtendedHeaderGenerator::new();
+        let genesis = gen.next();
+        let headers_2_27 = gen.next_many(26);
+
+        // Start Syncer and report height 25 as HEAD
+        let (syncer, store, mut p2p_mock) =
+            initialized_syncer(genesis.clone(), headers_2_27[24].clone()).await;
+
+        // Wait for the request but do not reply to it
+        let (height, amount, _respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 2);
+        assert_eq!(amount, 25);
+
+        p2p_mock.announce_all_peers_disconnected();
+        p2p_mock.expect_no_cmd().await;
+
+        p2p_mock.announce_trusted_peer_connected();
+
+        // Syncer is now back to `connecting_event_loop`, so we expect a request for HEAD
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 0);
+        assert_eq!(amount, 1);
+        // Now HEAD is height 27
+        respond_to.send(Ok(vec![headers_2_27[25].clone()])).unwrap();
+
+        // Syncer initializes HeaderSub with the latest HEAD
+        let (head_from_syncer, respond_to) = p2p_mock.expect_init_header_sub().await;
+        assert_eq!(&head_from_syncer, &headers_2_27[25]);
+        respond_to.send(Ok(())).unwrap();
+
+        // Syncer now moved to `connected_event_loop`
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 2);
+        assert_eq!(amount, 26);
+        respond_to
+            .send(Ok(headers_2_27))
+            // Mapping to avoid spamming error message on failure
+            .map_err(|_| "headers [2, 27]")
+            .unwrap();
+        assert_syncing(&syncer, &store, 27, 27).await;
+
+        // Node is fully synced, so nothing else is produced.
         p2p_mock.expect_no_cmd().await;
     }
 

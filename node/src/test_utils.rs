@@ -75,6 +75,13 @@ impl MockP2pHandle {
         });
     }
 
+    pub fn announce_all_peers_disconnected(&self) {
+        self.peer_tracker_tx.send_modify(|info| {
+            info.num_connected_peers = 0;
+            info.num_connected_trusted_peers = 0;
+        });
+    }
+
     pub fn announce_new_head(&self, header: ExtendedHeader) {
         self.header_sub_tx.send_replace(Some(header));
     }
