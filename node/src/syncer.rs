@@ -179,11 +179,6 @@ where
     }
 
     async fn run(&mut self) {
-        if let Ok(store_height) = self.store.head_height().await {
-            info!("Setting initial subjective head to {store_height}");
-            self.subjective_head_height = Some(store_height);
-        }
-
         loop {
             if self.cancellation_token.is_cancelled() {
                 break;
@@ -220,20 +215,8 @@ where
                     self.report().await;
                 }
                 Ok(network_head_height) = &mut try_init_result => {
-                    match self.subjective_head_height {
-                        Some(height) if network_head_height > height => {
-                            info!("Updating subjective head to {network_head_height}");
-                            self.subjective_head_height = Some(network_head_height);
-                        }
-                        Some(height) if network_head_height == height => {}
-                        Some(height) => {
-                            warn!("Network head ({network_head_height}) is smaller than the subjective head ({height})");
-                        }
-                        None => {
-                            info!("Setting initial subjective head to {network_head_height}");
-                            self.subjective_head_height = Some(network_head_height);
-                        }
-                    }
+                    info!("Setting initial subjective head to {network_head_height}");
+                    self.subjective_head_height = Some(network_head_height);
                     break;
                 }
                 Some(cmd) = self.cmd_rx.recv() => {
