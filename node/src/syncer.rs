@@ -98,9 +98,10 @@ where
         })
     }
 
-    pub async fn stop(&self) -> Result<()> {
+    pub fn stop(&self) {
+        // Singal the Worker to stop.
+        // TODO: Should we wait for the Worker to stop?
         self.cancellation_token.cancel();
-        Ok(())
     }
 
     async fn send_command(&self, cmd: SyncerCmd) -> Result<()> {
@@ -142,7 +143,13 @@ where
     subjective_head_height: Option<u64>,
     headers_tx: mpsc::Sender<Result<Vec<ExtendedHeader>, P2pError>>,
     headers_rx: mpsc::Receiver<Result<Vec<ExtendedHeader>, P2pError>>,
-    ongoing_batch: Option<(u64, u64)>,
+    ongoing_batch: Option<Ongoing>,
+}
+
+struct Ongoing {
+    start: u64,
+    end: u64,
+    cancellation_token: CancellationToken,
 }
 
 impl<S> Worker<S>
@@ -242,7 +249,13 @@ where
         debug!("Entering connected_event_loop");
 
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
-        let peer_tracker_info_watcher = self.p2p.peer_tracker_info_watcher();
+        let mut peer_tracker_info_watcher = self.p2p.peer_tracker_info_watcher();
+
+        // Check if connection status changed before creating the watcher
+        if peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
+            warn!("All peers disconnected");
+            return;
+        }
 
         self.fetch_next_batch().await;
         self.report().await;
@@ -252,6 +265,12 @@ where
                 _ = self.cancellation_token.cancelled() => {
                     break;
                 }
+                _ = peer_tracker_info_watcher.changed() => {
+                    if peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
+                        warn!("All peers disconnected");
+                        break;
+                    }
+                }
                 _ = report_interval.tick() => {
                     self.report().await;
                 }
@@ -259,25 +278,22 @@ where
                     self.on_header_sub_message().await;
                     self.fetch_next_batch().await;
                 }
-                cmd = self.cmd_rx.recv() => {
-                    if let Some(cmd) = cmd {
-                        self.on_cmd(cmd).await;
-                    } else {
-                        return;
-                    }
+                Some(cmd) = self.cmd_rx.recv() => {
+                    self.on_cmd(cmd).await;
                 }
                 Some(res) = self.headers_rx.recv() => {
-                    let is_err = res.is_err();
                     self.on_fetch_next_batch_result(res).await;
-
-                    if is_err && peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
-                        warn!("All peers disconnected");
-                        break;
-                    }
-
                     self.fetch_next_batch().await;
                 }
             }
+        }
+
+        if let Some(ongoing) = self.ongoing_batch.take() {
+            warn!(
+                "Cancelling fetching of [{}, {}]",
+                ongoing.start, ongoing.end
+            );
+            ongoing.cancellation_token.cancel();
         }
     }
 
@@ -297,7 +313,8 @@ where
 
         let ongoing_batch = self
             .ongoing_batch
-            .map(|(start, end)| format!("[{start}, {end}]"))
+            .as_ref()
+            .map(|ongoing| format!("[{}, {}]", ongoing.start, ongoing.end))
             .unwrap_or_else(|| "None".to_string());
 
         info!("syncing: {local_head}/{subjective_head}, ongoing batch: {ongoing_batch}",);
@@ -411,16 +428,27 @@ where
             return;
         }
 
+        if self.p2p.peer_tracker_info().num_connected_peers == 0 {
+            // No connected peers. We can do the request.
+            // This will be recovered by `run`.
+            return;
+        }
+
         let start = local_head.height().value() + 1;
         let end = start + amount - 1;
+        let cancellation_token = self.cancellation_token.child_token();
 
-        self.ongoing_batch = Some((start, end));
+        self.ongoing_batch = Some(Ongoing {
+            start,
+            end,
+            cancellation_token: cancellation_token.clone(),
+        });
         info!("Fetching batch {start} until {end}");
 
         let tx = self.headers_tx.clone();
         let p2p = self.p2p.clone();
 
-        spawn_cancellable(self.cancellation_token.child_token(), async move {
+        spawn_cancellable(cancellation_token, async move {
             let res = p2p.get_verified_headers_range(&local_head, amount).await;
             let _ = tx.send(res).await;
         });
@@ -428,10 +456,13 @@ where
 
     #[instrument(skip_all)]
     async fn on_fetch_next_batch_result(&mut self, res: Result<Vec<ExtendedHeader>, P2pError>) {
-        let Some((start, end)) = self.ongoing_batch.take() else {
+        let Some(ongoing) = self.ongoing_batch.take() else {
             warn!("No batch was scheduled, however result was received. Discarding it.");
             return;
         };
+
+        let start = ongoing.start;
+        let end = ongoing.end;
 
         let headers = match res {
             Ok(headers) => headers,
@@ -689,6 +720,73 @@ mod tests {
         assert_syncing(&syncer, &store, 545, 545).await;
 
         // Syncer is fulling synced and awaiting for events
+        p2p_mock.expect_no_cmd().await;
+    }
+
+    #[async_test]
+    async fn stop_syncer() {
+        let mut gen = ExtendedHeaderGenerator::new();
+        let genesis = gen.next();
+
+        let (syncer, _store, mut p2p_mock) =
+            initialized_syncer(genesis.clone(), genesis.clone()).await;
+
+        // Genesis == HEAD, so nothing else is produced.
+        p2p_mock.expect_no_cmd().await;
+
+        syncer.stop();
+        // Wait for Worker to stop
+        sleep(Duration::from_millis(1)).await;
+        assert!(matches!(
+            syncer.info().await.unwrap_err(),
+            SyncerError::WorkerDied
+        ));
+    }
+
+    #[async_test]
+    async fn all_peers_disconnected() {
+        let mut gen = ExtendedHeaderGenerator::new();
+        let genesis = gen.next();
+        let headers_2_27 = gen.next_many(26);
+
+        // Start Syncer and report height 25 as HEAD
+        let (syncer, store, mut p2p_mock) =
+            initialized_syncer(genesis.clone(), headers_2_27[24].clone()).await;
+
+        // Wait for the request but do not reply to it
+        let (height, amount, _respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 2);
+        assert_eq!(amount, 25);
+
+        p2p_mock.announce_all_peers_disconnected();
+        p2p_mock.expect_no_cmd().await;
+
+        p2p_mock.announce_trusted_peer_connected();
+
+        // Syncer is now back to `connecting_event_loop`, so we expect a request for HEAD
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 0);
+        assert_eq!(amount, 1);
+        // Now HEAD is height 27
+        respond_to.send(Ok(vec![headers_2_27[25].clone()])).unwrap();
+
+        // Syncer initializes HeaderSub with the latest HEAD
+        let (head_from_syncer, respond_to) = p2p_mock.expect_init_header_sub().await;
+        assert_eq!(&head_from_syncer, &headers_2_27[25]);
+        respond_to.send(Ok(())).unwrap();
+
+        // Syncer now moved to `connected_event_loop`
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 2);
+        assert_eq!(amount, 26);
+        respond_to
+            .send(Ok(headers_2_27))
+            // Mapping to avoid spamming error message on failure
+            .map_err(|_| "headers [2, 27]")
+            .unwrap();
+        assert_syncing(&syncer, &store, 27, 27).await;
+
+        // Node is fully synced, so nothing else is produced.
         p2p_mock.expect_no_cmd().await;
     }
 

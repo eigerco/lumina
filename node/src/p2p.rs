@@ -213,6 +213,10 @@ where
         self.peer_tracker_info_watcher.clone()
     }
 
+    pub fn peer_tracker_info(&self) -> watch::Ref<PeerTrackerInfo> {
+        self.peer_tracker_info_watcher.borrow()
+    }
+
     pub async fn init_header_sub(&self, head: ExtendedHeader) -> Result<()> {
         let (tx, rx) = oneshot::channel();
 

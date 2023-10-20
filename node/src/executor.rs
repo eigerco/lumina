@@ -16,7 +16,10 @@ impl swarm::Executor for Executor {
     }
 }
 
-/// Spawn a task and that can be stopped by the `cancelation_token`.
+/// Spawn a cancellable task.
+///
+/// This will cancel the task in the highest layer and should not be used
+/// if cancellation must happen in a point.
 pub(crate) fn spawn_cancellable<F>(cancelation_token: CancellationToken, future: F)
 where
     F: Future<Output = ()> + Send + 'static,
