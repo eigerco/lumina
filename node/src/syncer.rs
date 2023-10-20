@@ -20,6 +20,7 @@ use crate::utils::OneshotSenderExt;
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
 const MAX_HEADERS_IN_BATCH: u64 = 512;
+const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncerError {
@@ -311,7 +312,7 @@ where
 
         let fut = async move {
             let mut backoff = ExponentialBackoffBuilder::default()
-                .with_max_interval(Duration::from_secs(60))
+                .with_max_interval(TRY_INIT_BACKOFF_MAX_INTERVAL)
                 .with_max_elapsed_time(None)
                 .build();
 
