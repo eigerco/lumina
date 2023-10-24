@@ -1,0 +1,2 @@
+# rust_embed needs this dir, otherwise derive macro fails. Ignore contents as it's generated
+*

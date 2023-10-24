@@ -19,11 +19,16 @@ nmt-rs = { workspace = true }
 rand = { version = "0.8.5", optional = true }
 ruint = { version = "1.8.0", features = ["serde"] }
 serde = { version = "1.0.164", features = ["derive"] }
-serde_repr = { version = "0.1", optional = true }
+serde_repr = "0.1"
 sha2 = "0.10.7"
 tendermint = { workspace = true, features = ["std", "rust-crypto"] }
 tendermint-proto = { workspace = true }
 thiserror = "1.0.40"
+libp2p = "0.52.3"
+wasm-bindgen = "0.2.87"
+anyhow = "1.0.71"
+hex = "0.4.3"
+clap = { version = "4.4.4", features = ["derive"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2.10", features = ["js"] }
@@ -38,5 +43,5 @@ serde_json = "1.0.97"
 
 [features]
 default = ["p2p"]
-p2p = ["dep:libp2p-identity", "dep:multiaddr", "dep:serde_repr"]
+p2p = ["dep:libp2p-identity", "dep:multiaddr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <title>celestia-node-rs</title>
+        <script type="module" src="/js/run_node.js"></script>
+    </head>
+    <body>
+        <h1>Celestia Node</h1>
+        <h2>Network</h2>
+        <select id="network_id">
+            <option value="0">Arabica</option>
+            <option value="1">Mocha</option>
+            <option value="2">Private</option>
+        </select>
+        <h2>Bootnodes</h2>
+        <textarea id="bootnodes" cols=80 rows=10>
+        </textarea>
+        <h2>Genesis Hash</h2>
+        <input type="text" id="genesis" size=80 />
+
+        <button id="start">Start!</button>
+
+        <h3>Status</h3>
+        <h4>PeerId</h4><div id="peer_id"></div>
+        <h4>Syncer</h4><div id="syncer"></div>
+        <h4>Peers</h4><div id="peers"></div>
+    </body>
+</html>

@@ -6,11 +6,12 @@ use anyhow::{bail, Context, Result};
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::SledStore;
 use celestia_rpc::prelude::*;
-use celestia_types::hash::Hash;
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use tokio::time::sleep;
 use tracing::info;
+
+use celestia_types::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -31,14 +32,6 @@ struct Args {
     store: Option<PathBuf>,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum Network {
-    Arabica,
-    Mocha,
-    #[default]
-    Private,
-}
-
 pub async fn run() -> Result<()> {
     let _ = dotenvy::dotenv();
     let args = Args::parse();
@@ -47,7 +40,10 @@ pub async fn run() -> Result<()> {
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
     let p2p_bootnodes = if args.bootnodes.is_empty() {
-        network_bootnodes(args.network).await?
+        match args.network {
+            Network::Private => fetch_bridge_multiaddrs("ws://localhost:26658").await?,
+            network => canonical_network_bootnodes(network)?,
+        }
     } else {
         args.bootnodes
     };
@@ -81,60 +77,6 @@ pub async fn run() -> Result<()> {
     // We have nothing else to do, but we want to keep main alive
     loop {
         sleep(Duration::from_secs(1)).await;
-    }
-}
-
-fn network_id(network: Network) -> &'static str {
-    match network {
-        Network::Arabica => "arabica-10",
-        Network::Mocha => "mocha-4",
-        Network::Private => "private",
-    }
-}
-
-fn network_genesis(network: Network) -> Result<Option<Hash>> {
-    let hex = match network {
-        Network::Arabica => "5904E55478BA4B3002EE885621E007A2A6A2399662841912219AECD5D5CBE393",
-        Network::Mocha => "B93BBE20A0FBFDF955811B6420F8433904664D45DB4BF51022BE4200C1A1680D",
-        Network::Private => return Ok(None),
-    };
-
-    let bytes = hex::decode(hex).context("Failed to decode genesis hash")?;
-    let array = bytes
-        .try_into()
-        .ok()
-        .context("Failed to decode genesis hash")?;
-
-    Ok(Some(Hash::Sha256(array)))
-}
-
-async fn network_bootnodes(network: Network) -> Result<Vec<Multiaddr>> {
-    match network {
-        Network::Arabica => Ok(
-            [
-                "/dns4/da-bridge.celestia-arabica-10.com/tcp/2121/p2p/12D3KooWM3e9MWtyc8GkP8QRt74Riu17QuhGfZMytB2vq5NwkWAu",
-                "/dns4/da-bridge-2.celestia-arabica-10.com/tcp/2121/p2p/12D3KooWKj8mcdiBGxQRe1jqhaMnh2tGoC3rPDmr5UH2q8H4WA9M",
-                "/dns4/da-full-1.celestia-arabica-10.com/tcp/2121/p2p/12D3KooWBWkgmN7kmJSFovVrCjkeG47FkLGq7yEwJ2kEqNKCsBYk",
-                "/dns4/da-full-2.celestia-arabica-10.com/tcp/2121/p2p/12D3KooWRByRF67a2kVM2j4MP5Po3jgTw7H2iL2Spu8aUwPkrRfP",
-            ]
-            .iter()
-            .map(|s| s.parse().unwrap())
-            .collect()
-        ),
-        Network::Mocha => Ok(
-            [
-                "/dns4/da-bridge-mocha-4.celestia-mocha.com/tcp/2121/p2p/12D3KooWCBAbQbJSpCpCGKzqz3rAN4ixYbc63K68zJg9aisuAajg",
-                "/dns4/da-bridge-mocha-4-2.celestia-mocha.com/tcp/2121/p2p/12D3KooWK6wJkScGQniymdWtBwBuU36n6BRXp9rCDDUD6P5gJr3G",
-                "/dns4/da-full-1-mocha-4.celestia-mocha.com/tcp/2121/p2p/12D3KooWCUHPLqQXZzpTx1x3TAsdn3vYmTNDhzg66yG8hqoxGGN8",
-                "/dns4/da-full-2-mocha-4.celestia-mocha.com/tcp/2121/p2p/12D3KooWR6SHsXPkkvhCRn6vp1RqSefgaT1X1nMNvrVjU2o3GoYy",
-            ]
-            .iter()
-            .map(|s| s.parse().unwrap())
-            .collect()
-        ),
-        Network::Private => Ok(
-            fetch_bridge_multiaddrs("ws://localhost:26658").await?
-        )
     }
 }
 
