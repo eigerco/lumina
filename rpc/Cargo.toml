@@ -5,6 +5,7 @@ edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
+async-trait = "0.1"
 celestia-types = { workspace = true }
 jsonrpsee = { version = "0.20", features = ["client-core", "macros"] }
 serde = { version = "1.0.188", features = ["derive"] }

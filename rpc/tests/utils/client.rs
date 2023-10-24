@@ -2,13 +2,11 @@ use std::env;
 use std::sync::OnceLock;
 
 use anyhow::Result;
-use celestia_rpc::client::{new_http, new_websocket};
+use celestia_rpc::client::{HttpClient, WsClient};
 use celestia_rpc::prelude::*;
 use celestia_types::{blob::SubmitOptions, Blob};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::Error;
-use jsonrpsee::http_client::HttpClient;
-use jsonrpsee::ws_client::WsClient;
 use tokio::sync::{Mutex, MutexGuard};
 
 const WS_URL: &str = "ws://localhost:26658";
@@ -45,7 +43,7 @@ pub async fn new_test_client(auth_level: AuthLevel) -> Result<WsClient> {
     let token = token_from_env(auth_level)?;
     let url = env_or("CELESTIA_RPC_URL", WS_URL);
 
-    let client = new_websocket(&url, token.as_deref()).await?;
+    let client = WsClient::new(&url, token.as_deref()).await?;
 
     // minimum 2 blocks
     client.header_wait_for_height(2).await?;
@@ -59,7 +57,7 @@ pub async fn new_test_client_http(auth_level: AuthLevel) -> Result<HttpClient> {
     let token = token_from_env(auth_level)?;
     let url = env_or("CELESTIA_RPC_URL", HTTP_URL);
 
-    let client = new_http(&url, token.as_deref())?;
+    let client = HttpClient::new(&url, token.as_deref())?;
 
     // minimum 2 blocks
     client.header_wait_for_height(2).await?;

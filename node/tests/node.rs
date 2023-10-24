@@ -8,7 +8,7 @@ use celestia_node::{
     store::InMemoryStore,
     test_utils::{test_node_config, test_node_config_with_keypair},
 };
-use celestia_rpc::prelude::*;
+use celestia_rpc::{client::WsClient, prelude::*};
 use libp2p::{identity, multiaddr::Protocol, Multiaddr, PeerId};
 use tokio::time::sleep;
 
@@ -18,9 +18,7 @@ async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
     let _ = dotenvy::dotenv();
 
     let auth_token = env::var("CELESTIA_NODE_AUTH_TOKEN_ADMIN").unwrap();
-    let client = celestia_rpc::client::new_websocket(WS_URL, Some(&auth_token))
-        .await
-        .unwrap();
+    let client = WsClient::new(WS_URL, Some(&auth_token)).await.unwrap();
     let bridge_info = client.p2p_info().await.unwrap();
 
     let mut ma = bridge_info
