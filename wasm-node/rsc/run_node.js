@@ -1,11 +1,11 @@
 Error.stackTraceLimit = 99;
 
-import init, { setup, Network, WasmNode, WasmNodeConfig, canonical_network_bootnodes, network_genesis } from "/wasm/wasm_node.js";
+import init, { setup_logging, Network, WasmNode, WasmNodeConfig, canonical_network_bootnodes, network_genesis } from "/wasm/wasm_node.js";
 
 // initialize wasm
 await init();
 // setup logging and console panic hook
-await setup();
+await setup_logging();
 
 const response = await fetch('/cfg.json');
 const json = await response.json();
@@ -35,10 +35,13 @@ document.getElementById("start").addEventListener("click", async function(ev) {
     const config = new WasmNodeConfig(network, genesis, bootnodes);
     window.node = await new WasmNode(config);
 
-    setInterval(async function() {
+    async function update_stats() {
         document.getElementById("peer_id").innerText = JSON.stringify(await window.node.local_peer_id());
         document.getElementById("syncer").innerText = JSON.stringify(await window.node.syncer_info());
         document.getElementById("peers").innerText = JSON.stringify(await window.node.connected_peers());
-    }, 1000);
+
+        setTimeout(update_stats, 1000)
+    }
+    await update_stats();
 
 }, false);

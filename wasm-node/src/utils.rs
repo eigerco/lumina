@@ -3,7 +3,7 @@ use serde_wasm_bindgen::to_value;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn setup() {
+pub fn setup_logging() {
     console_error_panic_hook::set_once();
 
     tracing_wasm::set_as_global_default();

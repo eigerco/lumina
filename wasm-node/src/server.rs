@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
 
 use anyhow::Result;
-use axum::{Router, Json, body};
 use axum::extract::{Path, State};
 use axum::http::{header, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
+use axum::{body, Json, Router};
 use clap::Parser;
 use libp2p::Multiaddr;
 use rust_embed::RustEmbed;
@@ -59,7 +59,9 @@ pub async fn run() -> Result<()> {
         .route("/cfg.json", get(serve_config))
         .with_state(state);
 
-    Ok(axum::Server::bind(&args.listen_addr).serve(app.into_make_service()).await?)
+    Ok(axum::Server::bind(&args.listen_addr)
+        .serve(app.into_make_service())
+        .await?)
 }
 
 async fn serve_index_html() -> Result<Response, StatusCode> {

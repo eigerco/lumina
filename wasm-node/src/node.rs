@@ -1,7 +1,7 @@
 use anyhow::Context;
+use celestia_node::network::{network_id, Network};
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::IndexedDbStore;
-use celestia_node::network::{network_id, Network};
 use celestia_types::hash::Hash;
 use js_sys::{Array, JsString};
 use libp2p::identity::Keypair;
@@ -9,7 +9,6 @@ use libp2p::{identity, Multiaddr};
 use serde_wasm_bindgen::to_value;
 use tracing::info;
 use wasm_bindgen::prelude::*;
-
 
 #[wasm_bindgen]
 struct WasmNode {
