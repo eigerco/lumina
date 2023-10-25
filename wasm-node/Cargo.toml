@@ -12,7 +12,7 @@ celestia-types = { workspace = true, features = ["test-utils"] }
 
 anyhow = "1.0.71"
 console_error_panic_hook = "0.1.7"
-futures-timer = { version = "3.0.2", features = ["wasm-bindgen"]}
+futures-timer = { version = "3.0.2", features = ["wasm-bindgen"] }
 js-sys = "0.3.64"
 libp2p = "0.52.3"
 serde = "1.0.189"
@@ -21,7 +21,7 @@ tracing = "0.1.37"
 tracing-wasm = "0.2.1"
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"
-web-sys = { version = "0.3.64", features = ["console"]}
+web-sys = { version = "0.3.64", features = ["console"] }
 serde_json = "1.0.107"
 
 [dev-dependencies]
@@ -32,5 +32,5 @@ axum = "0.6.20"
 clap = { version = "4.4.4", features = ["derive"] }
 dotenvy = "0.15.7"
 mime_guess = "2.0"
-rust-embed="8.0.0"
+rust-embed = "8.0.0"
 tokio = { version = "1.29.0", features = ["macros", "rt-multi-thread"] }

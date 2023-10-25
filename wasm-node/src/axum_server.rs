@@ -68,7 +68,7 @@ pub async fn run() -> Result<()> {
     }
 }
 
-async fn serve_index_html() -> Result<impl IntoResponse, StatusCode> {
+async fn serve_index_html() -> Result<Response, StatusCode> {
     serve_embedded_path::<StaticResources>(Path("index.html".to_string())).await
 }
 
