@@ -1,4 +1,5 @@
 use anyhow::Context;
+use celestia_node::network::{network_id, Network};
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::IndexedDbStore;
 use celestia_types::hash::Hash;
@@ -8,8 +9,6 @@ use libp2p::{identity, Multiaddr};
 use serde_wasm_bindgen::to_value;
 use tracing::info;
 use wasm_bindgen::prelude::*;
-
-use celestia_types::network::{network_id, Network};
 
 #[wasm_bindgen]
 struct WasmNode {

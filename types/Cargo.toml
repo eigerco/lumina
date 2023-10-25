@@ -26,9 +26,6 @@ tendermint-proto = { workspace = true }
 thiserror = "1.0.40"
 libp2p = "0.52.3"
 wasm-bindgen = "0.2.87"
-anyhow = "1.0.71"
-hex = "0.4.3"
-clap = { version = "4.4.4", features = ["derive"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2.10", features = ["js"] }

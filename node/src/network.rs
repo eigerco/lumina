@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use crate::hash::Hash;
 use anyhow::{Context, Result};
+use celestia_types::hash::Hash;
 #[cfg(not(target_arch = "wasm32"))]
 use clap::ValueEnum;
 use libp2p::Multiaddr;
@@ -62,8 +62,7 @@ pub fn network_genesis(network: Network) -> Result<Option<Hash>> {
 
 pub fn canonical_network_bootnodes(network: Network) -> Result<Vec<Multiaddr>> {
     match network {
-        Network::Arabica => Ok(
-            [
+        Network::Arabica => Ok([
                 "/dns4/da-bridge.celestia-arabica-10.com/tcp/2121/p2p/12D3KooWM3e9MWtyc8GkP8QRt74Riu17QuhGfZMytB2vq5NwkWAu",
                 "/dns4/da-bridge-2.celestia-arabica-10.com/tcp/2121/p2p/12D3KooWKj8mcdiBGxQRe1jqhaMnh2tGoC3rPDmr5UH2q8H4WA9M",
                 "/dns4/da-full-1.celestia-arabica-10.com/tcp/2121/p2p/12D3KooWBWkgmN7kmJSFovVrCjkeG47FkLGq7yEwJ2kEqNKCsBYk",
@@ -72,14 +71,9 @@ pub fn canonical_network_bootnodes(network: Network) -> Result<Vec<Multiaddr>> {
             .iter()
             .map(|s| s.parse().unwrap())
             .collect()
-        ),
-        Network::Mocha => Ok(
-            [
-            "/ip4/40.85.94.176/tcp/2121/p2p/12D3KooWNJ3Nf1DTQTz8JZogg2eSvPKKKv8itC6fxxspe4C6bizs",
-            "/ip4/40.85.94.176/udp/2121/quic-v1/p2p/12D3KooWNJ3Nf1DTQTz8JZogg2eSvPKKKv8itC6fxxspe4C6bizs",
-            "/ip4/40.85.94.176/udp/2121/quic-v1/webtransport/certhash/uEiBf-OX4HzFK9owOpjdCifsDIWRO0SoD3j3vGKlq0pAXKw/certhash/uEiCx1md1BATJ_0NXAjp3KOuwRYG1535E7kUzFdMq8aPaWw/p2p/12D3KooWNJ3Nf1DTQTz8JZogg2eSvPKKKv8itC6fxxspe4C6bizs",
-            "/ip4/40.85.94.176/udp/2121/quic-v1/p2p/12D3KooWQUYAApYb4DJnhS1QmAwRr5HRvUeHJYocchCpwEhCtDGu",
-            "/ip4/40.85.94.176/udp/2121/quic-v1/webtransport/certhash/uEiBr4-sr95BpqfA-ttpjiLdjbGABhTvX8oxrTXf3Ubfibw/certhash/uEiBSVgyze9xG1UbbNuTwyEUWLPq7l2N9pyeQSs3OtEhGRg/p2p/12D3KooWQUYAApYb4DJnhS1QmAwRr5HRvUeHJYocchCpwEhCtDGu",
+            )
+        ,
+        Network::Mocha => Ok([
             "/dns4/da-bridge-mocha-4.celestia-mocha.com/udp/2121/quic/p2p/12D3KooWCBAbQbJSpCpCGKzqz3rAN4ixYbc63K68zJg9aisuAajg",
             "/dns4/da-bridge-mocha-4-2.celestia-mocha.com/udp/2121/quic/p2p/12D3KooWK6wJkScGQniymdWtBwBuU36n6BRXp9rCDDUD6P5gJr3G",
             "/dns4/da-full-1-mocha-4.celestia-mocha.com/udp/2121/quic/p2p/12D3KooWCUHPLqQXZzpTx1x3TAsdn3vYmTNDhzg66yG8hqoxGGN8",
@@ -88,7 +82,8 @@ pub fn canonical_network_bootnodes(network: Network) -> Result<Vec<Multiaddr>> {
             .iter()
             .map(|s| s.parse().unwrap())
             .collect()
-        ),
+            )
+        ,
         Network::Private => Ok(vec![])
     }
 }

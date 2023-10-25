@@ -7,7 +7,6 @@ mod error;
 mod extended_header;
 pub mod fraud_proof;
 pub mod hash;
-pub mod network;
 pub mod nmt;
 #[cfg(feature = "p2p")]
 pub mod p2p;

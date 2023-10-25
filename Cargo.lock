@@ -618,6 +618,7 @@ dependencies = [
 name = "celestia-node"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "backoff",
  "bytes",
@@ -625,6 +626,7 @@ dependencies = [
  "celestia-proto",
  "celestia-rpc",
  "celestia-types",
+ "clap",
  "dashmap",
  "directories",
  "dotenvy",
@@ -632,6 +634,7 @@ dependencies = [
  "futures",
  "getrandom 0.2.10",
  "gloo-timers 0.3.0",
+ "hex",
  "instant",
  "libp2p",
  "pin-project",
@@ -642,6 +645,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
+ "serde_repr",
  "sled",
  "smallvec",
  "tempdir",
@@ -691,18 +695,15 @@ dependencies = [
 name = "celestia-types"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "base64 0.21.3",
  "bech32",
  "bytes",
  "celestia-proto",
  "cid",
- "clap",
  "const_format",
  "ed25519-consensus",
  "enum_dispatch",
  "getrandom 0.2.10",
- "hex",
  "libp2p",
  "libp2p-identity",
  "multiaddr",

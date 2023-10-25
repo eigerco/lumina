@@ -1,5 +1,6 @@
 mod exchange;
 mod executor;
+pub mod network;
 pub mod node;
 pub mod p2p;
 pub mod peer_tracker;

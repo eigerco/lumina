@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use anyhow::Result;
 use axum::body;
 use axum::extract::{Path, State};
@@ -9,10 +11,9 @@ use clap::Parser;
 use libp2p::Multiaddr;
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 use tokio::{spawn, time};
 
-use celestia_types::network::Network;
+use celestia_node::network::Network;
 
 const BIND_ADDR: &str = "127.0.0.1:9876";
 
