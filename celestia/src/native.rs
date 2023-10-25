@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
+use celestia_node::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::SledStore;
 use celestia_rpc::prelude::*;
@@ -10,8 +11,6 @@ use clap::Parser;
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use tokio::time::sleep;
 use tracing::info;
-
-use celestia_types::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
 
 #[derive(Debug, Parser)]
 struct Args {

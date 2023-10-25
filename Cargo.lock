@@ -618,7 +618,6 @@ dependencies = [
 name = "celestia-node"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "backoff",
  "bytes",
@@ -704,7 +703,6 @@ dependencies = [
  "ed25519-consensus",
  "enum_dispatch",
  "getrandom 0.2.10",
- "libp2p",
  "libp2p-identity",
  "multiaddr",
  "nmt-rs",
@@ -718,7 +716,6 @@ dependencies = [
  "tendermint",
  "tendermint-proto",
  "thiserror",
- "wasm-bindgen",
  "wasm-bindgen-test",
 ]
 
