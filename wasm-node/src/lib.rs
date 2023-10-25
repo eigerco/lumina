@@ -4,4 +4,4 @@ pub mod node;
 pub mod utils;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub mod axum_server;
+pub mod server;

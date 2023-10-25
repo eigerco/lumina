@@ -1,17 +1,15 @@
 use std::net::SocketAddr;
 
 use anyhow::Result;
-use axum::body;
+use axum::{Router, Json, body};
 use axum::extract::{Path, State};
 use axum::http::{header, StatusCode};
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use axum::routing::get;
-use axum::Router;
 use clap::Parser;
 use libp2p::Multiaddr;
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
-use tokio::{spawn, time};
 
 use celestia_node::network::Network;
 
@@ -61,11 +59,7 @@ pub async fn run() -> Result<()> {
         .route("/cfg.json", get(serve_config))
         .with_state(state);
 
-    spawn(axum::Server::bind(&args.listen_addr).serve(app.into_make_service()));
-
-    loop {
-        time::sleep(time::Duration::from_secs(1)).await;
-    }
+    Ok(axum::Server::bind(&args.listen_addr).serve(app.into_make_service()).await?)
 }
 
 async fn serve_index_html() -> Result<Response, StatusCode> {
@@ -86,11 +80,6 @@ async fn serve_embedded_path<Source: RustEmbed>(
     }
 }
 
-async fn serve_config(state: State<WasmNodeArgs>) -> Result<Response, StatusCode> {
-    let args = serde_json::to_string(&state.0).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    Response::builder()
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(body::boxed(body::Full::from(args)))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+async fn serve_config(state: State<WasmNodeArgs>) -> Json<WasmNodeArgs> {
+    Json(state.0)
 }
