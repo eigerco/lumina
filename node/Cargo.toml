@@ -10,7 +10,6 @@ celestia-types = { workspace = true }
 tendermint-proto = { workspace = true }
 
 async-trait = "0.1.73"
-clap = { version = "4.4.4", features = ["derive"] }
 dashmap = "5.5.3"
 futures = "0.3.28"
 hex = "0.4.3"

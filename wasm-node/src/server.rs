@@ -6,18 +6,17 @@ use axum::http::{header, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
 use axum::{body, Json, Router};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use libp2p::Multiaddr;
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
-
-use celestia_node::network::Network;
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 const BIND_ADDR: &str = "127.0.0.1:9876";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WasmNodeArgs {
-    pub network: Network,
+    pub network: ArgNetwork,
     pub bootnodes: Vec<Multiaddr>,
 }
 
@@ -33,7 +32,7 @@ struct StaticResources;
 struct Args {
     /// Network to connect.
     #[arg(short, long, value_enum, default_value_t)]
-    network: Network,
+    network: ArgNetwork,
 
     /// Bootnode multiaddr, including peer id. Can be used multiple times.
     #[arg(long)]
@@ -42,6 +41,17 @@ struct Args {
     /// Address to serve app at
     #[arg(long, default_value = BIND_ADDR)]
     listen_addr: SocketAddr,
+}
+
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize_repr, Deserialize_repr,
+)]
+#[repr(u8)]
+pub enum ArgNetwork {
+    Arabica,
+    Mocha,
+    #[default]
+    Private,
 }
 
 pub async fn run() -> Result<()> {

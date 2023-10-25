@@ -7,7 +7,7 @@ use celestia_node::network::{canonical_network_bootnodes, network_genesis, netwo
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::SledStore;
 use celestia_rpc::prelude::*;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use tokio::time::sleep;
 use tracing::info;
@@ -16,7 +16,7 @@ use tracing::info;
 struct Args {
     /// Network to connect.
     #[arg(short, long, value_enum, default_value_t)]
-    network: Network,
+    network: ArgNetwork,
 
     /// Listening addresses. Can be used multiple times.
     #[arg(short, long = "listen")]
@@ -31,6 +31,14 @@ struct Args {
     store: Option<PathBuf>,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ArgNetwork {
+    Arabica,
+    Mocha,
+    #[default]
+    Private,
+}
+
 pub async fn run() -> Result<()> {
     let _ = dotenvy::dotenv();
     let args = Args::parse();
@@ -38,8 +46,9 @@ pub async fn run() -> Result<()> {
 
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
+    let network = args.network.into();
     let p2p_bootnodes = if args.bootnodes.is_empty() {
-        match args.network {
+        match network {
             Network::Private => fetch_bridge_multiaddrs("ws://localhost:26658").await?,
             network => canonical_network_bootnodes(network)?,
         }
@@ -47,8 +56,8 @@ pub async fn run() -> Result<()> {
         args.bootnodes
     };
 
-    let network_id = network_id(args.network).to_owned();
-    let genesis_hash = network_genesis(args.network)?;
+    let network_id = network_id(network).to_owned();
+    let genesis_hash = network_genesis(network)?;
 
     let store = if let Some(db_path) = args.store {
         SledStore::new_in_path(db_path).await?
@@ -120,4 +129,14 @@ fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
         .init();
 
     guard
+}
+
+impl From<ArgNetwork> for Network {
+    fn from(network: ArgNetwork) -> Network {
+        match network {
+            ArgNetwork::Arabica => Network::Arabica,
+            ArgNetwork::Mocha => Network::Mocha,
+            ArgNetwork::Private => Network::Private,
+        }
+    }
 }

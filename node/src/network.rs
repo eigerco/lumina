@@ -1,20 +1,16 @@
 use std::str::FromStr;
 
 use celestia_types::hash::Hash;
-#[cfg(not(target_arch = "wasm32"))]
-use clap::ValueEnum;
 use hex::FromHexError;
 use libp2p::core::multiaddr::Error as MultiaddrError;
 use libp2p::Multiaddr;
-use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-#[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
-#[repr(u8)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Network {
     Arabica,
     Mocha,
