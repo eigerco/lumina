@@ -35,8 +35,9 @@ document.getElementById("start").addEventListener("click", async function(ev) {
     const config = new WasmNodeConfig(network, genesis, bootnodes);
     window.node = await new WasmNode(config);
 
+    document.getElementById("peer_id").innerText = JSON.stringify(await window.node.local_peer_id());
+
     async function update_stats() {
-        document.getElementById("peer_id").innerText = JSON.stringify(await window.node.local_peer_id());
         document.getElementById("syncer").innerText = JSON.stringify(await window.node.syncer_info());
         document.getElementById("peers").innerText = JSON.stringify(await window.node.connected_peers());
 

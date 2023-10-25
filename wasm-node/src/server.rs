@@ -25,7 +25,7 @@ pub struct WasmNodeArgs {
 struct WasmPackage;
 
 #[derive(RustEmbed)]
-#[folder = "rsc"]
+#[folder = "static"]
 struct StaticResources;
 
 #[derive(Debug, Clone, Parser)]
