@@ -2,9 +2,7 @@ Error.stackTraceLimit = 99;
 
 import init, { setup_logging, Network, WasmNode, WasmNodeConfig, canonical_network_bootnodes, network_genesis } from "/wasm/wasm_node.js";
 
-// initialize wasm
 await init();
-// setup logging and console panic hook
 await setup_logging();
 
 const response = await fetch('/cfg.json');
@@ -39,7 +37,15 @@ document.getElementById("start").addEventListener("click", async function(ev) {
 
     async function update_stats() {
         document.getElementById("syncer").innerText = JSON.stringify(await window.node.syncer_info());
-        document.getElementById("peers").innerText = JSON.stringify(await window.node.connected_peers());
+
+        let peers_ul = document.createElement('ul');
+        (await window.node.connected_peers()).forEach(function(peer) {
+            var li = document.createElement("li");
+            li.innerText = peer;
+            peers_ul.appendChild(li);
+        });
+
+        document.getElementById("peers").replaceChildren(peers_ul);
 
         setTimeout(update_stats, 1000)
     }

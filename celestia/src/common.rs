@@ -1,17 +1,19 @@
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
-use crate::{native, server};
 use anyhow::{bail, Result};
 use celestia_node::network::Network;
 use clap::{error::ErrorKind, ArgGroup, CommandFactory, Parser, ValueEnum};
 use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use std::path::PathBuf;
+
+use crate::{native, server};
 
 const SERVER_DEFAULT_BIND_ADDR: &str = "127.0.0.1:9876";
 
 #[derive(Debug, Parser)]
+// disallow specifying store path when running in browser
 #[clap(group(ArgGroup::new("native_xor_browser")
              .args(&["store", "browser"])))]
 pub(crate) struct Args {
@@ -40,7 +42,7 @@ pub(crate) struct Args {
     Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize_repr, Deserialize_repr,
 )]
 #[repr(u8)]
-pub enum ArgNetwork {
+pub(crate) enum ArgNetwork {
     Arabica,
     Mocha,
     #[default]
@@ -65,11 +67,17 @@ pub async fn run_cli() -> Result<()> {
         };
         server::run(args.network, args.bootnodes, listen_addr).await
     } else {
-        native::run(args).await
+        native::run(
+            args.network.into(),
+            args.bootnodes,
+            args.listen_addrs,
+            args.store,
+        )
+        .await
     }
 }
 
-pub fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
+fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
     let (non_blocking, guard) = tracing_appender::non_blocking(std::io::stdout());
 
     let filter = tracing_subscriber::EnvFilter::builder()

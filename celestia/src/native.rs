@@ -1,7 +1,7 @@
 use std::env;
+use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::common::Args;
 use anyhow::{bail, Context, Result};
 use celestia_node::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
 use celestia_node::node::{Node, NodeConfig};
@@ -11,23 +11,28 @@ use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use tokio::time::sleep;
 use tracing::info;
 
-pub(crate) async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(
+    network: Network,
+    bootnodes: Vec<Multiaddr>,
+    listen_addrs: Vec<Multiaddr>,
+    store_path: Option<PathBuf>,
+) -> Result<()> {
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
-    let network = args.network.into();
-    let p2p_bootnodes = if args.bootnodes.is_empty() {
+    //let network = args.network.into();
+    let p2p_bootnodes = if bootnodes.is_empty() {
         match network {
             Network::Private => fetch_bridge_multiaddrs("ws://localhost:26658").await?,
             network => canonical_network_bootnodes(network)?,
         }
     } else {
-        args.bootnodes
+        bootnodes
     };
 
     let network_id = network_id(network).to_owned();
     let genesis_hash = network_genesis(network)?;
 
-    let store = if let Some(db_path) = args.store {
+    let store = if let Some(db_path) = store_path {
         SledStore::new_in_path(db_path).await?
     } else {
         SledStore::new(network_id.clone()).await?
@@ -42,7 +47,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         genesis_hash,
         p2p_local_keypair,
         p2p_bootnodes,
-        p2p_listen_on: args.listen_addrs,
+        p2p_listen_on: listen_addrs,
         store,
     })
     .await

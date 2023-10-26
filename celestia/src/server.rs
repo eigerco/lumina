@@ -14,7 +14,7 @@ use tracing::info;
 use crate::common::ArgNetwork;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WasmNodeArgs {
+struct WasmNodeArgs {
     pub network: ArgNetwork,
     pub bootnodes: Vec<Multiaddr>,
 }
@@ -27,7 +27,7 @@ struct WasmPackage;
 #[folder = "static"]
 struct StaticResources;
 
-pub async fn run(
+pub(crate) async fn run(
     network: ArgNetwork,
     bootnodes: Vec<Multiaddr>,
     listen_addr: SocketAddr,
@@ -36,8 +36,8 @@ pub async fn run(
 
     let app = Router::new()
         .route("/", get(serve_index_html))
-        .route("/js/*script", get(serve_embedded_path::<StaticResources>))
-        .route("/wasm/*binary", get(serve_embedded_path::<WasmPackage>))
+        .route("/js/*path", get(serve_embedded_path::<StaticResources>))
+        .route("/wasm/*path", get(serve_embedded_path::<WasmPackage>))
         .route("/cfg.json", get(serve_config))
         .with_state(state);
 
