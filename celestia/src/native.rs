@@ -5,8 +5,8 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::SledStore;
-use celestia_rpc::client::WsClient;
 use celestia_rpc::prelude::*;
+use celestia_rpc::Client;
 use celestia_types::hash::Hash;
 use clap::{Parser, ValueEnum};
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
@@ -142,7 +142,7 @@ async fn network_bootnodes(network: Network) -> Result<Vec<Multiaddr>> {
 /// Get the address of the local bridge node
 async fn fetch_bridge_multiaddrs(ws_url: &str) -> Result<Vec<Multiaddr>> {
     let auth_token = env::var("CELESTIA_NODE_AUTH_TOKEN_ADMIN")?;
-    let client = WsClient::new(ws_url, Some(&auth_token)).await?;
+    let client = Client::new(ws_url, Some(&auth_token)).await?;
     let bridge_info = client.p2p_info().await?;
 
     info!("bridge id: {:?}", bridge_info.id);

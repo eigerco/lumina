@@ -5,45 +5,37 @@
 //! one using [`jsonrpsee`] crate directly.
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use self::imp::{HttpClient, WsClient};
+pub use self::native::Client;
 
 #[cfg(not(target_arch = "wasm32"))]
-mod imp {
-    use crate::Result;
+mod native {
+    use std::fmt;
+    use std::marker::Send;
+    use std::result::Result as StdResult;
+
+    use crate::{Error, Result};
+    use async_trait::async_trait;
     use http::{header, HeaderValue};
-    use jsonrpsee::http_client::{HeaderMap, HttpClient as JrpcHttpClient, HttpClientBuilder};
-    use jsonrpsee::ws_client::{WsClient as JrpcWsClient, WsClientBuilder};
+    use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
+    use jsonrpsee::core::params::BatchRequestBuilder;
+    use jsonrpsee::core::traits::ToRpcParams;
+    use jsonrpsee::core::Error as JrpcError;
+    use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
+    use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
+    use serde::de::DeserializeOwned;
 
-    /// Json RPC client using http protocol.
-    pub struct HttpClient {
-        inner: JrpcHttpClient,
+    /// Json RPC client.
+    pub enum Client {
+        Http(HttpClient),
+        Ws(WsClient),
     }
 
-    impl HttpClient {
-        /// Create a new http client.
-        pub fn new(conn_str: &str, auth_token: Option<&str>) -> Result<Self> {
-            let mut headers = HeaderMap::new();
-
-            if let Some(token) = auth_token {
-                let val = HeaderValue::from_str(&format!("Bearer {token}"))?;
-                headers.insert(header::AUTHORIZATION, val);
-            }
-
-            let client = HttpClientBuilder::default()
-                .set_headers(headers)
-                .build(conn_str)?;
-
-            Ok(Self { inner: client })
-        }
-    }
-
-    /// Json RPC client using websockets protocol.
-    pub struct WsClient {
-        inner: JrpcWsClient,
-    }
-
-    impl WsClient {
-        /// Create a new websocket client.
+    impl Client {
+        /// Create a new Json RPC client.
+        ///
+        /// Only 'http' and 'ws' protocols are supported and they should
+        /// be specified in the provided `conn_str`. For more flexibility
+        /// consider creating the client using [`jsonrpsee`] directly.
         pub async fn new(conn_str: &str, auth_token: Option<&str>) -> Result<Self> {
             let mut headers = HeaderMap::new();
 
@@ -52,98 +44,108 @@ mod imp {
                 headers.insert(header::AUTHORIZATION, val);
             }
 
-            let client = WsClientBuilder::default()
-                .set_headers(headers)
-                .build(conn_str)
-                .await?;
+            let client = match conn_str.split_once(':') {
+                Some(("http", _)) => Client::Http(
+                    HttpClientBuilder::default()
+                        .set_headers(headers)
+                        .build(conn_str)?,
+                ),
+                Some(("ws", _)) => Client::Ws(
+                    WsClientBuilder::default()
+                        .set_headers(headers)
+                        .build(conn_str)
+                        .await?,
+                ),
+                _ => return Err(Error::ProtocolNotSupported(conn_str.into())),
+            };
 
-            Ok(Self { inner: client })
+            Ok(client)
         }
     }
 
-    /// Implements `ClientT` and `SubscriptionClientT` by delegating calls to $typ::$target.
-    macro_rules! impl_jsonrpc_client_delegate {
-        ($typ:ty, $target:ident) => {
-            #[::async_trait::async_trait]
-            impl ::jsonrpsee::core::client::ClientT for $typ {
-                async fn notification<Params>(
-                    &self,
-                    method: &str,
-                    params: Params,
-                ) -> ::std::result::Result<(), ::jsonrpsee::core::Error>
-                where
-                    Params: ::jsonrpsee::core::traits::ToRpcParams + ::std::marker::Send,
-                {
-                    self.$target.notification(method, params).await
-                }
-
-                async fn request<R, Params>(
-                    &self,
-                    method: &str,
-                    params: Params,
-                ) -> ::std::result::Result<R, ::jsonrpsee::core::Error>
-                where
-                    R: ::serde::de::DeserializeOwned,
-                    Params: ::jsonrpsee::core::traits::ToRpcParams + ::std::marker::Send,
-                {
-                    self.$target.request(method, params).await
-                }
-
-                async fn batch_request<'a, R>(
-                    &self,
-                    batch: ::jsonrpsee::core::params::BatchRequestBuilder<'a>,
-                ) -> ::std::result::Result<
-                    ::jsonrpsee::core::client::BatchResponse<'a, R>,
-                    ::jsonrpsee::core::Error,
-                >
-                where
-                    R: ::serde::de::DeserializeOwned + ::std::fmt::Debug + 'a,
-                {
-                    self.$target.batch_request(batch).await
-                }
+    #[async_trait]
+    impl ClientT for Client {
+        async fn notification<Params>(
+            &self,
+            method: &str,
+            params: Params,
+        ) -> StdResult<(), JrpcError>
+        where
+            Params: ToRpcParams + Send,
+        {
+            match self {
+                Client::Http(client) => client.notification(method, params).await,
+                Client::Ws(client) => client.notification(method, params).await,
             }
+        }
 
-            #[::async_trait::async_trait]
-            impl ::jsonrpsee::core::client::SubscriptionClientT for $typ {
-                async fn subscribe<'a, N, Params>(
-                    &self,
-                    subscribe_method: &'a str,
-                    params: Params,
-                    unsubscribe_method: &'a str,
-                ) -> ::std::result::Result<
-                    ::jsonrpsee::core::client::Subscription<N>,
-                    ::jsonrpsee::core::Error,
-                >
-                where
-                    Params: ::jsonrpsee::core::traits::ToRpcParams + ::std::marker::Send,
-                    N: ::serde::de::DeserializeOwned,
-                {
-                    self.$target
+        async fn request<R, Params>(&self, method: &str, params: Params) -> StdResult<R, JrpcError>
+        where
+            R: DeserializeOwned,
+            Params: ToRpcParams + Send,
+        {
+            match self {
+                Client::Http(client) => client.request(method, params).await,
+                Client::Ws(client) => client.request(method, params).await,
+            }
+        }
+
+        async fn batch_request<'a, R>(
+            &self,
+            batch: BatchRequestBuilder<'a>,
+        ) -> StdResult<BatchResponse<'a, R>, JrpcError>
+        where
+            R: DeserializeOwned + fmt::Debug + 'a,
+        {
+            match self {
+                Client::Http(client) => client.batch_request(batch).await,
+                Client::Ws(client) => client.batch_request(batch).await,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl SubscriptionClientT for Client {
+        async fn subscribe<'a, N, Params>(
+            &self,
+            subscribe_method: &'a str,
+            params: Params,
+            unsubscribe_method: &'a str,
+        ) -> StdResult<Subscription<N>, JrpcError>
+        where
+            Params: ToRpcParams + Send,
+            N: DeserializeOwned,
+        {
+            match self {
+                Client::Http(client) => {
+                    client
                         .subscribe(subscribe_method, params, unsubscribe_method)
                         .await
                 }
-
-                async fn subscribe_to_method<'a, N>(
-                    &self,
-                    method: &'a str,
-                ) -> ::std::result::Result<
-                    ::jsonrpsee::core::client::Subscription<N>,
-                    ::jsonrpsee::core::Error,
-                >
-                where
-                    N: ::serde::de::DeserializeOwned,
-                {
-                    self.$target.subscribe_to_method(method).await
+                Client::Ws(client) => {
+                    client
+                        .subscribe(subscribe_method, params, unsubscribe_method)
+                        .await
                 }
             }
-        };
-    }
+        }
 
-    impl_jsonrpc_client_delegate!(HttpClient, inner);
-    impl_jsonrpc_client_delegate!(WsClient, inner);
+        async fn subscribe_to_method<'a, N>(
+            &self,
+            method: &'a str,
+        ) -> StdResult<Subscription<N>, JrpcError>
+        where
+            N: DeserializeOwned,
+        {
+            match self {
+                Client::Http(client) => client.subscribe_to_method(method).await,
+                Client::Ws(client) => client.subscribe_to_method(method).await,
+            }
+        }
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
-mod imp {
+mod wasm {
     // TODO: implement HttpClient with `fetch`
 }

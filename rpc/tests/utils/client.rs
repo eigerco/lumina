@@ -2,8 +2,8 @@ use std::env;
 use std::sync::OnceLock;
 
 use anyhow::Result;
-use celestia_rpc::client::{HttpClient, WsClient};
 use celestia_rpc::prelude::*;
+use celestia_rpc::Client;
 use celestia_types::{blob::SubmitOptions, Blob};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::Error;
@@ -38,12 +38,13 @@ fn env_or(var_name: &str, or_value: &str) -> String {
     env::var(var_name).unwrap_or_else(|_| or_value.to_owned())
 }
 
-pub async fn new_test_client(auth_level: AuthLevel) -> Result<WsClient> {
+pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
     let _ = dotenvy::dotenv();
     let token = token_from_env(auth_level)?;
     let url = env_or("CELESTIA_RPC_URL", WS_URL);
 
-    let client = WsClient::new(&url, token.as_deref()).await?;
+    assert!(url.starts_with("ws://"));
+    let client = Client::new(&url, token.as_deref()).await?;
 
     // minimum 2 blocks
     client.header_wait_for_height(2).await?;
@@ -52,12 +53,13 @@ pub async fn new_test_client(auth_level: AuthLevel) -> Result<WsClient> {
 }
 
 // This can be used if you want to inspect the requests from `mitmproxy`.
-pub async fn new_test_client_http(auth_level: AuthLevel) -> Result<HttpClient> {
+pub async fn new_test_client_http(auth_level: AuthLevel) -> Result<Client> {
     let _ = dotenvy::dotenv();
     let token = token_from_env(auth_level)?;
-    let url = env_or("CELESTIA_RPC_URL", HTTP_URL);
+    let url = env_or("CELESTIA_RPC_URL_HTTP", HTTP_URL);
 
-    let client = HttpClient::new(&url, token.as_deref())?;
+    assert!(url.starts_with("http://"));
+    let client = Client::new(&url, token.as_deref()).await?;
 
     // minimum 2 blocks
     client.header_wait_for_height(2).await?;
