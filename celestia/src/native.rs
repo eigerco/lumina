@@ -1,49 +1,17 @@
 use std::env;
-use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::common::Args;
 use anyhow::{bail, Context, Result};
 use celestia_node::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::SledStore;
 use celestia_rpc::prelude::*;
-use clap::{Parser, ValueEnum};
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use tokio::time::sleep;
 use tracing::info;
 
-#[derive(Debug, Parser)]
-struct Args {
-    /// Network to connect.
-    #[arg(short, long, value_enum, default_value_t)]
-    network: ArgNetwork,
-
-    /// Listening addresses. Can be used multiple times.
-    #[arg(short, long = "listen")]
-    listen_addrs: Vec<Multiaddr>,
-
-    /// Bootnode multiaddr, including peer id. Can be used multiple times.
-    #[arg(short, long = "bootnode")]
-    bootnodes: Vec<Multiaddr>,
-
-    /// Persistent header store path.
-    #[arg(short, long = "store")]
-    store: Option<PathBuf>,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum ArgNetwork {
-    Arabica,
-    Mocha,
-    #[default]
-    Private,
-}
-
-pub async fn run() -> Result<()> {
-    let _ = dotenvy::dotenv();
-    let args = Args::parse();
-    let _guard = init_tracing();
-
+pub(crate) async fn run(args: Args) -> Result<()> {
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
     let network = args.network.into();
@@ -114,29 +82,4 @@ async fn fetch_bridge_multiaddrs(ws_url: &str) -> Result<Vec<Multiaddr>> {
     }
 
     Ok(addrs)
-}
-
-fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
-    let (non_blocking, guard) = tracing_appender::non_blocking(std::io::stdout());
-
-    let filter = tracing_subscriber::EnvFilter::builder()
-        .with_default_directive(tracing_subscriber::filter::LevelFilter::INFO.into())
-        .from_env_lossy();
-
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_writer(non_blocking)
-        .init();
-
-    guard
-}
-
-impl From<ArgNetwork> for Network {
-    fn from(network: ArgNetwork) -> Network {
-        match network {
-            ArgNetwork::Arabica => Network::Arabica,
-            ArgNetwork::Mocha => Network::Mocha,
-            ArgNetwork::Private => Network::Private,
-        }
-    }
 }

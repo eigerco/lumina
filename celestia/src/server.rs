@@ -6,13 +6,12 @@ use axum::http::{header, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
 use axum::{body, Json, Router};
-use clap::{Parser, ValueEnum};
 use libp2p::Multiaddr;
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
-use serde_repr::{Deserialize_repr, Serialize_repr};
+use tracing::info;
 
-const BIND_ADDR: &str = "127.0.0.1:9876";
+use crate::common::ArgNetwork;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WasmNodeArgs {
@@ -21,46 +20,19 @@ pub struct WasmNodeArgs {
 }
 
 #[derive(RustEmbed)]
-#[folder = "pkg"]
+#[folder = "../wasm-node/pkg"]
 struct WasmPackage;
 
 #[derive(RustEmbed)]
 #[folder = "static"]
 struct StaticResources;
 
-#[derive(Debug, Clone, Parser)]
-struct Args {
-    /// Network to connect.
-    #[arg(short, long, value_enum, default_value_t)]
+pub async fn run(
     network: ArgNetwork,
-
-    /// Bootnode multiaddr, including peer id. Can be used multiple times.
-    #[arg(long)]
-    bootnode: Vec<Multiaddr>,
-
-    /// Address to serve app at
-    #[arg(long, default_value = BIND_ADDR)]
+    bootnodes: Vec<Multiaddr>,
     listen_addr: SocketAddr,
-}
-
-#[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize_repr, Deserialize_repr,
-)]
-#[repr(u8)]
-pub enum ArgNetwork {
-    Arabica,
-    Mocha,
-    #[default]
-    Private,
-}
-
-pub async fn run() -> Result<()> {
-    let args = Args::parse();
-
-    let state = WasmNodeArgs {
-        network: args.network,
-        bootnodes: args.bootnode,
-    };
+) -> Result<()> {
+    let state = WasmNodeArgs { network, bootnodes };
 
     let app = Router::new()
         .route("/", get(serve_index_html))
@@ -69,7 +41,8 @@ pub async fn run() -> Result<()> {
         .route("/cfg.json", get(serve_config))
         .with_state(state);
 
-    Ok(axum::Server::bind(&args.listen_addr)
+    info!("listening on {listen_addr}");
+    Ok(axum::Server::bind(&listen_addr)
         .serve(app.into_make_service())
         .await?)
 }

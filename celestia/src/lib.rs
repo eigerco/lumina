@@ -1,4 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
+mod common;
 mod native;
-pub use crate::native::*;
+mod server;
+
+pub use common::run_cli;
