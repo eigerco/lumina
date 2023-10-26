@@ -17,7 +17,6 @@ struct WasmNode {
 
 #[wasm_bindgen]
 pub struct WasmNodeConfig {
-    #[wasm_bindgen(skip)]
     pub network: Network,
     #[wasm_bindgen(skip)]
     pub genesis_hash: Option<Hash>,
@@ -135,7 +134,7 @@ impl WasmNode {
 impl WasmNodeConfig {
     #[wasm_bindgen(constructor)]
     pub fn new(network: Network, genesis_hash: JsString, bootnodes: Vec<JsString>) -> Self {
-        let p2p_local_keypair = identity::Keypair::generate_ed25519(); // TODO
+        let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
         let p2p_bootnodes: Vec<Multiaddr> = bootnodes
             .iter()
@@ -149,5 +148,32 @@ impl WasmNodeConfig {
             p2p_local_keypair,
             p2p_bootnodes,
         }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn genesis_hash(&self) -> Option<String> {
+        self.genesis_hash.map(|h| h.to_string())
+    }
+
+    #[wasm_bindgen(setter)]
+    pub fn set_genesis_hash(&mut self, hash: Option<String>) {
+        self.genesis_hash = hash.map(|h| h.parse().unwrap_throw())
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn bootnodes(&self) -> Array {
+        self.p2p_bootnodes
+            .iter()
+            .map(ToString::to_string)
+            .map(JsValue::from)
+            .collect::<Array>()
+    }
+
+    #[wasm_bindgen(setter)]
+    pub fn set_bootnodes(&mut self, bootnodes: Array) {
+        self.p2p_bootnodes = bootnodes
+            .iter()
+            .map(|addr| addr.as_string().unwrap_throw().parse().unwrap_throw())
+            .collect::<Vec<_>>();
     }
 }

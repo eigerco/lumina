@@ -15,12 +15,7 @@ async function fetch_config() {
     }
     const genesis = network_genesis(network);
 
-    //return new WasmNodeConfig(network, genesis, bootnodes);
-    return {
-        "network": network,
-        "genesis": genesis,
-        "bootnodes": bootnodes,
-    };
+    return new WasmNodeConfig(network, genesis, bootnodes);
 }
 
 async function show_stats(node) {
@@ -53,6 +48,10 @@ function bind_config() {
     show_config(window.config);
 
     document.getElementById("start").addEventListener("click", async function(ev) {
+        document.querySelectorAll('.config').forEach(function(element) {
+            element.disabled = true
+        });
+
         start_node(window.config);
     });
 
@@ -62,7 +61,7 @@ function bind_config() {
 
 function show_config(config) {
     document.getElementById("network_id").value = config.network;
-    document.getElementById("genesis").value = config.genesis;
+    document.getElementById("genesis").value = config.genesis_hash;
     document.getElementById("bootnodes").value = config.bootnodes.join("\n");
 }
 
