@@ -9,8 +9,7 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::Error;
 use tokio::sync::{Mutex, MutexGuard};
 
-const WS_URL: &str = "ws://localhost:26658";
-const HTTP_URL: &str = "http://localhost:26658";
+const CELESTIA_RPC_URL: &str = "ws://localhost:26658";
 
 async fn write_lock() -> MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -41,24 +40,8 @@ fn env_or(var_name: &str, or_value: &str) -> String {
 pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
     let _ = dotenvy::dotenv();
     let token = token_from_env(auth_level)?;
-    let url = env_or("CELESTIA_RPC_URL", WS_URL);
+    let url = env_or("CELESTIA_RPC_URL", CELESTIA_RPC_URL);
 
-    assert!(url.starts_with("ws://"));
-    let client = Client::new(&url, token.as_deref()).await?;
-
-    // minimum 2 blocks
-    client.header_wait_for_height(2).await?;
-
-    Ok(client)
-}
-
-// This can be used if you want to inspect the requests from `mitmproxy`.
-pub async fn new_test_client_http(auth_level: AuthLevel) -> Result<Client> {
-    let _ = dotenvy::dotenv();
-    let token = token_from_env(auth_level)?;
-    let url = env_or("CELESTIA_RPC_URL_HTTP", HTTP_URL);
-
-    assert!(url.starts_with("http://"));
     let client = Client::new(&url, token.as_deref()).await?;
 
     // minimum 2 blocks
