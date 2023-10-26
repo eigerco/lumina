@@ -1,54 +1,75 @@
-Error.stackTraceLimit = 99;
+Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
 import init, { setup_logging, Network, WasmNode, WasmNodeConfig, canonical_network_bootnodes, network_genesis } from "/wasm/wasm_node.js";
 
-await init();
-await setup_logging();
+async function fetch_config() {
+    const response = await fetch('/cfg.json');
+    const json = await response.json();
 
-const response = await fetch('/cfg.json');
-const json = await response.json();
+    console.log("Received config:", json);
 
-console.log("Received config:", json);
+    const network = json.network;
+    const bootnodes = json.bootnodes
+    if (bootnodes.length === 0) {
+        bootnodes.push(...canonical_network_bootnodes(network));
+    }
+    const genesis = network_genesis(network);
 
-const network = json.network;
-const bootnodes = json.bootnodes
-if (bootnodes.length === 0) {
-    bootnodes.push(...canonical_network_bootnodes(network));
+    //return new WasmNodeConfig(network, genesis, bootnodes);
+    return {
+        "network": network,
+        "genesis": genesis,
+        "bootnodes": bootnodes,
+    };
 }
-const genesis = network_genesis(network);
 
-document.getElementById("network_id").value = network;
-document.getElementById("genesis").value = genesis;
-document.getElementById("bootnodes").value = bootnodes.join("\n");
+async function show_stats(node) {
+    if (!node) {
+        return;
+    }
+    document.getElementById("syncer").innerText = JSON.stringify(await node.syncer_info());
 
-document.getElementById("start").addEventListener("click", async function(ev) {
-    document.getElementById("start").disabled = true;
+    let peers_ul = document.createElement('ul');
+    (await node.connected_peers()).forEach(function(peer) {
+        var li = document.createElement("li");
+        li.innerText = peer;
+        peers_ul.appendChild(li);
+    });
 
-    const network = Number(document.getElementById("network_id").value);
-    const genesis = document.getElementById("genesis").value;
-    const bootnodes  = document.getElementById("bootnodes").value.split("\n");
+    document.getElementById("peers").replaceChildren(peers_ul);
+}
 
-    console.log("starting with:", network, bootnodes, genesis);
 
-    const config = new WasmNodeConfig(network, genesis, bootnodes);
+function bind_config() {
+    // TODO two way binding between window.config and input values
+}
+
++async function main(document, window, undefined) {
+    await init();
+    await setup_logging();
+
+    window.config = await fetch_config();
+
+    show_config(window.config);
+
+    document.getElementById("start").addEventListener("click", async function(ev) {
+        start_node(window.config);
+    });
+
+    await show_stats(window.node);
+    setInterval(async function() { await show_stats(window.node) }, 1000)
+}(document, window);
+
+function show_config(config) {
+    document.getElementById("network_id").value = config.network;
+    document.getElementById("genesis").value = config.genesis;
+    document.getElementById("bootnodes").value = config.bootnodes.join("\n");
+}
+
+async function start_node(config_json) {
+    const config = new WasmNodeConfig(config_json.network, config_json.genesis, config_json.bootnodes);
+
     window.node = await new WasmNode(config);
 
     document.getElementById("peer_id").innerText = JSON.stringify(await window.node.local_peer_id());
-
-    async function update_stats() {
-        document.getElementById("syncer").innerText = JSON.stringify(await window.node.syncer_info());
-
-        let peers_ul = document.createElement('ul');
-        (await window.node.connected_peers()).forEach(function(peer) {
-            var li = document.createElement("li");
-            li.innerText = peer;
-            peers_ul.appendChild(li);
-        });
-
-        document.getElementById("peers").replaceChildren(peers_ul);
-
-        setTimeout(update_stats, 1000)
-    }
-    await update_stats();
-
-}, false);
+}
