@@ -45,12 +45,11 @@ to authorize yourself in github's container registry.
 Start a celestia network with single validator and bridge
 ```bash
 docker-compose -f ci/docker-compose.yml up --build --force-recreate -d
+# and to stop it
+docker-compose -f ci/docker-compose.yml down
 ```
-
-When deleting, remember to also delete subvolumes:
-```bash
-docker-compose -f ci/docker-compose.yml down -v
-```
+> [!NOTE]
+> You can run more bridge nodes by uncommenting / replicating the bridge service definition in `ci/docker-compose.yml`.
 
 To get the JWT token for the account with coins (coins will be transferred in block 2):
 ```bash

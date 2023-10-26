@@ -5,19 +5,52 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.validator
+    # uncomment to provide amount of bridge nodes to provision (default: 1)
+    # command: ["/opt/entrypoint.sh", "2"]
     volumes:
-      - shared:/shared
+      - credentials:/credentials
+      - genesis:/genesis
 
-  bridge:
+  bridge-0:
     image: bridge
     platform: "linux/amd64"
     build:
       context: .
       dockerfile: Dockerfile.bridge
-    volumes:
-      - shared:/shared
+    # uncomment to provide the id of the bridge node (default: 0)
+    # command: ["/opt/entrypoint.sh", "0"]
     ports:
       - 26658:26658
+    volumes:
+      - credentials:/credentials
+      - genesis:/genesis
+
+  # Uncomment for another bridge node
+  # remember to adjust services.validator.command
+  # bridge-1:
+  #   image: bridge
+  #   platform: "linux/amd64"
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.bridge
+  #   # uncomment to provide the id of the bridge node (default: 0)
+  #   # command: ["/opt/entrypoint.sh", "1"]
+  #   ports:
+  #     - 36658:26658
+  #   volumes:
+  #     - credentials:/credentials
+  #     - genesis:/genesis
 
 volumes:
-  shared:
+  # local volume where node's credentials can persist
+  credentials:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: './credentials'
+  # a temporary fs where the genesis hash is announced
+  genesis:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs

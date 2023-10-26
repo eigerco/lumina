@@ -5,6 +5,17 @@ DOTENV=".env"
 DOTENV_SAMPLE=".env.sample"
 DOCKER_COMPOSE_FILE="./ci/docker-compose.yml"
 
+wait_for_docker_setup() {
+ # we follow the logs with -f and then kill it with awk exit so we
+ # need to suppress the exit status of the docker compose command
+ # but we check the correctness with the grep instead
+ set +o pipefail
+  docker compose -f "$DOCKER_COMPOSE_FILE" logs -f |
+    awk '/Configuration finished. Running a bridge/ {print; exit}' |
+    grep -o Configuration >/dev/null
+ set -o pipefail
+}
+
 ensure_dotenv_file() {
   if [ ! -e "$DOTENV" ]; then
     if [ ! -e "$DOTENV_SAMPLE" ]; then
@@ -22,7 +33,7 @@ ensure_dotenv_file() {
 
 generate_token() {
   local auth_level="$1"
-  docker-compose -f "$DOCKER_COMPOSE_FILE" exec -T bridge \
+  docker-compose -f "$DOCKER_COMPOSE_FILE" exec -T bridge-0 \
     celestia bridge auth "$auth_level" --p2p.network private
 }
 
@@ -41,6 +52,7 @@ write_token() {
 }
 
 main() {
+  wait_for_docker_setup
   ensure_dotenv_file
 
   for auth_level in "read" "write" "admin"; do
