@@ -10,7 +10,6 @@ pub use self::native::Client;
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
     use std::fmt;
-    use std::marker::Send;
     use std::result::Result as StdResult;
 
     use crate::{Error, Result};
