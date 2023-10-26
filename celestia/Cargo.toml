@@ -13,7 +13,6 @@ celestia-rpc = { workspace = true, features = ["p2p"] }
 celestia-types = { workspace = true }
 
 anyhow = "1.0.71"
-axum = "0.6.20"
 clap = { version = "4.4.4", features = ["derive"] }
 dotenvy = "0.15.7"
 hex = "0.4.3"
@@ -22,10 +21,10 @@ mime_guess = "2.0"
 rust-embed = "8.0.0"
 serde = "1.0.189"
 serde_repr = "0.1"
-tokio = { version = "1.29.0", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1.37"
 tracing-appender = "0.2.2"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.29.0", features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+axum = "0.6.20"
