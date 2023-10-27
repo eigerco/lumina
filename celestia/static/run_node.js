@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import init, { setup_logging, Network, WasmNode, WasmNodeConfig, canonical_network_bootnodes, network_genesis } from "/wasm/wasm_node.js";
+import init, { setup_logging, Network, Node, NodeConfig, canonical_network_bootnodes, network_genesis } from "/wasm/wasm_node.js";
 
 async function fetch_config() {
     const response = await fetch('/cfg.json');
@@ -15,7 +15,7 @@ async function fetch_config() {
     }
     const genesis = network_genesis(network);
 
-    return new WasmNodeConfig(network, genesis, bootnodes);
+    return new NodeConfig(network, genesis, bootnodes);
 }
 
 async function show_stats(node) {
@@ -39,7 +39,21 @@ function bind_config() {
     // TODO two way binding between window.config and input values
 }
 
-+async function main(document, window, undefined) {
+function show_config(config) {
+    document.getElementById("network_id").value = config.network;
+    document.getElementById("genesis").value = config.genesis_hash;
+    document.getElementById("bootnodes").value = config.bootnodes.join("\n");
+}
+
+async function start_node(config_json) {
+    const config = new NodeConfig(config_json.network, config_json.genesis, config_json.bootnodes);
+
+    window.node = await new Node(config);
+
+    document.getElementById("peer_id").innerText = JSON.stringify(await window.node.local_peer_id());
+}
+
+async function main(document, window, undefined) {
     await init();
     await setup_logging();
 
@@ -57,18 +71,7 @@ function bind_config() {
 
     await show_stats(window.node);
     setInterval(async function() { await show_stats(window.node) }, 1000)
-}(document, window);
-
-function show_config(config) {
-    document.getElementById("network_id").value = config.network;
-    document.getElementById("genesis").value = config.genesis_hash;
-    document.getElementById("bootnodes").value = config.bootnodes.join("\n");
 }
 
-async function start_node(config_json) {
-    const config = new WasmNodeConfig(config_json.network, config_json.genesis, config_json.bootnodes);
+await main(document, window);
 
-    window.node = await new WasmNode(config);
-
-    document.getElementById("peer_id").innerText = JSON.stringify(await window.node.local_peer_id());
-}

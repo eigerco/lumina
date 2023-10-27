@@ -19,18 +19,17 @@ pub(crate) async fn run(
 ) -> Result<()> {
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
-    //let network = args.network.into();
     let p2p_bootnodes = if bootnodes.is_empty() {
         match network {
             Network::Private => fetch_bridge_multiaddrs("ws://localhost:26658").await?,
-            network => canonical_network_bootnodes(network)?,
+            network => canonical_network_bootnodes(network),
         }
     } else {
         bootnodes
     };
 
     let network_id = network_id(network).to_owned();
-    let genesis_hash = network_genesis(network)?;
+    let genesis_hash = network_genesis(network);
 
     let store = if let Some(db_path) = store_path {
         SledStore::new_in_path(db_path).await?

@@ -1,8 +1,6 @@
 use std::str::FromStr;
 
 use celestia_types::hash::Hash;
-use hex::FromHexError;
-use libp2p::core::multiaddr::Error as MultiaddrError;
 use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -21,14 +19,6 @@ pub enum Network {
 #[derive(Debug, Error)]
 #[error("unknown network {0}")]
 pub struct UnknownNetworkError(String);
-
-#[derive(Debug, Error)]
-pub enum NetworkGenesisError {
-    #[error("error decoding genesis hash: {0}")]
-    HexDecodeError(#[from] FromHexError),
-    #[error("decoded genesis has invalid length: {0}")]
-    InvalidLengthError(usize),
-}
 
 impl FromStr for Network {
     type Err = UnknownNetworkError;
@@ -51,22 +41,20 @@ pub fn network_id(network: Network) -> &'static str {
     }
 }
 
-pub fn network_genesis(network: Network) -> Result<Option<Hash>, NetworkGenesisError> {
+pub fn network_genesis(network: Network) -> Option<Hash> {
     let hex = match network {
         Network::Arabica => "5904E55478BA4B3002EE885621E007A2A6A2399662841912219AECD5D5CBE393",
         Network::Mocha => "B93BBE20A0FBFDF955811B6420F8433904664D45DB4BF51022BE4200C1A1680D",
-        Network::Private => return Ok(None),
+        Network::Private => return None,
     };
 
-    let bytes = hex::decode(hex)?;
-    let array = bytes
-        .try_into()
-        .map_err(|b: Vec<u8>| NetworkGenesisError::InvalidLengthError(b.len()))?;
+    let bytes = hex::decode(hex).expect("failed decoding genesis hash");
+    let array = bytes.try_into().expect("invalid genesis hash lenght");
 
-    Ok(Some(Hash::Sha256(array)))
+    Some(Hash::Sha256(array))
 }
 
-pub fn canonical_network_bootnodes(network: Network) -> Result<Vec<Multiaddr>, MultiaddrError> {
+pub fn canonical_network_bootnodes(network: Network) -> Vec<Multiaddr> {
     match network {
         Network::Arabica => [
                 "/dns4/da-bridge.celestia-arabica-10.com/tcp/2121/p2p/12D3KooWM3e9MWtyc8GkP8QRt74Riu17QuhGfZMytB2vq5NwkWAu",
@@ -89,5 +77,35 @@ pub fn canonical_network_bootnodes(network: Network) -> Result<Vec<Multiaddr>, M
             .collect()
         ,
         Network::Private => Ok(vec![])
+    }.expect("invalid bootnode address")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_network_genesis() {
+        let arabica = network_genesis(Network::Arabica);
+        assert!(arabica.is_some());
+
+        let mocha = network_genesis(Network::Mocha);
+        assert!(mocha.is_some());
+
+        let private = network_genesis(Network::Private);
+        assert!(private.is_none());
+    }
+
+    #[test]
+    fn test_canonical_network_bootnodes() {
+        // canonical_network_bootnodes works on const data, test it doesn't panic and the data is there
+        let arabica = canonical_network_bootnodes(Network::Arabica);
+        assert_ne!(arabica.len(), 0);
+
+        let mocha = canonical_network_bootnodes(Network::Mocha);
+        assert_ne!(mocha.len(), 0);
+
+        let private = canonical_network_bootnodes(Network::Private);
+        assert_eq!(private.len(), 0);
     }
 }

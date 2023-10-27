@@ -10,12 +10,12 @@ use serde_wasm_bindgen::to_value;
 use tracing::info;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_name = Node)]
 struct WasmNode {
     node: Node<IndexedDbStore>,
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_name = NodeConfig)]
 pub struct WasmNodeConfig {
     pub network: Network,
     #[wasm_bindgen(skip)]
@@ -26,7 +26,7 @@ pub struct WasmNodeConfig {
     pub p2p_bootnodes: Vec<Multiaddr>,
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_class = Node)]
 impl WasmNode {
     #[wasm_bindgen(constructor)]
     pub async fn new(config: WasmNodeConfig) -> Self {
@@ -130,7 +130,7 @@ impl WasmNode {
     }
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_class = NodeConfig)]
 impl WasmNodeConfig {
     #[wasm_bindgen(constructor)]
     pub fn new(network: Network, genesis_hash: JsString, bootnodes: Vec<JsString>) -> Self {

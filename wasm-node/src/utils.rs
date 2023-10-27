@@ -11,7 +11,7 @@ pub fn setup_logging() {
 
 #[wasm_bindgen]
 pub fn canonical_network_bootnodes(network: Network) -> JsValue {
-    let mut bootnodes = network::canonical_network_bootnodes(network).unwrap_throw();
+    let mut bootnodes = network::canonical_network_bootnodes(network);
 
     if network == Network::Mocha {
         // 40.85.94.176 is a node set up for testing QUIC/WebTransport since official nodes
@@ -32,5 +32,5 @@ pub fn canonical_network_bootnodes(network: Network) -> JsValue {
 
 #[wasm_bindgen]
 pub fn network_genesis(network: Network) -> JsValue {
-    to_value(&network::network_genesis(network).unwrap_throw()).unwrap_throw()
+    to_value(&network::network_genesis(network)).unwrap_throw()
 }

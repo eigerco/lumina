@@ -607,7 +607,6 @@ dependencies = [
  "celestia-types",
  "clap",
  "dotenvy",
- "hex",
  "libp2p",
  "mime_guess",
  "rust-embed",
@@ -636,7 +635,7 @@ dependencies = [
  "function_name",
  "futures",
  "getrandom 0.2.10",
- "gloo-timers 0.3.0",
+ "gloo-timers",
  "hex",
  "instant",
  "libp2p",
@@ -644,11 +643,10 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "rexie",
- "send_wrapper 0.6.0",
+ "send_wrapper",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
- "serde_repr",
  "sled",
  "smallvec",
  "tempdir",
@@ -1502,10 +1500,6 @@ name = "futures-timer"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e64b03909df88034c26dc1547e8970b91f98bdb65165d6a4e9110d94263dbb2c"
-dependencies = [
- "gloo-timers 0.2.6",
- "send_wrapper 0.4.0",
-]
 
 [[package]]
 name = "futures-util"
@@ -1583,18 +1577,6 @@ name = "gimli"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fb8d784f27acf97159b40fc4db5ecd8aa23b9ad5ef69cdd136d3bc80665f0c0"
-
-[[package]]
-name = "gloo-timers"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b995a66bb87bebce9a0f4a95aed01daca4872c050bfcb21653361c03bc35e5c"
-dependencies = [
- "futures-channel",
- "futures-core",
- "js-sys",
- "wasm-bindgen",
-]
 
 [[package]]
 name = "gloo-timers"
@@ -2490,7 +2472,7 @@ dependencies = [
  "log",
  "multiaddr",
  "multihash 0.19.1",
- "send_wrapper 0.6.0",
+ "send_wrapper",
  "thiserror",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -3952,12 +3934,6 @@ dependencies = [
 
 [[package]]
 name = "send_wrapper"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f638d531eccd6e23b980caf34876660d38e265409d8e99b397ab71eb3612fad0"
-
-[[package]]
-name = "send_wrapper"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
@@ -4940,19 +4916,13 @@ dependencies = [
  "celestia-node",
  "celestia-types",
  "console_error_panic_hook",
- "futures-timer",
  "js-sys",
  "libp2p",
- "serde",
  "serde-wasm-bindgen",
- "serde_json",
- "serde_repr",
  "tracing",
  "tracing-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-bindgen-test",
- "web-sys",
 ]
 
 [[package]]
