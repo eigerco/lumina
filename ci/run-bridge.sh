@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-# Name for this node, with suffix taken from the first argument
-# or `bridge-0` if not provided
-NODE_NAME="bridge-${1:-0}"
+# Name for this node or `bridge-0` if not provided
+NODE_ID="${NODE_ID:-0}"
+NODE_NAME="bridge-$NODE_ID"
 # a private local network
 P2P_NETWORK="private"
 # a bridge node configuration directory

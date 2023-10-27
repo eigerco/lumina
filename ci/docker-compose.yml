@@ -5,8 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.validator
-    # uncomment to provide amount of bridge nodes to provision (default: 1)
-    # command: ["/opt/entrypoint.sh", "2"]
+    environment:
+      # provide amount of bridge nodes to provision (default: 1)
+      - BRIDGE_COUNT=1
     volumes:
       - credentials:/credentials
       - genesis:/genesis
@@ -17,8 +18,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.bridge
-    # uncomment to provide the id of the bridge node (default: 0)
-    # command: ["/opt/entrypoint.sh", "0"]
+    environment:
+      # provide an id for the bridge node (default: 0)
+      # each node should have a next natural number starting from 0
+      - NODE_ID=0
     ports:
       - 26658:26658
     volumes:
@@ -33,8 +36,10 @@ services:
   #   build:
   #     context: .
   #     dockerfile: Dockerfile.bridge
-  #   # uncomment to provide the id of the bridge node (default: 0)
-  #   # command: ["/opt/entrypoint.sh", "1"]
+  #   environment:
+  #     # provide an id for the bridge node (default: 0)
+  #     # each node should have a next natural number starting from 0
+  #     - NODE_ID=1
   #   ports:
   #     - 36658:26658
   #   volumes:
