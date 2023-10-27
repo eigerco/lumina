@@ -66,7 +66,9 @@ provision_bridge_nodes() {
       echo "Creating a new keys for the $bridge_name"
       celestia-appd keys add "$bridge_name" --keyring-backend "test"
       # export it
-      echo "password" | celestia-appd keys export "$bridge_name" 2> "$key_file"
+      echo "password" | celestia-appd keys export "$bridge_name" 2> "$key_file.lock"
+      # the `.lock` file and `mv` ensures that readers read file only after finished writing
+      mv "$key_file.lock" "$key_file"
       # export associated address
       node_address "$bridge_name" > "$addr_file"
     else
