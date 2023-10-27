@@ -6,14 +6,21 @@ DOTENV_SAMPLE=".env.sample"
 DOCKER_COMPOSE_FILE="./ci/docker-compose.yml"
 
 wait_for_docker_setup() {
- # we follow the logs with -f and then kill it with awk exit so we
- # need to suppress the exit status of the docker compose command
- # but we check the correctness with the grep instead
- set +o pipefail
+  local services_running
+  local services_expected
+  
+  services_expected="$(docker compose -f "$DOCKER_COMPOSE_FILE" config --services | wc -l)"
+  services_running="$(docker compose -f "$DOCKER_COMPOSE_FILE" ps --services | wc -l)"
+
+  if [[ "$services_running" != "$services_expected" ]]; then
+    echo "Not all required services running, expected $services_expected, found $services_running" >&2
+    exit 1
+  fi
+
+  # wait for the services to start
   docker compose -f "$DOCKER_COMPOSE_FILE" logs -f |
-    awk '/Configuration finished. Running a bridge/ {print; exit}' |
-    grep -o Configuration >/dev/null
- set -o pipefail
+    awk '/Configuration finished. Running a bridge/ {print; exit}' ||
+    true # awk's `exit` kills `logs -f` so we need to suppress erronous exit code
 }
 
 ensure_dotenv_file() {
