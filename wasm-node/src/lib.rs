@@ -2,4 +2,4 @@
 
 pub mod node;
 pub mod utils;
-pub mod wrapper;
+mod wrapper;
