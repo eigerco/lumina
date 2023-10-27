@@ -67,7 +67,6 @@ async function main(document, window, undefined) {
         start_node(window.config);
     });
 
-    await show_stats(window.node);
     setInterval(async function() { await show_stats(window.node) }, 1000)
 }
 
