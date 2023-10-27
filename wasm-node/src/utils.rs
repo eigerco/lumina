@@ -9,7 +9,7 @@ pub enum Network {
     Private,
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(start)]
 pub fn setup_logging() {
     console_error_panic_hook::set_once();
 

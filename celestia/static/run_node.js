@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import init, { setup_logging, Network, Node, NodeConfig, canonical_network_bootnodes, network_genesis } from "/wasm/wasm_node.js";
+import init, { setup_logging, Network, Node, NodeConfig} from "/wasm/wasm_node.js";
 
 async function fetch_config() {
     const response = await fetch('/cfg.json');
@@ -8,14 +8,15 @@ async function fetch_config() {
 
     console.log("Received config:", json);
 
-    const network = json.network;
-    const bootnodes = json.bootnodes
-    if (bootnodes.length === 0) {
-        bootnodes.push(...canonical_network_bootnodes(network));
+    let config = new NodeConfig(json.network);
+    if (json.bootnodes.length !== 0) {
+        config.bootnodes = json.bootnodes;
     }
-    const genesis = network_genesis(network);
+    if (json.genesis) {
+        config.genesis = json.genesis;
+    }
 
-    return new NodeConfig(network, genesis, bootnodes);
+    return config;
 }
 
 async function show_stats(node) {
@@ -53,7 +54,6 @@ async function start_node(config) {
 
 async function main(document, window, undefined) {
     await init();
-    await setup_logging();
 
     window.config = await fetch_config();
 
