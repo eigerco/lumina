@@ -45,9 +45,7 @@ function show_config(config) {
     document.getElementById("bootnodes").value = config.bootnodes.join("\n");
 }
 
-async function start_node(config_json) {
-    const config = new NodeConfig(config_json.network, config_json.genesis, config_json.bootnodes);
-
+async function start_node(config) {
     window.node = await new Node(config);
 
     document.getElementById("peer_id").innerText = JSON.stringify(await window.node.local_peer_id());
