@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 use celestia_node::network::Network;
-use clap::{error::ErrorKind, ArgGroup, CommandFactory, Parser, ValueEnum};
+use clap::{error::ErrorKind, CommandFactory, Parser, ValueEnum};
 use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -14,8 +14,6 @@ const SERVER_DEFAULT_BIND_ADDR: &str = "127.0.0.1:9876";
 
 #[derive(Debug, Parser)]
 // disallow specifying store path when running in browser
-#[clap(group(ArgGroup::new("native_xor_browser")
-             .args(&["store", "browser"])))]
 pub(crate) struct Args {
     /// Network to connect.
     #[arg(short, long, value_enum, default_value_t)]
@@ -30,11 +28,11 @@ pub(crate) struct Args {
     pub(crate) bootnodes: Vec<Multiaddr>,
 
     /// Persistent header store path.
-    #[arg(short, long = "store")]
+    #[arg(short, long = "store", group = "native_xor_browser")]
     pub(crate) store: Option<PathBuf>,
 
     /// Serve wasm node which can be accessed with web browser
-    #[arg(long)]
+    #[arg(long, group = "native_xor_browser")]
     browser: bool,
 }
 
