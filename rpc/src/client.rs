@@ -32,9 +32,12 @@ mod native {
     impl Client {
         /// Create a new Json RPC client.
         ///
-        /// Only 'http' and 'ws' protocols are supported and they should
+        /// Only 'http[s]' and 'ws[s]' protocols are supported and they should
         /// be specified in the provided `conn_str`. For more flexibility
         /// consider creating the client using [`jsonrpsee`] directly.
+        ///
+        /// Please note that currently the celestia-node supports only 'http' and 'ws'.
+        /// For a secure connection you have to hide it behind a proxy.
         pub async fn new(conn_str: &str, auth_token: Option<&str>) -> Result<Self> {
             let mut headers = HeaderMap::new();
 
@@ -43,13 +46,14 @@ mod native {
                 headers.insert(header::AUTHORIZATION, val);
             }
 
-            let client = match conn_str.split_once(':') {
-                Some(("http", _)) => Client::Http(
+            let protocol = conn_str.split_once(':').map(|(proto, _)| proto);
+            let client = match protocol {
+                Some("http") | Some("https") => Client::Http(
                     HttpClientBuilder::default()
                         .set_headers(headers)
                         .build(conn_str)?,
                 ),
-                Some(("ws", _)) => Client::Ws(
+                Some("ws") | Some("wss") => Client::Ws(
                     WsClientBuilder::default()
                         .set_headers(headers)
                         .build(conn_str)
