@@ -6,9 +6,9 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[dependencies]
-celestia-node = { workspace = true, features = ["test-utils"] }
-celestia-types = { workspace = true, features = ["test-utils"] }
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+celestia-node = { workspace = true }
+celestia-types = { workspace = true }
 
 anyhow = "1.0.71"
 console_error_panic_hook = "0.1.7"
