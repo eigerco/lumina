@@ -46,9 +46,7 @@ mod imp {
             yamux_config.set_max_buffer_size(1024 * 1024);
             yamux_config.set_max_num_streams(2048);
 
-            dns::TokioDnsConfig::system(tcp::tokio::Transport::new(tcp::Config::default()))
-                .map_err(P2pError::InitDns)
-                .unwrap()
+            tcp::tokio::Transport::new(tcp::Config::default())
                 .upgrade(Version::V1Lazy)
                 .authenticate(noise::Config::new(keypair)?)
                 .multiplex(yamux_config)
@@ -60,6 +58,19 @@ mod imp {
                 Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
                 Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
             });
+
+        let transport = dns::TokioDnsConfig::custom(
+            transport,
+            // Why not system DNS? Because if transport is constructed before user
+            // connects to its router, libp2p-dns will not find any nameservers in
+            // `/etc/resolv.conf` and any future DNS requests will fail even after
+            // user connects.
+            //
+            // By having a pre-defined public server, this problem is solved.
+            dns::ResolverConfig::cloudflare(),
+            dns::ResolverOpts::default(),
+        )
+        .map_err(P2pError::InitDns)?;
 
         Ok(transport.boxed())
     }

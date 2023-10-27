@@ -436,11 +436,24 @@ where
 
     async fn run(&mut self) {
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
+        let mut kademlia_interval = Interval::new(Duration::from_secs(5 * 60)).await;
+
+        // Initiate discovery
+        let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
 
         loop {
             select! {
                 _ = report_interval.tick() => {
                     self.report();
+                }
+                _ = kademlia_interval.tick() => {
+                    // Bootstrap procedure is a bit misleading as a name. It is actually
+                    // scanning the network thought the already known peers and find new
+                    // ones. It also recovers connectivity of previously known peers and
+                    // refreshes the routing table.
+                    //
+                    // libp2p team suggests to start bootstrap procedure every 5 minute.
+                    let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
                 }
                 ev = self.swarm.select_next_some() => {
                     if let Err(e) = self.on_swarm_event(ev).await {
@@ -554,18 +567,14 @@ where
     async fn on_identify_event(&mut self, ev: identify::Event) -> Result<()> {
         match ev {
             identify::Event::Received { peer_id, info } => {
-                // Inform peer tracker
-                self.peer_tracker.set_identified(peer_id, &info);
-
-                let kademlia = &mut self.swarm.behaviour_mut().kademlia;
-
-                // Inform Kademlia
+                // Inform Kademlia about the listening addresses
+                // TODO: Remove this when rust-libp2p#4302 is implemented
                 for addr in info.listen_addrs {
-                    kademlia.add_address(&peer_id, addr);
+                    self.swarm
+                        .behaviour_mut()
+                        .kademlia
+                        .add_address(&peer_id, addr);
                 }
-
-                // Start a deeper lookup for other peers
-                kademlia.get_closest_peers(peer_id);
             }
             _ => trace!("Unhandled identify event"),
         }
@@ -614,13 +623,6 @@ where
             } => {
                 self.peer_tracker.add_addresses(peer, addresses.iter());
             }
-            KademliaEvent::UnroutablePeer { peer } => {
-                // Kademlia does know the address of the peer, but we might have
-                // it in PeerTracker
-                for addr in self.peer_tracker.addresses(peer) {
-                    self.swarm.behaviour_mut().kademlia.add_address(&peer, addr);
-                }
-            }
             _ => trace!("Unhandled Kademlia event"),
         }
 
@@ -634,12 +636,6 @@ where
         }
 
         debug!("Peer discovered");
-
-        // Initiate deeper lookup
-        self.swarm
-            .behaviour_mut()
-            .kademlia
-            .get_closest_peers(peer_id);
     }
 
     #[instrument(skip_all, fields(peer_id = %peer_id))]
@@ -795,12 +791,6 @@ where
 
     if !args.listen_on.is_empty() {
         kad.set_mode(Some(Mode::Server));
-    }
-
-    // Peer multiaddress may not contain the peer. This is not fatal
-    // because after we join to a bootstrap peer we initiate `get_closest_peers`.
-    if let Err(e) = kad.bootstrap() {
-        warn!("Failed to start Kademlia boostrap: {e}");
     }
 
     Ok(kad)
