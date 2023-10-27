@@ -10,6 +10,8 @@ use serde_wasm_bindgen::to_value;
 use tracing::info;
 use wasm_bindgen::prelude::*;
 
+use crate::wrapper::libp2p::NetworkInfo;
+
 #[wasm_bindgen(js_name = Node)]
 struct WasmNode {
     node: Node<IndexedDbStore>,
@@ -68,11 +70,8 @@ impl WasmNode {
             .unwrap_throw();
     }
 
-    pub async fn network_info(&self) -> JsValue {
-        // NetworkInfo isn't serializable
-        //let info = self.node.p2p().network_info().await.unwrap_throw();
-        //to_value(&info).unwrap_throw()
-        unimplemented!()
+    pub async fn network_info(&self) -> NetworkInfo {
+        self.node.p2p().network_info().await.unwrap_throw().into()
     }
 
     pub async fn get_head_header(&self) -> JsValue {
