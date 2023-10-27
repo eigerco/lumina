@@ -4,10 +4,7 @@ use celestia_types::hash::Hash;
 use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Network {
     Arabica,

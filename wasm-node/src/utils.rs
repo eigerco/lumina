@@ -1,6 +1,14 @@
-use celestia_node::network::{self, Network};
+use celestia_node::network;
 use serde_wasm_bindgen::to_value;
 use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum Network {
+    Arabica,
+    Mocha,
+    Private,
+}
 
 #[wasm_bindgen]
 pub fn setup_logging() {
@@ -11,7 +19,7 @@ pub fn setup_logging() {
 
 #[wasm_bindgen]
 pub fn canonical_network_bootnodes(network: Network) -> JsValue {
-    let mut bootnodes = network::canonical_network_bootnodes(network);
+    let mut bootnodes = network::canonical_network_bootnodes(network.into());
 
     if network == Network::Mocha {
         // 40.85.94.176 is a node set up for testing QUIC/WebTransport since official nodes
@@ -32,5 +40,25 @@ pub fn canonical_network_bootnodes(network: Network) -> JsValue {
 
 #[wasm_bindgen]
 pub fn network_genesis(network: Network) -> JsValue {
-    to_value(&network::network_genesis(network)).unwrap_throw()
+    to_value(&network::network_genesis(network.into())).unwrap_throw()
+}
+
+impl From<Network> for network::Network {
+    fn from(network: Network) -> network::Network {
+        match network {
+            Network::Arabica => network::Network::Arabica,
+            Network::Mocha => network::Network::Mocha,
+            Network::Private => network::Network::Private,
+        }
+    }
+}
+
+impl From<network::Network> for Network {
+    fn from(network: network::Network) -> Network {
+        match network {
+            network::Network::Arabica => Network::Arabica,
+            network::Network::Mocha => Network::Mocha,
+            network::Network::Private => Network::Private,
+        }
+    }
 }

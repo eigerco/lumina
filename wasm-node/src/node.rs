@@ -1,5 +1,5 @@
 use anyhow::Context;
-use celestia_node::network::{network_id, Network};
+use celestia_node::network::network_id;
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::IndexedDbStore;
 use celestia_types::hash::Hash;
@@ -10,6 +10,7 @@ use serde_wasm_bindgen::to_value;
 use tracing::info;
 use wasm_bindgen::prelude::*;
 
+use crate::utils::Network;
 use crate::wrapper::libp2p::NetworkInfo;
 
 #[wasm_bindgen(js_name = Node)]
@@ -32,7 +33,7 @@ pub struct WasmNodeConfig {
 impl WasmNode {
     #[wasm_bindgen(constructor)]
     pub async fn new(config: WasmNodeConfig) -> Self {
-        let network_id = network_id(config.network);
+        let network_id = network_id(config.network.into());
         let store = IndexedDbStore::new(network_id).await.unwrap();
         info!(
             "Initialised store with head height: {:?}",
