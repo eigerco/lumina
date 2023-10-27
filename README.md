@@ -44,16 +44,16 @@ to authorize yourself in github's container registry.
 
 Start a celestia network with single validator and bridge
 ```bash
-docker-compose -f ci/docker-compose.yml up --build --force-recreate -d
+docker compose -f ci/docker-compose.yml up --build --force-recreate -d
 # and to stop it
-docker-compose -f ci/docker-compose.yml down
+docker compose -f ci/docker-compose.yml down
 ```
 > [!NOTE]
 > You can run more bridge nodes by uncommenting / replicating the bridge service definition in `ci/docker-compose.yml`.
 
 To get the JWT token for the account with coins (coins will be transferred in block 2):
 ```bash
-export CELESTIA_NODE_AUTH_TOKEN=$(docker-compose -f ci/docker-compose.yml exec bridge celestia bridge auth admin --p2p.network private)
+export CELESTIA_NODE_AUTH_TOKEN=$(docker compose -f ci/docker-compose.yml exec bridge celestia bridge auth admin --p2p.network private)
 ```
 
 Accessing json RPC api with Go `celestia` cli:
@@ -68,7 +68,7 @@ celestia rpc header GetByHeight 27 | jq .result
 
 ## Running integration tests with celestia node
 
-Make sure you have the celestia network running inside docker-compose from the section above.
+Make sure you have the celestia network running inside docker compose from the section above.
 
 Generate authentication tokens for the tests
 ```
