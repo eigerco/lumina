@@ -5,19 +5,57 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.validator
+    environment:
+      # provide amount of bridge nodes to provision (default: 1)
+      - BRIDGE_COUNT=1
     volumes:
-      - shared:/shared
+      - credentials:/credentials
+      - genesis:/genesis
 
-  bridge:
+  bridge-0:
     image: bridge
     platform: "linux/amd64"
     build:
       context: .
       dockerfile: Dockerfile.bridge
-    volumes:
-      - shared:/shared
+    environment:
+      # provide an id for the bridge node (default: 0)
+      # each node should have a next natural number starting from 0
+      - NODE_ID=0
     ports:
       - 26658:26658
+    volumes:
+      - credentials:/credentials
+      - genesis:/genesis
+
+  # Uncomment for another bridge node
+  # remember to adjust services.validator.command
+  # bridge-1:
+  #   image: bridge
+  #   platform: "linux/amd64"
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.bridge
+  #   environment:
+  #     # provide an id for the bridge node (default: 0)
+  #     # each node should have a next natural number starting from 0
+  #     - NODE_ID=1
+  #   ports:
+  #     - 36658:26658
+  #   volumes:
+  #     - credentials:/credentials
+  #     - genesis:/genesis
 
 volumes:
-  shared:
+  # local volume where node's credentials can persist
+  credentials:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: './credentials'
+  # a temporary fs where the genesis hash is announced
+  genesis:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
