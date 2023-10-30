@@ -17,10 +17,11 @@ wait_for_docker_setup() {
     exit 1
   fi
 
-  # wait for the services to start
-  docker compose -f "$DOCKER_COMPOSE_FILE" logs -f |
-    awk '/Configuration finished. Running a bridge/ {print; exit}' ||
-    true # awk's `exit` kills `logs -f` so we need to suppress erronous exit code
+  # wait for the service to start
+  while :; do
+    curl http://127.0.0.1:26658 > /dev/null 2>&1 && break
+    sleep 1
+  done
 }
 
 ensure_dotenv_file() {
