@@ -109,11 +109,11 @@ impl MockP2pHandle {
         OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
         match self.expect_cmd().await {
-            P2pCmd::HeaderExHeaderRequest {
+            P2pCmd::HeaderExRequest {
                 request,
                 respond_to,
             } => (request, respond_to),
-            cmd => panic!("Expecting HeaderExHeaderRequest, but received: {cmd:?}"),
+            cmd => panic!("Expecting HeaderExRequest, but received: {cmd:?}"),
         }
     }
 
@@ -124,7 +124,7 @@ impl MockP2pHandle {
 
         match req.data {
             Some(Data::Origin(height)) if req.amount > 0 => (height, req.amount, respond_to),
-            _ => panic!("Expecting HeaderExHeaderRequest for height, but received: {req:?}"),
+            _ => panic!("Expecting HeaderExRequest for height, but received: {req:?}"),
         }
     }
 
@@ -139,7 +139,7 @@ impl MockP2pHandle {
                 let hash = Hash::Sha256(array);
                 (hash, respond_to)
             }
-            _ => panic!("Expecting HeaderExHeaderRequest for hash, but received: {req:?}"),
+            _ => panic!("Expecting HeaderExRequest for hash, but received: {req:?}"),
         }
     }
 

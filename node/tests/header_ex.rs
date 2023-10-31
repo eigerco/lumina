@@ -128,7 +128,7 @@ async fn client_server_invalid_requests() {
 
     let none_data = client
         .p2p()
-        .header_ex_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: None,
             amount: 1,
         })
@@ -141,7 +141,7 @@ async fn client_server_invalid_requests() {
 
     let zero_amount = client
         .p2p()
-        .header_ex_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(5)),
             amount: 0,
         })
@@ -154,7 +154,7 @@ async fn client_server_invalid_requests() {
 
     let malformed_hash = client
         .p2p()
-        .header_ex_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Hash(vec![0; 31])),
             amount: 1,
         })
@@ -336,7 +336,7 @@ async fn replaced_header_server_store() {
     // non-validating requests should still accept responses
     let tampered_header_in_range = client
         .p2p()
-        .header_ex_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(8)),
             amount: 5,
         })
@@ -410,7 +410,7 @@ async fn invalidated_header_server_store() {
     // received ExtendedHeaders are validated during conversion from HeaderResponse
     let tampered_header_in_range = client
         .p2p()
-        .header_ex_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(8)),
             amount: 5,
         })
@@ -491,7 +491,7 @@ async fn unverified_header_server_store() {
     // non-verifying requests should still accept responses
     let tampered_header_in_range = client
         .p2p()
-        .header_ex_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(8)),
             amount: 5,
         })

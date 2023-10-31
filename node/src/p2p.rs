@@ -115,7 +115,7 @@ pub(crate) enum P2pCmd {
     NetworkInfo {
         respond_to: oneshot::Sender<NetworkInfo>,
     },
-    HeaderExHeaderRequest {
+    HeaderExRequest {
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     },
@@ -254,13 +254,13 @@ where
         Ok(rx.await?)
     }
 
-    pub async fn header_ex_header_request(
+    pub async fn header_ex_request(
         &self,
         request: HeaderRequest,
     ) -> Result<Vec<ExtendedHeader>> {
         let (tx, rx) = oneshot::channel();
 
-        self.send_command(P2pCmd::HeaderExHeaderRequest {
+        self.send_command(P2pCmd::HeaderExRequest {
             request,
             respond_to: tx,
         })
@@ -274,7 +274,7 @@ where
     }
 
     pub async fn get_header(&self, hash: Hash) -> Result<ExtendedHeader> {
-        self.header_ex_header_request(HeaderRequest {
+        self.header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Hash(hash.as_bytes().to_vec())),
             amount: 1,
         })
@@ -285,7 +285,7 @@ where
     }
 
     pub async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
-        self.header_ex_header_request(HeaderRequest {
+        self.header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(height)),
             amount: 1,
         })
@@ -305,7 +305,7 @@ where
         let height = from.height().value() + 1;
 
         let headers = self
-            .header_ex_header_request(HeaderRequest {
+            .header_ex_request(HeaderRequest {
                 data: Some(header_request::Data::Origin(height)),
                 amount,
             })
@@ -495,7 +495,7 @@ where
             P2pCmd::NetworkInfo { respond_to } => {
                 respond_to.maybe_send(self.swarm.network_info());
             }
-            P2pCmd::HeaderExHeaderRequest {
+            P2pCmd::HeaderExRequest {
                 request,
                 respond_to,
             } => {
