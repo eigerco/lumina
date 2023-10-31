@@ -2819,6 +2819,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "node-wasm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "celestia-node",
+ "celestia-types",
+ "console_error_panic_hook",
+ "js-sys",
+ "libp2p",
+ "serde-wasm-bindgen",
+ "tracing",
+ "tracing-wasm",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
 name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4931,23 +4948,6 @@ checksum = "ecb993dd8c836930ed130e020e77d9b2e65dd0fbab1b67c790b0f5d80b11a575"
 dependencies = [
  "proc-macro2",
  "quote",
-]
-
-[[package]]
-name = "wasm-node"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "celestia-node",
- "celestia-types",
- "console_error_panic_hook",
- "js-sys",
- "libp2p",
- "serde-wasm-bindgen",
- "tracing",
- "tracing-wasm",
- "wasm-bindgen",
- "wasm-bindgen-futures",
 ]
 
 [[package]]
