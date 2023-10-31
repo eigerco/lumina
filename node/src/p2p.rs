@@ -26,9 +26,9 @@ use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
-use crate::exchange::{ExchangeBehaviour, ExchangeConfig};
 use crate::executor::Interval;
 use crate::executor::{spawn, Executor};
+use crate::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::Store;
@@ -38,7 +38,7 @@ use crate::utils::{
     OneshotSenderExt,
 };
 
-pub use crate::exchange::ExchangeError;
+pub use crate::header_ex::HeaderExError;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
@@ -71,8 +71,8 @@ pub enum P2pError {
     #[error("Not connected to any peers")]
     NoConnectedPeers,
 
-    #[error("Exchange: {0}")]
-    Exchange(#[from] ExchangeError),
+    #[error("HeaderEx: {0}")]
+    HeaderEx(#[from] HeaderExError),
 
     #[error("HeaderSub already initialized")]
     HeaderSubAlreadyInitialized,
@@ -115,7 +115,7 @@ pub(crate) enum P2pCmd {
     NetworkInfo {
         respond_to: oneshot::Sender<NetworkInfo>,
     },
-    ExchangeHeaderRequest {
+    HeaderExRequest {
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     },
@@ -254,13 +254,10 @@ where
         Ok(rx.await?)
     }
 
-    pub async fn exchange_header_request(
-        &self,
-        request: HeaderRequest,
-    ) -> Result<Vec<ExtendedHeader>> {
+    pub async fn header_ex_request(&self, request: HeaderRequest) -> Result<Vec<ExtendedHeader>> {
         let (tx, rx) = oneshot::channel();
 
-        self.send_command(P2pCmd::ExchangeHeaderRequest {
+        self.send_command(P2pCmd::HeaderExRequest {
             request,
             respond_to: tx,
         })
@@ -274,25 +271,25 @@ where
     }
 
     pub async fn get_header(&self, hash: Hash) -> Result<ExtendedHeader> {
-        self.exchange_header_request(HeaderRequest {
+        self.header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Hash(hash.as_bytes().to_vec())),
             amount: 1,
         })
         .await?
         .into_iter()
         .next()
-        .ok_or(ExchangeError::HeaderNotFound.into())
+        .ok_or(HeaderExError::HeaderNotFound.into())
     }
 
     pub async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
-        self.exchange_header_request(HeaderRequest {
+        self.header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(height)),
             amount: 1,
         })
         .await?
         .into_iter()
         .next()
-        .ok_or(ExchangeError::HeaderNotFound.into())
+        .ok_or(HeaderExError::HeaderNotFound.into())
     }
 
     pub async fn get_verified_headers_range(
@@ -300,19 +297,19 @@ where
         from: &ExtendedHeader,
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
-        from.validate().map_err(|_| ExchangeError::InvalidRequest)?;
+        from.validate().map_err(|_| HeaderExError::InvalidRequest)?;
 
         let height = from.height().value() + 1;
 
         let headers = self
-            .exchange_header_request(HeaderRequest {
+            .header_ex_request(HeaderRequest {
                 data: Some(header_request::Data::Origin(height)),
                 amount,
             })
             .await?;
 
         from.verify_adjacent_range(&headers)
-            .map_err(|_| ExchangeError::InvalidResponse)?;
+            .map_err(|_| HeaderExError::InvalidResponse)?;
 
         Ok(headers)
     }
@@ -353,7 +350,7 @@ where
     autonat: autonat::Behaviour,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
-    header_ex: ExchangeBehaviour<S>,
+    header_ex: HeaderExBehaviour<S>,
     gossipsub: gossipsub::Behaviour,
     kademlia: Kademlia<MemoryStore>,
 }
@@ -395,7 +392,7 @@ where
 
         let kademlia = init_kademlia(&args)?;
 
-        let header_ex = ExchangeBehaviour::new(ExchangeConfig {
+        let header_ex = HeaderExBehaviour::new(HeaderExConfig {
             network_id: &args.network_id,
             peer_tracker: peer_tracker.clone(),
             header_store: args.store.clone(),
@@ -436,11 +433,24 @@ where
 
     async fn run(&mut self) {
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
+        let mut kademlia_interval = Interval::new(Duration::from_secs(5 * 60)).await;
+
+        // Initiate discovery
+        let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
 
         loop {
             select! {
                 _ = report_interval.tick() => {
                     self.report();
+                }
+                _ = kademlia_interval.tick() => {
+                    // Bootstrap procedure is a bit misleading as a name. It is actually
+                    // scanning the network thought the already known peers and find new
+                    // ones. It also recovers connectivity of previously known peers and
+                    // refreshes the routing table.
+                    //
+                    // libp2p team suggests to start bootstrap procedure every 5 minute.
+                    let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
                 }
                 ev = self.swarm.select_next_some() => {
                     if let Err(e) = self.on_swarm_event(ev).await {
@@ -495,7 +505,7 @@ where
             P2pCmd::NetworkInfo { respond_to } => {
                 respond_to.maybe_send(self.swarm.network_info());
             }
-            P2pCmd::ExchangeHeaderRequest {
+            P2pCmd::HeaderExRequest {
                 request,
                 respond_to,
             } => {
@@ -554,18 +564,14 @@ where
     async fn on_identify_event(&mut self, ev: identify::Event) -> Result<()> {
         match ev {
             identify::Event::Received { peer_id, info } => {
-                // Inform peer tracker
-                self.peer_tracker.set_identified(peer_id, &info);
-
-                let kademlia = &mut self.swarm.behaviour_mut().kademlia;
-
-                // Inform Kademlia
+                // Inform Kademlia about the listening addresses
+                // TODO: Remove this when rust-libp2p#4302 is implemented
                 for addr in info.listen_addrs {
-                    kademlia.add_address(&peer_id, addr);
+                    self.swarm
+                        .behaviour_mut()
+                        .kademlia
+                        .add_address(&peer_id, addr);
                 }
-
-                // Start a deeper lookup for other peers
-                kademlia.get_closest_peers(peer_id);
             }
             _ => trace!("Unhandled identify event"),
         }
@@ -614,13 +620,6 @@ where
             } => {
                 self.peer_tracker.add_addresses(peer, addresses.iter());
             }
-            KademliaEvent::UnroutablePeer { peer } => {
-                // Kademlia does know the address of the peer, but we might have
-                // it in PeerTracker
-                for addr in self.peer_tracker.addresses(peer) {
-                    self.swarm.behaviour_mut().kademlia.add_address(&peer, addr);
-                }
-            }
             _ => trace!("Unhandled Kademlia event"),
         }
 
@@ -634,12 +633,6 @@ where
         }
 
         debug!("Peer discovered");
-
-        // Initiate deeper lookup
-        self.swarm
-            .behaviour_mut()
-            .kademlia
-            .get_closest_peers(peer_id);
     }
 
     #[instrument(skip_all, fields(peer_id = %peer_id))]
@@ -795,12 +788,6 @@ where
 
     if !args.listen_on.is_empty() {
         kad.set_mode(Some(Mode::Server));
-    }
-
-    // Peer multiaddress may not contain the peer. This is not fatal
-    // because after we join to a bootstrap peer we initiate `get_closest_peers`.
-    if let Err(e) = kad.bootstrap() {
-        warn!("Failed to start Kademlia boostrap: {e}");
     }
 
     Ok(kad)

@@ -135,10 +135,10 @@ impl WasmNode {
 impl WasmNodeConfig {
     #[wasm_bindgen(constructor)]
     pub fn new(network: Network) -> Self {
-        let p2p_local_keypair = identity::Keypair::generate_ed25519();
         let genesis_hash = network_genesis(network.into());
 
-        let mut p2p_bootnodes = canonical_network_bootnodes(network.into());
+        let p2p_local_keypair = identity::Keypair::generate_ed25519();
+        let p2p_bootnodes = canonical_network_bootnodes(network.into());
 
         WasmNodeConfig {
             network,

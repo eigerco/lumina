@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use celestia_node::{
     node::{Node, NodeConfig},
-    p2p::{ExchangeError, P2pError},
+    p2p::{HeaderExError, P2pError},
     store::Store,
     test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
 };
@@ -91,14 +91,14 @@ async fn client_server() {
         .unwrap_err();
     assert!(matches!(
         unexpected_hash,
-        P2pError::Exchange(ExchangeError::HeaderNotFound)
+        P2pError::HeaderEx(HeaderExError::HeaderNotFound)
     ));
 
     // request unknown height
     let unexpected_height = client.p2p().get_header_by_height(21).await.unwrap_err();
     assert!(matches!(
         unexpected_height,
-        P2pError::Exchange(ExchangeError::HeaderNotFound)
+        P2pError::HeaderEx(HeaderExError::HeaderNotFound)
     ));
 }
 
@@ -128,7 +128,7 @@ async fn client_server_invalid_requests() {
 
     let none_data = client
         .p2p()
-        .exchange_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: None,
             amount: 1,
         })
@@ -136,12 +136,12 @@ async fn client_server_invalid_requests() {
         .unwrap_err();
     assert!(matches!(
         none_data,
-        P2pError::Exchange(ExchangeError::InvalidRequest)
+        P2pError::HeaderEx(HeaderExError::InvalidRequest)
     ));
 
     let zero_amount = client
         .p2p()
-        .exchange_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(5)),
             amount: 0,
         })
@@ -149,12 +149,12 @@ async fn client_server_invalid_requests() {
         .unwrap_err();
     assert!(matches!(
         zero_amount,
-        P2pError::Exchange(ExchangeError::InvalidRequest)
+        P2pError::HeaderEx(HeaderExError::InvalidRequest)
     ));
 
     let malformed_hash = client
         .p2p()
-        .exchange_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Hash(vec![0; 31])),
             amount: 1,
         })
@@ -162,7 +162,7 @@ async fn client_server_invalid_requests() {
         .unwrap_err();
     assert!(matches!(
         malformed_hash,
-        P2pError::Exchange(ExchangeError::InvalidRequest)
+        P2pError::HeaderEx(HeaderExError::InvalidRequest)
     ));
 }
 
@@ -320,7 +320,7 @@ async fn replaced_header_server_store() {
         .unwrap_err();
     assert!(matches!(
         tampered_header_in_range,
-        P2pError::Exchange(ExchangeError::InvalidResponse)
+        P2pError::HeaderEx(HeaderExError::InvalidResponse)
     ));
 
     let requested_from_tampered_header = client
@@ -330,13 +330,13 @@ async fn replaced_header_server_store() {
         .unwrap_err();
     assert!(matches!(
         requested_from_tampered_header,
-        P2pError::Exchange(ExchangeError::InvalidResponse)
+        P2pError::HeaderEx(HeaderExError::InvalidResponse)
     ));
 
     // non-validating requests should still accept responses
     let tampered_header_in_range = client
         .p2p()
-        .exchange_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(8)),
             amount: 5,
         })
@@ -394,7 +394,7 @@ async fn invalidated_header_server_store() {
         .unwrap_err();
     assert!(matches!(
         invalidated_header_in_range,
-        P2pError::Exchange(ExchangeError::InvalidResponse)
+        P2pError::HeaderEx(HeaderExError::InvalidResponse)
     ));
 
     let requested_from_invalidated_header = client
@@ -404,13 +404,13 @@ async fn invalidated_header_server_store() {
         .unwrap_err();
     assert!(matches!(
         requested_from_invalidated_header,
-        P2pError::Exchange(ExchangeError::InvalidRequest)
+        P2pError::HeaderEx(HeaderExError::InvalidRequest)
     ));
 
     // received ExtendedHeaders are validated during conversion from HeaderResponse
     let tampered_header_in_range = client
         .p2p()
-        .exchange_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(8)),
             amount: 5,
         })
@@ -418,7 +418,7 @@ async fn invalidated_header_server_store() {
         .unwrap_err();
     assert!(matches!(
         tampered_header_in_range,
-        P2pError::Exchange(ExchangeError::InvalidResponse)
+        P2pError::HeaderEx(HeaderExError::InvalidResponse)
     ));
 
     let requested_tampered_header = client
@@ -428,7 +428,7 @@ async fn invalidated_header_server_store() {
         .unwrap_err();
     assert!(matches!(
         requested_tampered_header,
-        P2pError::Exchange(ExchangeError::InvalidResponse)
+        P2pError::HeaderEx(HeaderExError::InvalidResponse)
     ));
 
     // requests for non-invalidated headers should still pass
@@ -475,7 +475,7 @@ async fn unverified_header_server_store() {
         .unwrap_err();
     assert!(matches!(
         tampered_header_in_range,
-        P2pError::Exchange(ExchangeError::InvalidResponse)
+        P2pError::HeaderEx(HeaderExError::InvalidResponse)
     ));
 
     let requested_from_tampered_header = client
@@ -485,13 +485,13 @@ async fn unverified_header_server_store() {
         .unwrap_err();
     assert!(matches!(
         requested_from_tampered_header,
-        P2pError::Exchange(ExchangeError::InvalidResponse)
+        P2pError::HeaderEx(HeaderExError::InvalidResponse)
     ));
 
     // non-verifying requests should still accept responses
     let tampered_header_in_range = client
         .p2p()
-        .exchange_header_request(HeaderRequest {
+        .header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(8)),
             amount: 5,
         })
