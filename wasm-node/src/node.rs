@@ -3,7 +3,7 @@ use std::convert::Into;
 use anyhow::Context;
 use celestia_node::network::{canonical_network_bootnodes, network_genesis, network_id};
 use celestia_node::node::{Node, NodeConfig};
-use celestia_node::store::IndexedDbStore;
+use celestia_node::store::{IndexedDbStore, Store};
 use celestia_types::{hash::Hash, ExtendedHeader};
 use js_sys::Array;
 use libp2p::identity::Keypair;
