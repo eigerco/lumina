@@ -5,7 +5,7 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use tendermint_proto::Protobuf;
 
-use crate::exchange::ExchangeError;
+use crate::header_ex::HeaderExError;
 
 pub(super) trait HeaderRequestExt {
     fn with_origin(origin: u64, amount: u64) -> HeaderRequest;
@@ -49,18 +49,18 @@ impl HeaderRequestExt for HeaderRequest {
 }
 
 pub(super) trait HeaderResponseExt {
-    fn to_extended_header(&self) -> Result<ExtendedHeader, ExchangeError>;
+    fn to_extended_header(&self) -> Result<ExtendedHeader, HeaderExError>;
     fn not_found() -> HeaderResponse;
     fn invalid() -> HeaderResponse;
 }
 
 impl HeaderResponseExt for HeaderResponse {
-    fn to_extended_header(&self) -> Result<ExtendedHeader, ExchangeError> {
+    fn to_extended_header(&self) -> Result<ExtendedHeader, HeaderExError> {
         match self.status_code() {
-            StatusCode::Invalid => Err(ExchangeError::InvalidResponse),
-            StatusCode::NotFound => Err(ExchangeError::HeaderNotFound),
+            StatusCode::Invalid => Err(HeaderExError::InvalidResponse),
+            StatusCode::NotFound => Err(HeaderExError::HeaderNotFound),
             StatusCode::Ok => ExtendedHeader::decode_and_validate(&self.body[..])
-                .map_err(|_| ExchangeError::InvalidResponse),
+                .map_err(|_| HeaderExError::InvalidResponse),
         }
     }
 

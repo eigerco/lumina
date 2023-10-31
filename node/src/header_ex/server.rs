@@ -11,14 +11,14 @@ use libp2p::{
 use tokio::sync::mpsc::{self, error::TrySendError};
 use tracing::{instrument, trace};
 
-use crate::exchange::utils::{ExtendedHeaderExt, HeaderRequestExt, HeaderResponseExt};
-use crate::exchange::{ReqRespBehaviour, ResponseType};
 use crate::executor::spawn;
+use crate::header_ex::utils::{ExtendedHeaderExt, HeaderRequestExt, HeaderResponseExt};
+use crate::header_ex::{ReqRespBehaviour, ResponseType};
 use crate::store::Store;
 
 const MAX_HEADERS_AMOUNT_RESPONSE: u64 = 512;
 
-pub(super) struct ExchangeServerHandler<S, R = ReqRespBehaviour>
+pub(super) struct HeaderExServerHandler<S, R = ReqRespBehaviour>
 where
     S: Store,
     R: ResponseSender,
@@ -45,14 +45,14 @@ impl ResponseSender for ReqRespBehaviour {
     }
 }
 
-impl<S, R> ExchangeServerHandler<S, R>
+impl<S, R> HeaderExServerHandler<S, R>
 where
     S: Store + 'static,
     R: ResponseSender,
 {
     pub(super) fn new(store: Arc<S>) -> Self {
         let (tx, rx) = mpsc::channel(32);
-        ExchangeServerHandler { store, rx, tx }
+        HeaderExServerHandler { store, rx, tx }
     }
 
     #[instrument(level = "trace", skip(self, response_channel))]
@@ -205,7 +205,7 @@ fn parse_request(request: HeaderRequest) -> Option<(u64, header_request::Data)> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exchange::utils::HeaderRequestExt;
+    use crate::header_ex::utils::HeaderRequestExt;
     use crate::test_utils::gen_filled_store;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::{HeaderRequest, StatusCode};
@@ -226,7 +226,7 @@ mod tests {
     async fn request_head_test() {
         let (store, _) = gen_filled_store(4);
         let expected_head = store.get_head().unwrap();
-        let mut handler = ExchangeServerHandler::new(Arc::new(store));
+        let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         handler.on_request_received(PeerId::random(), "test", HeaderRequest::head_request(), ());
 
@@ -242,7 +242,7 @@ mod tests {
     async fn request_header_test() {
         let (store, _) = gen_filled_store(3);
         let expected_genesis = store.get_by_height(1).unwrap();
-        let mut handler = ExchangeServerHandler::new(Arc::new(store));
+        let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         handler.on_request_received(
             PeerId::random(),
@@ -262,7 +262,7 @@ mod tests {
     #[async_test]
     async fn invalid_amount_request_test() {
         let (store, _) = gen_filled_store(1);
-        let mut handler = ExchangeServerHandler::new(Arc::new(store));
+        let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         handler.on_request_received(
             PeerId::random(),
@@ -280,7 +280,7 @@ mod tests {
     #[async_test]
     async fn none_data_request_test() {
         let (store, _) = gen_filled_store(1);
-        let mut handler = ExchangeServerHandler::new(Arc::new(store));
+        let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         let request = HeaderRequest {
             data: None,
@@ -298,7 +298,7 @@ mod tests {
     async fn request_hash_test() {
         let (store, _) = gen_filled_store(1);
         let stored_header = store.get_head().unwrap();
-        let mut handler = ExchangeServerHandler::new(Arc::new(store));
+        let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         handler.on_request_received(
             PeerId::random(),
@@ -323,7 +323,7 @@ mod tests {
             store.get_by_height(6).unwrap(),
             store.get_by_height(7).unwrap(),
         ];
-        let mut handler = ExchangeServerHandler::new(Arc::new(store));
+        let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         let request = HeaderRequest {
             data: Some(Data::Origin(5)),
@@ -347,7 +347,7 @@ mod tests {
         let expected_status_codes = [StatusCode::Ok];
         assert_eq!(expected_hashes.len(), expected_status_codes.len());
 
-        let mut handler = ExchangeServerHandler::new(Arc::new(store));
+        let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         let request = HeaderRequest::with_origin(5, 10);
         handler.on_request_received(PeerId::random(), "test", request, ());
@@ -381,9 +381,9 @@ mod tests {
     }
 
     // helper which waits for result over the test channel, while continously polling the handler
-    // needed because `ExchangeServerHandler::poll` never returns `Ready`
+    // needed because `HeaderExServerHandler::poll` never returns `Ready`
     async fn poll_handler_for_result<S>(
-        handler: &mut ExchangeServerHandler<S, TestResponseSender>,
+        handler: &mut HeaderExServerHandler<S, TestResponseSender>,
     ) -> Vec<HeaderResponse>
     where
         S: Store + 'static,

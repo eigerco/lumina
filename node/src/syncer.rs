@@ -387,7 +387,7 @@ where
         if self.ongoing_batch.is_some() {
             // Another batch is ongoing. We do not parallelize `Syncer`
             // by design. Any parallel requests are done in the
-            // Exchange client through `Session`.
+            // HeaderEx client through `Session`.
             //
             // Nothing to schedule
             return;

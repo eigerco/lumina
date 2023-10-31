@@ -17,9 +17,9 @@ use smallvec::SmallVec;
 use tokio::sync::oneshot;
 use tracing::{instrument, trace, warn};
 
-use crate::exchange::utils::{HeaderRequestExt, HeaderResponseExt};
-use crate::exchange::{ExchangeError, ReqRespBehaviour};
 use crate::executor::{spawn, yield_now};
+use crate::header_ex::utils::{HeaderRequestExt, HeaderResponseExt};
+use crate::header_ex::{HeaderExError, ReqRespBehaviour};
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
 use crate::utils::{OneshotResultSender, OneshotResultSenderExt, VALIDATIONS_PER_YIELD};
@@ -27,7 +27,7 @@ use crate::utils::{OneshotResultSender, OneshotResultSenderExt, VALIDATIONS_PER_
 const MAX_PEERS: usize = 10;
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-pub(super) struct ExchangeClientHandler<S = ReqRespBehaviour>
+pub(super) struct HeaderExClientHandler<S = ReqRespBehaviour>
 where
     S: RequestSender,
 {
@@ -55,12 +55,12 @@ impl RequestSender for ReqRespBehaviour {
     }
 }
 
-impl<S> ExchangeClientHandler<S>
+impl<S> HeaderExClientHandler<S>
 where
     S: RequestSender,
 {
     pub(super) fn new(peer_tracker: Arc<PeerTracker>) -> Self {
-        ExchangeClientHandler {
+        HeaderExClientHandler {
             reqs: HashMap::new(),
             peer_tracker,
         }
@@ -74,7 +74,7 @@ where
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
         if !request.is_valid() {
-            respond_to.maybe_send_err(ExchangeError::InvalidRequest);
+            respond_to.maybe_send_err(HeaderExError::InvalidRequest);
             return;
         }
 
@@ -95,7 +95,7 @@ where
     ) {
         // Validate amount
         if usize::try_from(request.amount).is_err() {
-            respond_to.maybe_send_err(ExchangeError::InvalidRequest);
+            respond_to.maybe_send_err(HeaderExError::InvalidRequest);
             return;
         };
 
@@ -161,7 +161,7 @@ where
 
             // In case of no responses, Celestia handles it as NotFound
             if resps.is_empty() {
-                respond_to.maybe_send_err(ExchangeError::HeaderNotFound);
+                respond_to.maybe_send_err(HeaderExError::HeaderNotFound);
                 return;
             }
 
@@ -232,7 +232,7 @@ where
         if let Some(state) = self.reqs.remove(&request_id) {
             state
                 .respond_to
-                .maybe_send_err(ExchangeError::OutboundFailure(error));
+                .maybe_send_err(HeaderExError::OutboundFailure(error));
         }
     }
 
@@ -254,7 +254,7 @@ where
             if let Some(state) = self.reqs.remove(&req_id) {
                 state
                     .respond_to
-                    .maybe_send_err(ExchangeError::OutboundFailure(OutboundFailure::Timeout));
+                    .maybe_send_err(HeaderExError::OutboundFailure(OutboundFailure::Timeout));
             }
         }
     }
@@ -268,16 +268,16 @@ where
 async fn decode_and_verify_responses(
     request: &HeaderRequest,
     responses: &[HeaderResponse],
-) -> Result<Vec<ExtendedHeader>, ExchangeError> {
+) -> Result<Vec<ExtendedHeader>, HeaderExError> {
     if responses.is_empty() {
-        return Err(ExchangeError::InvalidResponse);
+        return Err(HeaderExError::InvalidResponse);
     }
 
     let amount = usize::try_from(request.amount).expect("validated in send_request");
 
     // Server shouldn't respond with more headers
     if responses.len() > amount {
-        return Err(ExchangeError::InvalidResponse);
+        return Err(HeaderExError::InvalidResponse);
     }
 
     let mut headers = Vec::with_capacity(responses.len());
@@ -307,7 +307,7 @@ async fn decode_and_verify_responses(
         (Some(Data::Origin(start)), amount) if *start > 0 && amount > 0 => {
             for (header, height) in headers.iter().zip(*start..*start + amount as u64) {
                 if header.height().value() != height {
-                    return Err(ExchangeError::InvalidResponse);
+                    return Err(HeaderExError::InvalidResponse);
                 }
             }
         }
@@ -315,11 +315,11 @@ async fn decode_and_verify_responses(
         // Check if header has the requested hash
         (Some(Data::Hash(hash)), 1) => {
             if headers[0].hash().as_bytes() != hash {
-                return Err(ExchangeError::InvalidResponse);
+                return Err(HeaderExError::InvalidResponse);
             }
         }
 
-        _ => return Err(ExchangeError::InvalidResponse),
+        _ => return Err(HeaderExError::InvalidResponse),
     }
 
     Ok(headers)
@@ -328,7 +328,7 @@ async fn decode_and_verify_responses(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exchange::utils::ExtendedHeaderExt;
+    use crate::header_ex::utils::ExtendedHeaderExt;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::consts::HASH_SIZE;
@@ -347,7 +347,7 @@ mod tests {
     async fn request_height() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -368,7 +368,7 @@ mod tests {
     async fn request_hash() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -393,7 +393,7 @@ mod tests {
     async fn request_range() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -417,7 +417,7 @@ mod tests {
     async fn request_range_responds_with_unsorted_headers() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -446,7 +446,7 @@ mod tests {
     async fn request_range_responds_with_not_found() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -461,7 +461,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::HeaderNotFound)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound)))
         ));
     }
 
@@ -469,7 +469,7 @@ mod tests {
     async fn respond_with_another_height() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -482,7 +482,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
         ));
     }
 
@@ -490,7 +490,7 @@ mod tests {
     async fn respond_with_bad_range() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -513,7 +513,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
         ));
     }
 
@@ -521,7 +521,7 @@ mod tests {
     async fn respond_with_bad_hash() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -538,7 +538,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
         ));
     }
 
@@ -546,7 +546,7 @@ mod tests {
     async fn request_unavailable_heigh() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -561,7 +561,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::HeaderNotFound)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound)))
         ));
     }
 
@@ -569,7 +569,7 @@ mod tests {
     async fn respond_with_invalid_status_code() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -584,7 +584,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
         ));
     }
 
@@ -592,7 +592,7 @@ mod tests {
     async fn respond_with_unknown_status_code() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -607,7 +607,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
         ));
     }
 
@@ -617,7 +617,7 @@ mod tests {
     async fn request_range_responds_with_smaller_one() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -630,7 +630,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
         ));
     }
 
@@ -638,7 +638,7 @@ mod tests {
     async fn request_range_responds_with_bigger_one() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -655,7 +655,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
         ));
     }
 
@@ -663,13 +663,13 @@ mod tests {
     async fn respond_with_invalid_header() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 1), tx);
 
-        // Exchange client must return a validated header.
+        // HeaderEx client must return a validated header.
         let mut gen = ExtendedHeaderGenerator::new_from_height(5);
         let mut invalid_header5 = gen.next();
         invalidate(&mut invalid_header5);
@@ -678,7 +678,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidResponse)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
         ));
     }
 
@@ -686,7 +686,7 @@ mod tests {
     async fn respond_with_allowed_bad_header() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -694,7 +694,7 @@ mod tests {
 
         let mut gen = ExtendedHeaderGenerator::new_from_height(5);
 
-        // Exchange client must not verify the headers, this is done only
+        // HeaderEx client must not verify the headers, this is done only
         // in `get_verified_headers_range` which is used later on in `Syncer`.
         let mut expected_headers = gen.next_many(2);
         unverify(&mut expected_headers[1]);
@@ -715,14 +715,14 @@ mod tests {
     async fn invalid_requests() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         // Zero amount
         let (tx, rx) = oneshot::channel();
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 0), tx);
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
         ));
 
         // Head with zero amount
@@ -730,7 +730,7 @@ mod tests {
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 0), tx);
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
         ));
 
         // Head with more than one amount
@@ -738,7 +738,7 @@ mod tests {
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 2), tx);
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
         ));
 
         // Invalid hash
@@ -753,7 +753,7 @@ mod tests {
         );
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
         ));
 
         // Valid hash with more than one amount
@@ -768,7 +768,7 @@ mod tests {
         );
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
         ));
 
         // No data
@@ -783,7 +783,7 @@ mod tests {
         );
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::InvalidRequest)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
         ));
     }
 
@@ -792,7 +792,7 @@ mod tests {
     async fn head_best() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -830,7 +830,7 @@ mod tests {
     async fn head_highest_peers() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -873,7 +873,7 @@ mod tests {
     async fn head_highest_height() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -899,7 +899,7 @@ mod tests {
     async fn head_request_responds_with_multiple_headers() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -933,7 +933,7 @@ mod tests {
     async fn head_request_responds_with_invalid_headers() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -960,7 +960,7 @@ mod tests {
     async fn head_request_responds_only_with_invalid_headers() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -974,7 +974,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::HeaderNotFound)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound)))
         ));
     }
 
@@ -982,7 +982,7 @@ mod tests {
     async fn head_request_responds_with_only_failures() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -993,7 +993,7 @@ mod tests {
 
         assert!(matches!(
             rx.await,
-            Ok(Err(P2pError::Exchange(ExchangeError::HeaderNotFound)))
+            Ok(Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound)))
         ));
     }
 
@@ -1001,7 +1001,7 @@ mod tests {
     async fn head_request_with_one_peer() {
         let peer_tracker = peer_tracker_with_n_peers(1);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -1022,7 +1022,7 @@ mod tests {
     async fn head_request_with_no_peers() {
         let peer_tracker = peer_tracker_with_n_peers(0);
         let mut mock_req = MockReq::new();
-        let mut handler = ExchangeClientHandler::<MockReq>::new(peer_tracker);
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
 
         let (tx, rx) = oneshot::channel();
 
@@ -1070,7 +1070,7 @@ mod tests {
 
         fn send_n_responses(
             &mut self,
-            handler: &mut ExchangeClientHandler<Self>,
+            handler: &mut HeaderExClientHandler<Self>,
             n: usize,
             responses: Vec<HeaderResponse>,
         ) {
@@ -1081,7 +1081,7 @@ mod tests {
 
         fn send_n_failures(
             &mut self,
-            handler: &mut ExchangeClientHandler<Self>,
+            handler: &mut HeaderExClientHandler<Self>,
             n: usize,
             error: OutboundFailure,
         ) {
