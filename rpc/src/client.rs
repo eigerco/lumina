@@ -162,6 +162,7 @@ mod wasm {
     use jsonrpsee::core::Error as JrpcError;
     use serde::de::DeserializeOwned;
 
+    // TODO: implement HttpClient with `fetch`
     pub struct Client;
 
     impl Client {
@@ -228,6 +229,4 @@ mod wasm {
             todo!()
         }
     }
-
-    // TODO: implement HttpClient with `fetch`
 }
