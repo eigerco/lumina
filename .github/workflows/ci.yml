@@ -69,7 +69,7 @@ jobs:
       run: wasm-pack test --headless --chrome node
 
     - name: Build and pack wasm-node
-      run: wasm-pack build wasm-node && wasm-pack pack wasm-node
+      run: wasm-pack build --release --target web wasm-node && wasm-pack pack wasm-node
 
 
   test:
