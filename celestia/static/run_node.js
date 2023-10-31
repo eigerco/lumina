@@ -36,42 +36,49 @@ async function show_stats(node) {
 }
 
 
+
 function bind_config(data) {
-    let proxy = {
-        set: function(obj, prop, value) {
-            console.log(obj, prop, value);
-            switch (prop) {
-                case 'network':
-                    document.getElementById("network_id").value = value;
-                    break;
-                case 'genesis_hash':
-                    document.getElementById("genesis_hash").value = value;
-                    break;
-                case 'bootnodes':
-                    document.getElementById("bootnodes").value = value.join("\n");
-                    break;
-            }
-            obj[prop] = value;
-            console.log(obj, prop, value);
+  const network_div = document.getElementById("network_id");
+  const genesis_div = document.getElementById("genesis_hash");
+  const bootnodes_div = document.getElementById("bootnodes");
 
-            return true;
-        }
-    };
-    window.config = new Proxy(data, proxy);
-    document.getElementById("network_id").addEventListener("change", (event) => {
-        window.config.network = Number(event.target.value);
-    });
-    document.getElementById("genesis_hash").addEventListener("change", (event) => {
-        window.config.genesis_hash = event.target.value;
-    });
-    document.getElementById("bootnodes").addEventListener("change", (event) => {
-        window.config.bootnodes = event.target.value.split("\n");
-    });
+  const update_config_elements = () => {
+    network_div.value = window.config.network;
+    genesis_div.value = window.config.genesis_div || "";
+    bootnodes_div.value = window.config.bootnodes.join("\n");
+  }
 
+  let proxy = {
+    set: function(obj, prop, value) {
+      if (prop == "network") {
+        const config = new NodeConfig(value);
+        obj.network = config.network;
+        obj.genesis_hash = config.genesis_hash;
+        obj.bootnodes = config.bootnodes;
+      } else if (prop == "genesis_hash" || prop == "bootnodes") {
+        obj[prop] = value;
+      } else {
+        return Reflect.set(obj, prop, value);
+      }
 
-    document.getElementById("network_id").value = config.network;
-    document.getElementById("genesis_hash").value = config.genesis_hash;
-    document.getElementById("bootnodes").value = config.bootnodes.join("\n");
+      update_config_elements()
+
+      return true;
+    }
+  };
+
+  window.config = new Proxy(data, proxy);
+  update_config_elements();
+
+  network_div.addEventListener("change", (event) => {
+    window.config.network = Number(event.target.value);
+  });
+  genesis_div.addEventListener("change", (event) => {
+    window.config.genesis_hash = event.target.value;
+  });
+  bootnodes_div.addEventListener("change", (event) => {
+    window.config.bootnodes = event.target.value.split("\n");
+  });
 }
 
 async function start_node(config) {
