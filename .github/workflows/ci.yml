@@ -17,18 +17,11 @@ jobs:
         version: "23.3"
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Install wasm Rust
-      uses: ATiltedTree/setup-rust@v1
-      with:
-        rust-version: stable
-        components: clippy
-        targets: wasm32-unknown-unknown
-
     - name: Run clippy for native
       run: cargo clippy --all --all-targets -- -D warnings
 
     - name: Run clippy for wasm32
-      run: cargo clippy --all --all-targets --target=wasm32-unknown-unkown -- -D warnings
+      run: cargo clippy --all --all-targets --target=wasm32-unknown-unknown -- -D warnings
 
   fmt:
     runs-on: ubuntu-latest
