@@ -38,10 +38,9 @@ impl WasmNode {
     pub async fn new(config: WasmNodeConfig) -> Self {
         let network_id = network_id(config.network.into());
         let store = IndexedDbStore::new(network_id).await.unwrap();
-        info!(
-            "Initialised store with head height: {:?}",
-            store.get_head_height()
-        );
+        if let Ok(store_height) = store.head_height().await {
+            info!("Initialised store with head height: {store_height}");
+        }
 
         let node = Node::new(NodeConfig {
             network_id: network_id.to_string(),
