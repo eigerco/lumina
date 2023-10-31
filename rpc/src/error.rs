@@ -6,6 +6,9 @@ pub enum Error {
     #[error("Token contains invalid characters: {0}")]
     InvalidCharactersInToken(#[from] http::header::InvalidHeaderValue),
 
+    #[error("Protocol not supported or missing: {0}")]
+    ProtocolNotSupported(String),
+
     #[error(transparent)]
     JsonRpc(#[from] jsonrpsee::core::Error),
 }

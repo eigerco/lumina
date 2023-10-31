@@ -115,9 +115,9 @@ jobs:
               "cache-to": ["type=gha,mode=max,scope=validator"],
               "output": ["type=docker"]
             },
-            "bridge": {
-              "cache-from": ["type=gha,scope=bridge"],
-              "cache-to": ["type=gha,mode=max,scope=bridge"],
+            "bridge-0": {
+              "cache-from": ["type=gha,scope=bridge-0"],
+              "cache-to": ["type=gha,mode=max,scope=bridge-0"],
               "output": ["type=docker"]
             }
           }
@@ -126,14 +126,11 @@ jobs:
         cd ci && docker buildx bake --file docker-compose.yml --file cache.json --load
 
     - name: Run the docker-compose stack
-      env:
-        COMPOSE_DOCKER_CLI_BUILD: 1
-        DOCKER_BUILDKIT: 1
-      run: docker-compose -f ci/docker-compose.yml up --no-build -d
+      run: docker compose -f ci/docker-compose.yml up --no-build -d
 
     - name: Wait for bridge node to start
       run: |
-        docker-compose -f ci/docker-compose.yml logs -f |
+        docker compose -f ci/docker-compose.yml logs -f |
           awk '/Configuration finished. Running a bridge node/ {print;exit}'
 
     - name: Generate auth tokens

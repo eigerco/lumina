@@ -45,9 +45,7 @@ pub(crate) struct Params {
     pub(crate) bootnodes: Vec<Multiaddr>,
 }
 
-pub(crate) async fn run(
-    args: Params,
-) -> Result<()> {
+pub(crate) async fn run(args: Params) -> Result<()> {
     let state = WasmNodeArgs {
         network: args.network,
         bootnodes: args.bootnodes,

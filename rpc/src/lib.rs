@@ -8,6 +8,8 @@ mod share;
 mod state;
 
 pub use crate::blob::BlobClient;
+#[cfg(not(target_arch = "wasm32"))]
+pub use crate::client::Client;
 pub use crate::error::{Error, Result};
 pub use crate::header::HeaderClient;
 #[cfg(feature = "p2p")]
