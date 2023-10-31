@@ -9,14 +9,14 @@ use axum::{body, Json, Router};
 use clap::Args;
 use libp2p::Multiaddr;
 use rust_embed::RustEmbed;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tracing::info;
 
 use crate::common::ArgNetwork;
 
 const SERVER_DEFAULT_BIND_ADDR: &str = "127.0.0.1:9876";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 struct WasmNodeArgs {
     pub network: ArgNetwork,
     pub bootnodes: Vec<Multiaddr>,

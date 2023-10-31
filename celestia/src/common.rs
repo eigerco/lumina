@@ -1,13 +1,11 @@
 use anyhow::Result;
 use celestia_node::network::Network;
 use clap::{Parser, ValueEnum};
-use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde_repr::Serialize_repr;
 
 use crate::{native, server};
 
-#[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize_repr, Deserialize_repr,
-)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize_repr)]
 #[repr(u8)]
 pub(crate) enum ArgNetwork {
     Arabica,
