@@ -1,17 +1,20 @@
+use std::convert::Into;
+
 use anyhow::Context;
-use celestia_node::network::{network_id, canonical_network_bootnodes, network_genesis};
+use celestia_node::network::{canonical_network_bootnodes, network_genesis, network_id};
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::IndexedDbStore;
-use celestia_types::hash::Hash;
+use celestia_types::{hash::Hash, ExtendedHeader};
 use js_sys::Array;
 use libp2p::identity::Keypair;
 use libp2p::{identity, Multiaddr};
-use serde_wasm_bindgen::to_value;
+use serde_wasm_bindgen::{from_value, to_value};
 use tracing::info;
 use wasm_bindgen::prelude::*;
 
 use crate::utils::Network;
 use crate::wrapper::libp2p::NetworkInfo;
+use crate::Result;
 
 #[wasm_bindgen(js_name = Node)]
 struct WasmNode {
@@ -59,74 +62,72 @@ impl WasmNode {
         self.node.p2p().local_peer_id().to_string()
     }
 
-    pub async fn wait_connected(&self) {
-        self.node.p2p().wait_connected().await.unwrap_throw();
+    pub async fn wait_connected(&self) -> Result<()> {
+        Ok(self.node.p2p().wait_connected().await?)
     }
 
-    pub async fn wait_connected_trusted(&self) {
-        self.node
-            .p2p()
-            .wait_connected_trusted()
-            .await
-            .unwrap_throw();
+    pub async fn wait_connected_trusted(&self) -> Result<()> {
+        Ok(self.node.p2p().wait_connected_trusted().await?)
     }
 
-    pub async fn network_info(&self) -> NetworkInfo {
-        self.node.p2p().network_info().await.unwrap_throw().into()
+    pub async fn network_info(&self) -> Result<NetworkInfo> {
+        Ok(self.node.p2p().network_info().await?.into())
     }
 
-    pub async fn get_head_header(&self) -> JsValue {
-        let eh = self.node.p2p().get_head_header().await.unwrap_throw();
-        to_value(&eh).unwrap_throw()
+    pub async fn get_head_header(&self) -> Result<JsValue> {
+        let eh = self.node.p2p().get_head_header().await?;
+        Ok(to_value(&eh)?)
     }
 
-    pub async fn get_header(&self, hash: &str /*&Hash*/) -> JsValue {
-        let hash = hash.parse().unwrap_throw();
-        let eh = self.node.p2p().get_header(hash).await.unwrap_throw();
-        to_value(&eh).unwrap_throw()
+    pub async fn get_header(&self, hash: &str) -> Result<JsValue> {
+        let hash: Hash = hash.parse()?;
+        let eh = self.node.p2p().get_header(hash).await?;
+        Ok(to_value(&eh)?)
     }
 
-    pub async fn get_header_by_height(&self, height: u64) -> JsValue {
-        let eh = self
+    pub async fn get_header_by_height(&self, height: u64) -> Result<JsValue> {
+        let eh = self.node.p2p().get_header_by_height(height).await?;
+        Ok(to_value(&eh)?)
+    }
+
+    pub async fn get_verified_headers_range(&self, from: JsValue, amount: u64) -> Result<Array> {
+        let header = from_value::<ExtendedHeader>(from)?;
+        let verified_headers = self
             .node
             .p2p()
-            .get_header_by_height(height)
-            .await
-            .unwrap_throw();
-        to_value(&eh).unwrap_throw()
+            .get_verified_headers_range(&header, amount)
+            .await?;
+
+        Ok(Array::from_iter(
+            verified_headers.iter().map(|v| to_value(v).unwrap_throw()),
+        ))
     }
 
-    pub async fn get_verified_headers_range() {
-        unimplemented!()
-    }
+    pub async fn listeners(&self) -> Result<Array> {
+        let listeners = self.node.p2p().listeners().await?;
 
-    pub async fn listeners(&self) -> Array {
-        self.node
-            .p2p()
-            .listeners()
-            .await
-            .unwrap_throw()
+        Ok(listeners
             .iter()
             .map(ToString::to_string)
             .map(JsValue::from)
-            .collect::<Array>()
+            .collect::<Array>())
     }
 
-    pub async fn connected_peers(&self) -> Array {
-        self.node
+    pub async fn connected_peers(&self) -> Result<Array> {
+        Ok(self
+            .node
             .p2p()
             .connected_peers()
-            .await
-            .unwrap_throw()
+            .await?
             .iter()
             .map(ToString::to_string)
             .map(JsValue::from)
-            .collect::<Array>()
+            .collect::<Array>())
     }
 
-    pub async fn syncer_info(&self) -> JsValue {
-        let syncer_info = self.node.syncer().info().await.unwrap_throw();
-        to_value(&syncer_info).unwrap_throw()
+    pub async fn syncer_info(&self) -> Result<JsValue> {
+        let syncer_info = self.node.syncer().info().await?;
+        Ok(to_value(&syncer_info)?)
     }
 }
 
@@ -166,8 +167,9 @@ impl WasmNodeConfig {
     }
 
     #[wasm_bindgen(setter)]
-    pub fn set_genesis_hash(&mut self, hash: Option<String>) {
-        self.genesis_hash = hash.map(|h| h.parse().unwrap_throw())
+    pub fn set_genesis_hash(&mut self, hash: Option<String>) -> Result<()> {
+        self.genesis_hash = hash.map(|h| h.parse()).transpose()?;
+        Ok(())
     }
 
     #[wasm_bindgen(getter)]
@@ -180,10 +182,19 @@ impl WasmNodeConfig {
     }
 
     #[wasm_bindgen(setter)]
-    pub fn set_bootnodes(&mut self, bootnodes: Array) {
+    pub fn set_bootnodes(&mut self, bootnodes: Array) -> Result<()> {
         self.p2p_bootnodes = bootnodes
             .iter()
-            .map(|addr| addr.as_string().unwrap_throw().parse().unwrap_throw())
-            .collect::<Vec<_>>();
+            .map(|n| {
+                n.as_string()
+                    .ok_or(JsError::new("utf16 decode error"))
+                    .and_then(|s| {
+                        s.parse::<Multiaddr>()
+                            .map_err(|e| JsError::new(&e.to_string()))
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(())
     }
 }

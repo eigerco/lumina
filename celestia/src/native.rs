@@ -7,31 +7,49 @@ use celestia_node::network::{canonical_network_bootnodes, network_genesis, netwo
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::SledStore;
 use celestia_rpc::prelude::*;
+use clap::Args;
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use tokio::time::sleep;
 use tracing::info;
 
-pub(crate) async fn run(
-    network: Network,
-    bootnodes: Vec<Multiaddr>,
-    listen_addrs: Vec<Multiaddr>,
-    store_path: Option<PathBuf>,
-) -> Result<()> {
+use crate::common::ArgNetwork;
+
+#[derive(Debug, Args)]
+pub(crate) struct Params {
+    /// Network to connect.
+    #[arg(short, long, value_enum, default_value_t)]
+    pub(crate) network: ArgNetwork,
+
+    /// Listening addresses. Can be used multiple times.
+    #[arg(short, long = "listen")]
+    pub(crate) listen_addrs: Vec<Multiaddr>,
+
+    /// Bootnode multiaddr, including peer id. Can be used multiple times.
+    #[arg(short, long = "bootnode")]
+    pub(crate) bootnodes: Vec<Multiaddr>,
+
+    /// Persistent header store path.
+    #[arg(short, long = "store")]
+    pub(crate) store: Option<PathBuf>,
+}
+
+pub(crate) async fn run(args: Params) -> Result<()> {
+    let network = args.network.into();
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
-    let p2p_bootnodes = if bootnodes.is_empty() {
+    let p2p_bootnodes = if args.bootnodes.is_empty() {
         match network {
             Network::Private => fetch_bridge_multiaddrs("ws://localhost:26658").await?,
             network => canonical_network_bootnodes(network),
         }
     } else {
-        bootnodes
+        args.bootnodes
     };
 
     let network_id = network_id(network).to_owned();
     let genesis_hash = network_genesis(network);
 
-    let store = if let Some(db_path) = store_path {
+    let store = if let Some(db_path) = args.store {
         SledStore::new_in_path(db_path).await?
     } else {
         SledStore::new(network_id.clone()).await?
@@ -46,7 +64,7 @@ pub(crate) async fn run(
         genesis_hash,
         p2p_local_keypair,
         p2p_bootnodes,
-        p2p_listen_on: listen_addrs,
+        p2p_listen_on: args.listen_addrs,
         store,
     })
     .await

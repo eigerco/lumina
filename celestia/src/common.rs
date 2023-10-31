@@ -1,40 +1,9 @@
-use std::net::SocketAddr;
-use std::path::PathBuf;
-
-use anyhow::{bail, Result};
+use anyhow::Result;
 use celestia_node::network::Network;
-use clap::{error::ErrorKind, CommandFactory, Parser, ValueEnum};
-use libp2p::multiaddr::Protocol;
-use libp2p::Multiaddr;
+use clap::{Parser, ValueEnum};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use crate::{native, server};
-
-const SERVER_DEFAULT_BIND_ADDR: &str = "127.0.0.1:9876";
-
-#[derive(Debug, Parser)]
-// disallow specifying store path when running in browser
-pub(crate) struct Args {
-    /// Network to connect.
-    #[arg(short, long, value_enum, default_value_t)]
-    pub(crate) network: ArgNetwork,
-
-    /// Listening addresses. Can be used multiple times.
-    #[arg(short, long = "listen")]
-    pub(crate) listen_addrs: Vec<Multiaddr>,
-
-    /// Bootnode multiaddr, including peer id. Can be used multiple times.
-    #[arg(short, long = "bootnode")]
-    pub(crate) bootnodes: Vec<Multiaddr>,
-
-    /// Persistent header store path.
-    #[arg(short, long = "store", group = "native_xor_browser")]
-    pub(crate) store: Option<PathBuf>,
-
-    /// Serve wasm node which can be accessed with web browser
-    #[arg(long, group = "native_xor_browser")]
-    browser: bool,
-}
 
 #[derive(
     Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize_repr, Deserialize_repr,
@@ -47,31 +16,20 @@ pub(crate) enum ArgNetwork {
     Private,
 }
 
+#[derive(Debug, Parser)]
+pub(crate) enum CliArgs {
+    Node(native::Params),
+    Browser(server::Params),
+}
+
 pub async fn run_cli() -> Result<()> {
     let _ = dotenvy::dotenv();
-    let mut args = Args::parse();
+    let args = CliArgs::parse();
     let _guard = init_tracing();
 
-    if args.browser {
-        let listen_addr = match args.listen_addrs.len() {
-            0 => SERVER_DEFAULT_BIND_ADDR.parse().unwrap(),
-            1 => multiaddr_to_socketaddr(args.listen_addrs.pop().unwrap())?,
-            _ => Args::command()
-                .error(
-                    ErrorKind::TooManyValues,
-                    "expected single listenting address when serving wasm node",
-                )
-                .exit(),
-        };
-        server::run(args.network, args.bootnodes, listen_addr).await
-    } else {
-        native::run(
-            args.network.into(),
-            args.bootnodes,
-            args.listen_addrs,
-            args.store,
-        )
-        .await
+    match args {
+        CliArgs::Node(args) => native::run(args).await,
+        CliArgs::Browser(args) => server::run(args).await,
     }
 }
 
@@ -88,29 +46,6 @@ fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
         .init();
 
     guard
-}
-
-fn multiaddr_to_socketaddr(mut addr: Multiaddr) -> Result<SocketAddr> {
-    let mut port = None;
-    while let Some(proto) = addr.pop() {
-        match proto {
-            Protocol::Ip4(ipv4) => match port {
-                Some(port) => return Ok(SocketAddr::new(ipv4.into(), port)),
-                None => bail!("port not specified"),
-            },
-            Protocol::Ip6(ipv6) => match port {
-                Some(port) => return Ok(SocketAddr::new(ipv6.into(), port)),
-                None => bail!("port not specified"),
-            },
-            Protocol::Tcp(portnum) => match port {
-                Some(_) => bail!("multiple ports specified"),
-                None => port = Some(portnum),
-            },
-            Protocol::P2p(_) => {}
-            _ => bail!("p2p protocol not supported here"),
-        }
-    }
-    bail!("no listen address specified")
 }
 
 impl From<ArgNetwork> for Network {

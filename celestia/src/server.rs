@@ -6,12 +6,15 @@ use axum::http::{header, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
 use axum::{body, Json, Router};
+use clap::Args;
 use libp2p::Multiaddr;
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::common::ArgNetwork;
+
+const SERVER_DEFAULT_BIND_ADDR: &str = "127.0.0.1:9876";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct WasmNodeArgs {
@@ -27,12 +30,28 @@ struct WasmPackage;
 #[folder = "static"]
 struct StaticResources;
 
+#[derive(Debug, Args)]
+pub(crate) struct Params {
+    /// Network to connect.
+    #[arg(short, long, value_enum, default_value_t)]
+    pub(crate) network: ArgNetwork,
+
+    /// Listening addresses. Can be used multiple times.
+    #[arg(short, long = "listen", default_value = SERVER_DEFAULT_BIND_ADDR)]
+    pub(crate) listen_addr: SocketAddr,
+
+    /// Bootnode multiaddr, including peer id. Can be used multiple times.
+    #[arg(short, long = "bootnode")]
+    pub(crate) bootnodes: Vec<Multiaddr>,
+}
+
 pub(crate) async fn run(
-    network: ArgNetwork,
-    bootnodes: Vec<Multiaddr>,
-    listen_addr: SocketAddr,
+    args: Params,
 ) -> Result<()> {
-    let state = WasmNodeArgs { network, bootnodes };
+    let state = WasmNodeArgs {
+        network: args.network,
+        bootnodes: args.bootnodes,
+    };
 
     let app = Router::new()
         .route("/", get(serve_index_html))
@@ -41,8 +60,8 @@ pub(crate) async fn run(
         .route("/cfg.json", get(serve_config))
         .with_state(state);
 
-    info!("listening on {listen_addr}");
-    Ok(axum::Server::bind(&listen_addr)
+    info!("listening on {}", args.listen_addr);
+    Ok(axum::Server::bind(&args.listen_addr)
         .serve(app.into_make_service())
         .await?)
 }
