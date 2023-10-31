@@ -156,10 +156,10 @@ mod wasm {
     use std::fmt;
 
     use async_trait::async_trait;
-    use jsonrpsee::core::Error as JrpcError;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
+    use jsonrpsee::core::Error as JrpcError;
     use serde::de::DeserializeOwned;
 
     pub struct Client;
