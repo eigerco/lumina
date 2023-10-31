@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import init, { setup_logging, Network, Node, NodeConfig} from "/wasm/wasm_node.js";
+import init, { Node, NodeConfig} from "/wasm/wasm_node.js";
 
 async function fetch_config() {
     const response = await fetch('/cfg.json');
@@ -74,13 +74,13 @@ function bind_config(data) {
     document.getElementById("bootnodes").value = config.bootnodes.join("\n");
 }
 
-async function start_node(proxy_config) {
+async function start_node(config) {
     window.node = await new Node(config);
 
     document.getElementById("peer_id").innerText = JSON.stringify(await window.node.local_peer_id());
 }
 
-async function main(document, window, undefined) {
+async function main(document, window) {
     await init();
 
     bind_config(await fetch_config());
