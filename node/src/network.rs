@@ -64,6 +64,14 @@ pub fn canonical_network_bootnodes(network: Network) -> Vec<Multiaddr> {
             .collect()
         ,
         Network::Mocha => [
+            // 40.85.94.176 is a node set up for testing QUIC/WebTransport since official nodes
+            // don't have that enabled currently
+            "/ip4/40.85.94.176/tcp/2121/p2p/12D3KooWNJ3Nf1DTQTz8JZogg2eSvPKKKv8itC6fxxspe4C6bizs",
+            "/ip4/40.85.94.176/udp/2121/quic-v1/p2p/12D3KooWNJ3Nf1DTQTz8JZogg2eSvPKKKv8itC6fxxspe4C6bizs",
+            "/ip4/40.85.94.176/udp/2121/quic-v1/webtransport/certhash/uEiBf-OX4HzFK9owOpjdCifsDIWRO0SoD3j3vGKlq0pAXKw/certhash/uEiCx1md1BATJ_0NXAjp3KOuwRYG1535E7kUzFdMq8aPaWw/p2p/12D3KooWNJ3Nf1DTQTz8JZogg2eSvPKKKv8itC6fxxspe4C6bizs",
+            "/ip4/40.85.94.176/udp/2121/quic-v1/p2p/12D3KooWQUYAApYb4DJnhS1QmAwRr5HRvUeHJYocchCpwEhCtDGu",
+            "/ip4/40.85.94.176/udp/2121/quic-v1/webtransport/certhash/uEiBr4-sr95BpqfA-ttpjiLdjbGABhTvX8oxrTXf3Ubfibw/certhash/uEiBSVgyze9xG1UbbNuTwyEUWLPq7l2N9pyeQSs3OtEhGRg/p2p/12D3KooWQUYAApYb4DJnhS1QmAwRr5HRvUeHJYocchCpwEhCtDGu",
+
             "/dns4/da-bridge-mocha-4.celestia-mocha.com/udp/2121/quic/p2p/12D3KooWCBAbQbJSpCpCGKzqz3rAN4ixYbc63K68zJg9aisuAajg",
             "/dns4/da-bridge-mocha-4-2.celestia-mocha.com/udp/2121/quic/p2p/12D3KooWK6wJkScGQniymdWtBwBuU36n6BRXp9rCDDUD6P5gJr3G",
             "/dns4/da-full-1-mocha-4.celestia-mocha.com/udp/2121/quic/p2p/12D3KooWCUHPLqQXZzpTx1x3TAsdn3vYmTNDhzg66yG8hqoxGGN8",

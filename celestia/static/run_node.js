@@ -36,17 +36,45 @@ async function show_stats(node) {
 }
 
 
-function bind_config() {
-    // TODO two way binding between window.config and input values
-}
+function bind_config(data) {
+    let proxy = {
+        set: function(obj, prop, value) {
+            console.log(obj, prop, value);
+            switch (prop) {
+                case 'network':
+                    document.getElementById("network_id").value = value;
+                    break;
+                case 'genesis_hash':
+                    document.getElementById("genesis_hash").value = value;
+                    break;
+                case 'bootnodes':
+                    document.getElementById("bootnodes").value = value.join("\n");
+                    break;
+            }
+            obj[prop] = value;
+            console.log(obj, prop, value);
 
-function show_config(config) {
+            return true;
+        }
+    };
+    window.config = new Proxy(data, proxy);
+    document.getElementById("network_id").addEventListener("change", (event) => {
+        window.config.network = Number(event.target.value);
+    });
+    document.getElementById("genesis_hash").addEventListener("change", (event) => {
+        window.config.genesis_hash = event.target.value;
+    });
+    document.getElementById("bootnodes").addEventListener("change", (event) => {
+        window.config.bootnodes = event.target.value.split("\n");
+    });
+
+
     document.getElementById("network_id").value = config.network;
-    document.getElementById("genesis").value = config.genesis_hash;
+    document.getElementById("genesis_hash").value = config.genesis_hash;
     document.getElementById("bootnodes").value = config.bootnodes.join("\n");
 }
 
-async function start_node(config) {
+async function start_node(proxy_config) {
     window.node = await new Node(config);
 
     document.getElementById("peer_id").innerText = JSON.stringify(await window.node.local_peer_id());
@@ -55,9 +83,7 @@ async function start_node(config) {
 async function main(document, window, undefined) {
     await init();
 
-    window.config = await fetch_config();
-
-    show_config(window.config);
+    bind_config(await fetch_config());
 
     document.getElementById("start").addEventListener("click", async function(ev) {
         document.querySelectorAll('.config').forEach(function(element) {
