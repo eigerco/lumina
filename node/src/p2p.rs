@@ -254,10 +254,7 @@ where
         Ok(rx.await?)
     }
 
-    pub async fn header_ex_request(
-        &self,
-        request: HeaderRequest,
-    ) -> Result<Vec<ExtendedHeader>> {
+    pub async fn header_ex_request(&self, request: HeaderRequest) -> Result<Vec<ExtendedHeader>> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::HeaderExRequest {
