@@ -24,8 +24,8 @@ mod client;
 mod server;
 mod utils;
 
-use crate::exchange::client::ExchangeClientHandler;
-use crate::exchange::server::ExchangeServerHandler;
+use crate::header_ex::client::HeaderExClientHandler;
+use crate::header_ex::server::HeaderExServerHandler;
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
 use crate::store::Store;
@@ -42,23 +42,23 @@ type ReqRespBehaviour = request_response::Behaviour<HeaderCodec>;
 type ReqRespEvent = request_response::Event<RequestType, ResponseType>;
 type ReqRespMessage = request_response::Message<RequestType, ResponseType>;
 
-pub(crate) struct ExchangeBehaviour<S>
+pub(crate) struct HeaderExBehaviour<S>
 where
     S: Store + 'static,
 {
     req_resp: ReqRespBehaviour,
-    client_handler: ExchangeClientHandler,
-    server_handler: ExchangeServerHandler<S>,
+    client_handler: HeaderExClientHandler,
+    server_handler: HeaderExServerHandler<S>,
 }
 
-pub(crate) struct ExchangeConfig<'a, S> {
+pub(crate) struct HeaderExConfig<'a, S> {
     pub network_id: &'a str,
     pub peer_tracker: Arc<PeerTracker>,
     pub header_store: Arc<S>,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ExchangeError {
+pub enum HeaderExError {
     #[error("Header not found")]
     HeaderNotFound,
 
@@ -75,12 +75,12 @@ pub enum ExchangeError {
     OutboundFailure(OutboundFailure),
 }
 
-impl<S> ExchangeBehaviour<S>
+impl<S> HeaderExBehaviour<S>
 where
     S: Store + 'static,
 {
-    pub(crate) fn new(config: ExchangeConfig<'_, S>) -> Self {
-        ExchangeBehaviour {
+    pub(crate) fn new(config: HeaderExConfig<'_, S>) -> Self {
+        HeaderExBehaviour {
             req_resp: ReqRespBehaviour::new(
                 [(
                     protocol_id(config.network_id, "/header-ex/v0.0.3"),
@@ -88,8 +88,8 @@ where
                 )],
                 request_response::Config::default(),
             ),
-            client_handler: ExchangeClientHandler::new(config.peer_tracker),
-            server_handler: ExchangeServerHandler::new(config.header_store),
+            client_handler: HeaderExClientHandler::new(config.peer_tracker),
+            server_handler: HeaderExServerHandler::new(config.header_store),
         }
     }
 
@@ -172,7 +172,7 @@ where
     }
 }
 
-impl<S> NetworkBehaviour for ExchangeBehaviour<S>
+impl<S> NetworkBehaviour for HeaderExBehaviour<S>
 where
     S: Store + 'static,
 {
