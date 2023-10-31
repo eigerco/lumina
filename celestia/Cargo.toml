@@ -8,12 +8,12 @@ license = "Apache-2.0"
 celestia-node = { workspace = true }
 celestia-rpc = { workspace = true, features = ["p2p"] }
 celestia-types = { workspace = true }
+libp2p = { workspace = true }
 
 anyhow = "1.0.71"
 axum = "0.6.20"
 clap = { version = "4.4.4", features = ["derive"] }
 dotenvy = "0.15.7"
-libp2p = "0.52.3"
 mime_guess = "2.0"
 rust-embed = "8.0.0"
 serde = "1.0.189"

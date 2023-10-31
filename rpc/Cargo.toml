@@ -16,16 +16,17 @@ http = "0.2.9"
 jsonrpsee = { version = "0.20", features = ["http-client", "ws-client"] }
 
 [dev-dependencies]
-anyhow = "1.0.71"
-dotenvy = "0.15.7"
-futures = "0.3.28"
-libp2p = { version = "0.52.3", features = [
+libp2p = { workspace = true, features = [
   "tokio",
   "macros",
   "tcp",
   "noise",
   "yamux",
 ] }
+
+anyhow = "1.0.71"
+dotenvy = "0.15.7"
+futures = "0.3.28"
 rand = "0.8.5"
 tokio = { version = "1.32.0", features = ["rt", "macros"] }
 tracing = "0.1.37"
