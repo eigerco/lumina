@@ -1,8 +1,9 @@
 on:
   workflow_dispatch: {}
   # Once per day at 00:00 UTC
-  schedule:
-    - cron: '0 0 * * *'
+  push:
+    branches: [main]
+  pull_request:
 
 env:
   RUSTFLAGS: -D warnings
