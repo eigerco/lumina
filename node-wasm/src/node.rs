@@ -35,11 +35,16 @@ pub struct WasmNodeConfig {
 #[wasm_bindgen(js_class = Node)]
 impl WasmNode {
     #[wasm_bindgen(constructor)]
-    pub async fn new(config: WasmNodeConfig) -> Self {
+    pub async fn new(config: WasmNodeConfig) -> Result<Self> {
         let network_id = network_id(config.network.into());
-        let store = IndexedDbStore::new(network_id).await.unwrap();
+        let store = IndexedDbStore::new(network_id)
+            .await
+            .context("Failed to open the store")?;
+
         if let Ok(store_height) = store.head_height().await {
             info!("Initialised store with head height: {store_height}");
+        } else {
+            info!("Initialized new empty store");
         }
 
         let node = Node::new(NodeConfig {
@@ -51,8 +56,7 @@ impl WasmNode {
             store,
         })
         .await
-        .context("Failed to start node")
-        .unwrap_throw();
+        .context("Failed to start the node")?;
 
         Self { node }
     }
@@ -97,9 +101,10 @@ impl WasmNode {
             .get_verified_headers_range(&header, amount)
             .await?;
 
-        Ok(Array::from_iter(
-            verified_headers.iter().map(|v| to_value(v).unwrap_throw()),
-        ))
+        Ok(verified_headers
+            .iter()
+            .map(|v| to_value(v))
+            .collect::<Result<_>>()?)
     }
 
     pub async fn listeners(&self) -> Result<Array> {
