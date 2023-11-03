@@ -1,6 +1,5 @@
-use std::convert::Into;
+use std::result::Result as StdResult;
 
-use anyhow::Context;
 use celestia_node::network::{canonical_network_bootnodes, network_genesis, network_id};
 use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::{IndexedDbStore, Store};
@@ -12,6 +11,8 @@ use serde_wasm_bindgen::{from_value, to_value};
 use tracing::info;
 use wasm_bindgen::prelude::*;
 
+use crate::utils::js_value_from_display;
+use crate::utils::JsContext;
 use crate::utils::Network;
 use crate::wrapper::libp2p::NetworkInfo;
 use crate::Result;
@@ -35,11 +36,11 @@ pub struct WasmNodeConfig {
 #[wasm_bindgen(js_class = Node)]
 impl WasmNode {
     #[wasm_bindgen(constructor)]
-    pub async fn new(config: WasmNodeConfig) -> Result<Self> {
+    pub async fn new(config: WasmNodeConfig) -> Result<WasmNode> {
         let network_id = network_id(config.network.into());
         let store = IndexedDbStore::new(network_id)
             .await
-            .context("Failed to open the store")?;
+            .js_context("Failed to open the store")?;
 
         if let Ok(store_height) = store.head_height().await {
             info!("Initialised store with head height: {store_height}");
@@ -56,9 +57,9 @@ impl WasmNode {
             store,
         })
         .await
-        .context("Failed to start the node")?;
+        .js_context("Failed to start the node")?;
 
-        Self { node }
+        Ok(Self { node })
     }
 
     pub fn local_peer_id(&self) -> String {
@@ -94,7 +95,8 @@ impl WasmNode {
     }
 
     pub async fn get_verified_headers_range(&self, from: JsValue, amount: u64) -> Result<Array> {
-        let header = from_value::<ExtendedHeader>(from)?;
+        let header =
+            from_value::<ExtendedHeader>(from).js_context("Parsing extended header failed")?;
         let verified_headers = self
             .node
             .p2p()
@@ -103,8 +105,8 @@ impl WasmNode {
 
         Ok(verified_headers
             .iter()
-            .map(|v| to_value(v))
-            .collect::<Result<_>>()?)
+            .map(to_value)
+            .collect::<StdResult<_, _>>()?)
     }
 
     pub async fn listeners(&self) -> Result<Array> {
@@ -112,8 +114,7 @@ impl WasmNode {
 
         Ok(listeners
             .iter()
-            .map(ToString::to_string)
-            .map(JsValue::from)
+            .map(js_value_from_display)
             .collect::<Array>())
     }
 
@@ -124,8 +125,7 @@ impl WasmNode {
             .connected_peers()
             .await?
             .iter()
-            .map(ToString::to_string)
-            .map(JsValue::from)
+            .map(js_value_from_display)
             .collect::<Array>())
     }
 
@@ -167,8 +167,7 @@ impl WasmNodeConfig {
     pub fn bootnodes(&self) -> Array {
         self.p2p_bootnodes
             .iter()
-            .map(ToString::to_string)
-            .map(JsValue::from)
+            .map(js_value_from_display)
             .collect::<Array>()
     }
 
@@ -179,12 +178,9 @@ impl WasmNodeConfig {
             .map(|n| {
                 n.as_string()
                     .ok_or(JsError::new("utf16 decode error"))
-                    .and_then(|s| {
-                        s.parse::<Multiaddr>()
-                            .map_err(|e| JsError::new(&e.to_string()))
-                    })
+                    .and_then(|s| Ok(s.parse::<Multiaddr>()?))
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Result<_>>()?;
 
         Ok(())
     }

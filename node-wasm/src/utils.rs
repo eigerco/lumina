@@ -1,3 +1,5 @@
+use std::fmt;
+
 use celestia_node::network;
 use wasm_bindgen::prelude::*;
 
@@ -33,5 +35,43 @@ impl From<network::Network> for Network {
             network::Network::Mocha => Network::Mocha,
             network::Network::Private => Network::Private,
         }
+    }
+}
+
+pub(crate) fn js_value_from_display<D: fmt::Display>(value: D) -> JsValue {
+    JsValue::from(value.to_string())
+}
+
+pub(crate) trait JsContext<T> {
+    fn js_context<C>(self, context: C) -> Result<T, JsError>
+    where
+        C: fmt::Display + Send + Sync + 'static;
+
+    fn with_js_context<F, C>(self, context_fn: F) -> Result<T, JsError>
+    where
+        C: fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> C;
+}
+
+impl<T, E> JsContext<T> for std::result::Result<T, E>
+where
+    E: std::error::Error,
+{
+    fn js_context<C>(self, context: C) -> Result<T, JsError>
+    where
+        C: fmt::Display + Send + Sync + 'static,
+    {
+        self.map_err(|e| JsError::new(&format!("{context}: {e}")))
+    }
+
+    fn with_js_context<F, C>(self, context_fn: F) -> Result<T, JsError>
+    where
+        C: fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> C,
+    {
+        self.map_err(|e| {
+            let context = context_fn();
+            JsError::new(&format!("{context}: {e}"))
+        })
     }
 }
