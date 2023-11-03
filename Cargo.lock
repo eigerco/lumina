@@ -661,6 +661,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "celestia-node-wasm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "celestia-node",
+ "celestia-types",
+ "console_error_panic_hook",
+ "js-sys",
+ "libp2p",
+ "serde-wasm-bindgen",
+ "tracing",
+ "tracing-wasm",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
 name = "celestia-proto"
 version = "0.1.0"
 dependencies = [
@@ -2816,23 +2833,6 @@ source = "git+https://github.com/Sovereign-Labs/nmt-rs.git?rev=d821332#d821332ba
 dependencies = [
  "bytes",
  "sha2 0.10.7",
-]
-
-[[package]]
-name = "node-wasm"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "celestia-node",
- "celestia-types",
- "console_error_panic_hook",
- "js-sys",
- "libp2p",
- "serde-wasm-bindgen",
- "tracing",
- "tracing-wasm",
- "wasm-bindgen",
- "wasm-bindgen-futures",
 ]
 
 [[package]]

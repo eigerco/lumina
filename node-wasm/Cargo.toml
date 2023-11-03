@@ -1,5 +1,5 @@
 [package]
-name = "node-wasm"
+name = "celestia-node-wasm"
 version = "0.1.0"
 edition = "2021"
 
