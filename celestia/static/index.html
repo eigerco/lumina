@@ -1,29 +1,38 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="UTF-8" />
-        <title>celestia-node-rs</title>
-        <script type="module" src="/js/run_node.js"></script>
-    </head>
-    <body>
-        <h1>Celestia Node</h1>
-        <h2>Network</h2>
-        <select id="network_id" class="config">
-            <option value="0">Arabica</option>
-            <option value="1">Mocha</option>
-            <option value="2">Private</option>
-        </select>
-        <h2>Bootnodes</h2>
-        <textarea id="bootnodes" class="config" cols=220 rows=10>
-        </textarea>
-        <h2>Genesis Hash</h2>
-        <input type="text" id="genesis_hash" class="config" size=80 />
 
-        <button id="start" class="config">Start!</button>
+<head>
+  <meta charset="UTF-8" />
+  <title>celestia-node-rs</title>
+  <script type="module" src="/js/run_node.js"></script>
+</head>
 
-        <h3>Status</h3>
-        <h4>PeerId</h4><div id="peer_id"></div>
-        <h4>Syncer</h4><div id="syncer"></div>
-        <h4>Peers</h4><div id="peers"></div>
-    </body>
+<body>
+  <h1>Celestia Node</h1>
+
+  <h2>Network</h2>
+  <select id="network_id" class="config">
+    <option value="0">Arabica</option>
+    <option value="1">Mocha</option>
+    <option value="2">Private</option>
+  </select>
+
+  <h2>Bootnodes</h2>
+  <textarea id="bootnodes" class="config" cols=220 rows=10>
+  </textarea>
+
+  <h2>Genesis Hash</h2>
+  <input type="text" id="genesis_hash" class="config" size=80 />
+
+  <button id="start" class="config">Start!</button>
+
+  <h3>Status</h3>
+  <h4>PeerId</h4>
+  <div id="peer_id"></div>
+  <h4>Syncer</h4>
+  <div id="syncer"></div>
+  <h4>Peers</h4>
+  <div id="peers"></div>
+</body>
+
 </html>
