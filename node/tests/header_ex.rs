@@ -12,6 +12,52 @@ use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_types::test_utils::{invalidate, unverify};
 use tokio::time::sleep;
 
+use crate::utils::new_connected_node;
+
+mod utils;
+
+#[tokio::test]
+async fn get_single_header() {
+    let node = new_connected_node().await;
+
+    let header = node.p2p().get_header_by_height(1).await.unwrap();
+    let header_by_hash = node.p2p().get_header(header.hash()).await.unwrap();
+
+    assert_eq!(header, header_by_hash);
+}
+
+#[tokio::test]
+async fn get_verified_headers() {
+    let node = new_connected_node().await;
+
+    let from = node.p2p().get_header_by_height(1).await.unwrap();
+    let verified_headers = node
+        .p2p()
+        .get_verified_headers_range(&from, 2)
+        .await
+        .unwrap();
+    assert_eq!(verified_headers.len(), 2);
+
+    let height2 = node.p2p().get_header_by_height(2).await.unwrap();
+    assert_eq!(verified_headers[0], height2);
+
+    let height3 = node.p2p().get_header_by_height(3).await.unwrap();
+    assert_eq!(verified_headers[1], height3);
+}
+
+#[tokio::test]
+async fn get_head() {
+    let node = new_connected_node().await;
+
+    let genesis = node.p2p().get_header_by_height(1).await.unwrap();
+
+    let head1 = node.p2p().get_head_header().await.unwrap();
+    genesis.verify(&head1).unwrap();
+
+    let head2 = node.p2p().get_header_by_height(0).await.unwrap();
+    assert!(head1 == head2 || head1.verify(&head2).is_ok());
+}
+
 #[tokio::test]
 async fn client_server() {
     // Server Node
@@ -31,7 +77,7 @@ async fn client_server() {
 
     // give server a sec to breathe, otherwise occiasionally client has problems with connecting
     sleep(Duration::from_millis(100)).await;
-    let server_addrs = server.p2p().listeners().await.unwrap();
+    let server_addrs = server.listeners().await.unwrap();
 
     // Client node
     let client = Node::new(NodeConfig {
@@ -41,7 +87,7 @@ async fn client_server() {
     .await
     .unwrap();
 
-    client.p2p().wait_connected().await.unwrap();
+    client.wait_connected().await.unwrap();
 
     // request head (with one peer)
     let received_head = client.p2p().get_head_header().await.unwrap();
@@ -114,7 +160,7 @@ async fn client_server_invalid_requests() {
 
     // give server a sec to breathe, otherwise occiasionally client has problems with connecting
     sleep(Duration::from_millis(100)).await;
-    let server_addrs = server.p2p().listeners().await.unwrap();
+    let server_addrs = server.listeners().await.unwrap();
 
     // Client node
     let client = Node::new(NodeConfig {
@@ -124,7 +170,7 @@ async fn client_server_invalid_requests() {
     .await
     .unwrap();
 
-    client.p2p().wait_connected().await.unwrap();
+    client.wait_connected().await.unwrap();
 
     let none_data = client
         .p2p()
@@ -218,7 +264,7 @@ async fn head_selection_with_multiple_peers() {
 
     let mut server_addrs = vec![];
     for s in &servers {
-        server_addrs.extend_from_slice(&s.p2p().listeners().await.unwrap()[..]);
+        server_addrs.extend_from_slice(&s.listeners().await.unwrap()[..]);
     }
 
     // Client Node
@@ -229,11 +275,11 @@ async fn head_selection_with_multiple_peers() {
     .await
     .unwrap();
 
-    client.p2p().wait_connected().await.unwrap();
+    client.wait_connected().await.unwrap();
 
     // give client node a sec to breathe, otherwise occiasionally rogue node has problems with connecting
     sleep(Duration::from_millis(100)).await;
-    let client_addr = client.p2p().listeners().await.unwrap();
+    let client_addr = client.listeners().await.unwrap();
 
     // Rogue node, connects to client so isn't trusted
     let rogue_node = Node::new(NodeConfig {
@@ -244,7 +290,7 @@ async fn head_selection_with_multiple_peers() {
     .await
     .unwrap();
 
-    rogue_node.p2p().wait_connected().await.unwrap();
+    rogue_node.wait_connected().await.unwrap();
     // small delay needed for client to include rogue_node in head selection process
     sleep(Duration::from_millis(50)).await;
 
@@ -263,14 +309,10 @@ async fn head_selection_with_multiple_peers() {
 
     // Head requests are send only to trusted peers, so we add
     // `new_b_node` as trusted.
-    let new_b_peer_id = new_b_node.p2p().local_peer_id().to_owned();
-    client
-        .p2p()
-        .set_peer_trust(new_b_peer_id, true)
-        .await
-        .unwrap();
+    let new_b_peer_id = new_b_node.local_peer_id().to_owned();
+    client.set_peer_trust(new_b_peer_id, true).await.unwrap();
 
-    new_b_node.p2p().wait_connected().await.unwrap();
+    new_b_node.wait_connected().await.unwrap();
     // small delay needed for client to include new_b_node in head selection process
     sleep(Duration::from_millis(50)).await;
 
@@ -302,7 +344,7 @@ async fn replaced_header_server_store() {
 
     // give server a sec to breathe, otherwise occiasionally client has problems with connecting
     sleep(Duration::from_millis(100)).await;
-    let server_addrs = server.p2p().listeners().await.unwrap();
+    let server_addrs = server.listeners().await.unwrap();
 
     let client = Node::new(NodeConfig {
         p2p_bootnodes: server_addrs,
@@ -311,7 +353,7 @@ async fn replaced_header_server_store() {
     .await
     .unwrap();
 
-    client.p2p().wait_connected().await.unwrap();
+    client.wait_connected().await.unwrap();
 
     let tampered_header_in_range = client
         .p2p()
@@ -376,7 +418,7 @@ async fn invalidated_header_server_store() {
 
     // give server a sec to breathe, otherwise occiasionally client has problems with connecting
     sleep(Duration::from_millis(100)).await;
-    let server_addrs = server.p2p().listeners().await.unwrap();
+    let server_addrs = server.listeners().await.unwrap();
 
     let client = Node::new(NodeConfig {
         p2p_bootnodes: server_addrs,
@@ -385,7 +427,7 @@ async fn invalidated_header_server_store() {
     .await
     .unwrap();
 
-    client.p2p().wait_connected().await.unwrap();
+    client.wait_connected().await.unwrap();
 
     let invalidated_header_in_range = client
         .p2p()
@@ -457,7 +499,7 @@ async fn unverified_header_server_store() {
 
     // give server a sec to breathe, otherwise occiasionally client has problems with connecting
     sleep(Duration::from_millis(100)).await;
-    let server_addrs = server.p2p().listeners().await.unwrap();
+    let server_addrs = server.listeners().await.unwrap();
 
     let client = Node::new(NodeConfig {
         p2p_bootnodes: server_addrs,
@@ -466,7 +508,7 @@ async fn unverified_header_server_store() {
     .await
     .unwrap();
 
-    client.p2p().wait_connected().await.unwrap();
+    client.wait_connected().await.unwrap();
 
     let tampered_header_in_range = client
         .p2p()
