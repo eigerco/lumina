@@ -54,14 +54,14 @@ async fn get_by_hash() {
 }
 
 #[tokio::test]
-async fn get_verified_range_by_height() {
+async fn get_range_by_height() {
     let client = new_test_client(AuthLevel::Read).await.unwrap();
 
     let genesis_header = client.header_get_by_height(1).await.unwrap();
     let second_header = client.header_get_by_height(2).await.unwrap();
 
     let headers = client
-        .header_get_verified_range_by_height(&genesis_header, 3)
+        .header_get_range_by_height(&genesis_header, 3)
         .await
         .unwrap();
 
