@@ -661,9 +661,10 @@ where
         }
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(header = %head))]
     fn on_init_header_sub(&mut self, head: ExtendedHeader) {
         self.header_sub_watcher.send_replace(Some(head));
+        trace!("HeaderSub initialized");
     }
 
     #[instrument(skip_all)]
