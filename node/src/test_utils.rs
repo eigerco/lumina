@@ -143,11 +143,9 @@ impl MockP2pHandle {
         }
     }
 
-    pub async fn expect_init_header_sub(
-        &mut self,
-    ) -> (ExtendedHeader, OneshotResultSender<(), P2pError>) {
+    pub async fn expect_init_header_sub(&mut self) -> ExtendedHeader {
         match self.expect_cmd().await {
-            P2pCmd::InitHeaderSub { head, respond_to } => (*head, respond_to),
+            P2pCmd::InitHeaderSub { head } => *head,
             cmd => panic!("Expecting InitHeaderSub, but received: {cmd:?}"),
         }
     }
