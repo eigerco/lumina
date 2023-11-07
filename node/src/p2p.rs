@@ -74,9 +74,6 @@ pub enum P2pError {
     #[error("HeaderEx: {0}")]
     HeaderEx(#[from] HeaderExError),
 
-    #[error("HeaderSub already initialized")]
-    HeaderSubAlreadyInitialized,
-
     #[error("Bootnode multiaddrs without peer ID: {0:?}")]
     BootnodeAddrsWithoutPeerId(Vec<Multiaddr>),
 }
@@ -127,7 +124,6 @@ pub(crate) enum P2pCmd {
     },
     InitHeaderSub {
         head: Box<ExtendedHeader>,
-        respond_to: OneshotResultSender<(), P2pError>,
     },
     SetPeerTrust {
         peer_id: PeerId,
@@ -218,15 +214,10 @@ where
     }
 
     pub async fn init_header_sub(&self, head: ExtendedHeader) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-
         self.send_command(P2pCmd::InitHeaderSub {
             head: Box::new(head),
-            respond_to: tx,
         })
-        .await?;
-
-        rx.await?
+        .await
     }
 
     pub async fn wait_connected(&self) -> Result<()> {
@@ -533,9 +524,8 @@ where
             P2pCmd::ConnectedPeers { respond_to } => {
                 respond_to.maybe_send(self.peer_tracker.connected_peers());
             }
-            P2pCmd::InitHeaderSub { head, respond_to } => {
-                let res = self.on_init_header_sub(*head).await;
-                respond_to.maybe_send(res);
+            P2pCmd::InitHeaderSub { head } => {
+                self.on_init_header_sub(*head);
             }
             P2pCmd::SetPeerTrust {
                 peer_id,
@@ -672,22 +662,8 @@ where
     }
 
     #[instrument(skip_all)]
-    async fn on_init_header_sub(&mut self, head: ExtendedHeader) -> Result<()> {
-        let updated = self.header_sub_watcher.send_if_modified(move |state| {
-            if state.is_none() {
-                *state = Some(head);
-                true
-            } else {
-                false
-            }
-        });
-
-        if updated {
-            trace!("HeaderSub initialized");
-            Ok(())
-        } else {
-            Err(P2pError::HeaderSubAlreadyInitialized)
-        }
+    fn on_init_header_sub(&mut self, head: ExtendedHeader) {
+        self.header_sub_watcher.send_replace(Some(head));
     }
 
     #[instrument(skip_all)]
