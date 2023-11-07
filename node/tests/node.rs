@@ -6,7 +6,7 @@ use celestia_node::{
     node::{Node, NodeConfig},
     test_utils::{gen_filled_store, test_node_config, test_node_config_with_keypair},
 };
-use celestia_types::hash::{Hash, HashExt};
+use celestia_types::{consts::HASH_SIZE, hash::Hash};
 use libp2p::identity;
 use rand::Rng;
 use tokio::time::sleep;
@@ -24,7 +24,7 @@ async fn connects_to_the_go_bridge_node() {
 }
 
 #[tokio::test]
-async fn store_access() {
+async fn header_store_access() {
     let (store, _) = gen_filled_store(100);
     let node = Node::new(NodeConfig {
         store,
@@ -34,12 +34,12 @@ async fn store_access() {
     .unwrap();
 
     // check local head
-    let head = node.get_header_local_head().await.unwrap();
+    let head = node.get_local_head_header().await.unwrap();
     let expected_head = node.get_header_by_height(100).await.unwrap();
     assert_eq!(head, expected_head);
 
     // check getting existing headers
-    for _ in 0..10 {
+    for _ in 0..100 {
         let height = rand::thread_rng().gen_range(1..100);
         let header_by_height = node.get_header_by_height(height).await.unwrap();
         let header_by_hash = node
@@ -48,14 +48,39 @@ async fn store_access() {
             .unwrap();
 
         assert_eq!(header_by_height, header_by_hash);
+
+        // check range requests
+        let amount = rand::thread_rng().gen_range(1..50);
+        let res = node
+            .get_verified_headers_range(&header_by_height, amount)
+            .await;
+
+        if amount + height > 100 {
+            // errors out if exceeded store
+            res.unwrap_err();
+        } else {
+            // returns continuous range of headers
+            assert!(res
+                .unwrap()
+                .into_iter()
+                .zip(height + 1..height + 1 + amount)
+                .all(|(header, height)| header.height().value() == height));
+        }
     }
 
     // check getting non existing headers
-    node.get_header_by_height(101).await.unwrap_err();
-    node.get_header_by_height(1000).await.unwrap_err();
-    node.get_header_by_hash(&Hash::default_sha256())
-        .await
-        .unwrap_err();
+    for _ in 0..100 {
+        // by height
+        let height = rand::thread_rng().gen_range(100..u64::MAX);
+        node.get_header_by_height(height).await.unwrap_err();
+
+        // by hash
+        let mut hash = [0u8; HASH_SIZE];
+        rand::thread_rng().fill(&mut hash);
+        node.get_header_by_hash(&Hash::Sha256(hash))
+            .await
+            .unwrap_err();
+    }
 }
 
 #[tokio::test]

@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::io;
+use std::ops::Range;
 
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
@@ -32,6 +33,18 @@ pub trait Store: Send + Sync + Debug {
 
     /// Returns the header of a specific height.
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
+
+    /// Returns the headers from the given heights range.
+    async fn get_range(&self, range: Range<u64>) -> Result<Vec<ExtendedHeader>> {
+        let mut headers = Vec::with_capacity(range.clone().count());
+
+        for height in range {
+            let header = self.get_by_height(height).await?;
+            headers.push(header);
+        }
+
+        Ok(headers)
+    }
 
     /// Returns the highest known height.
     async fn head_height(&self) -> Result<u64>;

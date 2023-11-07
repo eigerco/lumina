@@ -1,9 +1,9 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(not(tarrequest_arch = "wasm32"))]
 
 use std::time::Duration;
 
 use celestia_node::{
-    node::{Node, NodeConfig},
+    node::{Node, NodeConfig, NodeError},
     p2p::{HeaderExError, P2pError},
     store::Store,
     test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
@@ -17,44 +17,40 @@ use crate::utils::new_connected_node;
 mod utils;
 
 #[tokio::test]
-async fn get_single_header() {
+async fn request_single_header() {
     let node = new_connected_node().await;
 
-    let header = node.p2p().get_header_by_height(1).await.unwrap();
-    let header_by_hash = node.p2p().get_header(header.hash()).await.unwrap();
+    let header = node.request_header_by_height(1).await.unwrap();
+    let header_by_hash = node.request_header_by_hash(&header.hash()).await.unwrap();
 
     assert_eq!(header, header_by_hash);
 }
 
 #[tokio::test]
-async fn get_verified_headers() {
+async fn request_verified_headers() {
     let node = new_connected_node().await;
 
-    let from = node.p2p().get_header_by_height(1).await.unwrap();
-    let verified_headers = node
-        .p2p()
-        .get_verified_headers_range(&from, 2)
-        .await
-        .unwrap();
+    let from = node.request_header_by_height(1).await.unwrap();
+    let verified_headers = node.request_verified_headers_range(&from, 2).await.unwrap();
     assert_eq!(verified_headers.len(), 2);
 
-    let height2 = node.p2p().get_header_by_height(2).await.unwrap();
+    let height2 = node.request_header_by_height(2).await.unwrap();
     assert_eq!(verified_headers[0], height2);
 
-    let height3 = node.p2p().get_header_by_height(3).await.unwrap();
+    let height3 = node.request_header_by_height(3).await.unwrap();
     assert_eq!(verified_headers[1], height3);
 }
 
 #[tokio::test]
-async fn get_head() {
+async fn request_head() {
     let node = new_connected_node().await;
 
-    let genesis = node.p2p().get_header_by_height(1).await.unwrap();
+    let genesis = node.request_header_by_height(1).await.unwrap();
 
-    let head1 = node.p2p().get_head_header().await.unwrap();
+    let head1 = node.request_head_header().await.unwrap();
     genesis.verify(&head1).unwrap();
 
-    let head2 = node.p2p().get_header_by_height(0).await.unwrap();
+    let head2 = node.request_header_by_height(0).await.unwrap();
     assert!(head1 == head2 || head1.verify(&head2).is_ok());
 }
 
@@ -90,30 +86,28 @@ async fn client_server() {
     client.wait_connected().await.unwrap();
 
     // request head (with one peer)
-    let received_head = client.p2p().get_head_header().await.unwrap();
+    let received_head = client.request_head_header().await.unwrap();
     assert_eq!(server_headers.last().unwrap(), &received_head);
 
     // request by height
-    let received_header_by_height = client.p2p().get_header_by_height(10).await.unwrap();
+    let received_header_by_height = client.request_header_by_height(10).await.unwrap();
     assert_eq!(server_headers[9], received_header_by_height);
 
     // request by hash
     let expected_header = &server_headers[15];
     let received_header_by_hash = client
-        .p2p()
-        .get_header(expected_header.hash())
+        .request_header_by_hash(&expected_header.hash())
         .await
         .unwrap();
     assert_eq!(expected_header, &received_header_by_hash);
 
     // request genesis by height
-    let received_genesis = client.p2p().get_header_by_height(1).await.unwrap();
+    let received_genesis = client.request_header_by_height(1).await.unwrap();
     assert_eq!(server_headers.first().unwrap(), &received_genesis);
 
     // request entire store range
     let received_all_headers = client
-        .p2p()
-        .get_verified_headers_range(&received_genesis, 19)
+        .request_verified_headers_range(&received_genesis, 19)
         .await
         .unwrap();
     assert_eq!(server_headers[1..], received_all_headers);
@@ -122,8 +116,7 @@ async fn client_server() {
     // TODO: this reflects _current_ behaviour. once sessions are implemented it'll keep retrying
     // and this test will need to be changed
     let partial_response = client
-        .p2p()
-        .get_verified_headers_range(&received_genesis, 20)
+        .request_verified_headers_range(&received_genesis, 20)
         .await
         .unwrap();
     assert_eq!(partial_response.len(), 19);
@@ -131,20 +124,19 @@ async fn client_server() {
     // request unknown hash
     let unstored_header = header_generator.next_of(&server_headers[0]);
     let unexpected_hash = client
-        .p2p()
-        .get_header(unstored_header.hash())
+        .request_header_by_hash(&unstored_header.hash())
         .await
         .unwrap_err();
     assert!(matches!(
         unexpected_hash,
-        P2pError::HeaderEx(HeaderExError::HeaderNotFound)
+        NodeError::P2p(P2pError::HeaderEx(HeaderExError::HeaderNotFound))
     ));
 
     // request unknown height
-    let unexpected_height = client.p2p().get_header_by_height(21).await.unwrap_err();
+    let unexpected_height = client.request_header_by_height(21).await.unwrap_err();
     assert!(matches!(
         unexpected_height,
-        P2pError::HeaderEx(HeaderExError::HeaderNotFound)
+        NodeError::P2p(P2pError::HeaderEx(HeaderExError::HeaderNotFound))
     ));
 }
 
@@ -295,7 +287,7 @@ async fn head_selection_with_multiple_peers() {
     sleep(Duration::from_millis(50)).await;
 
     // client should prefer heighest head received from 2+ peers
-    let network_head = client.p2p().get_head_header().await.unwrap();
+    let network_head = client.request_head_header().await.unwrap();
     assert_eq!(common_server_headers.last().unwrap(), &network_head);
 
     // new node from group B joins, head should go up
@@ -317,7 +309,7 @@ async fn head_selection_with_multiple_peers() {
     sleep(Duration::from_millis(50)).await;
 
     // now 2 nodes agree on head with height 25
-    let network_head = client.p2p().get_head_header().await.unwrap();
+    let network_head = client.request_head_header().await.unwrap();
     assert_eq!(additional_server_headers.last().unwrap(), &network_head);
 }
 
@@ -356,23 +348,21 @@ async fn replaced_header_server_store() {
     client.wait_connected().await.unwrap();
 
     let tampered_header_in_range = client
-        .p2p()
-        .get_verified_headers_range(&server_headers[9], 5)
+        .request_verified_headers_range(&server_headers[9], 5)
         .await
         .unwrap_err();
     assert!(matches!(
         tampered_header_in_range,
-        P2pError::HeaderEx(HeaderExError::InvalidResponse)
+        NodeError::P2p(P2pError::HeaderEx(HeaderExError::InvalidResponse))
     ));
 
     let requested_from_tampered_header = client
-        .p2p()
-        .get_verified_headers_range(&replaced_header, 1)
+        .request_verified_headers_range(&replaced_header, 1)
         .await
         .unwrap_err();
     assert!(matches!(
         requested_from_tampered_header,
-        P2pError::HeaderEx(HeaderExError::InvalidResponse)
+        NodeError::P2p(P2pError::HeaderEx(HeaderExError::InvalidResponse))
     ));
 
     // non-validating requests should still accept responses
@@ -387,13 +377,12 @@ async fn replaced_header_server_store() {
     assert_eq!(tampered_header_in_range, server_headers[7..12]);
 
     let requested_tampered_header = client
-        .p2p()
-        .get_header(replaced_header.hash())
+        .request_header_by_hash(&replaced_header.hash())
         .await
         .unwrap();
     assert_eq!(requested_tampered_header, replaced_header);
 
-    let network_head = client.p2p().get_head_header().await.unwrap();
+    let network_head = client.request_head_header().await.unwrap();
     assert_eq!(server_headers.last().unwrap(), &network_head);
 }
 
@@ -430,23 +419,21 @@ async fn invalidated_header_server_store() {
     client.wait_connected().await.unwrap();
 
     let invalidated_header_in_range = client
-        .p2p()
-        .get_verified_headers_range(&server_headers[9], 5)
+        .request_verified_headers_range(&server_headers[9], 5)
         .await
         .unwrap_err();
     assert!(matches!(
         invalidated_header_in_range,
-        P2pError::HeaderEx(HeaderExError::InvalidResponse)
+        NodeError::P2p(P2pError::HeaderEx(HeaderExError::InvalidResponse))
     ));
 
     let requested_from_invalidated_header = client
-        .p2p()
-        .get_verified_headers_range(&server_headers[10], 3)
+        .request_verified_headers_range(&server_headers[10], 3)
         .await
         .unwrap_err();
     assert!(matches!(
         requested_from_invalidated_header,
-        P2pError::HeaderEx(HeaderExError::InvalidRequest)
+        NodeError::P2p(P2pError::HeaderEx(HeaderExError::InvalidRequest))
     ));
 
     // received ExtendedHeaders are validated during conversion from HeaderResponse
@@ -464,17 +451,16 @@ async fn invalidated_header_server_store() {
     ));
 
     let requested_tampered_header = client
-        .p2p()
-        .get_header(server_headers[10].hash())
+        .request_header_by_hash(&server_headers[10].hash())
         .await
         .unwrap_err();
     assert!(matches!(
         requested_tampered_header,
-        P2pError::HeaderEx(HeaderExError::InvalidResponse)
+        NodeError::P2p(P2pError::HeaderEx(HeaderExError::InvalidResponse))
     ));
 
     // requests for non-invalidated headers should still pass
-    let valid_header = client.p2p().get_header_by_height(10).await.unwrap();
+    let valid_header = client.request_header_by_height(10).await.unwrap();
     assert_eq!(server_headers[9], valid_header);
 }
 
@@ -511,23 +497,21 @@ async fn unverified_header_server_store() {
     client.wait_connected().await.unwrap();
 
     let tampered_header_in_range = client
-        .p2p()
-        .get_verified_headers_range(&server_headers[9], 5)
+        .request_verified_headers_range(&server_headers[9], 5)
         .await
         .unwrap_err();
     assert!(matches!(
         tampered_header_in_range,
-        P2pError::HeaderEx(HeaderExError::InvalidResponse)
+        NodeError::P2p(P2pError::HeaderEx(HeaderExError::InvalidResponse))
     ));
 
     let requested_from_tampered_header = client
-        .p2p()
-        .get_verified_headers_range(&server_headers[10], 3)
+        .request_verified_headers_range(&server_headers[10], 3)
         .await
         .unwrap_err();
     assert!(matches!(
         requested_from_tampered_header,
-        P2pError::HeaderEx(HeaderExError::InvalidResponse)
+        NodeError::P2p(P2pError::HeaderEx(HeaderExError::InvalidResponse))
     ));
 
     // non-verifying requests should still accept responses
@@ -542,12 +526,11 @@ async fn unverified_header_server_store() {
     assert_eq!(tampered_header_in_range, server_headers[7..12]);
 
     let requested_tampered_header = client
-        .p2p()
-        .get_header(server_headers[10].hash())
+        .request_header_by_hash(&server_headers[10].hash())
         .await
         .unwrap();
     assert_eq!(requested_tampered_header, server_headers[10]);
 
-    let network_head = client.p2p().get_head_header().await.unwrap();
+    let network_head = client.request_head_header().await.unwrap();
     assert_eq!(server_headers.last().unwrap(), &network_head);
 }

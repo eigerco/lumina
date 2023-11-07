@@ -44,7 +44,7 @@ pub async fn new_connected_node() -> Node<InMemoryStore> {
 
     // Wait until node reaches height 3
     loop {
-        if let Some(head) = node.get_header_network_head() {
+        if let Some(head) = node.get_network_head_header() {
             if head.height().value() >= 3 {
                 break;
             }

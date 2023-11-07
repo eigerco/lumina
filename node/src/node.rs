@@ -137,28 +137,73 @@ where
         Ok(self.p2p.set_peer_trust(peer_id, is_trusted).await?)
     }
 
+    /// Request the head header from the network.
+    pub async fn request_head_header(&self) -> Result<ExtendedHeader> {
+        Ok(self.p2p.get_head_header().await?)
+    }
+
+    /// Request a header for the block with a given hash from the network.
+    pub async fn request_header_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
+        Ok(self.p2p.get_header(*hash).await?)
+    }
+
+    /// Request a header for the block with a given height from the network.
+    pub async fn request_header_by_height(&self, hash: u64) -> Result<ExtendedHeader> {
+        Ok(self.p2p.get_header_by_height(hash).await?)
+    }
+
+    /// Request headers in range (from, from + amount] from the network.
+    ///
+    /// The headers will be verified with the `from` header.
+    pub async fn request_verified_headers_range(
+        &self,
+        from: &ExtendedHeader,
+        amount: u64,
+    ) -> Result<Vec<ExtendedHeader>> {
+        Ok(self.p2p.get_verified_headers_range(from, amount).await?)
+    }
+
     /// Get current header syncing info.
     pub async fn syncer_info(&self) -> Result<SyncingInfo> {
         Ok(self.syncer.info().await?)
     }
 
     /// Get the latest header announced in the network.
-    pub fn get_header_network_head(&self) -> Option<ExtendedHeader> {
+    pub fn get_network_head_header(&self) -> Option<ExtendedHeader> {
         self.p2p.header_sub_watcher().borrow().clone()
     }
 
     /// Get the latest locally synced header.
-    pub async fn get_header_local_head(&self) -> Result<ExtendedHeader> {
+    pub async fn get_local_head_header(&self) -> Result<ExtendedHeader> {
         Ok(self.store.get_head().await?)
     }
 
-    /// Get a header for the block with a given hash.
+    /// Get a synced header for the block with a given hash.
     pub async fn get_header_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
         Ok(self.store.get_by_hash(hash).await?)
     }
 
-    /// Get a header for the block with a given height.
+    /// Get a synced header for the block with a given height.
     pub async fn get_header_by_height(&self, hash: u64) -> Result<ExtendedHeader> {
         Ok(self.store.get_by_height(hash).await?)
+    }
+
+    /// Get synced headers in range (from, from + amount].
+    pub async fn get_verified_headers_range(
+        &self,
+        from: &ExtendedHeader,
+        amount: u64,
+    ) -> Result<Vec<ExtendedHeader>> {
+        // instead of validating the provided header we can just compare it with the stored one
+        let synced_from = self.store.get_by_hash(&from.hash()).await?;
+        if synced_from != *from {
+            return Err(StoreError::NotFound.into());
+        }
+
+        let from_height = from.height().value() + 1;
+        Ok(self
+            .store
+            .get_range(from_height..from_height + amount)
+            .await?)
     }
 }
