@@ -189,10 +189,20 @@ where
         Ok(self.store.get_by_height(hash).await?)
     }
 
-    /// Get synced headers in range (from, from + amount].
+    /// Get synced headers from the given heights range.
+    ///
+    /// If start of the range is unbounded, the first returned header will be of height 1.
+    /// height.
+    /// If end of the range is unbounded, the last returned header will be the last header in the
+    /// store.
+    ///
+    /// # Errors
+    ///
+    /// If range contains a height of a header that is not found in the store or [`RangeBounds`]
+    /// cannot be converted to a valid range.
     pub async fn get_verified_headers<R>(&self, range: R) -> Result<Vec<ExtendedHeader>>
     where
-        R: RangeBounds<u64> + Iterator<Item = u64> + Clone + Send,
+        R: RangeBounds<u64> + Send,
     {
         Ok(self.store.get_range(range).await?)
     }

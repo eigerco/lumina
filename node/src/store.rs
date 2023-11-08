@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::io;
-use std::ops::RangeBounds;
+use std::ops::{Bound, RangeBounds, RangeInclusive};
 
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
@@ -35,10 +35,22 @@ pub trait Store: Send + Sync + Debug {
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
 
     /// Returns the headers from the given heights range.
+    ///
+    /// If start of the range is unbounded, the first returned header will be of height 1.
+    /// height.
+    /// If end of the range is unbounded, the last returned header will be the last header in the
+    /// store.
+    ///
+    /// # Errors
+    ///
+    /// If range contains a height of a header that is not found in the store or [`RangeBounds`]
+    /// cannot be converted to a valid range.
     async fn get_range<R>(&self, range: R) -> Result<Vec<ExtendedHeader>>
     where
-        R: RangeBounds<u64> + Iterator<Item = u64> + Clone + Send,
+        R: RangeBounds<u64> + Send,
     {
+        let head_height = self.head_height().await?;
+        let range = to_headers_range(range, head_height)?;
         let mut headers = Vec::with_capacity(range.clone().count());
 
         for height in range {
@@ -151,4 +163,68 @@ pub enum StoreError {
 
     #[error("Error opening store: {0}")]
     OpenFailed(String),
+
+    #[error("Invalid headers range")]
+    InvalidHeadersRange,
+}
+
+/// a helper function to convert any kind of range to the inclusive range of header heights.
+fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<RangeInclusive<u64>> {
+    let start = match bounds.start_bound() {
+        Bound::Unbounded => 1,
+        Bound::Included(&x) => x,
+        Bound::Excluded(&u64::MAX) => return Err(StoreError::InvalidHeadersRange),
+        Bound::Excluded(&x) => x + 1,
+    };
+    let end = match bounds.end_bound() {
+        Bound::Unbounded => last_index,
+        Bound::Included(&x) => x,
+        Bound::Excluded(&0) => return Err(StoreError::InvalidHeadersRange),
+        Bound::Excluded(&x) => x - 1,
+    };
+    if start < 1 {
+        return Err(StoreError::NotFound);
+    }
+    Ok(start..=end)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ops::Bound;
+
+    use super::to_headers_range;
+
+    #[test]
+    fn converts_bounded_ranges() {
+        assert_eq!(1..=15, to_headers_range(1..16, 100).unwrap());
+        assert_eq!(1..=15, to_headers_range(1..=15, 100).unwrap());
+        assert_eq!(300..=400, to_headers_range(300..401, 500).unwrap());
+        assert_eq!(300..=400, to_headers_range(300..=400, 500).unwrap());
+    }
+
+    #[test]
+    fn starts_from_one_when_unbounded_start() {
+        assert_eq!(&1, to_headers_range(..=10, 100).unwrap().start());
+        assert_eq!(&1, to_headers_range(..10, 100).unwrap().start());
+        assert_eq!(&1, to_headers_range(.., 100).unwrap().start());
+    }
+
+    #[test]
+    fn ends_on_last_index_when_unbounded_end() {
+        assert_eq!(&10, to_headers_range(1.., 10).unwrap().end());
+        assert_eq!(&11, to_headers_range(1.., 11).unwrap().end());
+        assert_eq!(&10, to_headers_range(.., 10).unwrap().end());
+    }
+
+    #[test]
+    fn handles_edge_cases() {
+        let includes_zero_height = 0..5;
+        to_headers_range(includes_zero_height, 10).unwrap_err();
+
+        let start_overflow = (Bound::Excluded(u64::MAX), Bound::Unbounded);
+        to_headers_range(start_overflow, 10).unwrap_err();
+
+        let end_underflow = (Bound::Unbounded, Bound::Excluded(0));
+        to_headers_range(end_underflow, 10).unwrap_err();
+    }
 }
