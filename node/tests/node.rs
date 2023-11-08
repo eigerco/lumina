@@ -50,10 +50,9 @@ async fn header_store_access() {
         assert_eq!(header_by_height, header_by_hash);
 
         // check range requests
+        let start = height + 1;
         let amount = rand::thread_rng().gen_range(1..50);
-        let res = node
-            .get_verified_headers_range(&header_by_height, amount)
-            .await;
+        let res = node.get_verified_headers(start..start + amount).await;
 
         if amount + height > 100 {
             // errors out if exceeded store
@@ -63,7 +62,7 @@ async fn header_store_access() {
             assert!(res
                 .unwrap()
                 .into_iter()
-                .zip(height + 1..height + 1 + amount)
+                .zip(start..start + amount)
                 .all(|(header, height)| header.height().value() == height));
         }
     }

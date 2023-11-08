@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::io;
-use std::ops::Range;
+use std::ops::RangeBounds;
 
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
@@ -35,7 +35,10 @@ pub trait Store: Send + Sync + Debug {
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
 
     /// Returns the headers from the given heights range.
-    async fn get_range(&self, range: Range<u64>) -> Result<Vec<ExtendedHeader>> {
+    async fn get_range<R>(&self, range: R) -> Result<Vec<ExtendedHeader>>
+    where
+        R: RangeBounds<u64> + Iterator<Item = u64> + Clone + Send,
+    {
         let mut headers = Vec::with_capacity(range.clone().count());
 
         for height in range {

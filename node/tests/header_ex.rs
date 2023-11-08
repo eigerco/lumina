@@ -1,4 +1,4 @@
-#![cfg(not(tarrequest_arch = "wasm32"))]
+#![cfg(not(target_arch = "wasm32"))]
 
 use std::time::Duration;
 
@@ -31,7 +31,7 @@ async fn request_verified_headers() {
     let node = new_connected_node().await;
 
     let from = node.request_header_by_height(1).await.unwrap();
-    let verified_headers = node.request_verified_headers_range(&from, 2).await.unwrap();
+    let verified_headers = node.request_verified_headers(&from, 2).await.unwrap();
     assert_eq!(verified_headers.len(), 2);
 
     let height2 = node.request_header_by_height(2).await.unwrap();
@@ -107,7 +107,7 @@ async fn client_server() {
 
     // request entire store range
     let received_all_headers = client
-        .request_verified_headers_range(&received_genesis, 19)
+        .request_verified_headers(&received_genesis, 19)
         .await
         .unwrap();
     assert_eq!(server_headers[1..], received_all_headers);
@@ -116,7 +116,7 @@ async fn client_server() {
     // TODO: this reflects _current_ behaviour. once sessions are implemented it'll keep retrying
     // and this test will need to be changed
     let partial_response = client
-        .request_verified_headers_range(&received_genesis, 20)
+        .request_verified_headers(&received_genesis, 20)
         .await
         .unwrap();
     assert_eq!(partial_response.len(), 19);
@@ -348,7 +348,7 @@ async fn replaced_header_server_store() {
     client.wait_connected().await.unwrap();
 
     let tampered_header_in_range = client
-        .request_verified_headers_range(&server_headers[9], 5)
+        .request_verified_headers(&server_headers[9], 5)
         .await
         .unwrap_err();
     assert!(matches!(
@@ -357,7 +357,7 @@ async fn replaced_header_server_store() {
     ));
 
     let requested_from_tampered_header = client
-        .request_verified_headers_range(&replaced_header, 1)
+        .request_verified_headers(&replaced_header, 1)
         .await
         .unwrap_err();
     assert!(matches!(
@@ -419,7 +419,7 @@ async fn invalidated_header_server_store() {
     client.wait_connected().await.unwrap();
 
     let invalidated_header_in_range = client
-        .request_verified_headers_range(&server_headers[9], 5)
+        .request_verified_headers(&server_headers[9], 5)
         .await
         .unwrap_err();
     assert!(matches!(
@@ -428,7 +428,7 @@ async fn invalidated_header_server_store() {
     ));
 
     let requested_from_invalidated_header = client
-        .request_verified_headers_range(&server_headers[10], 3)
+        .request_verified_headers(&server_headers[10], 3)
         .await
         .unwrap_err();
     assert!(matches!(
@@ -497,7 +497,7 @@ async fn unverified_header_server_store() {
     client.wait_connected().await.unwrap();
 
     let tampered_header_in_range = client
-        .request_verified_headers_range(&server_headers[9], 5)
+        .request_verified_headers(&server_headers[9], 5)
         .await
         .unwrap_err();
     assert!(matches!(
@@ -506,7 +506,7 @@ async fn unverified_header_server_store() {
     ));
 
     let requested_from_tampered_header = client
-        .request_verified_headers_range(&server_headers[10], 3)
+        .request_verified_headers(&server_headers[10], 3)
         .await
         .unwrap_err();
     assert!(matches!(

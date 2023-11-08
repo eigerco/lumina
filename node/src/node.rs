@@ -4,6 +4,7 @@
 //! [`Store`]: crate::store::Store
 //! [`Syncer`]: crate::syncer::Syncer
 
+use std::ops::RangeBounds;
 use std::sync::Arc;
 
 use celestia_types::hash::Hash;
@@ -155,7 +156,7 @@ where
     /// Request headers in range (from, from + amount] from the network.
     ///
     /// The headers will be verified with the `from` header.
-    pub async fn request_verified_headers_range(
+    pub async fn request_verified_headers(
         &self,
         from: &ExtendedHeader,
         amount: u64,
@@ -189,21 +190,10 @@ where
     }
 
     /// Get synced headers in range (from, from + amount].
-    pub async fn get_verified_headers_range(
-        &self,
-        from: &ExtendedHeader,
-        amount: u64,
-    ) -> Result<Vec<ExtendedHeader>> {
-        // instead of validating the provided header we can just compare it with the stored one
-        let synced_from = self.store.get_by_hash(&from.hash()).await?;
-        if synced_from != *from {
-            return Err(StoreError::NotFound.into());
-        }
-
-        let from_height = from.height().value() + 1;
-        Ok(self
-            .store
-            .get_range(from_height..from_height + amount)
-            .await?)
+    pub async fn get_verified_headers<R>(&self, range: R) -> Result<Vec<ExtendedHeader>>
+    where
+        R: RangeBounds<u64> + Iterator<Item = u64> + Clone + Send,
+    {
+        Ok(self.store.get_range(range).await?)
     }
 }
