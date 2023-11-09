@@ -39,8 +39,7 @@ async fn header_store_access() {
     assert_eq!(head, expected_head);
 
     // check getting existing headers
-    for _ in 0..100 {
-        let height = rand::thread_rng().gen_range(1..100);
+    for height in 0..100 {
         let header_by_height = node.get_header_by_height(height).await.unwrap();
         let header_by_hash = node
             .get_header_by_hash(&header_by_height.hash())
