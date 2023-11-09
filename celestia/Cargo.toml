@@ -21,5 +21,5 @@ tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 clap = { version = "4.4.4", features = ["derive"] }
 dotenvy = "0.15.7"
-libp2p = "0.52.3"
+libp2p = { workspace = true }
 tokio = { version = "1.29.0", features = ["macros", "rt-multi-thread"] }
