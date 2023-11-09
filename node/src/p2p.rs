@@ -23,11 +23,11 @@ use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
-use crate::executor::spawn;
-use crate::executor::Interval;
+use crate::executor::{spawn, Interval};
 use crate::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
+use crate::session::Session;
 use crate::store::Store;
 use crate::swarm::new_swarm;
 use crate::utils::{
@@ -288,12 +288,8 @@ where
 
         let height = from.height().value() + 1;
 
-        let headers = self
-            .header_ex_request(HeaderRequest {
-                data: Some(header_request::Data::Origin(height)),
-                amount,
-            })
-            .await?;
+        let mut session = Session::new(height, amount, self.cmd_tx.clone())?;
+        let headers = session.run().await?;
 
         from.verify_adjacent_range(&headers)
             .map_err(|_| HeaderExError::InvalidResponse)?;

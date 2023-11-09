@@ -3,6 +3,7 @@ mod header_ex;
 pub mod node;
 pub mod p2p;
 pub mod peer_tracker;
+mod session;
 pub mod store;
 mod swarm;
 pub mod syncer;
