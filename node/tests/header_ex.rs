@@ -8,7 +8,6 @@ use celestia_node::{
     store::Store,
     test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
 };
-use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_types::test_utils::{invalidate, unverify};
 use tokio::time::sleep;
 
@@ -137,70 +136,6 @@ async fn client_server() {
     assert!(matches!(
         unexpected_height,
         NodeError::P2p(P2pError::HeaderEx(HeaderExError::HeaderNotFound))
-    ));
-}
-
-#[tokio::test]
-async fn client_server_invalid_requests() {
-    // Server Node
-    let server = Node::new(NodeConfig {
-        store: gen_filled_store(20).0,
-        ..listening_test_node_config()
-    })
-    .await
-    .unwrap();
-
-    // give server a sec to breathe, otherwise occiasionally client has problems with connecting
-    sleep(Duration::from_millis(100)).await;
-    let server_addrs = server.listeners().await.unwrap();
-
-    // Client node
-    let client = Node::new(NodeConfig {
-        p2p_bootnodes: server_addrs.clone(),
-        ..test_node_config()
-    })
-    .await
-    .unwrap();
-
-    client.wait_connected().await.unwrap();
-
-    let none_data = client
-        .p2p()
-        .header_ex_request(HeaderRequest {
-            data: None,
-            amount: 1,
-        })
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        none_data,
-        P2pError::HeaderEx(HeaderExError::InvalidRequest)
-    ));
-
-    let zero_amount = client
-        .p2p()
-        .header_ex_request(HeaderRequest {
-            data: Some(header_request::Data::Origin(5)),
-            amount: 0,
-        })
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        zero_amount,
-        P2pError::HeaderEx(HeaderExError::InvalidRequest)
-    ));
-
-    let malformed_hash = client
-        .p2p()
-        .header_ex_request(HeaderRequest {
-            data: Some(header_request::Data::Hash(vec![0; 31])),
-            amount: 1,
-        })
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        malformed_hash,
-        P2pError::HeaderEx(HeaderExError::InvalidRequest)
     ));
 }
 
@@ -365,17 +300,6 @@ async fn replaced_header_server_store() {
         NodeError::P2p(P2pError::HeaderEx(HeaderExError::InvalidResponse))
     ));
 
-    // non-validating requests should still accept responses
-    let tampered_header_in_range = client
-        .p2p()
-        .header_ex_request(HeaderRequest {
-            data: Some(header_request::Data::Origin(8)),
-            amount: 5,
-        })
-        .await
-        .unwrap();
-    assert_eq!(tampered_header_in_range, server_headers[7..12]);
-
     let requested_tampered_header = client
         .request_header_by_hash(&replaced_header.hash())
         .await
@@ -434,20 +358,6 @@ async fn invalidated_header_server_store() {
     assert!(matches!(
         requested_from_invalidated_header,
         NodeError::P2p(P2pError::HeaderEx(HeaderExError::InvalidRequest))
-    ));
-
-    // received ExtendedHeaders are validated during conversion from HeaderResponse
-    let tampered_header_in_range = client
-        .p2p()
-        .header_ex_request(HeaderRequest {
-            data: Some(header_request::Data::Origin(8)),
-            amount: 5,
-        })
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        tampered_header_in_range,
-        P2pError::HeaderEx(HeaderExError::InvalidResponse)
     ));
 
     let requested_tampered_header = client
@@ -513,17 +423,6 @@ async fn unverified_header_server_store() {
         requested_from_tampered_header,
         NodeError::P2p(P2pError::HeaderEx(HeaderExError::InvalidResponse))
     ));
-
-    // non-verifying requests should still accept responses
-    let tampered_header_in_range = client
-        .p2p()
-        .header_ex_request(HeaderRequest {
-            data: Some(header_request::Data::Origin(8)),
-            amount: 5,
-        })
-        .await
-        .unwrap();
-    assert_eq!(tampered_header_in_range, server_headers[7..12]);
 
     let requested_tampered_header = client
         .request_header_by_hash(&server_headers[10].hash())

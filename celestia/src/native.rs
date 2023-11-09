@@ -78,7 +78,7 @@ pub async fn run() -> Result<()> {
     .await
     .context("Failed to start node")?;
 
-    node.p2p().wait_connected_trusted().await?;
+    node.wait_connected_trusted().await?;
 
     // We have nothing else to do, but we want to keep main alive
     loop {

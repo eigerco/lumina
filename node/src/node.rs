@@ -80,24 +80,6 @@ where
         Ok(Node { p2p, store, syncer })
     }
 
-    /// Grab a reference to the [`P2p`] component of the node.
-    #[doc(hidden)]
-    pub fn p2p(&self) -> &P2p<S> {
-        &self.p2p
-    }
-
-    /// Grab a reference to the [`Syncer`] component of the node.
-    #[doc(hidden)]
-    pub fn syncer(&self) -> &Syncer<S> {
-        &self.syncer
-    }
-
-    /// Grab a reference to the [`Store`] component of the node.
-    #[doc(hidden)]
-    pub fn store(&self) -> &S {
-        &self.store
-    }
-
     /// Get node's local peer ID.
     pub fn local_peer_id(&self) -> &PeerId {
         self.p2p.local_peer_id()
