@@ -51,7 +51,18 @@ pub trait Store: Send + Sync + Debug {
     {
         let head_height = self.head_height().await?;
         let range = to_headers_range(range, head_height)?;
-        let mut headers = Vec::with_capacity(range.clone().count());
+
+        let amount = if range.is_empty() {
+            0
+        } else {
+            range.end() - range.start() + 1 // add one as it's inclusive
+        };
+
+        let mut headers = Vec::with_capacity(
+            amount
+                .try_into()
+                .map_err(|_| StoreError::InvalidHeadersRange)?,
+        );
 
         for height in range {
             let header = self.get_by_height(height).await?;
@@ -171,20 +182,28 @@ pub enum StoreError {
 /// a helper function to convert any kind of range to the inclusive range of header heights.
 fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<RangeInclusive<u64>> {
     let start = match bounds.start_bound() {
+        // in case of unbounded, default to the first height
         Bound::Unbounded => 1,
+        // range starts after the last index or before first height
+        Bound::Included(&x) if x > last_index || x == 0 => return Err(StoreError::NotFound),
+        Bound::Excluded(&x) if x >= last_index => return Err(StoreError::NotFound),
+        // valid start indexes
         Bound::Included(&x) => x,
-        Bound::Excluded(&u64::MAX) => return Err(StoreError::InvalidHeadersRange),
-        Bound::Excluded(&x) => x + 1,
+        Bound::Excluded(&x) => x + 1, // can't overflow thanks to last_index check
     };
     let end = match bounds.end_bound() {
+        // in case of unbounded, default to the last index
         Bound::Unbounded => last_index,
+        // range ends after the last index
+        Bound::Included(&x) if x > last_index => return Err(StoreError::NotFound),
+        Bound::Excluded(&x) if x > last_index + 1 => return Err(StoreError::NotFound),
+        // prevent the underflow later on
+        Bound::Excluded(&0) => 0,
+        // valid end indexes
         Bound::Included(&x) => x,
-        Bound::Excluded(&0) => return Err(StoreError::InvalidHeadersRange),
         Bound::Excluded(&x) => x - 1,
     };
-    if start < 1 {
-        return Err(StoreError::NotFound);
-    }
+
     Ok(start..=end)
 }
 
@@ -217,14 +236,82 @@ mod tests {
     }
 
     #[test]
-    fn handles_edge_cases() {
+    fn handle_ranges_ending_precisely_at_last_index() {
+        let last_index = 10;
+
+        let bounds_ending_at_last_index = [
+            (Bound::Unbounded, Bound::Included(last_index)),
+            (Bound::Unbounded, Bound::Excluded(last_index + 1)),
+        ];
+
+        for bound in bounds_ending_at_last_index {
+            let range = to_headers_range(bound, last_index).unwrap();
+            assert_eq!(*range.end(), last_index);
+        }
+    }
+
+    #[test]
+    fn handle_ranges_ending_after_last_index() {
+        let last_index = 10;
+
+        let bounds_ending_after_last_index = [
+            (Bound::Unbounded, Bound::Included(last_index + 1)),
+            (Bound::Unbounded, Bound::Excluded(last_index + 2)),
+        ];
+
+        for bound in bounds_ending_after_last_index {
+            to_headers_range(bound, last_index).unwrap_err();
+        }
+    }
+
+    #[test]
+    fn errors_if_zero_heigth_is_included() {
         let includes_zero_height = 0..5;
         to_headers_range(includes_zero_height, 10).unwrap_err();
+    }
 
-        let start_overflow = (Bound::Excluded(u64::MAX), Bound::Unbounded);
-        to_headers_range(start_overflow, 10).unwrap_err();
+    #[test]
+    fn handle_ranges_starting_precisely_at_last_index() {
+        let last_index = 10;
 
-        let end_underflow = (Bound::Unbounded, Bound::Excluded(0));
-        to_headers_range(end_underflow, 10).unwrap_err();
+        let bounds_starting_at_last_index = [
+            (Bound::Included(last_index), Bound::Unbounded),
+            (Bound::Excluded(last_index - 1), Bound::Unbounded),
+        ];
+
+        for bound in bounds_starting_at_last_index {
+            let range = to_headers_range(bound, last_index).unwrap();
+            assert_eq!(*range.start(), last_index);
+        }
+    }
+
+    #[test]
+    fn handle_ranges_starting_after_last_index() {
+        let last_index = 10;
+
+        let bounds_starting_after_last_index = [
+            (Bound::Included(last_index + 1), Bound::Unbounded),
+            (Bound::Excluded(last_index), Bound::Unbounded),
+        ];
+
+        for bound in bounds_starting_after_last_index {
+            to_headers_range(bound, last_index).unwrap_err();
+        }
+    }
+
+    #[test]
+    fn handle_ranges_that_lead_to_empty_ranges() {
+        let last_index = 10;
+
+        let bounds_leading_to_empty_range = [
+            (Bound::Unbounded, Bound::Excluded(0)),
+            (Bound::Included(3), Bound::Excluded(3)),
+            (Bound::Included(3), Bound::Included(2)),
+            (Bound::Excluded(2), Bound::Included(2)),
+        ];
+
+        for bound in bounds_leading_to_empty_range {
+            assert!(to_headers_range(bound, last_index).unwrap().is_empty());
+        }
     }
 }
