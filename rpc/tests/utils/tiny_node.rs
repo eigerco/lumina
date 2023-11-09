@@ -4,10 +4,9 @@
 use celestia_types::p2p;
 use futures::StreamExt;
 use libp2p::{
-    core::upgrade::Version,
-    identity, noise,
-    swarm::{dummy, NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, PeerId, Transport,
+    noise,
+    swarm::{dummy, NetworkBehaviour, SwarmEvent},
+    tcp, yamux, SwarmBuilder,
 };
 use tokio::{
     sync::mpsc,
@@ -34,22 +33,19 @@ impl Behaviour {
 }
 
 pub async fn start_tiny_node() -> anyhow::Result<p2p::AddrInfo> {
-    // Create identity
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-
-    debug!("local peer id: {local_peer_id:?}");
-
-    // Setup swarm
-    let transport = tcp::tokio::Transport::default()
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(&local_key)?)
-        .multiplex(yamux::Config::default())
-        .boxed();
-
-    let mut swarm = SwarmBuilder::with_tokio_executor(transport, Behaviour::new(), local_peer_id)
-        .idle_connection_timeout(Duration::from_secs(u64::MAX))
+    let mut swarm = SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|_| Behaviour::new())?
+        .with_swarm_config(|config| config.with_idle_connection_timeout(Duration::MAX))
         .build();
+
+    let local_peer_id = *swarm.local_peer_id();
+    debug!("local peer id: {local_peer_id:?}");
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
