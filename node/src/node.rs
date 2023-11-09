@@ -182,7 +182,7 @@ where
     ///
     /// If range contains a height of a header that is not found in the store or [`RangeBounds`]
     /// cannot be converted to a valid range.
-    pub async fn get_verified_headers<R>(&self, range: R) -> Result<Vec<ExtendedHeader>>
+    pub async fn get_headers<R>(&self, range: R) -> Result<Vec<ExtendedHeader>>
     where
         R: RangeBounds<u64> + Send,
     {

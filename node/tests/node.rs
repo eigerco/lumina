@@ -51,7 +51,7 @@ async fn header_store_access() {
         // check range requests
         let start = height + 1;
         let amount = rand::thread_rng().gen_range(1..50);
-        let res = node.get_verified_headers(start..start + amount).await;
+        let res = node.get_headers(start..start + amount).await;
 
         if height + amount > 100 {
             // errors out if exceeded store
