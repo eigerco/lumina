@@ -5,7 +5,7 @@ use std::task::{Context, Poll};
 use celestia_proto::p2p::pb::{header_request, HeaderRequest, HeaderResponse};
 use celestia_types::hash::Hash;
 use libp2p::{
-    request_response::{InboundFailure, RequestId, ResponseChannel},
+    request_response::{InboundFailure, InboundRequestId, ResponseChannel},
     PeerId,
 };
 use tokio::sync::mpsc::{self, error::TrySendError};
@@ -83,14 +83,14 @@ where
         };
     }
 
-    pub(super) fn on_response_sent(&mut self, peer: PeerId, request_id: RequestId) {
+    pub(super) fn on_response_sent(&mut self, peer: PeerId, request_id: InboundRequestId) {
         trace!("response_sent; request_id: {request_id}, peer: {peer}");
     }
 
     pub(super) fn on_failure(
         &mut self,
         peer: PeerId,
-        request_id: RequestId,
+        request_id: InboundRequestId,
         error: InboundFailure,
     ) {
         // TODO: cancel job if libp2p already failed it?

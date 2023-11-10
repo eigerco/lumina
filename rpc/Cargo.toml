@@ -23,7 +23,7 @@ jsonrpsee = { version = "0.20", features = ["wasm-client"] }
 anyhow = "1.0.71"
 dotenvy = "0.15.7"
 futures = "0.3.28"
-libp2p = { version = "0.52.3", features = [
+libp2p = { workspace = true, features = [
   "tokio",
   "macros",
   "tcp",

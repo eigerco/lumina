@@ -11,7 +11,7 @@ use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
 use futures::future::join_all;
 use instant::Instant;
-use libp2p::request_response::{OutboundFailure, RequestId};
+use libp2p::request_response::{OutboundFailure, OutboundRequestId};
 use libp2p::PeerId;
 use smallvec::SmallVec;
 use tokio::sync::oneshot;
@@ -48,9 +48,9 @@ pub(super) trait RequestSender {
 }
 
 impl RequestSender for ReqRespBehaviour {
-    type RequestId = RequestId;
+    type RequestId = OutboundRequestId;
 
-    fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> RequestId {
+    fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> OutboundRequestId {
         self.send_request(peer, request)
     }
 }
@@ -336,6 +336,7 @@ mod tests {
     use celestia_types::test_utils::{invalidate, unverify, ExtendedHeaderGenerator};
     use libp2p::swarm::ConnectionId;
     use std::collections::VecDeque;
+    use std::io;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -1086,7 +1087,15 @@ mod tests {
             error: OutboundFailure,
         ) {
             for req in self.reqs.drain(..n) {
-                handler.on_failure(req.peer, req.id, error.clone());
+                // `OutboundFailure` does not implement `Clone`
+                let error = match error {
+                    OutboundFailure::DialFailure => OutboundFailure::DialFailure,
+                    OutboundFailure::Timeout => OutboundFailure::Timeout,
+                    OutboundFailure::ConnectionClosed => OutboundFailure::ConnectionClosed,
+                    OutboundFailure::UnsupportedProtocols => OutboundFailure::UnsupportedProtocols,
+                    OutboundFailure::Io(ref e) => OutboundFailure::Io(io::Error::new(e.kind(), "")),
+                };
+                handler.on_failure(req.peer, req.id, error);
             }
         }
     }

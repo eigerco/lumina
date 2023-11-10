@@ -9,30 +9,27 @@ use celestia_types::ExtendedHeader;
 use futures::StreamExt;
 use libp2p::{
     autonat,
-    core::{muxing::StreamMuxerBox, transport::Boxed, ConnectedPoint, Endpoint},
+    core::{ConnectedPoint, Endpoint},
     gossipsub::{self, SubscriptionError, TopicHash},
     identify,
     identity::Keypair,
-    kad::{record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent, Mode},
+    kad,
     multiaddr::Protocol,
     ping,
-    swarm::{
-        ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmBuilder, SwarmEvent,
-        THandlerErr,
-    },
+    swarm::{ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent},
     Multiaddr, PeerId, TransportError,
 };
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
+use crate::executor::spawn;
 use crate::executor::Interval;
-use crate::executor::{spawn, Executor};
 use crate::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::Store;
-use crate::transport::new_transport;
+use crate::swarm::new_swarm;
 use crate::utils::{
     celestia_protocol_id, gossipsub_ident_topic, MultiaddrExt, OneshotResultSender,
     OneshotSenderExt,
@@ -45,7 +42,7 @@ type Result<T, E = P2pError> = std::result::Result<T, E>;
 #[derive(Debug, thiserror::Error)]
 pub enum P2pError {
     #[error("Failed to initialize gossipsub behaviour: {0}")]
-    GossipsubInit(&'static str),
+    GossipsubInit(String),
 
     #[error("Failed to on gossipsub subscribe: {0}")]
     GossipsubSubscribe(#[from] SubscriptionError),
@@ -73,9 +70,6 @@ pub enum P2pError {
 
     #[error("HeaderEx: {0}")]
     HeaderEx(#[from] HeaderExError),
-
-    #[error("HeaderSub already initialized")]
-    HeaderSubAlreadyInitialized,
 
     #[error("Bootnode multiaddrs without peer ID: {0:?}")]
     BootnodeAddrsWithoutPeerId(Vec<Multiaddr>),
@@ -127,7 +121,6 @@ pub(crate) enum P2pCmd {
     },
     InitHeaderSub {
         head: Box<ExtendedHeader>,
-        respond_to: OneshotResultSender<(), P2pError>,
     },
     SetPeerTrust {
         peer_id: PeerId,
@@ -143,7 +136,6 @@ where
         validate_bootnode_addrs(&args.bootnodes)?;
 
         let local_peer_id = PeerId::from(args.local_keypair.public());
-        let transport = new_transport(&args.local_keypair)?;
 
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (header_sub_tx, header_sub_rx) = watch::channel(None);
@@ -151,7 +143,7 @@ where
         let peer_tracker = Arc::new(PeerTracker::new());
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
 
-        let mut worker = Worker::new(args, transport, cmd_rx, header_sub_tx, peer_tracker)?;
+        let mut worker = Worker::new(args, cmd_rx, header_sub_tx, peer_tracker)?;
 
         spawn(async move {
             worker.run().await;
@@ -218,15 +210,10 @@ where
     }
 
     pub async fn init_header_sub(&self, head: ExtendedHeader) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-
         self.send_command(P2pCmd::InitHeaderSub {
             head: Box::new(head),
-            respond_to: tx,
         })
-        .await?;
-
-        rx.await?
+        .await
     }
 
     pub async fn wait_connected(&self) -> Result<()> {
@@ -352,7 +339,7 @@ where
     identify: identify::Behaviour,
     header_ex: HeaderExBehaviour<S>,
     gossipsub: gossipsub::Behaviour,
-    kademlia: Kademlia<MemoryStore>,
+    kademlia: kad::Behaviour<kad::store::MemoryStore>,
 }
 
 struct Worker<S>
@@ -372,7 +359,6 @@ where
 {
     fn new(
         args: P2pArgs<S>,
-        transport: Boxed<(PeerId, StreamMuxerBox)>,
         cmd_rx: mpsc::Receiver<P2pCmd>,
         header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
         peer_tracker: Arc<PeerTracker>,
@@ -407,8 +393,7 @@ where
             kademlia,
         };
 
-        let mut swarm =
-            SwarmBuilder::with_executor(transport, behaviour, local_peer_id, Executor).build();
+        let mut swarm = new_swarm(args.local_keypair, behaviour)?;
 
         for addr in args.listen_on {
             swarm.listen_on(addr)?;
@@ -466,10 +451,7 @@ where
         }
     }
 
-    async fn on_swarm_event(
-        &mut self,
-        ev: SwarmEvent<BehaviourEvent<S>, THandlerErr<Behaviour<S>>>,
-    ) -> Result<()> {
+    async fn on_swarm_event(&mut self, ev: SwarmEvent<BehaviourEvent<S>>) -> Result<()> {
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {
                 BehaviourEvent::Identify(ev) => self.on_identify_event(ev).await?,
@@ -533,9 +515,8 @@ where
             P2pCmd::ConnectedPeers { respond_to } => {
                 respond_to.maybe_send(self.peer_tracker.connected_peers());
             }
-            P2pCmd::InitHeaderSub { head, respond_to } => {
-                let res = self.on_init_header_sub(*head).await;
-                respond_to.maybe_send(res);
+            P2pCmd::InitHeaderSub { head } => {
+                self.on_init_header_sub(*head);
             }
             P2pCmd::SetPeerTrust {
                 peer_id,
@@ -613,9 +594,9 @@ where
     }
 
     #[instrument(level = "trace", skip(self))]
-    async fn on_kademlia_event(&mut self, ev: KademliaEvent) -> Result<()> {
+    async fn on_kademlia_event(&mut self, ev: kad::Event) -> Result<()> {
         match ev {
-            KademliaEvent::RoutingUpdated {
+            kad::Event::RoutingUpdated {
                 peer, addresses, ..
             } => {
                 self.peer_tracker.add_addresses(peer, addresses.iter());
@@ -671,23 +652,10 @@ where
         }
     }
 
-    #[instrument(skip_all)]
-    async fn on_init_header_sub(&mut self, head: ExtendedHeader) -> Result<()> {
-        let updated = self.header_sub_watcher.send_if_modified(move |state| {
-            if state.is_none() {
-                *state = Some(head);
-                true
-            } else {
-                false
-            }
-        });
-
-        if updated {
-            trace!("HeaderSub initialized");
-            Ok(())
-        } else {
-            Err(P2pError::HeaderSubAlreadyInitialized)
-        }
+    #[instrument(skip_all, fields(header = %head))]
+    fn on_init_header_sub(&mut self, head: ExtendedHeader) {
+        self.header_sub_watcher.send_replace(Some(head));
+        trace!("HeaderSub initialized");
     }
 
     #[instrument(skip_all)]
@@ -754,11 +722,12 @@ where
         .validation_mode(gossipsub::ValidationMode::Strict)
         .validate_messages()
         .build()
-        .map_err(P2pError::GossipsubInit)?;
+        .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
 
     // build a gossipsub network behaviour
     let mut gossipsub: gossipsub::Behaviour =
-        gossipsub::Behaviour::new(message_authenticity, config).map_err(P2pError::GossipsubInit)?;
+        gossipsub::Behaviour::new(message_authenticity, config)
+            .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
 
     for topic in topics {
         gossipsub.subscribe(topic)?;
@@ -767,28 +736,29 @@ where
     Ok(gossipsub)
 }
 
-fn init_kademlia<S>(args: &P2pArgs<S>) -> Result<Kademlia<MemoryStore>>
+fn init_kademlia<S>(args: &P2pArgs<S>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
 where
     S: Store,
 {
     let local_peer_id = PeerId::from(args.local_keypair.public());
-    let mut config = KademliaConfig::default();
+    let mut config = kad::Config::default();
 
     let protocol_id = celestia_protocol_id(&args.network_id, "/kad/1.0.0");
 
     config.set_protocol_names(vec![protocol_id]);
 
-    let mut kad = Kademlia::with_config(local_peer_id, MemoryStore::new(local_peer_id), config);
+    let store = kad::store::MemoryStore::new(local_peer_id);
+    let mut kademlia = kad::Behaviour::with_config(local_peer_id, store, config);
 
     for addr in &args.bootnodes {
         if let Some(peer_id) = addr.peer_id() {
-            kad.add_address(&peer_id, addr.to_owned());
+            kademlia.add_address(&peer_id, addr.to_owned());
         }
     }
 
     if !args.listen_on.is_empty() {
-        kad.set_mode(Some(Mode::Server));
+        kademlia.set_mode(Some(kad::Mode::Server));
     }
 
-    Ok(kad)
+    Ok(kademlia)
 }

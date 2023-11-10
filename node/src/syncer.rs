@@ -540,9 +540,8 @@ mod tests {
         respond_to.send(Ok(vec![genesis.clone()])).unwrap();
 
         // Now Syncer initializes HeaderSub with the latest HEAD
-        let (head_from_syncer, respond_to) = handle.expect_init_header_sub().await;
+        let head_from_syncer = handle.expect_init_header_sub().await;
         assert_eq!(head_from_syncer, genesis);
-        respond_to.send(Ok(())).unwrap();
 
         // Genesis == HEAD, so nothing else is produced.
         handle.expect_no_cmd().await;
@@ -677,9 +676,8 @@ mod tests {
         respond_to.send(Ok(vec![network_head.clone()])).unwrap();
 
         // Now Syncer initializes HeaderSub with the latest HEAD
-        let (head_from_syncer, respond_to) = p2p_mock.expect_init_header_sub().await;
+        let head_from_syncer = p2p_mock.expect_init_header_sub().await;
         assert_eq!(head_from_syncer, network_head);
-        respond_to.send(Ok(())).unwrap();
 
         assert_syncing(&syncer, &store, 25, 545).await;
 
@@ -755,9 +753,8 @@ mod tests {
         respond_to.send(Ok(vec![headers_2_27[25].clone()])).unwrap();
 
         // Syncer initializes HeaderSub with the latest HEAD
-        let (head_from_syncer, respond_to) = p2p_mock.expect_init_header_sub().await;
+        let head_from_syncer = p2p_mock.expect_init_header_sub().await;
         assert_eq!(&head_from_syncer, &headers_2_27[25]);
-        respond_to.send(Ok(())).unwrap();
 
         // Syncer now moved to `connected_event_loop`
         let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
@@ -824,9 +821,8 @@ mod tests {
         respond_to.send(Ok(vec![head.clone()])).unwrap();
 
         // Now Syncer initializes HeaderSub with the latest HEAD
-        let (head_from_syncer, respond_to) = handle.expect_init_header_sub().await;
+        let head_from_syncer = handle.expect_init_header_sub().await;
         assert_eq!(head_from_syncer, head);
-        respond_to.send(Ok(())).unwrap();
 
         (syncer, store, handle)
     }
