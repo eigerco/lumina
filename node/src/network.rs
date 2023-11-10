@@ -57,6 +57,7 @@ pub fn network_genesis(network: Network) -> Option<Hash> {
 pub fn canonical_network_bootnodes(network: Network) -> Vec<Multiaddr> {
     match network {
         Network::Mainnet => [
+                "/dns4/celestia1.nodes.eiger.co/udp/2121/quic-v1/webtransport/p2p/12D3KooW9z4jLqwodwNRcSa5qgcSgtJ13kN7CYLcwZQjPRYodqWx",
                 "/dns4/da-bridge-1.celestia-bootstrap.net/tcp/2121/p2p/12D3KooWSqZaLcn5Guypo2mrHr297YPJnV8KMEMXNjs3qAS8msw8",
                 "/dns4/da-bridge-2.celestia-bootstrap.net/tcp/2121/p2p/12D3KooWQpuTFELgsUypqp9N4a1rKBccmrmQVY8Em9yhqppTJcXf",
                 "/dns4/da-bridge-3.celestia-bootstrap.net/tcp/2121/p2p/12D3KooWSGa4huD6ts816navn7KFYiStBiy5LrBQH1HuEahk4TzQ",
@@ -80,12 +81,6 @@ pub fn canonical_network_bootnodes(network: Network) -> Vec<Multiaddr> {
             .map(|s| s.parse())
             .collect(),
         Network::Mocha => [
-                // 40.85.94.176 is a node set up for testing QUIC/WebTransport since official nodes
-                // don't have that enabled currently
-                "/ip4/40.85.94.176/tcp/2121/p2p/12D3KooWNJ3Nf1DTQTz8JZogg2eSvPKKKv8itC6fxxspe4C6bizs",
-                "/ip4/40.85.94.176/udp/2121/quic-v1/p2p/12D3KooWNJ3Nf1DTQTz8JZogg2eSvPKKKv8itC6fxxspe4C6bizs",
-                "/ip4/40.85.94.176/udp/2121/quic-v1/webtransport/certhash/uEiCx1md1BATJ_0NXAjp3KOuwRYG1535E7kUzFdMq8aPaWw/certhash/uEiB99_E1dyPw-nj0S4OYN9Blv3U0MG9i6EI6nBJ-VanZ-A/p2p/12D3KooWNJ3Nf1DTQTz8JZogg2eSvPKKKv8itC6fxxspe4C6bizs",
-
                 "/dns4/da-bridge-mocha-4.celestia-mocha.com/udp/2121/quic/p2p/12D3KooWCBAbQbJSpCpCGKzqz3rAN4ixYbc63K68zJg9aisuAajg",
                 "/dns4/da-bridge-mocha-4-2.celestia-mocha.com/udp/2121/quic/p2p/12D3KooWK6wJkScGQniymdWtBwBuU36n6BRXp9rCDDUD6P5gJr3G",
                 "/dns4/da-full-1-mocha-4.celestia-mocha.com/udp/2121/quic/p2p/12D3KooWCUHPLqQXZzpTx1x3TAsdn3vYmTNDhzg66yG8hqoxGGN8",

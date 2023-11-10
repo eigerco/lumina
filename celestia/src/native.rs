@@ -35,10 +35,6 @@ pub(crate) struct Params {
 }
 
 pub(crate) async fn run(args: Params) -> Result<()> {
-    //let _ = dotenvy::dotenv();
-    //let args = Args::parse();
-    //let _guard = init_tracing();
-
     let network = args.network.into();
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 

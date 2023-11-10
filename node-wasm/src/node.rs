@@ -18,9 +18,7 @@ use crate::wrapper::libp2p::NetworkInfo;
 use crate::Result;
 
 #[wasm_bindgen(js_name = Node)]
-struct WasmNode {
-    node: Node<IndexedDbStore>,
-}
+struct WasmNode(Node<IndexedDbStore>);
 
 #[wasm_bindgen(js_name = NodeConfig)]
 pub struct WasmNodeConfig {
@@ -59,58 +57,38 @@ impl WasmNode {
         .await
         .js_context("Failed to start the node")?;
 
-        Ok(Self { node })
+        Ok(Self(node))
     }
 
+    /// Get node's local peer ID.
     pub fn local_peer_id(&self) -> String {
-        self.node.p2p().local_peer_id().to_string()
+        self.0.local_peer_id().to_string()
     }
 
+    /// Get current [`PeerTracker`] info.
+    pub fn peer_tracker_info(&self) -> Result<JsValue> {
+        let peer_tracker_info = self.0.peer_tracker_info();
+        Ok(to_value(&peer_tracker_info)?)
+    }
+
+    /// Wait until the node is connected to at least 1 peer.
     pub async fn wait_connected(&self) -> Result<()> {
-        Ok(self.node.p2p().wait_connected().await?)
+        Ok(self.0.wait_connected().await?)
     }
 
+    /// Wait until the node is connected to at least 1 trusted peer.
     pub async fn wait_connected_trusted(&self) -> Result<()> {
-        Ok(self.node.p2p().wait_connected_trusted().await?)
+        Ok(self.0.wait_connected_trusted().await?)
     }
 
+    /// Get current network info.
     pub async fn network_info(&self) -> Result<NetworkInfo> {
-        Ok(self.node.p2p().network_info().await?.into())
+        Ok(self.0.network_info().await?.into())
     }
 
-    pub async fn get_head_header(&self) -> Result<JsValue> {
-        let eh = self.node.p2p().get_head_header().await?;
-        Ok(to_value(&eh)?)
-    }
-
-    pub async fn get_header(&self, hash: &str) -> Result<JsValue> {
-        let hash: Hash = hash.parse()?;
-        let eh = self.node.p2p().get_header(hash).await?;
-        Ok(to_value(&eh)?)
-    }
-
-    pub async fn get_header_by_height(&self, height: u64) -> Result<JsValue> {
-        let eh = self.node.p2p().get_header_by_height(height).await?;
-        Ok(to_value(&eh)?)
-    }
-
-    pub async fn get_verified_headers_range(&self, from: JsValue, amount: u64) -> Result<Array> {
-        let header =
-            from_value::<ExtendedHeader>(from).js_context("Parsing extended header failed")?;
-        let verified_headers = self
-            .node
-            .p2p()
-            .get_verified_headers_range(&header, amount)
-            .await?;
-
-        Ok(verified_headers
-            .iter()
-            .map(to_value)
-            .collect::<StdResult<_, _>>()?)
-    }
-
+    /// Get all the multiaddresses on which the node listens.
     pub async fn listeners(&self) -> Result<Array> {
-        let listeners = self.node.p2p().listeners().await?;
+        let listeners = self.0.listeners().await?;
 
         Ok(listeners
             .iter()
@@ -118,10 +96,10 @@ impl WasmNode {
             .collect::<Array>())
     }
 
+    /// Get all the peers that node is connected to.
     pub async fn connected_peers(&self) -> Result<Array> {
         Ok(self
-            .node
-            .p2p()
+            .0
             .connected_peers()
             .await?
             .iter()
@@ -129,9 +107,98 @@ impl WasmNode {
             .collect::<Array>())
     }
 
+    /// Trust or untrust the peer with a given ID.
+    pub async fn set_peer_trust(&self, peer_id: &str, is_trusted: bool) -> Result<()> {
+        let peer_id = peer_id.parse().js_context("Parsing peer id failed")?;
+        Ok(self.0.set_peer_trust(peer_id, is_trusted).await?)
+    }
+
+    /// Request the head header from the network.
+    pub async fn request_head_header(&self) -> Result<JsValue> {
+        let eh = self.0.request_head_header().await?;
+        Ok(to_value(&eh)?)
+    }
+
+    /// Request a header for the block with a given hash from the network.
+    pub async fn request_header_by_hash(&self, hash: &str) -> Result<JsValue> {
+        let hash: Hash = hash.parse()?;
+        let eh = self.0.request_header_by_hash(&hash).await?;
+        Ok(to_value(&eh)?)
+    }
+
+    /// Request a header for the block with a given height from the network.
+    pub async fn request_header_by_height(&self, height: u64) -> Result<JsValue> {
+        let eh = self.0.request_header_by_height(height).await?;
+        Ok(to_value(&eh)?)
+    }
+
+    /// Request headers in range (from, from + amount] from the network.
+    ///
+    /// The headers will be verified with the `from` header.
+    pub async fn request_verified_headers(&self, from: JsValue, amount: u64) -> Result<Array> {
+        let header =
+            from_value::<ExtendedHeader>(from).js_context("Parsing extended header failed")?;
+        let verified_headers = self.0.request_verified_headers(&header, amount).await?;
+
+        Ok(verified_headers
+            .iter()
+            .map(to_value)
+            .collect::<StdResult<_, _>>()?)
+    }
+
+    /// Get current header syncing info.
     pub async fn syncer_info(&self) -> Result<JsValue> {
-        let syncer_info = self.node.syncer().info().await?;
+        let syncer_info = self.0.syncer_info().await?;
         Ok(to_value(&syncer_info)?)
+    }
+
+    /// Get the latest header announced in the network.
+    pub fn get_network_head_header(&self) -> Result<JsValue> {
+        let maybe_head_hedaer = self.0.get_network_head_header();
+        Ok(to_value(&maybe_head_hedaer)?)
+    }
+
+    /// Get the latest locally synced header.
+    pub async fn get_local_head_header(&self) -> Result<JsValue> {
+        let local_head = self.0.get_local_head_header().await?;
+        Ok(to_value(&local_head)?)
+    }
+
+    /// Get a synced header for the block with a given hash.
+    pub async fn get_header_by_hash(&self, hash: &str) -> Result<JsValue> {
+        let hash: Hash = hash.parse().js_context("parsing hash failed")?;
+        let eh = self.0.get_header_by_hash(&hash).await?;
+        Ok(to_value(&eh)?)
+    }
+
+    /// Get a synced header for the block with a given height.
+    pub async fn get_header_by_height(&self, height: u64) -> Result<JsValue> {
+        let eh = self.0.get_header_by_height(height).await?;
+        Ok(to_value(&eh)?)
+    }
+    /// Get synced headers from the given heights range.
+    ///
+    /// If start of the range is undefined (None), the first returned header will be of height 1.
+    /// If end of the range is undefined (None), the last returned header will be the last header in the
+    /// store.
+    ///
+    /// # Errors
+    ///
+    /// If range contains a height of a header that is not found in the store or [`RangeBounds`]
+    /// cannot be converted to a valid range.
+    pub async fn get_headers(
+        &self,
+        start_height: Option<u64>,
+        end_height: Option<u64>,
+    ) -> Result<JsValue> {
+        let headers = match (start_height, end_height) {
+            (None, None) => self.0.get_headers(..).await,
+            (Some(start), None) => self.0.get_headers(start..).await,
+            (None, Some(end)) => self.0.get_headers(..=end).await,
+            (Some(start), Some(end)) => self.0.get_headers(start..=end).await,
+        }?;
+
+        Ok(to_value(&headers)?)
     }
 }
 
