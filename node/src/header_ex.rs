@@ -196,7 +196,7 @@ where
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         self.req_resp
             .handle_established_inbound_connection(connection_id, peer, local_addr, remote_addr)
-            .map(|handler| ConnHandler(handler))
+            .map(ConnHandler)
     }
 
     fn handle_established_outbound_connection(
@@ -208,7 +208,7 @@ where
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         self.req_resp
             .handle_established_outbound_connection(connection_id, peer, addr, role_override)
-            .map(|handler| ConnHandler(handler))
+            .map(ConnHandler)
     }
 
     fn handle_pending_inbound_connection(
