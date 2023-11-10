@@ -144,6 +144,12 @@ jobs:
     - name: Checkout sources
       uses: actions/checkout@v3
 
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v2
+      with:
+        version: "23.3"
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Install toolchain
       uses: dtolnay/rust-toolchain@nightly
 
