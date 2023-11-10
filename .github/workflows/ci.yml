@@ -153,4 +153,6 @@ jobs:
         tool: cargo-udeps@0.1.43
 
     - name: Check for unused dependencies
-      run: cargo +nightly udeps --all-features --all-targets -- -D warnings
+      run: cargo +nightly udeps --all-features --all-targets
+      env:
+        RUSTFLAGS: -D warnings
