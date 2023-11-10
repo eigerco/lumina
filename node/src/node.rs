@@ -174,7 +174,6 @@ where
     /// Get synced headers from the given heights range.
     ///
     /// If start of the range is unbounded, the first returned header will be of height 1.
-    /// height.
     /// If end of the range is unbounded, the last returned header will be the last header in the
     /// store.
     ///
