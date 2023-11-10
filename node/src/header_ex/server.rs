@@ -316,6 +316,24 @@ mod tests {
     }
 
     #[async_test]
+    async fn request_malformed_hash_test() {
+        let (store, _) = gen_filled_store(1);
+        let mut handler = HeaderExServerHandler::new(Arc::new(store));
+
+        let request = HeaderRequest {
+            data: Some(header_request::Data::Hash(vec![0; 31])),
+            amount: 1,
+        };
+
+        handler.on_request_received(PeerId::random(), "test", request, ());
+
+        let received = poll_handler_for_result(&mut handler).await;
+
+        assert_eq!(received.len(), 1);
+        assert_eq!(received[0].status_code, i32::from(StatusCode::Invalid));
+    }
+
+    #[async_test]
     async fn request_range_test() {
         let (store, _) = gen_filled_store(10);
         let expected_headers = [
