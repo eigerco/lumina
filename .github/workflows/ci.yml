@@ -135,3 +135,22 @@ jobs:
 
     - name: Run tests
       run: cargo test
+
+
+  unused-deps:
+    runs-on: ubuntu-latest
+    name: unused dependencies
+    steps:
+    - name: Checkout sources
+      uses: actions/checkout@v3
+
+    - name: Install toolchain
+      uses: dtolnay/rust-toolchain@nightly
+
+    - name: Install cargo-udeps
+      uses: taiki-e/cache-cargo-install-action@v1
+      with:
+        tool: cargo-udeps@0.1.43
+
+    - name: Check for unused dependencies
+      run: cargo +nightly udeps --all-features --all-targets -- -D warnings
