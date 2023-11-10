@@ -5,7 +5,7 @@ use std::task::{Context, Poll};
 use celestia_proto::p2p::pb::{header_request, HeaderRequest, HeaderResponse};
 use celestia_types::hash::Hash;
 use libp2p::{
-    request_response::{InboundFailure, RequestId, ResponseChannel},
+    request_response::{InboundFailure, InboundRequestId, ResponseChannel},
     PeerId,
 };
 use tokio::sync::mpsc::{self, error::TrySendError};
@@ -83,14 +83,14 @@ where
         };
     }
 
-    pub(super) fn on_response_sent(&mut self, peer: PeerId, request_id: RequestId) {
+    pub(super) fn on_response_sent(&mut self, peer: PeerId, request_id: InboundRequestId) {
         trace!("response_sent; request_id: {request_id}, peer: {peer}");
     }
 
     pub(super) fn on_failure(
         &mut self,
         peer: PeerId,
-        request_id: RequestId,
+        request_id: InboundRequestId,
         error: InboundFailure,
     ) {
         // TODO: cancel job if libp2p already failed it?
@@ -313,6 +313,24 @@ mod tests {
         assert_eq!(received[0].status_code, i32::from(StatusCode::Ok));
         let decoded_header = ExtendedHeader::decode(&received[0].body[..]).unwrap();
         assert_eq!(decoded_header, stored_header);
+    }
+
+    #[async_test]
+    async fn request_malformed_hash_test() {
+        let (store, _) = gen_filled_store(1);
+        let mut handler = HeaderExServerHandler::new(Arc::new(store));
+
+        let request = HeaderRequest {
+            data: Some(header_request::Data::Hash(vec![0; 31])),
+            amount: 1,
+        };
+
+        handler.on_request_received(PeerId::random(), "test", request, ());
+
+        let received = poll_handler_for_result(&mut handler).await;
+
+        assert_eq!(received.len(), 1);
+        assert_eq!(received[0].status_code, i32::from(StatusCode::Invalid));
     }
 
     #[async_test]

@@ -35,6 +35,10 @@ pub(crate) struct Params {
 }
 
 pub(crate) async fn run(args: Params) -> Result<()> {
+    //let _ = dotenvy::dotenv();
+    //let args = Args::parse();
+    //let _guard = init_tracing();
+
     let network = args.network.into();
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
@@ -71,7 +75,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     .await
     .context("Failed to start node")?;
 
-    node.p2p().wait_connected_trusted().await?;
+    node.wait_connected_trusted().await?;
 
     // We have nothing else to do, but we want to keep main alive
     loop {

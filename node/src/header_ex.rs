@@ -11,8 +11,8 @@ use libp2p::{
     core::Endpoint,
     request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport},
     swarm::{
-        ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, PollParameters,
-        THandlerInEvent, THandlerOutEvent, ToSwarm,
+        ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandlerInEvent,
+        THandlerOutEvent, ToSwarm,
     },
     Multiaddr, PeerId, StreamProtocol,
 };
@@ -234,7 +234,7 @@ where
         )
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<'_, Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         self.req_resp.on_swarm_event(event)
     }
 
@@ -251,10 +251,9 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         loop {
-            if let Poll::Ready(ev) = self.req_resp.poll(cx, params) {
+            if let Poll::Ready(ev) = self.req_resp.poll(cx) {
                 if let Some(ev) = self.on_to_swarm(ev) {
                     return Poll::Ready(ev);
                 }

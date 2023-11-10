@@ -12,9 +12,9 @@ pub trait Header {
     #[method(name = "header.GetByHeight")]
     async fn header_get_by_height(&self, height: u64) -> Result<ExtendedHeader, Error>;
 
-    /// GetVerifiedRangeByHeight returns the given range (from:to) of ExtendedHeaders from the node's header store and verifies that the returned headers are adjacent to each other.
-    #[method(name = "header.GetVerifiedRangeByHeight")]
-    async fn header_get_verified_range_by_height(
+    /// GetRangeByHeight returns the given range (from:to) of ExtendedHeaders from the node's header store and verifies that the returned headers are adjacent to each other.
+    #[method(name = "header.GetRangeByHeight")]
+    async fn header_get_range_by_height(
         &self,
         from: &ExtendedHeader,
         to: u64,
