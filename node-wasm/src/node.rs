@@ -185,7 +185,6 @@ impl WasmNode {
         let eh = self.0.get_header_by_height(height).await?;
         Ok(to_value(&eh)?)
     }
-    
 
     /// Get synced headers from the given heights range.
     ///
