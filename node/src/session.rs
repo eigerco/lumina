@@ -5,7 +5,7 @@ use tracing::debug;
 
 use crate::executor::spawn;
 use crate::header_ex::utils::HeaderRequestExt;
-use crate::p2p::{P2pCmd, P2pError};
+use crate::p2p::{HeaderExError, P2pCmd, P2pError};
 
 const MAX_AMOUNT_PER_REQ: u64 = 64;
 const MAX_CONCURRENT_REQS: usize = 8;
@@ -24,7 +24,7 @@ pub(crate) struct Session {
 impl Session {
     pub(crate) fn new(from_height: u64, amount: u64, cmd_tx: mpsc::Sender<P2pCmd>) -> Result<Self> {
         if from_height < 1 || amount < 1 {
-            todo!();
+            return Err(P2pError::HeaderEx(HeaderExError::InvalidRequest));
         }
 
         let (response_tx, response_rx) = mpsc::channel(8);
@@ -87,7 +87,9 @@ impl Session {
     async fn recv_response(&mut self) -> (u64, u64, Result<Vec<ExtendedHeader>>) {
         let (height, requested_amount, res) =
             self.response_rx.recv().await.expect("channel never closes");
+
         self.ongoing -= 1;
+
         (height, requested_amount, res)
     }
 
