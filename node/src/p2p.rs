@@ -162,7 +162,7 @@ where
         let (peer_tracker_tx, peer_tracker_rx) = watch::channel(PeerTrackerInfo::default());
 
         let p2p = P2p {
-            cmd_tx,
+            cmd_tx: cmd_tx.clone(),
             header_sub_watcher: header_sub_rx,
             peer_tracker_info_watcher: peer_tracker_rx,
             local_peer_id: PeerId::random(),
@@ -170,6 +170,7 @@ where
         };
 
         let handle = crate::test_utils::MockP2pHandle {
+            cmd_tx,
             cmd_rx,
             header_sub_tx,
             peer_tracker_tx,

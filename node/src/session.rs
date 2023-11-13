@@ -59,11 +59,14 @@ impl Session {
 
                     responses.push(headers);
 
-                    // Reschedule the missing sub-range
                     if headers_len < requested_amount {
+                        // Reschedule the missing sub-range
                         let height = height + headers_len;
                         let amount = requested_amount - headers_len;
                         self.send_request(height, amount).await?;
+                    } else {
+                        // Schedule next request
+                        self.send_next_request().await?;
                     }
                 }
                 Err(P2pError::HeaderEx(e)) => {
@@ -134,5 +137,139 @@ impl Session {
         self.ongoing += 1;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::executor::spawn;
+    use crate::p2p::P2p;
+    use crate::store::InMemoryStore;
+    use celestia_types::test_utils::ExtendedHeaderGenerator;
+
+    #[cfg(not(target_arch = "wasm32"))]
+    use tokio::test as async_test;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as async_test;
+
+    #[async_test]
+    async fn retry_on_missing_range() {
+        let (_p2p, mut p2p_mock) = P2p::<InMemoryStore>::mocked();
+        let mut gen = ExtendedHeaderGenerator::new();
+        let headers = gen.next_many(64);
+
+        let mut session = Session::new(1, 64, p2p_mock.cmd_tx.clone()).unwrap();
+        let (result_tx, result_rx) = oneshot::channel();
+        spawn(async move {
+            let res = session.run().await;
+            result_tx.send(res).unwrap();
+        });
+
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 1);
+        assert_eq!(amount, 64);
+        respond_to.send(Ok(headers[..60].to_vec())).unwrap();
+
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 61);
+        assert_eq!(amount, 4);
+        respond_to.send(Ok(headers[60..64].to_vec())).unwrap();
+
+        p2p_mock.expect_no_cmd().await;
+
+        let received_headers = result_rx.await.unwrap().unwrap();
+        assert_eq!(headers, received_headers);
+    }
+
+    #[async_test]
+    async fn nine_batches() {
+        let (_p2p, mut p2p_mock) = P2p::<InMemoryStore>::mocked();
+        let mut gen = ExtendedHeaderGenerator::new();
+        let headers = gen.next_many(520);
+
+        let mut session = Session::new(1, 520, p2p_mock.cmd_tx.clone()).unwrap();
+        let (result_tx, result_rx) = oneshot::channel();
+        spawn(async move {
+            let res = session.run().await;
+            result_tx.send(res).unwrap();
+        });
+
+        for i in 0..8 {
+            let (height, amount, respond_to) =
+                p2p_mock.expect_header_request_for_height_cmd().await;
+            assert_eq!(height, 1 + 64 * i);
+            assert_eq!(amount, 64);
+            let start = (height - 1) as usize;
+            let end = start + amount as usize;
+            respond_to.send(Ok(headers[start..end].to_vec())).unwrap();
+        }
+
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 513);
+        assert_eq!(amount, 8);
+        let start = (height - 1) as usize;
+        let end = start + amount as usize;
+        respond_to.send(Ok(headers[start..end].to_vec())).unwrap();
+
+        p2p_mock.expect_no_cmd().await;
+
+        let received_headers = result_rx.await.unwrap().unwrap();
+        assert_eq!(headers, received_headers);
+    }
+
+    #[async_test]
+    async fn not_found_is_not_fatal() {
+        let (_p2p, mut p2p_mock) = P2p::<InMemoryStore>::mocked();
+        let mut gen = ExtendedHeaderGenerator::new();
+        let headers = gen.next_many(64);
+
+        let mut session = Session::new(1, 64, p2p_mock.cmd_tx.clone()).unwrap();
+        let (result_tx, result_rx) = oneshot::channel();
+        spawn(async move {
+            let res = session.run().await;
+            result_tx.send(res).unwrap();
+        });
+
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 1);
+        assert_eq!(amount, 64);
+        respond_to
+            .send(Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound)))
+            .unwrap();
+
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 1);
+        assert_eq!(amount, 64);
+        respond_to.send(Ok(headers.clone())).unwrap();
+
+        p2p_mock.expect_no_cmd().await;
+
+        let received_headers = result_rx.await.unwrap().unwrap();
+        assert_eq!(headers, received_headers);
+    }
+
+    #[async_test]
+    async fn no_peers_is_fatal() {
+        let (_p2p, mut p2p_mock) = P2p::<InMemoryStore>::mocked();
+
+        let mut session = Session::new(1, 64, p2p_mock.cmd_tx.clone()).unwrap();
+        let (result_tx, result_rx) = oneshot::channel();
+        spawn(async move {
+            let res = session.run().await;
+            result_tx.send(res).unwrap();
+        });
+
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 1);
+        assert_eq!(amount, 64);
+        respond_to.send(Err(P2pError::NoConnectedPeers)).unwrap();
+
+        p2p_mock.expect_no_cmd().await;
+
+        assert!(matches!(
+            result_rx.await,
+            Ok(Err(P2pError::NoConnectedPeers))
+        ));
     }
 }

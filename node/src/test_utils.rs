@@ -56,6 +56,8 @@ pub fn test_node_config_with_keypair(keypair: Keypair) -> NodeConfig<InMemorySto
 }
 
 pub struct MockP2pHandle {
+    #[allow(dead_code)]
+    pub(crate) cmd_tx: mpsc::Sender<P2pCmd>,
     pub(crate) cmd_rx: mpsc::Receiver<P2pCmd>,
     pub(crate) header_sub_tx: watch::Sender<Option<ExtendedHeader>>,
     pub(crate) peer_tracker_tx: watch::Sender<PeerTrackerInfo>,
