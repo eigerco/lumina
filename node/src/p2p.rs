@@ -50,9 +50,6 @@ pub enum P2pError {
     #[error("Transport error: {0}")]
     Transport(#[from] TransportError<io::Error>),
 
-    #[error("Failed to initialize DNS: {0}")]
-    InitDns(io::Error),
-
     #[error("Failed to initialize noise: {0}")]
     InitNoise(String),
 
