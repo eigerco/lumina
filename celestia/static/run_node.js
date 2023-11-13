@@ -69,13 +69,13 @@ function bind_config(data) {
   update_config_elements();
 
   network_div.addEventListener("change", (event) => {
-    window.config.network = Number(event.target.value);
+    window.config.network = Number(event.target.value.trim());
   });
   genesis_div.addEventListener("change", (event) => {
-    window.config.genesis_hash = event.target.value;
+    window.config.genesis_hash = event.target.value.trim();
   });
   bootnodes_div.addEventListener("change", (event) => {
-    window.config.bootnodes = event.target.value.split("\n");
+    window.config.bootnodes = event.target.value.trim().split("\n").map(multiaddr => multiaddr.trim());
   });
 }
 
