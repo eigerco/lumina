@@ -195,8 +195,7 @@ impl WasmNode {
     ///
     /// # Errors
     ///
-    /// If range contains a height of a header that is not found in the store or [`RangeBounds`]
-    /// cannot be converted to a valid range.
+    /// If range contains a height of a header that is not found in the store.
     pub async fn get_headers(
         &self,
         start_height: Option<u64>,
