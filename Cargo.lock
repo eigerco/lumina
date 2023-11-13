@@ -2091,9 +2091,9 @@ checksum = "f7012b1bbb0719e1097c47611d3898568c546d597c2e74d66f6087edd5233ff4"
 
 [[package]]
 name = "libp2p"
-version = "0.53.0"
+version = "0.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67c4d7fa0c6098ed39b90780715be07b70046ee64570371147bdc771503a5d3c"
+checksum = "1252a34c693386829c34d44ccfbce86679d2a9a2c61f582863649bbf57f26260"
 dependencies = [
  "bytes",
  "either",
@@ -2174,9 +2174,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.41.0"
+version = "0.41.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b8b63f1df89173dc6c582c07abfc072acf2792ce1787363ab266e0a18882fac"
+checksum = "59c61b924474cf2c7edccca306693e798d797b85d004f4fef5689a7a3e6e8fe5"
 dependencies = [
  "either",
  "fnv",
@@ -2202,9 +2202,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dns"
-version = "0.41.0"
+version = "0.41.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "852f9ab7c3eba64b158a4d9ab00848b1d732fa9d3224aa0a75643756f98aa136"
+checksum = "d17cbcf7160ff35c3e8e560de4a068fe9d6cb777ea72840e48eb76ff9576c4b6"
 dependencies = [
  "async-trait",
  "futures",
@@ -2291,9 +2291,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.45.0"
+version = "0.45.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91de4ab46f01286bf0a92d517b51b52b53b6f4d32a774a432ba1c49b39768043"
+checksum = "8cd9ae9180fbe425f14e5558b0dfcb3ae8a76075b0eefb7792076902fbb63a14"
 dependencies = [
  "arrayvec",
  "asynchronous-codec 0.6.2",
@@ -2341,10 +2341,11 @@ dependencies = [
 
 [[package]]
 name = "libp2p-metrics"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ac3c92d46c061d3564b660c143356de966a9ab17eb6bfa8d6819daa2ae49b28"
+checksum = "fdac91ae4f291046a3b2660c039a2830c931f84df2ee227989af92f7692d3357"
 dependencies = [
+ "futures",
  "instant",
  "libp2p-core",
  "libp2p-gossipsub",
@@ -2353,6 +2354,7 @@ dependencies = [
  "libp2p-kad",
  "libp2p-ping",
  "libp2p-swarm",
+ "pin-project",
  "prometheus-client",
 ]
 
@@ -2402,9 +2404,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3635a185249a123cbb57e97495245acbbb0a5daeb4d1a7ac9748ad7f685e631e"
+checksum = "c02570b9effbc7c33331803104a8e9e53af7f2bdb4a2b61be420d6667545a0f5"
 dependencies = [
  "bytes",
  "futures",
