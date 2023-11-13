@@ -8,9 +8,10 @@ use crate::{native, server};
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize_repr)]
 #[repr(u8)]
 pub(crate) enum ArgNetwork {
+    #[default]
+    Mainnet,
     Arabica,
     Mocha,
-    #[default]
     Private,
 }
 
@@ -49,9 +50,21 @@ fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
 impl From<ArgNetwork> for Network {
     fn from(network: ArgNetwork) -> Network {
         match network {
+            ArgNetwork::Mainnet => Network::Mainnet,
             ArgNetwork::Arabica => Network::Arabica,
             ArgNetwork::Mocha => Network::Mocha,
             ArgNetwork::Private => Network::Private,
+        }
+    }
+}
+
+impl From<Network> for ArgNetwork {
+    fn from(network: Network) -> ArgNetwork {
+        match network {
+            Network::Mainnet => ArgNetwork::Mainnet,
+            Network::Arabica => ArgNetwork::Arabica,
+            Network::Mocha => ArgNetwork::Mocha,
+            Network::Private => ArgNetwork::Private,
         }
     }
 }

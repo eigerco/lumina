@@ -1,10 +1,12 @@
 use std::fmt;
 
 use celestia_node::network;
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
 pub enum Network {
     Mainnet,
     Arabica,

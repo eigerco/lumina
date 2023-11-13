@@ -5,8 +5,8 @@ use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::{IndexedDbStore, Store};
 use celestia_types::{hash::Hash, ExtendedHeader};
 use js_sys::Array;
-use libp2p::identity::Keypair;
-use libp2p::{identity, Multiaddr};
+use libp2p::{identity::Keypair, Multiaddr};
+use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tracing::info;
 use wasm_bindgen::prelude::*;
@@ -20,21 +20,28 @@ use crate::Result;
 #[wasm_bindgen(js_name = Node)]
 struct WasmNode(Node<IndexedDbStore>);
 
-#[wasm_bindgen(js_name = NodeConfig)]
+#[derive(Serialize, Deserialize)]
 pub struct WasmNodeConfig {
     pub network: Network,
-    #[wasm_bindgen(skip)]
     pub genesis_hash: Option<Hash>,
-    #[wasm_bindgen(skip)]
-    pub p2p_local_keypair: Keypair,
-    #[wasm_bindgen(skip)]
-    pub p2p_bootnodes: Vec<Multiaddr>,
+    pub bootnodes: Vec<Multiaddr>,
+}
+
+#[wasm_bindgen]
+pub fn default_config(network: Network) -> Result<JsValue> {
+    Ok(to_value(&WasmNodeConfig {
+        network,
+        genesis_hash: network_genesis(network.into()),
+        bootnodes: canonical_network_bootnodes(network.into()),
+    })?)
 }
 
 #[wasm_bindgen(js_class = Node)]
 impl WasmNode {
     #[wasm_bindgen(constructor)]
-    pub async fn new(config: WasmNodeConfig) -> Result<WasmNode> {
+    pub async fn new(config: JsValue) -> Result<WasmNode> {
+        let config = from_value::<WasmNodeConfig>(config)?;
+
         let network_id = network_id(config.network.into());
         let store = IndexedDbStore::new(network_id)
             .await
@@ -46,11 +53,13 @@ impl WasmNode {
             info!("Initialized new empty store");
         }
 
+        let p2p_local_keypair = Keypair::generate_ed25519();
+
         let node = Node::new(NodeConfig {
             network_id: network_id.to_string(),
             genesis_hash: config.genesis_hash,
-            p2p_local_keypair: config.p2p_local_keypair,
-            p2p_bootnodes: config.p2p_bootnodes,
+            p2p_local_keypair,
+            p2p_bootnodes: config.bootnodes,
             p2p_listen_on: vec![],
             store,
         })
@@ -176,6 +185,7 @@ impl WasmNode {
         let eh = self.0.get_header_by_height(height).await?;
         Ok(to_value(&eh)?)
     }
+
     /// Get synced headers from the given heights range.
     ///
     /// If start of the range is undefined (None), the first returned header will be of height 1.
@@ -199,56 +209,5 @@ impl WasmNode {
         }?;
 
         Ok(to_value(&headers)?)
-    }
-}
-
-#[wasm_bindgen(js_class = NodeConfig)]
-impl WasmNodeConfig {
-    #[wasm_bindgen(constructor)]
-    pub fn new(network: Network) -> Self {
-        let genesis_hash = network_genesis(network.into());
-
-        let p2p_local_keypair = identity::Keypair::generate_ed25519();
-        let p2p_bootnodes = canonical_network_bootnodes(network.into());
-
-        WasmNodeConfig {
-            network,
-            genesis_hash,
-            p2p_local_keypair,
-            p2p_bootnodes,
-        }
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn genesis_hash(&self) -> Option<String> {
-        self.genesis_hash.map(|h| h.to_string())
-    }
-
-    #[wasm_bindgen(setter)]
-    pub fn set_genesis_hash(&mut self, hash: Option<String>) -> Result<()> {
-        self.genesis_hash = hash.map(|h| h.parse()).transpose()?;
-        Ok(())
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn bootnodes(&self) -> Array {
-        self.p2p_bootnodes
-            .iter()
-            .map(js_value_from_display)
-            .collect::<Array>()
-    }
-
-    #[wasm_bindgen(setter)]
-    pub fn set_bootnodes(&mut self, bootnodes: Array) -> Result<()> {
-        self.p2p_bootnodes = bootnodes
-            .iter()
-            .map(|n| {
-                n.as_string()
-                    .ok_or(JsError::new("utf16 decode error"))
-                    .and_then(|s| Ok(s.parse::<Multiaddr>()?))
-            })
-            .collect::<Result<_>>()?;
-
-        Ok(())
     }
 }
