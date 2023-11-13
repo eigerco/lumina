@@ -11,7 +11,9 @@ Supported features:
 - [ ] Data Availability Sampling
 - [ ] Creating, distributing, and listening for Fraud proofs
 
-## Building and running celestia-node
+## Building and running
+
+Install common dependencies
 
 ```bash
 # install dependencies
@@ -26,15 +28,29 @@ source "$HOME/.cargo/env"
 # clone the repository
 git clone https://github.com/eigerco/celestia-node-rs
 cd celestia-node-rs
+```
 
+### Running the node natively
+
+```bash
 # install celestia-node
 cargo install --path celestia
 
 # run celestia node
-celestia-node --network mocha
+celestia node --network mocha
 
 # check out help for more configuration options
-celestia-node --help
+celestia node --help
+```
+
+### Building and serving node-wasm
+
+```bash
+# build wasm-node to be bundled with celestia
+wasm-pack build --target web node-wasm
+
+# serve celestia node on default localhost:9876
+celestia browser
 ```
 
 ## Running Go celestia node for integration
