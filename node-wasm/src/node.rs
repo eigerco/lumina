@@ -6,7 +6,6 @@ use celestia_node::store::{IndexedDbStore, Store};
 use celestia_types::{hash::Hash, ExtendedHeader};
 use js_sys::Array;
 use libp2p::{identity::Keypair, Multiaddr};
-use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tracing::info;
 use wasm_bindgen::prelude::*;
@@ -20,51 +19,30 @@ use crate::Result;
 #[wasm_bindgen(js_name = Node)]
 struct WasmNode(Node<IndexedDbStore>);
 
-#[derive(Serialize, Deserialize)]
+#[wasm_bindgen(js_name = NodeConfig)]
 pub struct WasmNodeConfig {
     pub network: Network,
-    pub genesis_hash: Option<Hash>,
-    pub bootnodes: Vec<Multiaddr>,
-}
-
-#[wasm_bindgen]
-pub fn default_config(network: Network) -> Result<JsValue> {
-    Ok(to_value(&WasmNodeConfig {
-        network,
-        genesis_hash: network_genesis(network.into()),
-        bootnodes: canonical_network_bootnodes(network.into()),
-    })?)
+    #[wasm_bindgen(getter_with_clone)]
+    pub genesis_hash: Option<String>,
+    #[wasm_bindgen(getter_with_clone)]
+    pub bootnodes: Vec<String>,
 }
 
 #[wasm_bindgen(js_class = Node)]
 impl WasmNode {
     #[wasm_bindgen(constructor)]
-    pub async fn new(config: JsValue) -> Result<WasmNode> {
-        let config = from_value::<WasmNodeConfig>(config)?;
+    pub async fn new(config: WasmNodeConfig) -> Result<WasmNode> {
+        let config = config.into_node_config().await?;
 
-        let network_id = network_id(config.network.into());
-        let store = IndexedDbStore::new(network_id)
-            .await
-            .js_context("Failed to open the store")?;
-
-        if let Ok(store_height) = store.head_height().await {
+        if let Ok(store_height) = config.store.head_height().await {
             info!("Initialised store with head height: {store_height}");
         } else {
             info!("Initialized new empty store");
         }
 
-        let p2p_local_keypair = Keypair::generate_ed25519();
-
-        let node = Node::new(NodeConfig {
-            network_id: network_id.to_string(),
-            genesis_hash: config.genesis_hash,
-            p2p_local_keypair,
-            p2p_bootnodes: config.bootnodes,
-            p2p_listen_on: vec![],
-            store,
-        })
-        .await
-        .js_context("Failed to start the node")?;
+        let node = Node::new(config)
+            .await
+            .js_context("Failed to start the node")?;
 
         Ok(Self(node))
     }
@@ -208,5 +186,45 @@ impl WasmNode {
         }?;
 
         Ok(to_value(&headers)?)
+    }
+}
+
+#[wasm_bindgen(js_class = NodeConfig)]
+impl WasmNodeConfig {
+    /// Get the configuration with default bootnodes and genesis hash for provided network
+    pub fn default(network: Network) -> WasmNodeConfig {
+        WasmNodeConfig {
+            network,
+            genesis_hash: network_genesis(network.into()).map(|h| h.to_string()),
+            bootnodes: canonical_network_bootnodes(network.into())
+                .iter()
+                .map(|addr| addr.to_string())
+                .collect::<Vec<_>>(),
+        }
+    }
+
+    async fn into_node_config(self) -> Result<NodeConfig<IndexedDbStore>> {
+        let network_id = network_id(self.network.into());
+        let store = IndexedDbStore::new(network_id)
+            .await
+            .js_context("Failed to open the store")?;
+
+        let p2p_local_keypair = Keypair::generate_ed25519();
+
+        let genesis_hash = self.genesis_hash.map(|h| h.parse()).transpose()?;
+        let p2p_bootnodes = self
+            .bootnodes
+            .iter()
+            .map(|addr| addr.parse())
+            .collect::<StdResult<_, _>>()?;
+
+        Ok(NodeConfig {
+            network_id: network_id.to_string(),
+            genesis_hash,
+            p2p_bootnodes,
+            p2p_local_keypair,
+            p2p_listen_on: vec![],
+            store,
+        })
     }
 }

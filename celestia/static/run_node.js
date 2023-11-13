@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import init, { Node, default_config } from "/wasm/celestia_node_wasm.js";
+import init, { Node, NodeConfig } from "/wasm/celestia_node_wasm.js";
 
 async function fetch_config() {
   const response = await fetch('/cfg.json');
@@ -8,7 +8,7 @@ async function fetch_config() {
 
   console.log("Received config:", json);
 
-  let config = default_config(json.network);
+  let config = NodeConfig.default(json.network);
   if (json.bootnodes.length !== 0) {
     config.bootnodes = json.bootnodes;
   }
@@ -49,7 +49,7 @@ function bind_config(data) {
   let proxy = {
     set: function(obj, prop, value) {
       if (prop == "network") {
-        const config = default_config(Number(value));
+        const config = NodeConfig.default(Number(value));
         obj.network = config.network;
         obj.genesis_hash = config.genesis_hash;
         obj.bootnodes = config.bootnodes;
