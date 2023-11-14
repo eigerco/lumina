@@ -5,6 +5,7 @@ use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
 use libp2p::{identify, swarm::ConnectionId, Multiaddr, PeerId};
 use rand::seq::SliceRandom;
+use serde::Serialize;
 use smallvec::SmallVec;
 use tokio::sync::watch;
 
@@ -15,7 +16,7 @@ pub struct PeerTracker {
     info_tx: watch::Sender<PeerTrackerInfo>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct PeerTrackerInfo {
     /// Number of the connected peers.
     pub num_connected_peers: u64,

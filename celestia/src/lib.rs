@@ -1,9 +1,7 @@
-#[cfg(target_arch = "wasm32")]
-mod wasm;
-#[cfg(target_arch = "wasm32")]
-pub use crate::wasm::*;
+#![cfg(not(target_arch = "wasm32"))]
 
-#[cfg(not(target_arch = "wasm32"))]
+mod common;
 mod native;
-#[cfg(not(target_arch = "wasm32"))]
-pub use crate::native::*;
+mod server;
+
+pub use common::run_cli;

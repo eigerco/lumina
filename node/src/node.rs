@@ -167,8 +167,8 @@ where
     }
 
     /// Get a synced header for the block with a given height.
-    pub async fn get_header_by_height(&self, hash: u64) -> Result<ExtendedHeader> {
-        Ok(self.store.get_by_height(hash).await?)
+    pub async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
+        Ok(self.store.get_by_height(height).await?)
     }
 
     /// Get synced headers from the given heights range.

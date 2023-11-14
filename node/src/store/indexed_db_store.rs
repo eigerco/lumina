@@ -255,7 +255,7 @@ impl From<rexie::Error> for StoreError {
 
 impl From<serde_wasm_bindgen::Error> for StoreError {
     fn from(error: serde_wasm_bindgen::Error) -> StoreError {
-        StoreError::StoredDataError(format!("Error de/serializing: {}", error.to_string()))
+        StoreError::StoredDataError(format!("Error de/serializing: {error}"))
     }
 }
 

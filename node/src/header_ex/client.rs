@@ -261,7 +261,7 @@ async fn decode_and_verify_responses(
                 Err(_) => break 'outer,
             };
 
-            trace!("Header: {header:?}");
+            trace!("Header: {header}");
             headers.push(header);
         }
 

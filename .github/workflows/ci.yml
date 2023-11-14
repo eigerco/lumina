@@ -68,6 +68,9 @@ jobs:
     - name: Test node crate
       run: wasm-pack test --headless --chrome node
 
+    - name: Build and pack node-wasm
+      run: wasm-pack build --release --target web node-wasm && wasm-pack pack node-wasm
+
 
   test:
     runs-on: ubuntu-latest
