@@ -77,6 +77,9 @@ jobs:
     - name: Test node crate
       run: wasm-pack test --headless --chrome node
 
+    - name: Build and pack node-wasm
+      run: wasm-pack build --release --target web node-wasm && wasm-pack pack node-wasm
+
 
   test:
     runs-on: ubuntu-latest
@@ -144,3 +147,30 @@ jobs:
 
     - name: Run tests
       run: cargo test
+
+
+  unused-deps:
+    runs-on: ubuntu-latest
+    name: unused dependencies
+    steps:
+    - name: Checkout sources
+      uses: actions/checkout@v3
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v2
+      with:
+        version: "23.3"
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install toolchain
+      uses: dtolnay/rust-toolchain@nightly
+
+    - name: Install cargo-udeps
+      uses: taiki-e/cache-cargo-install-action@v1
+      with:
+        tool: cargo-udeps@0.1.43
+
+    - name: Check for unused dependencies
+      run: cargo +nightly udeps --all-features --all-targets
+      env:
+        RUSTFLAGS: -D warnings

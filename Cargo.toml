@@ -1,13 +1,14 @@
 [workspace]
 resolver = "2"
-members = ["celestia", "node", "proto", "rpc", "types"]
+members = ["celestia", "node", "proto", "rpc", "types", "node-wasm"]
 
 [workspace.dependencies]
 celestia-node = { version = "0.1.0", path = "node" }
+celestia-node-wasm = { version = "0.1.0", path = "node-wasm" }
 celestia-proto = { version = "0.1.0", path = "proto" }
 celestia-rpc = { version = "0.1.0", path = "rpc", default-features = false }
 celestia-types = { version = "0.1.0", path = "types", default-features = false }
-libp2p = "0.53.0"
+libp2p = "0.53.1"
 nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "d821332" }
 tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "ef58b85", default-features = false }
 tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "ef58b85" }

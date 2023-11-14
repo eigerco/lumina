@@ -7,6 +7,7 @@ use backoff::ExponentialBackoffBuilder;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use futures::FutureExt;
+use serde::Serialize;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
@@ -73,7 +74,7 @@ enum SyncerCmd {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct SyncingInfo {
     pub local_head: u64,
     pub subjective_head: u64,
