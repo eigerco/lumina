@@ -79,7 +79,7 @@ impl Session {
 
         let mut headers = responses
             .into_iter()
-            .flat_map(|headers| headers.into_iter())
+            .flatten()
             .collect::<Vec<_>>();
 
         headers.sort_unstable_by_key(|header| header.height().value());
