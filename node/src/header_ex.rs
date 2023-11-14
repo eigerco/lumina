@@ -1,29 +1,30 @@
 use std::io;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tracing::warn;
 
 use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use instant::{Duration, Instant};
 use libp2p::{
     core::Endpoint,
     request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport},
     swarm::{
-        ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandlerInEvent,
+        handler::ConnectionEvent, ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent,
+        ConnectionId, FromSwarm, NetworkBehaviour, SubstreamProtocol, THandlerInEvent,
         THandlerOutEvent, ToSwarm,
     },
     Multiaddr, PeerId, StreamProtocol,
 };
 use prost::Message;
-use tracing::debug;
-use tracing::instrument;
+use tracing::{debug, instrument, warn};
 
 mod client;
 mod server;
-mod utils;
+pub(crate) mod utils;
 
+use crate::executor::timeout;
 use crate::header_ex::client::HeaderExClientHandler;
 use crate::header_ex::server::HeaderExServerHandler;
 use crate::p2p::P2pError;
@@ -31,16 +32,23 @@ use crate::peer_tracker::PeerTracker;
 use crate::store::Store;
 use crate::utils::{protocol_id, OneshotResultSender};
 
-/// Max request size in bytes
-const REQUEST_SIZE_MAXIMUM: usize = 1024;
-/// Max response size in bytes
-const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
+/// Size limit of a request in bytes
+const REQUEST_SIZE_LIMIT: usize = 1024;
+/// Time limit on reading/writing a request
+const REQUEST_TIME_LIMIT: Duration = Duration::from_secs(1);
+/// Size limit of a response in bytes
+const RESPONSE_SIZE_LIMIT: usize = 10 * 1024 * 1024;
+/// Time limit on reading/writing a response
+const RESPONSE_TIME_LIMIT: Duration = Duration::from_secs(5);
+/// Substream negotiation timeout
+const NEGOTIATION_TIMEOUT: Duration = Duration::from_secs(1);
 
 type RequestType = HeaderRequest;
 type ResponseType = Vec<HeaderResponse>;
 type ReqRespBehaviour = request_response::Behaviour<HeaderCodec>;
 type ReqRespEvent = request_response::Event<RequestType, ResponseType>;
 type ReqRespMessage = request_response::Message<RequestType, ResponseType>;
+type ReqRespConnectionHandler = <ReqRespBehaviour as NetworkBehaviour>::ConnectionHandler;
 
 pub(crate) struct HeaderExBehaviour<S>
 where
@@ -176,7 +184,7 @@ impl<S> NetworkBehaviour for HeaderExBehaviour<S>
 where
     S: Store + 'static,
 {
-    type ConnectionHandler = <ReqRespBehaviour as NetworkBehaviour>::ConnectionHandler;
+    type ConnectionHandler = ConnHandler;
     type ToSwarm = ();
 
     fn handle_established_inbound_connection(
@@ -186,12 +194,9 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
-        self.req_resp.handle_established_inbound_connection(
-            connection_id,
-            peer,
-            local_addr,
-            remote_addr,
-        )
+        self.req_resp
+            .handle_established_inbound_connection(connection_id, peer, local_addr, remote_addr)
+            .map(ConnHandler)
     }
 
     fn handle_established_outbound_connection(
@@ -201,12 +206,9 @@ where
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
-        self.req_resp.handle_established_outbound_connection(
-            connection_id,
-            peer,
-            addr,
-            role_override,
-        )
+        self.req_resp
+            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
+            .map(ConnHandler)
     }
 
     fn handle_pending_inbound_connection(
@@ -274,6 +276,62 @@ where
     }
 }
 
+pub(crate) struct ConnHandler(ReqRespConnectionHandler);
+
+impl ConnectionHandler for ConnHandler {
+    type ToBehaviour = <ReqRespConnectionHandler as ConnectionHandler>::ToBehaviour;
+    type FromBehaviour = <ReqRespConnectionHandler as ConnectionHandler>::FromBehaviour;
+    type InboundProtocol = <ReqRespConnectionHandler as ConnectionHandler>::InboundProtocol;
+    type InboundOpenInfo = <ReqRespConnectionHandler as ConnectionHandler>::InboundOpenInfo;
+    type OutboundProtocol = <ReqRespConnectionHandler as ConnectionHandler>::OutboundProtocol;
+    type OutboundOpenInfo = <ReqRespConnectionHandler as ConnectionHandler>::OutboundOpenInfo;
+
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        self.0.listen_protocol().with_timeout(NEGOTIATION_TIMEOUT)
+    }
+
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
+    > {
+        match self.0.poll(cx) {
+            Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
+                Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                    protocol: protocol.with_timeout(NEGOTIATION_TIMEOUT),
+                })
+            }
+            ev => ev,
+        }
+    }
+
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
+        self.0.on_behaviour_event(event)
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            '_,
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        self.0.on_connection_event(event)
+    }
+
+    fn connection_keep_alive(&self) -> bool {
+        self.0.connection_keep_alive()
+    }
+
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        self.0.poll_close(cx)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct HeaderCodec;
 
@@ -287,14 +345,19 @@ impl Codec for HeaderCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let data = read_up_to(io, REQUEST_SIZE_MAXIMUM).await?;
+        let data = read_up_to(io, REQUEST_SIZE_LIMIT, REQUEST_TIME_LIMIT).await?;
 
-        if data.len() >= REQUEST_SIZE_MAXIMUM {
+        if data.len() >= REQUEST_SIZE_LIMIT {
             debug!("Message filled the whole buffer (len: {})", data.len());
         }
 
-        parse_header_request(&data)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid request"))
+        parse_header_request(&data).ok_or_else(|| {
+            // There are two cases that can reach here:
+            //
+            // 1. The request is invalid
+            // 2. The request is incomplete because of the size limit or time limit
+            io::Error::new(io::ErrorKind::Other, "invalid or incomplete request")
+        })
     }
 
     async fn read_response<T>(
@@ -305,9 +368,9 @@ impl Codec for HeaderCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let data = read_up_to(io, RESPONSE_SIZE_MAXIMUM).await?;
+        let data = read_up_to(io, RESPONSE_SIZE_LIMIT, RESPONSE_TIME_LIMIT).await?;
 
-        if data.len() >= RESPONSE_SIZE_MAXIMUM {
+        if data.len() >= RESPONSE_SIZE_LIMIT {
             debug!("Message filled the whole buffer (len: {})", data.len());
         }
 
@@ -320,7 +383,14 @@ impl Codec for HeaderCodec {
         }
 
         if msgs.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::Other, "invalid response"));
+            // There are two cases that can reach here:
+            //
+            // 1. The response is invalid
+            // 2. The response is incomplete because of the size limit or time limit
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "invalid or incomplete response",
+            ));
         }
 
         Ok(msgs)
@@ -335,11 +405,13 @@ impl Codec for HeaderCodec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let mut buf = Vec::with_capacity(REQUEST_SIZE_MAXIMUM);
+        let mut buf = Vec::with_capacity(REQUEST_SIZE_LIMIT);
 
         let _ = req.encode_length_delimited(&mut buf);
 
-        io.write_all(&buf).await?;
+        timeout(REQUEST_TIME_LIMIT, io.write_all(&buf))
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "writing request timed out"))??;
 
         Ok(())
     }
@@ -353,7 +425,7 @@ impl Codec for HeaderCodec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let mut buf = Vec::with_capacity(RESPONSE_SIZE_MAXIMUM);
+        let mut buf = Vec::with_capacity(RESPONSE_SIZE_LIMIT);
 
         for resp in resps {
             if resp.encode_length_delimited(&mut buf).is_err() {
@@ -364,18 +436,22 @@ impl Codec for HeaderCodec {
             }
         }
 
-        io.write_all(&buf).await?;
+        timeout(RESPONSE_TIME_LIMIT, io.write_all(&buf))
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "writing response timed out"))??;
 
         Ok(())
     }
 }
 
-async fn read_up_to<T>(io: &mut T, limit: usize) -> io::Result<Vec<u8>>
+/// Reads up to `size_limit` within `time_limit`.
+async fn read_up_to<T>(io: &mut T, size_limit: usize, time_limit: Duration) -> io::Result<Vec<u8>>
 where
     T: AsyncRead + Unpin + Send,
 {
-    let mut buf = vec![0u8; limit];
+    let mut buf = vec![0u8; size_limit];
     let mut read_len = 0;
+    let now = Instant::now();
 
     loop {
         if read_len == buf.len() {
@@ -383,7 +459,15 @@ where
             break;
         }
 
-        let len = io.read(&mut buf[read_len..]).await?;
+        let Some(time_limit) = time_limit.checked_sub(now.elapsed()) else {
+            break;
+        };
+
+        let len = match timeout(time_limit, io.read(&mut buf[read_len..])).await {
+            Ok(Ok(len)) => len,
+            Ok(Err(e)) => return Err(e),
+            Err(_) => break,
+        };
 
         if len == 0 {
             // EOF
@@ -511,7 +595,7 @@ mod tests {
 
     #[async_test]
     async fn test_decode_header_request_too_large() {
-        let too_long_message_len = REQUEST_SIZE_MAXIMUM + 1;
+        let too_long_message_len = REQUEST_SIZE_LIMIT + 1;
         let mut length_delimiter_buffer = BytesMut::new();
         prost::encode_length_delimiter(too_long_message_len, &mut length_delimiter_buffer).unwrap();
         let mut reader = Cursor::new(length_delimiter_buffer);
@@ -529,7 +613,7 @@ mod tests {
 
     #[async_test]
     async fn test_decode_header_response_too_large() {
-        let too_long_message_len = RESPONSE_SIZE_MAXIMUM + 1;
+        let too_long_message_len = RESPONSE_SIZE_LIMIT + 1;
         let mut length_delimiter_buffer = BytesMut::new();
         encode_length_delimiter(too_long_message_len, &mut length_delimiter_buffer).unwrap();
         let mut reader = Cursor::new(length_delimiter_buffer);

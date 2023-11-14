@@ -4,18 +4,15 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::time::Duration;
 
 use celestia_proto::p2p::pb::header_request::Data;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
 use futures::future::join_all;
-use instant::Instant;
 use libp2p::request_response::{OutboundFailure, OutboundRequestId};
 use libp2p::PeerId;
-use smallvec::SmallVec;
 use tokio::sync::oneshot;
-use tracing::{instrument, trace, warn};
+use tracing::{debug, instrument, trace};
 
 use crate::executor::{spawn, yield_now};
 use crate::header_ex::utils::{HeaderRequestExt, HeaderResponseExt};
@@ -25,7 +22,6 @@ use crate::peer_tracker::PeerTracker;
 use crate::utils::{OneshotResultSender, OneshotResultSenderExt, VALIDATIONS_PER_YIELD};
 
 const MAX_PEERS: usize = 10;
-const TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(super) struct HeaderExClientHandler<S = ReqRespBehaviour>
 where
@@ -38,7 +34,6 @@ where
 struct State {
     request: HeaderRequest,
     respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
-    started_at: Instant,
 }
 
 pub(super) trait RequestSender {
@@ -108,7 +103,6 @@ where
         let state = State {
             request,
             respond_to,
-            started_at: Instant::now(),
         };
 
         self.reqs.insert(req_id, state);
@@ -139,7 +133,6 @@ where
             let state = State {
                 request: request.clone(),
                 respond_to: tx,
-                started_at: Instant::now(),
             };
 
             self.reqs.insert(req_id, state);
@@ -220,14 +213,14 @@ where
         });
     }
 
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub(super) fn on_failure(
         &mut self,
         peer: PeerId,
         request_id: S::RequestId,
         error: OutboundFailure,
     ) {
-        trace!("Outbound failure");
+        debug!("Outbound failure");
 
         if let Some(state) = self.reqs.remove(&request_id) {
             state
@@ -236,31 +229,7 @@ where
         }
     }
 
-    #[instrument(skip_all)]
-    fn prune_expired_requests(&mut self) {
-        let mut expired_reqs = SmallVec::<[_; 32]>::new();
-
-        for (req_id, state) in self.reqs.iter() {
-            if state.started_at.elapsed() >= TIMEOUT {
-                expired_reqs.push(*req_id);
-            }
-        }
-
-        if !expired_reqs.is_empty() {
-            warn!("{} requests timed out", expired_reqs.len());
-        }
-
-        for req_id in expired_reqs {
-            if let Some(state) = self.reqs.remove(&req_id) {
-                state
-                    .respond_to
-                    .maybe_send_err(HeaderExError::OutboundFailure(OutboundFailure::Timeout));
-            }
-        }
-    }
-
     pub(super) fn poll(&mut self, _cx: &mut Context) -> Poll<()> {
-        self.prune_expired_requests();
         Poll::Pending
     }
 }
@@ -282,10 +251,16 @@ async fn decode_and_verify_responses(
 
     let mut headers = Vec::with_capacity(responses.len());
 
-    for responses in responses.chunks(VALIDATIONS_PER_YIELD) {
+    'outer: for responses in responses.chunks(VALIDATIONS_PER_YIELD) {
         for response in responses {
-            // Unmarshal and validate
-            let header = response.to_extended_header()?;
+            // Unmarshal and validate. Propagate error only if nothing
+            // was decoded before.
+            let header = match response.to_extended_header() {
+                Ok(header) => header,
+                Err(e) if headers.is_empty() => return Err(e),
+                Err(_) => break 'outer,
+            };
+
             trace!("Header: {header}");
             headers.push(header);
         }
@@ -440,6 +415,34 @@ mod tests {
 
         let result = rx.await.unwrap().unwrap();
         assert_eq!(result.len(), 3);
+        assert_eq!(result, expected_headers);
+    }
+
+    #[async_test]
+    async fn request_range_responds_with_invalid_headaer_in_the_middle() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 5), tx);
+
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let mut headers = gen.next_many(5);
+
+        invalidate(&mut headers[2]);
+        let expected_headers = &headers[..2];
+
+        let responses = headers
+            .iter()
+            .map(|header| header.to_header_response())
+            .collect::<Vec<_>>();
+
+        mock_req.send_n_responses(&mut handler, 1, responses);
+
+        let result = rx.await.unwrap().unwrap();
+        assert_eq!(result.len(), 2);
         assert_eq!(result, expected_headers);
     }
 

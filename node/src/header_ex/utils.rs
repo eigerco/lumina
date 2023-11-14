@@ -7,7 +7,7 @@ use tendermint_proto::Protobuf;
 
 use crate::header_ex::HeaderExError;
 
-pub(super) trait HeaderRequestExt {
+pub(crate) trait HeaderRequestExt {
     fn with_origin(origin: u64, amount: u64) -> HeaderRequest;
     fn with_hash(hash: Hash) -> HeaderRequest;
     fn head_request() -> HeaderRequest;
