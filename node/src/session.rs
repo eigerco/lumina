@@ -27,7 +27,7 @@ impl Session {
             return Err(P2pError::HeaderEx(HeaderExError::InvalidRequest));
         }
 
-        let (response_tx, response_rx) = mpsc::channel(8);
+        let (response_tx, response_rx) = mpsc::channel(MAX_CONCURRENT_REQS);
 
         Ok(Session {
             next_height: from_height,
