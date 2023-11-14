@@ -352,7 +352,7 @@ impl Codec for HeaderCodec {
         }
 
         parse_header_request(&data).ok_or_else(|| {
-            // We have two cases that can reach here:
+            // There are two cases that can reach here:
             //
             // 1. The request is invalid
             // 2. The request is incomplete because of the size limit or time limit
@@ -383,7 +383,7 @@ impl Codec for HeaderCodec {
         }
 
         if msgs.is_empty() {
-            // We have two cases that can reach here:
+            // There are two cases that can reach here:
             //
             // 1. The response is invalid
             // 2. The response is incomplete because of the size limit or time limit
