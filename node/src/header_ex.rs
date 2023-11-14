@@ -32,12 +32,12 @@ use crate::peer_tracker::PeerTracker;
 use crate::store::Store;
 use crate::utils::{protocol_id, OneshotResultSender};
 
-/// Max request size in bytes
-const REQUEST_SIZE_MAXIMUM: usize = 1024;
+/// Size limit of a request in bytes
+const REQUEST_SIZE_LIMIT: usize = 1024;
 /// Time limit on reading/writing a request
 const REQUEST_TIME_LIMIT: Duration = Duration::from_secs(1);
-/// Max response size in bytes
-const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
+/// Size limit of a response in bytes
+const RESPONSE_SIZE_LIMIT: usize = 10 * 1024 * 1024;
 /// Time limit on reading/writing a response
 const RESPONSE_TIME_LIMIT: Duration = Duration::from_secs(5);
 /// Substream negotiation timeout
@@ -345,9 +345,9 @@ impl Codec for HeaderCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let data = read_up_to(io, REQUEST_SIZE_MAXIMUM, REQUEST_TIME_LIMIT).await?;
+        let data = read_up_to(io, REQUEST_SIZE_LIMIT, REQUEST_TIME_LIMIT).await?;
 
-        if data.len() >= REQUEST_SIZE_MAXIMUM {
+        if data.len() >= REQUEST_SIZE_LIMIT {
             debug!("Message filled the whole buffer (len: {})", data.len());
         }
 
@@ -368,9 +368,9 @@ impl Codec for HeaderCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let data = read_up_to(io, RESPONSE_SIZE_MAXIMUM, RESPONSE_TIME_LIMIT).await?;
+        let data = read_up_to(io, RESPONSE_SIZE_LIMIT, RESPONSE_TIME_LIMIT).await?;
 
-        if data.len() >= RESPONSE_SIZE_MAXIMUM {
+        if data.len() >= RESPONSE_SIZE_LIMIT {
             debug!("Message filled the whole buffer (len: {})", data.len());
         }
 
@@ -405,7 +405,7 @@ impl Codec for HeaderCodec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let mut buf = Vec::with_capacity(REQUEST_SIZE_MAXIMUM);
+        let mut buf = Vec::with_capacity(REQUEST_SIZE_LIMIT);
 
         let _ = req.encode_length_delimited(&mut buf);
 
@@ -425,7 +425,7 @@ impl Codec for HeaderCodec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let mut buf = Vec::with_capacity(RESPONSE_SIZE_MAXIMUM);
+        let mut buf = Vec::with_capacity(RESPONSE_SIZE_LIMIT);
 
         for resp in resps {
             if resp.encode_length_delimited(&mut buf).is_err() {
@@ -595,7 +595,7 @@ mod tests {
 
     #[async_test]
     async fn test_decode_header_request_too_large() {
-        let too_long_message_len = REQUEST_SIZE_MAXIMUM + 1;
+        let too_long_message_len = REQUEST_SIZE_LIMIT + 1;
         let mut length_delimiter_buffer = BytesMut::new();
         prost::encode_length_delimiter(too_long_message_len, &mut length_delimiter_buffer).unwrap();
         let mut reader = Cursor::new(length_delimiter_buffer);
@@ -613,7 +613,7 @@ mod tests {
 
     #[async_test]
     async fn test_decode_header_response_too_large() {
-        let too_long_message_len = RESPONSE_SIZE_MAXIMUM + 1;
+        let too_long_message_len = RESPONSE_SIZE_LIMIT + 1;
         let mut length_delimiter_buffer = BytesMut::new();
         encode_length_delimiter(too_long_message_len, &mut length_delimiter_buffer).unwrap();
         let mut reader = Cursor::new(length_delimiter_buffer);
