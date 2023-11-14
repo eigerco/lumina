@@ -25,9 +25,6 @@ tendermint = { workspace = true, features = ["std", "rust-crypto"] }
 tendermint-proto = { workspace = true }
 thiserror = "1.0.40"
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-tendermint = { workspace = true }
-
 [dev-dependencies]
 ed25519-consensus = "2.1.0"
 proptest = { version = "1.2.0", default-features = false, features = ["std"] }
