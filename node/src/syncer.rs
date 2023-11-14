@@ -858,8 +858,9 @@ mod tests {
         mut requests: Vec<(u64, u64)>,
     ) {
         let first_start = requests[0].0;
+        let mut sum_amount = 0;
 
-        for _ in 0..8 {
+        for _ in 0..requests.len() {
             let (height, amount, respond_to) =
                 p2p_mock.expect_header_request_for_height_cmd().await;
 
@@ -875,9 +876,11 @@ mod tests {
                 .send(Ok(remaining_headers[start..end].to_vec()))
                 .map_err(|_| format!("headers [{}, {}]", height, height + amount - 1))
                 .unwrap();
+
+            sum_amount += amount;
         }
 
         // Remove already sent batch
-        remaining_headers.drain(..512);
+        remaining_headers.drain(..sum_amount as usize);
     }
 }
