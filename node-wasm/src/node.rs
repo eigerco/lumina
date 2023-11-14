@@ -5,7 +5,7 @@ use celestia_node::node::{Node, NodeConfig};
 use celestia_node::store::{IndexedDbStore, Store};
 use celestia_types::{hash::Hash, ExtendedHeader};
 use js_sys::Array;
-use libp2p::{identity::Keypair, Multiaddr};
+use libp2p::identity::Keypair;
 use serde_wasm_bindgen::{from_value, to_value};
 use tracing::info;
 use wasm_bindgen::prelude::*;

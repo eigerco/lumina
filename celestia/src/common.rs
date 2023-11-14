@@ -17,7 +17,9 @@ pub(crate) enum ArgNetwork {
 
 #[derive(Debug, Parser)]
 pub(crate) enum CliArgs {
+    /// Run native node locally
     Node(native::Params),
+    /// Serve compiled wasm node to be run in the browser
     Browser(server::Params),
 }
 
