@@ -286,7 +286,7 @@ async fn decode_and_verify_responses(
         for response in responses {
             // Unmarshal and validate
             let header = response.to_extended_header()?;
-            trace!("Header: {header:?}");
+            trace!("Header: {header}");
             headers.push(header);
         }
 
