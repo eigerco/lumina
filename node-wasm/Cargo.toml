@@ -2,6 +2,9 @@
 name = "celestia-node-wasm"
 version = "0.1.0"
 edition = "2021"
+description = "celestia node in wasm"
+repository = "https://github.com/eigerco/celestia-node-rs/"
+license = "Apache-2.0"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
