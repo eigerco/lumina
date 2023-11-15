@@ -1,8 +1,10 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use celestia_types::nmt::{Namespace, NS_ID_V0_SIZE};
 use rand::{Rng, RngCore};
 
 pub mod client;
-#[cfg(all(not(target_arch = "wasm32"), feature = "p2p"))]
+#[cfg(feature = "p2p")]
 pub mod tiny_node;
 
 fn ns_to_u128(ns: Namespace) -> u128 {
