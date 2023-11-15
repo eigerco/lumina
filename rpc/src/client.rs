@@ -7,9 +7,6 @@
 #[cfg(not(target_arch = "wasm32"))]
 pub use self::native::Client;
 
-#[cfg(target_arch = "wasm32")]
-pub use self::wasm::Client;
-
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
     use std::fmt;
@@ -153,80 +150,5 @@ mod native {
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-    use std::fmt;
-
-    use async_trait::async_trait;
-    use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
-    use jsonrpsee::core::params::BatchRequestBuilder;
-    use jsonrpsee::core::traits::ToRpcParams;
-    use jsonrpsee::core::Error as JrpcError;
-    use serde::de::DeserializeOwned;
-
     // TODO: implement HttpClient with `fetch`
-    pub struct Client;
-
-    impl Client {
-        pub async fn new(_conn_str: &str, _auth_token: Option<&str>) -> crate::Result<Self> {
-            // TODO: jsonrpsee_wasm_client doesn't support setting headers
-            Ok(Self)
-        }
-    }
-
-    #[async_trait]
-    impl ClientT for Client {
-        async fn notification<Params>(
-            &self,
-            _method: &str,
-            _params: Params,
-        ) -> Result<(), JrpcError>
-        where
-            Params: ToRpcParams + Send,
-        {
-            todo!()
-        }
-
-        async fn request<R, Params>(&self, _method: &str, _params: Params) -> Result<R, JrpcError>
-        where
-            R: DeserializeOwned,
-            Params: ToRpcParams + Send,
-        {
-            todo!()
-        }
-
-        async fn batch_request<'a, R>(
-            &self,
-            _batch: BatchRequestBuilder<'a>,
-        ) -> Result<BatchResponse<'a, R>, JrpcError>
-        where
-            R: DeserializeOwned + fmt::Debug + 'a,
-        {
-            todo!()
-        }
-    }
-
-    #[async_trait]
-    impl SubscriptionClientT for Client {
-        async fn subscribe<'a, N, Params>(
-            &self,
-            _subscribe_method: &'a str,
-            _params: Params,
-            _unsubscribe_method: &'a str,
-        ) -> Result<Subscription<N>, JrpcError>
-        where
-            Params: ToRpcParams + Send,
-            N: DeserializeOwned,
-        {
-            todo!()
-        }
-
-        async fn subscribe_to_method<'a, N>(
-            &self,
-            _method: &'a str,
-        ) -> Result<Subscription<N>, JrpcError>
-        where
-            N: DeserializeOwned,
-        {
-            todo!()
-        }
-    }
 }
