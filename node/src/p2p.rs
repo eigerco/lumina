@@ -23,11 +23,11 @@ use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
-use crate::executor::spawn;
-use crate::executor::Interval;
+use crate::executor::{spawn, Interval};
 use crate::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
+use crate::session::Session;
 use crate::store::Store;
 use crate::swarm::new_swarm;
 use crate::utils::{
@@ -162,7 +162,7 @@ where
         let (peer_tracker_tx, peer_tracker_rx) = watch::channel(PeerTrackerInfo::default());
 
         let p2p = P2p {
-            cmd_tx,
+            cmd_tx: cmd_tx.clone(),
             header_sub_watcher: header_sub_rx,
             peer_tracker_info_watcher: peer_tracker_rx,
             local_peer_id: PeerId::random(),
@@ -170,6 +170,7 @@ where
         };
 
         let handle = crate::test_utils::MockP2pHandle {
+            cmd_tx,
             cmd_rx,
             header_sub_tx,
             peer_tracker_tx,
@@ -285,12 +286,8 @@ where
 
         let height = from.height().value() + 1;
 
-        let headers = self
-            .header_ex_request(HeaderRequest {
-                data: Some(header_request::Data::Origin(height)),
-                amount,
-            })
-            .await?;
+        let mut session = Session::new(height, amount, self.cmd_tx.clone())?;
+        let headers = session.run().await?;
 
         from.verify_adjacent_range(&headers)
             .map_err(|_| HeaderExError::InvalidResponse)?;
