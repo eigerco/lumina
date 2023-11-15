@@ -66,13 +66,13 @@ jobs:
       uses: nanasess/setup-chromedriver@v2
 
     - name: Build (wasm32-unknown-unknown)
-      run: cargo build --all --target=wasm32-unknown-unknown
+      run: cargo build --all --target=wasm32-unknown-unknown --features=wasm-bindgen
 
     - name: Test proto crate
       run: wasm-pack test --node proto
 
     - name: Test types crate
-      run: wasm-pack test --node types
+      run: wasm-pack test --node types --features=wasm-bindgen
 
     - name: Test node crate
       run: wasm-pack test --headless --chrome node

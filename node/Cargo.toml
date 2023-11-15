@@ -52,6 +52,7 @@ libp2p = { workspace = true, features = [
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 backoff = { version = "0.4.0", features = ["wasm-bindgen"] }
+celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { version = "0.2.10", features = ["js"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 libp2p = { workspace = true, features = ["wasm-bindgen", "webtransport-websys"] }
