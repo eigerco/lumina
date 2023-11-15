@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+#[cfg(any(not(target_arch = "wasm32"), feature = "wasm-bindgen"))]
 use std::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
@@ -18,6 +19,7 @@ use crate::{
 pub type Validator = validator::Info;
 pub type ValidatorSet = validator::Set;
 
+#[cfg(any(not(target_arch = "wasm32"), feature = "wasm-bindgen"))]
 const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -144,16 +146,19 @@ impl ExtendedHeader {
             );
         }
 
-        let now = Time::now();
-        let valid_until = now.checked_add(VERIFY_CLOCK_DRIFT).unwrap();
+        #[cfg(any(not(target_arch = "wasm32"), feature = "wasm-bindgen"))]
+        {
+            let now = Time::now();
+            let valid_until = now.checked_add(VERIFY_CLOCK_DRIFT).unwrap();
 
-        if !untrusted.time().before(valid_until) {
-            bail_verification!(
-                "new untrusted header has a time from the future {} (now: {}, clock_drift: {:?})",
-                untrusted.time(),
-                now,
-                VERIFY_CLOCK_DRIFT
-            );
+            if !untrusted.time().before(valid_until) {
+                bail_verification!(
+                    "new untrusted header has a time from the future {} (now: {}, clock_drift: {:?})",
+                    untrusted.time(),
+                    now,
+                    VERIFY_CLOCK_DRIFT
+                );
+            }
         }
 
         // Optimization: If we are verifying an adjacent header we can avoid

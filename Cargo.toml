@@ -10,8 +10,8 @@ celestia-rpc = { version = "0.1.0", path = "rpc", default-features = false }
 celestia-types = { version = "0.1.0", path = "types", default-features = false }
 libp2p = "0.53.1"
 nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "d821332" }
-tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "ef58b85", default-features = false }
-tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "ef58b85" }
+tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "bbe7de8", default-features = false }
+tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "bbe7de8" }
 
 [patch.'https://github.com/eigerco/celestia-tendermint-rs.git']
 # Uncomment to apply local changes
