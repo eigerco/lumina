@@ -443,7 +443,7 @@ where
                     if self.peer_tracker.info().num_connected_peers < MIN_CONNECTED_PEERS
                         || kademlia_last_bootstrap.elapsed() > KADEMLIA_BOOTSTRAP_PERIOD
                     {
-                        info!("Running kademlia bootstrap procedure.");
+                        debug!("Running kademlia bootstrap procedure.");
                         let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
                         kademlia_last_bootstrap = Instant::now();
                     }
