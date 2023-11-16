@@ -83,7 +83,9 @@ pub fn canonical_network_bootnodes(network: Network) -> impl Iterator<Item = Mul
         ],
         Network::Private => &[],
     };
-    peers.iter().map(|s| s.parse().unwrap())
+    peers
+        .iter()
+        .map(|s| s.parse().expect("Invalid bootstrap address"))
 }
 
 #[cfg(test)]
