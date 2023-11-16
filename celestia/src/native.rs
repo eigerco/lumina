@@ -43,7 +43,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     let p2p_bootnodes = if args.bootnodes.is_empty() {
         match network {
             Network::Private => fetch_bridge_multiaddrs(CELESTIA_LOCAL_BRIDGE_RPC_ADDR).await?,
-            network => canonical_network_bootnodes(network),
+            network => canonical_network_bootnodes(network).collect(),
         }
     } else {
         args.bootnodes
