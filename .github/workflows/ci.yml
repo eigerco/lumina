@@ -18,11 +18,11 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install wasm Rust
-      uses: ATiltedTree/setup-rust@v1
+      uses: action-rs/toolchain@v1
       with:
         rust-version: stable
         components: clippy
-        targets: wasm32-unknown-unknown
+        target: wasm32-unknown-unknown
 
     - name: Run clippy for native
       run: cargo clippy --all --all-targets -- -D warnings
