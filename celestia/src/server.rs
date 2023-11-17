@@ -9,6 +9,7 @@ use axum::{body, Json, Router};
 use celestia_node::network::{canonical_network_bootnodes, network_genesis};
 use celestia_types::hash::Hash;
 use clap::Args;
+use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
 use rust_embed::RustEmbed;
 use serde::Serialize;
@@ -53,7 +54,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     let genesis_hash = network_genesis(network);
     let bootnodes = if args.bootnodes.is_empty() {
         canonical_network_bootnodes(network)
-            .filter(|addr| addr.protocol_stack().any(|proto| proto == "webtransport"))
+            .filter(|addr| addr.iter().any(|proto| proto == Protocol::WebTransport))
             .collect()
     } else {
         args.bootnodes

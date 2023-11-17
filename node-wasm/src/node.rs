@@ -197,7 +197,7 @@ impl WasmNodeConfig {
             network,
             genesis_hash: network_genesis(network.into()).map(|h| h.to_string()),
             bootnodes: canonical_network_bootnodes(network.into())
-                .filter(|addr| addr.protocol_stack().any(|proto| proto == "webtransport"))
+                .filter(|addr| addr.iter().any(|proto| proto == Protocol::WebTransport))
                 .map(|addr| addr.to_string())
                 .collect::<Vec<_>>(),
         }
