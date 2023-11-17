@@ -5,35 +5,124 @@
   <meta charset="UTF-8" />
   <title>celestia-node-rs</title>
   <script type="module" src="/js/run_node.js"></script>
+  <style>
+    :root {
+      --bg1: #151515;
+      --bg2: #171717;
+      --fg1: #dde0e4;
+      --border: #505050;
+      --fonts: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, system-ui, Cantarell, Open Sans, Helvetica Neue, sans-serif;
+      --fonts-mono: Roboto Mono, Inconsolata, Source Code Pro, IBM Plex Mono, monospace, monospace;
+    }
+
+    body {
+      background-color: var(--bg2);
+      color: var(--fg1);
+      font-family: var(--fonts);
+      margin: 1rem;
+    }
+
+    input {
+      text-align: center;
+    }
+
+    input,
+    textarea {
+      padding: 0.5rem;
+      font-family: var(--fonts-mono);
+    }
+
+    select,
+    button {
+      padding: 0.5rem 1rem;
+    }
+
+    .config {
+      background-color: var(--bg1);
+      color: var(--fg1);
+      border: 1px solid var(--border);
+    }
+
+    .config:focus,
+    .config:focus-visible {
+      border: 1px solid var(--fg1);
+      outline: none;
+    }
+
+    .status {
+      margin: 1rem 0 1rem 0.5rem;
+      visibility: hidden;
+    }
+
+    h2.status {
+      margin: 2rem 0 1rem 0;
+    }
+
+    .latest-block {
+      margin: 0.5rem 1rem;
+    }
+
+    .mono {
+      margin-left: 0.5rem;
+      font-family: var(--fonts-mono);
+    }
+  </style>
 </head>
 
 <body>
   <h1>Celestia Node</h1>
 
-  <h2>Network</h2>
-  <select id="network_id" class="config">
-    <option value="0">Mainnet</option>
-    <option value="1">Arabica</option>
-    <option value="2">Mocha</option>
-    <option value="3">Private</option>
-  </select>
+  <div>
+    <h3>Network</h3>
+    <select id="network_id" class="config">
+      <option value="0">Mainnet</option>
+      <option value="1">Arabica</option>
+      <option value="2">Mocha</option>
+      <option value="3">Private</option>
+    </select>
+  </div>
 
-  <h2>Bootnodes</h2>
-  <textarea id="bootnodes" class="config" cols=220 rows=10>
-  </textarea>
+  <div>
+    <h3>Genesis Hash</h3>
+    <input type="text" id="genesis_hash" class="config" size=64 />
+  </div>
 
-  <h2>Genesis Hash</h2>
-  <input type="text" id="genesis_hash" class="config" size=80 />
+  <h3>Bootnodes</h3>
+  <textarea id="bootnodes" class="config" cols=120 rows=8></textarea>
 
-  <button id="start" class="config">Start!</button>
+  <div>
+    <button id="start" class="config"><b>Start!</b></button>
+  </div>
 
-  <h3>Status</h3>
-  <h4>PeerId</h4>
-  <div id="peer_id"></div>
-  <h4>Syncer</h4>
-  <div id="syncer"></div>
-  <h4>Peers</h4>
-  <div id="peers"></div>
+  <h2 class="status">Status</h2>
+
+  <div class="status">
+    <b>PeerId: </b>
+    <span class="mono" id="peer_id"></span>
+  </div>
+
+  <div class="status">
+    <b>Synchronizing headers: </b>
+    <span class="mono" id="syncer"></span>
+  </div>
+
+  <div class="status">
+    <b>Latest block:</b>
+    <div class="latest-block">
+      Height: <span class="mono" id="block-height"></span>
+    </div>
+    <div class="latest-block">
+      Hash: <span class="mono" id="block-hash"></span>
+    </div>
+    <div class="latest-block">
+      Data square size: <span class="mono" id="block-data-square"></span>
+    </div>
+  </div>
+
+  <div class="status">
+    <b>Peers:</b>
+    <div id="peers"></div>
+  </div>
 </body>
 
 </html>

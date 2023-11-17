@@ -23,16 +23,26 @@ async function show_stats(node) {
   if (!node) {
     return;
   }
-  document.getElementById("syncer").innerText = JSON.stringify(await node.syncer_info());
+  let info = await node.syncer_info();
+  document.getElementById("syncer").innerText = `${info.local_head}/${info.subjective_head}`;
 
   let peers_ul = document.createElement('ul');
   (await node.connected_peers()).forEach(function(peer) {
     var li = document.createElement("li");
     li.innerText = peer;
+    li.classList.add("mono");
     peers_ul.appendChild(li);
   });
 
   document.getElementById("peers").replaceChildren(peers_ul);
+
+  const network_head = node.get_network_head_header();
+  const square_rows = network_head.dah.row_roots.length;
+  const square_cols = network_head.dah.column_roots.length;
+
+  document.getElementById("block-height").innerText = network_head.header.height;
+  document.getElementById("block-hash").innerText = network_head.commit.block_id.hash;
+  document.getElementById("block-data-square").innerText = `${square_rows}x${square_cols} shares`;
 }
 
 function bind_config(data) {
@@ -82,7 +92,8 @@ function bind_config(data) {
 async function start_node(config) {
   window.node = await new Node(config);
 
-  document.getElementById("peer_id").innerText = JSON.stringify(await window.node.local_peer_id());
+  document.getElementById("peer_id").innerText = await window.node.local_peer_id();
+  document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
 }
 
 async function main(document, window) {
