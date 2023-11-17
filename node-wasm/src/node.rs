@@ -6,6 +6,7 @@ use celestia_node::store::{IndexedDbStore, Store};
 use celestia_types::{hash::Hash, ExtendedHeader};
 use js_sys::Array;
 use libp2p::identity::Keypair;
+use libp2p::multiaddr::Protocol;
 use serde_wasm_bindgen::{from_value, to_value};
 use tracing::info;
 use wasm_bindgen::prelude::*;
@@ -197,7 +198,7 @@ impl WasmNodeConfig {
             network,
             genesis_hash: network_genesis(network.into()).map(|h| h.to_string()),
             bootnodes: canonical_network_bootnodes(network.into())
-                .iter()
+                .filter(|addr| addr.iter().any(|proto| proto == Protocol::WebTransport))
                 .map(|addr| addr.to_string())
                 .collect::<Vec<_>>(),
         }
