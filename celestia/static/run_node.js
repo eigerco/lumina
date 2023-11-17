@@ -23,11 +23,11 @@ async function show_stats(node) {
   if (!node) {
     return;
   }
-  let info = await node.syncer_info();
+  const info = await node.syncer_info();
   document.getElementById("syncer").innerText = `${info.local_head}/${info.subjective_head}`;
 
   let peers_ul = document.createElement('ul');
-  (await node.connected_peers()).forEach(function(peer) {
+  (await node.connected_peers()).forEach(peer => {
     var li = document.createElement("li");
     li.innerText = peer;
     li.classList.add("mono");
@@ -82,13 +82,13 @@ function bind_config(data) {
   window.config = new Proxy(data, proxy);
   update_config_elements();
 
-  network_div.addEventListener("change", (event) => {
+  network_div.addEventListener("change", event => {
     window.config.network = Number(event.target.value.trim());
   });
-  genesis_div.addEventListener("change", (event) => {
+  genesis_div.addEventListener("change", event => {
     window.config.genesis_hash = event.target.value.trim();
   });
-  bootnodes_div.addEventListener("change", (event) => {
+  bootnodes_div.addEventListener("change", event => {
     window.config.bootnodes = event.target.value.trim().split("\n").map(multiaddr => multiaddr.trim());
   });
 }
@@ -105,15 +105,12 @@ async function main(document, window) {
 
   bind_config(await fetch_config());
 
-  document.getElementById("start").addEventListener("click", async function(ev) {
-    document.querySelectorAll('.config').forEach(function(element) {
-      element.disabled = true
-    });
-
+  document.getElementById("start").addEventListener("click", async () => {
+    document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
     start_node(window.config);
   });
 
-  setInterval(async function() { await show_stats(window.node) }, 1000)
+  setInterval(async () => await show_stats(window.node), 1000)
 }
 
 await main(document, window);
