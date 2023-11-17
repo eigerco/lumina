@@ -37,6 +37,10 @@ async function show_stats(node) {
   document.getElementById("peers").replaceChildren(peers_ul);
 
   const network_head = node.get_network_head_header();
+  if (network_head == null) {
+    return
+  }
+
   const square_rows = network_head.dah.row_roots.length;
   const square_cols = network_head.dah.column_roots.length;
 
