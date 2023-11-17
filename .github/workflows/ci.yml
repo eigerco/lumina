@@ -30,6 +30,7 @@ jobs:
     - name: Run clippy for wasm32
       run: cargo clippy --all --all-targets --target=wasm32-unknown-unknown -- -D warnings
 
+
   fmt:
     runs-on: ubuntu-latest
     steps:
