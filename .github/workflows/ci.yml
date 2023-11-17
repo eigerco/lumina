@@ -18,9 +18,9 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install wasm Rust
-      uses: action-rs/toolchain@v1
+      uses: actions-rs/toolchain@v1
       with:
-        rust-version: stable
+        toolchain: stable
         components: clippy
         target: wasm32-unknown-unknown
 
