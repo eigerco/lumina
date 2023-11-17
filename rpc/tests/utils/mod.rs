@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use celestia_types::nmt::{Namespace, NS_ID_V0_SIZE};
 use rand::{Rng, RngCore};
 

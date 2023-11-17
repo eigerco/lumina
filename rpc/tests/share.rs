@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use celestia_rpc::prelude::*;
 use celestia_types::consts::appconsts::{
     CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SEQUENCE_LEN_BYTES,
