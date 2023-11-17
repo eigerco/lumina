@@ -1,4 +1,6 @@
-use crate::nmt::NS_SIZE;
+use nmt_rs::simple_merkle::tree::MerkleHash;
+
+use crate::nmt::{NamespacedSha2Hasher, NS_SIZE};
 use crate::Result;
 
 const NAMESPACED_HASH_SIZE: usize = NamespacedHash::size();
@@ -15,7 +17,7 @@ pub trait NamespacedHashExt {
 
 impl NamespacedHashExt for NamespacedHash {
     fn empty_root() -> NamespacedHash {
-        nmt_rs::NamespacedHash::<NS_SIZE>::EMPTY_ROOT
+        NamespacedSha2Hasher::EMPTY_ROOT
     }
 
     fn from_raw(bytes: &[u8]) -> Result<NamespacedHash> {

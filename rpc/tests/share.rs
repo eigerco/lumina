@@ -5,7 +5,7 @@ use celestia_types::consts::appconsts::{
     CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SEQUENCE_LEN_BYTES,
     SHARE_INFO_BYTES,
 };
-use celestia_types::nmt::Namespace;
+use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
 use celestia_types::Blob;
 
 pub mod utils;
@@ -115,7 +115,7 @@ async fn get_shares_by_namespace_wrong_ns_out_of_range() {
         .unwrap();
 
     assert!(ns_shares.rows.is_empty());
-    assert!(!root_hash.contains(random_ns.into()));
+    assert!(!root_hash.contains::<NamespacedSha2Hasher>(random_ns.into()));
 }
 
 #[tokio::test]
