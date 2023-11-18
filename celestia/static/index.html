@@ -7,10 +7,11 @@
   <script type="module" src="/js/run_node.js"></script>
   <style>
     :root {
-      --bg1: #151515;
-      --bg2: #171717;
-      --fg1: #dde0e4;
-      --border: #505050;
+      --bg1: #121212;
+      --bg2: #101010;
+      --fg1: #2ecc71;
+      --fg2: #5787ff;
+      --border: #5f87ff;
       --fonts: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, system-ui, Cantarell, Open Sans, Helvetica Neue, sans-serif;
       --fonts-mono: Roboto Mono, Inconsolata, Source Code Pro, IBM Plex Mono, monospace, monospace;
     }
@@ -18,7 +19,7 @@
     body {
       background-color: var(--bg2);
       color: var(--fg1);
-      font-family: var(--fonts);
+      font-family: var(--fonts-mono);
       margin: 1rem;
     }
 
@@ -52,19 +53,21 @@
     .status {
       margin: 1rem 0 1rem 0.5rem;
       visibility: hidden;
+      color: var(--fg2);
     }
 
     h2.status {
       margin: 2rem 0 1rem 0;
+      color: var(--fg1);
     }
 
     .latest-block {
       margin: 0.5rem 1rem;
     }
 
-    .mono {
+    .status-value {
       margin-left: 0.5rem;
-      font-family: var(--fonts-mono);
+      color: var(--fg1);
     }
   </style>
 </head>
@@ -93,31 +96,34 @@
   <h2 class="status">Status</h2>
 
   <div class="status">
-    <b>PeerId: </b>
-    <span class="mono" id="peer_id"></span>
+    <b>PeerId:</b>
+    <span class="status-value" id="peer_id"></span>
   </div>
 
   <div class="status">
-    <b>Synchronizing headers: </b>
-    <span class="mono" id="syncer"></span>
+    <b>Synchronizing headers:</b>
+    <span class="status-value" id="syncer"></span>
   </div>
 
   <div class="status">
     <b>Latest block:</b>
     <div class="latest-block">
-      Height: <span class="mono" id="block-height"></span>
+      <b>Height:</b>
+      <span class="status-value" id="block-height"></span>
     </div>
     <div class="latest-block">
-      Hash: <span class="mono" id="block-hash"></span>
+      <b>Hash:</b>
+      <span class="status-value" id="block-hash"></span>
     </div>
     <div class="latest-block">
-      Data square size: <span class="mono" id="block-data-square"></span>
+      <b>Data square size:</b>
+      <span class="status-value" id="block-data-square"></span>
     </div>
   </div>
 
   <div class="status">
     <b>Peers:</b>
-    <div id="peers"></div>
+    <div class="status-value" id="peers"></div>
   </div>
 </body>
 
