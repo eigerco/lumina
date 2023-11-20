@@ -50,8 +50,8 @@ async function show_stats(node) {
 }
 
 function bind_config(data) {
-  const network_div = document.getElementById("network_id");
-  const genesis_div = document.getElementById("genesis_hash");
+  const network_div = document.getElementById("network-id");
+  const genesis_div = document.getElementById("genesis-hash");
   const bootnodes_div = document.getElementById("bootnodes");
 
   const update_config_elements = () => {
@@ -96,7 +96,7 @@ function bind_config(data) {
 async function start_node(config) {
   window.node = await new Node(config);
 
-  document.getElementById("peer_id").innerText = await window.node.local_peer_id();
+  document.getElementById("peer-id").innerText = await window.node.local_peer_id();
   document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
 }
 
