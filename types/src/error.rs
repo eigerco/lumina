@@ -46,6 +46,9 @@ pub enum Error {
     #[error("Invalid nmt leaf size: {0}")]
     InvalidNmtLeafSize(usize),
 
+    #[error("Invalid nmt node order")]
+    InvalidNmtNodeOrder,
+
     #[error(
         "Sequence len must fit into {} bytes, got value {0}",
         appconsts::SEQUENCE_LEN_BYTES
