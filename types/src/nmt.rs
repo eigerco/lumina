@@ -7,7 +7,9 @@ mod namespace_proof;
 mod namespaced_hash;
 
 pub use self::namespace_proof::NamespaceProof;
-pub use self::namespaced_hash::{NamespacedHash, NamespacedHashExt, RawNamespacedHash, NAMESPACED_HASH_SIZE, HASH_SIZE};
+pub use self::namespaced_hash::{
+    NamespacedHash, NamespacedHashExt, RawNamespacedHash, HASH_SIZE, NAMESPACED_HASH_SIZE,
+};
 use crate::{Error, Result};
 
 pub const NS_VER_SIZE: usize = 1;

@@ -17,8 +17,18 @@ jobs:
         version: "23.3"
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Run clippy
+    - name: Install wasm Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: clippy
+        target: wasm32-unknown-unknown
+
+    - name: Run clippy for native
       run: cargo clippy --all --all-targets -- -D warnings
+
+    - name: Run clippy for wasm32
+      run: cargo clippy --all --all-targets --target=wasm32-unknown-unknown -- -D warnings
 
 
   fmt:
@@ -57,16 +67,19 @@ jobs:
       uses: nanasess/setup-chromedriver@v2
 
     - name: Build (wasm32-unknown-unknown)
-      run: cargo build --all --target=wasm32-unknown-unknown
+      run: cargo build --all --target=wasm32-unknown-unknown --features=wasm-bindgen
 
     - name: Test proto crate
       run: wasm-pack test --node proto
 
     - name: Test types crate
-      run: wasm-pack test --node types
+      run: wasm-pack test --node types --features=wasm-bindgen
 
     - name: Test node crate
       run: wasm-pack test --headless --chrome node
+
+    - name: Test node-wasm crate
+      run: wasm-pack test --headless --chrome node-wasm
 
     - name: Build and pack node-wasm
       run: wasm-pack build --release --target web node-wasm && wasm-pack pack node-wasm

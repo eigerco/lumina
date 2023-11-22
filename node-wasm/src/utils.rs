@@ -2,6 +2,11 @@ use std::fmt;
 
 use celestia_node::network;
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::fmt::format::Pretty;
+use tracing_subscriber::fmt::time::UtcTime;
+use tracing_subscriber::prelude::*;
+use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -18,7 +23,17 @@ pub enum Network {
 pub fn setup_logging() {
     console_error_panic_hook::set_once();
 
-    tracing_wasm::set_as_global_default();
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_ansi(true) // Only partially supported across browsers, but we target only chrome now
+        .with_timer(UtcTime::rfc_3339()) // std::time is not available in browsers
+        .with_writer(MakeConsoleWriter) // write events to the console
+        .with_filter(LevelFilter::INFO); // TODO: allow customizing the log level
+    let perf_layer = performance_layer().with_details_from_fields(Pretty::default());
+
+    tracing_subscriber::registry()
+        .with(fmt_layer)
+        .with(perf_layer)
+        .init();
 }
 
 impl From<Network> for network::Network {

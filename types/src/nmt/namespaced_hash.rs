@@ -1,5 +1,7 @@
-use crate::nmt::NS_SIZE;
+use crate::nmt::{NamespacedSha2Hasher, NS_SIZE};
 use crate::{Error, Result};
+
+use nmt_rs::simple_merkle::tree::MerkleHash;
 
 pub const NAMESPACED_HASH_SIZE: usize = NamespacedHash::size();
 pub const HASH_SIZE: usize = 32;
@@ -17,7 +19,7 @@ pub trait NamespacedHashExt {
 
 impl NamespacedHashExt for NamespacedHash {
     fn empty_root() -> NamespacedHash {
-        nmt_rs::NamespacedHash::<NS_SIZE>::EMPTY_ROOT
+        NamespacedSha2Hasher::EMPTY_ROOT
     }
 
     fn from_raw(bytes: &[u8]) -> Result<NamespacedHash> {
@@ -72,16 +74,18 @@ mod tests {
         let ns_max = [2; NS_ID_V0_SIZE];
 
         let mut ns_bytes_min = [0; NS_SIZE];
-        ns_bytes_min[NS_SIZE - NS_ID_V0_SIZE ..].copy_from_slice(&ns_min);
+        ns_bytes_min[NS_SIZE - NS_ID_V0_SIZE..].copy_from_slice(&ns_min);
         let mut ns_bytes_max = [0; NS_SIZE];
-        ns_bytes_max[NS_SIZE - NS_ID_V0_SIZE ..].copy_from_slice(&ns_max);
+        ns_bytes_max[NS_SIZE - NS_ID_V0_SIZE..].copy_from_slice(&ns_max);
 
         let buff = NamespacedHash::with_min_and_max_ns(
             *Namespace::new_v0(&ns_min).unwrap(),
-            *Namespace::new_v0(&ns_max).unwrap()).to_array();
+            *Namespace::new_v0(&ns_max).unwrap(),
+        )
+        .to_array();
 
         assert_eq!(buff[..NS_SIZE], ns_bytes_min);
-        assert_eq!(buff[NS_SIZE..NS_SIZE*2], ns_bytes_max);
-        assert_eq!(buff[NS_SIZE*2..], [0; HASH_SIZE]);
+        assert_eq!(buff[NS_SIZE..NS_SIZE * 2], ns_bytes_max);
+        assert_eq!(buff[NS_SIZE * 2..], [0; HASH_SIZE]);
     }
 }

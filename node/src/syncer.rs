@@ -613,13 +613,21 @@ mod tests {
         assert_syncing(&syncer, &store, 30, 1058).await;
 
         // Syncer requested the first batch ([31, 542])
-        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
-        assert_eq!(height, 31);
-        assert_eq!(amount, 512);
-        respond_to
-            .send(Ok(headers.drain(..512).collect()))
-            .map_err(|_| "headers [31, 542]")
-            .unwrap();
+        handle_session_batch(
+            &mut p2p_mock,
+            &mut headers,
+            vec![
+                (31, 64),
+                (95, 64),
+                (159, 64),
+                (223, 64),
+                (287, 64),
+                (351, 64),
+                (415, 64),
+                (479, 64),
+            ],
+        )
+        .await;
         assert_syncing(&syncer, &store, 542, 1058).await;
 
         // Still syncing, but new HEAD arrived (height 1059)
@@ -628,13 +636,21 @@ mod tests {
         assert_syncing(&syncer, &store, 542, 1059).await;
 
         // Syncer requested the second batch ([543, 1054])
-        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
-        assert_eq!(height, 543);
-        assert_eq!(amount, 512);
-        respond_to
-            .send(Ok(headers.drain(..512).collect()))
-            .map_err(|_| "headers [543, 1054]")
-            .unwrap();
+        handle_session_batch(
+            &mut p2p_mock,
+            &mut headers,
+            vec![
+                (543, 64),
+                (607, 64),
+                (671, 64),
+                (735, 64),
+                (799, 64),
+                (863, 64),
+                (927, 64),
+                (991, 64),
+            ],
+        )
+        .await;
         assert_syncing(&syncer, &store, 1054, 1059).await;
 
         // Syncer requested the last batch ([1055, 1059])
@@ -683,13 +699,21 @@ mod tests {
         assert_syncing(&syncer, &store, 25, 545).await;
 
         // Syncer requested the first batch ([26, 537])
-        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
-        assert_eq!(height, 26);
-        assert_eq!(amount, 512);
-        respond_to
-            .send(Ok(headers.drain(..512).collect()))
-            .map_err(|_| "headers [26, 537]")
-            .unwrap();
+        handle_session_batch(
+            &mut p2p_mock,
+            &mut headers,
+            vec![
+                (26, 64),
+                (90, 64),
+                (154, 64),
+                (218, 64),
+                (282, 64),
+                (346, 64),
+                (410, 64),
+                (474, 64),
+            ],
+        )
+        .await;
         assert_syncing(&syncer, &store, 537, 545).await;
 
         // Syncer requested the last batch ([538, 545])
@@ -826,5 +850,37 @@ mod tests {
         assert_eq!(head_from_syncer, head);
 
         (syncer, store, handle)
+    }
+
+    async fn handle_session_batch(
+        p2p_mock: &mut MockP2pHandle,
+        remaining_headers: &mut Vec<ExtendedHeader>,
+        mut requests: Vec<(u64, u64)>,
+    ) {
+        let first_start = requests[0].0;
+        let mut sum_amount = 0;
+
+        for _ in 0..requests.len() {
+            let (height, amount, respond_to) =
+                p2p_mock.expect_header_request_for_height_cmd().await;
+
+            let pos = requests
+                .iter()
+                .position(|x| *x == (height, amount))
+                .expect("invalid request");
+            requests.remove(pos);
+
+            let start = (height - first_start) as usize;
+            let end = (height - first_start + amount) as usize;
+            respond_to
+                .send(Ok(remaining_headers[start..end].to_vec()))
+                .map_err(|_| format!("headers [{}, {}]", height, height + amount - 1))
+                .unwrap();
+
+            sum_amount += amount;
+        }
+
+        // Remove already sent batch
+        remaining_headers.drain(..sum_amount as usize);
     }
 }

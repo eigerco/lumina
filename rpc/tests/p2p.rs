@@ -1,4 +1,4 @@
-#![cfg(feature = "p2p")]
+#![cfg(all(not(target_arch = "wasm32"), feature = "p2p"))]
 use crate::utils::client::{new_test_client, AuthLevel};
 use celestia_rpc::prelude::*;
 use celestia_types::p2p;

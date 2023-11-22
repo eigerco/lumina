@@ -107,13 +107,12 @@ mod imp {
     #[derive(Debug)]
     pub(crate) struct Elapsed;
 
-    #[allow(dead_code)]
     pub(crate) fn timeout<F>(duration: Duration, future: F) -> Timeout<F>
     where
         F: Future,
     {
         let millis = u32::try_from(duration.as_millis().max(1)).unwrap_or(u32::MAX);
-        let delay = TimeoutFuture::new(millis);
+        let delay = SendWrapper::new(TimeoutFuture::new(millis));
 
         Timeout {
             value: future,
@@ -134,7 +133,7 @@ mod imp {
         #[pin]
         value: T,
         #[pin]
-        delay: TimeoutFuture,
+        delay: SendWrapper<TimeoutFuture>,
     }
     impl<T> Future for Timeout<T>
     where

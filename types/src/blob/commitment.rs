@@ -3,13 +3,14 @@ use std::num::NonZeroU64;
 
 use base64::prelude::*;
 use bytes::{Buf, BufMut, BytesMut};
+use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tendermint::crypto::sha256::HASH_SIZE;
 use tendermint::{crypto, merkle};
 use tendermint_proto::serializers::cow_str::CowStr;
 
 use crate::consts::appconsts;
-use crate::nmt::{Namespace, NamespacedHashExt, Nmt, RawNamespacedHash};
+use crate::nmt::{Namespace, NamespacedHashExt, NamespacedSha2Hasher, Nmt, RawNamespacedHash};
 use crate::InfoByte;
 use crate::{Error, Result};
 
@@ -61,7 +62,7 @@ impl Commitment {
         let mut subtree_roots: Vec<RawNamespacedHash> = Vec::with_capacity(leaf_sets.len());
         for leaf_set in leaf_sets {
             // create the nmt
-            let mut tree = Nmt::new();
+            let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
             for leaf_share in leaf_set {
                 tree.push_leaf(leaf_share.as_ref(), namespace.into())
                     .map_err(Error::Nmt)?;

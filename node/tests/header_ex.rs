@@ -9,7 +9,7 @@ use celestia_node::{
     test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
 };
 use celestia_types::test_utils::{invalidate, unverify};
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 
 use crate::utils::new_connected_node;
 
@@ -112,13 +112,12 @@ async fn client_server() {
     assert_eq!(server_headers[1..], received_all_headers);
 
     // reqest more headers than available in store
-    // TODO: this reflects _current_ behaviour. once sessions are implemented it'll keep retrying
-    // and this test will need to be changed
-    let partial_response = client
-        .request_verified_headers(&received_genesis, 20)
-        .await
-        .unwrap();
-    assert_eq!(partial_response.len(), 19);
+    timeout(
+        Duration::from_millis(200),
+        client.request_verified_headers(&received_genesis, 20),
+    )
+    .await
+    .expect_err("sessions keep retrying until all headers are received");
 
     // request unknown hash
     let unstored_header = header_generator.next_of(&server_headers[0]);
@@ -342,14 +341,12 @@ async fn invalidated_header_server_store() {
 
     client.wait_connected().await.unwrap();
 
-    let invalidated_header_in_range = client
-        .request_verified_headers(&server_headers[9], 5)
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        invalidated_header_in_range,
-        NodeError::P2p(P2pError::HeaderEx(HeaderExError::InvalidResponse))
-    ));
+    timeout(
+        Duration::from_millis(200),
+        client.request_verified_headers(&server_headers[9], 5),
+    )
+    .await
+    .expect_err("session never stops retrying on invalid header");
 
     let requested_from_invalidated_header = client
         .request_verified_headers(&server_headers[10], 3)

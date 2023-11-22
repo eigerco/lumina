@@ -23,21 +23,35 @@ async function show_stats(node) {
   if (!node) {
     return;
   }
-  document.getElementById("syncer").innerText = JSON.stringify(await node.syncer_info());
+  const info = await node.syncer_info();
+  document.getElementById("syncer").innerText = `${info.local_head}/${info.subjective_head}`;
 
   let peers_ul = document.createElement('ul');
-  (await node.connected_peers()).forEach(function(peer) {
+  (await node.connected_peers()).forEach(peer => {
     var li = document.createElement("li");
     li.innerText = peer;
+    li.classList.add("mono");
     peers_ul.appendChild(li);
   });
 
   document.getElementById("peers").replaceChildren(peers_ul);
+
+  const network_head = node.get_network_head_header();
+  if (network_head == null) {
+    return
+  }
+
+  const square_rows = network_head.dah.row_roots.length;
+  const square_cols = network_head.dah.column_roots.length;
+
+  document.getElementById("block-height").innerText = network_head.header.height;
+  document.getElementById("block-hash").innerText = network_head.commit.block_id.hash;
+  document.getElementById("block-data-square").innerText = `${square_rows}x${square_cols} shares`;
 }
 
 function bind_config(data) {
-  const network_div = document.getElementById("network_id");
-  const genesis_div = document.getElementById("genesis_hash");
+  const network_div = document.getElementById("network-id");
+  const genesis_div = document.getElementById("genesis-hash");
   const bootnodes_div = document.getElementById("bootnodes");
 
   const update_config_elements = () => {
@@ -68,13 +82,13 @@ function bind_config(data) {
   window.config = new Proxy(data, proxy);
   update_config_elements();
 
-  network_div.addEventListener("change", (event) => {
+  network_div.addEventListener("change", event => {
     window.config.network = Number(event.target.value.trim());
   });
-  genesis_div.addEventListener("change", (event) => {
+  genesis_div.addEventListener("change", event => {
     window.config.genesis_hash = event.target.value.trim();
   });
-  bootnodes_div.addEventListener("change", (event) => {
+  bootnodes_div.addEventListener("change", event => {
     window.config.bootnodes = event.target.value.trim().split("\n").map(multiaddr => multiaddr.trim());
   });
 }
@@ -82,7 +96,8 @@ function bind_config(data) {
 async function start_node(config) {
   window.node = await new Node(config);
 
-  document.getElementById("peer_id").innerText = JSON.stringify(await window.node.local_peer_id());
+  document.getElementById("peer-id").innerText = await window.node.local_peer_id();
+  document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
 }
 
 async function main(document, window) {
@@ -90,15 +105,12 @@ async function main(document, window) {
 
   bind_config(await fetch_config());
 
-  document.getElementById("start").addEventListener("click", async function(ev) {
-    document.querySelectorAll('.config').forEach(function(element) {
-      element.disabled = true
-    });
-
+  document.getElementById("start").addEventListener("click", async () => {
+    document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
     start_node(window.config);
   });
 
-  setInterval(async function() { await show_stats(window.node) }, 1000)
+  setInterval(async () => await show_stats(window.node), 1000)
 }
 
 await main(document, window);

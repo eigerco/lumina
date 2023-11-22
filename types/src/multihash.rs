@@ -3,7 +3,9 @@ use nmt_rs::simple_merkle::tree::MerkleHash;
 use nmt_rs::NamespaceMerkleHasher;
 
 use crate::byzantine::MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE;
-use crate::nmt::{Namespace, NamespacedHashExt, NamespacedSha2Hasher, NS_SIZE, NAMESPACED_HASH_SIZE, HASH_SIZE};
+use crate::nmt::{
+    Namespace, NamespacedHashExt, NamespacedSha2Hasher, HASH_SIZE, NAMESPACED_HASH_SIZE, NS_SIZE,
+};
 use crate::{Error, Result};
 
 pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;

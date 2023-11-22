@@ -7,6 +7,7 @@ use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use futures::StreamExt;
+use instant::Instant;
 use libp2p::{
     autonat,
     core::{ConnectedPoint, Endpoint},
@@ -23,11 +24,11 @@ use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
-use crate::executor::spawn;
-use crate::executor::Interval;
+use crate::executor::{spawn, Interval};
 use crate::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
+use crate::session::Session;
 use crate::store::Store;
 use crate::swarm::new_swarm;
 use crate::utils::{
@@ -36,6 +37,18 @@ use crate::utils::{
 };
 
 pub use crate::header_ex::HeaderExError;
+
+// Minimal number of peers that we want to maintain connection to.
+// If we have fewer peers than that, we will try to reconnect / discover
+// more aggresively.
+const MIN_CONNECTED_PEERS: u64 = 4;
+// Bootstrap procedure is a bit misleading as a name. It is actually
+// scanning the network thought the already known peers and find new
+// ones. It also recovers connectivity of previously known peers and
+// refreshes the routing table.
+//
+// libp2p team suggests to start bootstrap procedure every 5 minute
+const KADEMLIA_BOOTSTRAP_PERIOD: Duration = Duration::from_secs(5 * 60);
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
@@ -162,7 +175,7 @@ where
         let (peer_tracker_tx, peer_tracker_rx) = watch::channel(PeerTrackerInfo::default());
 
         let p2p = P2p {
-            cmd_tx,
+            cmd_tx: cmd_tx.clone(),
             header_sub_watcher: header_sub_rx,
             peer_tracker_info_watcher: peer_tracker_rx,
             local_peer_id: PeerId::random(),
@@ -170,6 +183,7 @@ where
         };
 
         let handle = crate::test_utils::MockP2pHandle {
+            cmd_tx,
             cmd_rx,
             header_sub_tx,
             peer_tracker_tx,
@@ -285,12 +299,8 @@ where
 
         let height = from.height().value() + 1;
 
-        let headers = self
-            .header_ex_request(HeaderRequest {
-                data: Some(header_request::Data::Origin(height)),
-                amount,
-            })
-            .await?;
+        let mut session = Session::new(height, amount, self.cmd_tx.clone())?;
+        let headers = session.run().await?;
 
         from.verify_adjacent_range(&headers)
             .map_err(|_| HeaderExError::InvalidResponse)?;
@@ -415,7 +425,8 @@ where
 
     async fn run(&mut self) {
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
-        let mut kademlia_interval = Interval::new(Duration::from_secs(5 * 60)).await;
+        let mut kademlia_interval = Interval::new(Duration::from_secs(30)).await;
+        let mut kademlia_last_bootstrap = Instant::now();
 
         // Initiate discovery
         let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
@@ -426,13 +437,13 @@ where
                     self.report();
                 }
                 _ = kademlia_interval.tick() => {
-                    // Bootstrap procedure is a bit misleading as a name. It is actually
-                    // scanning the network thought the already known peers and find new
-                    // ones. It also recovers connectivity of previously known peers and
-                    // refreshes the routing table.
-                    //
-                    // libp2p team suggests to start bootstrap procedure every 5 minute.
-                    let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
+                    if self.peer_tracker.info().num_connected_peers < MIN_CONNECTED_PEERS
+                        || kademlia_last_bootstrap.elapsed() > KADEMLIA_BOOTSTRAP_PERIOD
+                    {
+                        debug!("Running kademlia bootstrap procedure.");
+                        let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
+                        kademlia_last_bootstrap = Instant::now();
+                    }
                 }
                 ev = self.swarm.select_next_some() => {
                     if let Err(e) = self.on_swarm_event(ev).await {
