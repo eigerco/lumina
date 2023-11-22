@@ -4,7 +4,7 @@ use nmt_rs::NamespaceMerkleHasher;
 
 use crate::byzantine::MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE;
 use crate::nmt::{
-    Namespace, NamespacedHashExt, NamespacedSha2Hasher, HASH_SIZE, NAMESPACED_HASH_SIZE, NS_SIZE,
+    Namespace, NamespacedHashExt, NamespacedSha2Hasher, NAMESPACED_HASH_SIZE, NS_SIZE,
 };
 use crate::{Error, Result};
 
