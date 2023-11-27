@@ -3,21 +3,20 @@ use celestia_proto::share::eds::byzantine::pb::Share as RawShareWithProof;
 use cid::multihash::MultihashGeneric;
 use cid::CidGeneric;
 use serde::{Deserialize, Serialize};
-use tendermint::hash::SHA256_HASH_SIZE;
 use tendermint::{block::Height, Hash};
 use tendermint_proto::Protobuf;
 
 use crate::bail_validation;
 use crate::consts::appconsts;
 use crate::fraud_proof::FraudProof;
+use crate::multihash::{
+    MULTIHASH_NMT_CODEC_CODE, MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE,
+    MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE,
+};
 use crate::nmt::NamespacedHash;
 use crate::nmt::{Namespace, NamespaceProof, NamespacedHashExt, NS_SIZE};
 use crate::rsmt2d::Axis;
 use crate::{Error, ExtendedHeader, Result, Share};
-
-pub const MULTIHASH_NMT_CODEC_CODE: u64 = 0x7700;
-pub const MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE: u64 = 0x7701;
-pub const MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE: usize = 2 * NS_SIZE + SHA256_HASH_SIZE;
 
 type Cid = CidGeneric<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE>;
 type Multihash = MultihashGeneric<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE>;

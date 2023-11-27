@@ -1,14 +1,17 @@
 use multihash_derive::{Hasher, MultihashDigest};
 use nmt_rs::simple_merkle::tree::MerkleHash;
 use nmt_rs::NamespaceMerkleHasher;
+use tendermint::hash::SHA256_HASH_SIZE;
 
-use crate::byzantine::MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE;
 use crate::nmt::{
-    Namespace, NamespacedHashExt, NamespacedSha2Hasher, NAMESPACED_HASH_SIZE, NS_SIZE,
+    Namespace, NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, NAMESPACED_HASH_SIZE,
+    NS_SIZE,
 };
 use crate::{Error, Result};
 
-pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
+pub const MULTIHASH_NMT_CODEC_CODE: u64 = 0x7700;
+pub const MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE: u64 = 0x7701;
+pub const MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE: usize = 2 * NS_SIZE + SHA256_HASH_SIZE;
 
 struct Sha256NamespaceFlaggedHasher {
     hasher: NamespacedSha2Hasher,
@@ -17,24 +20,23 @@ struct Sha256NamespaceFlaggedHasher {
 }
 
 impl Sha256NamespaceFlaggedHasher {
-    fn hash_data(&mut self, data: &[u8]) -> Result<()> {
+    fn hash_data(&mut self, data: &[u8]) {
         let hash = if data.len() == NAMESPACED_HASH_SIZE * 2 {
             let (left, right) = data.split_at(NAMESPACED_HASH_SIZE);
+            // `try_into` panics on invalid length, which we know is correct
             self.hasher
-                .hash_nodes(&left.try_into()?, &right.try_into()?)
+                .hash_nodes(&left.try_into().unwrap(), &right.try_into().unwrap())
         } else {
             self.hasher.hash_leaf(data)
         };
 
         self.hash = Some(hash);
-
-        Ok(())
     }
 }
 
 impl Hasher for Sha256NamespaceFlaggedHasher {
     fn update(&mut self, data: &[u8]) {
-        self.hash_data(data).expect("invalid data to hash");
+        self.hash_data(data)
     }
 
     fn finalize(&mut self) -> &[u8] {
@@ -64,8 +66,19 @@ impl Default for Sha256NamespaceFlaggedHasher {
     }
 }
 
-/// Outputs Multihashes, may panic when running `digest`. See `MultihashDigestExt` trait methods
-/// for safe alternative.
+/// Provided digest method expects to receive entire, correctly formatted node in one call
+/// (to be able to distinguish leaf and non-leaf nodes) and doesn't validate the data before
+/// calling nmt-rs, so it may panic.
+/// See `MultihashDigestExt` trait methods for safe alternative.
+///
+/// # Panics
+/// provided Code::digest method may panic, if:
+/// for leaf node:
+/// - data length < NS_SIZE
+/// for inner node:
+/// - min namespace > max namespace for any of the parents
+/// - left parent's max namespace > right parent's min namespace
+///
 #[derive(Clone, Copy, Debug, Eq, MultihashDigest, PartialEq)]
 #[mh(alloc_size = 128)]
 pub enum Code {
@@ -75,7 +88,7 @@ pub enum Code {
 
 trait MultihashDigestExt {
     fn digest_leaf(&self, ns: &Namespace, data: &[u8]) -> Result<Multihash>;
-    fn digest_inner(&self, left: &NamespacedHash, right: &NamespacedHash) -> Result<Multihash>;
+    fn digest_nodes(&self, left: &NamespacedHash, right: &NamespacedHash) -> Result<Multihash>;
 }
 
 impl MultihashDigestExt for Code {
@@ -85,7 +98,7 @@ impl MultihashDigestExt for Code {
         Ok(self.digest(&namespaced_data))
     }
 
-    fn digest_inner(&self, left: &NamespacedHash, right: &NamespacedHash) -> Result<Multihash> {
+    fn digest_nodes(&self, left: &NamespacedHash, right: &NamespacedHash) -> Result<Multihash> {
         left.validate_namespace_order()?;
         right.validate_namespace_order()?;
 
@@ -139,7 +152,7 @@ mod tests {
 
         let multihash = Code::Sha256NamespaceFlagged;
         let hash = multihash.digest(&data);
-        let hash0 = multihash.digest_inner(&left, &right).unwrap();
+        let hash0 = multihash.digest_nodes(&left, &right).unwrap();
         assert_eq!(hash, hash0);
 
         assert_eq!(hash.code(), MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE);
@@ -159,7 +172,7 @@ mod tests {
         let right = NamespacedHash::with_min_and_max_ns(*ns0, *ns0);
 
         let multihash = Code::Sha256NamespaceFlagged;
-        let digest_result = multihash.digest_inner(&left, &right).unwrap_err();
+        let digest_result = multihash.digest_nodes(&left, &right).unwrap_err();
         assert!(matches!(digest_result, Error::InvalidNmtNodeOrder));
     }
 
