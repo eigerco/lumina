@@ -1,4 +1,3 @@
-//use multihash_derive::{Hasher, MultihashDigest};
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::simple_merkle::tree::MerkleHash;
