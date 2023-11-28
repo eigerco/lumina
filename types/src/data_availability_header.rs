@@ -40,6 +40,11 @@ impl DataAvailabilityHeader {
 
         Hash::Sha256(simple_hash_from_byte_vectors::<Sha256>(&all_roots))
     }
+
+    pub fn square_len(&self) -> usize {
+        // `validate_basic` checks that rows num = cols num
+        self.row_roots.len()
+    }
 }
 
 impl Protobuf<RawDataAvailabilityHeader> for DataAvailabilityHeader {}

@@ -1,104 +1,50 @@
-use multihash_derive::{Hasher, MultihashDigest};
+//use multihash_derive::{Hasher, MultihashDigest};
+use cid::CidGeneric;
+use multihash::Multihash;
 use nmt_rs::simple_merkle::tree::MerkleHash;
 use nmt_rs::NamespaceMerkleHasher;
 use tendermint::hash::SHA256_HASH_SIZE;
 
-use crate::nmt::{
-    Namespace, NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, NAMESPACED_HASH_SIZE,
-    NS_SIZE,
-};
+use crate::nmt::{Namespace, NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, NS_SIZE};
 use crate::{Error, Result};
 
 pub const MULTIHASH_NMT_CODEC_CODE: u64 = 0x7700;
 pub const MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE: u64 = 0x7701;
 pub const MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE: usize = 2 * NS_SIZE + SHA256_HASH_SIZE;
 
-struct Sha256NamespaceFlaggedHasher {
-    hasher: NamespacedSha2Hasher,
-    hash: Option<NamespacedHash>,
-    hash_buf: [u8; NAMESPACED_HASH_SIZE],
+pub trait HasMultihash<const S: usize> {
+    fn multihash(&self) -> Result<Multihash<S>>;
 }
 
-impl Sha256NamespaceFlaggedHasher {
-    fn hash_data(&mut self, data: &[u8]) {
-        let hash = if data.len() == NAMESPACED_HASH_SIZE * 2 {
-            let (left, right) = data.split_at(NAMESPACED_HASH_SIZE);
-            // `try_into` panics on invalid length, which we know is correct
-            self.hasher
-                .hash_nodes(&left.try_into().unwrap(), &right.try_into().unwrap())
-        } else {
-            self.hasher.hash_leaf(data)
-        };
-
-        self.hash = Some(hash);
-    }
-}
-
-impl Hasher for Sha256NamespaceFlaggedHasher {
-    fn update(&mut self, data: &[u8]) {
-        self.hash_data(data)
+pub trait HasCid<const S: usize>: HasMultihash<S> {
+    fn cid_v1(&self) -> Result<CidGeneric<S>> {
+        Ok(CidGeneric::<S>::new_v1(Self::codec(), self.multihash()?))
     }
 
-    fn finalize(&mut self) -> &[u8] {
-        let hash = if let Some(hash) = &self.hash {
-            hash
-        } else {
-            &NamespacedSha2Hasher::EMPTY_ROOT
-        };
-
-        self.hash_buf = hash.to_array();
-
-        &self.hash_buf
-    }
-
-    fn reset(&mut self) {
-        self.hash = None;
-    }
+    fn codec() -> u64;
 }
 
-impl Default for Sha256NamespaceFlaggedHasher {
-    fn default() -> Self {
-        Self {
-            hasher: NamespacedSha2Hasher::with_ignore_max_ns(true),
-            hash: None,
-            hash_buf: [0u8; NAMESPACED_HASH_SIZE],
-        }
-    }
-}
-
-/// Provided digest method expects to receive entire, correctly formatted node in one call
-/// (to be able to distinguish leaf and non-leaf nodes) and doesn't validate the data before
-/// calling nmt-rs, so it may panic.
-/// See `MultihashDigestExt` trait methods for safe alternative.
-///
-/// # Panics
-/// provided Code::digest method may panic, if:
-/// for leaf node:
-/// - data length < NS_SIZE
-/// for inner node:
-/// - min namespace > max namespace for any of the parents
-/// - left parent's max namespace > right parent's min namespace
-///
-#[derive(Clone, Copy, Debug, Eq, MultihashDigest, PartialEq)]
-#[mh(alloc_size = 128)]
-pub enum Code {
-    #[mh(code = MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE, hasher = Sha256NamespaceFlaggedHasher)]
-    Sha256NamespaceFlagged,
-}
-
-trait MultihashDigestExt {
-    fn digest_leaf(&self, ns: &Namespace, data: &[u8]) -> Result<Multihash>;
-    fn digest_nodes(&self, left: &NamespacedHash, right: &NamespacedHash) -> Result<Multihash>;
-}
-
-impl MultihashDigestExt for Code {
-    fn digest_leaf(&self, ns: &Namespace, data: &[u8]) -> Result<Multihash> {
+impl HasMultihash<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE> for (&Namespace, &[u8]) {
+    fn multihash(&self) -> Result<Multihash<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE>> {
+        let (ns, data) = self;
+        let hasher = NamespacedSha2Hasher::with_ignore_max_ns(true);
         let namespaced_data = [ns.as_bytes(), data].concat();
 
-        Ok(self.digest(&namespaced_data))
+        let digest = hasher.hash_leaf(&namespaced_data).to_array();
+        // size is correct, so unwrap is safe
+        Ok(Multihash::wrap(MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE, &digest).unwrap())
     }
+}
 
-    fn digest_nodes(&self, left: &NamespacedHash, right: &NamespacedHash) -> Result<Multihash> {
+impl HasCid<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE> for (&Namespace, &[u8]) {
+    fn codec() -> u64 {
+        MULTIHASH_NMT_CODEC_CODE
+    }
+}
+
+impl HasMultihash<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE> for (&NamespacedHash, &NamespacedHash) {
+    fn multihash(&self) -> Result<Multihash<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE>> {
+        let (left, right) = self;
         left.validate_namespace_order()?;
         right.validate_namespace_order()?;
 
@@ -106,18 +52,24 @@ impl MultihashDigestExt for Code {
             return Err(Error::InvalidNmtNodeOrder);
         }
 
-        let mut buffer = [0u8; NAMESPACED_HASH_SIZE * 2];
-        buffer[..NAMESPACED_HASH_SIZE].copy_from_slice(&left.to_array());
-        buffer[NAMESPACED_HASH_SIZE..].copy_from_slice(&right.to_array());
+        let hasher = NamespacedSha2Hasher::with_ignore_max_ns(true);
 
-        Ok(self.digest(&buffer))
+        let digest = hasher.hash_nodes(left, right).to_array();
+
+        Ok(Multihash::wrap(MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE, &digest).unwrap())
+    }
+}
+
+impl HasCid<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE> for (&NamespacedHash, &NamespacedHash) {
+    fn codec() -> u64 {
+        MULTIHASH_NMT_CODEC_CODE
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nmt::Namespace;
+    use crate::nmt::{Namespace, NAMESPACED_HASH_SIZE};
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -125,11 +77,9 @@ mod tests {
     #[test]
     fn test_generate_leaf_multihash() {
         let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
-        let mut data = [0xCD; 512];
-        data[0..NS_SIZE].copy_from_slice(namespace.as_bytes());
+        let data = [0xCDu8; 512];
 
-        let multihash = Code::Sha256NamespaceFlagged;
-        let hash = multihash.digest(&data);
+        let hash = (&namespace, data.as_ref()).multihash().unwrap();
 
         assert_eq!(hash.code(), MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE);
         assert_eq!(hash.size(), NAMESPACED_HASH_SIZE as u8);
@@ -147,13 +97,7 @@ mod tests {
         let left = NamespacedHash::with_min_and_max_ns(*ns0, *ns1);
         let right = NamespacedHash::with_min_and_max_ns(*ns1, *ns2);
 
-        let mut data = left.to_vec();
-        data.extend_from_slice(&right.to_array());
-
-        let multihash = Code::Sha256NamespaceFlagged;
-        let hash = multihash.digest(&data);
-        let hash0 = multihash.digest_nodes(&left, &right).unwrap();
-        assert_eq!(hash, hash0);
+        let hash = (&left, &right).multihash().unwrap();
 
         assert_eq!(hash.code(), MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE);
         assert_eq!(hash.size(), NAMESPACED_HASH_SIZE as u8);
@@ -171,42 +115,17 @@ mod tests {
         let left = NamespacedHash::with_min_and_max_ns(*ns1, *ns2);
         let right = NamespacedHash::with_min_and_max_ns(*ns0, *ns0);
 
-        let multihash = Code::Sha256NamespaceFlagged;
-        let digest_result = multihash.digest_nodes(&left, &right).unwrap_err();
-        assert!(matches!(digest_result, Error::InvalidNmtNodeOrder));
-    }
-
-    #[test]
-    #[should_panic]
-    fn invalid_ns_order_panic() {
-        let ns0 = Namespace::new_v0(&[1]).unwrap();
-        let ns1 = Namespace::new_v0(&[2]).unwrap();
-        let ns2 = Namespace::new_v0(&[3]).unwrap();
-
-        let left = NamespacedHash::with_min_and_max_ns(*ns1, *ns2);
-        let right = NamespacedHash::with_min_and_max_ns(*ns0, *ns0);
-
-        let mut data = left.to_vec();
-        data.extend_from_slice(&right.to_array());
-
-        let multihash = Code::Sha256NamespaceFlagged;
-        multihash.digest(&data);
-    }
-
-    #[test]
-    #[should_panic]
-    fn leaf_data_too_short() {
-        let namespace = [0; NS_SIZE - 1];
-
-        let multihash = Code::Sha256NamespaceFlagged;
-        multihash.digest(&namespace);
+        //let multihash = Code::Sha256NamespaceFlagged;
+        //let digest_result = multihash.digest_nodes(&left, &right).unwrap_err();
+        let result = (&left, &right).multihash().unwrap_err();
+        assert!(matches!(result, Error::InvalidNmtNodeOrder));
     }
 
     #[test]
     fn test_read_multihash() {
         let multihash = [
-            0x81, 0xee, 0x01, // code = 7701
-            0x5a, // len = NAMESPACED_HASH_SIZE = 90
+            0x81, 0xEE, 0x01, // code = 7701
+            0x5A, // len = NAMESPACED_HASH_SIZE = 90
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             1, // min ns
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -216,7 +135,7 @@ mod tests {
             0xFF, 0xFF, 0xFF, 0xFF, // hash
         ];
 
-        let mh = Multihash::from_bytes(&multihash).unwrap();
+        let mh = Multihash::<NAMESPACED_HASH_SIZE>::from_bytes(&multihash).unwrap();
         assert_eq!(mh.code(), MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE);
         assert_eq!(mh.size(), NAMESPACED_HASH_SIZE as u8);
         let hash = NamespacedHash::from_raw(mh.digest()).unwrap();

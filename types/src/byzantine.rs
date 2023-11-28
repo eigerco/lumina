@@ -1,11 +1,11 @@
 use celestia_proto::share::eds::byzantine::pb::BadEncoding as RawBadEncodingFraudProof;
 use celestia_proto::share::eds::byzantine::pb::Share as RawShareWithProof;
-use cid::multihash::MultihashGeneric;
 use cid::CidGeneric;
 use serde::{Deserialize, Serialize};
 use tendermint::{block::Height, Hash};
 use tendermint_proto::Protobuf;
 
+use crate::axis::AxisType;
 use crate::bail_validation;
 use crate::consts::appconsts;
 use crate::fraud_proof::FraudProof;
@@ -15,11 +15,10 @@ use crate::multihash::{
 };
 use crate::nmt::NamespacedHash;
 use crate::nmt::{Namespace, NamespaceProof, NamespacedHashExt, NS_SIZE};
-use crate::rsmt2d::Axis;
 use crate::{Error, ExtendedHeader, Result, Share};
 
 type Cid = CidGeneric<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE>;
-type Multihash = MultihashGeneric<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE>;
+type Multihash = multihash::Multihash<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
@@ -36,7 +35,7 @@ pub struct BadEncodingFraudProof {
     // Index represents the row/col index where ErrByzantineRow/ErrByzantineColl occurred.
     index: usize,
     // Axis represents the axis that verification failed on.
-    axis: Axis,
+    axis: AxisType,
 }
 
 impl FraudProof for BadEncodingFraudProof {
@@ -88,8 +87,8 @@ impl FraudProof for BadEncodingFraudProof {
         }
 
         let root = match self.axis {
-            Axis::Row => merkle_row_roots[self.index].clone(),
-            Axis::Col => merkle_col_roots[self.index].clone(),
+            AxisType::Row => merkle_row_roots[self.index].clone(),
+            AxisType::Col => merkle_col_roots[self.index].clone(),
         };
 
         // verify if the root can be converted to a cid and back

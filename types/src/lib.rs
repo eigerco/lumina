@@ -1,3 +1,4 @@
+mod axis;
 pub mod blob;
 mod block;
 mod byzantine;
@@ -12,6 +13,7 @@ pub mod nmt;
 #[cfg(feature = "p2p")]
 pub mod p2p;
 mod rsmt2d;
+mod sample;
 pub(crate) mod serializers;
 mod share;
 pub mod state;

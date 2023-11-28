@@ -105,6 +105,21 @@ pub enum Error {
 
     #[error("Unsupported fraud proof type: {0}")]
     UnsupportedFraudProofType(String),
+
+    #[error("Data square index out of range: {0}")]
+    EdsIndexOutOfRange(usize),
+
+    #[error("Invalid zero block height")]
+    ZeroBlockHeight,
+
+    #[error("Invalid multihash lenght")]
+    InvalidMultihashLength(u8),
+
+    #[error("Invalid multihash code {0} expected {1}")]
+    InvalidMultihashCode(u64, u64),
+
+    #[error("Invalid CID codec {0} expected{1}")]
+    InvalidCidCodec(u64, u64),
 }
 
 #[derive(Debug, thiserror::Error)]
