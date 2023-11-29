@@ -74,7 +74,7 @@ impl AxisId {
     pub const fn size() -> usize {
         // size of:
         // u8 + u16 + [u8; 32] + u64
-        //  1 +  20 +    32    +  8
+        //  1 +  2  +    32    +  8
         43
     }
 
