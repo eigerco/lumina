@@ -17,8 +17,6 @@ const AXIS_ID_SIZE: usize = AxisId::size();
 pub const AXIS_ID_MULTIHASH_CODE: u64 = 0x7811;
 pub const AXIS_ID_CODEC: u64 = 0x7810;
 
-pub type RawAxisId = [u8; AXIS_ID_SIZE];
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromPrimitive)]
 #[repr(u8)]
 pub enum AxisType {
@@ -78,17 +76,14 @@ impl AxisId {
         43
     }
 
-    pub fn to_bytes(&self) -> RawAxisId {
-        let mut bytes = BytesMut::with_capacity(AXIS_ID_SIZE);
+    pub(crate) fn to_bytes(&self, bytes: &mut BytesMut) {
         bytes.put_u8(self.axis_type as u8);
         bytes.put_u16_le(self.index);
         bytes.put(&self.hash[..]);
         bytes.put_u64_le(self.block_height);
-
-        bytes.as_ref().try_into().unwrap()
     }
 
-    pub fn from_bytes(buffer: &RawAxisId) -> Result<Self> {
+    pub(crate) fn from_bytes(buffer: &[u8; AXIS_ID_SIZE]) -> Result<Self> {
         let mut cursor = Cursor::new(buffer);
 
         let axis_type = i32::from(cursor.get_u8()).try_into()?;
@@ -111,9 +106,10 @@ impl AxisId {
 
 impl HasMultihash<AXIS_ID_SIZE> for AxisId {
     fn multihash(&self) -> Result<Multihash<AXIS_ID_SIZE>> {
-        let digest_bytes = self.to_bytes();
+        let mut bytes = BytesMut::with_capacity(AXIS_ID_SIZE);
+        self.to_bytes(&mut bytes);
         // length is correct, so unwrap is safe
-        Ok(Multihash::wrap(AXIS_ID_MULTIHASH_CODE, &digest_bytes)?)
+        Ok(Multihash::wrap(AXIS_ID_MULTIHASH_CODE, &bytes[..])?)
     }
 }
 

@@ -13,8 +13,6 @@ const SAMPLE_ID_SIZE: usize = SampleId::size();
 pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
 pub const SAMPLE_ID_CODEC: u64 = 0x7800;
 
-pub type RawSampleId = [u8; SAMPLE_ID_SIZE];
-
 #[derive(Debug, PartialEq)]
 pub struct SampleId {
     pub axis: AxisId,
@@ -48,17 +46,13 @@ impl SampleId {
         })
     }
 
-    fn to_bytes(&self) -> RawSampleId {
-        let mut bytes = BytesMut::with_capacity(Self::size());
-
+    fn to_bytes(&self, bytes: &mut BytesMut) {
         // TODO: avoid alloc?
-        let axis_id_bytes = self.axis.to_bytes();
-        bytes.put(&axis_id_bytes[..]);
+        self.axis.to_bytes(bytes);
         bytes.put_u16_le(self.index);
-        bytes.as_ref().try_into().unwrap()
     }
 
-    fn from_bytes(buffer: &RawSampleId) -> Result<Self> {
+    fn from_bytes(buffer: &[u8; SAMPLE_ID_SIZE]) -> Result<Self> {
         let (axis_id, index) = buffer.split_at(AxisId::size());
         // RawSampleId len is defined as AxisId::size + u16::size, these are safe
         Ok(Self {
@@ -70,10 +64,13 @@ impl SampleId {
 
 impl HasMultihash<SAMPLE_ID_SIZE> for SampleId {
     fn multihash(&self) -> Result<Multihash<SAMPLE_ID_SIZE>> {
-        let digest_bytes = self.to_bytes();
+        let mut bytes = BytesMut::with_capacity(Self::size());
+
+        self.to_bytes(&mut bytes);
+
         Ok(Multihash::<SAMPLE_ID_SIZE>::wrap(
             SAMPLE_ID_MULTIHASH_CODE,
-            &digest_bytes,
+            &bytes[..],
         )?)
     }
 }
