@@ -1,6 +1,6 @@
 use std::fmt;
 
-use celestia_node::network;
+use lumina_node::network;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::format::Pretty;

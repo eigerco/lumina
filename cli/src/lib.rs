@@ -4,4 +4,4 @@ mod common;
 mod native;
 mod server;
 
-pub use common::run_cli;
+pub use common::run;

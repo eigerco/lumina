@@ -1,4 +1,4 @@
-# Rust Celestia node
+# Lumina
 
 Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in the browser-based environments.
 
@@ -26,31 +26,31 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 
 # clone the repository
-git clone https://github.com/eigerco/celestia-node-rs
-cd celestia-node-rs
+git clone https://github.com/eigerco/lumina
+cd lumina
 ```
 
 ### Running the node natively
 
 ```bash
-# install celestia-node
-cargo install --path celestia
+# install lumina
+cargo install --path cli
 
-# run celestia node
-celestia node --network mocha
+# run lumina node
+lumina node --network mocha
 
 # check out help for more configuration options
-celestia node --help
+lumina node --help
 ```
 
 ### Building and serving node-wasm
 
 ```bash
-# build wasm-node to be bundled with celestia
+# build wasm-node to be bundled with lumina
 wasm-pack build --target web node-wasm
 
-# serve celestia node on default localhost:9876
-celestia browser
+# serve lumina node on default localhost:9876
+lumina browser
 ```
 
 ## Running Go celestia node for integration
