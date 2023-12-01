@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["celestia", "node", "proto", "rpc", "types", "node-wasm"]
+members = ["blockstore", "celestia", "node", "node-wasm", "proto", "rpc", "types"]
 
 [workspace.dependencies]
 celestia-node = { version = "0.1.0", path = "node" }
