@@ -30,6 +30,7 @@ thiserror = "1.0.40"
 
 [dev-dependencies]
 ed25519-consensus = "2.1.0"
+indoc = "2.0.4"
 proptest = { version = "1.2.0", default-features = false, features = ["std"] }
 rand = "0.8.5"
 serde_json = "1.0.97"
@@ -43,3 +44,7 @@ default = ["p2p"]
 p2p = ["dep:libp2p-identity", "dep:multiaddr", "dep:serde_repr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
 wasm-bindgen = ["tendermint/wasm-bindgen"]
+
+[package.metadata.docs.rs]
+features = ["p2p", "test-utils"]
+rustdoc-args = ["--cfg", "docs_rs"]

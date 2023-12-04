@@ -1,3 +1,11 @@
+//! Types related to the namespaced data.
+//!
+//! Namespaced data in Celestia is understood as all the [`Share`]s within
+//! the same [`Namespace`] in a single row of the [`ExtendedDataSquare`].
+//!
+//! [`Share`]: crate::Share
+//! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+
 use std::io::Cursor;
 
 use blockstore::block::CidError;
@@ -10,23 +18,41 @@ use crate::axis::AxisType;
 use crate::nmt::{Namespace, NamespacedHashExt, HASH_SIZE, NS_SIZE};
 use crate::{DataAvailabilityHeader, Error, Result};
 
+/// The size of the [`NamespacedDataId`] hash in `multihash`.
 const NAMESPACED_DATA_ID_SIZE: usize = NamespacedDataId::size();
+/// The code of the [`NamespacedDataId`] hashing algorithm in `multihash`.
 pub const NAMESPACED_DATA_ID_MULTIHASH_CODE: u64 = 0x7821;
+/// The id of codec used for the [`NamespacedDataId`] in `Cid`s.
 pub const NAMESPACED_DATA_ID_CODEC: u64 = 0x7820;
 
-/// Represents shares from a namespace located on a particular row of Data Square
+/// Identifies [`Share`]s within a [`Namespace`] located on a particular row of the
+/// block's [`ExtendedDataSquare`].
+///
+/// [`Share`]: crate::Share
+/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct NamespacedDataId {
+    /// A namespace of the [`Share`]s.
+    ///
+    /// [`Share`]: crate::Share
     pub namespace: Namespace,
+    /// Index of the row in the [`ExtendedDataSquare`].
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub row_index: u16,
+    /// A `SHA256` checksum of the row root hash from [`DataAvailabilityHeader`].
     pub hash: [u8; HASH_SIZE],
+    /// A height of the block which contains the data.
     pub block_height: u64,
 }
 
 impl NamespacedDataId {
-    /// Creates new NamespacedDataId for row and namespace, computes appropriate root hash
-    /// from provided DataAvailabilityHeader
-    #[allow(dead_code)] // unused for now
+    /// Create a new [`NamespacedDataId`] for given block, row and the [`Namespace`].
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the block height
+    /// or row index is invalid.
     pub fn new(
         namespace: Namespace,
         row_index: u16,
@@ -50,7 +76,7 @@ impl NamespacedDataId {
         })
     }
 
-    /// number of bytes needed to represent `SampleId`
+    /// Number of bytes needed to represent [`NamespacedDataId`].
     pub const fn size() -> usize {
         // size of:
         // NamespacedHash<NS_SIZE> + u16 + [u8; 32] + u64

@@ -18,6 +18,20 @@ use crate::{Error, ExtendedHeader, Result, Share};
 type Cid = CidGeneric<NMT_ID_SIZE>;
 type Multihash = multihash::Multihash<NMT_ID_SIZE>;
 
+/// A proof that the block producer incorrectly encoded [`ExtendedDataSquare`].
+///
+/// Some malicious actor may incorrectly extend the original data with the
+/// recovery data, thus making it impossible to reconstruct the original
+/// information.
+///
+/// Light node cannot detect such behaviour with [`Data Availability Sampling`].
+/// When the full node collects all the [`Share`]s of a row or column of the [`ExtendedDataSquare`]
+/// and detects that it was incorrectly encoded, it should create and announce
+/// [`BadEncodingFraudProof`] so that light nodes can reject this block.
+///
+/// [`Data Availability Sampling`]: https://docs.celestia.org/learn/how-celestia-works/data-availability-layer
+/// [`ExtendedDataSquare`]: crate::ExtendedDataSquare
+/// [`Share`]: crate::share::Share
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
     try_from = "RawBadEncodingFraudProof",

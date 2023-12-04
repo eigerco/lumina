@@ -1,3 +1,11 @@
+//! Types related to the axis.
+//!
+//! Axis in Celestia is understood as all the [`Share`]s in a
+//! particular row or column of the [`ExtendedDataSquare`].
+//!
+//! [`Share`]: crate::Share
+//! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+
 use std::io::Cursor;
 use std::result::Result as StdResult;
 
@@ -11,15 +19,22 @@ use crate::nmt::{NamespacedHashExt, HASH_SIZE};
 use crate::DataAvailabilityHeader;
 use crate::{Error, Result};
 
+/// The size of the [`AxisId`] hash in `multihash`.
 const AXIS_ID_SIZE: usize = AxisId::size();
+/// The code of the [`AxisId`] hashing algorithm in `multihash`.
 pub const AXIS_ID_MULTIHASH_CODE: u64 = 0x7811;
+/// The id of codec used for the [`AxisId`] in `Cid`s.
 pub const AXIS_ID_CODEC: u64 = 0x7810;
 
-/// Represents either Column or Row of the Data Square.
+/// Represents either column or row of the [`ExtendedDataSquare`].
+///
+/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum AxisType {
+    /// A row of the data square.
     Row = 0,
+    /// A column of the data square.
     Col,
 }
 
@@ -35,18 +50,28 @@ impl TryFrom<u8> for AxisType {
     }
 }
 
-/// Represents particular particular Column or Row in a specific Data Square,
-/// paired together with a hash of the axis root.
+/// Identifies particular `Column` or `Row` of data in a specified block.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct AxisId {
+    /// Distinction of the axis.
     pub axis_type: AxisType,
+    /// An index of the axis in the [`ExtendedDataSquare`].
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub index: u16,
+    /// A `SHA256` checksum of the root hash from [`DataAvailabilityHeader`].
     pub hash: [u8; HASH_SIZE],
+    /// A height of the block which contains the data.
     pub block_height: u64,
 }
 
 impl AxisId {
-    /// Create new axis for the particular data square
+    /// Create a new [`AxisId`] for the particular block.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the block height
+    /// or axis index is invalid.
     pub fn new(
         axis_type: AxisType,
         index: usize,
@@ -72,7 +97,7 @@ impl AxisId {
         })
     }
 
-    /// Number of bytes needed to represent `AxisId`
+    /// Number of bytes needed to represent [`AxisId`].
     pub const fn size() -> usize {
         // size of:
         // u8 + u16 + [u8; 32] + u64

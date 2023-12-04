@@ -8,6 +8,7 @@ use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
 pub(crate) const GENESIS_HEIGHT: u64 = 1;
 
+/// The height of the block in Celestia network.
 pub type Height = tendermint::block::Height;
 
 impl ValidateBasic for Header {
@@ -95,7 +96,14 @@ impl ValidateBasic for CommitSig {
     }
 }
 
+/// An extention trait for the [`Commit`] to perform additional actions.
+///
+/// [`Commit`]: tendermint::block::Commit
 pub trait CommitExt {
+    /// Get the signed [`Vote`] from the [`Commit`] at the given index.
+    ///
+    /// [`Commit`]: tendermint::block::Commit
+    /// [`Vote`]: tendermint::Vote
     fn vote_sign_bytes(&self, chain_id: &chain::Id, signature_idx: usize) -> Result<Vec<u8>>;
 }
 

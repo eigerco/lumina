@@ -1,3 +1,5 @@
+//! Utilities for writing tests.
+
 use ed25519_consensus::SigningKey;
 use tendermint::{
     block::{
@@ -15,6 +17,9 @@ use crate::hash::{Hash, HashExt};
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::{DataAvailabilityHeader, ExtendedHeader, ValidatorSet};
 
+/// [`ExtendedHeader`] generator for testing purposes.
+///
+/// **WARNING: ALL METHODS PANIC! DO NOT USE IT IN PRODUCTION!**
 #[derive(Debug, Clone)]
 pub struct ExtendedHeaderGenerator {
     chain_id: chain::Id,
@@ -22,9 +27,6 @@ pub struct ExtendedHeaderGenerator {
     current_header: Option<ExtendedHeader>,
 }
 
-/// [`ExtendedHeader`] generator for testing purposes.
-///
-/// **WARNING: ALL METHODS PANIC! DO NOT USE IT IN PRODUCTION!**
 impl ExtendedHeaderGenerator {
     /// Creates new `ExtendedHeaderGenerator`.
     pub fn new() -> ExtendedHeaderGenerator {
@@ -40,7 +42,7 @@ impl ExtendedHeaderGenerator {
 
     /// Creates new `ExtendedHeaderGenerator` starting from specified height.
     ///
-    /// ```ignore
+    /// ```
     /// let mut gen = ExtendedHeaderGenerator::new_from_height(5);
     /// let header5 = gen.next();
     /// ```
@@ -84,7 +86,7 @@ impl ExtendedHeaderGenerator {
     ///
     /// This can be used to create two headers of same height but different hash.
     ///
-    /// ```ignore
+    /// ```
     /// let mut gen = ExtendedHeaderGenerator::new();
     /// let header1 = gen.next();
     /// let header2 = gen.next();
@@ -103,7 +105,7 @@ impl ExtendedHeaderGenerator {
     /// This can be used to create two chains of headers of same
     /// heights but different hashes.
     ///
-    /// ```ignore
+    /// ```
     /// let mut gen = ExtendedHeaderGenerator::new();
     /// let header1 = gen.next();
     /// let headers_2_to_12 = gen.next_many(10);
@@ -127,7 +129,7 @@ impl ExtendedHeaderGenerator {
 
     /// Generates the another header of the same height but different hash.
     ///
-    /// ```ignore
+    /// ```
     /// let mut gen = ExtendedHeaderGenerator::new();
     /// let header1 = gen.next();
     /// let header2 = gen.next();
@@ -166,7 +168,7 @@ impl ExtendedHeaderGenerator {
 
     /// Create a "forked" generator for "forking" the chain.
     ///
-    /// ```ignore
+    /// ```
     /// let mut gen_chain1 = ExtendedHeaderGenerator::new();
     ///
     /// let header1 = gen_chain1.next();

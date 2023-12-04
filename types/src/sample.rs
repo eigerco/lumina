@@ -1,3 +1,12 @@
+//! Types related to the samples.
+//!
+//! Sample in Celestia is understood as a single [`Share`] located at an
+//! index in the particular [`axis`] of the [`ExtendedDataSquare`].
+//!
+//! [`axis`]: crate::axis
+//! [`Share`]: crate::Share
+//! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+
 use std::mem::size_of;
 
 use blockstore::block::CidError;
@@ -9,23 +18,70 @@ use crate::axis::{AxisId, AxisType};
 use crate::DataAvailabilityHeader;
 use crate::{Error, Result};
 
+/// The size of the [`SampleId`] hash in `multihash`.
 const SAMPLE_ID_SIZE: usize = SampleId::size();
+/// The code of the [`SampleId`] hashing algorithm in `multihash`.
 pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
+/// The id of codec used for the [`SampleId`] in `Cid`s.
 pub const SAMPLE_ID_CODEC: u64 = 0x7800;
 
-/// Represents particular sample along the axis on specific Data Square
+/// Identifies a particular [`Share`] located in the [`axis`] of the [`ExtendedDataSquare`].
+///
+/// [`axis`]: crate::axis
+/// [`Share`]: crate::Share
+/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct SampleId {
+    /// A pointee at what axis is the sample located.
     pub axis: AxisId,
+    /// An index of the sample within the axis.
     pub index: u16,
 }
 
 impl SampleId {
-    /// Create new SampleId. Index references sample number from the entire Data Square (is
-    /// converted to row/col coordinates internally). Same location can be sampled row or
-    /// column-wise, axis_type is used to distinguish that. Axis root hash is calculated from the
-    /// DataAvailabilityHeader
-    #[allow(dead_code)] // unused for now
+    /// Create new [`SampleId`] for the given index of the [`ExtendedDataSquare`] in a block.
+    ///
+    /// When creating the [`SampleId`], [`ExtendedDataSquare`] is indexed as if it was a
+    /// one-dimensional array. I.e. acquiring a `n` sample from the `m` axis, requires
+    /// `index` to be `m * square_len + n`.
+    ///
+    /// The `axis_type` determines whether the [`ExtendedDataSquare`] is traversed in a
+    /// row-major or column-major order.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the block height
+    /// or sample index is invalid.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use celestia_types::axis::AxisType;
+    /// use celestia_types::sample::SampleId;
+    /// # use celestia_types::ExtendedHeader;
+    /// # fn get_extended_header(_: usize) -> ExtendedHeader {
+    /// #     unimplemented!();
+    /// # }
+    /// let header = get_extended_header(15);
+    /// let square_width = header.dah.square_len();
+    ///
+    /// // Create an id of a sample at the 3rd row and 2nd column
+    /// // those are indexed from 0
+    /// let row = 2;
+    /// let col = 1;
+    /// let sample_id = SampleId::new(
+    ///     AxisType::Row,
+    ///     square_width * row + col,
+    ///     &header.dah,
+    ///     header.height().value(),
+    /// ).unwrap();
+    ///
+    /// assert_eq!(sample_id.axis.index, row as u16);
+    /// assert_eq!(sample_id.index, col as u16);
+    /// ```
+    ///
+    /// [`Share`]: crate::Share
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub fn new(
         axis_type: AxisType,
         index: usize,
@@ -47,7 +103,7 @@ impl SampleId {
         })
     }
 
-    /// number of bytes needed to represent `SampleId`
+    /// Number of bytes needed to represent `SampleId`.
     pub const fn size() -> usize {
         AxisId::size() + size_of::<u16>()
     }

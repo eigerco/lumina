@@ -1,3 +1,5 @@
+//! Types and interfaces for accessing Celestia's state-relevant information.
+
 mod address;
 mod balance;
 mod query_delegation;
@@ -10,4 +12,5 @@ pub use self::query_delegation::{
 };
 pub use self::tx::{RawTx, TxResponse};
 
+/// A 256-bit unsigned integer.
 pub type Uint = ruint::aliases::U256;
