@@ -1,3 +1,5 @@
+//! A build script generating rust types from protobuf definitions.
+
 use anyhow::Result;
 
 const SERIALIZED: &str = r#"#[derive(::serde::Deserialize, ::serde::Serialize)] #[serde(default)]"#;
@@ -10,7 +12,7 @@ const OPTION_ANY: &str = r#"#[serde(with = "crate::serializers::option_any")]"#;
 const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_timestamp")]"#;
 
 #[rustfmt::skip]
-pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
+static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.da.DataAvailabilityHeader", SERIALIZED),
     (".celestia.blob.v1.MsgPayForBlobs", SERIALIZED),
     (".cosmos.base.abci.v1beta1.ABCIMessageLog", SERIALIZED),
@@ -38,7 +40,7 @@ pub static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
 ];
 
 #[rustfmt::skip]
-pub static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
+static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.da.DataAvailabilityHeader.row_roots", VEC_BASE64STRING),
     (".celestia.da.DataAvailabilityHeader.column_roots", VEC_BASE64STRING),
     (".cosmos.base.abci.v1beta1.TxResponse.tx", OPTION_ANY),
