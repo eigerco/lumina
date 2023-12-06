@@ -182,6 +182,10 @@ impl TryFrom<RawBadEncodingFraudProof> for BadEncodingFraudProof {
     type Error = Error;
 
     fn try_from(value: RawBadEncodingFraudProof) -> Result<Self, Self::Error> {
+        let axis = u8::try_from(value.axis)
+            .map_err(|_| Error::InvalidAxis(value.axis))?
+            .try_into()?;
+
         Ok(Self {
             header_hash: value.header_hash.try_into()?,
             block_height: value.height.try_into()?,
@@ -191,7 +195,7 @@ impl TryFrom<RawBadEncodingFraudProof> for BadEncodingFraudProof {
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?,
             index: value.index as usize,
-            axis: value.axis.try_into()?,
+            axis,
         })
     }
 }

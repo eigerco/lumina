@@ -46,17 +46,16 @@ impl SampleId {
         })
     }
 
-    fn to_bytes(&self, bytes: &mut BytesMut) {
-        // TODO: avoid alloc?
-        self.axis.to_bytes(bytes);
+    fn encode(&self, bytes: &mut BytesMut) {
+        self.axis.encode(bytes);
         bytes.put_u16_le(self.index);
     }
 
-    fn from_bytes(buffer: &[u8; SAMPLE_ID_SIZE]) -> Result<Self> {
+    fn decode(buffer: &[u8; SAMPLE_ID_SIZE]) -> Result<Self> {
         let (axis_id, index) = buffer.split_at(AxisId::size());
         // RawSampleId len is defined as AxisId::size + u16::size, these are safe
         Ok(Self {
-            axis: AxisId::from_bytes(axis_id.try_into().unwrap())?,
+            axis: AxisId::decode(axis_id.try_into().unwrap())?,
             index: u16::from_le_bytes(index.try_into().unwrap()),
         })
     }
@@ -66,12 +65,9 @@ impl HasMultihash<SAMPLE_ID_SIZE> for SampleId {
     fn multihash(&self) -> Result<Multihash<SAMPLE_ID_SIZE>> {
         let mut bytes = BytesMut::with_capacity(Self::size());
 
-        self.to_bytes(&mut bytes);
+        self.encode(&mut bytes);
 
-        Ok(Multihash::<SAMPLE_ID_SIZE>::wrap(
-            SAMPLE_ID_MULTIHASH_CODE,
-            &bytes[..],
-        )?)
+        Ok(Multihash::<SAMPLE_ID_SIZE>::wrap(SAMPLE_ID_MULTIHASH_CODE, &bytes[..]).unwrap())
     }
 }
 
@@ -102,7 +98,7 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for SampleId {
             return Err(Error::InvalidMultihashCode(code, SAMPLE_ID_MULTIHASH_CODE));
         }
 
-        SampleId::from_bytes(hash.digest()[..SAMPLE_ID_SIZE].try_into().unwrap())
+        SampleId::decode(hash.digest()[..SAMPLE_ID_SIZE].try_into().unwrap())
     }
 }
 

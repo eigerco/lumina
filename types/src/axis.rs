@@ -4,8 +4,6 @@ use std::result::Result as StdResult;
 use bytes::{Buf, BufMut, BytesMut};
 use cid::CidGeneric;
 use multihash::Multihash;
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
 use sha2::{Digest, Sha256};
 
 use crate::multihash::{HasCid, HasMultihash};
@@ -17,18 +15,22 @@ const AXIS_ID_SIZE: usize = AxisId::size();
 pub const AXIS_ID_MULTIHASH_CODE: u64 = 0x7811;
 pub const AXIS_ID_CODEC: u64 = 0x7810;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, FromPrimitive)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum AxisType {
     Row = 0,
     Col,
 }
 
-impl TryFrom<i32> for AxisType {
+impl TryFrom<u8> for AxisType {
     type Error = Error;
 
-    fn try_from(value: i32) -> StdResult<Self, Self::Error> {
-        FromPrimitive::from_i32(value).ok_or(Error::InvalidAxis(value))
+    fn try_from(value: u8) -> StdResult<Self, Self::Error> {
+        match value {
+            0 => Ok(AxisType::Row),
+            1 => Ok(AxisType::Col),
+            n => Err(Error::InvalidAxis(n.into())),
+        }
     }
 }
 
@@ -51,12 +53,11 @@ impl AxisId {
             return Err(Error::ZeroBlockHeight);
         }
 
-        let Some(dah_root) = (match axis_type {
+        let dah_root = match axis_type {
             AxisType::Row => dah.row_root(index),
             AxisType::Col => dah.column_root(index),
-        }) else {
-            return Err(Error::EdsIndexOutOfRange(index));
         };
+        let dah_root = dah_root.ok_or(Error::EdsIndexOutOfRange(index))?;
         let hash = Sha256::digest(dah_root.to_array()).into();
 
         Ok(Self {
@@ -76,17 +77,18 @@ impl AxisId {
         43
     }
 
-    pub(crate) fn to_bytes(&self, bytes: &mut BytesMut) {
+    pub(crate) fn encode(&self, bytes: &mut BytesMut) {
+        bytes.reserve(AXIS_ID_SIZE);
         bytes.put_u8(self.axis_type as u8);
         bytes.put_u16_le(self.index);
         bytes.put(&self.hash[..]);
         bytes.put_u64_le(self.block_height);
     }
 
-    pub(crate) fn from_bytes(buffer: &[u8; AXIS_ID_SIZE]) -> Result<Self> {
+    pub(crate) fn decode(buffer: &[u8; AXIS_ID_SIZE]) -> Result<Self> {
         let mut cursor = Cursor::new(buffer);
 
-        let axis_type = i32::from(cursor.get_u8()).try_into()?;
+        let axis_type = cursor.get_u8().try_into()?;
         let index = cursor.get_u16_le();
         let hash = cursor.copy_to_bytes(HASH_SIZE).as_ref().try_into().unwrap();
         let block_height = cursor.get_u64_le();
@@ -107,9 +109,9 @@ impl AxisId {
 impl HasMultihash<AXIS_ID_SIZE> for AxisId {
     fn multihash(&self) -> Result<Multihash<AXIS_ID_SIZE>> {
         let mut bytes = BytesMut::with_capacity(AXIS_ID_SIZE);
-        self.to_bytes(&mut bytes);
+        self.encode(&mut bytes);
         // length is correct, so unwrap is safe
-        Ok(Multihash::wrap(AXIS_ID_MULTIHASH_CODE, &bytes[..])?)
+        Ok(Multihash::wrap(AXIS_ID_MULTIHASH_CODE, &bytes[..]).unwrap())
     }
 }
 
@@ -140,7 +142,7 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for AxisId {
             return Err(Error::InvalidMultihashCode(code, AXIS_ID_MULTIHASH_CODE));
         }
 
-        AxisId::from_bytes(hash.digest()[..AXIS_ID_SIZE].try_into().unwrap())
+        AxisId::decode(hash.digest()[..AXIS_ID_SIZE].try_into().unwrap())
     }
 }
 
