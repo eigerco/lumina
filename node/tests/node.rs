@@ -2,12 +2,12 @@
 
 use std::time::Duration;
 
-use celestia_node::{
+use celestia_types::{consts::HASH_SIZE, hash::Hash};
+use libp2p::identity;
+use lumina_node::{
     node::{Node, NodeConfig},
     test_utils::{gen_filled_store, test_node_config, test_node_config_with_keypair},
 };
-use celestia_types::{consts::HASH_SIZE, hash::Hash};
-use libp2p::identity;
 use rand::Rng;
 use tokio::time::sleep;
 

@@ -1,12 +1,12 @@
 use std::result::Result as StdResult;
 
-use celestia_node::network::{canonical_network_bootnodes, network_genesis, network_id};
-use celestia_node::node::{Node, NodeConfig};
-use celestia_node::store::{IndexedDbStore, Store};
 use celestia_types::{hash::Hash, ExtendedHeader};
 use js_sys::Array;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
+use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
+use lumina_node::node::{Node, NodeConfig};
+use lumina_node::store::{IndexedDbStore, Store};
 use serde_wasm_bindgen::{from_value, to_value};
 use tracing::info;
 use wasm_bindgen::prelude::*;

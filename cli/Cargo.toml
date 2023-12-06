@@ -1,14 +1,18 @@
 [package]
-name = "celestia"
+name = "lumina-cli"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
+[[bin]]
+name = "lumina"
+path = "src/main.rs"
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-celestia-node = { workspace = true }
 celestia-rpc = { workspace = true, features = ["p2p"] }
 celestia-types = { workspace = true }
 libp2p = { workspace = true }
+lumina-node = { workspace = true }
 
 anyhow = "1.0.71"
 axum = "0.6.20"
