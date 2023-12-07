@@ -9,16 +9,14 @@ use crate::axis::AxisType;
 use crate::bail_validation;
 use crate::consts::appconsts;
 use crate::fraud_proof::FraudProof;
-use crate::multihash::{
-    MULTIHASH_NMT_CODEC_CODE, MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE,
-    MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE,
+use crate::nmt::{
+    Namespace, NamespaceProof, NamespacedHash, NamespacedHashExt, NMT_CODEC, NMT_ID_SIZE,
+    NMT_MULTIHASH_CODE, NS_SIZE,
 };
-use crate::nmt::NamespacedHash;
-use crate::nmt::{Namespace, NamespaceProof, NamespacedHashExt, NS_SIZE};
 use crate::{Error, ExtendedHeader, Result, Share};
 
-type Cid = CidGeneric<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE>;
-type Multihash = multihash::Multihash<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE>;
+type Cid = CidGeneric<NMT_ID_SIZE>;
+type Multihash = multihash::Multihash<NMT_ID_SIZE>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
@@ -92,8 +90,8 @@ impl FraudProof for BadEncodingFraudProof {
         };
 
         // verify if the root can be converted to a cid and back
-        let mh = Multihash::wrap(MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE, &root.to_array())?;
-        let cid = Cid::new_v1(MULTIHASH_NMT_CODEC_CODE, mh);
+        let mh = Multihash::wrap(NMT_CODEC, &root.to_array())?;
+        let cid = Cid::new_v1(NMT_MULTIHASH_CODE, mh);
         let root = NamespacedHash::try_from(cid.hash().digest())?;
 
         // verify that Merkle proofs correspond to particular shares.

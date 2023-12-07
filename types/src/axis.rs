@@ -15,6 +15,7 @@ const AXIS_ID_SIZE: usize = AxisId::size();
 pub const AXIS_ID_MULTIHASH_CODE: u64 = 0x7811;
 pub const AXIS_ID_CODEC: u64 = 0x7810;
 
+/// Represents either Column or Row of the Data Square.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum AxisType {
@@ -34,6 +35,8 @@ impl TryFrom<u8> for AxisType {
     }
 }
 
+/// Represents particular particular Column or Row in a specific Data Square,
+/// paired together with a hash of the axis root.
 #[derive(Debug, PartialEq)]
 pub struct AxisId {
     pub axis_type: AxisType,
@@ -53,11 +56,9 @@ impl AxisId {
             return Err(Error::ZeroBlockHeight);
         }
 
-        let dah_root = match axis_type {
-            AxisType::Row => dah.row_root(index),
-            AxisType::Col => dah.column_root(index),
-        };
-        let dah_root = dah_root.ok_or(Error::EdsIndexOutOfRange(index))?;
+        let dah_root = dah
+            .root(axis_type, index)
+            .ok_or(Error::EdsIndexOutOfRange(index))?;
         let hash = Sha256::digest(dah_root.to_array()).into();
 
         Ok(Self {
