@@ -30,10 +30,12 @@ thiserror = "1.0.40"
 
 [dev-dependencies]
 ed25519-consensus = "2.1.0"
-indoc = "2.0.4"
 proptest = { version = "1.2.0", default-features = false, features = ["std"] }
 rand = "0.8.5"
 serde_json = "1.0.97"
+
+# doc-tests
+indoc = "2.0.4"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 getrandom = { version = "0.2.10", features = ["js"] }
@@ -48,3 +50,6 @@ wasm-bindgen = ["tendermint/wasm-bindgen"]
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]
 rustdoc-args = ["--cfg", "docs_rs"]
+
+[package.metadata.cargo-udeps.ignore]
+development = ["indoc"]
