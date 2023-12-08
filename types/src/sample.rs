@@ -57,11 +57,15 @@ impl SampleId {
         bytes.put_u16_le(self.index);
     }
 
-    fn decode(buffer: &[u8; SAMPLE_ID_SIZE]) -> Result<Self> {
+    fn decode(buffer: &[u8]) -> Result<Self> {
+        if buffer.len() != SAMPLE_ID_SIZE {
+            return Err(Error::InvalidMultihashLength(buffer.len()));
+        }
+
         let (axis_id, index) = buffer.split_at(AxisId::size());
         // RawSampleId len is defined as AxisId::size + u16::size, these are safe
         Ok(Self {
-            axis: AxisId::decode(axis_id.try_into().unwrap())?,
+            axis: AxisId::decode(axis_id)?,
             index: u16::from_le_bytes(index.try_into().unwrap()),
         })
     }
@@ -94,8 +98,8 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for SampleId {
 
         let hash = cid.hash();
 
-        let size = hash.size();
-        if size as usize != SAMPLE_ID_SIZE {
+        let size = hash.size() as usize;
+        if size != SAMPLE_ID_SIZE {
             return Err(Error::InvalidMultihashLength(size));
         }
 
@@ -104,7 +108,7 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for SampleId {
             return Err(Error::InvalidMultihashCode(code, SAMPLE_ID_MULTIHASH_CODE));
         }
 
-        SampleId::decode(hash.digest()[..SAMPLE_ID_SIZE].try_into().unwrap())
+        SampleId::decode(hash.digest())
     }
 }
 

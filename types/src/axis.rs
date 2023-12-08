@@ -89,7 +89,11 @@ impl AxisId {
         bytes.put_u64_le(self.block_height);
     }
 
-    pub(crate) fn decode(buffer: &[u8; AXIS_ID_SIZE]) -> Result<Self> {
+    pub(crate) fn decode(buffer: &[u8]) -> Result<Self> {
+        if buffer.len() != AXIS_ID_SIZE {
+            return Err(Error::InvalidMultihashLength(buffer.len()));
+        }
+
         let mut cursor = Cursor::new(buffer);
 
         let axis_type = cursor.get_u8().try_into()?;
@@ -136,8 +140,8 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for AxisId {
 
         let hash = cid.hash();
 
-        let size = hash.size();
-        if size as usize != AXIS_ID_SIZE {
+        let size = hash.size() as usize;
+        if size != AXIS_ID_SIZE {
             return Err(Error::InvalidMultihashLength(size));
         }
 
@@ -146,7 +150,7 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for AxisId {
             return Err(Error::InvalidMultihashCode(code, AXIS_ID_MULTIHASH_CODE));
         }
 
-        AxisId::decode(hash.digest()[..AXIS_ID_SIZE].try_into().unwrap())
+        AxisId::decode(hash.digest())
     }
 }
 

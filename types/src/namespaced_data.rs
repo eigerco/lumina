@@ -67,7 +67,11 @@ impl NamespacedDataId {
         bytes.put(self.namespace.as_bytes());
     }
 
-    fn decode(buffer: &[u8; NAMESPACED_DATA_ID_SIZE]) -> Result<Self> {
+    fn decode(buffer: &[u8]) -> Result<Self> {
+        if buffer.len() != NAMESPACED_DATA_ID_SIZE {
+            return Err(Error::InvalidMultihashLength(buffer.len()));
+        }
+
         let mut cursor = Cursor::new(buffer);
 
         let row_index = cursor.get_u16_le();
@@ -115,8 +119,8 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for NamespacedDataId {
 
         let hash = cid.hash();
 
-        let size = hash.size();
-        if size as usize != NAMESPACED_DATA_ID_SIZE {
+        let size = hash.size() as usize;
+        if size != NAMESPACED_DATA_ID_SIZE {
             return Err(Error::InvalidMultihashLength(size));
         }
 
@@ -128,7 +132,7 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for NamespacedDataId {
             ));
         }
 
-        NamespacedDataId::decode(hash.digest()[..NAMESPACED_DATA_ID_SIZE].try_into().unwrap())
+        NamespacedDataId::decode(hash.digest())
     }
 }
 
@@ -176,10 +180,10 @@ mod tests {
         let mh = cid.hash();
         assert_eq!(mh.code(), NAMESPACED_DATA_ID_MULTIHASH_CODE);
         assert_eq!(mh.size(), NAMESPACED_DATA_ID_SIZE as u8);
-        let sample_id = NamespacedDataId::try_from(cid).unwrap();
-        assert_eq!(sample_id.row_index, 7);
-        assert_eq!(sample_id.hash, [0xFF; 32]);
-        assert_eq!(sample_id.block_height, 64);
+        let data_id = NamespacedDataId::try_from(cid).unwrap();
+        assert_eq!(data_id.row_index, 7);
+        assert_eq!(data_id.hash, [0xFF; 32]);
+        assert_eq!(data_id.block_height, 64);
     }
 
     #[test]

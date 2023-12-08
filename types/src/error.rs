@@ -113,7 +113,7 @@ pub enum Error {
     ZeroBlockHeight,
 
     #[error("Invalid multihash lenght")]
-    InvalidMultihashLength(u8),
+    InvalidMultihashLength(usize),
 
     #[error("Invalid multihash code {0} expected {1}")]
     InvalidMultihashCode(u64, u64),
