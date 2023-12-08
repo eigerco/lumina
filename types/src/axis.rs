@@ -46,6 +46,7 @@ pub struct AxisId {
 }
 
 impl AxisId {
+    /// Create new axis for the particular data square
     pub fn new(
         axis_type: AxisType,
         index: usize,
@@ -71,6 +72,7 @@ impl AxisId {
         })
     }
 
+    /// Number of bytes needed to represent `AxisId`
     pub const fn size() -> usize {
         // size of:
         // u8 + u16 + [u8; 32] + u64
@@ -80,6 +82,7 @@ impl AxisId {
 
     pub(crate) fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(AXIS_ID_SIZE);
+
         bytes.put_u8(self.axis_type as u8);
         bytes.put_u16_le(self.index);
         bytes.put(&self.hash[..]);

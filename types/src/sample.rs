@@ -13,6 +13,7 @@ const SAMPLE_ID_SIZE: usize = SampleId::size();
 pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
 pub const SAMPLE_ID_CODEC: u64 = 0x7800;
 
+/// Represents particular sample along the axis on specific Data Square
 #[derive(Debug, PartialEq)]
 pub struct SampleId {
     pub axis: AxisId,
@@ -20,10 +21,10 @@ pub struct SampleId {
 }
 
 impl SampleId {
-    pub const fn size() -> usize {
-        AxisId::size() + size_of::<u16>()
-    }
-
+    /// Create new SampleId. Index references sample number from the entire Data Square (is
+    /// converted to row/col coordinates internally). Same location can be sampled row or
+    /// column-wise, axis_type is used to distinguish that. Axis root hash is calculated from the
+    /// DataAvailabilityHeader
     #[allow(dead_code)] // unused for now
     pub fn new(
         axis_type: AxisType,
@@ -44,6 +45,11 @@ impl SampleId {
                 .try_into()
                 .map_err(|_| Error::EdsIndexOutOfRange(sample_index))?,
         })
+    }
+
+    /// number of bytes needed to represent `SampleId`
+    pub const fn size() -> usize {
+        AxisId::size() + size_of::<u16>()
     }
 
     fn encode(&self, bytes: &mut BytesMut) {
