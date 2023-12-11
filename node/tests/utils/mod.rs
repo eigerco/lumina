@@ -1,11 +1,11 @@
 use std::env;
 use std::time::Duration;
 
-use celestia_node::node::NodeConfig;
-use celestia_node::test_utils::test_node_config;
-use celestia_node::{node::Node, store::InMemoryStore};
 use celestia_rpc::{prelude::*, Client};
 use libp2p::{multiaddr::Protocol, Multiaddr, PeerId};
+use lumina_node::node::NodeConfig;
+use lumina_node::test_utils::test_node_config;
+use lumina_node::{node::Node, store::InMemoryStore};
 use tokio::time::sleep;
 
 const WS_URL: &str = "ws://localhost:26658";

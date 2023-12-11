@@ -2,13 +2,13 @@
 
 use std::time::Duration;
 
-use celestia_node::{
+use celestia_types::test_utils::{invalidate, unverify};
+use lumina_node::{
     node::{Node, NodeConfig, NodeError},
     p2p::{HeaderExError, P2pError},
     store::Store,
     test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
 };
-use celestia_types::test_utils::{invalidate, unverify};
 use tokio::time::{sleep, timeout};
 
 use crate::utils::new_connected_node;

@@ -1,6 +1,6 @@
 use anyhow::Result;
-use celestia_node::network::Network;
 use clap::{Parser, ValueEnum};
+use lumina_node::network::Network;
 use serde_repr::Serialize_repr;
 
 use crate::{native, server};
@@ -23,7 +23,7 @@ pub(crate) enum CliArgs {
     Browser(server::Params),
 }
 
-pub async fn run_cli() -> Result<()> {
+pub async fn run() -> Result<()> {
     let _ = dotenvy::dotenv();
     let args = CliArgs::parse();
     let _guard = init_tracing();
