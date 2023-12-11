@@ -17,12 +17,8 @@ impl<const S: usize> InMemoryBlockstore<S> {
         }
     }
 
-    fn get_cid(&self, cid: &CidGeneric<S>) -> Result<Vec<u8>> {
-        self.map
-            .get(cid)
-            .as_deref()
-            .cloned()
-            .ok_or(BlockstoreError::CidNotFound)
+    fn get_cid(&self, cid: &CidGeneric<S>) -> Result<Option<Vec<u8>>> {
+        Ok(self.map.get(cid).as_deref().cloned())
     }
 
     fn insert_cid(&self, cid: CidGeneric<S>, data: &[u8]) -> Result<()> {
@@ -39,7 +35,7 @@ impl<const S: usize> InMemoryBlockstore<S> {
 
 #[async_trait]
 impl<const S: usize> Blockstore for InMemoryBlockstore<S> {
-    async fn get<const SS: usize>(&self, cid: &CidGeneric<SS>) -> Result<Vec<u8>> {
+    async fn get<const SS: usize>(&self, cid: &CidGeneric<SS>) -> Result<Option<Vec<u8>>> {
         let hash = cid.hash();
         let hash = Multihash::<S>::wrap(hash.code(), hash.digest())
             .map_err(|_| BlockstoreError::CidTooLong)?;
@@ -48,7 +44,7 @@ impl<const S: usize> Blockstore for InMemoryBlockstore<S> {
         self.get_cid(&cid)
     }
 
-    async fn insert<const SS: usize>(&self, cid: &CidGeneric<SS>, data: &[u8]) -> Result<()> {
+    async fn put_keyed<const SS: usize>(&self, cid: &CidGeneric<SS>, data: &[u8]) -> Result<()> {
         let hash = cid.hash();
         let hash = Multihash::<S>::wrap(hash.code(), hash.digest())
             .map_err(|_| BlockstoreError::CidTooLong)?;
@@ -85,14 +81,14 @@ mod tests {
         .unwrap();
         let data = [0xCD; 512];
 
-        store.insert(&cid, &data).await.unwrap();
+        store.put_keyed(&cid, &data).await.unwrap();
 
-        let retrieved_data = store.get(&cid).await.unwrap();
+        let retrieved_data = store.get(&cid).await.unwrap().unwrap();
         assert_eq!(data, retrieved_data.as_ref());
 
         let another_cid = CidGeneric::<128>::default();
-        let missing_block = store.get(&another_cid).await.unwrap_err();
-        assert_eq!(missing_block, BlockstoreError::CidNotFound);
+        let missing_block = store.get(&another_cid).await.unwrap();
+        assert_eq!(missing_block, None);
     }
 
     #[tokio::test]
@@ -122,9 +118,9 @@ mod tests {
 
         let store = InMemoryBlockstore::<128>::new();
 
-        store.insert(&cid0, &[0x01; 1]).await.unwrap();
-        store.insert(&cid1, &[0x02; 1]).await.unwrap();
-        let insert_err = store.insert(&cid1, &[0x03; 1]).await.unwrap_err();
+        store.put_keyed(&cid0, &[0x01; 1]).await.unwrap();
+        store.put_keyed(&cid1, &[0x02; 1]).await.unwrap();
+        let insert_err = store.put_keyed(&cid1, &[0x03; 1]).await.unwrap_err();
         assert_eq!(insert_err, BlockstoreError::CidExists);
     }
 
@@ -146,17 +142,17 @@ mod tests {
         let data = [0x99; 5];
 
         let store = InMemoryBlockstore::<64>::new();
-        store.insert(&cid0, data.as_ref()).await.unwrap();
+        store.put_keyed(&cid0, data.as_ref()).await.unwrap();
 
-        let data0 = store.get(&cid0).await.unwrap();
+        let data0 = store.get(&cid0).await.unwrap().unwrap();
         assert_eq!(data, data0.as_ref());
-        let data1 = store.get(&cid1).await.unwrap();
+        let data1 = store.get(&cid1).await.unwrap().unwrap();
         assert_eq!(data, data1.as_ref());
-        let data2 = store.get(&cid2).await.unwrap();
+        let data2 = store.get(&cid2).await.unwrap().unwrap();
         assert_eq!(data, data2.as_ref());
-        let data3 = store.get(&cid3).await.unwrap();
+        let data3 = store.get(&cid3).await.unwrap().unwrap();
         assert_eq!(data, data3.as_ref());
-        let data4 = store.get(&cid4).await.unwrap();
+        let data4 = store.get(&cid4).await.unwrap().unwrap();
         assert_eq!(data, data4.as_ref());
     }
 
@@ -172,7 +168,7 @@ mod tests {
         let cid = CidGeneric::<32>::read_bytes(cid_bytes.as_ref()).unwrap();
 
         let store = InMemoryBlockstore::<8>::new();
-        let insert_err = store.insert(&cid, [0x00, 1].as_ref()).await.unwrap_err();
+        let insert_err = store.put_keyed(&cid, [0x00, 1].as_ref()).await.unwrap_err();
         assert_eq!(insert_err, BlockstoreError::CidTooLong);
 
         let insert_err = store.get(&cid).await.unwrap_err();
