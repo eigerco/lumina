@@ -1,13 +1,20 @@
 use base64::prelude::*;
+use multihash::Multihash;
 use nmt_rs::simple_merkle::db::MemDb;
+use nmt_rs::simple_merkle::tree::MerkleHash;
+use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tendermint::hash::SHA256_HASH_SIZE;
 use tendermint_proto::serializers::cow_str::CowStr;
 
 mod namespace_proof;
 mod namespaced_hash;
 
 pub use self::namespace_proof::NamespaceProof;
-pub use self::namespaced_hash::{NamespacedHash, NamespacedHashExt, RawNamespacedHash};
+pub use self::namespaced_hash::{
+    NamespacedHashExt, RawNamespacedHash, HASH_SIZE, NAMESPACED_HASH_SIZE,
+};
+use crate::multihash::{HasCid, HasMultihash};
 use crate::{Error, Result};
 
 pub const NS_VER_SIZE: usize = 1;
@@ -15,7 +22,12 @@ pub const NS_ID_SIZE: usize = 28;
 pub const NS_SIZE: usize = NS_VER_SIZE + NS_ID_SIZE;
 pub const NS_ID_V0_SIZE: usize = 10;
 
+pub const NMT_MULTIHASH_CODE: u64 = 0x7700;
+pub const NMT_CODEC: u64 = 0x7701;
+pub const NMT_ID_SIZE: usize = 2 * NS_SIZE + SHA256_HASH_SIZE;
+
 pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
+pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
 pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
@@ -161,6 +173,48 @@ impl<'de> Deserialize<'de> for Namespace {
             .map_err(|e| serde::de::Error::custom(e.to_string()))?;
 
         Namespace::from_raw(&buf[..len]).map_err(|e| serde::de::Error::custom(e.to_string()))
+    }
+}
+
+impl HasMultihash<NMT_ID_SIZE> for (&Namespace, &[u8]) {
+    fn multihash(&self) -> Result<Multihash<NMT_ID_SIZE>> {
+        let (ns, data) = self;
+        let hasher = NamespacedSha2Hasher::with_ignore_max_ns(true);
+        let namespaced_data = [ns.as_bytes(), data].concat();
+
+        let digest = hasher.hash_leaf(&namespaced_data).to_array();
+        // size is correct, so unwrap is safe
+        Ok(Multihash::wrap(NMT_CODEC, &digest).unwrap())
+    }
+}
+
+impl HasCid<NMT_ID_SIZE> for (&Namespace, &[u8]) {
+    fn codec() -> u64 {
+        NMT_MULTIHASH_CODE
+    }
+}
+
+impl HasMultihash<NMT_ID_SIZE> for (&NamespacedHash, &NamespacedHash) {
+    fn multihash(&self) -> Result<Multihash<NMT_ID_SIZE>> {
+        let (left, right) = self;
+        left.validate_namespace_order()?;
+        right.validate_namespace_order()?;
+
+        if left.max_namespace() > right.min_namespace() {
+            return Err(Error::InvalidNmtNodeOrder);
+        }
+
+        let hasher = NamespacedSha2Hasher::with_ignore_max_ns(true);
+
+        let digest = hasher.hash_nodes(left, right).to_array();
+
+        Ok(Multihash::wrap(NMT_CODEC, &digest).unwrap())
+    }
+}
+
+impl HasCid<NMT_ID_SIZE> for (&NamespacedHash, &NamespacedHash) {
+    fn codec() -> u64 {
+        NMT_MULTIHASH_CODE
     }
 }
 
@@ -335,5 +389,75 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(e, Error::UnsupportedNamespaceVersion(254)));
+    }
+
+    #[test]
+    fn test_generate_leaf_multihash() {
+        let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
+        let data = [0xCDu8; 512];
+
+        let hash = (&namespace, data.as_ref()).multihash().unwrap();
+
+        assert_eq!(hash.code(), NMT_CODEC);
+        assert_eq!(hash.size(), NAMESPACED_HASH_SIZE as u8);
+        let hash = NamespacedHash::from_raw(hash.digest()).unwrap();
+        assert_eq!(hash.min_namespace(), *namespace);
+        assert_eq!(hash.max_namespace(), *namespace);
+    }
+
+    #[test]
+    fn test_generate_inner_multihash() {
+        let ns0 = Namespace::new_v0(&[1]).unwrap();
+        let ns1 = Namespace::new_v0(&[2]).unwrap();
+        let ns2 = Namespace::new_v0(&[3]).unwrap();
+
+        let left = NamespacedHash::with_min_and_max_ns(*ns0, *ns1);
+        let right = NamespacedHash::with_min_and_max_ns(*ns1, *ns2);
+
+        let hash = (&left, &right).multihash().unwrap();
+
+        assert_eq!(hash.code(), NMT_CODEC);
+        assert_eq!(hash.size(), NAMESPACED_HASH_SIZE as u8);
+        let hash = NamespacedHash::from_raw(hash.digest()).unwrap();
+        assert_eq!(hash.min_namespace(), *ns0);
+        assert_eq!(hash.max_namespace(), *ns2);
+    }
+
+    #[test]
+    fn invalid_ns_order_result() {
+        let ns0 = Namespace::new_v0(&[1]).unwrap();
+        let ns1 = Namespace::new_v0(&[2]).unwrap();
+        let ns2 = Namespace::new_v0(&[3]).unwrap();
+
+        let left = NamespacedHash::with_min_and_max_ns(*ns1, *ns2);
+        let right = NamespacedHash::with_min_and_max_ns(*ns0, *ns0);
+
+        //let multihash = Code::Sha256NamespaceFlagged;
+        //let digest_result = multihash.digest_nodes(&left, &right).unwrap_err();
+        let result = (&left, &right).multihash().unwrap_err();
+        assert!(matches!(result, Error::InvalidNmtNodeOrder));
+    }
+
+    #[test]
+    fn test_read_multihash() {
+        let multihash = [
+            0x81, 0xEE, 0x01, // code = 7701
+            0x5A, // len = NAMESPACED_HASH_SIZE = 90
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            1, // min ns
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            9, // max ns
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+            0xFF, 0xFF, 0xFF, 0xFF, // hash
+        ];
+
+        let mh = Multihash::<NAMESPACED_HASH_SIZE>::from_bytes(&multihash).unwrap();
+        assert_eq!(mh.code(), NMT_CODEC);
+        assert_eq!(mh.size(), NAMESPACED_HASH_SIZE as u8);
+        let hash = NamespacedHash::from_raw(mh.digest()).unwrap();
+        assert_eq!(hash.min_namespace(), *Namespace::new_v0(&[1]).unwrap());
+        assert_eq!(hash.max_namespace(), *Namespace::new_v0(&[9]).unwrap());
+        assert_eq!(hash.hash(), [0xFF; 32]);
     }
 }

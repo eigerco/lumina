@@ -4,6 +4,7 @@ use sha2::Sha256;
 use tendermint::merkle::simple_hash_from_byte_vectors;
 use tendermint_proto::Protobuf;
 
+use crate::axis::AxisType;
 use crate::consts::data_availability_header::{
     MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
 };
@@ -22,6 +23,13 @@ pub struct DataAvailabilityHeader {
 }
 
 impl DataAvailabilityHeader {
+    pub fn root(&self, axis: AxisType, index: usize) -> Option<NamespacedHash> {
+        match axis {
+            AxisType::Col => self.column_root(index),
+            AxisType::Row => self.row_root(index),
+        }
+    }
+
     pub fn row_root(&self, row: usize) -> Option<NamespacedHash> {
         self.row_roots.get(row).cloned()
     }
@@ -39,6 +47,11 @@ impl DataAvailabilityHeader {
             .collect();
 
         Hash::Sha256(simple_hash_from_byte_vectors::<Sha256>(&all_roots))
+    }
+
+    pub fn square_len(&self) -> usize {
+        // `validate_basic` checks that rows num = cols num
+        self.row_roots.len()
     }
 }
 
