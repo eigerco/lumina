@@ -1,9 +1,16 @@
+use blockstore::multihash::{CidError, HasCid, HasMultihash};
 use celestia_proto::share::p2p::shrex::nd::NamespaceRowResponse as RawNamespacedRow;
+use multihash::Multihash;
+use nmt_rs::simple_merkle::tree::MerkleHash;
+use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
 use crate::consts::appconsts;
-use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
+use crate::nmt::{
+    Namespace, NamespaceProof, NamespacedSha2Hasher, NMT_CODEC, NMT_ID_SIZE, NMT_MULTIHASH_CODE,
+    NS_SIZE,
+};
 use crate::{Error, Result};
 
 mod info_byte;
@@ -67,6 +74,24 @@ impl Share {
 impl AsRef<[u8]> for Share {
     fn as_ref(&self) -> &[u8] {
         &self.data
+    }
+}
+
+impl HasMultihash<NMT_ID_SIZE> for Share {
+    fn multihash(&self) -> Result<Multihash<NMT_ID_SIZE>, CidError> {
+        //let (ns, data) = self;
+        let hasher = NamespacedSha2Hasher::with_ignore_max_ns(true);
+        //let namespaced_data = [ns.as_bytes(), data].concat();
+
+        let digest = hasher.hash_leaf(self.as_ref()).iter().collect::<Vec<_>>();
+        // size is correct, so unwrap is safe
+        Ok(Multihash::wrap(NMT_CODEC, &digest).unwrap())
+    }
+}
+
+impl HasCid<NMT_ID_SIZE> for Share {
+    fn codec() -> u64 {
+        NMT_MULTIHASH_CODE
     }
 }
 
@@ -157,6 +182,7 @@ impl From<NamespacedRow> for RawNamespacedRow {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::nmt::{NamespacedHash, NAMESPACED_HASH_SIZE};
     use base64::prelude::*;
 
     #[cfg(target_arch = "wasm32")]
@@ -329,5 +355,21 @@ mod tests {
 
         assert_eq!(ns_shares.rows[0].shares.len(), 1);
         assert!(!ns_shares.rows[0].proof.is_of_absence());
+    }
+
+    #[test]
+    fn test_generate_leaf_multihash() {
+        let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
+        let mut data = [0xCDu8; appconsts::SHARE_SIZE];
+        data[..NS_SIZE].copy_from_slice(namespace.as_bytes());
+        let share = Share::from_raw(&data).unwrap();
+
+        let hash = share.multihash().unwrap();
+
+        assert_eq!(hash.code(), NMT_CODEC);
+        assert_eq!(hash.size(), NAMESPACED_HASH_SIZE as u8);
+        let hash = NamespacedHash::try_from(hash.digest()).unwrap();
+        assert_eq!(hash.min_namespace(), *namespace);
+        assert_eq!(hash.max_namespace(), *namespace);
     }
 }

@@ -589,6 +589,7 @@ dependencies = [
  "cid",
  "dashmap",
  "multihash",
+ "thiserror",
  "tokio",
 ]
 
@@ -676,6 +677,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.21.5",
  "bech32",
+ "blockstore",
  "bytes",
  "celestia-proto",
  "cid",

@@ -1,17 +1,24 @@
 use async_trait::async_trait;
 use cid::CidGeneric;
+use thiserror::Error;
 
-use crate::multihash::Block;
+use crate::multihash::{Block, CidError};
 
 pub use crate::in_memory_blockstore::InMemoryBlockstore;
 
 mod in_memory_blockstore;
 pub mod multihash;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Error)]
 pub enum BlockstoreError {
+    #[error("CID already exists in the store")]
     CidExists,
+
+    #[error("CID length longer that max allowed by the store")]
     CidTooLong,
+
+    #[error("Error generating CID: {0}")]
+    CidError(#[from] CidError),
 }
 
 type Result<T> = std::result::Result<T, BlockstoreError>;
