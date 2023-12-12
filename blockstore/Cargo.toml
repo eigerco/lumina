@@ -13,3 +13,6 @@ thiserror = "1.0.40"
 
 [dev-dependencies]
 tokio = "1.29.0"
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docs_rs"]

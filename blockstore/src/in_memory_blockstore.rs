@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use cid::CidGeneric;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
@@ -6,11 +5,13 @@ use multihash::Multihash;
 
 use crate::{Blockstore, BlockstoreError, Result};
 
+/// Simple in-memory blockstore implementation.
 pub struct InMemoryBlockstore<const S: usize> {
     map: DashMap<CidGeneric<S>, Vec<u8>>,
 }
 
 impl<const S: usize> InMemoryBlockstore<S> {
+    /// Create new empty in-memory blockstore
     pub fn new() -> Self {
         InMemoryBlockstore {
             map: DashMap::new(),
@@ -33,7 +34,7 @@ impl<const S: usize> InMemoryBlockstore<S> {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(docs_rs), async_trait::async_trait)]
 impl<const S: usize> Blockstore for InMemoryBlockstore<S> {
     async fn get<const SS: usize>(&self, cid: &CidGeneric<SS>) -> Result<Option<Vec<u8>>> {
         let hash = cid.hash();
