@@ -46,6 +46,9 @@ pub enum Error {
     #[error("Invalid nmt leaf size: {0}")]
     InvalidNmtLeafSize(usize),
 
+    #[error("Invalid nmt node order")]
+    InvalidNmtNodeOrder,
+
     #[error(
         "Sequence len must fit into {} bytes, got value {0}",
         appconsts::SEQUENCE_LEN_BYTES
@@ -102,6 +105,21 @@ pub enum Error {
 
     #[error("Unsupported fraud proof type: {0}")]
     UnsupportedFraudProofType(String),
+
+    #[error("Data square index out of range: {0}")]
+    EdsIndexOutOfRange(usize),
+
+    #[error("Invalid zero block height")]
+    ZeroBlockHeight,
+
+    #[error("Invalid multihash lenght")]
+    InvalidMultihashLength(usize),
+
+    #[error("Invalid multihash code {0} expected {1}")]
+    InvalidMultihashCode(u64, u64),
+
+    #[error("Invalid CID codec {0} expected{1}")]
+    InvalidCidCodec(u64, u64),
 }
 
 #[derive(Debug, thiserror::Error)]

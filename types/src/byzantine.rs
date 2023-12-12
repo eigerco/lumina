@@ -1,26 +1,22 @@
 use celestia_proto::share::eds::byzantine::pb::BadEncoding as RawBadEncodingFraudProof;
 use celestia_proto::share::eds::byzantine::pb::Share as RawShareWithProof;
-use cid::multihash::MultihashGeneric;
 use cid::CidGeneric;
 use serde::{Deserialize, Serialize};
-use tendermint::hash::SHA256_HASH_SIZE;
 use tendermint::{block::Height, Hash};
 use tendermint_proto::Protobuf;
 
+use crate::axis::AxisType;
 use crate::bail_validation;
 use crate::consts::appconsts;
 use crate::fraud_proof::FraudProof;
-use crate::nmt::NamespacedHash;
-use crate::nmt::{Namespace, NamespaceProof, NamespacedHashExt, NS_SIZE};
-use crate::rsmt2d::Axis;
+use crate::nmt::{
+    Namespace, NamespaceProof, NamespacedHash, NamespacedHashExt, NMT_CODEC, NMT_ID_SIZE,
+    NMT_MULTIHASH_CODE, NS_SIZE,
+};
 use crate::{Error, ExtendedHeader, Result, Share};
 
-pub const MULTIHASH_NMT_CODEC_CODE: u64 = 0x7700;
-pub const MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE: u64 = 0x7701;
-pub const MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE: usize = 2 * NS_SIZE + SHA256_HASH_SIZE;
-
-type Cid = CidGeneric<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE>;
-type Multihash = MultihashGeneric<MULTIHASH_SHA256_NAMESPACE_FLAGGED_SIZE>;
+type Cid = CidGeneric<NMT_ID_SIZE>;
+type Multihash = multihash::Multihash<NMT_ID_SIZE>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
@@ -37,7 +33,7 @@ pub struct BadEncodingFraudProof {
     // Index represents the row/col index where ErrByzantineRow/ErrByzantineColl occurred.
     index: usize,
     // Axis represents the axis that verification failed on.
-    axis: Axis,
+    axis: AxisType,
 }
 
 impl FraudProof for BadEncodingFraudProof {
@@ -89,13 +85,13 @@ impl FraudProof for BadEncodingFraudProof {
         }
 
         let root = match self.axis {
-            Axis::Row => merkle_row_roots[self.index].clone(),
-            Axis::Col => merkle_col_roots[self.index].clone(),
+            AxisType::Row => merkle_row_roots[self.index].clone(),
+            AxisType::Col => merkle_col_roots[self.index].clone(),
         };
 
         // verify if the root can be converted to a cid and back
-        let mh = Multihash::wrap(MULTIHASH_SHA256_NAMESPACE_FLAGGED_CODE, &root.to_array())?;
-        let cid = Cid::new_v1(MULTIHASH_NMT_CODEC_CODE, mh);
+        let mh = Multihash::wrap(NMT_CODEC, &root.to_array())?;
+        let cid = Cid::new_v1(NMT_MULTIHASH_CODE, mh);
         let root = NamespacedHash::try_from(cid.hash().digest())?;
 
         // verify that Merkle proofs correspond to particular shares.
@@ -184,6 +180,10 @@ impl TryFrom<RawBadEncodingFraudProof> for BadEncodingFraudProof {
     type Error = Error;
 
     fn try_from(value: RawBadEncodingFraudProof) -> Result<Self, Self::Error> {
+        let axis = u8::try_from(value.axis)
+            .map_err(|_| Error::InvalidAxis(value.axis))?
+            .try_into()?;
+
         Ok(Self {
             header_hash: value.header_hash.try_into()?,
             block_height: value.height.try_into()?,
@@ -193,7 +193,7 @@ impl TryFrom<RawBadEncodingFraudProof> for BadEncodingFraudProof {
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?,
             index: value.index as usize,
-            axis: value.axis.try_into()?,
+            axis,
         })
     }
 }
