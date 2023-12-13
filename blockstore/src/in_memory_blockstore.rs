@@ -64,6 +64,9 @@ impl<const S: usize> Default for InMemoryBlockstore<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::multihash::{CidError, HasCid, HasMultihash};
+    use std::iter::zip;
+    use std::result::Result as StdResult;
 
     #[tokio::test]
     async fn test_insert_get() {
@@ -159,14 +162,17 @@ mod tests {
 
     #[tokio::test]
     async fn too_large_cid() {
-        let cid_bytes = [
-            0x01, // CIDv1
-            0x11, // CID codec
-            0x22, // multihash code
-            0x10, // len = 16
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ];
-        let cid = CidGeneric::<32>::read_bytes(cid_bytes.as_ref()).unwrap();
+        let cid = CidGeneric::<32>::read_bytes(
+            [
+                0x01, // CIDv1
+                0x11, // CID codec
+                0x22, // multihash code
+                0x10, // len = 16
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ]
+            .as_ref(),
+        )
+        .unwrap();
 
         let store = InMemoryBlockstore::<8>::new();
         let insert_err = store.put_keyed(&cid, [0x00, 1].as_ref()).await.unwrap_err();
@@ -174,5 +180,96 @@ mod tests {
 
         let insert_err = store.get(&cid).await.unwrap_err();
         assert_eq!(insert_err, BlockstoreError::CidTooLong);
+    }
+
+    #[tokio::test]
+    async fn test_block_insert() {
+        let block = TestBlock([0, 1, 2, 3]);
+
+        let store = InMemoryBlockstore::<8>::new();
+        store.put(block).await.unwrap();
+        let retrieved_block = store.get(&block.cid_v1().unwrap()).await.unwrap().unwrap();
+        assert_eq!(block.as_ref(), &retrieved_block);
+    }
+
+    #[tokio::test]
+    async fn test_multiple_blocks_insert() {
+        let blocks = [
+            TestBlock([0, 0, 0, 0]),
+            TestBlock([0, 0, 0, 1]),
+            TestBlock([0, 0, 1, 0]),
+            TestBlock([0, 0, 1, 1]),
+            TestBlock([0, 1, 0, 0]),
+            TestBlock([0, 1, 0, 1]),
+            TestBlock([0, 1, 1, 0]),
+            TestBlock([0, 1, 1, 1]),
+        ];
+        let uninserted_blocks = [
+            TestBlock([1, 0, 0, 0]),
+            TestBlock([1, 0, 0, 1]),
+            TestBlock([1, 0, 1, 0]),
+            TestBlock([1, 1, 0, 1]),
+        ];
+
+        let store = InMemoryBlockstore::<8>::new();
+        store.put_many(blocks).await.unwrap();
+
+        for b in blocks {
+            let cid = b.cid_v1().unwrap();
+            assert!(store.has(&cid).await.unwrap());
+            let retrieved_block = store.get(&cid).await.unwrap().unwrap();
+            assert_eq!(b.as_ref(), &retrieved_block);
+        }
+
+        for b in uninserted_blocks {
+            let cid = b.cid_v1().unwrap();
+            assert!(!store.has(&cid).await.unwrap());
+            assert!(store.get(&cid).await.unwrap().is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_multiple_keyed() {
+        let blocks = [[0], [1], [2], [3]];
+        let cids = [
+            // 4 different arbitrary CIDs
+            TestBlock([0, 0, 0, 1]).cid_v1().unwrap(),
+            TestBlock([0, 0, 0, 2]).cid_v1().unwrap(),
+            TestBlock([0, 0, 0, 3]).cid_v1().unwrap(),
+            TestBlock([0, 0, 0, 4]).cid_v1().unwrap(),
+        ];
+        let pairs = zip(cids, blocks);
+
+        let store = InMemoryBlockstore::<8>::new();
+        store.put_many_keyed(pairs.clone()).await.unwrap();
+
+        for (cid, block) in pairs {
+            let retrieved_block = store.get(&cid).await.unwrap().unwrap();
+            assert_eq!(block.as_ref(), &retrieved_block);
+        }
+    }
+
+    const TEST_CODEC: u64 = 0x0A;
+    const TEST_MH_CODE: u64 = 0x0A;
+
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct TestBlock(pub [u8; 4]);
+
+    impl HasMultihash<8> for TestBlock {
+        fn multihash(&self) -> StdResult<Multihash<8>, CidError> {
+            Ok(Multihash::wrap(TEST_MH_CODE, &self.0).unwrap())
+        }
+    }
+
+    impl HasCid<8> for TestBlock {
+        fn codec() -> u64 {
+            TEST_CODEC
+        }
+    }
+
+    impl AsRef<[u8]> for TestBlock {
+        fn as_ref(&self) -> &[u8] {
+            &self.0
+        }
     }
 }

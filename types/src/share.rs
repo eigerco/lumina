@@ -79,11 +79,9 @@ impl AsRef<[u8]> for Share {
 
 impl HasMultihash<NMT_ID_SIZE> for Share {
     fn multihash(&self) -> Result<Multihash<NMT_ID_SIZE>, CidError> {
-        //let (ns, data) = self;
         let hasher = NamespacedSha2Hasher::with_ignore_max_ns(true);
-        //let namespaced_data = [ns.as_bytes(), data].concat();
-
         let digest = hasher.hash_leaf(self.as_ref()).iter().collect::<Vec<_>>();
+
         // size is correct, so unwrap is safe
         Ok(Multihash::wrap(NMT_CODEC, &digest).unwrap())
     }

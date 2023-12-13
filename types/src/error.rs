@@ -111,16 +111,6 @@ pub enum Error {
 
     #[error("Invalid zero block height")]
     ZeroBlockHeight,
-    /*
-    #[error("Invalid multihash lenght")]
-    InvalidMultihashLength(usize),
-
-    #[error("Invalid multihash code {0} expected {1}")]
-    InvalidMultihashCode(u64, u64),
-
-    #[error("Invalid CID codec {0} expected{1}")]
-    InvalidCidCodec(u64, u64),
-    */
 }
 
 #[derive(Debug, thiserror::Error)]

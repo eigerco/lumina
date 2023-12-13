@@ -12,7 +12,7 @@ multihash = "0.19.1"
 thiserror = "1.0.40"
 
 [dev-dependencies]
-tokio = "1.29.0"
+tokio = { version = "1.29.0", features = [ "macros", "rt" ] }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docs_rs"]
