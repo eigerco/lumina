@@ -6,11 +6,11 @@ use multihash::Multihash;
 use crate::{Blockstore, BlockstoreError, Result};
 
 /// Simple in-memory blockstore implementation.
-pub struct InMemoryBlockstore<const S: usize> {
-    map: DashMap<CidGeneric<S>, Vec<u8>>,
+pub struct InMemoryBlockstore<const MAX_MULTIHASH_SIZE: usize> {
+    map: DashMap<CidGeneric<MAX_MULTIHASH_SIZE>, Vec<u8>>,
 }
 
-impl<const S: usize> InMemoryBlockstore<S> {
+impl<const MAX_MULTIHASH_SIZE: usize> InMemoryBlockstore<MAX_MULTIHASH_SIZE> {
     /// Create new empty in-memory blockstore
     pub fn new() -> Self {
         InMemoryBlockstore {
@@ -18,11 +18,11 @@ impl<const S: usize> InMemoryBlockstore<S> {
         }
     }
 
-    fn get_cid(&self, cid: &CidGeneric<S>) -> Result<Option<Vec<u8>>> {
+    fn get_cid(&self, cid: &CidGeneric<MAX_MULTIHASH_SIZE>) -> Result<Option<Vec<u8>>> {
         Ok(self.map.get(cid).as_deref().cloned())
     }
 
-    fn insert_cid(&self, cid: CidGeneric<S>, data: &[u8]) -> Result<()> {
+    fn insert_cid(&self, cid: CidGeneric<MAX_MULTIHASH_SIZE>, data: &[u8]) -> Result<()> {
         let cid_entry = self.map.entry(cid);
         if matches!(cid_entry, Entry::Occupied(_)) {
             return Err(BlockstoreError::CidExists);
@@ -35,27 +35,27 @@ impl<const S: usize> InMemoryBlockstore<S> {
 }
 
 #[cfg_attr(not(docs_rs), async_trait::async_trait)]
-impl<const S: usize> Blockstore for InMemoryBlockstore<S> {
+impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for InMemoryBlockstore<MAX_MULTIHASH_SIZE> {
     async fn get<const SS: usize>(&self, cid: &CidGeneric<SS>) -> Result<Option<Vec<u8>>> {
         let hash = cid.hash();
-        let hash = Multihash::<S>::wrap(hash.code(), hash.digest())
-            .map_err(|_| BlockstoreError::CidTooLong)?;
-        let cid = CidGeneric::<S>::new_v1(cid.codec(), hash);
+        let hash =
+            Multihash::wrap(hash.code(), hash.digest()).map_err(|_| BlockstoreError::CidTooLong)?;
+        let cid = CidGeneric::new_v1(cid.codec(), hash);
 
         self.get_cid(&cid)
     }
 
     async fn put_keyed<const SS: usize>(&self, cid: &CidGeneric<SS>, data: &[u8]) -> Result<()> {
         let hash = cid.hash();
-        let hash = Multihash::<S>::wrap(hash.code(), hash.digest())
-            .map_err(|_| BlockstoreError::CidTooLong)?;
-        let cid = CidGeneric::<S>::new_v1(cid.codec(), hash);
+        let hash =
+            Multihash::wrap(hash.code(), hash.digest()).map_err(|_| BlockstoreError::CidTooLong)?;
+        let cid = CidGeneric::new_v1(cid.codec(), hash);
 
         self.insert_cid(cid, data)
     }
 }
 
-impl<const S: usize> Default for InMemoryBlockstore<S> {
+impl<const MAX_MULTIHASH_SIZE: usize> Default for InMemoryBlockstore<MAX_MULTIHASH_SIZE> {
     fn default() -> Self {
         Self::new()
     }
