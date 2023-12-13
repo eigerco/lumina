@@ -34,7 +34,14 @@ pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
 impl Namespace {
-    pub const MAX: Namespace = Namespace(nmt_rs::NamespaceId::MAX_ID);
+    pub const TRANSACTION: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+    pub const PAY_FOR_BLOB: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+    pub const PRIMARY_RESERVED_PADDING: Namespace = Namespace::MAX_PRIMARY_RESERVED;
+    pub const MAX_PRIMARY_RESERVED: Namespace =
+        Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff]);
+    pub const MIN_SECONDARY_RESERVED: Namespace = Namespace::const_v255(0);
+    pub const TAIL_PADDING: Namespace = Namespace::const_v255(0xfe);
+    pub const PARITY_SHARE: Namespace = Namespace::const_v255(0xff);
 
     pub fn from_raw(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != NS_SIZE {
@@ -47,7 +54,7 @@ impl Namespace {
     pub fn new(version: u8, id: &[u8]) -> Result<Self> {
         match version {
             0 => Self::new_v0(id),
-            255 => Self::try_max(id),
+            255 => Self::new_v255(id),
             n => Err(Error::UnsupportedNamespaceVersion(n)),
         }
     }
@@ -98,11 +105,21 @@ impl Namespace {
         Namespace(nmt_rs::NamespaceId(bytes))
     }
 
-    fn try_max(id: &[u8]) -> Result<Self> {
-        if id.iter().all(|&x| x == 0xff) {
-            Ok(Namespace::MAX)
+    pub const fn const_v255(id: u8) -> Self {
+        let mut bytes = [255u8; NS_SIZE];
+        bytes[NS_ID_SIZE] = id;
+        Namespace(nmt_rs::NamespaceId(bytes))
+    }
+
+    pub fn new_v255(id: &[u8]) -> Result<Self> {
+        if id.len() != NS_ID_SIZE {
+            return Err(Error::InvalidNamespaceSize);
+        }
+
+        if id.iter().take(NS_ID_SIZE - 1).all(|&x| x == 0xff) {
+            Ok(Namespace::const_v255(id[NS_ID_SIZE - 1]))
         } else {
-            Err(Error::UnsupportedNamespaceVersion(255))
+            Err(Error::InvalidNamespaceV255)
         }
     }
 
@@ -268,12 +285,34 @@ mod tests {
     }
 
     #[test]
+    fn namespace_id_max() {
+        let nid = Namespace::new(0xff, &[0xff; 28]).unwrap();
+        let expected_nid = Namespace::PARITY_SHARE;
+
+        assert_eq!(nid, expected_nid);
+    }
+
+    #[test]
     fn namespace_id_const_v0() {
         let nid = Namespace::const_v0([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         let expected_nid = Namespace(nmt_rs::NamespaceId([
             0, // version
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // prefix
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // id
+        ]));
+
+        assert_eq!(nid, expected_nid);
+    }
+
+    #[test]
+    fn namespace_id_const_v255() {
+        let nid = Namespace::const_v255(0xab);
+        let expected_nid = Namespace(nmt_rs::NamespaceId([
+            0xff, // version
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, // prefix
+            0xab, // id
         ]));
 
         assert_eq!(nid, expected_nid);
@@ -312,6 +351,31 @@ mod tests {
         let e = Namespace::new_v0(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap_err();
 
         assert!(matches!(e, Error::InvalidNamespaceSize));
+    }
+
+    #[test]
+    fn namespace_id_v255_too_long() {
+        let e = Namespace::new_v255(&[0xff; 29]).unwrap_err();
+
+        assert!(matches!(e, Error::InvalidNamespaceSize));
+    }
+
+    #[test]
+    fn namespace_id_v255_too_short() {
+        let e = Namespace::new_v255(&[0xff; 27]).unwrap_err();
+
+        assert!(matches!(e, Error::InvalidNamespaceSize));
+    }
+
+    #[test]
+    fn namespace_id_max_invalid_prefix() {
+        let namespace = &[
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff,
+        ];
+        let e = Namespace::new_v255(namespace).unwrap_err();
+
+        assert!(matches!(e, Error::InvalidNamespaceV255));
     }
 
     #[test]
@@ -365,7 +429,7 @@ mod tests {
         ])
         .unwrap();
 
-        let expected_nid = Namespace::MAX;
+        let expected_nid = Namespace::PARITY_SHARE;
 
         assert_eq!(nid, expected_nid);
     }
@@ -378,7 +442,16 @@ mod tests {
         ])
         .unwrap_err();
 
-        assert!(matches!(e, Error::UnsupportedNamespaceVersion(255)));
+        assert!(matches!(e, Error::InvalidNamespaceV255));
+
+        let e = Namespace::from_raw(&[
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe,
+            0xff,
+        ])
+        .unwrap_err();
+
+        assert!(matches!(e, Error::InvalidNamespaceV255));
     }
 
     #[test]
