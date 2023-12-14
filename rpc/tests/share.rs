@@ -5,8 +5,9 @@ use celestia_types::consts::appconsts::{
     CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SEQUENCE_LEN_BYTES,
     SHARE_INFO_BYTES,
 };
-use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
-use celestia_types::Blob;
+use celestia_types::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
+use celestia_types::{Blob, Share};
+use nmt_rs::NamespaceMerkleHasher;
 
 pub mod utils;
 
@@ -148,7 +149,26 @@ async fn get_eds() {
 
     let header = client.header_get_by_height(submitted_height).await.unwrap();
 
-    let _eds = client.share_get_eds(&header).await.unwrap();
+    let eds = client.share_get_eds(&header).await.unwrap();
+    let width = header.dah.square_len();
 
-    // TODO: validate
+    for (y, chunk) in eds.data_square.chunks(width).enumerate() {
+        let mut nmt = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+
+        for (x, leaf) in chunk.iter().enumerate() {
+            if x < width / 2 && y < width / 2 {
+                // the `OriginalDataSquare` part of the `EDS`
+                let share = Share::from_raw(leaf).unwrap();
+                let ns = share.namespace();
+                nmt.push_leaf(share.as_ref(), *ns).unwrap();
+            } else {
+                // the parity data computed using `eds.codec`
+                nmt.push_leaf(leaf, *Namespace::PARITY_SHARE).unwrap();
+            }
+        }
+
+        // check if the root corresponds to the one from the dah
+        let root = nmt.root();
+        assert_eq!(root, header.dah.row_root(y).unwrap());
+    }
 }
