@@ -116,8 +116,11 @@ impl Namespace {
             return Err(Error::InvalidNamespaceSize);
         }
 
-        if id.iter().take(NS_ID_SIZE - 1).all(|&x| x == 0xff) {
-            Ok(Namespace::const_v255(id[NS_ID_SIZE - 1]))
+        // safe after the length check
+        let (id, prefix) = id.split_last().unwrap();
+
+        if prefix.iter().all(|&x| x == 0xff) {
+            Ok(Namespace::const_v255(*id))
         } else {
             Err(Error::InvalidNamespaceV255)
         }
