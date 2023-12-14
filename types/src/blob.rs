@@ -8,7 +8,7 @@ pub use self::commitment::Commitment;
 use crate::consts::appconsts;
 use crate::nmt::Namespace;
 use crate::serializers::none_as_negative_one;
-use crate::{bail_validation, Error, Result};
+use crate::{bail_validation, Error, Result, Share};
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -54,7 +54,7 @@ impl Blob {
         Ok(())
     }
 
-    pub fn to_shares(&self) -> Result<Vec<Vec<u8>>> {
+    pub fn to_shares(&self) -> Result<Vec<Share>> {
         commitment::split_blob_to_shares(self.namespace, self.share_version, &self.data)
     }
 }
