@@ -1,4 +1,4 @@
-mod axis;
+pub mod axis;
 pub mod blob;
 mod block;
 mod byzantine;
@@ -8,12 +8,12 @@ mod error;
 mod extended_header;
 pub mod fraud_proof;
 pub mod hash;
-mod namespaced_data;
+pub mod namespaced_data;
 pub mod nmt;
 #[cfg(feature = "p2p")]
 pub mod p2p;
 mod rsmt2d;
-mod sample;
+pub mod sample;
 pub(crate) mod serializers;
 mod share;
 pub mod state;

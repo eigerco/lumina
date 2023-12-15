@@ -664,6 +664,7 @@ dependencies = [
  "http",
  "jsonrpsee",
  "libp2p",
+ "nmt-rs",
  "rand 0.8.5",
  "serde",
  "thiserror",

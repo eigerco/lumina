@@ -11,10 +11,8 @@ use tendermint_proto::serializers::cow_str::CowStr;
 
 use crate::consts::appconsts;
 use crate::nmt::{Namespace, NamespacedHashExt, NamespacedSha2Hasher, Nmt, RawNamespacedHash};
-use crate::InfoByte;
 use crate::{Error, Result};
-
-type SparseShare = Vec<u8>;
+use crate::{InfoByte, Share};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Commitment(pub merkle::Hash);
@@ -35,14 +33,8 @@ impl Commitment {
         Self::from_shares(namespace, &shares)
     }
 
-    /// Generate the commitment for given shares.
-    ///
-    /// Shares are treated as the arbitrary byte blobs. No verification of their binary repr correctness
-    /// is made, not even if they belong to the provided namespace. TODO: should we change that?
-    pub fn from_shares(
-        namespace: Namespace,
-        mut shares: &[impl AsRef<[u8]>],
-    ) -> Result<Commitment> {
+    /// Generate the commitment from the given shares.
+    pub fn from_shares(namespace: Namespace, mut shares: &[Share]) -> Result<Commitment> {
         // the commitment is the root of a merkle mountain range with max tree size
         // determined by the number of roots required to create a share commitment
         // over that blob. The size of the tree is only increased if the number of
@@ -114,7 +106,7 @@ pub(crate) fn split_blob_to_shares(
     namespace: Namespace,
     share_version: u8,
     blob_data: &[u8],
-) -> Result<Vec<SparseShare>> {
+) -> Result<Vec<Share>> {
     if share_version != appconsts::SHARE_VERSION_ZERO {
         return Err(Error::UnsupportedShareVersion(share_version));
     }
@@ -133,7 +125,7 @@ pub(crate) fn split_blob_to_shares(
 fn build_sparse_share_v0(
     namespace: Namespace,
     data: &mut Cursor<impl AsRef<[u8]>>,
-) -> Result<SparseShare> {
+) -> Result<Share> {
     let is_first_share = data.position() == 0;
     let data_len = cursor_inner_length(data);
     let mut bytes = BytesMut::with_capacity(appconsts::SHARE_SIZE);
@@ -162,7 +154,7 @@ fn build_sparse_share_v0(
     // Read the share data
     data.copy_to_slice(&mut bytes[current_size..current_size + read_amount]);
 
-    Ok(bytes.to_vec())
+    Share::from_raw(&bytes)
 }
 
 fn cursor_inner_length(cursor: &Cursor<impl AsRef<[u8]>>) -> usize {
@@ -274,7 +266,7 @@ mod tests {
         assert!(!cursor.has_remaining());
 
         // check namespace
-        let (share_ns, share_data) = share.split_at(appconsts::NAMESPACE_SIZE);
+        let (share_ns, share_data) = share.as_ref().split_at(appconsts::NAMESPACE_SIZE);
         assert_eq!(share_ns, namespace.as_bytes());
 
         // check data
@@ -309,7 +301,7 @@ mod tests {
         );
 
         // check namespace
-        let (share_ns, share_data) = first_share.split_at(appconsts::NAMESPACE_SIZE);
+        let (share_ns, share_data) = first_share.as_ref().split_at(appconsts::NAMESPACE_SIZE);
         assert_eq!(share_ns, namespace.as_bytes());
 
         // check info byte
@@ -333,7 +325,9 @@ mod tests {
         assert!(!cursor.has_remaining());
 
         // check namespace
-        let (share_ns, share_data) = continuation_share.split_at(appconsts::NAMESPACE_SIZE);
+        let (share_ns, share_data) = continuation_share
+            .as_ref()
+            .split_at(appconsts::NAMESPACE_SIZE);
         assert_eq!(share_ns, namespace.as_bytes());
 
         // check data
@@ -368,7 +362,7 @@ mod tests {
         assert!(!cursor.has_remaining());
 
         // check namespace
-        let (share_ns, share_data) = share.split_at(appconsts::NAMESPACE_SIZE);
+        let (share_ns, share_data) = share.as_ref().split_at(appconsts::NAMESPACE_SIZE);
         assert_eq!(share_ns, namespace.as_bytes());
 
         // check data

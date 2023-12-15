@@ -58,6 +58,9 @@ pub enum Error {
     #[error("Invalid namespace v0")]
     InvalidNamespaceV0,
 
+    #[error("Invalid namespace v255")]
+    InvalidNamespaceV255,
+
     #[error(transparent)]
     InvalidNamespacedHash(#[from] nmt_rs::InvalidNamespacedHash),
 
