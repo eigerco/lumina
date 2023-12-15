@@ -86,7 +86,8 @@ pub(crate) async fn run(args: Params) -> Result<()> {
 
 /// Get the address of the local bridge node
 async fn fetch_bridge_multiaddrs(ws_url: &str) -> Result<Vec<Multiaddr>> {
-    let auth_token = env::var("CELESTIA_NODE_AUTH_TOKEN_ADMIN")?;
+    let auth_token = env::var("CELESTIA_NODE_AUTH_TOKEN_ADMIN")
+        .context("Missing CELESTIA_NODE_AUTH_TOKEN_ADMIN environment variable")?;
     let client = Client::new(ws_url, Some(&auth_token)).await?;
     let bridge_info = client.p2p_info().await?;
 
