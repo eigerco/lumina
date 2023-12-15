@@ -3,13 +3,13 @@
 use cid::CidGeneric;
 use thiserror::Error;
 
-use crate::multihash::{Block, CidError};
+use crate::block::{Block, CidError};
 
 pub use crate::in_memory_blockstore::InMemoryBlockstore;
 
-mod in_memory_blockstore;
 /// Utilities related to computing CID for the inserted data
-pub mod multihash;
+pub mod block;
+mod in_memory_blockstore;
 
 /// Error returned when performing operations on [`Blockstore`]
 #[derive(Debug, PartialEq, Error)]

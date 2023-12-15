@@ -1,4 +1,4 @@
-use blockstore::multihash::{Block, CidError};
+use blockstore::block::{Block, CidError};
 use celestia_proto::share::p2p::shrex::nd::NamespaceRowResponse as RawNamespacedRow;
 use cid::CidGeneric;
 use multihash::Multihash;

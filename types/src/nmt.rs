@@ -1,5 +1,5 @@
 use base64::prelude::*;
-use blockstore::multihash::CidError;
+use blockstore::block::CidError;
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::simple_merkle::db::MemDb;

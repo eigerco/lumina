@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use blockstore::multihash::CidError;
+use blockstore::block::CidError;
 use bytes::{BufMut, BytesMut};
 use cid::CidGeneric;
 use multihash::Multihash;

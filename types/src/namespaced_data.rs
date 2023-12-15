@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use blockstore::multihash::CidError;
+use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
 use cid::CidGeneric;
 use multihash::Multihash;

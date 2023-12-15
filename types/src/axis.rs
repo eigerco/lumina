@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::result::Result as StdResult;
 
-use blockstore::multihash::CidError;
+use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
 use cid::CidGeneric;
 use multihash::Multihash;
