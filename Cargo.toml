@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cli", "node", "node-wasm", "proto", "rpc", "types"]
+members = ["blockstore", "cli", "node", "node-wasm", "proto", "rpc", "types"]
 
 [workspace.dependencies]
 lumina-node = { version = "0.1.0", path = "node" }
@@ -12,6 +12,7 @@ libp2p = "0.53.1"
 nmt-rs = "0.1.0"
 tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "bbe7de8", default-features = false }
 tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "bbe7de8" }
+blockstore = { version = "0.1.0", path = "blockstore" }
 
 [patch.'https://github.com/eigerco/celestia-tendermint-rs.git']
 # Uncomment to apply local changes

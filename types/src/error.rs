@@ -67,7 +67,7 @@ pub enum Error {
     #[error("Invalid index of signature in commit {0}, height {1}")]
     InvalidSignatureIndex(usize, u64),
 
-    #[error("Invalid axis: {0}")]
+    #[error("Invalid axis type: {0}")]
     InvalidAxis(i32),
 
     #[error("Range proof verification failed: {0:?}")]
@@ -114,15 +114,6 @@ pub enum Error {
 
     #[error("Invalid zero block height")]
     ZeroBlockHeight,
-
-    #[error("Invalid multihash lenght")]
-    InvalidMultihashLength(usize),
-
-    #[error("Invalid multihash code {0} expected {1}")]
-    InvalidMultihashCode(u64, u64),
-
-    #[error("Invalid CID codec {0} expected{1}")]
-    InvalidCidCodec(u64, u64),
 }
 
 #[derive(Debug, thiserror::Error)]

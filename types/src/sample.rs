@@ -1,11 +1,11 @@
 use std::mem::size_of;
 
+use blockstore::block::CidError;
 use bytes::{BufMut, BytesMut};
 use cid::CidGeneric;
 use multihash::Multihash;
 
 use crate::axis::{AxisId, AxisType};
-use crate::multihash::{HasCid, HasMultihash};
 use crate::DataAvailabilityHeader;
 use crate::{Error, Result};
 
@@ -14,7 +14,7 @@ pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
 pub const SAMPLE_ID_CODEC: u64 = 0x7800;
 
 /// Represents particular sample along the axis on specific Data Square
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct SampleId {
     pub axis: AxisId,
     pub index: u16,
@@ -57,9 +57,9 @@ impl SampleId {
         bytes.put_u16_le(self.index);
     }
 
-    fn decode(buffer: &[u8]) -> Result<Self> {
+    fn decode(buffer: &[u8]) -> Result<Self, CidError> {
         if buffer.len() != SAMPLE_ID_SIZE {
-            return Err(Error::InvalidMultihashLength(buffer.len()));
+            return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
         let (axis_id, index) = buffer.split_at(AxisId::size());
@@ -71,44 +71,45 @@ impl SampleId {
     }
 }
 
-impl HasMultihash<SAMPLE_ID_SIZE> for SampleId {
-    fn multihash(&self) -> Result<Multihash<SAMPLE_ID_SIZE>> {
-        let mut bytes = BytesMut::with_capacity(Self::size());
-
-        self.encode(&mut bytes);
-
-        Ok(Multihash::<SAMPLE_ID_SIZE>::wrap(SAMPLE_ID_MULTIHASH_CODE, &bytes[..]).unwrap())
-    }
-}
-
-impl HasCid<SAMPLE_ID_SIZE> for SampleId {
-    fn codec() -> u64 {
-        SAMPLE_ID_CODEC
-    }
-}
-
 impl<const S: usize> TryFrom<CidGeneric<S>> for SampleId {
-    type Error = Error;
+    type Error = CidError;
 
     fn try_from(cid: CidGeneric<S>) -> Result<Self, Self::Error> {
         let codec = cid.codec();
         if codec != SAMPLE_ID_CODEC {
-            return Err(Error::InvalidCidCodec(codec, SAMPLE_ID_CODEC));
+            return Err(CidError::InvalidCidCodec(codec));
         }
 
         let hash = cid.hash();
 
         let size = hash.size() as usize;
         if size != SAMPLE_ID_SIZE {
-            return Err(Error::InvalidMultihashLength(size));
+            return Err(CidError::InvalidMultihashLength(size));
         }
 
         let code = hash.code();
         if code != SAMPLE_ID_MULTIHASH_CODE {
-            return Err(Error::InvalidMultihashCode(code, SAMPLE_ID_MULTIHASH_CODE));
+            return Err(CidError::InvalidMultihashCode(
+                code,
+                SAMPLE_ID_MULTIHASH_CODE,
+            ));
         }
 
         SampleId::decode(hash.digest())
+    }
+}
+
+impl TryFrom<SampleId> for CidGeneric<SAMPLE_ID_SIZE> {
+    type Error = CidError;
+
+    fn try_from(sample_id: SampleId) -> Result<Self, Self::Error> {
+        let mut bytes = BytesMut::with_capacity(SAMPLE_ID_SIZE);
+        // length is correct, so unwrap is safe
+        sample_id.encode(&mut bytes);
+
+        let mh = Multihash::wrap(SAMPLE_ID_MULTIHASH_CODE, &bytes[..]).unwrap();
+
+        Ok(CidGeneric::new_v1(SAMPLE_ID_CODEC, mh))
     }
 }
 
@@ -124,7 +125,7 @@ mod tests {
             column_roots: vec![NamespacedHash::empty_root(); 10],
         };
         let sample_id = SampleId::new(AxisType::Row, 5, &dah, 100).unwrap();
-        let cid = sample_id.cid_v1().unwrap();
+        let cid = CidGeneric::try_from(sample_id).unwrap();
 
         let multihash = cid.hash();
         assert_eq!(multihash.code(), SAMPLE_ID_MULTIHASH_CODE);
@@ -183,10 +184,10 @@ mod tests {
         let multihash = Multihash::<SAMPLE_ID_SIZE>::wrap(888, &[0; SAMPLE_ID_SIZE]).unwrap();
         let cid = CidGeneric::<SAMPLE_ID_SIZE>::new_v1(SAMPLE_ID_CODEC, multihash);
         let axis_err = SampleId::try_from(cid).unwrap_err();
-        assert!(matches!(
+        assert_eq!(
             axis_err,
-            Error::InvalidMultihashCode(888, SAMPLE_ID_MULTIHASH_CODE)
-        ));
+            CidError::InvalidMultihashCode(888, SAMPLE_ID_MULTIHASH_CODE)
+        );
     }
 
     #[test]
@@ -196,9 +197,6 @@ mod tests {
                 .unwrap();
         let cid = CidGeneric::<SAMPLE_ID_SIZE>::new_v1(4321, multihash);
         let axis_err = SampleId::try_from(cid).unwrap_err();
-        assert!(matches!(
-            axis_err,
-            Error::InvalidCidCodec(4321, SAMPLE_ID_CODEC)
-        ));
+        assert!(matches!(axis_err, CidError::InvalidCidCodec(4321)));
     }
 }

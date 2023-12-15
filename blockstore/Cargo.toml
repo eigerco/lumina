@@ -1,0 +1,18 @@
+[package]
+name = "blockstore"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+async-trait = "0.1.73"
+cid = "0.11.0"
+dashmap = "5.5.3"
+multihash = "0.19.1"
+thiserror = "1.0.40"
+
+[dev-dependencies]
+tokio = { version = "1.29.0", features = [ "macros", "rt" ] }
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docs_rs"]

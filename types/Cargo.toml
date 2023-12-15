@@ -5,10 +5,15 @@ edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
+blockstore = { workspace = true }
+celestia-proto = { workspace = true }
+nmt-rs = { workspace = true }
+tendermint = { workspace = true, features = ["std", "rust-crypto"] }
+tendermint-proto = { workspace = true }
+
 base64 = "0.21.2"
 bech32 = "0.9.1"
 bytes = "1.4.0"
-celestia-proto = { workspace = true }
 cid = { version = "0.11", default-features = false, features = ["std"] }
 const_format = "0.2.31"
 ed25519-consensus = { version = "2.1.0", optional = true }
@@ -16,14 +21,11 @@ enum_dispatch = "0.3.12"
 libp2p-identity = { version = "0.2.7", optional = true }
 multiaddr = { version = "0.18.0", optional = true }
 multihash = "0.19.1"
-nmt-rs = { workspace = true }
 rand = { version = "0.8.5", optional = true }
 ruint = { version = "1.8.0", features = ["serde"] }
 serde = { version = "1.0.164", features = ["derive"] }
 serde_repr = { version = "0.1", optional = true }
 sha2 = "0.10.7"
-tendermint = { workspace = true, features = ["std", "rust-crypto"] }
-tendermint-proto = { workspace = true }
 thiserror = "1.0.40"
 
 [dev-dependencies]

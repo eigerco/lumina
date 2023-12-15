@@ -1,12 +1,12 @@
 use std::io::Cursor;
 use std::result::Result as StdResult;
 
+use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
 use cid::CidGeneric;
 use multihash::Multihash;
 use sha2::{Digest, Sha256};
 
-use crate::multihash::{HasCid, HasMultihash};
 use crate::nmt::{NamespacedHashExt, HASH_SIZE};
 use crate::DataAvailabilityHeader;
 use crate::{Error, Result};
@@ -37,7 +37,7 @@ impl TryFrom<u8> for AxisType {
 
 /// Represents particular particular Column or Row in a specific Data Square,
 /// paired together with a hash of the axis root.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct AxisId {
     pub axis_type: AxisType,
     pub index: u16,
@@ -89,20 +89,21 @@ impl AxisId {
         bytes.put_u64_le(self.block_height);
     }
 
-    pub(crate) fn decode(buffer: &[u8]) -> Result<Self> {
+    pub(crate) fn decode(buffer: &[u8]) -> Result<Self, CidError> {
         if buffer.len() != AXIS_ID_SIZE {
-            return Err(Error::InvalidMultihashLength(buffer.len()));
+            return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
         let mut cursor = Cursor::new(buffer);
 
-        let axis_type = cursor.get_u8().try_into()?;
+        let axis_type =
+            AxisType::try_from(cursor.get_u8()).map_err(|e| CidError::InvalidCid(e.to_string()))?;
         let index = cursor.get_u16_le();
         let hash = cursor.copy_to_bytes(HASH_SIZE).as_ref().try_into().unwrap();
         let block_height = cursor.get_u64_le();
 
         if block_height == 0 {
-            return Err(Error::ZeroBlockHeight);
+            return Err(CidError::InvalidCid("Zero block height".to_string()));
         }
 
         Ok(Self {
@@ -114,43 +115,41 @@ impl AxisId {
     }
 }
 
-impl HasMultihash<AXIS_ID_SIZE> for AxisId {
-    fn multihash(&self) -> Result<Multihash<AXIS_ID_SIZE>> {
-        let mut bytes = BytesMut::with_capacity(AXIS_ID_SIZE);
-        self.encode(&mut bytes);
-        // length is correct, so unwrap is safe
-        Ok(Multihash::wrap(AXIS_ID_MULTIHASH_CODE, &bytes[..]).unwrap())
-    }
-}
-
-impl HasCid<AXIS_ID_SIZE> for AxisId {
-    fn codec() -> u64 {
-        AXIS_ID_CODEC
-    }
-}
-
 impl<const S: usize> TryFrom<CidGeneric<S>> for AxisId {
-    type Error = Error;
+    type Error = CidError;
 
     fn try_from(cid: CidGeneric<S>) -> Result<Self, Self::Error> {
         let codec = cid.codec();
         if codec != AXIS_ID_CODEC {
-            return Err(Error::InvalidCidCodec(codec, AXIS_ID_CODEC));
+            return Err(CidError::InvalidCidCodec(codec));
         }
 
         let hash = cid.hash();
 
         let size = hash.size() as usize;
         if size != AXIS_ID_SIZE {
-            return Err(Error::InvalidMultihashLength(size));
+            return Err(CidError::InvalidMultihashLength(size));
         }
 
         let code = hash.code();
         if code != AXIS_ID_MULTIHASH_CODE {
-            return Err(Error::InvalidMultihashCode(code, AXIS_ID_MULTIHASH_CODE));
+            return Err(CidError::InvalidMultihashCode(code, AXIS_ID_MULTIHASH_CODE));
         }
 
         AxisId::decode(hash.digest())
+    }
+}
+
+impl TryFrom<AxisId> for CidGeneric<AXIS_ID_SIZE> {
+    type Error = CidError;
+
+    fn try_from(axis: AxisId) -> Result<Self, Self::Error> {
+        let mut bytes = BytesMut::with_capacity(AXIS_ID_SIZE);
+        axis.encode(&mut bytes);
+        // length is correct, so unwrap is safe
+        let mh = Multihash::wrap(AXIS_ID_MULTIHASH_CODE, &bytes[..]).unwrap();
+
+        Ok(CidGeneric::new_v1(AXIS_ID_CODEC, mh))
     }
 }
 
@@ -183,7 +182,7 @@ mod tests {
             column_roots: vec![NamespacedHash::empty_root(); 10],
         };
         let axis_id = AxisId::new(AxisType::Row, 5, &dah, 100).unwrap();
-        let cid = axis_id.cid_v1().unwrap();
+        let cid = CidGeneric::try_from(axis_id).unwrap();
 
         let multihash = cid.hash();
         assert_eq!(multihash.code(), AXIS_ID_MULTIHASH_CODE);
@@ -256,7 +255,10 @@ mod tests {
         assert_eq!(mh.code(), AXIS_ID_MULTIHASH_CODE);
         assert_eq!(mh.size(), AXIS_ID_SIZE as u8);
         let axis_err = AxisId::try_from(cid).unwrap_err();
-        assert!(matches!(axis_err, Error::InvalidAxis(0xBE)));
+        assert_eq!(
+            axis_err,
+            CidError::InvalidCid("Invalid axis type: 190".to_string())
+        );
     }
 
     #[test]
@@ -280,7 +282,10 @@ mod tests {
         assert_eq!(mh.code(), AXIS_ID_MULTIHASH_CODE);
         assert_eq!(mh.size(), AXIS_ID_SIZE as u8);
         let axis_err = AxisId::try_from(cid).unwrap_err();
-        assert!(matches!(axis_err, Error::ZeroBlockHeight));
+        assert_eq!(
+            axis_err,
+            CidError::InvalidCid("Zero block height".to_string())
+        );
     }
 
     #[test]
@@ -288,10 +293,10 @@ mod tests {
         let multihash = Multihash::<AXIS_ID_SIZE>::wrap(999, &[0; AXIS_ID_SIZE]).unwrap();
         let cid = CidGeneric::<AXIS_ID_SIZE>::new_v1(AXIS_ID_CODEC, multihash);
         let axis_err = AxisId::try_from(cid).unwrap_err();
-        assert!(matches!(
+        assert_eq!(
             axis_err,
-            Error::InvalidMultihashCode(999, AXIS_ID_MULTIHASH_CODE)
-        ));
+            CidError::InvalidMultihashCode(999, AXIS_ID_MULTIHASH_CODE)
+        );
     }
 
     #[test]
@@ -300,9 +305,6 @@ mod tests {
             Multihash::<AXIS_ID_SIZE>::wrap(AXIS_ID_MULTIHASH_CODE, &[0; AXIS_ID_SIZE]).unwrap();
         let cid = CidGeneric::<AXIS_ID_SIZE>::new_v1(1234, multihash);
         let axis_err = AxisId::try_from(cid).unwrap_err();
-        assert!(matches!(
-            axis_err,
-            Error::InvalidCidCodec(1234, AXIS_ID_CODEC)
-        ));
+        assert_eq!(axis_err, CidError::InvalidCidCodec(1234));
     }
 }
