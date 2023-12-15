@@ -32,6 +32,10 @@ impl<const MAX_MULTIHASH_SIZE: usize> InMemoryBlockstore<MAX_MULTIHASH_SIZE> {
 
         Ok(())
     }
+
+    fn contains_cid(&self, cid: &CidGeneric<MAX_MULTIHASH_SIZE>) -> bool {
+        self.map.contains_key(cid)
+    }
 }
 
 #[cfg_attr(not(docs_rs), async_trait::async_trait)]
@@ -53,12 +57,26 @@ impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for InMemoryBlockstore<MAX_MULT
 
         self.insert_cid(cid, data)
     }
+
+    async fn has<const SS: usize>(&self, cid: &CidGeneric<SS>) -> Result<bool> {
+        let cid = get_internal_cid(cid)?;
+        Ok(self.contains_cid(&cid))
+    }
 }
 
 impl<const MAX_MULTIHASH_SIZE: usize> Default for InMemoryBlockstore<MAX_MULTIHASH_SIZE> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn get_internal_cid<const S0: usize, const S1: usize>(
+    cid: &CidGeneric<S0>,
+) -> Result<CidGeneric<S1>> {
+    let hash = cid.hash();
+    let hash =
+        Multihash::wrap(hash.code(), hash.digest()).map_err(|_| BlockstoreError::CidTooLong)?;
+    Ok(CidGeneric::new_v1(cid.codec(), hash))
 }
 
 #[cfg(test)]
