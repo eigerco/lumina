@@ -61,8 +61,8 @@ pub trait Blockstore {
     where
         B: Block<S>,
     {
-        let cid = block.cid_v1()?;
-        self.put_keyed(&cid, block.as_ref()).await
+        let cid = block.cid()?;
+        self.put_keyed(&cid, block.data()).await
     }
 
     /// Inserts multiple blocks into the blockstore computing their CID
@@ -75,8 +75,8 @@ pub trait Blockstore {
         <I as IntoIterator>::IntoIter: Send,
     {
         for b in blocks {
-            let cid = b.cid_v1()?;
-            self.put_keyed(&cid, b.as_ref()).await?;
+            let cid = b.cid()?;
+            self.put_keyed(&cid, b.data()).await?;
         }
         Ok(())
     }

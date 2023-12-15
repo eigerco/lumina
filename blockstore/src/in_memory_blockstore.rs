@@ -64,7 +64,7 @@ impl<const MAX_MULTIHASH_SIZE: usize> Default for InMemoryBlockstore<MAX_MULTIHA
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::multihash::{CidError, HasCid, HasMultihash};
+    use crate::multihash::{Block, CidError};
     use std::iter::zip;
     use std::result::Result as StdResult;
 
@@ -188,8 +188,8 @@ mod tests {
 
         let store = InMemoryBlockstore::<8>::new();
         store.put(block).await.unwrap();
-        let retrieved_block = store.get(&block.cid_v1().unwrap()).await.unwrap().unwrap();
-        assert_eq!(block.as_ref(), &retrieved_block);
+        let retrieved_block = store.get(&block.cid().unwrap()).await.unwrap().unwrap();
+        assert_eq!(block.data(), &retrieved_block);
     }
 
     #[tokio::test]
@@ -215,14 +215,14 @@ mod tests {
         store.put_many(blocks).await.unwrap();
 
         for b in blocks {
-            let cid = b.cid_v1().unwrap();
+            let cid = b.cid().unwrap();
             assert!(store.has(&cid).await.unwrap());
             let retrieved_block = store.get(&cid).await.unwrap().unwrap();
-            assert_eq!(b.as_ref(), &retrieved_block);
+            assert_eq!(b.data(), &retrieved_block);
         }
 
         for b in uninserted_blocks {
-            let cid = b.cid_v1().unwrap();
+            let cid = b.cid().unwrap();
             assert!(!store.has(&cid).await.unwrap());
             assert!(store.get(&cid).await.unwrap().is_none());
         }
@@ -233,10 +233,10 @@ mod tests {
         let blocks = [[0], [1], [2], [3]];
         let cids = [
             // 4 different arbitrary CIDs
-            TestBlock([0, 0, 0, 1]).cid_v1().unwrap(),
-            TestBlock([0, 0, 0, 2]).cid_v1().unwrap(),
-            TestBlock([0, 0, 0, 3]).cid_v1().unwrap(),
-            TestBlock([0, 0, 0, 4]).cid_v1().unwrap(),
+            TestBlock([0, 0, 0, 1]).cid().unwrap(),
+            TestBlock([0, 0, 0, 2]).cid().unwrap(),
+            TestBlock([0, 0, 0, 3]).cid().unwrap(),
+            TestBlock([0, 0, 0, 4]).cid().unwrap(),
         ];
         let pairs = zip(cids, blocks);
 
@@ -255,20 +255,13 @@ mod tests {
     #[derive(Debug, PartialEq, Clone, Copy)]
     struct TestBlock(pub [u8; 4]);
 
-    impl HasMultihash<8> for TestBlock {
-        fn multihash(&self) -> StdResult<Multihash<8>, CidError> {
-            Ok(Multihash::wrap(TEST_MH_CODE, &self.0).unwrap())
+    impl Block<8> for TestBlock {
+        fn cid(&self) -> StdResult<CidGeneric<8>, CidError> {
+            let mh = Multihash::wrap(TEST_MH_CODE, &self.0).unwrap();
+            Ok(CidGeneric::new_v1(TEST_CODEC, mh))
         }
-    }
 
-    impl HasCid<8> for TestBlock {
-        fn codec() -> u64 {
-            TEST_CODEC
-        }
-    }
-
-    impl AsRef<[u8]> for TestBlock {
-        fn as_ref(&self) -> &[u8] {
+        fn data(&self) -> &[u8] {
             &self.0
         }
     }

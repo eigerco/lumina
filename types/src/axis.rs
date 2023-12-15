@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::result::Result as StdResult;
 
-use blockstore::multihash::{CidError, HasCid, HasMultihash};
+use blockstore::multihash::CidError;
 use bytes::{Buf, BufMut, BytesMut};
 use cid::CidGeneric;
 use multihash::Multihash;
@@ -37,7 +37,7 @@ impl TryFrom<u8> for AxisType {
 
 /// Represents particular particular Column or Row in a specific Data Square,
 /// paired together with a hash of the axis root.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct AxisId {
     pub axis_type: AxisType,
     pub index: u16,
@@ -115,21 +115,6 @@ impl AxisId {
     }
 }
 
-impl HasMultihash<AXIS_ID_SIZE> for AxisId {
-    fn multihash(&self) -> Result<Multihash<AXIS_ID_SIZE>, CidError> {
-        let mut bytes = BytesMut::with_capacity(AXIS_ID_SIZE);
-        self.encode(&mut bytes);
-        // length is correct, so unwrap is safe
-        Ok(Multihash::wrap(AXIS_ID_MULTIHASH_CODE, &bytes[..]).unwrap())
-    }
-}
-
-impl HasCid<AXIS_ID_SIZE> for AxisId {
-    fn codec() -> u64 {
-        AXIS_ID_CODEC
-    }
-}
-
 impl<const S: usize> TryFrom<CidGeneric<S>> for AxisId {
     type Error = CidError;
 
@@ -152,6 +137,19 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for AxisId {
         }
 
         AxisId::decode(hash.digest())
+    }
+}
+
+impl TryFrom<AxisId> for CidGeneric<AXIS_ID_SIZE> {
+    type Error = CidError;
+
+    fn try_from(axis: AxisId) -> Result<Self, Self::Error> {
+        let mut bytes = BytesMut::with_capacity(AXIS_ID_SIZE);
+        axis.encode(&mut bytes);
+        // length is correct, so unwrap is safe
+        let mh = Multihash::wrap(AXIS_ID_MULTIHASH_CODE, &bytes[..]).unwrap();
+
+        Ok(CidGeneric::new_v1(AXIS_ID_CODEC, mh))
     }
 }
 
@@ -184,7 +182,7 @@ mod tests {
             column_roots: vec![NamespacedHash::empty_root(); 10],
         };
         let axis_id = AxisId::new(AxisType::Row, 5, &dah, 100).unwrap();
-        let cid = axis_id.cid_v1().unwrap();
+        let cid = CidGeneric::try_from(axis_id).unwrap();
 
         let multihash = cid.hash();
         assert_eq!(multihash.code(), AXIS_ID_MULTIHASH_CODE);

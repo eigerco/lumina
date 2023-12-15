@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use blockstore::multihash::{CidError, HasCid, HasMultihash};
+use blockstore::multihash::CidError;
 use bytes::{BufMut, BytesMut};
 use cid::CidGeneric;
 use multihash::Multihash;
@@ -14,7 +14,7 @@ pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
 pub const SAMPLE_ID_CODEC: u64 = 0x7800;
 
 /// Represents particular sample along the axis on specific Data Square
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct SampleId {
     pub axis: AxisId,
     pub index: u16,
@@ -71,22 +71,6 @@ impl SampleId {
     }
 }
 
-impl HasMultihash<SAMPLE_ID_SIZE> for SampleId {
-    fn multihash(&self) -> Result<Multihash<SAMPLE_ID_SIZE>, CidError> {
-        let mut bytes = BytesMut::with_capacity(Self::size());
-
-        self.encode(&mut bytes);
-
-        Ok(Multihash::<SAMPLE_ID_SIZE>::wrap(SAMPLE_ID_MULTIHASH_CODE, &bytes[..]).unwrap())
-    }
-}
-
-impl HasCid<SAMPLE_ID_SIZE> for SampleId {
-    fn codec() -> u64 {
-        SAMPLE_ID_CODEC
-    }
-}
-
 impl<const S: usize> TryFrom<CidGeneric<S>> for SampleId {
     type Error = CidError;
 
@@ -115,6 +99,20 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for SampleId {
     }
 }
 
+impl TryFrom<SampleId> for CidGeneric<SAMPLE_ID_SIZE> {
+    type Error = CidError;
+
+    fn try_from(sample_id: SampleId) -> Result<Self, Self::Error> {
+        let mut bytes = BytesMut::with_capacity(SAMPLE_ID_SIZE);
+        // length is correct, so unwrap is safe
+        sample_id.encode(&mut bytes);
+
+        let mh = Multihash::wrap(SAMPLE_ID_MULTIHASH_CODE, &bytes[..]).unwrap();
+
+        Ok(CidGeneric::new_v1(SAMPLE_ID_CODEC, mh))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,7 +125,7 @@ mod tests {
             column_roots: vec![NamespacedHash::empty_root(); 10],
         };
         let sample_id = SampleId::new(AxisType::Row, 5, &dah, 100).unwrap();
-        let cid = sample_id.cid_v1().unwrap();
+        let cid = CidGeneric::try_from(sample_id).unwrap();
 
         let multihash = cid.hash();
         assert_eq!(multihash.code(), SAMPLE_ID_MULTIHASH_CODE);

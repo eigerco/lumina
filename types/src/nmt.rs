@@ -1,5 +1,6 @@
 use base64::prelude::*;
-use blockstore::multihash::{CidError, HasCid, HasMultihash};
+use blockstore::multihash::CidError;
+use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::simple_merkle::db::MemDb;
 use nmt_rs::simple_merkle::tree::MerkleHash;
@@ -193,22 +194,20 @@ impl NodePair {
     }
 }
 
-impl HasMultihash<NMT_ID_SIZE> for NodePair {
-    fn multihash(&self) -> Result<Multihash<NMT_ID_SIZE>, CidError> {
-        self.validate_namespace_order()
+impl TryFrom<NodePair> for CidGeneric<NMT_ID_SIZE> {
+    type Error = CidError;
+
+    fn try_from(nodes: NodePair) -> Result<Self, Self::Error> {
+        nodes
+            .validate_namespace_order()
             .map_err(|e| CidError::InvalidDataFormat(e.to_string()))?;
 
         let hasher = NamespacedSha2Hasher::with_ignore_max_ns(true);
+        let digest = hasher.hash_nodes(&nodes.0, &nodes.1).to_array();
 
-        let digest = hasher.hash_nodes(&self.0, &self.1).to_array();
+        let mh = Multihash::wrap(NMT_MULTIHASH_CODE, &digest).unwrap();
 
-        Ok(Multihash::wrap(NMT_CODEC, &digest).unwrap())
-    }
-}
-
-impl HasCid<NMT_ID_SIZE> for NodePair {
-    fn codec() -> u64 {
-        NMT_MULTIHASH_CODE
+        Ok(CidGeneric::new_v1(NMT_CODEC, mh))
     }
 }
 
@@ -391,13 +390,18 @@ mod tests {
         let ns1 = Namespace::new_v0(&[2]).unwrap();
         let ns2 = Namespace::new_v0(&[3]).unwrap();
 
-        let left = NamespacedHash::with_min_and_max_ns(*ns0, *ns1);
-        let right = NamespacedHash::with_min_and_max_ns(*ns1, *ns2);
+        let nodes = NodePair(
+            NamespacedHash::with_min_and_max_ns(*ns0, *ns1),
+            NamespacedHash::with_min_and_max_ns(*ns1, *ns2),
+        );
 
-        let hash = NodePair(left, right).multihash().unwrap();
+        let cid = CidGeneric::try_from(nodes).unwrap();
+        assert_eq!(cid.codec(), NMT_CODEC);
 
-        assert_eq!(hash.code(), NMT_CODEC);
+        let hash = cid.hash();
+        assert_eq!(hash.code(), NMT_MULTIHASH_CODE);
         assert_eq!(hash.size(), NAMESPACED_HASH_SIZE as u8);
+
         let hash = NamespacedHash::from_raw(hash.digest()).unwrap();
         assert_eq!(hash.min_namespace(), *ns0);
         assert_eq!(hash.max_namespace(), *ns2);
@@ -409,10 +413,12 @@ mod tests {
         let ns1 = Namespace::new_v0(&[2]).unwrap();
         let ns2 = Namespace::new_v0(&[3]).unwrap();
 
-        let left = NamespacedHash::with_min_and_max_ns(*ns1, *ns2);
-        let right = NamespacedHash::with_min_and_max_ns(*ns0, *ns0);
+        let nodes = NodePair(
+            NamespacedHash::with_min_and_max_ns(*ns1, *ns2),
+            NamespacedHash::with_min_and_max_ns(*ns0, *ns0),
+        );
+        let result = CidGeneric::try_from(nodes).unwrap_err();
 
-        let result = NodePair(left, right).multihash().unwrap_err();
         assert_eq!(
             result,
             CidError::InvalidDataFormat("Invalid nmt node order".to_string())

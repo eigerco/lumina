@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use blockstore::multihash::{CidError, HasCid, HasMultihash};
+use blockstore::multihash::CidError;
 use bytes::{Buf, BufMut, BytesMut};
 use cid::CidGeneric;
 use multihash::Multihash;
@@ -15,7 +15,7 @@ pub const NAMESPACED_DATA_ID_MULTIHASH_CODE: u64 = 0x7821;
 pub const NAMESPACED_DATA_ID_CODEC: u64 = 0x7820;
 
 /// Represents shares from a namespace located on a particular row of Data Square
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct NamespacedDataId {
     pub namespace: Namespace,
     pub row_index: u16,
@@ -93,21 +93,6 @@ impl NamespacedDataId {
     }
 }
 
-impl HasMultihash<NAMESPACED_DATA_ID_SIZE> for NamespacedDataId {
-    fn multihash(&self) -> Result<Multihash<NAMESPACED_DATA_ID_SIZE>, CidError> {
-        let mut bytes = BytesMut::with_capacity(NAMESPACED_DATA_ID_SIZE);
-        self.encode(&mut bytes);
-        // length is correct, so unwrap is safe
-        Ok(Multihash::wrap(NAMESPACED_DATA_ID_MULTIHASH_CODE, &bytes[..]).unwrap())
-    }
-}
-
-impl HasCid<NAMESPACED_DATA_ID_SIZE> for NamespacedDataId {
-    fn codec() -> u64 {
-        NAMESPACED_DATA_ID_CODEC
-    }
-}
-
 impl<const S: usize> TryFrom<CidGeneric<S>> for NamespacedDataId {
     type Error = CidError;
 
@@ -136,6 +121,19 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for NamespacedDataId {
     }
 }
 
+impl TryFrom<NamespacedDataId> for CidGeneric<NAMESPACED_DATA_ID_SIZE> {
+    type Error = CidError;
+
+    fn try_from(namespaced_data_id: NamespacedDataId) -> Result<Self, Self::Error> {
+        let mut bytes = BytesMut::with_capacity(NAMESPACED_DATA_ID_SIZE);
+        namespaced_data_id.encode(&mut bytes);
+        // length is correct, so unwrap is safe
+        let mh = Multihash::wrap(NAMESPACED_DATA_ID_MULTIHASH_CODE, &bytes[..]).unwrap();
+
+        Ok(CidGeneric::new_v1(NAMESPACED_DATA_ID_CODEC, mh))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,7 +147,7 @@ mod tests {
             column_roots: vec![NamespacedHash::empty_root(); 10],
         };
         let data_id = NamespacedDataId::new(ns, 5, &dah, 100).unwrap();
-        let cid = data_id.cid_v1().unwrap();
+        let cid = CidGeneric::try_from(data_id).unwrap();
 
         let multihash = cid.hash();
         assert_eq!(multihash.code(), NAMESPACED_DATA_ID_MULTIHASH_CODE);

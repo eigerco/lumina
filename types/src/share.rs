@@ -1,5 +1,6 @@
-use blockstore::multihash::{CidError, HasCid, HasMultihash};
+use blockstore::multihash::{Block, CidError};
 use celestia_proto::share::p2p::shrex::nd::NamespaceRowResponse as RawNamespacedRow;
+use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::simple_merkle::tree::MerkleHash;
 use nmt_rs::NamespaceMerkleHasher;
@@ -77,19 +78,19 @@ impl AsRef<[u8]> for Share {
     }
 }
 
-impl HasMultihash<NMT_ID_SIZE> for Share {
-    fn multihash(&self) -> Result<Multihash<NMT_ID_SIZE>, CidError> {
+impl Block<NMT_ID_SIZE> for Share {
+    fn cid(&self) -> Result<CidGeneric<NMT_ID_SIZE>, CidError> {
         let hasher = NamespacedSha2Hasher::with_ignore_max_ns(true);
         let digest = hasher.hash_leaf(self.as_ref()).iter().collect::<Vec<_>>();
 
         // size is correct, so unwrap is safe
-        Ok(Multihash::wrap(NMT_CODEC, &digest).unwrap())
-    }
-}
+        let mh = Multihash::wrap(NMT_MULTIHASH_CODE, &digest).unwrap();
 
-impl HasCid<NMT_ID_SIZE> for Share {
-    fn codec() -> u64 {
-        NMT_MULTIHASH_CODE
+        Ok(CidGeneric::new_v1(NMT_CODEC, mh))
+    }
+
+    fn data(&self) -> &[u8] {
+        &self.data
     }
 }
 
@@ -362,9 +363,10 @@ mod tests {
         data[..NS_SIZE].copy_from_slice(namespace.as_bytes());
         let share = Share::from_raw(&data).unwrap();
 
-        let hash = share.multihash().unwrap();
-
-        assert_eq!(hash.code(), NMT_CODEC);
+        let cid = share.cid().unwrap();
+        assert_eq!(cid.codec(), NMT_CODEC);
+        let hash = cid.hash();
+        assert_eq!(hash.code(), NMT_MULTIHASH_CODE);
         assert_eq!(hash.size(), NAMESPACED_HASH_SIZE as u8);
         let hash = NamespacedHash::try_from(hash.digest()).unwrap();
         assert_eq!(hash.min_namespace(), *namespace);

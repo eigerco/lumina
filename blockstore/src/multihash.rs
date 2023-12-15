@@ -1,5 +1,4 @@
 use cid::CidGeneric;
-use multihash::Multihash;
 use thiserror::Error;
 
 /// Error returned when trying to compute new or parse existing CID. Note that errors here can be
@@ -27,27 +26,9 @@ pub enum CidError {
     InvalidCid(String),
 }
 
-/// Trait indicating a struct that can compute its own multihash
-pub trait HasMultihash<const S: usize> {
-    fn multihash(&self) -> Result<Multihash<S>, CidError>;
+/// Trait for a block of data which can be represented as a string of bytes, which can compute its
+/// own CID
+pub trait Block<const S: usize>: Sync + Send {
+    fn cid(&self) -> Result<CidGeneric<S>, CidError>;
+    fn data(&self) -> &[u8];
 }
-
-/// Trait indicating a struct that can compute its own CID
-pub trait HasCid<const S: usize>: HasMultihash<S> {
-    fn cid_v1(&self) -> Result<CidGeneric<S>, CidError> {
-        Ok(CidGeneric::<S>::new_v1(Self::codec(), self.multihash()?))
-    }
-
-    fn codec() -> u64;
-}
-
-/// Trait for structs that can be inserted into the [`Blockstore`]. For this purpose they need to
-/// know how to compute their own CID ([`HasCid`] trait) as well as have a byte string
-/// representation (`AsRef[u8]` trait). If CID is known, or it's otherwise more conventient, one
-/// can use [`Blockstore::put_keyed`] with `CID` and `&[u8]` directly.
-///
-/// [`Blockstore`]: crate::Blockstore
-/// [`Blockstore::put_keyed`]: crate::Blockstore::put_keyed
-pub trait Block<const S: usize>: HasCid<S> + AsRef<[u8]> + Sync + Send {}
-
-impl<const S: usize, T: HasCid<S> + AsRef<[u8]> + Sync + Send> Block<S> for T {}
