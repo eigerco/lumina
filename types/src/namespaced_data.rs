@@ -2,13 +2,16 @@ use std::io::Cursor;
 
 use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
+use celestia_proto::share::p2p::shwap::Data as RawNamespacedData;
 use cid::CidGeneric;
 use multihash::Multihash;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tendermint_proto::Protobuf;
 
 use crate::axis::AxisType;
-use crate::nmt::{Namespace, NamespacedHashExt, HASH_SIZE, NS_SIZE};
-use crate::{DataAvailabilityHeader, Error, Result};
+use crate::nmt::{Namespace, NamespaceProof, NamespacedHashExt, HASH_SIZE, NS_SIZE};
+use crate::{DataAvailabilityHeader, Error, Result, Share};
 
 const NAMESPACED_DATA_ID_SIZE: usize = NamespacedDataId::size();
 pub const NAMESPACED_DATA_ID_MULTIHASH_CODE: u64 = 0x7821;
@@ -21,6 +24,57 @@ pub struct NamespacedDataId {
     pub row_index: u16,
     pub hash: [u8; HASH_SIZE],
     pub block_height: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(try_from = "RawNamespacedData", into = "RawNamespacedData")]
+pub struct NamespacedData {
+    pub namespaced_data_id: NamespacedDataId,
+
+    pub proof: NamespaceProof,
+    pub shares: Vec<Share>,
+}
+
+impl NamespacedData {}
+
+impl Protobuf<RawNamespacedData> for NamespacedData {}
+
+impl TryFrom<RawNamespacedData> for NamespacedData {
+    type Error = Error;
+
+    fn try_from(namespaced_data: RawNamespacedData) -> Result<NamespacedData, Self::Error> {
+        let Some(proof) = namespaced_data.data_proof else {
+            return Err(Error::MissingProof);
+        };
+
+        let namespaced_data_id = NamespacedDataId::decode(&namespaced_data.data_id)?;
+        let shares = namespaced_data
+            .data_shares
+            .iter()
+            .map(|s| Share::from_raw(s))
+            .collect::<Result<_, _>>()?;
+
+        Ok(NamespacedData {
+            namespaced_data_id,
+            shares,
+            proof: proof.try_into()?,
+        })
+    }
+}
+
+impl From<NamespacedData> for RawNamespacedData {
+    fn from(namespaced_data: NamespacedData) -> RawNamespacedData {
+        let mut data_id_bytes = BytesMut::new();
+        namespaced_data
+            .namespaced_data_id
+            .encode(&mut data_id_bytes);
+
+        RawNamespacedData {
+            data_id: data_id_bytes.to_vec(),
+            data_shares: namespaced_data.shares.iter().map(|s| s.to_vec()).collect(),
+            data_proof: Some(namespaced_data.proof.into()),
+        }
+    }
 }
 
 impl NamespacedDataId {
@@ -207,5 +261,20 @@ mod tests {
         let cid = CidGeneric::<NAMESPACED_DATA_ID_SIZE>::new_v1(4321, multihash);
         let axis_err = NamespacedDataId::try_from(cid).unwrap_err();
         assert_eq!(axis_err, CidError::InvalidCidCodec(4321));
+    }
+
+    #[test]
+    fn decode_data_bytes() {
+        let bytes = include_bytes!("../test_data/shwap_samples/namespaced_data.data");
+        let msg = NamespacedData::decode(&bytes[..]).unwrap();
+
+        let ns = Namespace::new_v0(&[93, 2, 248, 47, 108, 59, 195, 216, 222, 33]).unwrap();
+        assert_eq!(msg.namespaced_data_id.namespace, ns);
+        assert_eq!(msg.namespaced_data_id.row_index, 0);
+        assert_eq!(msg.namespaced_data_id.block_height, 1);
+
+        for s in msg.shares {
+            assert_eq!(s.namespace(), ns);
+        }
     }
 }

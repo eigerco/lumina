@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package share.p2p.shwap;
+import "pb/proof.proto"; // celestiaorg/nmt/pb/proof.proto
+
+enum AxisType {
+    Row = 0;
+    Col = 1;
+}
+
+message Axis {
+    bytes axis_id = 1;
+    repeated bytes axis_half = 2;
+}
+
+enum SampleType {
+    DataSample = 0;
+    ParitySample = 1;
+}
+
+message Sample {
+    bytes sample_id = 1;
+    SampleType sample_type = 2;
+    bytes sample_share = 3;
+    proof.pb.Proof sample_proof = 4;
+}
+
+message Data {
+    bytes data_id = 1;
+    repeated bytes data_shares = 2;
+    proof.pb.Proof data_proof = 3;
+}

@@ -3,13 +3,17 @@ use std::result::Result as StdResult;
 
 use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
+use celestia_proto::share::p2p::shwap::Axis as RawAxis;
 use cid::CidGeneric;
 use multihash::Multihash;
+use nmt_rs::NamespaceMerkleHasher;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tendermint_proto::Protobuf;
 
-use crate::nmt::{NamespacedHashExt, HASH_SIZE};
-use crate::DataAvailabilityHeader;
-use crate::{Error, Result};
+use crate::nmt::{NamespacedHashExt, NamespacedSha2Hasher, Nmt, HASH_SIZE};
+use crate::{DataAvailabilityHeader, ExtendedDataSquare};
+use crate::{Error, Result, Share};
 
 const AXIS_ID_SIZE: usize = AxisId::size();
 pub const AXIS_ID_MULTIHASH_CODE: u64 = 0x7811;
@@ -43,6 +47,86 @@ pub struct AxisId {
     pub index: u16,
     pub hash: [u8; HASH_SIZE],
     pub block_height: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(try_from = "RawAxis", into = "RawAxis")]
+pub struct Axis {
+    pub axis_id: AxisId,
+
+    pub shares: Vec<Share>,
+}
+
+impl Axis {
+    pub fn new(
+        axis_type: AxisType,
+        index: usize,
+        dah: &DataAvailabilityHeader,
+        eds: &ExtendedDataSquare,
+        block_height: u64,
+    ) -> Result<Self> {
+        let square_len = dah.square_len();
+
+        let axis_id = AxisId::new(axis_type, index, dah, block_height)?;
+        let mut shares = eds.axis(axis_type, index, square_len);
+        shares.truncate(square_len / 2);
+
+        Ok(Axis { axis_id, shares })
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+
+        for s in &self.shares {
+            tree.push_leaf(s.data(), *s.namespace())
+                .map_err(Error::Nmt)?;
+        }
+
+        //TODO: only original data shares are sent over the wire, we need leopard codec to
+        //re-compute parity shares
+        /*
+        let parity_shares : Vec<Share> = unimplemented!();
+        for s in parity_shares {
+            tree.push_leaf(s.data(), *s.namespace())
+                .map_err(Error::Nmt)?;
+        }
+        */
+
+        if self.axis_id.hash != tree.root().hash() {
+            return Err(Error::RootMismatch);
+        }
+
+        unimplemented!("unable to compute parity shares")
+    }
+}
+
+impl Protobuf<RawAxis> for Axis {}
+
+impl TryFrom<RawAxis> for Axis {
+    type Error = Error;
+
+    fn try_from(axis: RawAxis) -> Result<Axis, Self::Error> {
+        let axis_id = AxisId::decode(&axis.axis_id)?;
+        let shares = axis
+            .axis_half
+            .into_iter()
+            .map(|s| Share::from_raw(&s))
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(Axis { axis_id, shares })
+    }
+}
+
+impl From<Axis> for RawAxis {
+    fn from(axis: Axis) -> RawAxis {
+        let mut axis_id_bytes = BytesMut::new();
+        axis.axis_id.encode(&mut axis_id_bytes);
+
+        RawAxis {
+            axis_id: axis_id_bytes.to_vec(),
+            axis_half: axis.shares.into_iter().map(|s| s.data.to_vec()).collect(),
+        }
+    }
 }
 
 impl AxisId {
@@ -156,7 +240,8 @@ impl TryFrom<AxisId> for CidGeneric<AXIS_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nmt::NamespacedHash;
+    use crate::consts::appconsts::SHARE_SIZE;
+    use crate::nmt::{Namespace, NamespacedHash, NS_SIZE};
 
     #[test]
     fn axis_type_serialization() {
@@ -306,5 +391,45 @@ mod tests {
         let cid = CidGeneric::<AXIS_ID_SIZE>::new_v1(1234, multihash);
         let axis_err = AxisId::try_from(cid).unwrap_err();
         assert_eq!(axis_err, CidError::InvalidCidCodec(1234));
+    }
+
+    #[test]
+    fn decode_axis_bytes() {
+        let bytes = include_bytes!("../test_data/shwap_samples/axis.data");
+        let axis = Axis::decode(&bytes[..]).unwrap();
+
+        /*
+        msg.axis_id.axis_type = AxisType::Col;
+        msg.axis_id.index = 64;
+        msg.axis_id.hash = [0xEF; HASH_SIZE];
+        msg.axis_id.block_height = 255;
+
+
+        let mut i = 0;
+        for share in &mut msg.shares {
+            let ns = Namespace::new_v0(&[i]).unwrap();
+
+            let data = [0; crate::consts::appconsts::SHARE_SIZE];
+            share.data[..].copy_from_slice(&data);
+            share.data[..NS_SIZE].copy_from_slice(ns.as_bytes());
+
+            println!("{i} {:?}", share.namespace());
+            i += 1;
+        }
+        let mut file = std::fs::File::create("axis.data2").unwrap();
+        let bytes = msg.encode_vec().unwrap();
+        file.write_all(&bytes).unwrap();
+        */
+        assert_eq!(axis.axis_id.axis_type, AxisType::Col);
+        assert_eq!(axis.axis_id.index, 64);
+        assert_eq!(axis.axis_id.hash, [0xEF; HASH_SIZE]);
+        assert_eq!(axis.axis_id.block_height, 255);
+
+        for (idx, share) in axis.shares.iter().enumerate() {
+            let ns = Namespace::new_v0(&[idx as u8]).unwrap();
+            assert_eq!(share.namespace(), ns);
+            let data = [0; SHARE_SIZE - NS_SIZE];
+            assert_eq!(share.data(), data);
+        }
     }
 }
