@@ -97,15 +97,12 @@ async fn fetch_bridge_multiaddrs(ws_url: &str) -> Result<Vec<Multiaddr>> {
     let addrs = bridge_info
         .addrs
         .into_iter()
-        .filter_map(|mut ma| {
-            if ma.protocol_stack().any(|protocol| protocol == "tcp") {
-                if !ma.protocol_stack().any(|protocol| protocol == "p2p") {
-                    ma.push(Protocol::P2p(bridge_info.id.into()));
-                }
-                Some(ma)
-            } else {
-                None
+        .filter(|ma| ma.protocol_stack().any(|protocol| protocol == "tcp"))
+        .map(|mut ma| {
+            if !ma.protocol_stack().any(|protocol| protocol == "p2p") {
+                ma.push(Protocol::P2p(bridge_info.id.into()))
             }
+            ma
         })
         .collect::<Vec<_>>();
 

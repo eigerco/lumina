@@ -86,16 +86,15 @@ async fn serve_index_html() -> Result<Response, StatusCode> {
 async fn serve_embedded_path<Source: RustEmbed>(
     Path(path): Path<String>,
 ) -> Result<Response, StatusCode> {
-    Source::get(&path).map_or_else(
-        || Err(StatusCode::NOT_FOUND),
-        |content| {
-            let mime = mime_guess::from_path(&path).first_or_octet_stream();
-            Response::builder()
-                .header(header::CONTENT_TYPE, mime.as_ref())
-                .body(body::boxed(body::Full::from(content.data)))
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
-        },
-    )
+    if let Some(content) = Source::get(&path) {
+        let mime = mime_guess::from_path(&path).first_or_octet_stream();
+        Ok(Response::builder()
+            .header(header::CONTENT_TYPE, mime.as_ref())
+            .body(body::boxed(body::Full::from(content.data)))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }
 
 async fn serve_config(state: State<WasmNodeArgs>) -> Json<WasmNodeArgs> {
