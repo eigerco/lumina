@@ -25,14 +25,16 @@ mod native {
 
     /// Json RPC client.
     pub enum Client {
+        /// A client using 'http\[s\]' protocol.
         Http(HttpClient),
+        /// A client using 'ws\[s\]' protocol.
         Ws(WsClient),
     }
 
     impl Client {
         /// Create a new Json RPC client.
         ///
-        /// Only 'http[s]' and 'ws[s]' protocols are supported and they should
+        /// Only 'http\[s\]' and 'ws\[s\]' protocols are supported and they should
         /// be specified in the provided `conn_str`. For more flexibility
         /// consider creating the client using [`jsonrpsee`] directly.
         ///
