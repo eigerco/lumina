@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn create_from_raw() {
         let expected = sample_blob();
-        let raw = RawBlob::try_from(expected.clone()).unwrap();
+        let raw = RawBlob::from(expected.clone());
         let created = Blob::try_from(raw).unwrap();
 
         assert_eq!(created, expected);
