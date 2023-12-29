@@ -1,3 +1,5 @@
+//! Various utilities for interacting with node from wasm.
+
 use std::fmt;
 
 use lumina_node::network;
@@ -9,16 +11,22 @@ use tracing_subscriber::prelude::*;
 use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
 
+/// Supported Celestia networks.
 #[wasm_bindgen]
 #[derive(PartialEq, Eq, Clone, Copy, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum Network {
+    /// Celestia mainnet.
     Mainnet,
+    /// Arabica testnet.
     Arabica,
+    /// Mocha testnet.
     Mocha,
+    /// Private local network.
     Private,
 }
 
+/// Set up a logging layer that direct logs to the browsers console.
 #[wasm_bindgen(start)]
 pub fn setup_logging() {
     console_error_panic_hook::set_once();
