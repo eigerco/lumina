@@ -22,6 +22,7 @@ const HEAD_HEIGHT_KEY: &[u8] = b"KEY.HEAD_HEIGHT";
 const HASH_TREE_ID: &[u8] = b"HASH";
 const HEIGHT_TO_HASH_TREE_ID: &[u8] = b"HEIGHT";
 
+/// A [`Store`] implementation based on a [`sled`] database.
 #[derive(Debug)]
 pub struct SledStore {
     inner: Arc<Inner>,
@@ -35,6 +36,7 @@ struct Inner {
 }
 
 impl SledStore {
+    /// Create or open a persistent store.
     pub async fn new(network_id: String) -> Result<Self> {
         spawn_blocking(move || {
             let Some(project_dirs) = ProjectDirs::from("co", "eiger", "celestia") else {
@@ -52,6 +54,7 @@ impl SledStore {
         .await?
     }
 
+    /// Create a persistent store in a temporary directory.
     pub async fn new_temp() -> Result<Self> {
         spawn_blocking(move || {
             let tmp_path = TempDir::new("celestia")?.into_path();
@@ -67,6 +70,7 @@ impl SledStore {
         .map_err(|e| StoreError::OpenFailed(e.to_string()))
     }
 
+    /// Create a persistent store in a given path.
     pub async fn new_in_path<P>(path: P) -> Result<Self>
     where
         P: AsRef<Path>,
@@ -94,20 +98,20 @@ impl SledStore {
         })
     }
 
-    pub async fn head_height(&self) -> Result<u64> {
+    async fn head_height(&self) -> Result<u64> {
         let inner = self.inner.clone();
 
         spawn_blocking(move || read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY)).await?
     }
 
-    pub async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
+    async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
         let inner = self.inner.clone();
         let hash = *hash;
 
         spawn_blocking(move || read_header_by_db_key(&inner.headers, hash.as_bytes())).await?
     }
 
-    pub async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
+    async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let inner = self.inner.clone();
 
         spawn_blocking(move || {
@@ -117,7 +121,7 @@ impl SledStore {
         .await?
     }
 
-    pub async fn get_head(&self) -> Result<ExtendedHeader> {
+    async fn get_head(&self) -> Result<ExtendedHeader> {
         let inner = self.inner.clone();
 
         spawn_blocking(move || {
@@ -128,7 +132,7 @@ impl SledStore {
         .await?
     }
 
-    pub async fn contains_hash(&self, hash: &Hash) -> bool {
+    async fn contains_hash(&self, hash: &Hash) -> bool {
         let inner = self.inner.clone();
         let hash = *hash;
 
@@ -137,7 +141,7 @@ impl SledStore {
             .unwrap_or(false)
     }
 
-    pub async fn contains_height(&self, height: u64) -> bool {
+    async fn contains_height(&self, height: u64) -> bool {
         let inner = self.inner.clone();
 
         spawn_blocking(move || {
@@ -150,7 +154,7 @@ impl SledStore {
         .unwrap_or(false)
     }
 
-    pub async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
+    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
         let hash = header.hash();
         let height = header.height().value();
         let inner = self.inner.clone();
@@ -206,6 +210,7 @@ impl SledStore {
         Ok(())
     }
 
+    /// Flush the store's state to the filesystem.
     pub async fn flush_to_storage(&self) -> Result<()> {
         self.inner.db.flush_async().await?;
 

@@ -1,3 +1,14 @@
+//! Component responsible for synchronizing block headers announced in the Celestia network.
+//!
+//! It starts by asking the trusted peers for their current head headers and picks
+//! the latest header returned by at least two of them as the initial synchronization target
+//! called `subjective_head`.
+//!
+//! Then it starts synchronizing from the genesis header up to the target requesting headers
+//! on the `header-ex` p2p protocol. In the meantime, it constantly checks for the latest
+//! headers announced on the `header-sub` p2p protocol to keep the `subjective_head` as close
+//! to the `network_head` as possible.
+
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,20 +34,26 @@ type Result<T, E = SyncerError> = std::result::Result<T, E>;
 const MAX_HEADERS_IN_BATCH: u64 = 512;
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
 
+/// Representation of all the errors that can occur when interacting with the [`Syncer`].
 #[derive(Debug, thiserror::Error)]
 pub enum SyncerError {
+    /// An error propagated from the [`P2p`] module.
     #[error(transparent)]
     P2p(#[from] P2pError),
 
+    /// An error propagated from the [`Store`] module.
     #[error(transparent)]
     Store(#[from] StoreError),
 
+    /// An error propagated from the [`celestia_types`].
     #[error(transparent)]
     Celestia(#[from] celestia_types::Error),
 
+    /// The worker has died.
     #[error("Worker died")]
     WorkerDied,
 
+    /// Channel has been closed unexpectedly.
     #[error("Channel closed unexpectedly")]
     ChannelClosedUnexpectedly,
 }
@@ -47,7 +64,7 @@ impl From<oneshot::error::RecvError> for SyncerError {
     }
 }
 
-#[allow(unused)]
+/// Component responsible for synchronizing block headers from the network.
 #[derive(Debug)]
 pub struct Syncer<S>
 where
@@ -58,12 +75,16 @@ where
     _store: PhantomData<S>,
 }
 
+/// Arguments used to configure the [`Syncer`].
 pub struct SyncerArgs<S>
 where
     S: Store + 'static,
 {
+    /// Hash of the genesis block.
     pub genesis_hash: Option<Hash>,
+    /// Handler for the peer to peer messaging.
     pub p2p: Arc<P2p<S>>,
+    /// Headers storage.
     pub store: Arc<S>,
 }
 
@@ -74,9 +95,12 @@ enum SyncerCmd {
     },
 }
 
+/// Status of the synchronization.
 #[derive(Debug, Serialize)]
 pub struct SyncingInfo {
+    /// The height the [`Syncer`] is currently synchronized to.
     pub local_head: u64,
+    /// Syncing target. The latest height seen in the network that was successfully verified.
     pub subjective_head: u64,
 }
 
@@ -84,6 +108,7 @@ impl<S> Syncer<S>
 where
     S: Store,
 {
+    /// Create and start the [`Syncer`].
     pub fn start(args: SyncerArgs<S>) -> Result<Self> {
         let cancellation_token = CancellationToken::new();
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
@@ -100,6 +125,7 @@ where
         })
     }
 
+    /// Stop the [`Syncer`].
     pub fn stop(&self) {
         // Singal the Worker to stop.
         // TODO: Should we wait for the Worker to stop?
@@ -113,6 +139,11 @@ where
             .map_err(|_| SyncerError::WorkerDied)
     }
 
+    /// Get the current synchronization status.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the [`Syncer`] has been stopped.
     pub async fn info(&self) -> Result<SyncingInfo> {
         let (tx, rx) = oneshot::channel();
 
@@ -673,7 +704,7 @@ mod tests {
         let (store, mut gen) = gen_filled_store(25);
         let store = Arc::new(store);
 
-        let genesis = store.get_by_height(1).unwrap();
+        let genesis = store.get_by_height(1).await.unwrap();
         let mut headers = gen.next_many(520);
         let network_head = headers.last().cloned().unwrap();
 
@@ -806,7 +837,7 @@ mod tests {
         // Wait a bit to be processed.
         sleep(Duration::from_millis(1)).await;
 
-        let store_height = store.get_head_height().unwrap();
+        let store_height = store.head_height().await.unwrap();
         let syncing_info = syncer.info().await.unwrap();
 
         assert_eq!(store_height, expected_local_head);

@@ -1,3 +1,5 @@
+//! Primitives related to the [`ExtendedHeader`] storage.
+
 use std::fmt::Debug;
 use std::io;
 use std::ops::{Bound, RangeBounds, RangeInclusive};
@@ -23,6 +25,10 @@ use crate::utils::validate_headers;
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
 
+/// An asynchronous [`ExtendedHeader`] storage.
+///
+/// Currently it is required that all the headers are inserted to the storage
+/// in order, starting from the genesis.
 #[async_trait]
 pub trait Store: Send + Sync + Debug {
     /// Returns the [`ExtendedHeader`] with the highest height.
@@ -133,47 +139,62 @@ pub trait Store: Send + Sync + Debug {
     }
 }
 
+/// Representation of all the errors that can occur when interacting with the [`Store`].
 #[derive(Error, Debug)]
 pub enum StoreError {
+    /// Hash already exists in the store.
     #[error("Hash {0} already exists in store")]
     HashExists(Hash),
 
+    /// Height already exists in the store.
     #[error("Height {0} already exists in store")]
     HeightExists(u64),
 
+    /// Inserted height is not following store's current head.
     #[error("Failed to append header at height {1}, current head {0}")]
     NonContinuousAppend(u64, u64),
 
+    /// Header validation has failed.
     #[error("Failed to validate header at height {0}")]
     HeaderChecksError(u64),
 
+    /// Header not found.
     #[error("Header not found in store")]
     NotFound,
 
+    /// Header not found but it should be present. Store is invalid.
     #[error("Store in inconsistent state; height {0} within known range, but missing header")]
     LostHeight(u64),
 
+    /// Hash not found but it should be present. Store is invalid.
     #[error("Store in inconsistent state; height->hash mapping exists, {0} missing")]
     LostHash(Hash),
 
+    /// An error propagated from the [`celestia_types`].
     #[error(transparent)]
     CelestiaTypes(#[from] celestia_types::Error),
 
+    /// Storage corrupted.
     #[error("Stored data in inconsistent state, try reseting the store: {0}")]
     StoredDataError(String),
 
+    /// Unrecoverable error reported by the backing store.
     #[error("Persistent storage reported unrecoverable error: {0}")]
     BackingStoreError(String),
 
+    /// An error propagated from the async executor.
     #[error("Received error from executor: {0}")]
     ExecutorError(String),
 
+    /// An error propagated from the IO operation.
     #[error("Received io error from persistent storage: {0}")]
     IoError(#[from] io::Error),
 
+    /// Failed to open the store.
     #[error("Error opening store: {0}")]
     OpenFailed(String),
 
+    /// Invalid range of headers provided.
     #[error("Invalid headers range")]
     InvalidHeadersRange,
 }

@@ -1,3 +1,5 @@
+//! Primitives related to tracking the state of peers in the network.
+
 use std::borrow::Borrow;
 
 use dashmap::mapref::entry::Entry;
@@ -16,6 +18,7 @@ pub struct PeerTracker {
     info_tx: watch::Sender<PeerTrackerInfo>,
 }
 
+/// A statistics of the peers tracked in the network.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct PeerTrackerInfo {
     /// Number of the connected peers.

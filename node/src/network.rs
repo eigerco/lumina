@@ -1,3 +1,5 @@
+//! Primitives and constants related to the networks supported by Celestia nodes.
+
 use std::str::FromStr;
 
 use celestia_types::hash::Hash;
@@ -5,15 +7,21 @@ use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Supported Celestia networks.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Network {
+    /// Celestia mainnet.
     #[default]
     Mainnet,
+    /// Arabica testnet.
     Arabica,
+    /// Mocha testnet.
     Mocha,
+    /// Private local network.
     Private,
 }
 
+/// An unknown network provided.
 #[derive(Debug, Error)]
 #[error("unknown network {0}")]
 pub struct UnknownNetworkError(String);
@@ -31,6 +39,7 @@ impl FromStr for Network {
     }
 }
 
+/// Get the string id of the given network.
 pub fn network_id(network: Network) -> &'static str {
     match network {
         Network::Arabica => "arabica-10",
@@ -40,6 +49,7 @@ pub fn network_id(network: Network) -> &'static str {
     }
 }
 
+/// Get the hash of a genesis block for the given network.
 pub fn network_genesis(network: Network) -> Option<Hash> {
     let hex = match network {
         Network::Mainnet => "6BE39EFD10BA412A9DB5288488303F5DD32CF386707A5BEF33617F4C43301872",
@@ -54,6 +64,7 @@ pub fn network_genesis(network: Network) -> Option<Hash> {
     Some(Hash::Sha256(array))
 }
 
+/// Get the official Celestia and Lumina bootnodes for the given network.
 pub fn canonical_network_bootnodes(network: Network) -> impl Iterator<Item = Multiaddr> {
     let peers: &[_] = match network {
         Network::Mainnet => &[

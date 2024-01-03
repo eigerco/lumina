@@ -9,7 +9,7 @@ use clap::Args;
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
 use lumina_node::node::{Node, NodeConfig};
-use lumina_node::store::SledStore;
+use lumina_node::store::{SledStore, Store};
 use tokio::time::sleep;
 use tracing::info;
 

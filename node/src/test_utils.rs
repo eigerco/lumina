@@ -1,3 +1,5 @@
+//! Utilities for writing tests.
+
 use std::time::Duration;
 
 use celestia_proto::p2p::pb::{header_request::Data, HeaderRequest};
@@ -14,6 +16,7 @@ use crate::{
     utils::OneshotResultSender,
 };
 
+/// Generate a store pre-filled with headers.
 pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
     let s = InMemoryStore::new();
     let mut gen = ExtendedHeaderGenerator::new();
@@ -28,7 +31,9 @@ pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator)
     (s, gen)
 }
 
-// helpers to use with struct update syntax to avoid spelling out all the details
+/// [`NodeConfig`] with default values for the usage in tests.
+///
+/// Can be used to fill the missing fields with `..test_node_config()` syntax.
 pub fn test_node_config() -> NodeConfig<InMemoryStore> {
     let node_keypair = identity::Keypair::generate_ed25519();
     NodeConfig {
@@ -41,6 +46,7 @@ pub fn test_node_config() -> NodeConfig<InMemoryStore> {
     }
 }
 
+/// [`NodeConfig`] with listen address and default values for the usage in tests.
 pub fn listening_test_node_config() -> NodeConfig<InMemoryStore> {
     NodeConfig {
         p2p_listen_on: vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()],
@@ -48,6 +54,7 @@ pub fn listening_test_node_config() -> NodeConfig<InMemoryStore> {
     }
 }
 
+/// [`NodeConfig`] with given keypair and default values for the usage in tests.
 pub fn test_node_config_with_keypair(keypair: Keypair) -> NodeConfig<InMemoryStore> {
     NodeConfig {
         p2p_local_keypair: keypair,
@@ -55,6 +62,9 @@ pub fn test_node_config_with_keypair(keypair: Keypair) -> NodeConfig<InMemorySto
     }
 }
 
+/// A handle to the mocked [`P2p`] component.
+///
+/// [`P2p`]: crate::p2p::P2p
 pub struct MockP2pHandle {
     #[allow(dead_code)]
     pub(crate) cmd_tx: mpsc::Sender<P2pCmd>,
@@ -64,12 +74,14 @@ pub struct MockP2pHandle {
 }
 
 impl MockP2pHandle {
+    /// Simulate a new connected peer.
     pub fn announce_peer_connected(&self) {
         self.peer_tracker_tx.send_modify(|info| {
             info.num_connected_peers += 1;
         });
     }
 
+    /// Simulate a new connected trusted peer.
     pub fn announce_trusted_peer_connected(&self) {
         self.peer_tracker_tx.send_modify(|info| {
             info.num_connected_peers += 1;
@@ -77,6 +89,7 @@ impl MockP2pHandle {
         });
     }
 
+    /// Simulate a disconnect from all peers.
     pub fn announce_all_peers_disconnected(&self) {
         self.peer_tracker_tx.send_modify(|info| {
             info.num_connected_peers = 0;
@@ -84,10 +97,14 @@ impl MockP2pHandle {
         });
     }
 
+    /// Simulate a new header announced in the network.
     pub fn announce_new_head(&self, header: ExtendedHeader) {
         self.header_sub_tx.send_replace(Some(header));
     }
 
+    /// Assert that a command was sent to the [`P2p`] worker.
+    ///
+    /// [`P2p`]: crate::p2p::P2p
     async fn expect_cmd(&mut self) -> P2pCmd {
         timeout(Duration::from_millis(300), async move {
             self.cmd_rx.recv().await.expect("P2p dropped")
@@ -96,6 +113,9 @@ impl MockP2pHandle {
         .expect("Expecting P2pCmd, but timed-out")
     }
 
+    /// Assert that no command was sent to the [`P2p`] worker.
+    ///
+    /// [`P2p`]: crate::p2p::P2p
     pub async fn expect_no_cmd(&mut self) {
         timeout(Duration::from_millis(300), async move {
             self.cmd_rx.recv().await.expect("P2p dropped")
@@ -104,6 +124,9 @@ impl MockP2pHandle {
         .expect_err("Expecting no P2pCmd, but received");
     }
 
+    /// Assert that a header request was sent to the [`P2p`] worker and obtain a response channel.
+    ///
+    /// [`P2p`]: crate::p2p::P2p
     pub async fn expect_header_request_cmd(
         &mut self,
     ) -> (
@@ -119,6 +142,9 @@ impl MockP2pHandle {
         }
     }
 
+    /// Assert that a header request for height was sent to the [`P2p`] worker and obtain a response channel.
+    ///
+    /// [`P2p`]: crate::p2p::P2p
     pub async fn expect_header_request_for_height_cmd(
         &mut self,
     ) -> (u64, u64, OneshotResultSender<Vec<ExtendedHeader>, P2pError>) {
@@ -130,6 +156,9 @@ impl MockP2pHandle {
         }
     }
 
+    /// Assert that a header request for hash was sent to the [`P2p`] worker and obtain a response channel.
+    ///
+    /// [`P2p`]: crate::p2p::P2p
     pub async fn expect_header_request_for_hash_cmd(
         &mut self,
     ) -> (Hash, OneshotResultSender<Vec<ExtendedHeader>, P2pError>) {
@@ -145,6 +174,9 @@ impl MockP2pHandle {
         }
     }
 
+    /// Assert that a header-sub initialization command was sent to the [`P2p`] worker.
+    ///
+    /// [`P2p`]: crate::p2p::P2p
     pub async fn expect_init_header_sub(&mut self) -> ExtendedHeader {
         match self.expect_cmd().await {
             P2pCmd::InitHeaderSub { head } => *head,
