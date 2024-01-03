@@ -25,10 +25,10 @@ jobs:
         target: wasm32-unknown-unknown
 
     - name: Run clippy for native
-      run: cargo clippy --all --all-targets -- -D warnings
+      run: cargo clippy --all --all-targets -- -D warnings -D missing-docs
 
     - name: Run clippy for wasm32
-      run: cargo clippy --all --all-targets --target=wasm32-unknown-unknown -- -D warnings
+      run: cargo clippy --all --all-targets --target=wasm32-unknown-unknown -- -D warnings -D missing-docs
 
 
   fmt:
