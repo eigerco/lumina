@@ -43,6 +43,8 @@ impl ExtendedHeaderGenerator {
     /// Creates new `ExtendedHeaderGenerator` starting from specified height.
     ///
     /// ```
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    ///
     /// let mut gen = ExtendedHeaderGenerator::new_from_height(5);
     /// let header5 = gen.next();
     /// ```
@@ -87,6 +89,8 @@ impl ExtendedHeaderGenerator {
     /// This can be used to create two headers of same height but different hash.
     ///
     /// ```
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    ///
     /// let mut gen = ExtendedHeaderGenerator::new();
     /// let header1 = gen.next();
     /// let header2 = gen.next();
@@ -106,6 +110,8 @@ impl ExtendedHeaderGenerator {
     /// heights but different hashes.
     ///
     /// ```
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    ///
     /// let mut gen = ExtendedHeaderGenerator::new();
     /// let header1 = gen.next();
     /// let headers_2_to_12 = gen.next_many(10);
@@ -130,6 +136,8 @@ impl ExtendedHeaderGenerator {
     /// Generates the another header of the same height but different hash.
     ///
     /// ```
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    ///
     /// let mut gen = ExtendedHeaderGenerator::new();
     /// let header1 = gen.next();
     /// let header2 = gen.next();
@@ -169,6 +177,8 @@ impl ExtendedHeaderGenerator {
     /// Create a "forked" generator for "forking" the chain.
     ///
     /// ```
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    ///
     /// let mut gen_chain1 = ExtendedHeaderGenerator::new();
     ///
     /// let header1 = gen_chain1.next();
