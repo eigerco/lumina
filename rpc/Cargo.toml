@@ -37,3 +37,7 @@ tracing = "0.1.37"
 default = ["p2p"]
 p2p = ["celestia-types/p2p"]
 wasm-bindgen = ["celestia-types/wasm-bindgen"]
+
+[package.metadata.docs.rs]
+features = ["p2p"]
+rustdoc-args = ["--cfg", "docs_rs"]

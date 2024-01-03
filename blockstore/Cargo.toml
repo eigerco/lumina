@@ -12,7 +12,13 @@ multihash = "0.19.1"
 thiserror = "1.0.40"
 
 [dev-dependencies]
-tokio = { version = "1.29.0", features = [ "macros", "rt" ] }
+tokio = { version = "1.29.0", features = ["macros", "rt"] }
+
+# doc-tests
+multihash-codetable = { version = "0.1.1", features = ["digest", "sha2"] }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docs_rs"]
+
+[package.metadata.cargo-udeps.ignore]
+development = ["multihash-codetable"]

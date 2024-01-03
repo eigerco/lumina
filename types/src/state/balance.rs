@@ -4,14 +4,22 @@ use serde::{Deserialize, Serialize};
 use crate::state::Uint;
 use crate::{Error, Result};
 
+/// Representation of the account's balance.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "RawCoin")]
 pub struct Balance {
+    /// The denomination, eg. 'utia'.
     pub denom: String,
+    /// The amount of coins.
     pub amount: Uint,
 }
 
 impl Balance {
+    /// Validate if the balance is correct.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the denomination is invalid.
     pub fn validate(&self) -> Result<()> {
         validate_denom(&self.denom)
     }

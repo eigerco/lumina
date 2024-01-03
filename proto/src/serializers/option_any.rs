@@ -1,6 +1,9 @@
+//! [`serde`] serializer for the optional [`Any`].
+
 use prost_types::Any;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+/// Deserialize `Option<Any>`.
 pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Any>, D::Error>
 where
     D: Deserializer<'de>,
@@ -20,6 +23,7 @@ where
     Ok(any)
 }
 
+/// Serialize `Option<Any>`.
 pub fn serialize<S>(value: &Option<Any>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,

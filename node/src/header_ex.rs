@@ -65,20 +65,26 @@ pub(crate) struct HeaderExConfig<'a, S> {
     pub header_store: Arc<S>,
 }
 
+/// Representation of all the errors that can occur when interacting with the header-ex.
 #[derive(Debug, thiserror::Error)]
 pub enum HeaderExError {
+    /// Header not found.
     #[error("Header not found")]
     HeaderNotFound,
 
+    /// The response is invalid.
     #[error("Invalid response")]
     InvalidResponse,
 
+    /// The request is invalid.
     #[error("Invalid request")]
     InvalidRequest,
 
+    /// Error when handling connection from the client.
     #[error("Inbound failure: {0}")]
     InboundFailure(InboundFailure),
 
+    /// Error when handling connection to the server.
     #[error("Outbound failure: {0}")]
     OutboundFailure(OutboundFailure),
 }

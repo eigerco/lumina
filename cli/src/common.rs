@@ -23,6 +23,7 @@ pub(crate) enum CliArgs {
     Browser(server::Params),
 }
 
+/// Run the Lumina node.
 pub async fn run() -> Result<()> {
     let _ = dotenvy::dotenv();
     let args = CliArgs::parse();

@@ -25,10 +25,26 @@ jobs:
         target: wasm32-unknown-unknown
 
     - name: Run clippy for native
-      run: cargo clippy --all --all-targets -- -D warnings
+      run: cargo clippy --all --all-targets -- -D warnings -D missing-docs
 
     - name: Run clippy for wasm32
-      run: cargo clippy --all --all-targets --target=wasm32-unknown-unknown -- -D warnings
+      run: cargo clippy --all --all-targets --target=wasm32-unknown-unknown -- -D warnings -D missing-docs
+
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v2
+      with:
+        version: "23.3"
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Run rustdoc check
+      env:
+        RUSTDOCFLAGS: -D warnings
+      run: cargo doc
 
 
   fmt:

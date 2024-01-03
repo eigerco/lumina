@@ -1,3 +1,15 @@
+//! Component responsible for the messeging and interacting on peer to peer layer with other nodes.
+//!
+//! It is a high level integration of various p2p protocols used by Celestia nodes.
+//! Currently supporting:
+//! - libp2p-identitfy
+//! - header-sub topic on libp2p-gossipsub
+//! - libp2p-kad
+//! - libp2p-autonat
+//! - libp2p-ping
+//! - header-ex client
+//! - header-ex server
+
 use std::io;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -52,35 +64,46 @@ const KADEMLIA_BOOTSTRAP_PERIOD: Duration = Duration::from_secs(5 * 60);
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
+/// Representation of all the errors that can occur when interacting with the [`P2p`].
 #[derive(Debug, thiserror::Error)]
 pub enum P2pError {
+    /// Failed to initialize gossipsub behaviour.
     #[error("Failed to initialize gossipsub behaviour: {0}")]
     GossipsubInit(String),
 
+    /// Failed to subscribe to a topic on gossibsub.
     #[error("Failed to on gossipsub subscribe: {0}")]
     GossipsubSubscribe(#[from] SubscriptionError),
 
+    /// An error propagated from the libp2p transport.
     #[error("Transport error: {0}")]
     Transport(#[from] TransportError<io::Error>),
 
+    /// Failed to initialize noise protocol.
     #[error("Failed to initialize noise: {0}")]
     InitNoise(String),
 
+    /// An error propagated from the dialing.
     #[error("Dial error: {0}")]
     Dial(#[from] DialError),
 
+    /// The worker has died.
     #[error("Worker died")]
     WorkerDied,
 
+    /// Channel closed unexpectedly.
     #[error("Channel closed unexpectedly")]
     ChannelClosedUnexpectedly,
 
+    /// Not connected to any peers.
     #[error("Not connected to any peers")]
     NoConnectedPeers,
 
+    /// An error propagated from the `header-ex`.
     #[error("HeaderEx: {0}")]
     HeaderEx(#[from] HeaderExError),
 
+    /// Bootnode address missing peer ID.
     #[error("Bootnode multiaddrs without peer ID: {0:?}")]
     BootnodeAddrsWithoutPeerId(Vec<Multiaddr>),
 }
@@ -91,6 +114,7 @@ impl From<oneshot::error::RecvError> for P2pError {
     }
 }
 
+/// Component responsible for the peer to peer networking handling.
 #[derive(Debug)]
 pub struct P2p<S>
 where
@@ -103,14 +127,20 @@ where
     _store: PhantomData<S>,
 }
 
+/// Arguments used to configure the [`P2p`].
 pub struct P2pArgs<S>
 where
     S: Store + 'static,
 {
+    /// An id of the network to connect to.
     pub network_id: String,
+    /// The keypair to be used as the identity.
     pub local_keypair: Keypair,
+    /// List of bootstrap nodes to connect to and trust.
     pub bootnodes: Vec<Multiaddr>,
+    /// List of the addresses on which to listen for incoming connections.
     pub listen_on: Vec<Multiaddr>,
+    /// The store for headers.
     pub store: Arc<S>,
 }
 
@@ -142,6 +172,7 @@ impl<S> P2p<S>
 where
     S: Store,
 {
+    /// Creates and starts a new p2p handler.
     pub fn start(args: P2pArgs<S>) -> Result<Self> {
         validate_bootnode_addrs(&args.bootnodes)?;
 
@@ -168,6 +199,7 @@ where
         })
     }
 
+    /// Creates and starts a new mocked p2p handler.
     #[cfg(any(test, feature = "test-utils"))]
     pub fn mocked() -> (Self, crate::test_utils::MockP2pHandle) {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
@@ -192,11 +224,13 @@ where
         (p2p, handle)
     }
 
+    /// Stop the [`P2p`].
     pub async fn stop(&self) -> Result<()> {
         // TODO
         Ok(())
     }
 
+    /// Local peer ID in the p2p network.
     pub fn local_peer_id(&self) -> &PeerId {
         &self.local_peer_id
     }
@@ -208,18 +242,22 @@ where
             .map_err(|_| P2pError::WorkerDied)
     }
 
+    /// Watcher for the latest verified network head headers announced on `header-sub`.
     pub fn header_sub_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
         self.header_sub_watcher.clone()
     }
 
+    /// Watcher for the current [`PeerTrackerInfo`].
     pub fn peer_tracker_info_watcher(&self) -> watch::Receiver<PeerTrackerInfo> {
         self.peer_tracker_info_watcher.clone()
     }
 
+    /// A reference to the current [`PeerTrackerInfo`].
     pub fn peer_tracker_info(&self) -> watch::Ref<PeerTrackerInfo> {
         self.peer_tracker_info_watcher.borrow()
     }
 
+    /// Initializes `header-sub` protocol with given `subjective_head`.
     pub async fn init_header_sub(&self, head: ExtendedHeader) -> Result<()> {
         self.send_command(P2pCmd::InitHeaderSub {
             head: Box::new(head),
@@ -227,6 +265,7 @@ where
         .await
     }
 
+    /// Wait until the node is connected to any peer.
     pub async fn wait_connected(&self) -> Result<()> {
         self.peer_tracker_info_watcher()
             .wait_for(|info| info.num_connected_peers > 0)
@@ -235,6 +274,7 @@ where
             .map_err(|_| P2pError::WorkerDied)
     }
 
+    /// Wait until the node is connected to any trusted peer.
     pub async fn wait_connected_trusted(&self) -> Result<()> {
         self.peer_tracker_info_watcher()
             .wait_for(|info| info.num_connected_trusted_peers > 0)
@@ -243,6 +283,7 @@ where
             .map_err(|_| P2pError::WorkerDied)
     }
 
+    /// Get current [`NetworkInfo`].
     pub async fn network_info(&self) -> Result<NetworkInfo> {
         let (tx, rx) = oneshot::channel();
 
@@ -252,6 +293,7 @@ where
         Ok(rx.await?)
     }
 
+    /// Send a request on the `header-ex` protocol.
     pub async fn header_ex_request(&self, request: HeaderRequest) -> Result<Vec<ExtendedHeader>> {
         let (tx, rx) = oneshot::channel();
 
@@ -264,10 +306,12 @@ where
         rx.await?
     }
 
+    /// Request the head header on the `header-ex` protocol.
     pub async fn get_head_header(&self) -> Result<ExtendedHeader> {
         self.get_header_by_height(0).await
     }
 
+    /// Request the header by hash on the `header-ex` protocol.
     pub async fn get_header(&self, hash: Hash) -> Result<ExtendedHeader> {
         self.header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Hash(hash.as_bytes().to_vec())),
@@ -279,6 +323,7 @@ where
         .ok_or(HeaderExError::HeaderNotFound.into())
     }
 
+    /// Request the header by height on the `header-ex` protocol.
     pub async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         self.header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(height)),
@@ -290,6 +335,9 @@ where
         .ok_or(HeaderExError::HeaderNotFound.into())
     }
 
+    /// Request the headers following given one on the `header-ex` protocol.
+    ///
+    /// The headers will be verified with each other starting from the supplied one.
     pub async fn get_verified_headers_range(
         &self,
         from: &ExtendedHeader,
@@ -308,6 +356,7 @@ where
         Ok(headers)
     }
 
+    /// Get the addresses where [`P2p`] listens on for incoming connections.
     pub async fn listeners(&self) -> Result<Vec<Multiaddr>> {
         let (tx, rx) = oneshot::channel();
 
@@ -317,6 +366,7 @@ where
         Ok(rx.await?)
     }
 
+    /// Get the list of the connected peers.
     pub async fn connected_peers(&self) -> Result<Vec<PeerId>> {
         let (tx, rx) = oneshot::channel();
 
@@ -326,6 +376,7 @@ where
         Ok(rx.await?)
     }
 
+    /// Alter the trust status for a given peer.
     pub async fn set_peer_trust(&self, peer_id: PeerId, is_trusted: bool) -> Result<()> {
         self.send_command(P2pCmd::SetPeerTrust {
             peer_id,

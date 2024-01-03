@@ -225,7 +225,7 @@ mod tests {
     #[async_test]
     async fn request_head_test() {
         let (store, _) = gen_filled_store(4);
-        let expected_head = store.get_head().unwrap();
+        let expected_head = store.get_head().await.unwrap();
         let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         handler.on_request_received(PeerId::random(), "test", HeaderRequest::head_request(), ());
@@ -241,7 +241,7 @@ mod tests {
     #[async_test]
     async fn request_header_test() {
         let (store, _) = gen_filled_store(3);
-        let expected_genesis = store.get_by_height(1).unwrap();
+        let expected_genesis = store.get_by_height(1).await.unwrap();
         let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         handler.on_request_received(
@@ -297,7 +297,7 @@ mod tests {
     #[async_test]
     async fn request_hash_test() {
         let (store, _) = gen_filled_store(1);
-        let stored_header = store.get_head().unwrap();
+        let stored_header = store.get_head().await.unwrap();
         let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         handler.on_request_received(
@@ -337,9 +337,9 @@ mod tests {
     async fn request_range_test() {
         let (store, _) = gen_filled_store(10);
         let expected_headers = [
-            store.get_by_height(5).unwrap(),
-            store.get_by_height(6).unwrap(),
-            store.get_by_height(7).unwrap(),
+            store.get_by_height(5).await.unwrap(),
+            store.get_by_height(6).await.unwrap(),
+            store.get_by_height(7).await.unwrap(),
         ];
         let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
@@ -361,7 +361,7 @@ mod tests {
     #[async_test]
     async fn request_range_beyond_head_test() {
         let (store, _) = gen_filled_store(5);
-        let expected_hashes = [store.get_by_height(5).ok()];
+        let expected_hashes = [store.get_by_height(5).await.ok()];
         let expected_status_codes = [StatusCode::Ok];
         assert_eq!(expected_hashes.len(), expected_status_codes.len());
 

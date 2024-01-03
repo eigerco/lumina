@@ -25,7 +25,9 @@ impl ValidateBasic for Set {
     }
 }
 
+/// An extension trait for the [`Set`] to allow additional actions.
 pub trait ValidatorSetExt {
+    /// Verify the commit signatures and the voting power of the commit.
     fn verify_commit_light(
         &self,
         chain_id: &chain::Id,
@@ -33,6 +35,7 @@ pub trait ValidatorSetExt {
         commit: &block::Commit,
     ) -> Result<()>;
 
+    /// Verify the commit signatures and the voting power of the commit optimistically.
     fn verify_commit_light_trusting(
         &self,
         chain_id: &chain::Id,
