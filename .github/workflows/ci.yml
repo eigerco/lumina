@@ -31,6 +31,16 @@ jobs:
       run: cargo clippy --all --all-targets --target=wasm32-unknown-unknown -- -D warnings -D missing-docs
 
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Run rustdoc check
+      env:
+        RUSTDOCFLAGS: -D warnings
+      run: cargo doc
+
+
   fmt:
     runs-on: ubuntu-latest
     steps:
