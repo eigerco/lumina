@@ -46,12 +46,11 @@ pub mod appconsts {
 
         /// The number of bytes reserved for the share metadata.
         ///
-        /// The info byte contains the share version and a sequence start idicator.
+        /// The info byte contains the share version and a sequence start indicator.
         pub const SHARE_INFO_BYTES: usize = 1;
 
         /// The number of bytes reserved for the sequence length in a share.
-        ///
-        /// That is present in the first share of a sequence.
+        /// It is present only in the first share of a sequence.
         pub const SEQUENCE_LEN_BYTES: usize = 4;
 
         /// The first share version format.

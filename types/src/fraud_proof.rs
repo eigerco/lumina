@@ -1,6 +1,6 @@
 //! Fraud proof related types and traits.
 //!
-//! A fraud proof is a proof of the detected malicious actions done to the network.
+//! A fraud proof is a proof of the detected malicious action done to the network.
 
 use std::convert::Infallible;
 

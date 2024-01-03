@@ -273,7 +273,7 @@ impl ExtendedHeader {
     ///
     /// # Errors
     ///
-    /// If validation fails, this function will return an error with a reason of failure.
+    /// If verification fails, this function will return an error with a reason of failure.
     /// This function will also return an error if untrusted headers are not adjacent
     /// to each other.
     ///
@@ -325,7 +325,7 @@ impl ExtendedHeader {
     ///
     /// # Errors
     ///
-    /// If validation fails, this function will return an error with a reason of failure.
+    /// If verification fails, this function will return an error with a reason of failure.
     /// This function will also return an error if untrusted headers are not adjacent
     /// to each other and to `self`.
     ///

@@ -1,11 +1,11 @@
 //! Namespaces and Namespaced Merkle Tree.
 //!
-//! [`Namespace`] is a key to your data in celestia. Whenever you publish blobs
-//! to the Celestia network, you have to assign them to some namespace. You can
+//! [`Namespace`] is a key to your data in Celestia. Whenever you publish blobs
+//! to the Celestia network, you have to assign them to a namespace. You can
 //! later use that namespace to acquire the data back from the network.
 //!
-//! All the data in each block is also ordered by it's [`Namespace`]. Things like
-//! transactions or trailing bytes have it's own namespaces too, tho those are reserved
+//! All the data in each block is also ordered by its [`Namespace`]. Things like
+//! transactions or trailing bytes have its own namespaces too, but those are reserved
 //! for block producers and cannot be utilized when submitting data.
 //!
 //! The fact that data in Celestia blocks is ordered allows for various optimizations

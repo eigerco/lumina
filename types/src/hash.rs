@@ -7,7 +7,7 @@ pub type Hash = tendermint::hash::Hash;
 ///
 /// [`Hash`]: crate::hash::Hash
 pub trait HashExt {
-    /// Get the default `SHA256` hash.
+    /// Get the `SHA256` hash of an empty input.
     ///
     /// This is equivalent to `sha256sum /dev/null`.
     fn default_sha256() -> Hash;

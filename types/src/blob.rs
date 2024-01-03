@@ -1,4 +1,4 @@
-//! Types related to creation and submition of blobs.
+//! Types related to creation and submission of blobs.
 
 use serde::{Deserialize, Serialize};
 use tendermint_proto::v0_34::types::Blob as RawBlob;
@@ -12,7 +12,7 @@ use crate::nmt::Namespace;
 use crate::serializers::none_as_negative_one;
 use crate::{bail_validation, Error, Result, Share};
 
-/// Options for configuring the blob submition to the network.
+/// Options for configuring the blob submission to the network.
 ///
 /// If no options are provided, then the default ones will be used.
 /// Read more about the mechanisms of fees and gas usage in [`submitting data blobs`].

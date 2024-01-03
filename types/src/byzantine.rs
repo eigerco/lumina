@@ -20,7 +20,7 @@ type Multihash = multihash::Multihash<NMT_ID_SIZE>;
 
 /// A proof that the block producer incorrectly encoded [`ExtendedDataSquare`].
 ///
-/// Some malicious actor may incorrectly extend the original data with the
+/// A malicious actor may incorrectly extend the original data with the
 /// recovery data, thus making it impossible to reconstruct the original
 /// information.
 ///

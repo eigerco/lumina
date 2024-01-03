@@ -96,7 +96,7 @@ impl ValidateBasic for CommitSig {
     }
 }
 
-/// An extention trait for the [`Commit`] to perform additional actions.
+/// An extension trait for the [`Commit`] to perform additional actions.
 ///
 /// [`Commit`]: tendermint::block::Commit
 pub trait CommitExt {
