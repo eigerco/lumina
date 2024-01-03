@@ -87,11 +87,11 @@ celestia rpc header GetByHeight 27 | jq .result
 Make sure you have the celestia network running inside docker compose from the section above.
 
 Generate authentication tokens for the tests
-```
+```bash
 ./tools/gen_auth_tokens.sh
 ```
 
 Run tests
-```
+```bash
 cargo test
 ```
