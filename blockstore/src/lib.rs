@@ -23,9 +23,7 @@ pub enum BlockstoreError {
     #[error("CID length longer that max allowed by the store")]
     CidTooLong,
 
-    /// Error occured when trying to compute CID with [`HasCid`] trait
-    ///
-    /// [`HasCid`]: crate::multihash::HasCid
+    /// Error occured when trying to compute CID.
     #[error("Error generating CID: {0}")]
     CidError(#[from] CidError),
 }
@@ -53,11 +51,7 @@ pub trait Blockstore {
         Ok(self.get(cid).await?.is_some())
     }
 
-    /// Inserts the data into the blockstore, computing CID using [`HasCid`] trait that needs to be
-    /// implemented for [`Block`]
-    ///
-    /// [`Block`]: crate::multihash::Block
-    /// [`HasCid`]: crate::multihash::HasCid
+    /// Inserts the data into the blockstore, computing CID using [`Block`] trait.
     async fn put<const S: usize, B>(&self, block: B) -> Result<()>
     where
         B: Block<S>,

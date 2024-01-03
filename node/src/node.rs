@@ -96,6 +96,8 @@ where
     }
 
     /// Get current [`PeerTracker`] info.
+    ///
+    /// [`PeerTracker`]: crate::peer_tracker::PeerTracker
     pub fn peer_tracker_info(&self) -> PeerTrackerInfo {
         self.p2p.peer_tracker_info().clone()
     }
