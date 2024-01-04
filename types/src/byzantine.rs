@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tendermint::{block::Height, Hash};
 use tendermint_proto::Protobuf;
 
-use crate::axis::AxisType;
+use crate::rsmt2d::AxisType;
 use crate::bail_validation;
 use crate::consts::appconsts;
 use crate::fraud_proof::FraudProof;

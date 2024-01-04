@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tendermint_proto::Protobuf;
 
-use crate::axis::AxisType;
+use crate::rsmt2d::AxisType;
 use crate::nmt::{Namespace, NamespaceProof, NamespacedHashExt, HASH_SIZE, NS_SIZE};
 use crate::{DataAvailabilityHeader, Error, Result, Share};
 

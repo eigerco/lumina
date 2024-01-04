@@ -1,20 +1,48 @@
+use std::result::Result as StdResult;
+
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 
-use crate::axis::AxisType;
 use crate::namespaced_data::{NamespacedData, NamespacedDataId};
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
 use crate::{DataAvailabilityHeader, Share};
 use crate::{Error, Result};
 
+/// Represents either Column or Row of the Data Square.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum AxisType {
+    Row = 0,
+    Col,
+}
+
+impl TryFrom<u8> for AxisType {
+    type Error = Error;
+
+    fn try_from(value: u8) -> StdResult<Self, Self::Error> {
+        match value {
+            0 => Ok(AxisType::Row),
+            1 => Ok(AxisType::Col),
+            n => Err(Error::InvalidAxis(n.into())),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtendedDataSquare {
     #[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]
     pub data_square: Vec<Vec<u8>>,
-    pub codec: String,
+    pub square_len: usize,
 }
 
 impl ExtendedDataSquare {
+    pub fn new(shares: Vec<Vec<u8>>, square_len: usize) -> Self {
+        // TODO: validation
+        Self {
+            data_square: shares, square_len
+        }
+    }
+
     pub fn row(&self, index: usize, square_len: usize) -> Vec<Share> {
         self.data_square[index * square_len..(index + 1) * square_len]
             .iter()
@@ -38,6 +66,11 @@ impl ExtendedDataSquare {
             AxisType::Row => self.row(index, square_len),
         }
     }
+
+    pub fn square_len(&self) -> usize {
+        self.square_len
+    }
+
 
     pub fn get_namespaced_data(
         &self,
@@ -84,4 +117,28 @@ impl ExtendedDataSquare {
 
         Ok(data)
     }
+
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn axis_type_serialization() {
+        assert_eq!(AxisType::Row as u8, 0);
+        assert_eq!(AxisType::Col as u8, 1);
+    }
+
+    #[test]
+    fn axis_type_deserialization() {
+        assert_eq!(AxisType::try_from(0).unwrap(), AxisType::Row);
+        assert_eq!(AxisType::try_from(1).unwrap(), AxisType::Col);
+
+        let axis_type_err = AxisType::try_from(2).unwrap_err();
+        assert!(matches!(axis_type_err, Error::InvalidAxis(2)));
+        let axis_type_err = AxisType::try_from(99).unwrap_err();
+        assert!(matches!(axis_type_err, Error::InvalidAxis(99)));
+    }
+
 }

@@ -4,7 +4,7 @@ use sha2::Sha256;
 use tendermint::merkle::simple_hash_from_byte_vectors;
 use tendermint_proto::Protobuf;
 
-use crate::axis::AxisType;
+use crate::rsmt2d::AxisType;
 use crate::consts::data_availability_header::{
     MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
 };
