@@ -216,7 +216,7 @@ mod tests {
     fn index_calculation() {
         let height = 100;
         let shares = vec![vec![0; SHARE_SIZE]; 8 * 8];
-        let eds = ExtendedDataSquare::new(shares, 8);
+        let eds = ExtendedDataSquare::new(shares, "".to_string());
 
         Row::new(1, &eds, height).unwrap();
         Row::new(7, &eds, height).unwrap();

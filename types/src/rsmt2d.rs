@@ -32,15 +32,15 @@ impl TryFrom<u8> for AxisType {
 pub struct ExtendedDataSquare {
     #[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]
     pub data_square: Vec<Vec<u8>>,
-    pub square_len: usize,
+    pub codec: String,
 }
 
 impl ExtendedDataSquare {
-    pub fn new(shares: Vec<Vec<u8>>, square_len: usize) -> Self {
+    pub fn new(shares: Vec<Vec<u8>>, codec: String) -> Self {
         // TODO: validation
         Self {
             data_square: shares,
-            square_len,
+            codec,
         }
     }
 
@@ -69,7 +69,7 @@ impl ExtendedDataSquare {
     }
 
     pub fn square_len(&self) -> usize {
-        self.square_len
+        f64::sqrt(self.data_square.len() as f64) as usize + 1
     }
 
     pub fn get_namespaced_data(
