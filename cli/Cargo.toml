@@ -3,6 +3,19 @@ name = "lumina-cli"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
+description = "Celestia data availability node implementation in Rust"
+repository = "https://github.com/eigerco/lumina"
+# readme = "README.md" -- It's using the project's root readme as for now, should it have a separate one?
+# crates.io is limited to 5 keywords and 5 categories
+keywords = ["blockchain", "celestia", "lumina", "node"]
+# Must be one of <https://crates.io/category_slugs>
+categories = [
+  "asynchronous",
+  "command-line-utilities",
+  "cryptography::cryptocurrencies",
+  "network-programming",
+  "wasm",
+]
 
 [[bin]]
 name = "lumina"
