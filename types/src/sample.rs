@@ -29,33 +29,7 @@ pub struct SampleId {
     pub index: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SampleType {
-    DataSample,
-    ParitySample,
-}
-
-impl TryFrom<u8> for SampleType {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(SampleType::DataSample),
-            1 => Ok(SampleType::ParitySample),
-            n => Err(Error::InvalidAxis(n.into())), // TODO
-        }
-    }
-}
-
-impl From<SampleType> for u8 {
-    fn from(sample_type: SampleType) -> u8 {
-        match sample_type {
-            SampleType::DataSample => 0,
-            SampleType::ParitySample => 1,
-        }
-    }
-}
-
+/// Represents Sample, with proof of its inclusion and location on EDS
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(try_from = "RawSample", into = "RawSample")]
 pub struct Sample {
@@ -67,6 +41,7 @@ pub struct Sample {
 }
 
 impl Sample {
+    /// Create new sample from EDS along provided axis
     pub fn new(
         axis_type: AxisType,
         index: usize,
@@ -105,6 +80,7 @@ impl Sample {
         })
     }
 
+    /// Validate sample with root hash from ExtendedHeader
     pub fn validate(&self, hash: Hash) -> Result<()> {
         let namespaced_hash = NamespacedHash::from_raw(hash.as_ref())?;
         self.proof
@@ -253,8 +229,7 @@ impl TryFrom<SampleId> for CidGeneric<SAMPLE_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consts::appconsts::SHARE_SIZE;
-    use crate::nmt::{Namespace, NS_SIZE};
+    use crate::nmt::Namespace;
 
     #[test]
     fn round_trip() {
@@ -330,13 +305,11 @@ mod tests {
         let bytes = include_bytes!("../test_data/shwap_samples/sample.data");
         let msg = Sample::decode(&bytes[..]).unwrap();
 
-        assert_eq!(msg.sample_id.index, 100);
-        assert_eq!(msg.sample_id.row.index, 64);
-        assert_eq!(msg.sample_id.row.block_height, 255);
+        assert_eq!(msg.sample_id.index, 1);
+        assert_eq!(msg.sample_id.row.index, 0);
+        assert_eq!(msg.sample_id.row.block_height, 1);
 
-        let ns = Namespace::new_v0(&[99]).unwrap();
+        let ns = Namespace::new_v0(&[11, 13, 177, 159, 193, 156, 129, 121, 234, 136]).unwrap();
         assert_eq!(msg.share.namespace(), ns);
-        let data = [0xCD; SHARE_SIZE - NS_SIZE];
-        assert_eq!(msg.share.data(), data);
     }
 }

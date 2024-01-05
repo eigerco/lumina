@@ -18,14 +18,14 @@ const ROW_ID_SIZE: usize = RowId::size();
 pub const ROW_ID_MULTIHASH_CODE: u64 = 0x7811;
 pub const ROW_ID_CODEC: u64 = 0x7810;
 
-/// Represents particular particular Column or Row in a specific Data Square,
-/// paired together with a hash of the axis root.
+/// Represents particular particular Row in a specific Data Square,
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct RowId {
     pub block_height: u64,
     pub index: u16,
 }
 
+/// Row together with the data
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(try_from = "RawRow", into = "RawRow")]
 pub struct Row {
@@ -35,6 +35,7 @@ pub struct Row {
 }
 
 impl Row {
+    /// Create Row with given index from the EDS
     pub fn new(
         index: usize,
         eds: &ExtendedDataSquare,
