@@ -3,6 +3,13 @@ name = "celestia-types"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
+description = "Core types, traits and constants for working with the Celestia ecosystem"
+repository = "https://github.com/eigerco/lumina"
+readme = "README.md"
+# crates.io is limited to 5 keywords and 5 categories
+keywords = ["blockchain", "celestia", "lumina"]
+# Must be one of <https://crates.io/category_slugs>
+categories = ["encoding", "cryptography::cryptocurrencies"]
 
 [dependencies]
 blockstore = { workspace = true }
