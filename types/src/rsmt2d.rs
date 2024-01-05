@@ -39,7 +39,8 @@ impl ExtendedDataSquare {
     pub fn new(shares: Vec<Vec<u8>>, square_len: usize) -> Self {
         // TODO: validation
         Self {
-            data_square: shares, square_len
+            data_square: shares,
+            square_len,
         }
     }
 
@@ -70,7 +71,6 @@ impl ExtendedDataSquare {
     pub fn square_len(&self) -> usize {
         self.square_len
     }
-
 
     pub fn get_namespaced_data(
         &self,
@@ -117,7 +117,6 @@ impl ExtendedDataSquare {
 
         Ok(data)
     }
-
 }
 
 #[cfg(test)]
@@ -140,5 +139,4 @@ mod tests {
         let axis_type_err = AxisType::try_from(99).unwrap_err();
         assert!(matches!(axis_type_err, Error::InvalidAxis(99)));
     }
-
 }

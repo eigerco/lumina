@@ -1,6 +1,5 @@
 use std::io::Cursor;
 
-use tendermint::Hash;
 use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
 use celestia_proto::share::p2p::shwap::Row as RawRow;
@@ -8,6 +7,7 @@ use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
+use tendermint::Hash;
 use tendermint_proto::Protobuf;
 
 use crate::nmt::{NamespacedSha2Hasher, Nmt};
@@ -36,14 +36,10 @@ pub struct Row {
 
 impl Row {
     /// Create Row with given index from the EDS
-    pub fn new(
-        index: usize,
-        eds: &ExtendedDataSquare,
-        block_height: u64,
-    ) -> Result<Self> {
+    pub fn new(index: usize, eds: &ExtendedDataSquare, block_height: u64) -> Result<Self> {
         let square_len = eds.square_len();
 
-        if index >= square_len { 
+        if index >= square_len {
             return Err(Error::EdsIndexOutOfRange(index));
         }
 
@@ -111,10 +107,7 @@ impl From<Row> for RawRow {
 
 impl RowId {
     /// Create new axis for the particular data square
-    pub fn new(
-        index: usize,
-        block_height: u64,
-    ) -> Result<Self> {
+    pub fn new(index: usize, block_height: u64) -> Result<Self> {
         if block_height == 0 {
             return Err(Error::ZeroBlockHeight);
         }

@@ -11,8 +11,8 @@ pub mod namespaced_data;
 pub mod nmt;
 #[cfg(feature = "p2p")]
 pub mod p2p;
-mod rsmt2d;
 pub mod row;
+mod rsmt2d;
 pub mod sample;
 pub(crate) mod serializers;
 mod share;

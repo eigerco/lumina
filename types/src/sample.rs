@@ -1,6 +1,5 @@
 use std::mem::size_of;
 
-use tendermint::Hash;
 use blockstore::block::CidError;
 use bytes::{BufMut, BytesMut};
 use celestia_proto::proof::pb::Proof as RawProof;
@@ -10,11 +9,12 @@ use multihash::Multihash;
 use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
+use tendermint::Hash;
 use tendermint_proto::Protobuf;
 
+use crate::nmt::{NamespaceProof, NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, Nmt};
 use crate::row::RowId;
 use crate::rsmt2d::AxisType;
-use crate::nmt::{NamespaceProof, NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, Nmt};
 use crate::ExtendedDataSquare;
 use crate::{Error, Result, Share};
 
@@ -129,7 +129,7 @@ impl From<Sample> for RawSample {
         RawSample {
             sample_id: sample_id_bytes.to_vec(),
             sample_share: sample.share.to_vec(),
-            sample_type:  sample.sample_proof_type as u8 as i32, // u8::from(sample.sample_proof_type) as i32,
+            sample_type: sample.sample_proof_type as u8 as i32, // u8::from(sample.sample_proof_type) as i32,
             sample_proof: Some(sample_proof),
         }
     }
@@ -140,11 +140,7 @@ impl SampleId {
     /// converted to row/col coordinates internally). Same location can be sampled row or
     /// column-wise, axis_type is used to distinguish that. Axis root hash is calculated from the
     /// DataAvailabilityHeader
-    pub fn new(
-        index: usize,
-        square_len: usize,
-        block_height: u64,
-    ) -> Result<Self> {
+    pub fn new(index: usize, square_len: usize, block_height: u64) -> Result<Self> {
         let row_index = index / square_len;
         let sample_index = index % square_len;
 
