@@ -12,10 +12,9 @@ use serde::{Deserialize, Serialize};
 use tendermint::Hash;
 use tendermint_proto::Protobuf;
 
+use crate::extended_data_square::{AxisType, ExtendedDataSquare};
 use crate::nmt::{NamespaceProof, NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, Nmt};
 use crate::row::RowId;
-use crate::rsmt2d::AxisType;
-use crate::ExtendedDataSquare;
 use crate::{Error, Result, Share};
 
 const SAMPLE_ID_SIZE: usize = SampleId::size();
@@ -55,11 +54,11 @@ impl Sample {
             AxisType::Col => (index % square_len, index / square_len),
         };
 
-        let shares = eds.axis(axis_type, axis_index, square_len);
+        let shares = eds.axis(axis_type, axis_index)?;
 
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
 
-        // TODO: are erasure coded shares correctly prefixed with parity namespace?
+        // XXX: are erasure coded shares correctly prefixed with parity namespace?
         for s in &shares {
             tree.push_leaf(s.data(), *s.namespace())
                 .map_err(Error::Nmt)?;

@@ -4,6 +4,7 @@ mod byzantine;
 pub mod consts;
 mod data_availability_header;
 mod error;
+mod extended_data_square;
 mod extended_header;
 pub mod fraud_proof;
 pub mod hash;

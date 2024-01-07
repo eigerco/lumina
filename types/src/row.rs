@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use tendermint::Hash;
 use tendermint_proto::Protobuf;
 
+use crate::extended_data_square::ExtendedDataSquare;
 use crate::nmt::{NamespacedSha2Hasher, Nmt};
-use crate::ExtendedDataSquare;
 use crate::{Error, Result, Share};
 
 const ROW_ID_SIZE: usize = RowId::size();
@@ -39,12 +39,8 @@ impl Row {
     pub fn new(index: usize, eds: &ExtendedDataSquare, block_height: u64) -> Result<Self> {
         let square_len = eds.square_len();
 
-        if index >= square_len {
-            return Err(Error::EdsIndexOutOfRange(index));
-        }
-
         let row_id = RowId::new(index, block_height)?;
-        let mut shares = eds.row(index, square_len);
+        let mut shares = eds.row(index)?;
         shares.truncate(square_len / 2);
 
         Ok(Row { row_id, shares })
@@ -215,8 +211,8 @@ mod tests {
     #[test]
     fn index_calculation() {
         let height = 100;
-        let shares = vec![vec![0; SHARE_SIZE]; 8 * 8];
-        let eds = ExtendedDataSquare::new(shares, "".to_string());
+        let shares = vec![Share::from_raw(&[0; SHARE_SIZE]).unwrap(); 8 * 8];
+        let eds = ExtendedDataSquare::new(shares).unwrap();
 
         Row::new(1, &eds, height).unwrap();
         Row::new(7, &eds, height).unwrap();

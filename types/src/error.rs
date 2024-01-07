@@ -121,6 +121,9 @@ pub enum Error {
     #[error("Data square index out of range: {0}")]
     EdsIndexOutOfRange(usize),
 
+    #[error("Invalid dimensions of EDS")]
+    EdsInvalidDimentions,
+
     #[error("Invalid zero block height")]
     ZeroBlockHeight,
 }

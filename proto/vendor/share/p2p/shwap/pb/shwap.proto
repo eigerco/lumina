@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+// TODO: current celestia-node PR doesn't specify the package, we might want to align on it
 package share.p2p.shwap;
 import "pb/proof.proto"; // celestiaorg/nmt/pb/proof.proto
 

@@ -7,12 +7,12 @@ use tendermint_proto::Protobuf;
 
 use crate::bail_validation;
 use crate::consts::appconsts;
+use crate::extended_data_square::AxisType;
 use crate::fraud_proof::FraudProof;
 use crate::nmt::{
     Namespace, NamespaceProof, NamespacedHash, NamespacedHashExt, NMT_CODEC, NMT_ID_SIZE,
     NMT_MULTIHASH_CODE, NS_SIZE,
 };
-use crate::rsmt2d::AxisType;
 use crate::{Error, ExtendedHeader, Result, Share};
 
 type Cid = CidGeneric<NMT_ID_SIZE>;
