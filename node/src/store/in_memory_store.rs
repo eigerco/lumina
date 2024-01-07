@@ -9,6 +9,7 @@ use tracing::debug;
 
 use crate::store::{Result, Store, StoreError};
 
+/// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
 pub struct InMemoryStore {
     headers: DashMap<Hash, ExtendedHeader>,
@@ -17,6 +18,7 @@ pub struct InMemoryStore {
 }
 
 impl InMemoryStore {
+    /// Create a new store.
     pub fn new() -> Self {
         InMemoryStore {
             headers: DashMap::new(),
@@ -26,7 +28,7 @@ impl InMemoryStore {
     }
 
     #[inline]
-    pub fn get_head_height(&self) -> Result<u64> {
+    fn get_head_height(&self) -> Result<u64> {
         let height = self.head_height.load(Ordering::Acquire);
 
         if height == 0 {
@@ -36,7 +38,7 @@ impl InMemoryStore {
         }
     }
 
-    pub fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
+    pub(crate) fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
         let hash = header.hash();
         let height = header.height().value();
         let head_height = self.get_head_height().unwrap_or(0);
@@ -76,16 +78,16 @@ impl InMemoryStore {
         Ok(())
     }
 
-    pub fn get_head(&self) -> Result<ExtendedHeader> {
+    fn get_head(&self) -> Result<ExtendedHeader> {
         let head_height = self.get_head_height()?;
         self.get_by_height(head_height)
     }
 
-    pub fn contains_hash(&self, hash: &Hash) -> bool {
+    fn contains_hash(&self, hash: &Hash) -> bool {
         self.headers.contains_key(hash)
     }
 
-    pub fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
+    fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
         self.headers
             .get(hash)
             .as_deref()
@@ -93,7 +95,7 @@ impl InMemoryStore {
             .ok_or(StoreError::NotFound)
     }
 
-    pub fn contains_height(&self, height: u64) -> bool {
+    fn contains_height(&self, height: u64) -> bool {
         let Ok(head_height) = self.get_head_height() else {
             return false;
         };
@@ -101,7 +103,7 @@ impl InMemoryStore {
         height <= head_height
     }
 
-    pub fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
+    fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
         }

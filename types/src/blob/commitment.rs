@@ -14,16 +14,47 @@ use crate::nmt::{Namespace, NamespacedHashExt, NamespacedSha2Hasher, Nmt, RawNam
 use crate::{Error, Result};
 use crate::{InfoByte, Share};
 
+/// A merkle hash used to identify the [`Blob`]s data.
+///
+/// In Celestia network, the transaction which pays for the blob's inclusion
+/// is separated from the data itself. The reason for that is to allow verifying
+/// the blockchain's state without the need to pull the actual data which got stored.
+/// To achieve that, the [`MsgPayForBlobs`] transaction only includes the [`Commitment`]s
+/// of the blobs it is paying for, not the data itself.
+///
+/// The algorithm of computing the [`Commitment`] of the [`Blob`]'s [`Share`]s is
+/// designed in a way to allow easy and cheap proving of the [`Share`]s inclusion in the
+/// block. It is computed as a [`merkle hash`] of all the [`Nmt`] subtree roots created from
+/// the blob shares included in the [`ExtendedDataSquare`] rows. Assuming the `s1` and `s2`
+/// are the only shares of some blob posted to the celestia, they'll result in a single subtree
+/// root as shown below:
+///
+/// ```text
+/// NMT:           row root
+///                /     \
+///              o   subtree root
+///             / \      / \
+///           _________________
+/// EDS row: | s | s | s1 | s2 |
+/// ```
+///
+/// Using subtree roots as a base for [`Commitment`] computation allows for much smaller
+/// inclusion proofs than when the [`Share`]s would be used directly, but it implies some
+/// constraints on how the [`Blob`]s can be placed in the [`ExtendedDataSquare`]. You can
+/// read more about that in the [`share commitment rules`].
+///
+/// [`Blob`]: crate::Blob
+/// [`Share`]: crate::share::Share
+/// [`MsgPayForBlobs`]: celestia_proto::celestia::blob::v1::MsgPayForBlobs
+/// [`merkle hash`]: tendermint::merkle::simple_hash_from_byte_vectors
+/// [`Nmt`]: crate::nmt::Nmt
+/// [`ExtendedDataSquare`]: crate::ExtendedDataSquare
+/// [`share commitment rules`]: https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/data_square_layout.md#blob-share-commitment-rules
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Commitment(pub merkle::Hash);
 
 impl Commitment {
-    /// Generate the share commitment for a given blob.
-    ///
-    /// See [Message layout rationale] and [Non-interactive default rules].
-    ///
-    /// [Message layout rationale]: https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/rationale/message_block_layout.md?plain=1#L12
-    /// [Non-interactive default rules]: https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/rationale/message_block_layout.md?plain=1#L36
+    /// Generate the share commitment from the given blob data.
     pub fn from_blob(
         namespace: Namespace,
         share_version: u8,

@@ -1,7 +1,10 @@
+//! [`serde`] serializer for the optional [`Timestamp`].
+
 use serde::{Deserialize, Deserializer, Serializer};
 use tendermint_proto::google::protobuf::Timestamp;
 use tendermint_proto::serializers::timestamp;
 
+/// Deserialize `Option<Timestamp>`.
 pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Timestamp>, D::Error>
 where
     D: Deserializer<'de>,
@@ -16,6 +19,7 @@ where
     Ok(Option::<Def>::deserialize(deserializer)?.map(|def| def.value))
 }
 
+/// Serialize `Option<Timestamp>`.
 pub fn serialize<S>(value: &Option<Timestamp>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,

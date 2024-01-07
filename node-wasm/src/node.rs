@@ -1,3 +1,5 @@
+//! A browser compatible wrappers for the [`lumina-node`].
+
 use std::result::Result as StdResult;
 
 use celestia_types::{hash::Hash, ExtendedHeader};
@@ -17,20 +19,26 @@ use crate::utils::Network;
 use crate::wrapper::libp2p::NetworkInfo;
 use crate::Result;
 
+/// Lumina wasm node.
 #[wasm_bindgen(js_name = Node)]
 struct WasmNode(Node<IndexedDbStore>);
 
+/// Config for the lumina wasm node.
 #[wasm_bindgen(js_name = NodeConfig)]
 pub struct WasmNodeConfig {
+    /// A network to connect to.
     pub network: Network,
+    /// Hash of the genesis block in the network.
     #[wasm_bindgen(getter_with_clone)]
     pub genesis_hash: Option<String>,
+    /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
 }
 
 #[wasm_bindgen(js_class = Node)]
 impl WasmNode {
+    /// Create a new Lumina node.
     #[wasm_bindgen(constructor)]
     pub async fn new(config: WasmNodeConfig) -> Result<WasmNode> {
         let config = config.into_node_config().await?;

@@ -1,7 +1,11 @@
+//! Primitives for the trust level of consensus commits.
+
 use crate::{verification_error, VerificationError};
 
+/// A default trust level for the optimistic commit verification.
 pub const DEFAULT_TRUST_LEVEL: TrustLevelRatio = TrustLevelRatio::new(1, 3);
 
+/// The representation of the trust level.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrustLevelRatio {
     numerator: u64,
@@ -9,6 +13,7 @@ pub struct TrustLevelRatio {
 }
 
 impl TrustLevelRatio {
+    /// Create a new [`TrustLevelRatio`].
     pub const fn new(numerator: u64, denominator: u64) -> Self {
         TrustLevelRatio {
             numerator,
@@ -16,14 +21,21 @@ impl TrustLevelRatio {
         }
     }
 
+    /// Get the numerator component of the fraction.
     pub fn numerator(&self) -> u64 {
         self.numerator
     }
 
+    /// Get the denominator component of the fraction.
     pub fn denominator(&self) -> u64 {
         self.denominator
     }
 
+    /// Get the amount of voting power needed to satisfy this trust level.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the operation overflows or if denominator is 0.
     pub fn voting_power_needed(
         &self,
         total_voting_power: impl Into<u64>,
