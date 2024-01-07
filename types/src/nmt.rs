@@ -30,6 +30,7 @@ pub const NMT_ID_SIZE: usize = 2 * NS_SIZE + SHA256_HASH_SIZE;
 pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
 pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
 pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
+pub type Proof = nmt_rs::simple_merkle::proof::Proof<crate::nmt::NamespacedSha2Hasher>;
 
 pub struct NodePair(NamespacedHash, NamespacedHash);
 

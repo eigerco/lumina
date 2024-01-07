@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use tendermint::{block::Height, Hash};
 use tendermint_proto::Protobuf;
 
-use crate::axis::AxisType;
 use crate::bail_validation;
 use crate::consts::appconsts;
+use crate::extended_data_square::AxisType;
 use crate::fraud_proof::FraudProof;
 use crate::nmt::{
     Namespace, NamespaceProof, NamespacedHash, NamespacedHashExt, NMT_CODEC, NMT_ID_SIZE,

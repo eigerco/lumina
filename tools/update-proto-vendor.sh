@@ -31,7 +31,8 @@ extract_urls ../target/proto-vendor-src \
     https://github.com/cosmos/cosmos-proto/archive/refs/tags/v1.0.0-alpha4.tar.gz \
     https://github.com/cosmos/gogoproto/archive/refs/tags/v1.4.11.tar.gz \
     https://github.com/celestiaorg/go-header/archive/refs/heads/main.tar.gz \
-    https://github.com/googleapis/googleapis/archive/refs/heads/master.tar.gz
+    https://github.com/googleapis/googleapis/archive/refs/heads/master.tar.gz \
+    https://codeload.github.com/celestiaorg/celestia-node/zip/refs/heads/hlib/v2-prototype
 
 mkdir -p vendor
 
@@ -69,6 +70,13 @@ for pb_dir in ../target/proto-vendor-src/celestia-node-main/share/*/*/pb; do
     mkdir -p "$out_dir"
     cp -r "$pb_dir" "$out_dir"
 done
+
+# TODO: replace with version from main, once it is merged
+# https://github.com/celestiaorg/celestia-node/pull/2675
+rm -rf vendor/share/p2p/shwap
+mkdir -p vendor/share/p2p/shwap/pb
+cp ../target/proto-vendor-src/celestia-node-hlib-v2-prototype/share/shwap/pb/shwap_pb.proto \
+    vendor/share/p2p/shwap/pb/shwap.proto
 
 rm -rf vendor/tendermint
 cp -r ../target/proto-vendor-src/celestia-core-0.34.x-celestia/proto/tendermint vendor

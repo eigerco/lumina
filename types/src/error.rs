@@ -19,6 +19,9 @@ pub enum Error {
     #[error(transparent)]
     Multihash(#[from] cid::multihash::Error),
 
+    #[error(transparent)]
+    CidError(#[from] blockstore::block::CidError),
+
     #[error("Missing header")]
     MissingHeader,
 
@@ -73,6 +76,12 @@ pub enum Error {
     #[error("Range proof verification failed: {0:?}")]
     RangeProofError(nmt_rs::simple_merkle::error::RangeProofError),
 
+    #[error("Index {0} is out of range for NMT Range Proof")]
+    RangeProofIndexOutOfRange(i64),
+
+    #[error("Computed root doesn't match received one")]
+    RootMismatch,
+
     #[error("Unexpected absent commit signature")]
     UnexpectedAbsentSignature,
 
@@ -111,6 +120,9 @@ pub enum Error {
 
     #[error("Data square index out of range: {0}")]
     EdsIndexOutOfRange(usize),
+
+    #[error("Invalid dimensions of EDS")]
+    EdsInvalidDimentions,
 
     #[error("Invalid zero block height")]
     ZeroBlockHeight,

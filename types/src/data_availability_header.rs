@@ -4,10 +4,10 @@ use sha2::Sha256;
 use tendermint::merkle::simple_hash_from_byte_vectors;
 use tendermint_proto::Protobuf;
 
-use crate::axis::AxisType;
 use crate::consts::data_availability_header::{
     MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
 };
+use crate::extended_data_square::AxisType;
 use crate::hash::Hash;
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
