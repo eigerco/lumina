@@ -38,7 +38,7 @@ pub struct NamespacedRow {
 
 /// A single fixed-size chunk of data which is used to form an [`ExtendedDataSquare`].
 ///
-/// All data in Celestia is split into the [`Share`]s before being put into the
+/// All data in Celestia is split into [`Share`]s before being put into a
 /// block's data square. See [`Blob::to_shares`].
 ///
 /// All shares have the fixed size of 512 bytes and the following structure:
@@ -61,7 +61,7 @@ pub struct Share {
 }
 
 impl Share {
-    /// Create a new [`Share`] from the raw bytes.
+    /// Create a new [`Share`] from raw bytes.
     ///
     /// # Errors
     ///

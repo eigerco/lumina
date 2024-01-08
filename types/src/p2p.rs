@@ -16,7 +16,7 @@ pub struct AddrInfo {
     pub addrs: Vec<Multiaddr>,
 }
 
-/// Information about the resources used by a node.
+/// Information about the resources used by the node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Stat {
@@ -73,7 +73,7 @@ impl From<PeerId> for libp2p_identity::PeerId {
     }
 }
 
-/// Bandwidth statistics reported by a node.
+/// Bandwidth statistics reported by the node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct BandwidthStats {

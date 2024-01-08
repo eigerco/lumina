@@ -14,7 +14,7 @@ use crate::{Error, Result};
 pub trait AddressTrait: FromStr + Display + private::Sealed {
     /// Get a reference to the account's ID.
     fn id_ref(&self) -> &Id;
-    /// Get the kind of the address.
+    /// Get the kind of address.
     fn kind(&self) -> AddressKind;
 
     /// Get the account's ID.
@@ -23,13 +23,13 @@ pub trait AddressTrait: FromStr + Display + private::Sealed {
         *self.id_ref()
     }
 
-    /// Convert the address to the byte slice.
+    /// Convert the address to a byte slice.
     #[inline]
     fn as_bytes(&self) -> &[u8] {
         self.id_ref().as_bytes()
     }
 
-    /// Get the `bech32` human readable prefix of the account kind.
+    /// Get a `bech32` human readable prefix of the account kind.
     #[inline]
     fn prefix(&self) -> &'static str {
         self.kind().prefix()

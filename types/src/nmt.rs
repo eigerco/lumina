@@ -249,7 +249,7 @@ impl Namespace {
         Namespace(nmt_rs::NamespaceId(bytes))
     }
 
-    /// Create a new [`Namespace`] version `0` with given id.
+    /// Create a new [`Namespace`] version `0` with a given id.
     ///
     /// # Example
     ///
@@ -277,7 +277,7 @@ impl Namespace {
         Namespace(nmt_rs::NamespaceId(bytes))
     }
 
-    /// Create a new [`Namespace`] version `255` with given id.
+    /// Create a new [`Namespace`] version `255` with a given id.
     ///
     /// # Example
     ///
@@ -294,7 +294,7 @@ impl Namespace {
         Namespace(nmt_rs::NamespaceId(bytes))
     }
 
-    /// Create a new [`Namespace`] version `255` with given id.
+    /// Create a new [`Namespace`] version `255` with a given id.
     ///
     /// [`Namespace`]s in version `255` must have id's prefixed with 27 `0xff` bytes followed by a
     /// single byte being actual id.
