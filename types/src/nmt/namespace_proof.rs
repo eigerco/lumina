@@ -70,7 +70,7 @@ impl NamespaceProof {
     /// If the tree had contained the proven namespace, it should be in the tree
     /// right before the leaf returned by this function.
     ///
-    /// This function returns [`None`] if the proof is a [`PresenceProof`] or the
+    /// This function returns [`None`] if the proof isn't an [`AbsenceProof`] or the
     /// proven [`Namespace`] is not in the range of the tree root [`NamespacedHash`].
     ///
     /// [`Namespace`]: crate::nmt::Namespace

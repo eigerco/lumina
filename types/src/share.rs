@@ -47,9 +47,7 @@ pub struct NamespacedRow {
 /// | Namespace | InfoByte | (optional) sequence length | data |
 /// ```
 ///
-/// The `sequence length` field indicates the byte length of the data split into shares.
-/// If the data split into shares cannot fit into a single share, then each following
-/// share shouldn't have this field set.
+/// `sequence length` is the length of the original data in bytes and is present only in the first of the shares the data was split into.
 ///
 /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 /// [`Blob::to_shares`]: crate::Blob::to_shares
@@ -65,8 +63,8 @@ impl Share {
     ///
     /// # Errors
     ///
-    /// This function will return an error if the slice length is different than
-    /// [`SHARE_SIZE`] or if the namespace is invalid.
+    /// This function will return an error if the slice length isn't
+    /// [`SHARE_SIZE`] or if a namespace encoded in the share is invalid.
     ///
     /// # Example
     ///

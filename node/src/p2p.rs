@@ -335,9 +335,9 @@ where
         .ok_or(HeaderExError::HeaderNotFound.into())
     }
 
-    /// Request the headers following given one on the `header-ex` protocol.
+    /// Request the headers following the one given with the `header-ex` protocol.
     ///
-    /// The headers will be verified with each other starting from the supplied one.
+    /// First header from the requested range will be verified against the provided one, then each subsequent is verified against the previous one.
     pub async fn get_verified_headers_range(
         &self,
         from: &ExtendedHeader,

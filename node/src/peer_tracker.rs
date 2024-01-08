@@ -18,7 +18,7 @@ pub struct PeerTracker {
     info_tx: watch::Sender<PeerTrackerInfo>,
 }
 
-/// A statistics of the peers tracked in the network.
+/// Statistics of the connected peers
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct PeerTrackerInfo {
     /// Number of the connected peers.

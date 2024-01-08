@@ -9,8 +9,8 @@
 //! for block producers and cannot be utilized when submitting data.
 //!
 //! The fact that data in Celestia blocks is ordered allows for various optimizations
-//! regarding proving it's inclusion or absence. There is a namespace-aware implementation
-//! of merkle trees, called 'Namespace Merkle Tree', shortened as [`Nmt`].
+//! when proving data inclusion or absence. There is a namespace-aware implementation
+//! of merkle trees, called 'Namespaced Merkle Tree', shortened as [`Nmt`].
 //!
 //! The generic implementation of this merkle tree lives in [`nmt-rs`]. This module is
 //! a wrapper around that with Celestia specific defaults and functionalities.
@@ -128,7 +128,7 @@ impl Namespace {
     /// Secondary reserved [`Namespace`] used for padding after the blobs.
     ///
     /// It is used to fill up the `original data square` after all user-submitted
-    /// blobs between the parity data is generated for the [`ExtendedDataSquare`].
+    /// blobs before the parity data is generated for the [`ExtendedDataSquare`].
     ///
     /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub const TAIL_PADDING: Namespace = Namespace::const_v255(0xfe);
@@ -296,8 +296,8 @@ impl Namespace {
 
     /// Create a new [`Namespace`] version `255` with a given id.
     ///
-    /// [`Namespace`]s in version `255` must have id's prefixed with 27 `0xff` bytes followed by a
-    /// single byte being actual id.
+    /// [`Namespace`]s with version `255` must have ids prefixed with 27 `0xff` bytes followed by a
+    /// single byte with actual id.
     ///
     /// # Errors
     ///

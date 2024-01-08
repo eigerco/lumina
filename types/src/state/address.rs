@@ -9,7 +9,7 @@ use tendermint::account::Id;
 use crate::consts::cosmos::*;
 use crate::{Error, Result};
 
-/// A generic representation of addresses in Celestia network.
+/// A generic representation of an address in Celestia network.
 #[enum_dispatch(Address)]
 pub trait AddressTrait: FromStr + Display + private::Sealed {
     /// Get a reference to the account's ID.

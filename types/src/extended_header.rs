@@ -182,7 +182,7 @@ impl ExtendedHeader {
 
     /// Verify an untrusted header.
     ///
-    /// Ensures that the untrusted header can be trusted by comparing it with `self`.
+    /// Ensures that the untrusted header can be trusted by verifying it against `self`.
     ///
     /// # Errors
     ///
@@ -326,8 +326,7 @@ impl ExtendedHeader {
     /// # Errors
     ///
     /// If verification fails, this function will return an error with a reason of failure.
-    /// This function will also return an error if untrusted headers are not adjacent
-    /// to each other and to `self`.
+    /// This function will also return an error if untrusted headers and `self` don't form contiguous range
     ///
     /// # Example
     ///

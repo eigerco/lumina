@@ -43,11 +43,11 @@ use serde::{Deserialize, Serialize};
 /// properties those have in terms of data availability.
 ///
 /// Thanks to the parity data, to make original data unrecoverable, a malicious
-/// actor would need to hide more than a half of data from each row and column.
-/// If we take `k` as the width of the `OriginalDataSquare` then the attacker
-/// would need to hide more than `(k + 1)^2` data from the [`ExtendedDataSquare`].
-/// For the `EDS` that is 4 width an attacker would need to hide more than 50% of
-/// all the shares and that value approaches the 25% as the square grows.
+/// actor would need to hide more than a half of the data from each row and column.
+/// If we take `k` as the width of the `OriginalDataSquare`, then the attacker
+/// needs to hide more than `(k + 1)^2` shares from the [`ExtendedDataSquare`].
+/// For the `EDS` with a width of 4, the attacker needs to hide more than 50% of
+/// all the shares and that value approaches 25% as the square grows.
 ///
 /// This allows for really efficient data sampling, as the sampling node can reach
 /// very high confidence that whole data is available by taking only a few samples.
