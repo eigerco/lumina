@@ -70,7 +70,7 @@ impl Serialize for Proof {
     where
         S: Serializer,
     {
-        let raw: RawFraudProof = self.try_into().map_err(serde::ser::Error::custom)?;
+        let raw: RawFraudProof = self.into();
         raw.serialize(serializer)
     }
 }

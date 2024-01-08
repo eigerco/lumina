@@ -240,7 +240,7 @@ impl PeerTracker {
 
         peers.shuffle(&mut rand::thread_rng());
 
-        peers.get(0).copied()
+        peers.first().copied()
     }
 
     /// Returns up to N amount of best peers.
