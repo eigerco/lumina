@@ -249,7 +249,7 @@ mod tests {
             0x01, // CIDv1
             0x90, 0xF0, 0x01, // CID codec = 7810
             0x91, 0xF0, 0x01, // code = 7811
-            0x0A, // len = ROW_ID_SIZE = 43
+            0x0A, // len = ROW_ID_SIZE = 10
             0, 0, 0, 0, 0, 0, 0, 0, // invalid block height = 0 !
             7, 0, // axis index = 7
         ];
@@ -294,24 +294,6 @@ mod tests {
         row.row_id.index = 64;
         row.row_id.block_height = 255;
 
-        /*
-        use std::io::Write;
-
-        let mut i = 0;
-        for share in &mut row.shares {
-            let ns = Namespace::new_v0(&[i]).unwrap();
-
-            let data = [0; crate::consts::appconsts::SHARE_SIZE];
-            share.data[..].copy_from_slice(&data);
-            share.data[..NS_SIZE].copy_from_slice(ns.as_bytes());
-
-            println!("{i} {:?}", share.namespace());
-            i += 1;
-        }
-        let mut file = std::fs::File::create("axis.data2").unwrap();
-        let bytes = row.encode_vec().unwrap();
-        file.write_all(&bytes).unwrap();
-        */
         assert_eq!(row.row_id.index, 64);
         assert_eq!(row.row_id.block_height, 255);
 

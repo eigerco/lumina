@@ -21,7 +21,7 @@ const SAMPLE_ID_SIZE: usize = SampleId::size();
 pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
 pub const SAMPLE_ID_CODEC: u64 = 0x7800;
 
-/// Represents particular sample along the axis on specific Data Square
+/// Represents a location of a sample on the EDS
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct SampleId {
     pub row: RowId,
@@ -40,7 +40,7 @@ pub struct Sample {
 }
 
 impl Sample {
-    /// Create new sample from EDS along provided axis
+    /// Create a new Sample. Index references sample number from the entire Data Square
     pub fn new(
         axis_type: AxisType,
         index: usize,
@@ -74,7 +74,7 @@ impl Sample {
         Ok(Sample {
             sample_id,
             sample_proof_type: axis_type,
-            share: shares[sample_index].clone(), // or add copy to Share?
+            share: shares[sample_index].clone(),
             proof: proof.into(),
         })
     }
@@ -128,17 +128,17 @@ impl From<Sample> for RawSample {
         RawSample {
             sample_id: sample_id_bytes.to_vec(),
             sample_share: sample.share.to_vec(),
-            sample_type: sample.sample_proof_type as u8 as i32, // u8::from(sample.sample_proof_type) as i32,
+            sample_type: sample.sample_proof_type as u8 as i32,
             sample_proof: Some(sample_proof),
         }
     }
 }
 
 impl SampleId {
-    /// Create new SampleId. Index references sample number from the entire Data Square (is
-    /// converted to row/col coordinates internally). Same location can be sampled row or
-    /// column-wise, axis_type is used to distinguish that. Axis root hash is calculated from the
-    /// DataAvailabilityHeader
+    /// Create a new SampleId. Index references sample number from the entire Data Square (it is
+    /// converted to row/col coordinates internally). SampleId doesn't contain information
+    /// whether inclusion proof should be constructed row or column-wise, it's up to the
+    /// responding server to decide (which is then indicated in `Sample::sample_proof_type`)
     pub fn new(index: usize, square_len: usize, block_height: u64) -> Result<Self> {
         let row_index = index / square_len;
         let sample_index = index % square_len;
@@ -257,7 +257,7 @@ mod tests {
             0x01, // CIDv1
             0x80, 0xF0, 0x01, // CID codec = 7800
             0x81, 0xF0, 0x01, // multihash code = 7801
-            0x0C, // len = SAMPLE_ID_SIZE = 45
+            0x0C, // len = SAMPLE_ID_SIZE = 12
             64, 0, 0, 0, 0, 0, 0, 0, // block height = 64
             7, 0, // axis index = 7
             5, 0, // sample index = 5
