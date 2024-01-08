@@ -171,7 +171,7 @@ impl Namespace {
     ///
     /// # Errors
     ///
-    /// This function will return an error if the version doesn't match
+    /// This function will return an error if provided namespace version isn't supported
     /// or if the namespace is invalid. If you are constructing the
     /// version `0` namespace, check [`new_v0`] for more details.
     ///
