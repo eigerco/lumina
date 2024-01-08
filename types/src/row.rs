@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use tendermint::Hash;
 use tendermint_proto::Protobuf;
 
-use crate::extended_data_square::ExtendedDataSquare;
 use crate::nmt::{NamespacedSha2Hasher, Nmt};
+use crate::rsmt2d::ExtendedDataSquare;
 use crate::{Error, Result, Share};
 
 const ROW_ID_SIZE: usize = RowId::size();
@@ -21,6 +21,7 @@ pub const ROW_ID_CODEC: u64 = 0x7810;
 /// Represents particular particular Row in a specific Data Square,
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct RowId {
+    ///
     pub block_height: u64,
     pub index: u16,
 }
@@ -29,8 +30,10 @@ pub struct RowId {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(try_from = "RawRow", into = "RawRow")]
 pub struct Row {
+    /// Location of the row in the EDS and associated block height
     pub row_id: RowId,
 
+    /// Shares contained in the row
     pub shares: Vec<Share>,
 }
 
@@ -59,7 +62,7 @@ impl Row {
         /*
         let parity_shares : Vec<Share> = unimplemented!();
         for s in parity_shares {
-            tree.push_leaf(s.data(), *s.namespace())
+            tree.push_leaf(s.data(), *Namespace::PARITY_SHARE)
                 .map_err(Error::Nmt)?;
         }
         */
@@ -77,9 +80,9 @@ impl Protobuf<RawRow> for Row {}
 impl TryFrom<RawRow> for Row {
     type Error = Error;
 
-    fn try_from(axis: RawRow) -> Result<Row, Self::Error> {
-        let row_id = RowId::decode(&axis.row_id)?;
-        let shares = axis
+    fn try_from(row: RawRow) -> Result<Row, Self::Error> {
+        let row_id = RowId::decode(&row.row_id)?;
+        let shares = row
             .row_half
             .into_iter()
             .map(|s| Share::from_raw(&s))
@@ -90,13 +93,13 @@ impl TryFrom<RawRow> for Row {
 }
 
 impl From<Row> for RawRow {
-    fn from(axis: Row) -> RawRow {
-        let mut axis_id_bytes = BytesMut::new();
-        axis.row_id.encode(&mut axis_id_bytes);
+    fn from(row: Row) -> RawRow {
+        let mut row_id_bytes = BytesMut::new();
+        row.row_id.encode(&mut row_id_bytes);
 
         RawRow {
-            row_id: axis_id_bytes.to_vec(),
-            row_half: axis.shares.into_iter().map(|s| s.data.to_vec()).collect(),
+            row_id: row_id_bytes.to_vec(),
+            row_half: row.shares.into_iter().map(|s| s.data.to_vec()).collect(),
         }
     }
 }
@@ -179,9 +182,9 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for RowId {
 impl TryFrom<RowId> for CidGeneric<ROW_ID_SIZE> {
     type Error = CidError;
 
-    fn try_from(axis: RowId) -> Result<Self, Self::Error> {
+    fn try_from(row: RowId) -> Result<Self, Self::Error> {
         let mut bytes = BytesMut::with_capacity(ROW_ID_SIZE);
-        axis.encode(&mut bytes);
+        row.encode(&mut bytes);
         // length is correct, so unwrap is safe
         let mh = Multihash::wrap(ROW_ID_MULTIHASH_CODE, &bytes[..]).unwrap();
 
@@ -197,22 +200,22 @@ mod tests {
 
     #[test]
     fn round_trip_test() {
-        let axis_id = RowId::new(5, 100).unwrap();
-        let cid = CidGeneric::try_from(axis_id).unwrap();
+        let row_id = RowId::new(5, 100).unwrap();
+        let cid = CidGeneric::try_from(row_id).unwrap();
 
         let multihash = cid.hash();
         assert_eq!(multihash.code(), ROW_ID_MULTIHASH_CODE);
         assert_eq!(multihash.size(), ROW_ID_SIZE as u8);
 
-        let deserialized_axis_id = RowId::try_from(cid).unwrap();
-        assert_eq!(axis_id, deserialized_axis_id);
+        let deserialized_row_id = RowId::try_from(cid).unwrap();
+        assert_eq!(row_id, deserialized_row_id);
     }
 
     #[test]
     fn index_calculation() {
         let height = 100;
         let shares = vec![Share::from_raw(&[0; SHARE_SIZE]).unwrap(); 8 * 8];
-        let eds = ExtendedDataSquare::new(shares).unwrap();
+        let eds = ExtendedDataSquare::new(shares, "codec".to_string()).unwrap();
 
         Row::new(1, &eds, height).unwrap();
         Row::new(7, &eds, height).unwrap();
@@ -230,7 +233,7 @@ mod tests {
             0x91, 0xF0, 0x01, // multihash code = 7811
             0x0A, // len = ROW_ID_SIZE = 10
             64, 0, 0, 0, 0, 0, 0, 0, // block height = 64
-            7, 0, // axis index = 7
+            7, 0, // row index = 7
         ];
 
         let cid = CidGeneric::<ROW_ID_SIZE>::read_bytes(bytes.as_ref()).unwrap();
@@ -238,9 +241,9 @@ mod tests {
         let mh = cid.hash();
         assert_eq!(mh.code(), ROW_ID_MULTIHASH_CODE);
         assert_eq!(mh.size(), ROW_ID_SIZE as u8);
-        let axis_id = RowId::try_from(cid).unwrap();
-        assert_eq!(axis_id.index, 7);
-        assert_eq!(axis_id.block_height, 64);
+        let row_id = RowId::try_from(cid).unwrap();
+        assert_eq!(row_id.index, 7);
+        assert_eq!(row_id.block_height, 64);
     }
 
     #[test]
@@ -251,7 +254,7 @@ mod tests {
             0x91, 0xF0, 0x01, // code = 7811
             0x0A, // len = ROW_ID_SIZE = 10
             0, 0, 0, 0, 0, 0, 0, 0, // invalid block height = 0 !
-            7, 0, // axis index = 7
+            7, 0, // row index = 7
         ];
 
         let cid = CidGeneric::<ROW_ID_SIZE>::read_bytes(bytes.as_ref()).unwrap();
@@ -259,9 +262,9 @@ mod tests {
         let mh = cid.hash();
         assert_eq!(mh.code(), ROW_ID_MULTIHASH_CODE);
         assert_eq!(mh.size(), ROW_ID_SIZE as u8);
-        let axis_err = RowId::try_from(cid).unwrap_err();
+        let row_err = RowId::try_from(cid).unwrap_err();
         assert_eq!(
-            axis_err,
+            row_err,
             CidError::InvalidCid("Zero block height".to_string())
         );
     }
@@ -270,9 +273,9 @@ mod tests {
     fn multihash_invalid_code() {
         let multihash = Multihash::<ROW_ID_SIZE>::wrap(999, &[0; ROW_ID_SIZE]).unwrap();
         let cid = CidGeneric::<ROW_ID_SIZE>::new_v1(ROW_ID_CODEC, multihash);
-        let axis_err = RowId::try_from(cid).unwrap_err();
+        let row_err = RowId::try_from(cid).unwrap_err();
         assert_eq!(
-            axis_err,
+            row_err,
             CidError::InvalidMultihashCode(999, ROW_ID_MULTIHASH_CODE)
         );
     }
@@ -282,12 +285,12 @@ mod tests {
         let multihash =
             Multihash::<ROW_ID_SIZE>::wrap(ROW_ID_MULTIHASH_CODE, &[0; ROW_ID_SIZE]).unwrap();
         let cid = CidGeneric::<ROW_ID_SIZE>::new_v1(1234, multihash);
-        let axis_err = RowId::try_from(cid).unwrap_err();
-        assert_eq!(axis_err, CidError::InvalidCidCodec(1234));
+        let row_err = RowId::try_from(cid).unwrap_err();
+        assert_eq!(row_err, CidError::InvalidCidCodec(1234));
     }
 
     #[test]
-    fn decode_axis_bytes() {
+    fn decode_row_bytes() {
         let bytes = include_bytes!("../test_data/shwap_samples/row.data");
         let mut row = Row::decode(&bytes[..]).unwrap();
 

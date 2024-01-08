@@ -1,17 +1,14 @@
-use std::io::Cursor;
-
 use blockstore::block::CidError;
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, BytesMut};
 use celestia_proto::share::p2p::shwap::Data as RawNamespacedData;
 use cid::CidGeneric;
 use multihash::Multihash;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use tendermint_proto::Protobuf;
 
-use crate::extended_data_square::AxisType;
-use crate::nmt::{Namespace, NamespaceProof, NamespacedHashExt, HASH_SIZE, NS_SIZE};
-use crate::{DataAvailabilityHeader, Error, Result, Share};
+use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
+use crate::row::RowId;
+use crate::{Error, Result, Share};
 
 const NAMESPACED_DATA_ID_SIZE: usize = NamespacedDataId::size();
 pub const NAMESPACED_DATA_ID_MULTIHASH_CODE: u64 = 0x7821;
@@ -20,18 +17,24 @@ pub const NAMESPACED_DATA_ID_CODEC: u64 = 0x7820;
 /// Represents shares from a namespace located on a particular row of Data Square
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct NamespacedDataId {
+    /// Row long which data is located on
+    pub row: RowId,
+    /// Namespace data belongs to
     pub namespace: Namespace,
-    pub row_index: u16,
-    pub hash: [u8; HASH_SIZE],
-    pub block_height: u64,
 }
 
+/// `NamespacedData` is constructed out of the ExtendedDataSquare, containing up to a row of
+/// shares belonging to a particular namespace and a proof of their inclusion. If, for
+/// particular EDS, shares from the namespace span multiple rows, one needs multiple
+/// NamespacedData instances to cover the whole range.
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(try_from = "RawNamespacedData", into = "RawNamespacedData")]
 pub struct NamespacedData {
+    /// Location of the shares on EDS
     pub namespaced_data_id: NamespacedDataId,
-
+    /// Proof of data inclusion
     pub proof: NamespaceProof,
+    /// Shares with data
     pub shares: Vec<Share>,
 }
 
@@ -81,43 +84,27 @@ impl NamespacedDataId {
     /// Creates new NamespacedDataId for row and namespace, computes appropriate root hash
     /// from provided DataAvailabilityHeader
     #[allow(dead_code)] // unused for now
-    pub fn new(
-        namespace: Namespace,
-        row_index: u16,
-        dah: &DataAvailabilityHeader,
-        block_height: u64,
-    ) -> Result<Self> {
+    pub fn new(namespace: Namespace, row_index: usize, block_height: u64) -> Result<Self> {
         if block_height == 0 {
             return Err(Error::ZeroBlockHeight);
         }
 
-        let dah_root = dah
-            .root(AxisType::Row, row_index as usize)
-            .ok_or(Error::EdsIndexOutOfRange(row_index as usize))?;
-        let hash = Sha256::digest(dah_root.to_array()).into();
-
         Ok(Self {
+            row: RowId::new(row_index, block_height)?,
             namespace,
-            row_index,
-            hash,
-            block_height,
         })
     }
 
     /// number of bytes needed to represent `SampleId`
     pub const fn size() -> usize {
         // size of:
-        // NamespacedHash<NS_SIZE> + u16 + [u8; 32] + u64
-        // NS_SIZE ( = 29)         + 2   + 32       + 8
-        NS_SIZE + 42
+        // RowId + Namespace
+        //    10 +        29 = 39
+        RowId::size() + NS_SIZE
     }
 
     fn encode(&self, bytes: &mut BytesMut) {
-        bytes.reserve(NAMESPACED_DATA_ID_SIZE);
-
-        bytes.put_u16_le(self.row_index);
-        bytes.put(&self.hash[..]);
-        bytes.put_u64_le(self.block_height);
+        self.row.encode(bytes);
         bytes.put(self.namespace.as_bytes());
     }
 
@@ -126,23 +113,12 @@ impl NamespacedDataId {
             return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
-        let mut cursor = Cursor::new(buffer);
-
-        let row_index = cursor.get_u16_le();
-        let hash = cursor.copy_to_bytes(HASH_SIZE).as_ref().try_into().unwrap();
-
-        let block_height = cursor.get_u64_le();
-        if block_height == 0 {
-            return Err(CidError::InvalidCid("Zero block height".to_string()));
-        }
-
-        let namespace = Namespace::from_raw(cursor.copy_to_bytes(NS_SIZE).as_ref()).unwrap();
+        let (row_id, namespace) = buffer.split_at(RowId::size());
 
         Ok(Self {
-            namespace,
-            row_index,
-            hash,
-            block_height,
+            row: RowId::decode(row_id)?,
+            namespace: Namespace::from_raw(namespace)
+                .map_err(|e| CidError::InvalidCid(e.to_string()))?,
         })
     }
 }
@@ -191,16 +167,11 @@ impl TryFrom<NamespacedDataId> for CidGeneric<NAMESPACED_DATA_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nmt::{NamespacedHash, NamespacedHashExt};
 
     #[test]
     fn round_trip() {
         let ns = Namespace::new_v0(&[0, 1]).unwrap();
-        let dah = DataAvailabilityHeader {
-            row_roots: vec![NamespacedHash::empty_root(); 10],
-            column_roots: vec![NamespacedHash::empty_root(); 10],
-        };
-        let data_id = NamespacedDataId::new(ns, 5, &dah, 100).unwrap();
+        let data_id = NamespacedDataId::new(ns, 5, 100).unwrap();
         let cid = CidGeneric::try_from(data_id).unwrap();
 
         let multihash = cid.hash();
@@ -217,12 +188,9 @@ mod tests {
             0x01, // CIDv1
             0xA0, 0xF0, 0x01, // CID codec = 7820
             0xA1, 0xF0, 0x01, // multihash code = 7821
-            0x47, // len = NAMESPACED_DATA_ID_SIZE = 45
-            7, 0, // row = 7
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            0xFF, 0xFF, 0xFF, 0xFF, // hash
+            0x27, // len = NAMESPACED_DATA_ID_SIZE = 39
             64, 0, 0, 0, 0, 0, 0, 0, // block height = 64
+            7, 0, // row = 7
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             1, // NS = 1
         ];
@@ -233,9 +201,9 @@ mod tests {
         assert_eq!(mh.code(), NAMESPACED_DATA_ID_MULTIHASH_CODE);
         assert_eq!(mh.size(), NAMESPACED_DATA_ID_SIZE as u8);
         let data_id = NamespacedDataId::try_from(cid).unwrap();
-        assert_eq!(data_id.row_index, 7);
-        assert_eq!(data_id.hash, [0xFF; 32]);
-        assert_eq!(data_id.block_height, 64);
+        assert_eq!(data_id.namespace, Namespace::new_v0(&[1]).unwrap());
+        assert_eq!(data_id.row.block_height, 64);
+        assert_eq!(data_id.row.index, 7);
     }
 
     #[test]
@@ -268,10 +236,10 @@ mod tests {
         let bytes = include_bytes!("../test_data/shwap_samples/namespaced_data.data");
         let msg = NamespacedData::decode(&bytes[..]).unwrap();
 
-        let ns = Namespace::new_v0(&[93, 2, 248, 47, 108, 59, 195, 216, 222, 33]).unwrap();
+        let ns = Namespace::new_v0(&[135, 30, 47, 81, 60, 66, 177, 20, 57, 85]).unwrap();
         assert_eq!(msg.namespaced_data_id.namespace, ns);
-        assert_eq!(msg.namespaced_data_id.row_index, 0);
-        assert_eq!(msg.namespaced_data_id.block_height, 1);
+        assert_eq!(msg.namespaced_data_id.row.index, 0);
+        assert_eq!(msg.namespaced_data_id.row.block_height, 1);
 
         for s in msg.shares {
             assert_eq!(s.namespace(), ns);

@@ -9,13 +9,12 @@ use multihash::Multihash;
 use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
-use tendermint::Hash;
 use tendermint_proto::Protobuf;
 
-use crate::extended_data_square::{AxisType, ExtendedDataSquare};
-use crate::nmt::{NamespaceProof, NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, Nmt};
+use crate::nmt::{Namespace, NamespaceProof, NamespacedHashExt, NamespacedSha2Hasher, Nmt};
 use crate::row::RowId;
-use crate::{Error, Result, Share};
+use crate::rsmt2d::{AxisType, ExtendedDataSquare};
+use crate::{DataAvailabilityHeader, Error, Result, Share};
 
 const SAMPLE_ID_SIZE: usize = SampleId::size();
 pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
@@ -32,10 +31,16 @@ pub struct SampleId {
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(try_from = "RawSample", into = "RawSample")]
 pub struct Sample {
+    /// Location of the sample in the EDS and associated block height
     pub sample_id: SampleId,
 
+    /// Indication whether sampling was done row or column-wise
     pub sample_proof_type: AxisType,
+
+    /// Share that is being sampled
     pub share: Share,
+
+    /// Proof of the inclusion of the share
     pub proof: NamespaceProof,
 }
 
@@ -58,9 +63,8 @@ impl Sample {
 
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
 
-        // XXX: are erasure coded shares correctly prefixed with parity namespace?
         for s in &shares {
-            tree.push_leaf(s.data(), *s.namespace())
+            tree.push_leaf(s.data(), *Namespace::PARITY_SHARE)
                 .map_err(Error::Nmt)?;
         }
 
@@ -80,10 +84,20 @@ impl Sample {
     }
 
     /// Validate sample with root hash from ExtendedHeader
-    pub fn validate(&self, hash: Hash) -> Result<()> {
-        let namespaced_hash = NamespacedHash::from_raw(hash.as_ref())?;
+    pub fn validate(&self, dah: DataAvailabilityHeader) -> Result<()> {
+        // TODO: tests
+        let index = match self.sample_proof_type {
+            AxisType::Row => self.sample_id.row.index,
+            AxisType::Col => self.sample_id.index,
+        }
+        .into();
+
+        let root = dah
+            .root(self.sample_proof_type, index)
+            .ok_or(Error::EdsIndexOutOfRange(index))?;
+
         self.proof
-            .verify_range(&namespaced_hash, &[&self.share], *self.share.namespace())
+            .verify_range(&root, &[&self.share], *self.share.namespace())
             .map_err(Error::RangeProofError)
     }
 }
@@ -259,7 +273,7 @@ mod tests {
             0x81, 0xF0, 0x01, // multihash code = 7801
             0x0C, // len = SAMPLE_ID_SIZE = 12
             64, 0, 0, 0, 0, 0, 0, 0, // block height = 64
-            7, 0, // axis index = 7
+            7, 0, // row index = 7
             5, 0, // sample index = 5
         ];
 
@@ -278,9 +292,9 @@ mod tests {
     fn multihash_invalid_code() {
         let multihash = Multihash::<SAMPLE_ID_SIZE>::wrap(888, &[0; SAMPLE_ID_SIZE]).unwrap();
         let cid = CidGeneric::<SAMPLE_ID_SIZE>::new_v1(SAMPLE_ID_CODEC, multihash);
-        let axis_err = SampleId::try_from(cid).unwrap_err();
+        let code_err = SampleId::try_from(cid).unwrap_err();
         assert_eq!(
-            axis_err,
+            code_err,
             CidError::InvalidMultihashCode(888, SAMPLE_ID_MULTIHASH_CODE)
         );
     }
@@ -291,8 +305,8 @@ mod tests {
             Multihash::<SAMPLE_ID_SIZE>::wrap(SAMPLE_ID_MULTIHASH_CODE, &[0; SAMPLE_ID_SIZE])
                 .unwrap();
         let cid = CidGeneric::<SAMPLE_ID_SIZE>::new_v1(4321, multihash);
-        let axis_err = SampleId::try_from(cid).unwrap_err();
-        assert!(matches!(axis_err, CidError::InvalidCidCodec(4321)));
+        let codec_err = SampleId::try_from(cid).unwrap_err();
+        assert!(matches!(codec_err, CidError::InvalidCidCodec(4321)));
     }
 
     #[test]
