@@ -74,7 +74,7 @@ impl NamespaceProof {
     /// proven [`Namespace`] is not in the range of the tree root [`NamespacedHash`].
     ///
     /// [`Namespace`]: crate::nmt::Namespace
-    /// [`PresenceProof`]: NmtNamespaceProof::PresenceProof
+    /// [`AbsenceProof`]: NmtNamespaceProof::PresenceProof
     /// [`NamespacedHash`]: crate::nmt::NamespacedHash
     pub fn leaf(&self) -> Option<&NamespacedHash> {
         match &self.0 {
