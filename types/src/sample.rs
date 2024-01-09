@@ -2,7 +2,6 @@ use std::mem::size_of;
 
 use blockstore::block::CidError;
 use bytes::{BufMut, BytesMut};
-use celestia_proto::proof::pb::Proof as RawProof;
 use celestia_proto::share::p2p::shwap::Sample as RawSample;
 use cid::CidGeneric;
 use multihash::Multihash;
@@ -11,7 +10,7 @@ use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
-use crate::nmt::{Namespace, NamespaceProof, NamespacedHashExt, NamespacedSha2Hasher, Nmt};
+use crate::nmt::{Namespace, NamespaceProof, NamespacedSha2Hasher, Nmt};
 use crate::row::RowId;
 use crate::rsmt2d::{AxisType, ExtendedDataSquare};
 use crate::{DataAvailabilityHeader, Error, Result, Share};
@@ -23,7 +22,9 @@ pub const SAMPLE_ID_CODEC: u64 = 0x7800;
 /// Represents a location of a sample on the EDS
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct SampleId {
+    /// Row of the EDS being sampled
     pub row: RowId,
+    /// Index in the row of the share being sampled
     pub index: u16,
 }
 
@@ -33,13 +34,10 @@ pub struct SampleId {
 pub struct Sample {
     /// Location of the sample in the EDS and associated block height
     pub sample_id: SampleId,
-
     /// Indication whether sampling was done row or column-wise
     pub sample_proof_type: AxisType,
-
     /// Share that is being sampled
     pub share: Share,
-
     /// Proof of the inclusion of the share
     pub proof: NamespaceProof,
 }
@@ -59,11 +57,17 @@ impl Sample {
             AxisType::Col => (index % square_len, index / square_len),
         };
 
-        let shares = eds.axis(axis_type, axis_index)?;
-
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
 
-        for s in &shares {
+        let shares = eds.axis(axis_type, axis_index)?;
+        let (data_shares, parity_shares) = shares.split_at(square_len / 2);
+
+        for s in data_shares {
+            tree.push_leaf(s.data(), *s.namespace())
+                .map_err(Error::Nmt)?;
+        }
+
+        for s in parity_shares {
             tree.push_leaf(s.data(), *Namespace::PARITY_SHARE)
                 .map_err(Error::Nmt)?;
         }
@@ -84,7 +88,7 @@ impl Sample {
     }
 
     /// Validate sample with root hash from ExtendedHeader
-    pub fn validate(&self, dah: DataAvailabilityHeader) -> Result<()> {
+    pub fn validate(&self, dah: &DataAvailabilityHeader) -> Result<()> {
         // TODO: tests
         let index = match self.sample_proof_type {
             AxisType::Row => self.sample_id.row.index,
@@ -129,21 +133,14 @@ impl TryFrom<RawSample> for Sample {
 
 impl From<Sample> for RawSample {
     fn from(sample: Sample) -> RawSample {
-        let mut sample_id_bytes = BytesMut::new();
+        let mut sample_id_bytes = BytesMut::with_capacity(SAMPLE_ID_SIZE);
         sample.sample_id.encode(&mut sample_id_bytes);
-        let sample_proof = RawProof {
-            start: sample.proof.start_idx() as i64,
-            end: sample.proof.end_idx() as i64,
-            nodes: sample.proof.siblings().iter().map(|h| h.to_vec()).collect(),
-            leaf_hash: vec![], // this is an inclusion proof
-            is_max_namespace_ignored: true,
-        };
 
         RawSample {
             sample_id: sample_id_bytes.to_vec(),
             sample_share: sample.share.to_vec(),
             sample_type: sample.sample_proof_type as u8 as i32,
-            sample_proof: Some(sample_proof),
+            sample_proof: Some(sample.proof.into()),
         }
     }
 }

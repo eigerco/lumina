@@ -7,22 +7,22 @@ use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
-use tendermint::Hash;
 use tendermint_proto::Protobuf;
 
 use crate::nmt::{NamespacedSha2Hasher, Nmt};
 use crate::rsmt2d::ExtendedDataSquare;
-use crate::{Error, Result, Share};
+use crate::{DataAvailabilityHeader, Error, Result, Share};
 
 const ROW_ID_SIZE: usize = RowId::size();
 pub const ROW_ID_MULTIHASH_CODE: u64 = 0x7811;
 pub const ROW_ID_CODEC: u64 = 0x7810;
 
-/// Represents particular particular Row in a specific Data Square,
+/// Represents particular particular row in a specific Data Square,
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct RowId {
-    ///
+    /// Block height of the EDS the row belongs to
     pub block_height: u64,
+    /// Index of the row
     pub index: u16,
 }
 
@@ -32,7 +32,6 @@ pub struct RowId {
 pub struct Row {
     /// Location of the row in the EDS and associated block height
     pub row_id: RowId,
-
     /// Shares contained in the row
     pub shares: Vec<Share>,
 }
@@ -49,7 +48,8 @@ impl Row {
         Ok(Row { row_id, shares })
     }
 
-    pub fn validate(&self, root_hash: Hash) -> Result<()> {
+    /// Validate the row against roots from DAH
+    pub fn validate(&self, dah: &DataAvailabilityHeader) -> Result<()> {
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
 
         for s in &self.shares {
@@ -66,8 +66,12 @@ impl Row {
                 .map_err(Error::Nmt)?;
         }
         */
+        let index = self.row_id.index.into();
+        let Some(root) = dah.row_root(index) else {
+            return Err(Error::EdsIndexOutOfRange(index));
+        };
 
-        if tree.root().hash() != root_hash.as_ref() {
+        if tree.root().hash() != root.hash() {
             return Err(Error::RootMismatch);
         }
 
