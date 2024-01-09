@@ -76,9 +76,6 @@ pub enum Error {
     #[error("Range proof verification failed: {0:?}")]
     RangeProofError(nmt_rs::simple_merkle::error::RangeProofError),
 
-    #[error("Index {0} is out of range for NMT Range Proof")]
-    RangeProofIndexOutOfRange(i64),
-
     #[error("Computed root doesn't match received one")]
     RootMismatch,
 

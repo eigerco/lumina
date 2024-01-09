@@ -6,6 +6,7 @@ use crate::{Error, Result};
 /// The last bit is a "sequence start indicator", that is `1` if this is the
 /// first share of a sequence and `0` if this is a continuation share.
 #[repr(transparent)]
+#[derive(Debug, PartialEq)]
 pub struct InfoByte(u8);
 
 impl InfoByte {
@@ -29,5 +30,18 @@ impl InfoByte {
 
     pub fn as_u8(&self) -> u8 {
         self.0
+    }
+
+    pub fn from_raw(byte: u8) -> Result<Self> {
+        let version = byte >> 1;
+        if version > appconsts::MAX_SHARE_VERSION {
+            Err(Error::MaxShareVersionExceeded(version))
+        } else {
+            Ok(InfoByte(byte))
+        }
+    }
+
+    pub fn from_raw_unchecked(byte: u8) -> Self {
+        InfoByte(byte)
     }
 }

@@ -1,4 +1,5 @@
 use blockstore::block::{Block, CidError};
+use bytes::{BufMut, BytesMut};
 use celestia_proto::share::p2p::shrex::nd::NamespaceRowResponse as RawNamespacedRow;
 use cid::CidGeneric;
 use multihash::Multihash;
@@ -17,6 +18,8 @@ use crate::{Error, Result};
 mod info_byte;
 
 pub use info_byte::InfoByte;
+
+const FIRST_SPARSE_SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTES;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(from = "RawNamespacedShares", into = "RawNamespacedShares")]
@@ -45,14 +48,54 @@ pub struct Share {
 }
 
 impl Share {
+    /// Create a new Share with given namespace, and data, appropriately setting share sequence
+    /// metadata.
+    /// If sequence length is provided, first share is created, with sequence length field included
+    /// and sequence start indicator set. Otherwise continuation share is created.
+    /// Provided data must fit into the share type and is zero padded, if it's shorter.
+    pub fn new_v0(namespace: Namespace, sequence_length: Option<u32>, data: &[u8]) -> Result<Self> {
+        let (max_data_length, info_byte) = if sequence_length.is_some() {
+            (
+                appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE,
+                InfoByte::new(0, true).unwrap(),
+            )
+        } else {
+            (
+                appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE,
+                InfoByte::new(0, false).unwrap(),
+            )
+        };
+
+        if data.len() > max_data_length {
+            let total_len = appconsts::SHARE_SIZE - max_data_length + data.len();
+            return Err(Error::InvalidShareSize(total_len));
+        }
+
+        let mut bytes = BytesMut::with_capacity(appconsts::SHARE_SIZE);
+        bytes.extend_from_slice(namespace.as_bytes());
+        bytes.put_u8(info_byte.as_u8());
+        if let Some(sequence_length) = sequence_length {
+            bytes.put_u32(sequence_length);
+        }
+        bytes.extend_from_slice(data);
+
+        // resize to pad with zeros, since we've checked that the data fits
+        bytes.resize(appconsts::SHARE_SIZE, 0);
+
+        // this is safe, we've just resized it
+        Ok(Self {
+            data: bytes.as_ref().try_into().unwrap(),
+        })
+    }
+
     pub fn from_raw(data: &[u8]) -> Result<Self> {
         if data.len() != appconsts::SHARE_SIZE {
             return Err(Error::InvalidShareSize(data.len()));
         }
 
-        // validate the namespace to later return it
-        // with the `new_unchecked`
+        // validate namespace and info byte so that we can return it later without checks
         Namespace::from_raw(&data[..NS_SIZE])?;
+        InfoByte::from_raw(data[NS_SIZE])?;
 
         Ok(Share {
             data: data.try_into().unwrap(),
@@ -69,6 +112,35 @@ impl Share {
 
     pub fn to_vec(&self) -> Vec<u8> {
         self.as_ref().to_vec()
+    }
+
+    /// Return Share's `InfoByte`
+    pub fn info_byte(&self) -> InfoByte {
+        InfoByte::from_raw_unchecked(self.data[NS_SIZE])
+    }
+
+    /// For first share in a sequence, return sequence length, None for continuation shares
+    pub fn sequence_length(&self) -> Option<u32> {
+        if self.info_byte().is_sequence_start() {
+            let sequence_length_bytes = &self.data[FIRST_SPARSE_SHARE_SEQUENCE_LENGTH_OFFSET
+                ..FIRST_SPARSE_SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES];
+            Some(u32::from_be_bytes(
+                sequence_length_bytes.try_into().unwrap(),
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// Return share content without the namespace and sequence metadata
+    pub fn content(&self) -> &[u8] {
+        let content_offset = if self.info_byte().is_sequence_start() {
+            appconsts::SHARE_SIZE - appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
+        } else {
+            appconsts::SHARE_SIZE - appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE
+        };
+
+        &self.data[content_offset..]
     }
 }
 
@@ -196,6 +268,79 @@ mod tests {
         Share::from_raw(&[0; 2 * appconsts::SHARE_SIZE]).unwrap_err();
 
         Share::from_raw(&vec![0; appconsts::SHARE_SIZE]).unwrap();
+    }
+
+    #[test]
+    fn share_padding_creation() {
+        let ns1 = Namespace::new_v0(&[1]).unwrap();
+        let first_share = Share::new_v0(ns1, Some(2), &[]).unwrap();
+
+        assert_eq!(first_share.namespace(), ns1);
+        assert_eq!(first_share.info_byte(), InfoByte::new(0, true).unwrap());
+        assert_eq!(first_share.sequence_length(), Some(2));
+        assert_eq!(
+            first_share.content(),
+            [0; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE]
+        );
+
+        let continuation_share = Share::new_v0(ns1, None, &[]).unwrap();
+        assert_eq!(continuation_share.namespace(), ns1);
+        assert_eq!(
+            continuation_share.info_byte(),
+            InfoByte::new(0, false).unwrap()
+        );
+        assert_eq!(continuation_share.sequence_length(), None);
+        assert_eq!(
+            continuation_share.content(),
+            [0; appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE]
+        );
+    }
+
+    #[test]
+    fn share_creation_data_length() {
+        let ns1 = Namespace::new_v0(&[1]).unwrap();
+        Share::new_v0(ns1, Some(1), &[]).unwrap();
+        Share::new_v0(
+            ns1,
+            Some(1),
+            &[1; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE],
+        )
+        .unwrap();
+        Share::new_v0(
+            ns1,
+            Some(1),
+            &[1; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE + 1],
+        )
+        .unwrap_err();
+        Share::new_v0(ns1, Some(1), &[1; 9999]).unwrap_err();
+
+        Share::new_v0(ns1, None, &[]).unwrap();
+        Share::new_v0(
+            ns1,
+            None,
+            &[1; appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE],
+        )
+        .unwrap();
+        Share::new_v0(
+            ns1,
+            None,
+            &[1; appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE + 1],
+        )
+        .unwrap_err();
+        Share::new_v0(ns1, None, &[1; 9999]).unwrap_err();
+    }
+
+    #[test]
+    fn share_creation_test_content() {
+        let ns1 = Namespace::new_v0(&[1]).unwrap();
+        let mut content = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let share = Share::new_v0(ns1, None, &content).unwrap();
+        content.resize(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, 0);
+        assert_eq!(share.content(), content);
+
+        let content = [100; appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE];
+        let share = Share::new_v0(ns1, None, &content).unwrap();
+        assert_eq!(share.content(), content);
     }
 
     #[test]

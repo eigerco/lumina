@@ -9,7 +9,7 @@ use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
-use crate::nmt::{NamespacedSha2Hasher, Nmt};
+use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
 use crate::rsmt2d::ExtendedDataSquare;
 use crate::{DataAvailabilityHeader, Error, Result, Share};
 
@@ -42,30 +42,30 @@ impl Row {
         let square_len = eds.square_len();
 
         let row_id = RowId::new(index, block_height)?;
-        let mut shares = eds.row(index)?;
-        shares.truncate(square_len / 2);
+        let shares = &eds.row(index)?[..square_len / 2];
 
-        Ok(Row { row_id, shares })
+        Ok(Row {
+            row_id,
+            shares: shares.to_vec(),
+        })
     }
 
     /// Validate the row against roots from DAH
     pub fn validate(&self, dah: &DataAvailabilityHeader) -> Result<()> {
-        let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+        let square_len = self.shares.len();
 
-        for s in &self.shares {
+        let (data_shares, parity_shares) = self.shares.split_at(square_len / 2);
+
+        let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+        for s in data_shares {
             tree.push_leaf(s.data(), *s.namespace())
                 .map_err(Error::Nmt)?;
         }
-
-        //TODO: only original data shares are sent over the wire, we need leopard codec to
-        //re-compute parity shares
-        /*
-        let parity_shares : Vec<Share> = unimplemented!();
         for s in parity_shares {
             tree.push_leaf(s.data(), *Namespace::PARITY_SHARE)
                 .map_err(Error::Nmt)?;
         }
-        */
+
         let index = self.row_id.index.into();
         let Some(root) = dah.row_root(index) else {
             return Err(Error::EdsIndexOutOfRange(index));
@@ -92,7 +92,14 @@ impl TryFrom<RawRow> for Row {
             .map(|s| Share::from_raw(&s))
             .collect::<Result<Vec<_>>>()?;
 
-        Ok(Row { row_id, shares })
+        // TODO: only original data shares are sent over the wire, we need leopard codec to
+        // re-compute parity shares
+        //
+        // somehow_generate_parity_shares(&mut shares);
+
+        let _ = Row { row_id, shares };
+
+        unimplemented!()
     }
 }
 
@@ -101,9 +108,13 @@ impl From<Row> for RawRow {
         let mut row_id_bytes = BytesMut::new();
         row.row_id.encode(&mut row_id_bytes);
 
+        // parity shares aren't transmitted over shwap, just data shares
+        let square_len = row.shares.len();
+        let row_half = &row.shares[..square_len / 2];
+
         RawRow {
             row_id: row_id_bytes.to_vec(),
-            row_half: row.shares.into_iter().map(|s| s.data.to_vec()).collect(),
+            row_half: row_half.iter().map(|s| s.data.to_vec()).collect(),
         }
     }
 }
@@ -294,6 +305,13 @@ mod tests {
     }
 
     #[test]
+    // TODO:
+    // fully testing protobuf deserialisation requires leopard codec, to generate parity shares.
+    // By asserting that we've reached `unimplemented!`, we rely on implementation detail to
+    // check whether protobuf, RowId and Share deserialisations were successful (but can't check
+    // the actual data)
+    // Once we have leopard codec, remove `should_panic` to enable full test functionality
+    #[should_panic(expected = "not implemented")]
     fn decode_row_bytes() {
         let bytes = include_bytes!("../test_data/shwap_samples/row.data");
         let mut row = Row::decode(&bytes[..]).unwrap();
