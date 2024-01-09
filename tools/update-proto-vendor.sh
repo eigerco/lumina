@@ -23,7 +23,7 @@ rm -rf ../target/proto-vendor-src
 mkdir -p ../target/proto-vendor-src
 
 extract_urls ../target/proto-vendor-src \
-    https://github.com/celestiaorg/celestia-app/archive/refs/heads/main.tar.gz \
+    https://github.com/celestiaorg/celestia-app/archive/refs/tags/v1.4.0.tar.gz \
     https://github.com/celestiaorg/celestia-core/archive/refs/heads/v0.34.x-celestia.tar.gz \
     https://github.com/celestiaorg/celestia-node/archive/refs/heads/main.tar.gz \
     https://github.com/celestiaorg/cosmos-sdk/archive/refs/heads/release/v0.46.x-celestia.tar.gz \
@@ -36,7 +36,7 @@ extract_urls ../target/proto-vendor-src \
 mkdir -p vendor
 
 rm -rf vendor/celestia
-cp -r ../target/proto-vendor-src/celestia-app-main/proto/celestia vendor
+cp -r ../target/proto-vendor-src/celestia-app-1.4.0/proto/celestia vendor
 
 rm -rf vendor/go-header
 mkdir -p vendor/go-header/p2p
