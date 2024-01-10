@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// # Note
 ///
-/// Tx has no types at this level
+/// Transaction has no types at this level
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RawTx {

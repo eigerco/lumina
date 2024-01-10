@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-#![cfg_attr(docs_rs, feature(async_fn_in_trait))]
 
 use cid::CidGeneric;
 use thiserror::Error;
@@ -30,8 +29,10 @@ pub enum BlockstoreError {
 
 type Result<T> = std::result::Result<T, BlockstoreError>;
 
-/// An IPLD blockstore capable of holding arbitrary data indexed by CID. Implementations can impose
-/// limit on supported CID length, and any operations on longer CIDs will fail with [`CidTooLong`]
+/// An IPLD blockstore capable of holding arbitrary data indexed by CID.
+///
+/// Implementations can impose limit on supported CID length, and any operations on longer CIDs
+/// will fail with [`CidTooLong`].
 ///
 /// [`CidTooLong`]: BlockstoreError::CidTooLong
 
