@@ -39,7 +39,7 @@ use crate::{InfoByte, Share};
 /// ```
 ///
 /// Using subtree roots as a base for [`Commitment`] computation allows for much smaller
-/// inclusion proofs than when the [`Share`]s would be used directly, but it implies some
+/// inclusion proofs than when the [`Share`]s would be used directly, but it imposes some
 /// constraints on how the [`Blob`]s can be placed in the [`ExtendedDataSquare`]. You can
 /// read more about that in the [`share commitment rules`].
 ///

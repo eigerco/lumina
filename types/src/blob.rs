@@ -53,7 +53,7 @@ impl Blob {
     ///
     /// # Errors
     ///
-    /// This function will propagate any error from the [`Commitment`] creation.
+    /// This function propagates any error from the [`Commitment`] creation.
     ///
     /// # Example
     ///
@@ -120,7 +120,7 @@ impl Blob {
         Ok(())
     }
 
-    /// Encode the blob into the sequence of shares.
+    /// Encode the blob into a sequence of shares.
     ///
     /// Check the [`Share`] documentation for more information about the share format.
     ///

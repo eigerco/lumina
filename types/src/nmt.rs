@@ -4,7 +4,7 @@
 //! to the Celestia network, you have to assign them to a namespace. You can
 //! later use that namespace to acquire the data back from the network.
 //!
-//! All the data in each block is also ordered by its [`Namespace`]. Things like
+//! All the data in each block is ordered by its [`Namespace`]. Things like
 //! transactions or trailing bytes have its own namespaces too, but those are reserved
 //! for block producers and cannot be utilized when submitting data.
 //!
@@ -55,13 +55,13 @@ pub const NMT_ID_SIZE: usize = 2 * NS_SIZE + SHA256_HASH_SIZE;
 
 /// Hash that carries info about minimum and maximum [`Namespace`] of the hashed data.
 ///
-/// [`NamespacedHash`] can represent the leaves or internal nodes of the [`Nmt`].
+/// [`NamespacedHash`] can represent leaves or internal nodes of the [`Nmt`].
 ///
 /// If it is a hash of a leaf, then it will be constructed like so:
 ///
 /// `leaf_namespace | leaf_namespace | Sha256(0x00 | leaf_namespace | data)`
 ///
-/// If it is a hash of the children nodes, then it will be constructed like so:
+/// If it is a hash of its children nodes, then it will be constructed like so:
 ///
 /// `min_namespace | max_namespace | Sha256(0x01 | left | right)`
 pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
@@ -105,8 +105,8 @@ impl Namespace {
 
     /// Primary reserved [`Namespace`] for the [`Share`]s used for padding.
     ///
-    /// It is used for [`Share`]s inserted after all other shares from primary reserved namespace
-    /// to align user-defined namespaces correctly in [`ExtendedDataSquare`].
+    /// [`Share`]s with this namespace are inserted after other shares from primary reserved namespace
+    /// so that user-defined namespaces are correctly aligned in [`ExtendedDataSquare`]
     ///
     /// [`Share`]: crate::share::Share
     /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
@@ -201,8 +201,8 @@ impl Namespace {
     ///
     /// # Errors
     ///
-    /// This function will return an error if the provided id is of incorrect length
-    /// or if the `id` was of 28 bytes and have incorrect `0x00` prefix.
+    /// This function will return an error if the provided id has incorrect length
+    /// or if the `id` has 28 bytes and have doesn't have mandatory 18x`0x00` bytes prefix
     ///
     /// # Example
     ///
@@ -297,11 +297,11 @@ impl Namespace {
     /// Create a new [`Namespace`] version `255` with a given id.
     ///
     /// [`Namespace`]s with version `255` must have ids prefixed with 27 `0xff` bytes followed by a
-    /// single byte with actual id.
+    /// single byte with an actual id.
     ///
     /// # Errors
     ///
-    /// This function will return an error if the provided id is of incorrect length
+    /// This function will return an error, if the provided id has incorrect length
     /// or if the `id` prefix is incorrect.
     ///
     /// # Example
@@ -328,7 +328,7 @@ impl Namespace {
         }
     }
 
-    /// Converts the [`Namespace`] to the byte slice.
+    /// Converts the [`Namespace`] to a byte slice.
     pub fn as_bytes(&self) -> &[u8] {
         &self.0 .0
     }

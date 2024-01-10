@@ -29,7 +29,7 @@ const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
 /// [`ExtendedHeader`]s are used to announce and describe the blocks
 /// in the Celestia network.
 ///
-/// Before being used, each header should be validated and verified with the header you trust.
+/// Before being used, each header should be validated and verified with a header you trust.
 ///
 /// # Example
 ///

@@ -21,7 +21,7 @@ pub enum Network {
     Private,
 }
 
-/// An unknown network provided.
+/// Unknown network provided.
 #[derive(Debug, Error)]
 #[error("unknown network {0}")]
 pub struct UnknownNetworkError(String);
@@ -64,7 +64,7 @@ pub fn network_genesis(network: Network) -> Option<Hash> {
     Some(Hash::Sha256(array))
 }
 
-/// Get the official Celestia and Lumina bootnodes for the given network.
+/// Get official Celestia and Lumina bootnodes for the given network.
 pub fn canonical_network_bootnodes(network: Network) -> impl Iterator<Item = Multiaddr> {
     let peers: &[_] = match network {
         Network::Mainnet => &[

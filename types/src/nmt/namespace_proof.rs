@@ -83,7 +83,7 @@ impl NamespaceProof {
         }
     }
 
-    /// Returns true if the proof will ignore all the leaves inserted with
+    /// Returns true if the proof ignores all the leaves inserted with
     /// [`Namespace::PARITY_SHARE`].
     ///
     /// [`Namespace::PARITY_SHARE`]: crate::nmt::Namespace::PARITY_SHARE

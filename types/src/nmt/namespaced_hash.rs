@@ -19,9 +19,9 @@ pub trait NamespacedHashExt {
     fn empty_root() -> NamespacedHash;
     /// Try to decode [`NamespacedHash`] from the raw bytes.
     fn from_raw(bytes: &[u8]) -> Result<NamespacedHash>;
-    /// Encode [`NamespacedHash`] to the [`Vec`].
+    /// Encode [`NamespacedHash`] into [`Vec`].
     fn to_vec(&self) -> Vec<u8>;
-    /// Encode [`NamespacedHash`] to the [`array`].
+    /// Encode [`NamespacedHash`] into [`array`].
     fn to_array(&self) -> RawNamespacedHash;
     /// Validate if the [`Namespace`]s covered by this hash are in correct order.
     ///

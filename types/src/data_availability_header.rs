@@ -71,12 +71,12 @@ impl DataAvailabilityHeader {
         }
     }
 
-    /// Get the root of a row with the given index.
+    /// Get a root of the row with the given index.
     pub fn row_root(&self, row: usize) -> Option<NamespacedHash> {
         self.row_roots.get(row).cloned()
     }
 
-    /// Get the root of a column with the given index.
+    /// Get the a root of the column with the given index.
     pub fn column_root(&self, column: usize) -> Option<NamespacedHash> {
         self.column_roots.get(column).cloned()
     }

@@ -1,4 +1,4 @@
-//! Component responsible for the messeging and interacting on peer to peer layer with other nodes.
+//! Component responsible for the messaging and interacting with other nodes on the peer to peer layer.
 //!
 //! It is a high level integration of various p2p protocols used by Celestia nodes.
 //! Currently supporting:
@@ -64,7 +64,7 @@ const KADEMLIA_BOOTSTRAP_PERIOD: Duration = Duration::from_secs(5 * 60);
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
-/// Representation of all the errors that can occur when interacting with the [`P2p`].
+/// Representation of all the errors that can occur when interacting with [`P2p`].
 #[derive(Debug, thiserror::Error)]
 pub enum P2pError {
     /// Failed to initialize gossipsub behaviour.
@@ -83,7 +83,7 @@ pub enum P2pError {
     #[error("Failed to initialize noise: {0}")]
     InitNoise(String),
 
-    /// An error propagated from the dialing.
+    /// Error occured when trying to establish or upgrade an outbound connection.
     #[error("Dial error: {0}")]
     Dial(#[from] DialError),
 
@@ -103,7 +103,7 @@ pub enum P2pError {
     #[error("HeaderEx: {0}")]
     HeaderEx(#[from] HeaderExError),
 
-    /// Bootnode address missing peer ID.
+    /// Bootnode address is missing its peer ID.
     #[error("Bootnode multiaddrs without peer ID: {0:?}")]
     BootnodeAddrsWithoutPeerId(Vec<Multiaddr>),
 }
@@ -230,7 +230,7 @@ where
         Ok(())
     }
 
-    /// Local peer ID in the p2p network.
+    /// Local peer ID on the p2p network.
     pub fn local_peer_id(&self) -> &PeerId {
         &self.local_peer_id
     }
@@ -257,7 +257,7 @@ where
         self.peer_tracker_info_watcher.borrow()
     }
 
-    /// Initializes `header-sub` protocol with given `subjective_head`.
+    /// Initializes `header-sub` protocol with a given `subjective_head`.
     pub async fn init_header_sub(&self, head: ExtendedHeader) -> Result<()> {
         self.send_command(P2pCmd::InitHeaderSub {
             head: Box::new(head),
@@ -366,7 +366,7 @@ where
         Ok(rx.await?)
     }
 
-    /// Get the list of the connected peers.
+    /// Get the list of connected peers.
     pub async fn connected_peers(&self) -> Result<Vec<PeerId>> {
         let (tx, rx) = oneshot::channel();
 

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// The [`ExtendedDataSquare`] consists of four quadrants. The first
 /// quadrant (upper-left) is the original data submitted to the network,
-/// referred to as `OriginalDataSquare`. The rest three quadrants are
+/// referred to as `OriginalDataSquare`. The other three quadrants are
 /// the parity data encoded row-wise or column-wise using Reed-Solomon
 /// `codec` specified in `EDS`.
 ///

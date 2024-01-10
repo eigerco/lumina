@@ -3,7 +3,7 @@
 /// The hash type used commonly in the Celestia.
 pub type Hash = tendermint::hash::Hash;
 
-/// A trait extending the [`Hash`] functionalities.
+/// A trait extending [`Hash`] functionality.
 ///
 /// [`Hash`]: crate::hash::Hash
 pub trait HashExt {

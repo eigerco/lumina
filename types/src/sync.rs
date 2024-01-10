@@ -5,7 +5,7 @@ use tendermint::time::Time;
 /// A state of the blockchain synchronization.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncState {
-    /// The ID of current syncing process.
+    /// The ID of the current syncing process.
     pub id: u64,
     /// Currently synced height.
     pub height: u64,
@@ -21,6 +21,6 @@ pub struct SyncState {
     pub start: Time,
     /// The time when syncing ended.
     pub end: Time,
-    /// The error that could happen during synchronization.
+    /// Any error during synchronisation, if it occured
     pub error: Option<String>,
 }
