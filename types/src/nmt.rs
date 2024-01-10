@@ -256,8 +256,7 @@ impl Namespace {
     /// ```
     /// use celestia_types::nmt::Namespace;
     ///
-    /// let id = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-    /// let namespace = Namespace::const_v0(id);
+    /// const NAMESPACE: Namespace = Namespace::const_v0([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
     /// ```
     pub const fn const_v0(id: [u8; NS_ID_V0_SIZE]) -> Self {
         let mut bytes = [0u8; NS_SIZE];
@@ -284,9 +283,9 @@ impl Namespace {
     /// ```
     /// use celestia_types::nmt::Namespace;
     ///
-    /// let namespace = Namespace::const_v255(0xff);
+    /// const NAMESPACE: Namespace = Namespace::const_v255(0xff);
     ///
-    /// assert_eq!(namespace, Namespace::PARITY_SHARE);
+    /// assert_eq!(NAMESPACE, Namespace::PARITY_SHARE);
     /// ```
     pub const fn const_v255(id: u8) -> Self {
         let mut bytes = [255u8; NS_SIZE];
