@@ -1,9 +1,9 @@
-//! Types related to the samples.
+//! Types related to samples.
 //!
 //! Sample in Celestia is understood as a single [`Share`] located at an
-//! index in the particular [`axis`] of the [`ExtendedDataSquare`].
+//! index in the particular [`row`] of the [`ExtendedDataSquare`].
 //!
-//! [`axis`]: crate::axis
+//! [`row`]: crate::row
 //! [`Share`]: crate::Share
 //! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 
@@ -195,14 +195,11 @@ impl SampleId {
     /// # Example
     ///
     /// ```no_run
-    /// use celestia_types::axis::AxisType;
+    /// use celestia_types::rsmt2d::AxisType;
     /// use celestia_types::sample::SampleId;
-    /// # use celestia_types::ExtendedHeader;
-    /// # fn get_extended_header(_: usize) -> ExtendedHeader {
-    /// #     unimplemented!();
-    /// # }
-    /// let header = get_extended_header(15);
-    /// let square_width = header.dah.square_len();
+    ///
+    /// let square_width = 8;
+    /// let header_height = 15;
     ///
     /// // Create an id of a sample at the 3rd row and 2nd column
     /// // those are indexed from 0
@@ -211,8 +208,7 @@ impl SampleId {
     /// let sample_id = SampleId::new(
     ///     AxisType::Row,
     ///     square_width * row + col,
-    ///     &header.dah,
-    ///     header.height().value(),
+    ///     header_height,
     /// ).unwrap();
     ///
     /// assert_eq!(sample_id.axis.index, row as u16);

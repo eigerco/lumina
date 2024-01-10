@@ -1,3 +1,11 @@
+//! Types related to rows
+//!
+//! Row in Celestia is understood as all the [`Share`]s in a particular
+//! row of the [`ExtendedDataSquare`].
+//!
+//! [`Share`]: crate::Share
+//! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+
 use std::io::Cursor;
 
 use blockstore::block::CidError;

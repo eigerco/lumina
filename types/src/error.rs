@@ -30,6 +30,7 @@ pub enum Error {
     #[error(transparent)]
     Multihash(#[from] cid::multihash::Error),
 
+    /// Error returned when trying to compute new or parse existing CID. See [`blockstore::block`]
     #[error(transparent)]
     CidError(#[from] blockstore::block::CidError),
 
@@ -104,6 +105,7 @@ pub enum Error {
     #[error("Range proof verification failed: {0:?}")]
     RangeProofError(nmt_rs::simple_merkle::error::RangeProofError),
 
+    /// Row root computed from shares doesn't match one received in `DataAvailabilityHeaderz
     #[error("Computed root doesn't match received one")]
     RootMismatch,
 
@@ -158,6 +160,7 @@ pub enum Error {
     #[error("Data square index out of range: {0}")]
     EdsIndexOutOfRange(usize),
 
+    /// Could not create EDS, provided number of shares doesn't form a pefect square
     #[error("Invalid dimensions of EDS")]
     EdsInvalidDimentions,
 
