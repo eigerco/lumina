@@ -20,35 +20,66 @@ pub use info_byte::InfoByte;
 
 const SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTES;
 
+/// A collection of rows of [`Share`]s from a particular [`Namespace`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(from = "RawNamespacedShares", into = "RawNamespacedShares")]
 pub struct NamespacedShares {
+    /// All rows containing shares within some namespace.
     pub rows: Vec<NamespacedRow>,
 }
 
+/// [`Share`]s from a particular [`Namespace`] with proof in the data square row.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawNamespacedRow", into = "RawNamespacedRow")]
 pub struct NamespacedRow {
+    /// All shares within some namespace in the given row.
     pub shares: Vec<Share>,
+    /// A merkle proof of inclusion or absence of the shares in this row.
     pub proof: NamespaceProof,
 }
 
-// NOTE:
-// Share ::= SHARE_SIZE bytes {
-//      Namespace   NS_SIZE bytes
-//      InfoByte    SHARE_INFO_BYTES bytes
-//      SequenceLen SEQUENCE_LEN_BYTES bytes OPTIONAL
-//      Data        bytes
-// }
+/// A single fixed-size chunk of data which is used to form an [`ExtendedDataSquare`].
+///
+/// All data in Celestia is split into [`Share`]s before being put into a
+/// block's data square. See [`Blob::to_shares`].
+///
+/// All shares have the fixed size of 512 bytes and the following structure:
+///
+/// ```text
+/// | Namespace | InfoByte | (optional) sequence length | data |
+/// ```
+///
+/// `sequence length` is the length of the original data in bytes and is present only in the first of the shares the data was split into.
+///
+/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+/// [`Blob::to_shares`]: crate::Blob::to_shares
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "RawShare", into = "RawShare")]
 pub struct Share {
+    /// A raw data of the share.
     pub data: [u8; appconsts::SHARE_SIZE],
 }
 
 impl Share {}
 
 impl Share {
+    /// Create a new [`Share`] from raw bytes.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the slice length isn't
+    /// [`SHARE_SIZE`] or if a namespace encoded in the share is invalid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::Share;
+    ///
+    /// let raw = [0; 512];
+    /// let share = Share::from_raw(&raw).unwrap();
+    /// ```
+    ///
+    /// [`SHARE_SIZE`]: crate::consts::appconsts::SHARE_SIZE
     pub fn from_raw(data: &[u8]) -> Result<Self> {
         if data.len() != appconsts::SHARE_SIZE {
             return Err(Error::InvalidShareSize(data.len()));
@@ -63,14 +94,21 @@ impl Share {
         })
     }
 
+    /// Get the [`Namespace`] the [`Share`] belongs to.
     pub fn namespace(&self) -> Namespace {
         Namespace::new_unchecked(self.data[..NS_SIZE].try_into().unwrap())
     }
 
+    /// Get all the data that follows the [`Namespace`] of the [`Share`].
+    ///
+    /// This will include also the [`InfoByte`] and the `sequence length`.
     pub fn data(&self) -> &[u8] {
         &self.data[NS_SIZE..]
     }
 
+    /// Converts this [`Share`] into the raw bytes vector.
+    ///
+    /// This will include also the [`InfoByte`] and the `sequence length`.
     pub fn to_vec(&self) -> Vec<u8> {
         self.as_ref().to_vec()
     }
@@ -83,8 +121,8 @@ impl Share {
     /// For first share in a sequence, return sequence length, None for continuation shares
     pub fn sequence_length(&self) -> Option<u32> {
         if self.info_byte().is_sequence_start() {
-            let sequence_length_bytes = &self.data[FIRST_SPARSE_SHARE_SEQUENCE_LENGTH_OFFSET
-                ..FIRST_SPARSE_SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES];
+            let sequence_length_bytes = &self.data[SHARE_SEQUENCE_LENGTH_OFFSET
+                ..SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES];
             Some(u32::from_be_bytes(
                 sequence_length_bytes.try_into().unwrap(),
             ))

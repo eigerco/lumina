@@ -14,16 +14,21 @@ use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
 use crate::rsmt2d::ExtendedDataSquare;
 use crate::{DataAvailabilityHeader, Error, Result};
 
+/// The size of the [`RowId`] hash in `multihash`.
 const ROW_ID_SIZE: usize = RowId::size();
+/// The code of the [`RowId`] hashing algorithm in `multihash`.
 pub const ROW_ID_MULTIHASH_CODE: u64 = 0x7811;
+/// The id of codec used for the [`RowId`] in `Cid`s.
 pub const ROW_ID_CODEC: u64 = 0x7810;
 
 /// Represents particular row in a specific Data Square,
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct RowId {
-    /// Block height of the EDS the row belongs to
+    /// A height of the block which contains the data.
     pub block_height: u64,
-    /// Index of the row
+    /// An index of the row in the [`ExtendedDataSquare`].
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub index: u16,
 }
 
@@ -39,11 +44,11 @@ pub struct Row {
 
 impl Row {
     /// Create Row with the given index from EDS
-    pub fn new(index: usize, eds: &ExtendedDataSquare, block_height: u64) -> Result<Self> {
+    pub fn new(index: u16, eds: &ExtendedDataSquare, block_height: u64) -> Result<Self> {
         let square_len = eds.square_len();
 
         let row_id = RowId::new(index, block_height)?;
-        let mut shares = eds.row(index)?;
+        let mut shares = eds.row(index.into())?;
         shares.truncate(square_len / 2);
 
         Ok(Row { row_id, shares })
@@ -116,21 +121,23 @@ impl From<Row> for RawRow {
 }
 
 impl RowId {
-    /// Create new axis for the particular data square
-    pub fn new(index: usize, block_height: u64) -> Result<Self> {
+    /// Create a new [`RowId`] for the particular block.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the block height is invalid.
+    pub fn new(index: u16, block_height: u64) -> Result<Self> {
         if block_height == 0 {
             return Err(Error::ZeroBlockHeight);
         }
 
         Ok(Self {
-            index: index
-                .try_into()
-                .map_err(|_| Error::EdsIndexOutOfRange(index))?,
+            index,
             block_height,
         })
     }
 
-    /// Number of bytes needed to represent `RowId`
+    /// Number of bytes needed to represent [`RowId`]
     pub const fn size() -> usize {
         // size of:
         // u16 + u64

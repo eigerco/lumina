@@ -25,14 +25,16 @@ struct ExtendedHeaderEntry {
     header: Vec<u8>,
 }
 
-// SendWrapper usage is safe in wasm because we're running on a single thread
+/// A [`Store`] implementation based on a `IndexedDB` browser database.
 #[derive(Debug)]
 pub struct IndexedDbStore {
+    // SendWrapper usage is safe in wasm because we're running on a single thread
     head: SendWrapper<RefCell<Option<ExtendedHeader>>>,
     db: SendWrapper<Rexie>,
 }
 
 impl IndexedDbStore {
+    /// Create or open a persistent store.
     pub async fn new(name: &str) -> Result<IndexedDbStore> {
         let rexie = Rexie::builder(name)
             .version(DB_VERSION)
@@ -60,18 +62,19 @@ impl IndexedDbStore {
         })
     }
 
+    /// Delete the persistent store.
     pub async fn delete_db(self) -> rexie::Result<()> {
         let name = self.db.name();
         self.db.take().close();
         Rexie::delete(&name).await
     }
 
-    pub fn get_head(&self) -> Result<ExtendedHeader> {
+    fn get_head(&self) -> Result<ExtendedHeader> {
         // this shouldn't panic, we don't borrow across await points and wasm is single threaded
         self.head.borrow().clone().ok_or(StoreError::NotFound)
     }
 
-    pub fn get_head_height(&self) -> Result<u64> {
+    fn get_head_height(&self) -> Result<u64> {
         // this shouldn't panic, we don't borrow across await points and wasm is single threaded
         self.head
             .borrow()
@@ -80,7 +83,7 @@ impl IndexedDbStore {
             .ok_or(StoreError::NotFound)
     }
 
-    pub async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
+    async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         // quick check with contains_height, which uses cached head
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
@@ -106,7 +109,7 @@ impl IndexedDbStore {
             .map_err(|e| StoreError::CelestiaTypes(e.into()))
     }
 
-    pub async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
+    async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
         let tx = self
             .db
             .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
@@ -125,7 +128,7 @@ impl IndexedDbStore {
             .map_err(|e| StoreError::CelestiaTypes(e.into()))
     }
 
-    pub async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
+    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
         let height = header.height().value();
         let hash = header.hash();
 
@@ -184,7 +187,7 @@ impl IndexedDbStore {
         Ok(())
     }
 
-    pub async fn contains_hash(&self, hash: &Hash) -> Result<bool> {
+    async fn contains_hash(&self, hash: &Hash) -> Result<bool> {
         let tx = self
             .db
             .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
@@ -199,7 +202,7 @@ impl IndexedDbStore {
         Ok(hash_count > 0)
     }
 
-    pub fn contains_height(&self, height: u64) -> bool {
+    fn contains_height(&self, height: u64) -> bool {
         let Ok(head_height) = self.get_head_height() else {
             return false;
         };

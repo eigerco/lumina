@@ -1,3 +1,7 @@
+//! Fraud proof related types and traits.
+//!
+//! A fraud proof is a proof of the detected malicious action done to the network.
+
 use std::convert::Infallible;
 
 use serde::{Deserialize, Serialize, Serializer};
@@ -5,24 +9,32 @@ use tendermint::block::Height;
 use tendermint::Hash;
 use tendermint_proto::Protobuf;
 
-use crate::{byzantine::BadEncodingFraudProof, Error, ExtendedHeader, Result};
+pub use crate::byzantine::BadEncodingFraudProof;
+use crate::{Error, ExtendedHeader, Result};
 
+/// A proof of the malicious actions done to the network.
 pub trait FraudProof {
+    /// Name of the proof type.
     const TYPE: &'static str;
 
-    // HeaderHash returns the block hash.
+    /// HeaderHash returns the block hash.
     fn header_hash(&self) -> Hash;
 
-    // Height returns the block height corresponding to the Proof.
+    /// Height returns the block height corresponding to the Proof.
     fn height(&self) -> Height;
 
-    // Checks the validity of the fraud proof.
-    //
-    // # Errors
-    // Returns an error if some conditions don't pass and thus fraud proof is not valid.
+    /// Checks the validity of the fraud proof.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if some conditions don't pass and thus fraud proof is not valid.
     fn validate(&self, header: &ExtendedHeader) -> Result<()>;
 }
 
+/// Raw representation of the generic fraud proof.
+///
+/// Consists of the name of the proof type and the protobuf serialized payload
+/// holding the proof itself.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RawFraudProof {
     proof_type: String,
@@ -30,10 +42,14 @@ pub struct RawFraudProof {
     data: Vec<u8>,
 }
 
+/// Aggregation of all the supported fraud proofs.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(try_from = "RawFraudProof", into = "RawFraudProof")]
 #[non_exhaustive]
 pub enum Proof {
+    /// A proof that a block producer incorrectly encoded [`ExtendedDataSquare`].
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     BadEncoding(BadEncodingFraudProof),
 }
 

@@ -3,16 +3,32 @@ use crate::{Error, Result};
 
 use nmt_rs::simple_merkle::tree::MerkleHash;
 
+/// Size of the [`NamespacedHash`] in bytes.
 pub const NAMESPACED_HASH_SIZE: usize = NamespacedHash::size();
+/// Size of the Sha256 hash in [`NamespacedHash`] in bytes.
 pub const HASH_SIZE: usize = 32;
 
+/// Byte representation of the [`NamespacedHash`].
 pub type RawNamespacedHash = [u8; NAMESPACED_HASH_SIZE];
 
+/// An extention trait for the [`NamespacedHash`] to perform additional actions.
 pub trait NamespacedHashExt {
+    /// Get the hash of the root of an empty [`Nmt`].
+    ///
+    /// [`Nmt`]: crate::nmt::Nmt
     fn empty_root() -> NamespacedHash;
+    /// Try to decode [`NamespacedHash`] from the raw bytes.
     fn from_raw(bytes: &[u8]) -> Result<NamespacedHash>;
+    /// Encode [`NamespacedHash`] into [`Vec`].
     fn to_vec(&self) -> Vec<u8>;
+    /// Encode [`NamespacedHash`] into [`array`].
     fn to_array(&self) -> RawNamespacedHash;
+    /// Validate if the [`Namespace`]s covered by this hash are in correct order.
+    ///
+    /// I.e. this verifies that the minimum [`Namespace`] of this hash is lower
+    /// or equal to the maximum [`Namespace`].
+    ///
+    /// [`Namespace`]: crate::nmt::Namespace
     fn validate_namespace_order(&self) -> Result<()>;
 }
 

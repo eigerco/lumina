@@ -80,3 +80,7 @@ serde_json = "1.0.107"
 
 [features]
 test-utils = ["celestia-types/test-utils"]
+
+[package.metadata.docs.rs]
+features = ["test-utils"]
+rustdoc-args = ["--cfg", "docs_rs"]

@@ -10,15 +10,74 @@ use crate::{Error, Result};
 
 type NmtNamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;
 
+/// A helper constant to be used as leaves when verifying the [`NamespaceProof`] of absence.
+pub const EMPTY_LEAVES: &[&[u8]] = &[];
+
+/// Merkle proof of inclusion or absence of some data in the [`Nmt`].
+///
+/// # Example
+///
+/// ```
+/// use nmt_rs::NamespaceMerkleHasher;
+/// use celestia_types::nmt::{Namespace, Nmt, NamespacedSha2Hasher, EMPTY_LEAVES};
+///
+/// let ns1 = Namespace::new_v0(&[1]).unwrap();
+/// let ns2 = Namespace::new_v0(&[2]).unwrap();
+/// let ns3 = Namespace::new_v0(&[3]).unwrap();
+/// let ns4 = Namespace::new_v0(&[4]).unwrap();
+///
+/// let leaves = [
+///     (ns1, b"leaf0"),
+///     (ns2, b"leaf1"),
+///     (ns2, b"leaf2"),
+///     (ns4, b"leaf3"),
+/// ];
+///
+/// // create the nmt and feed it with data
+/// let mut nmt = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+///
+/// for (namespace, data) in leaves {
+///     nmt.push_leaf(data, *namespace);
+/// }
+///
+/// // create and verify the proof of inclusion of namespace 2 data
+/// let root = nmt.root();
+/// let proof = nmt.get_namespace_proof(*ns2);
+/// assert!(proof.is_of_presence());
+/// assert!(
+///     proof.verify_complete_namespace(&root, &["leaf1", "leaf2"], *ns2).is_ok()
+/// );
+///
+/// // create and verify the proof of absence of namespace 3 data
+/// let proof = nmt.get_namespace_proof(*ns3);
+/// assert!(proof.is_of_absence());
+/// assert!(
+///     proof.verify_complete_namespace(&root, EMPTY_LEAVES, *ns3).is_ok()
+/// );
+/// ```
+///
+/// [`Nmt`]: crate::nmt::Nmt
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawProof", into = "RawProof")]
 pub struct NamespaceProof(NmtNamespaceProof);
 
 impl NamespaceProof {
+    /// Convert the proof to the underlying [`nmt_rs`] equivalent.
     pub fn into_inner(self) -> NmtNamespaceProof {
         self.0
     }
 
+    /// Get the hash of the leaf following the [`Namespace`] which absence is being proven.
+    ///
+    /// If the tree had contained the proven namespace, it should be in the tree
+    /// right before the leaf returned by this function.
+    ///
+    /// This function returns [`None`] if the proof isn't an [`AbsenceProof`] or the
+    /// proven [`Namespace`] is not in the range of the tree root [`NamespacedHash`].
+    ///
+    /// [`Namespace`]: crate::nmt::Namespace
+    /// [`AbsenceProof`]: NmtNamespaceProof::PresenceProof
+    /// [`NamespacedHash`]: crate::nmt::NamespacedHash
     pub fn leaf(&self) -> Option<&NamespacedHash> {
         match &self.0 {
             NmtNamespaceProof::AbsenceProof { leaf, .. } => leaf.as_ref(),
@@ -26,6 +85,10 @@ impl NamespaceProof {
         }
     }
 
+    /// Returns true if the proof ignores all the leaves inserted with
+    /// [`Namespace::PARITY_SHARE`].
+    ///
+    /// [`Namespace::PARITY_SHARE`]: crate::nmt::Namespace::PARITY_SHARE
     pub fn max_ns_ignored(&self) -> bool {
         match &self.0 {
             NmtNamespaceProof::AbsenceProof { ignore_max_ns, .. }

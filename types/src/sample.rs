@@ -1,3 +1,12 @@
+//! Types related to the samples.
+//!
+//! Sample in Celestia is understood as a single [`Share`] located at an
+//! index in the particular [`axis`] of the [`ExtendedDataSquare`].
+//!
+//! [`axis`]: crate::axis
+//! [`Share`]: crate::Share
+//! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+
 use std::mem::size_of;
 
 use blockstore::block::CidError;
@@ -15,14 +24,21 @@ use crate::row::RowId;
 use crate::rsmt2d::{AxisType, ExtendedDataSquare};
 use crate::{DataAvailabilityHeader, Error, Result};
 
+/// The size of the [`SampleId`] hash in `multihash`.
 const SAMPLE_ID_SIZE: usize = SampleId::size();
+/// The code of the [`SampleId`] hashing algorithm in `multihash`.
 pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
+/// The id of codec used for the [`SampleId`] in `Cid`s.
 pub const SAMPLE_ID_CODEC: u64 = 0x7800;
 
-/// Represents a location of a sample on the EDS
+/// Identifies a particular [`Share`] located in the [`row`] of the [`ExtendedDataSquare`].
+///
+/// [`row`]: crate::row
+/// [`Share`]: crate::Share
+/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct SampleId {
-    /// Row of the EDS being sampled
+    /// Row of the EDS sample is located on
     pub row: RowId,
     /// Index in the row of the share being sampled
     pub index: u16,
@@ -43,7 +59,6 @@ pub struct Sample {
 }
 
 impl Sample {
-    /// Create a new Sample. Index references sample number from the entire Data Square
     pub fn new(
         axis_type: AxisType,
         index: usize,
@@ -163,10 +178,49 @@ impl From<Sample> for RawSample {
 }
 
 impl SampleId {
-    /// Create a new SampleId. Index references sample number from the entire Data Square (it is
-    /// converted to row/col coordinates internally). SampleId doesn't contain information
-    /// whether inclusion proof should be constructed row or column-wise, it's up to the
-    /// responding server to decide (which is then indicated in `Sample::sample_proof_type`)
+    /// Create new [`SampleId`] for the given index of the [`ExtendedDataSquare`] in a block.
+    ///
+    /// When creating the [`SampleId`], [`ExtendedDataSquare`] is indexed as if it was a
+    /// one-dimensional array. I.e. acquiring a `n` sample from the `m` axis, requires
+    /// `index` to be `m * square_len + n`.
+    ///
+    /// The `axis_type` determines whether the [`ExtendedDataSquare`] is traversed in a
+    /// row-major or column-major order.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the block height
+    /// or sample index is invalid.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use celestia_types::axis::AxisType;
+    /// use celestia_types::sample::SampleId;
+    /// # use celestia_types::ExtendedHeader;
+    /// # fn get_extended_header(_: usize) -> ExtendedHeader {
+    /// #     unimplemented!();
+    /// # }
+    /// let header = get_extended_header(15);
+    /// let square_width = header.dah.square_len();
+    ///
+    /// // Create an id of a sample at the 3rd row and 2nd column
+    /// // those are indexed from 0
+    /// let row = 2;
+    /// let col = 1;
+    /// let sample_id = SampleId::new(
+    ///     AxisType::Row,
+    ///     square_width * row + col,
+    ///     &header.dah,
+    ///     header.height().value(),
+    /// ).unwrap();
+    ///
+    /// assert_eq!(sample_id.axis.index, row as u16);
+    /// assert_eq!(sample_id.index, col as u16);
+    /// ```
+    ///
+    /// [`Share`]: crate::Share
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub fn new(index: usize, square_len: usize, block_height: u64) -> Result<Self> {
         let row_index = index / square_len;
         let sample_index = index % square_len;
@@ -175,15 +229,22 @@ impl SampleId {
             return Err(Error::EdsIndexOutOfRange(index));
         }
 
+        let row_id = RowId::new(
+            row_index
+                .try_into()
+                .map_err(|_| Error::EdsIndexOutOfRange(index))?,
+            block_height,
+        )?;
+
         Ok(SampleId {
-            row: RowId::new(row_index, block_height)?,
+            row: row_id,
             index: sample_index
                 .try_into()
                 .map_err(|_| Error::EdsIndexOutOfRange(sample_index))?,
         })
     }
 
-    /// number of bytes needed to represent `SampleId`
+    /// Number of bytes needed to represent `SampleId`.
     pub const fn size() -> usize {
         RowId::size() + size_of::<u16>()
     }

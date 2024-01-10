@@ -1,4 +1,4 @@
-#![cfg_attr(docs_rs, feature(async_fn_in_trait))]
+#![doc = include_str!("../README.md")]
 
 use cid::CidGeneric;
 use thiserror::Error;
@@ -22,17 +22,17 @@ pub enum BlockstoreError {
     #[error("CID length longer that max allowed by the store")]
     CidTooLong,
 
-    /// Error occured when trying to compute CID with [`HasCid`] trait
-    ///
-    /// [`HasCid`]: crate::multihash::HasCid
+    /// Error occured when trying to compute CID.
     #[error("Error generating CID: {0}")]
     CidError(#[from] CidError),
 }
 
 type Result<T> = std::result::Result<T, BlockstoreError>;
 
-/// A IPLD blockstore capable of holding arbitrary data indexed by CID. Implementations can impose
-/// limit on supported CID length, and any operations on longer CIDs will fail with [`CidTooLong`]
+/// An IPLD blockstore capable of holding arbitrary data indexed by CID.
+///
+/// Implementations can impose limit on supported CID length, and any operations on longer CIDs
+/// will fail with [`CidTooLong`].
 ///
 /// [`CidTooLong`]: BlockstoreError::CidTooLong
 
@@ -52,11 +52,7 @@ pub trait Blockstore {
         Ok(self.get(cid).await?.is_some())
     }
 
-    /// Inserts the data into the blockstore, computing CID using [`HasCid`] trait that needs to be
-    /// implemented for [`Block`]
-    ///
-    /// [`Block`]: crate::multihash::Block
-    /// [`HasCid`]: crate::multihash::HasCid
+    /// Inserts the data into the blockstore, computing CID using [`Block`] trait.
     async fn put<const S: usize, B>(&self, block: B) -> Result<()>
     where
         B: Block<S>,

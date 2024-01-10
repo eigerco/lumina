@@ -1,6 +1,15 @@
+//! Celestia hash related types and traits.
+
+/// The hash type used commonly in the Celestia.
 pub type Hash = tendermint::hash::Hash;
 
+/// A trait extending [`Hash`] functionality.
+///
+/// [`Hash`]: crate::hash::Hash
 pub trait HashExt {
+    /// Get the `SHA256` hash of an empty input.
+    ///
+    /// This is equivalent to `sha256sum /dev/null`.
     fn default_sha256() -> Hash;
 }
 

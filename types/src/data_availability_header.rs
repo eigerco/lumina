@@ -12,17 +12,58 @@ use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::rsmt2d::AxisType;
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
+/// Header with commitments of the data availability.
+///
+/// It consists of the root hashes of the merkle trees created from each
+/// row and column of the [`ExtendedDataSquare`]. Those are used to prove
+/// the inclusion of the data in a block.
+///
+/// The hash of this header is a hash of all rows and columns and thus a
+/// data commitment of the block.
+///
+/// # Example
+///
+/// ```no_run
+/// # use celestia_types::{ExtendedHeader, Height, Share};
+/// # use celestia_types::nmt::{Namespace, NamespaceProof};
+/// # fn extended_header() -> ExtendedHeader {
+/// #     unimplemented!();
+/// # }
+/// # fn shares_with_proof(_: Height, _: &Namespace) -> (Vec<Share>, NamespaceProof) {
+/// #     unimplemented!();
+/// # }
+/// // fetch the block header and data for your namespace
+/// let namespace = Namespace::new_v0(&[1, 2, 3, 4]).unwrap();
+/// let eh = extended_header();
+/// let (shares, proof) = shares_with_proof(eh.height(), &namespace);
+///
+/// // get the data commitment for a given row
+/// let dah = eh.dah;
+/// let root = dah.row_root(0).unwrap();
+///
+/// // verify a proof of the inclusion of the shares
+/// assert!(proof.verify_complete_namespace(&root, &shares, *namespace).is_ok());
+/// ```
+///
+/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     try_from = "RawDataAvailabilityHeader",
     into = "RawDataAvailabilityHeader"
 )]
 pub struct DataAvailabilityHeader {
+    /// Merkle roots of the [`ExtendedDataSquare`] rows.
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub row_roots: Vec<NamespacedHash>,
+    /// Merkle roots of the [`ExtendedDataSquare`] columns.
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub column_roots: Vec<NamespacedHash>,
 }
 
 impl DataAvailabilityHeader {
+    /// Get the root from an axis at the given index.
     pub fn root(&self, axis: AxisType, index: usize) -> Option<NamespacedHash> {
         match axis {
             AxisType::Col => self.column_root(index),
@@ -30,14 +71,33 @@ impl DataAvailabilityHeader {
         }
     }
 
+    /// Get a root of the row with the given index.
     pub fn row_root(&self, row: usize) -> Option<NamespacedHash> {
         self.row_roots.get(row).cloned()
     }
 
+    /// Get the a root of the column with the given index.
     pub fn column_root(&self, column: usize) -> Option<NamespacedHash> {
         self.column_roots.get(column).cloned()
     }
 
+    /// Compute the combined hash of all rows and columns.
+    ///
+    /// This is the data commitment for the block.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use celestia_types::ExtendedHeader;
+    /// # fn get_extended_header() -> ExtendedHeader {
+    /// #   let s = include_str!("../test_data/chain1/extended_header_block_1.json");
+    /// #   serde_json::from_str(s).unwrap()
+    /// # }
+    /// let eh = get_extended_header();
+    /// let dah = eh.dah;
+    ///
+    /// assert_eq!(dah.hash(), eh.header.data_hash);
+    /// ```
     pub fn hash(&self) -> Hash {
         let all_roots: Vec<_> = self
             .row_roots
@@ -49,6 +109,9 @@ impl DataAvailabilityHeader {
         Hash::Sha256(simple_hash_from_byte_vectors::<Sha256>(&all_roots))
     }
 
+    /// Get the size of the [`ExtendedDataSquare`] for which this header was built.
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub fn square_len(&self) -> usize {
         // `validate_basic` checks that rows num = cols num
         self.row_roots.len()
