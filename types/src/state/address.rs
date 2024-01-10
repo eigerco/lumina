@@ -9,21 +9,27 @@ use tendermint::account::Id;
 use crate::consts::cosmos::*;
 use crate::{Error, Result};
 
+/// A generic representation of an address in Celestia network.
 #[enum_dispatch(Address)]
 pub trait AddressTrait: FromStr + Display + private::Sealed {
+    /// Get a reference to the account's ID.
     fn id_ref(&self) -> &Id;
+    /// Get the kind of address.
     fn kind(&self) -> AddressKind;
 
+    /// Get the account's ID.
     #[inline]
     fn id(&self) -> Id {
         *self.id_ref()
     }
 
+    /// Convert the address to a byte slice.
     #[inline]
     fn as_bytes(&self) -> &[u8] {
         self.id_ref().as_bytes()
     }
 
+    /// Get a `bech32` human readable prefix of the account kind.
     #[inline]
     fn prefix(&self) -> &'static str {
         self.kind().prefix()
@@ -34,34 +40,45 @@ mod private {
     pub trait Sealed {}
 }
 
+/// Different kinds of addresses supported by Celestia.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AddressKind {
+    /// Account address kind.
     Account,
+    /// Validator address kind.
     Validator,
+    /// Consensus address kind.
     Consensus,
 }
 
+/// A Celestia address. Either account, consensus or validator.
 #[enum_dispatch]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub enum Address {
+    /// Account address.
     AccAddress,
+    /// Validator address.
     ValAddress,
+    /// Consensus address.
     ConsAddress,
 }
 
+/// Address of an account.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct AccAddress {
     id: Id,
 }
 
+/// Address of a validator.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct ValAddress {
     id: Id,
 }
 
+/// Address of a consensus node.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct ConsAddress {
@@ -76,6 +93,7 @@ struct Raw {
 }
 
 impl AddressKind {
+    /// Get the `bech32` human readable prefix.
     pub fn prefix(&self) -> &'static str {
         match self {
             AddressKind::Account => BECH32_PREFIX_ACC_ADDR,
@@ -140,6 +158,7 @@ impl From<Address> for Raw {
 }
 
 impl AccAddress {
+    /// Create a new account address with given ID.
     pub fn new(id: Id) -> Self {
         AccAddress { id }
     }
@@ -195,6 +214,7 @@ impl From<AccAddress> for Raw {
 }
 
 impl ValAddress {
+    /// Create a new validator address with given ID.
     pub fn new(id: Id) -> Self {
         ValAddress { id }
     }
@@ -250,6 +270,7 @@ impl From<ValAddress> for Raw {
 }
 
 impl ConsAddress {
+    /// Create a new consensus address with given ID.
     pub fn new(id: Id) -> Self {
         ConsAddress { id }
     }

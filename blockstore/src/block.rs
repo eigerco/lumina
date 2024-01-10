@@ -29,6 +29,8 @@ pub enum CidError {
 /// Trait for a block of data which can be represented as a string of bytes, which can compute its
 /// own CID
 pub trait Block<const S: usize>: Sync + Send {
+    /// Get the CID of the block.
     fn cid(&self) -> Result<CidGeneric<S>, CidError>;
+    /// Get the data of the block.
     fn data(&self) -> &[u8];
 }

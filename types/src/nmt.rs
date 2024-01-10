@@ -1,3 +1,22 @@
+//! Namespaces and Namespaced Merkle Tree.
+//!
+//! [`Namespace`] is a key to your data in Celestia. Whenever you publish blobs
+//! to the Celestia network, you have to assign them to a namespace. You can
+//! later use that namespace to acquire the data back from the network.
+//!
+//! All the data in each block is ordered by its [`Namespace`]. Things like
+//! transactions or trailing bytes have its own namespaces too, but those are reserved
+//! for block producers and cannot be utilized when submitting data.
+//!
+//! The fact that data in Celestia blocks is ordered allows for various optimizations
+//! when proving data inclusion or absence. There is a namespace-aware implementation
+//! of merkle trees, called 'Namespaced Merkle Tree', shortened as [`Nmt`].
+//!
+//! The generic implementation of this merkle tree lives in [`nmt-rs`]. This module is
+//! a wrapper around that with Celestia specific defaults and functionalities.
+//!
+//! [`nmt-rs`]: https://github.com/sovereign-labs/nmt-rs
+
 use base64::prelude::*;
 use blockstore::block::CidError;
 use cid::CidGeneric;
@@ -12,40 +31,134 @@ use tendermint_proto::serializers::cow_str::CowStr;
 mod namespace_proof;
 mod namespaced_hash;
 
-pub use self::namespace_proof::NamespaceProof;
+pub use self::namespace_proof::{NamespaceProof, EMPTY_LEAVES};
 pub use self::namespaced_hash::{
     NamespacedHashExt, RawNamespacedHash, HASH_SIZE, NAMESPACED_HASH_SIZE,
 };
 use crate::{Error, Result};
 
+/// Namespace version size in bytes.
 pub const NS_VER_SIZE: usize = 1;
+/// Namespace id size in bytes.
 pub const NS_ID_SIZE: usize = 28;
+/// Namespace size in bytes.
 pub const NS_SIZE: usize = NS_VER_SIZE + NS_ID_SIZE;
+/// Size of the user-defined namespace suffix in bytes. For namespaces in version `0`.
 pub const NS_ID_V0_SIZE: usize = 10;
 
+/// The code of the [`Nmt`] hashing algorithm in `multihash`.
 pub const NMT_MULTIHASH_CODE: u64 = 0x7700;
+/// The id of codec used for the [`Nmt`] in `Cid`s.
 pub const NMT_CODEC: u64 = 0x7701;
+/// The size of the [`Nmt`] hash in `multihash`.
 pub const NMT_ID_SIZE: usize = 2 * NS_SIZE + SHA256_HASH_SIZE;
 
-pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
+/// Hash that carries info about minimum and maximum [`Namespace`] of the hashed data.
+///
+/// [`NamespacedHash`] can represent leaves or internal nodes of the [`Nmt`].
+///
+/// If it is a hash of a leaf, then it will be constructed like so:
+///
+/// `leaf_namespace | leaf_namespace | Sha256(0x00 | leaf_namespace | data)`
+///
+/// If it is a hash of its children nodes, then it will be constructed like so:
+///
+/// `min_namespace | max_namespace | Sha256(0x01 | left | right)`
 pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
+/// Hasher for generating [`Namespace`] aware hashes.
+pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
+/// [`Namespace`] aware merkle tree.
 pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
 
-pub struct NodePair(NamespacedHash, NamespacedHash);
-
+/// Namespace of the data published to the celestia network.
+///
+/// The [`Namespace`] is a single byte defining the version
+/// followed by 28 bytes specifying concrete ID of the namespace.
+///
+/// Currently there are two versions of namespaces:
+///  - version `0` - the one allowing for the custom namespace ids. It requires an id to start
+///  with 18 `0x00` bytes followed by a user specified suffix (except reserved ones, see below).
+///  - version `255` - for secondary reserved namespaces. It requires an id to start with 27
+///  `0xff` bytes followed by a single byte indicating the id.
+///
+/// Some namespaces are reserved for the block creation purposes and cannot be used
+/// when submitting the blobs to celestia. Those fall into one of the two categories:
+///  - primary reserved namespaces - those use version `0` and have id lower or equal to `0xff`
+///  so they are always placed in blocks before user-submitted data.
+///  - secondary reserved namespaces - those use version `0xff` so they are always placed after
+///  user-submitted data.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
 impl Namespace {
+    /// Primary reserved [`Namespace`] for the compact [`Share`]s with [`cosmos SDK`] transactions.
+    ///
+    /// [`Share`]: crate::share::Share
+    /// [`cosmos SDK`]: https://docs.cosmos.network/v0.46/core/transactions.html
     pub const TRANSACTION: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+
+    /// Primary reserved [`Namespace`] for the compact [`Share`]s with [`MsgPayForBlobs`] transactions.
+    ///
+    /// [`Share`]: crate::share::Share
+    /// [`MsgPayForBlobs`]: celestia_proto::celestia::blob::v1::MsgPayForBlobs
     pub const PAY_FOR_BLOB: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+
+    /// Primary reserved [`Namespace`] for the [`Share`]s used for padding.
+    ///
+    /// [`Share`]s with this namespace are inserted after other shares from primary reserved namespace
+    /// so that user-defined namespaces are correctly aligned in [`ExtendedDataSquare`]
+    ///
+    /// [`Share`]: crate::share::Share
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub const PRIMARY_RESERVED_PADDING: Namespace = Namespace::MAX_PRIMARY_RESERVED;
+
+    /// Maximal primary reserved [`Namespace`].
+    ///
+    /// Used to indicate the end of the primary reserved group.
+    ///
+    /// [`PRIMARY_RESERVED_PADDING`]: Namespace::PRIMARY_RESERVED_PADDING
     pub const MAX_PRIMARY_RESERVED: Namespace =
         Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff]);
+
+    /// Minimal secondary reserved [`Namespace`].
+    ///
+    /// Used to indicate the beginning of the secondary reserved group.
     pub const MIN_SECONDARY_RESERVED: Namespace = Namespace::const_v255(0);
+
+    /// Secondary reserved [`Namespace`] used for padding after the blobs.
+    ///
+    /// It is used to fill up the `original data square` after all user-submitted
+    /// blobs before the parity data is generated for the [`ExtendedDataSquare`].
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub const TAIL_PADDING: Namespace = Namespace::const_v255(0xfe);
+
+    /// The [`Namespace`] for `parity shares`.
+    ///
+    /// It is the namespace with which all the `parity shares` from
+    /// [`ExtendedDataSquare`] are inserted to the [`Nmt`] when computing
+    /// merkle roots.
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub const PARITY_SHARE: Namespace = Namespace::const_v255(0xff);
 
+    /// Create a new [`Namespace`] from the raw bytes.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the slice length is different than
+    /// [`NS_SIZE`] or if the namespace is invalid. If you are constructing the
+    /// version `0` namespace, check [`new_v0`] for more details.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::nmt::{Namespace, NS_SIZE};
+    /// let raw = [0; NS_SIZE];
+    /// let namespace = Namespace::from_raw(&raw).unwrap();
+    /// ```
+    ///
+    /// [`new_v0`]: crate::nmt::Namespace::new_v0
     pub fn from_raw(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != NS_SIZE {
             return Err(Error::InvalidNamespaceSize);
@@ -54,6 +167,22 @@ impl Namespace {
         Namespace::new(bytes[0], &bytes[1..])
     }
 
+    /// Create a new [`Namespace`] from the version and id.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if provided namespace version isn't supported
+    /// or if the namespace is invalid. If you are constructing the
+    /// version `0` namespace, check [`new_v0`] for more details.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::nmt::Namespace;
+    /// let namespace = Namespace::new(0, b"custom-ns").unwrap();
+    /// ```
+    ///
+    /// [`new_v0`]: crate::nmt::Namespace::new_v0
     pub fn new(version: u8, id: &[u8]) -> Result<Self> {
         match version {
             0 => Self::new_v0(id),
@@ -62,6 +191,36 @@ impl Namespace {
         }
     }
 
+    /// Create a new [`Namespace`] version `0` with given id.
+    ///
+    /// The `id` must be either:
+    ///  - a 28 byte slice specifying full id
+    ///  - a 10 or less byte slice specifying user-defined suffix
+    ///
+    /// [`Namespace`]s in version 0 must have id's prefixed with 18 `0x00` bytes.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the provided id has incorrect length
+    /// or if the `id` has 28 bytes and have doesn't have mandatory 18x`0x00` bytes prefix
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::nmt::Namespace;
+    ///
+    /// // construct using 28 byte slice
+    /// let id = [0u8; 28];
+    /// let namespace = Namespace::new_v0(&id).unwrap();
+    ///
+    /// // construct using <=10 byte suffix
+    /// let namespace = Namespace::new_v0(b"any-suffix").unwrap();
+    ///
+    /// // invalid
+    /// let mut id = [0u8; 28];
+    /// id[4] = 1;
+    /// let namespace = Namespace::new_v0(&id).unwrap_err();
+    /// ```
     pub fn new_v0(id: &[u8]) -> Result<Self> {
         let id_pos = match id.len() {
             // Allow 28 bytes len
@@ -90,6 +249,15 @@ impl Namespace {
         Namespace(nmt_rs::NamespaceId(bytes))
     }
 
+    /// Create a new [`Namespace`] version `0` with a given id.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::nmt::Namespace;
+    ///
+    /// const NAMESPACE: Namespace = Namespace::const_v0([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    /// ```
     pub const fn const_v0(id: [u8; NS_ID_V0_SIZE]) -> Self {
         let mut bytes = [0u8; NS_SIZE];
         let start = NS_SIZE - NS_ID_V0_SIZE;
@@ -108,12 +276,42 @@ impl Namespace {
         Namespace(nmt_rs::NamespaceId(bytes))
     }
 
+    /// Create a new [`Namespace`] version `255` with a given id.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::nmt::Namespace;
+    ///
+    /// const NAMESPACE: Namespace = Namespace::const_v255(0xff);
+    ///
+    /// assert_eq!(NAMESPACE, Namespace::PARITY_SHARE);
+    /// ```
     pub const fn const_v255(id: u8) -> Self {
         let mut bytes = [255u8; NS_SIZE];
         bytes[NS_ID_SIZE] = id;
         Namespace(nmt_rs::NamespaceId(bytes))
     }
 
+    /// Create a new [`Namespace`] version `255` with a given id.
+    ///
+    /// [`Namespace`]s with version `255` must have ids prefixed with 27 `0xff` bytes followed by a
+    /// single byte with an actual id.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error, if the provided id has incorrect length
+    /// or if the `id` prefix is incorrect.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::nmt::Namespace;
+    ///
+    /// // construct using 28 byte slice
+    /// let id = [255u8; 28];
+    /// let namespace = Namespace::new_v255(&id).unwrap();
+    /// ```
     pub fn new_v255(id: &[u8]) -> Result<Self> {
         if id.len() != NS_ID_SIZE {
             return Err(Error::InvalidNamespaceSize);
@@ -129,18 +327,22 @@ impl Namespace {
         }
     }
 
+    /// Converts the [`Namespace`] to a byte slice.
     pub fn as_bytes(&self) -> &[u8] {
         &self.0 .0
     }
 
+    /// Returns the first byte indicating the version of the [`Namespace`].
     pub fn version(&self) -> u8 {
         self.as_bytes()[0]
     }
 
+    /// Returns the trailing 28 bytes indicating the id of the [`Namespace`].
     pub fn id(&self) -> &[u8] {
         &self.as_bytes()[1..]
     }
 
+    /// Returns the 10 bytes user-defined suffix of the [`Namespace`] if it's a version 0.
     pub fn id_v0(&self) -> Option<&[u8]> {
         if self.version() == 0 {
             let start = NS_SIZE - NS_ID_V0_SIZE;
@@ -198,6 +400,9 @@ impl<'de> Deserialize<'de> for Namespace {
         Namespace::from_raw(&buf[..len]).map_err(|e| serde::de::Error::custom(e.to_string()))
     }
 }
+
+/// A pair of two nodes in the [`Nmt`], usually the siblings.
+pub struct NodePair(NamespacedHash, NamespacedHash);
 
 impl NodePair {
     fn validate_namespace_order(&self) -> Result<()> {

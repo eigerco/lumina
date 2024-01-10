@@ -64,7 +64,7 @@ docker compose -f ci/docker-compose.yml up --build --force-recreate -d
 # and to stop it
 docker compose -f ci/docker-compose.yml down
 ```
-> [!NOTE]
+> **Note:**
 > You can run more bridge nodes by uncommenting / replicating the bridge service definition in `ci/docker-compose.yml`.
 
 To get the JWT token for the account with coins (coins will be transferred in block 2):
@@ -87,11 +87,11 @@ celestia rpc header GetByHeight 27 | jq .result
 Make sure you have the celestia network running inside docker compose from the section above.
 
 Generate authentication tokens for the tests
-```
+```bash
 ./tools/gen_auth_tokens.sh
 ```
 
 Run tests
-```
+```bash
 cargo test
 ```

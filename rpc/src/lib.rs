@@ -1,9 +1,12 @@
+#![cfg_attr(docs_rs, feature(doc_cfg))]
+#![doc = include_str!("../README.md")]
+
 mod blob;
 pub mod client;
 mod error;
 mod header;
 #[cfg(feature = "p2p")]
-pub mod p2p;
+mod p2p;
 mod share;
 mod state;
 
@@ -13,10 +16,12 @@ pub use crate::client::Client;
 pub use crate::error::{Error, Result};
 pub use crate::header::HeaderClient;
 #[cfg(feature = "p2p")]
+#[cfg_attr(docs_rs, doc(cfg(feature = "p2p")))]
 pub use crate::p2p::P2PClient;
 pub use crate::share::ShareClient;
 pub use crate::state::StateClient;
 
+/// Re-exports of all the RPC traits.
 pub mod prelude {
     pub use crate::BlobClient;
     pub use crate::HeaderClient;

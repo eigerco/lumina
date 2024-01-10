@@ -20,14 +20,18 @@ use crate::syncer::{Syncer, SyncerArgs, SyncerError, SyncingInfo};
 
 type Result<T, E = NodeError> = std::result::Result<T, E>;
 
+/// Representation of all the errors that can occur when interacting with the [`Node`].
 #[derive(Debug, thiserror::Error)]
 pub enum NodeError {
+    /// An error propagated from the [`P2p`] module.
     #[error(transparent)]
     P2p(#[from] P2pError),
 
+    /// An error propagated from the [`Syncer`] module.
     #[error(transparent)]
     Syncer(#[from] SyncerError),
 
+    /// An error propagated from the [`Store`] module.
     #[error(transparent)]
     Store(#[from] StoreError),
 }
@@ -37,11 +41,17 @@ pub struct NodeConfig<S>
 where
     S: Store + 'static,
 {
+    /// An id of the network to connect to.
     pub network_id: String,
+    /// The hash of the genesis block in network.
     pub genesis_hash: Option<Hash>,
+    /// The keypair to be used as [`Node`]s identity.
     pub p2p_local_keypair: Keypair,
+    /// List of bootstrap nodes to connect to and trust.
     pub p2p_bootnodes: Vec<Multiaddr>,
+    /// List of the addresses where [`Node`] will listen for incoming connections.
     pub p2p_listen_on: Vec<Multiaddr>,
+    /// The store for headers.
     pub store: S,
 }
 
@@ -86,6 +96,8 @@ where
     }
 
     /// Get current [`PeerTracker`] info.
+    ///
+    /// [`PeerTracker`]: crate::peer_tracker::PeerTracker
     pub fn peer_tracker_info(&self) -> PeerTrackerInfo {
         self.p2p.peer_tracker_info().clone()
     }
