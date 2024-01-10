@@ -31,7 +31,7 @@ use tendermint_proto::serializers::cow_str::CowStr;
 mod namespace_proof;
 mod namespaced_hash;
 
-pub use self::namespace_proof::NamespaceProof;
+pub use self::namespace_proof::{NamespaceProof, EMPTY_LEAVES};
 pub use self::namespaced_hash::{
     NamespacedHashExt, RawNamespacedHash, HASH_SIZE, NAMESPACED_HASH_SIZE,
 };

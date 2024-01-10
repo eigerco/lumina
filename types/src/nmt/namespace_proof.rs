@@ -10,13 +10,16 @@ use crate::{Error, Result};
 
 type NmtNamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;
 
+/// A helper constant to be used as leaves when verifying the [`NamespaceProof`] of absence.
+pub const EMPTY_LEAVES: &[&[u8]] = &[];
+
 /// Merkle proof of inclusion or absence of some data in the [`Nmt`].
 ///
 /// # Example
 ///
 /// ```
 /// use nmt_rs::NamespaceMerkleHasher;
-/// use celestia_types::nmt::{Namespace, Nmt, NamespacedSha2Hasher};
+/// use celestia_types::nmt::{Namespace, Nmt, NamespacedSha2Hasher, EMPTY_LEAVES};
 ///
 /// let ns1 = Namespace::new_v0(&[1]).unwrap();
 /// let ns2 = Namespace::new_v0(&[2]).unwrap();
@@ -47,10 +50,9 @@ type NmtNamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher,
 ///
 /// // create and verify the proof of absence of namespace 3 data
 /// let proof = nmt.get_namespace_proof(*ns3);
-/// let empty: &[&[u8]] = &[];
 /// assert!(proof.is_of_absence());
 /// assert!(
-///     proof.verify_complete_namespace(&root, empty, *ns3).is_ok()
+///     proof.verify_complete_namespace(&root, EMPTY_LEAVES, *ns3).is_ok()
 /// );
 /// ```
 ///
