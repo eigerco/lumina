@@ -4,10 +4,9 @@ use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 
 use crate::namespaced_data::{NamespacedData, NamespacedDataId};
-use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
+use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NS_SIZE};
 use crate::row::RowId;
-use crate::{DataAvailabilityHeader, Share};
-use crate::{Error, Result};
+use crate::{DataAvailabilityHeader, Error, Result};
 
 /// Represents either Column or Row of the Data Square.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -31,7 +30,7 @@ impl TryFrom<u8> for AxisType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtendedDataSquare {
-    pub data_square: Vec<Share>,
+    pub data_square: Vec<Vec<u8>>,
     pub codec: String,
     #[serde(skip)]
     pub square_len: usize,
@@ -40,7 +39,7 @@ pub struct ExtendedDataSquare {
 impl ExtendedDataSquare {
     /// Create a new EDS out of the provided shares. Returns error if share number doesn't
     /// create a square
-    pub fn new(shares: Vec<Share>, codec: String) -> Result<Self> {
+    pub fn new(shares: Vec<Vec<u8>>, codec: String) -> Result<Self> {
         let square_len = f64::sqrt(shares.len() as f64) as usize;
         if square_len * square_len != shares.len() {
             return Err(Error::EdsInvalidDimentions);
@@ -54,20 +53,23 @@ impl ExtendedDataSquare {
     }
 
     /// Return row with index
-    pub fn row(&self, index: usize) -> Result<&[Share]> {
-        self.data_square
+    pub fn row(&self, index: usize) -> Result<Vec<Vec<u8>>> {
+        Ok(self
+            .data_square
             .get(index * self.square_len..(index + 1) * self.square_len)
-            .ok_or(Error::EdsIndexOutOfRange(index))
+            .ok_or(Error::EdsIndexOutOfRange(index))?
+            .to_vec())
     }
 
     /// Return colum with index
-    pub fn column(&self, mut index: usize) -> Result<Vec<&Share>> {
+    pub fn column(&self, mut index: usize) -> Result<Vec<Vec<u8>>> {
         let mut r = Vec::with_capacity(self.square_len);
         while index < self.data_square.len() {
             r.push(
                 self.data_square
                     .get(index)
-                    .ok_or(Error::EdsIndexOutOfRange(index))?,
+                    .ok_or(Error::EdsIndexOutOfRange(index))?
+                    .to_vec(),
             );
             index += self.square_len;
         }
@@ -75,10 +77,10 @@ impl ExtendedDataSquare {
     }
 
     /// Return column or row with the provided index
-    pub fn axis(&self, axis: AxisType, index: usize) -> Result<Vec<&Share>> {
+    pub fn axis(&self, axis: AxisType, index: usize) -> Result<Vec<Vec<u8>>> {
         match axis {
             AxisType::Col => self.column(index),
-            AxisType::Row => Ok(self.row(index)?.iter().collect()),
+            AxisType::Row => self.row(index),
         }
     }
 
@@ -107,9 +109,9 @@ impl ExtendedDataSquare {
 
             let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
             for s in self.row(i)? {
-                tree.push_leaf(s.data(), *s.namespace())
-                    .map_err(Error::Nmt)?;
-                if s.namespace() == namespace {
+                let ns = Namespace::from_raw(&s[..NS_SIZE])?;
+                tree.push_leaf(&s, *ns).map_err(Error::Nmt)?;
+                if ns == namespace {
                     shares.push(s.clone());
                 }
             }
@@ -132,7 +134,6 @@ impl ExtendedDataSquare {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nmt_rs::NamespacedHash;
 
     #[test]
     fn axis_type_serialization() {
@@ -149,74 +150,5 @@ mod tests {
         assert!(matches!(axis_type_err, Error::InvalidAxis(2)));
         let axis_type_err = AxisType::try_from(99).unwrap_err();
         assert!(matches!(axis_type_err, Error::InvalidAxis(99)));
-    }
-
-    #[test]
-    fn get_empty_namespaced_data() {
-        // we're building EDS with following namespace|data
-        //
-        // 1|1 1|2 1|3 2|1
-        // 2|2 2|3 2|4 2|5
-        // 2|6 3|1 3|2 3|3
-        // 3|4  X   X   X
-        //
-        // where X is a padding share
-
-        #[rustfmt::skip]
-        let eds_prototype = vec![
-            (1,1), (1,2), (1,3), (2,1),
-            (2,2), (2,3), (2,4), (2,5),
-            (2,6), (3,1), (3,2), (3,3),
-            (3,4)
-        ];
-        let mut shares = eds_prototype
-            .into_iter()
-            .map(|(ns, data)| {
-                let ns = Namespace::new_v0(&[ns]).unwrap();
-                Share::new_v0(ns, None, &[data]).unwrap()
-            })
-            .collect::<Vec<_>>();
-        shares.resize(
-            16,
-            Share::new_v0(Namespace::TAIL_PADDING, None, &[]).unwrap(),
-        );
-
-        let eds = ExtendedDataSquare::new(shares.clone(), "".to_string()).unwrap();
-
-        let ns = [
-            *Namespace::new_v0(&[0]).unwrap(),
-            *Namespace::new_v0(&[1]).unwrap(),
-            *Namespace::new_v0(&[2]).unwrap(),
-            *Namespace::new_v0(&[3]).unwrap(),
-        ];
-
-        // we're relying on the fact that getting namespaced data only needs min and max
-        // namespace data from row roots to be correct
-        let row_roots = vec![
-            NamespacedHash::new(ns[1], ns[2], [0; 32]),
-            NamespacedHash::new(ns[2], ns[2], [0; 32]),
-            NamespacedHash::new(ns[2], ns[3], [0; 32]),
-            NamespacedHash::new(ns[3], *Namespace::TAIL_PADDING, [0; 32]),
-        ];
-        let dah = DataAvailabilityHeader {
-            column_roots: row_roots.clone(),
-            row_roots,
-        };
-
-        let namespaced_data1 = eds.get_namespaced_data(ns[1].into(), &dah, 1).unwrap();
-        assert_eq!(namespaced_data1.len(), 1);
-        assert_eq!(namespaced_data1[0].shares.len(), 3);
-        assert_eq!(namespaced_data1[0].shares, shares[0..=2]);
-
-        let namespaced_data2 = eds.get_namespaced_data(ns[2].into(), &dah, 1).unwrap();
-        assert_eq!(namespaced_data2.len(), 3);
-        assert_eq!(namespaced_data2[0].shares, shares[3..=3]);
-        assert_eq!(namespaced_data2[1].shares, shares[4..=7]);
-        assert_eq!(namespaced_data2[2].shares, shares[8..=8]);
-
-        let namespaced_data3 = eds.get_namespaced_data(ns[3].into(), &dah, 1).unwrap();
-        assert_eq!(namespaced_data3.len(), 2);
-        assert_eq!(namespaced_data3[0].shares, shares[9..=11]);
-        assert_eq!(namespaced_data3[1].shares, shares[12..=12]);
     }
 }

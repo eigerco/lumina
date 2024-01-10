@@ -4,7 +4,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Unsupported namesapce version: {0}")]
+    #[error("Unsupported namespace version: {0}")]
     UnsupportedNamespaceVersion(u8),
 
     #[error("Invalid namespace size")]

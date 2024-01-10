@@ -9,15 +9,16 @@ use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
+use crate::nmt::NS_SIZE;
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
 use crate::rsmt2d::ExtendedDataSquare;
-use crate::{DataAvailabilityHeader, Error, Result, Share};
+use crate::{DataAvailabilityHeader, Error, Result};
 
 const ROW_ID_SIZE: usize = RowId::size();
 pub const ROW_ID_MULTIHASH_CODE: u64 = 0x7811;
 pub const ROW_ID_CODEC: u64 = 0x7810;
 
-/// Represents particular particular row in a specific Data Square,
+/// Represents particular row in a specific Data Square,
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct RowId {
     /// Block height of the EDS the row belongs to
@@ -33,21 +34,19 @@ pub struct Row {
     /// Location of the row in the EDS and associated block height
     pub row_id: RowId,
     /// Shares contained in the row
-    pub shares: Vec<Share>,
+    pub shares: Vec<Vec<u8>>,
 }
 
 impl Row {
-    /// Create Row with given index from the EDS
+    /// Create Row with the given index from EDS
     pub fn new(index: usize, eds: &ExtendedDataSquare, block_height: u64) -> Result<Self> {
         let square_len = eds.square_len();
 
         let row_id = RowId::new(index, block_height)?;
-        let shares = &eds.row(index)?[..square_len / 2];
+        let mut shares = eds.row(index)?;
+        shares.truncate(square_len / 2);
 
-        Ok(Row {
-            row_id,
-            shares: shares.to_vec(),
-        })
+        Ok(Row { row_id, shares })
     }
 
     /// Validate the row against roots from DAH
@@ -58,11 +57,11 @@ impl Row {
 
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
         for s in data_shares {
-            tree.push_leaf(s.data(), *s.namespace())
-                .map_err(Error::Nmt)?;
+            let ns = Namespace::from_raw(&s[..NS_SIZE])?;
+            tree.push_leaf(s, *ns).map_err(Error::Nmt)?;
         }
         for s in parity_shares {
-            tree.push_leaf(s.data(), *Namespace::PARITY_SHARE)
+            tree.push_leaf(s, *Namespace::PARITY_SHARE)
                 .map_err(Error::Nmt)?;
         }
 
@@ -86,11 +85,7 @@ impl TryFrom<RawRow> for Row {
 
     fn try_from(row: RawRow) -> Result<Row, Self::Error> {
         let row_id = RowId::decode(&row.row_id)?;
-        let shares = row
-            .row_half
-            .into_iter()
-            .map(|s| Share::from_raw(&s))
-            .collect::<Result<Vec<_>>>()?;
+        let shares = row.row_half;
 
         // TODO: only original data shares are sent over the wire, we need leopard codec to
         // re-compute parity shares
@@ -110,11 +105,12 @@ impl From<Row> for RawRow {
 
         // parity shares aren't transmitted over shwap, just data shares
         let square_len = row.shares.len();
-        let row_half = &row.shares[..square_len / 2];
+        let mut row_half = row.shares;
+        row_half.truncate(square_len / 2);
 
         RawRow {
             row_id: row_id_bytes.to_vec(),
-            row_half: row_half.iter().map(|s| s.data.to_vec()).collect(),
+            row_half,
         }
     }
 }
@@ -229,7 +225,7 @@ mod tests {
     #[test]
     fn index_calculation() {
         let height = 100;
-        let shares = vec![Share::from_raw(&[0; SHARE_SIZE]).unwrap(); 8 * 8];
+        let shares = vec![vec![0; SHARE_SIZE]; 8 * 8];
         let eds = ExtendedDataSquare::new(shares, "codec".to_string()).unwrap();
 
         Row::new(1, &eds, height).unwrap();
@@ -323,10 +319,11 @@ mod tests {
         assert_eq!(row.row_id.block_height, 255);
 
         for (idx, share) in row.shares.iter().enumerate() {
-            let ns = Namespace::new_v0(&[idx as u8]).unwrap();
-            assert_eq!(share.namespace(), ns);
+            let expected_ns = Namespace::new_v0(&[idx as u8]).unwrap();
+            let ns = Namespace::from_raw(&share[..NS_SIZE]).unwrap();
+            assert_eq!(ns, expected_ns);
             let data = [0; SHARE_SIZE - NS_SIZE];
-            assert_eq!(share.data(), data);
+            assert_eq!(share[NS_SIZE..], data);
         }
     }
 }

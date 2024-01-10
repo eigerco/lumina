@@ -6,7 +6,7 @@ use celestia_types::consts::appconsts::{
     SHARE_INFO_BYTES,
 };
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
-use celestia_types::Blob;
+use celestia_types::{Blob, Share};
 use nmt_rs::NamespaceMerkleHasher;
 
 pub mod utils;
@@ -158,12 +158,12 @@ async fn get_eds() {
         for (x, leaf) in chunk.iter().enumerate() {
             if x < width / 2 && y < width / 2 {
                 // the `OriginalDataSquare` part of the `EDS`
-                let ns = leaf.namespace();
-                nmt.push_leaf(leaf.as_ref(), *ns).unwrap();
+                let share = Share::from_raw(leaf).unwrap();
+                let ns = share.namespace();
+                nmt.push_leaf(share.as_ref(), *ns).unwrap();
             } else {
                 // the parity data computed using `eds.codec`
-                nmt.push_leaf(leaf.as_ref(), *Namespace::PARITY_SHARE)
-                    .unwrap();
+                nmt.push_leaf(leaf, *Namespace::PARITY_SHARE).unwrap();
             }
         }
 

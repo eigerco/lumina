@@ -8,7 +8,7 @@ use tendermint_proto::Protobuf;
 
 use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
 use crate::row::RowId;
-use crate::{Error, Result, Share};
+use crate::{Error, Result};
 
 const NAMESPACED_DATA_ID_SIZE: usize = NamespacedDataId::size();
 pub const NAMESPACED_DATA_ID_MULTIHASH_CODE: u64 = 0x7821;
@@ -17,7 +17,7 @@ pub const NAMESPACED_DATA_ID_CODEC: u64 = 0x7820;
 /// Represents shares from a namespace located on a particular row of Data Square
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct NamespacedDataId {
-    /// Row long which data is located on
+    /// Row on which the data is located on
     pub row: RowId,
     /// Namespace data belongs to
     pub namespace: Namespace,
@@ -35,7 +35,7 @@ pub struct NamespacedData {
     /// Proof of data inclusion
     pub proof: NamespaceProof,
     /// Shares with data
-    pub shares: Vec<Share>,
+    pub shares: Vec<Vec<u8>>,
 }
 
 impl NamespacedData {}
@@ -51,15 +51,10 @@ impl TryFrom<RawNamespacedData> for NamespacedData {
         };
 
         let namespaced_data_id = NamespacedDataId::decode(&namespaced_data.data_id)?;
-        let shares = namespaced_data
-            .data_shares
-            .iter()
-            .map(|s| Share::from_raw(s))
-            .collect::<Result<_, _>>()?;
 
         Ok(NamespacedData {
             namespaced_data_id,
-            shares,
+            shares: namespaced_data.data_shares,
             proof: proof.try_into()?,
         })
     }
@@ -83,7 +78,6 @@ impl From<NamespacedData> for RawNamespacedData {
 impl NamespacedDataId {
     /// Creates new NamespacedDataId for row and namespace, computes appropriate root hash
     /// from provided DataAvailabilityHeader
-    #[allow(dead_code)] // unused for now
     pub fn new(namespace: Namespace, row_index: usize, block_height: u64) -> Result<Self> {
         if block_height == 0 {
             return Err(Error::ZeroBlockHeight);
@@ -157,7 +151,7 @@ impl TryFrom<NamespacedDataId> for CidGeneric<NAMESPACED_DATA_ID_SIZE> {
     fn try_from(namespaced_data_id: NamespacedDataId) -> Result<Self, Self::Error> {
         let mut bytes = BytesMut::with_capacity(NAMESPACED_DATA_ID_SIZE);
         namespaced_data_id.encode(&mut bytes);
-        // length is correct, so unwrap is safe
+        // length is correct, so the unwrap is safe
         let mh = Multihash::wrap(NAMESPACED_DATA_ID_MULTIHASH_CODE, &bytes[..]).unwrap();
 
         Ok(CidGeneric::new_v1(NAMESPACED_DATA_ID_CODEC, mh))
@@ -167,6 +161,7 @@ impl TryFrom<NamespacedDataId> for CidGeneric<NAMESPACED_DATA_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Share;
 
     #[test]
     fn round_trip() {
@@ -242,6 +237,7 @@ mod tests {
         assert_eq!(msg.namespaced_data_id.row.block_height, 1);
 
         for s in msg.shares {
+            let s = Share::from_raw(&s).unwrap();
             assert_eq!(s.namespace(), ns);
         }
     }

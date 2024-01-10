@@ -10,10 +10,10 @@ use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
-use crate::nmt::{Namespace, NamespaceProof, NamespacedSha2Hasher, Nmt};
+use crate::nmt::{Namespace, NamespaceProof, NamespacedSha2Hasher, Nmt, NS_SIZE};
 use crate::row::RowId;
 use crate::rsmt2d::{AxisType, ExtendedDataSquare};
-use crate::{DataAvailabilityHeader, Error, Result, Share};
+use crate::{DataAvailabilityHeader, Error, Result};
 
 const SAMPLE_ID_SIZE: usize = SampleId::size();
 pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
@@ -37,7 +37,7 @@ pub struct Sample {
     /// Indication whether sampling was done row or column-wise
     pub sample_proof_type: AxisType,
     /// Share that is being sampled
-    pub share: Share,
+    pub share: Vec<u8>,
     /// Proof of the inclusion of the share
     pub proof: NamespaceProof,
 }
@@ -63,12 +63,12 @@ impl Sample {
         let (data_shares, parity_shares) = shares.split_at(square_len / 2);
 
         for s in data_shares {
-            tree.push_leaf(s.data(), *s.namespace())
-                .map_err(Error::Nmt)?;
+            let ns = Namespace::from_raw(&s[..NS_SIZE])?;
+            tree.push_leaf(s, *ns).map_err(Error::Nmt)?;
         }
 
         for s in parity_shares {
-            tree.push_leaf(s.data(), *Namespace::PARITY_SHARE)
+            tree.push_leaf(s, *Namespace::PARITY_SHARE)
                 .map_err(Error::Nmt)?;
         }
 
@@ -100,9 +100,27 @@ impl Sample {
             .root(self.sample_proof_type, index)
             .ok_or(Error::EdsIndexOutOfRange(index))?;
 
+        let ns = if self.is_ods_sample(dah.square_len()) {
+            // shares from ODS should be prefixed with the namespace
+            Namespace::from_raw(&self.share[..NS_SIZE]).unwrap()
+        } else {
+            Namespace::PARITY_SHARE
+        };
+
         self.proof
-            .verify_range(&root, &[&self.share], *self.share.namespace())
+            .verify_range(&root, &[&self.share], *ns)
             .map_err(Error::RangeProofError)
+    }
+
+    /// Returns true if and only if provided sample belongs to Original Data Square, first
+    /// quadrant of Extended Data Square
+    fn is_ods_sample(&self, square_len: usize) -> bool {
+        let row_index = usize::from(self.sample_id.row.index);
+        let column_index = usize::from(self.sample_id.index);
+
+        let half_square_len = square_len / 2;
+
+        row_index < half_square_len && column_index < half_square_len
     }
 }
 
@@ -117,7 +135,6 @@ impl TryFrom<RawSample> for Sample {
         };
 
         let sample_id = SampleId::decode(&sample.sample_id)?;
-        let share = Share::from_raw(&sample.sample_share)?;
         let sample_proof_type = u8::try_from(sample.sample_type)
             .map_err(|_| Error::InvalidAxis(sample.sample_type))?
             .try_into()?;
@@ -125,7 +142,7 @@ impl TryFrom<RawSample> for Sample {
         Ok(Sample {
             sample_id,
             sample_proof_type,
-            share,
+            share: sample.sample_share,
             proof: proof.try_into()?,
         })
     }
@@ -315,7 +332,9 @@ mod tests {
         assert_eq!(msg.sample_id.row.index, 0);
         assert_eq!(msg.sample_id.row.block_height, 1);
 
-        let ns = Namespace::new_v0(&[11, 13, 177, 159, 193, 156, 129, 121, 234, 136]).unwrap();
-        assert_eq!(msg.share.namespace(), ns);
+        let expected_ns =
+            Namespace::new_v0(&[11, 13, 177, 159, 193, 156, 129, 121, 234, 136]).unwrap();
+        let ns = Namespace::from_raw(&msg.share[..NS_SIZE]).unwrap();
+        assert_eq!(ns, expected_ns);
     }
 }

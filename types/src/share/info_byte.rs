@@ -32,7 +32,7 @@ impl InfoByte {
         self.0
     }
 
-    pub fn from_raw(byte: u8) -> Result<Self> {
+    pub(crate) fn from_raw(byte: u8) -> Result<Self> {
         let version = byte >> 1;
         if version > appconsts::MAX_SHARE_VERSION {
             Err(Error::MaxShareVersionExceeded(version))
@@ -41,7 +41,7 @@ impl InfoByte {
         }
     }
 
-    pub fn from_raw_unchecked(byte: u8) -> Self {
+    pub(crate) fn from_raw_unchecked(byte: u8) -> Self {
         InfoByte(byte)
     }
 }
