@@ -18,7 +18,7 @@ mod info_byte;
 
 pub use info_byte::InfoByte;
 
-const FIRST_SPARSE_SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTES;
+const SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTES;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(from = "RawNamespacedShares", into = "RawNamespacedShares")]
