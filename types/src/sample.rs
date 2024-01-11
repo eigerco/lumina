@@ -59,6 +59,45 @@ pub struct Sample {
 }
 
 impl Sample {
+    /// Create a new [`Sample`] for the given index of the [`ExtendedDataSquare`] in a block.
+    ///
+    /// `index` specifies the [`Share`] position in EDS, for details see [`SampleId::new`].
+    /// `axis_type` determines whether proof of inclusion of the [`Share`] should be
+    /// constructed for its row or column.
+    ///
+    /// # Errors
+    /// This function will return an error, if:
+    /// - `index` falls outside the provided [`ExtendedDataSquare`]
+    /// - [`ExtendedDataSquare`] is incorrect (either data shares don't have their namespace
+    /// prefixed, or [`Share`]s aren't namespace ordered)
+    /// - block height is zero
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::rsmt2d::AxisType;
+    /// # use celestia_types::rsmt2d::ExtendedDataSquare;
+    /// # use celestia_types::ExtendedHeader;
+    /// # fn get_extended_data_square(height: usize) -> ExtendedDataSquare {
+    /// #    unimplemented!()
+    /// # }
+    /// # fn get_extended_header(height: usize) -> ExtendedHeader {
+    /// #    unimplemented!()
+    /// # }
+    ///
+    /// let block_height = 15;
+    /// let eds = get_extended_data_square(block_height);
+    /// let index = 2 * eds.square_len() + 3 // 3rd row and 4th column as these are 0 indexed
+    ///
+    /// let header = get_extended_header(block_height);
+    ///
+    /// let sample = Sample::new(AxisType::Row, index, &eds, block_height).unwrap();
+    ///
+    /// sample.verify(&header.dah).unwrap();
+    /// ```
+    ///
+    /// [`Share`]: crate::Share
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub fn new(
         axis_type: AxisType,
         index: usize,
@@ -116,8 +155,7 @@ impl Sample {
             .ok_or(Error::EdsIndexOutOfRange(index))?;
 
         let ns = if self.is_ods_sample(dah.square_len()) {
-            // shares from ODS should be prefixed with the namespace
-            Namespace::from_raw(&self.share[..NS_SIZE]).unwrap()
+            Namespace::from_raw(&self.share[..NS_SIZE])?
         } else {
             Namespace::PARITY_SHARE
         };
@@ -178,26 +216,22 @@ impl From<Sample> for RawSample {
 }
 
 impl SampleId {
-    /// Create new [`SampleId`] for the given index of the [`ExtendedDataSquare`] in a block.
+    /// Create a new [`SampleId`] for the given index of the [`ExtendedDataSquare`] in a block.
     ///
-    /// When creating the [`SampleId`], [`ExtendedDataSquare`] is indexed as if it was a
-    /// one-dimensional array. I.e. acquiring a `n` sample from the `m` axis, requires
-    /// `index` to be `m * square_len + n`.
-    ///
-    /// The `axis_type` determines whether the [`ExtendedDataSquare`] is traversed in a
-    /// row-major or column-major order.
+    /// When creating the [`SampleId`], [`ExtendedDataSquare`] is indexed in a row-major order,
+    /// meaning that to get [`Share`] at coordinates `(row_id, col_id)`, one would pass
+    /// `index = row_id * square_len + col_id`
     ///
     /// # Errors
     ///
-    /// This function will return an error if the block height
-    /// or sample index is invalid.
+    /// This function will return an error if the block height or sample index is invalid.
     ///
     /// # Example
     ///
     /// ```no_run
-    /// use celestia_types::rsmt2d::AxisType;
     /// use celestia_types::sample::SampleId;
     ///
+    /// // Consider an 64 share EDS with block height of 15
     /// let square_width = 8;
     /// let header_height = 15;
     ///
@@ -206,8 +240,8 @@ impl SampleId {
     /// let row = 2;
     /// let col = 1;
     /// let sample_id = SampleId::new(
-    ///     AxisType::Row,
     ///     square_width * row + col,
+    ///     square_width,
     ///     header_height,
     /// ).unwrap();
     ///
