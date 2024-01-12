@@ -18,11 +18,11 @@ pub enum Error {
     #[error("Invalid namespace size")]
     InvalidNamespaceSize,
 
-    /// Error propagated from the [`tendermint`].
+    /// Error propagated from the [`celestia_tendermint`].
     #[error(transparent)]
     Tendermint(#[from] celestia_tendermint::Error),
 
-    /// Error propagated from the [`tendermint_proto`].
+    /// Error propagated from the [`celestia_tendermint_proto`].
     #[error(transparent)]
     Protobuf(#[from] celestia_tendermint_proto::Error),
 
