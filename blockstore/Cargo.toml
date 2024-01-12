@@ -3,6 +3,13 @@ name = "blockstore"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
+description = "An IPLD blockstore capable of holding arbitrary data indexed by CID"
+repository = "https://github.com/eigerco/lumina"
+readme = "README.md"
+# crates.io is limited to 5 keywords and 5 categories
+keywords = ["bitswap", "blockstore", "ipld", "cid"]
+# Must be one of <https://crates.io/category_slugs>
+categories = ["asynchronous", "data-structures"]
 
 [dependencies]
 async-trait = "0.1.73"
