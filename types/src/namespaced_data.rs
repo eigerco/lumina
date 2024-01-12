@@ -42,10 +42,10 @@ pub struct NamespacedDataId {
     pub namespace: Namespace,
 }
 
-/// `NamespacedData` is constructed out of the ExtendedDataSquare, containing up to a row of
-/// shares belonging to a particular namespace and a proof of their inclusion. If, for
-/// particular EDS, shares from the namespace span multiple rows, one needs multiple
-/// NamespacedData instances to cover the whole range.
+/// `NamespacedData` contains up to a row of shares belonging to a particular namespace and a proof of their inclusion.
+///
+/// It is constructed out of the ExtendedDataSquare. If, for particular EDS, shares from the namespace span multiple rows,
+/// one needs multiple NamespacedData instances to cover the whole range.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(try_from = "RawNamespacedData", into = "RawNamespacedData")]
 pub struct NamespacedData {
