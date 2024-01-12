@@ -12,12 +12,12 @@ use std::mem::size_of;
 use blockstore::block::CidError;
 use bytes::{BufMut, BytesMut};
 use celestia_proto::share::p2p::shwap::Sample as RawSample;
+use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
-use celestia_tendermint_proto::Protobuf;
 
 use crate::nmt::{Namespace, NamespaceProof, NamespacedSha2Hasher, Nmt, NS_SIZE};
 use crate::row::RowId;
