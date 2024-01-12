@@ -1,8 +1,8 @@
 use celestia_proto::celestia::da::DataAvailabilityHeader as RawDataAvailabilityHeader;
+use celestia_tendermint::merkle::simple_hash_from_byte_vectors;
+use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use tendermint::merkle::simple_hash_from_byte_vectors;
-use tendermint_proto::Protobuf;
 
 use crate::consts::data_availability_header::{
     MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,

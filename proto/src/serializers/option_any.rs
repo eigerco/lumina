@@ -11,7 +11,7 @@ where
     #[derive(Deserialize)]
     struct Def {
         type_url: String,
-        #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
+        #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]
         value: Vec<u8>,
     }
 
@@ -31,7 +31,7 @@ where
     #[derive(Serialize)]
     struct Def<'a> {
         type_url: &'a str,
-        #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
+        #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]
         value: &'a [u8],
     }
 

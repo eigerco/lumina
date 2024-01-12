@@ -7,9 +7,9 @@ license = "Apache-2.0"
 [dependencies]
 blockstore = { workspace = true }
 celestia-proto = { workspace = true }
+celestia-tendermint = { workspace = true, features = ["std", "rust-crypto"] }
+celestia-tendermint-proto = { workspace = true }
 nmt-rs = { workspace = true }
-tendermint = { workspace = true, features = ["std", "rust-crypto"] }
-tendermint-proto = { workspace = true }
 
 base64 = "0.21.2"
 bech32 = "0.9.1"
@@ -45,7 +45,7 @@ wasm-bindgen-test = "0.3"
 default = ["p2p"]
 p2p = ["dep:libp2p-identity", "dep:multiaddr", "dep:serde_repr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
-wasm-bindgen = ["tendermint/wasm-bindgen"]
+wasm-bindgen = ["celestia-tendermint/wasm-bindgen"]
 
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]

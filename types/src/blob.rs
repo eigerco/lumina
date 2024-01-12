@@ -1,8 +1,8 @@
 //! Types related to creation and submission of blobs.
 
+use celestia_tendermint_proto::v0_34::types::Blob as RawBlob;
+use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
-use tendermint_proto::v0_34::types::Blob as RawBlob;
-use tendermint_proto::Protobuf;
 
 mod commitment;
 
@@ -38,7 +38,7 @@ pub struct Blob {
     /// A [`Namespace`] the [`Blob`] belongs to.
     pub namespace: Namespace,
     /// Data stored within the [`Blob`].
-    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
+    #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]
     pub data: Vec<u8>,
     /// Version indicating the format in which [`Share`]s should be created from this [`Blob`].
     ///

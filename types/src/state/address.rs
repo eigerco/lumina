@@ -2,9 +2,9 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use bech32::{FromBase32, ToBase32};
+use celestia_tendermint::account::Id;
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
-use tendermint::account::Id;
 
 use crate::consts::cosmos::*;
 use crate::{Error, Result};
@@ -88,7 +88,7 @@ pub struct ConsAddress {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 struct Raw {
-    #[serde(with = "tendermint_proto::serializers::from_str")]
+    #[serde(with = "celestia_tendermint_proto::serializers::from_str")]
     addr: String,
 }
 

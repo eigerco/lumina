@@ -1,8 +1,8 @@
 //! [`serde`] serializer for the optional [`Timestamp`].
 
+use celestia_tendermint_proto::google::protobuf::Timestamp;
+use celestia_tendermint_proto::serializers::timestamp;
 use serde::{Deserialize, Deserializer, Serializer};
-use tendermint_proto::google::protobuf::Timestamp;
-use tendermint_proto::serializers::timestamp;
 
 /// Deserialize `Option<Timestamp>`.
 pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Timestamp>, D::Error>

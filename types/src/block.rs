@@ -1,7 +1,7 @@
-use tendermint::block::{Commit, CommitSig, Header, Id};
-use tendermint::signature::SIGNATURE_LENGTH;
-use tendermint::vote;
-use tendermint::{chain, Hash, Vote};
+use celestia_tendermint::block::{Commit, CommitSig, Header, Id};
+use celestia_tendermint::signature::SIGNATURE_LENGTH;
+use celestia_tendermint::vote;
+use celestia_tendermint::{chain, Hash, Vote};
 
 use crate::consts::{genesis::MAX_CHAIN_ID_LEN, version};
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
@@ -9,7 +9,7 @@ use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 pub(crate) const GENESIS_HEIGHT: u64 = 1;
 
 /// The height of the block in Celestia network.
-pub type Height = tendermint::block::Height;
+pub type Height = celestia_tendermint::block::Height;
 
 impl ValidateBasic for Header {
     fn validate_basic(&self) -> Result<(), ValidationError> {
@@ -98,12 +98,12 @@ impl ValidateBasic for CommitSig {
 
 /// An extension trait for the [`Commit`] to perform additional actions.
 ///
-/// [`Commit`]: tendermint::block::Commit
+/// [`Commit`]: celestia_tendermint::block::Commit
 pub trait CommitExt {
     /// Get the signed [`Vote`] from the [`Commit`] at the given index.
     ///
-    /// [`Commit`]: tendermint::block::Commit
-    /// [`Vote`]: tendermint::Vote
+    /// [`Commit`]: celestia_tendermint::block::Commit
+    /// [`Vote`]: celestia_tendermint::Vote
     fn vote_sign_bytes(&self, chain_id: &chain::Id, signature_idx: usize) -> Result<Vec<u8>>;
 }
 

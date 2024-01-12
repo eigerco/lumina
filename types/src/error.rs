@@ -20,11 +20,11 @@ pub enum Error {
 
     /// Error propagated from the [`tendermint`].
     #[error(transparent)]
-    Tendermint(#[from] tendermint::Error),
+    Tendermint(#[from] celestia_tendermint::Error),
 
     /// Error propagated from the [`tendermint_proto`].
     #[error(transparent)]
-    Protobuf(#[from] tendermint_proto::Error),
+    Protobuf(#[from] celestia_tendermint_proto::Error),
 
     /// Error propagated from the [`cid::multihash`].
     #[error(transparent)]

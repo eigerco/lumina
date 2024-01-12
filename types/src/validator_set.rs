@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use tendermint::block::CommitSig;
-use tendermint::crypto::default::signature::Verifier;
-use tendermint::validator::{Info, Set};
-use tendermint::{account, block, chain};
+use celestia_tendermint::block::CommitSig;
+use celestia_tendermint::crypto::default::signature::Verifier;
+use celestia_tendermint::validator::{Info, Set};
+use celestia_tendermint::{account, block, chain};
 
 use crate::trust_level::TrustLevelRatio;
 use crate::{
@@ -162,7 +162,7 @@ fn find_validator<'a>(vals: &'a Set, val_id: &account::Id) -> Option<(usize, &'a
 mod tests {
     use super::*;
 
-    use tendermint_proto::v0_34::types::ValidatorSet as RawValidatorSet;
+    use celestia_tendermint_proto::v0_34::types::ValidatorSet as RawValidatorSet;
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;

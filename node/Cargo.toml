@@ -6,6 +6,7 @@ license = "Apache-2.0"
 
 [dependencies]
 celestia-proto = { workspace = true }
+celestia-tendermint-proto = { workspace = true }
 celestia-types = { workspace = true }
 libp2p = { workspace = true, features = [
   "autonat",
@@ -16,7 +17,6 @@ libp2p = { workspace = true, features = [
   "request-response",
   "kad",
 ] }
-tendermint-proto = { workspace = true }
 
 async-trait = "0.1.73"
 dashmap = "5.5.3"

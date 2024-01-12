@@ -1,6 +1,6 @@
+use celestia_tendermint::hash::Hash;
+use celestia_tendermint::time::Time;
 use serde::{Deserialize, Serialize};
-use tendermint::hash::Hash;
-use tendermint::time::Time;
 
 /// A state of the blockchain synchronization.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
