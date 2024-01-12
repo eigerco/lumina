@@ -70,7 +70,7 @@ impl NamespacedData {
     /// # fn get_extended_header(height: usize) -> ExtendedHeader {
     /// #    unimplemented!()
     /// # }
-    ///
+    /// #
     /// let block_height = 100;
     /// let eds = get_extended_data_square(block_height);
     /// let header = get_extended_header(block_height);
