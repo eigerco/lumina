@@ -12,7 +12,7 @@ use celestia_proto::share::p2p::shwap::Data as RawNamespacedData;
 use cid::CidGeneric;
 use multihash::Multihash;
 use serde::{Deserialize, Serialize};
-use tendermint_proto::Protobuf;
+use celestia_tendermint_proto::Protobuf;
 
 use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
 use crate::row::RowId;

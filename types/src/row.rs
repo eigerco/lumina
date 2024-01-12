@@ -15,7 +15,7 @@ use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
-use tendermint_proto::Protobuf;
+use celestia_tendermint_proto::Protobuf;
 
 use crate::nmt::NS_SIZE;
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt};

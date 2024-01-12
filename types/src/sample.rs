@@ -17,7 +17,7 @@ use multihash::Multihash;
 use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
-use tendermint_proto::Protobuf;
+use celestia_tendermint_proto::Protobuf;
 
 use crate::nmt::{Namespace, NamespaceProof, NamespacedSha2Hasher, Nmt, NS_SIZE};
 use crate::row::RowId;

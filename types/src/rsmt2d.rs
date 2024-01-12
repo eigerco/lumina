@@ -244,7 +244,7 @@ impl ExtendedDataSquare {
 
 #[derive(Deserialize)]
 struct RawExtendedDataSquare {
-    #[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]
+    #[serde(with = "celestia_tendermint_proto::serializers::bytes::vec_base64string")]
     pub data_square: Vec<Vec<u8>>,
     pub codec: String,
 }
