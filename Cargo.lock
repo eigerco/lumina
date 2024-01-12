@@ -679,12 +679,12 @@ name = "celestia-proto"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "celestia-tendermint-proto",
  "prost",
  "prost-build",
  "prost-types",
  "serde",
  "serde_json",
- "tendermint-proto",
  "wasm-bindgen-test",
 ]
 
@@ -709,6 +709,54 @@ dependencies = [
 ]
 
 [[package]]
+name = "celestia-tendermint"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c452fbfbc7b397f5ee39be36bfbbb1870898f8644f88da96fcdbda9015397d51"
+dependencies = [
+ "bytes",
+ "celestia-tendermint-proto",
+ "digest 0.10.7",
+ "ed25519",
+ "ed25519-consensus",
+ "flex-error",
+ "futures",
+ "instant",
+ "num-traits",
+ "once_cell",
+ "prost",
+ "prost-types",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "serde_repr",
+ "sha2 0.10.8",
+ "signature",
+ "subtle",
+ "subtle-encoding",
+ "time",
+ "zeroize",
+]
+
+[[package]]
+name = "celestia-tendermint-proto"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "670067a9fb113fe86cb5f1b3db08c718da158a40beed6d167027ae7723fb5642"
+dependencies = [
+ "bytes",
+ "flex-error",
+ "num-derive",
+ "num-traits",
+ "prost",
+ "prost-types",
+ "serde",
+ "serde_bytes",
+ "subtle-encoding",
+ "time",
+]
+
+[[package]]
 name = "celestia-types"
 version = "0.1.0"
 dependencies = [
@@ -717,6 +765,8 @@ dependencies = [
  "blockstore",
  "bytes",
  "celestia-proto",
+ "celestia-tendermint",
+ "celestia-tendermint-proto",
  "cid",
  "const_format",
  "ed25519-consensus",
@@ -734,8 +784,6 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "sha2 0.10.8",
- "tendermint",
- "tendermint-proto",
  "thiserror",
  "wasm-bindgen-test",
 ]
@@ -2714,6 +2762,7 @@ dependencies = [
  "bytes",
  "celestia-proto",
  "celestia-rpc",
+ "celestia-tendermint-proto",
  "celestia-types",
  "dashmap",
  "directories",
@@ -2737,7 +2786,6 @@ dependencies = [
  "sled",
  "smallvec",
  "tempdir",
- "tendermint-proto",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -4594,52 +4642,6 @@ dependencies = [
  "redox_syscall 0.3.5",
  "rustix 0.38.11",
  "windows-sys",
-]
-
-[[package]]
-name = "tendermint"
-version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=bbe7de8#bbe7de8c777f0c44b338f4bf26f0f6efb18e87f0"
-dependencies = [
- "bytes",
- "digest 0.10.7",
- "ed25519",
- "ed25519-consensus",
- "flex-error",
- "futures",
- "instant",
- "num-traits",
- "once_cell",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "serde_json",
- "serde_repr",
- "sha2 0.10.8",
- "signature",
- "subtle",
- "subtle-encoding",
- "tendermint-proto",
- "time",
- "zeroize",
-]
-
-[[package]]
-name = "tendermint-proto"
-version = "0.32.0"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs.git?rev=bbe7de8#bbe7de8c777f0c44b338f4bf26f0f6efb18e87f0"
-dependencies = [
- "bytes",
- "flex-error",
- "num-derive",
- "num-traits",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "subtle-encoding",
- "time",
 ]
 
 [[package]]

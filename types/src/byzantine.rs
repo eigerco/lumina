@@ -1,9 +1,9 @@
 use celestia_proto::share::eds::byzantine::pb::BadEncoding as RawBadEncodingFraudProof;
 use celestia_proto::share::eds::byzantine::pb::Share as RawShareWithProof;
+use celestia_tendermint::{block::Height, Hash};
+use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use serde::{Deserialize, Serialize};
-use tendermint::{block::Height, Hash};
-use tendermint_proto::Protobuf;
 
 use crate::bail_validation;
 use crate::consts::appconsts;

@@ -4,10 +4,10 @@
 
 use std::convert::Infallible;
 
+use celestia_tendermint::block::Height;
+use celestia_tendermint::Hash;
+use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize, Serializer};
-use tendermint::block::Height;
-use tendermint::Hash;
-use tendermint_proto::Protobuf;
 
 pub use crate::byzantine::BadEncodingFraudProof;
 use crate::{Error, ExtendedHeader, Result};
@@ -38,7 +38,7 @@ pub trait FraudProof {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RawFraudProof {
     proof_type: String,
-    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
+    #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]
     data: Vec<u8>,
 }
 

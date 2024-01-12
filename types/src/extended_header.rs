@@ -3,12 +3,12 @@ use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
+use celestia_tendermint::block::header::Header;
+use celestia_tendermint::block::{Commit, Height};
+use celestia_tendermint::chain::id::Id;
+use celestia_tendermint::{validator, Hash, Time};
+use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
-use tendermint::block::header::Header;
-use tendermint::block::{Commit, Height};
-use tendermint::chain::id::Id;
-use tendermint::{validator, Hash, Time};
-use tendermint_proto::Protobuf;
 
 use crate::trust_level::DEFAULT_TRUST_LEVEL;
 use crate::validator_set::ValidatorSetExt;

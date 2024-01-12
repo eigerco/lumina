@@ -1,7 +1,7 @@
 //! Celestia hash related types and traits.
 
 /// The hash type used commonly in the Celestia.
-pub type Hash = tendermint::hash::Hash;
+pub type Hash = celestia_tendermint::hash::Hash;
 
 /// A trait extending [`Hash`] functionality.
 ///

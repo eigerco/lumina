@@ -19,14 +19,14 @@
 
 use base64::prelude::*;
 use blockstore::block::CidError;
+use celestia_tendermint::hash::SHA256_HASH_SIZE;
+use celestia_tendermint_proto::serializers::cow_str::CowStr;
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::simple_merkle::db::MemDb;
 use nmt_rs::simple_merkle::tree::MerkleHash;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use tendermint::hash::SHA256_HASH_SIZE;
-use tendermint_proto::serializers::cow_str::CowStr;
 
 mod namespace_proof;
 mod namespaced_hash;

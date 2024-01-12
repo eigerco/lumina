@@ -1,11 +1,11 @@
 use blockstore::block::{Block, CidError};
 use celestia_proto::share::p2p::shrex::nd::NamespaceRowResponse as RawNamespacedRow;
+use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::simple_merkle::tree::MerkleHash;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
-use tendermint_proto::Protobuf;
 
 use crate::consts::appconsts;
 use crate::nmt::{
@@ -181,7 +181,7 @@ impl From<NamespacedShares> for RawNamespacedShares {
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
 struct RawShare {
-    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
+    #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]
     data: Vec<u8>,
 }
 

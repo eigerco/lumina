@@ -4,10 +4,10 @@ use anyhow::Result;
 
 const SERIALIZED: &str = r#"#[derive(::serde::Deserialize, ::serde::Serialize)] #[serde(default)]"#;
 const BASE64STRING: &str =
-    r#"#[serde(with = "tendermint_proto::serializers::bytes::base64string")]"#;
-const QUOTED: &str = r#"#[serde(with = "tendermint_proto::serializers::from_str")]"#;
+    r#"#[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]"#;
+const QUOTED: &str = r#"#[serde(with = "celestia_tendermint_proto::serializers::from_str")]"#;
 const VEC_BASE64STRING: &str =
-    r#"#[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]"#;
+    r#"#[serde(with = "celestia_tendermint_proto::serializers::bytes::vec_base64string")]"#;
 const OPTION_ANY: &str = r#"#[serde(with = "crate::serializers::option_any")]"#;
 const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_timestamp")]"#;
 
@@ -69,14 +69,14 @@ fn main() -> Result<()> {
 
     config
         .include_file("mod.rs")
-        .extern_path(".tendermint", "::tendermint_proto::v0_34")
+        .extern_path(".tendermint", "::celestia_tendermint_proto::v0_34")
         .extern_path(
             ".google.protobuf.Timestamp",
-            "::tendermint_proto::google::protobuf::Timestamp",
+            "::celestia_tendermint_proto::google::protobuf::Timestamp",
         )
         .extern_path(
             ".google.protobuf.Duration",
-            "::tendermint_proto::google::protobuf::Duration",
+            "::celestia_tendermint_proto::google::protobuf::Duration",
         )
         // Comments in Google's protobuf are causing issues with cargo-test
         .disable_comments([".google"])

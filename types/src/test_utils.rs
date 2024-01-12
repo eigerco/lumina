@@ -1,7 +1,6 @@
 //! Utilities for writing tests.
 
-use ed25519_consensus::SigningKey;
-use tendermint::{
+use celestia_tendermint::{
     block::{
         header::{Header, Version},
         parts, Commit, CommitSig,
@@ -10,6 +9,7 @@ use tendermint::{
     public_key::PublicKey,
     Signature, Time,
 };
+use ed25519_consensus::SigningKey;
 
 use crate::block::{CommitExt, GENESIS_HEIGHT};
 use crate::consts::version;
@@ -227,19 +227,19 @@ pub fn unverify(header: &mut ExtendedHeader) {
     let key = SigningKey::new(rand::thread_rng());
     let pub_key_bytes = key.verification_key().to_bytes();
     let pub_key = PublicKey::from_raw_ed25519(&pub_key_bytes).unwrap();
-    let validator_address = tendermint::account::Id::new(rand::random());
+    let validator_address = celestia_tendermint::account::Id::new(rand::random());
 
     header.header.proposer_address = validator_address;
 
     header.validator_set = ValidatorSet::new(
-        vec![tendermint::validator::Info {
+        vec![celestia_tendermint::validator::Info {
             address: validator_address,
             pub_key,
             power: 5000_u32.into(),
             name: None,
             proposer_priority: 0_i64.into(),
         }],
-        Some(tendermint::validator::Info {
+        Some(celestia_tendermint::validator::Info {
             address: validator_address,
             pub_key,
             power: 5000_u32.into(),
@@ -262,12 +262,12 @@ fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> 
 
     let pub_key_bytes = signing_key.verification_key().to_bytes();
     let pub_key = PublicKey::from_raw_ed25519(&pub_key_bytes).unwrap();
-    let validator_address = tendermint::account::Id::new(rand::random());
+    let validator_address = celestia_tendermint::account::Id::new(rand::random());
 
     let last_block_id = if height == GENESIS_HEIGHT {
         None
     } else {
-        Some(tendermint::block::Id {
+        Some(celestia_tendermint::block::Id {
             hash: Hash::Sha256(rand::random()),
             part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
                 .expect("invalid PartSetHeader"),
@@ -301,7 +301,7 @@ fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> 
         commit: Commit {
             height: height.try_into().unwrap(),
             round: 0_u16.into(),
-            block_id: tendermint::block::Id {
+            block_id: celestia_tendermint::block::Id {
                 hash: Hash::None,
                 part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
                     .expect("invalid PartSetHeader"),
@@ -313,14 +313,14 @@ fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> 
             }],
         },
         validator_set: ValidatorSet::new(
-            vec![tendermint::validator::Info {
+            vec![celestia_tendermint::validator::Info {
                 address: validator_address,
                 pub_key,
                 power: 5000_u32.into(),
                 name: None,
                 proposer_priority: 0_i64.into(),
             }],
-            Some(tendermint::validator::Info {
+            Some(celestia_tendermint::validator::Info {
                 address: validator_address,
                 pub_key,
                 power: 5000_u32.into(),
@@ -356,7 +356,7 @@ fn generate_next(
     let last_block_id = if increment == 1 {
         Some(current.commit.block_id)
     } else {
-        Some(tendermint::block::Id {
+        Some(celestia_tendermint::block::Id {
             hash: Hash::Sha256(rand::random()),
             part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
                 .expect("invalid PartSetHeader"),
@@ -387,7 +387,7 @@ fn generate_next(
         commit: Commit {
             height,
             round: 0_u16.into(),
-            block_id: tendermint::block::Id {
+            block_id: celestia_tendermint::block::Id {
                 hash: Hash::None,
                 part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
                     .expect("invalid PartSetHeader"),

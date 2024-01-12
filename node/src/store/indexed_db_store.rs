@@ -2,13 +2,13 @@ use std::cell::RefCell;
 use std::convert::Infallible;
 
 use async_trait::async_trait;
+use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
-use tendermint_proto::Protobuf;
 
 use crate::store::{Result, Store, StoreError};
 

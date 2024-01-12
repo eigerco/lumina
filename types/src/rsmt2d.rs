@@ -134,7 +134,7 @@ impl TryFrom<u8> for AxisType {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExtendedDataSquare {
     /// The raw data of the EDS.
-    #[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]
+    #[serde(with = "celestia_tendermint_proto::serializers::bytes::vec_base64string")]
     pub data_square: Vec<Vec<u8>>,
     /// The codec used to encode parity shares.
     pub codec: String,
@@ -244,7 +244,7 @@ impl ExtendedDataSquare {
 
 #[derive(Deserialize)]
 struct RawExtendedDataSquare {
-    #[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]
+    #[serde(with = "celestia_tendermint_proto::serializers::bytes::vec_base64string")]
     pub data_square: Vec<Vec<u8>>,
     pub codec: String,
 }

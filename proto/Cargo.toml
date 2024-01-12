@@ -12,10 +12,10 @@ keywords = ["blockchain", "celestia", "lumina"]
 categories = ["encoding", "cryptography::cryptocurrencies"]
 
 [dependencies]
+celestia-tendermint-proto = { workspace = true }
 prost = "0.12.0"
 prost-types = "0.12.0"
 serde = { version = "1.0.188", features = ["derive"] }
-tendermint-proto = { workspace = true }
 
 [build-dependencies]
 anyhow = "1.0.75"

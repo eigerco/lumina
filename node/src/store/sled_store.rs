@@ -4,13 +4,13 @@ use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use directories::ProjectDirs;
 use sled::transaction::{ConflictableTransactionError, TransactionError};
 use sled::{Db, Error as SledError, Transactional, Tree};
 use tempdir::TempDir;
-use tendermint_proto::Protobuf;
 use tokio::task::spawn_blocking;
 use tokio::task::JoinError;
 use tracing::debug;

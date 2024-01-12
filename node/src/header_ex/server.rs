@@ -209,11 +209,11 @@ mod tests {
     use crate::test_utils::gen_filled_store;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::{HeaderRequest, StatusCode};
+    use celestia_tendermint_proto::Protobuf;
     use celestia_types::ExtendedHeader;
     use libp2p::PeerId;
     use std::future::poll_fn;
     use std::sync::Arc;
-    use tendermint_proto::Protobuf;
     use tokio::select;
     use tokio::sync::oneshot;
 

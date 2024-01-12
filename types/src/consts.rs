@@ -1,7 +1,7 @@
 //! Constants used within celestia ecosystem.
 
 /// The size of the SHA256 hash.
-pub const HASH_SIZE: usize = tendermint::hash::SHA256_HASH_SIZE;
+pub const HASH_SIZE: usize = celestia_tendermint::hash::SHA256_HASH_SIZE;
 
 // celestia-core/types/genesis
 /// Constants related to genesis definition.
