@@ -53,11 +53,8 @@ pub struct Row {
 impl Row {
     /// Create Row with the given index from EDS
     pub fn new(index: u16, eds: &ExtendedDataSquare, block_height: u64) -> Result<Self> {
-        let square_len = eds.square_len();
-
         let row_id = RowId::new(index, block_height)?;
-        let mut shares = eds.row(index.into())?;
-        shares.truncate(square_len / 2);
+        let shares = eds.row(index.into())?;
 
         Ok(Row { row_id, shares })
     }
