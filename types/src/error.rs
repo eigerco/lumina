@@ -11,7 +11,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Unsupported namespace version.
-    #[error("Unsupported namesapce version: {0}")]
+    #[error("Unsupported namespace version: {0}")]
     UnsupportedNamespaceVersion(u8),
 
     /// Invalid namespace size.
@@ -29,6 +29,10 @@ pub enum Error {
     /// Error propagated from the [`cid::multihash`].
     #[error(transparent)]
     Multihash(#[from] cid::multihash::Error),
+
+    /// Error returned when trying to compute new or parse existing CID. See [`blockstore::block`]
+    #[error(transparent)]
+    CidError(#[from] blockstore::block::CidError),
 
     /// Missing header.
     #[error("Missing header")]
@@ -101,6 +105,10 @@ pub enum Error {
     #[error("Range proof verification failed: {0:?}")]
     RangeProofError(nmt_rs::simple_merkle::error::RangeProofError),
 
+    /// Row root computed from shares doesn't match one received in `DataAvailabilityHeaderz
+    #[error("Computed root doesn't match received one")]
+    RootMismatch,
+
     /// Unexpected signature in absent commit.
     #[error("Unexpected absent commit signature")]
     UnexpectedAbsentSignature,
@@ -151,6 +159,10 @@ pub enum Error {
     /// Data square index out of range.
     #[error("Data square index out of range: {0}")]
     EdsIndexOutOfRange(usize),
+
+    /// Could not create EDS, provided number of shares doesn't form a pefect square
+    #[error("Invalid dimensions of EDS")]
+    EdsInvalidDimentions,
 
     /// Zero block height.
     #[error("Invalid zero block height")]

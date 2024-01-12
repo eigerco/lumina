@@ -69,6 +69,9 @@ pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
 pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
 /// [`Namespace`] aware merkle tree.
 pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
+/// Proof of some statement about namesapced merkle tree. It can either prove presence
+/// of a set of shares or absence of a particular namespace.
+pub type Proof = nmt_rs::simple_merkle::proof::Proof<NamespacedSha2Hasher>;
 
 /// Namespace of the data published to the celestia network.
 ///

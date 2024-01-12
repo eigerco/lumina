@@ -37,6 +37,9 @@ static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".share.eds.byzantine.pb.Share", SERIALIZED),
     (".proof.pb.Proof", SERIALIZED),
     (".share.p2p.shrex.nd.NamespaceRowResponse", SERIALIZED),
+    (".share.p2p.shwap.Row", SERIALIZED),
+    (".share.p2p.shwap.Sample", SERIALIZED),
+    (".share.p2p.shwap.Data", SERIALIZED),
 ];
 
 #[rustfmt::skip]
@@ -83,6 +86,7 @@ fn main() -> Result<()> {
                 "vendor/celestia/blob/v1/tx.proto",
                 "vendor/header/pb/extended_header.proto",
                 "vendor/share/p2p/shrexnd/pb/share.proto",
+                "vendor/share/p2p/shwap/pb/shwap.proto",
                 "vendor/share/eds/byzantine/pb/share.proto",
                 "vendor/cosmos/base/v1beta1/coin.proto",
                 "vendor/cosmos/base/abci/v1beta1/abci.proto",
