@@ -10,6 +10,7 @@ use crate::{Error, Result};
 ///
 ///  [`Share`]: crate::Share
 #[repr(transparent)]
+#[derive(Debug, PartialEq)]
 pub struct InfoByte(u8);
 
 impl InfoByte {
@@ -37,5 +38,18 @@ impl InfoByte {
     /// Convert the [`InfoByte`] to a byte.
     pub fn as_u8(&self) -> u8 {
         self.0
+    }
+
+    pub(crate) fn from_raw(byte: u8) -> Result<Self> {
+        let version = byte >> 1;
+        if version > appconsts::MAX_SHARE_VERSION {
+            Err(Error::MaxShareVersionExceeded(version))
+        } else {
+            Ok(InfoByte(byte))
+        }
+    }
+
+    pub(crate) fn from_raw_unchecked(byte: u8) -> Self {
+        InfoByte(byte)
     }
 }

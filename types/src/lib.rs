@@ -1,7 +1,6 @@
 #![cfg_attr(docs_rs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
-pub mod axis;
 pub mod blob;
 mod block;
 mod byzantine;
@@ -16,6 +15,7 @@ pub mod nmt;
 #[cfg(feature = "p2p")]
 #[cfg_attr(docs_rs, doc(cfg(feature = "p2p")))]
 pub mod p2p;
+pub mod row;
 mod rsmt2d;
 pub mod sample;
 pub(crate) mod serializers;
@@ -35,7 +35,7 @@ pub use crate::data_availability_header::*;
 pub use crate::error::*;
 pub use crate::extended_header::*;
 pub use crate::fraud_proof::FraudProof;
-pub use crate::rsmt2d::ExtendedDataSquare;
+pub use crate::rsmt2d::{AxisType, ExtendedDataSquare};
 pub use crate::share::*;
 pub use crate::sync::*;
 pub use crate::validate::*;

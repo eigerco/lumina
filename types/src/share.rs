@@ -18,6 +18,8 @@ mod info_byte;
 
 pub use info_byte::InfoByte;
 
+const SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTES;
+
 /// A collection of rows of [`Share`]s from a particular [`Namespace`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(from = "RawNamespacedShares", into = "RawNamespacedShares")]
@@ -81,9 +83,9 @@ impl Share {
             return Err(Error::InvalidShareSize(data.len()));
         }
 
-        // validate the namespace to later return it
-        // with the `new_unchecked`
+        // validate namespace and info byte so that we can return it later without checks
         Namespace::from_raw(&data[..NS_SIZE])?;
+        InfoByte::from_raw(data[NS_SIZE])?;
 
         Ok(Share {
             data: data.try_into().unwrap(),
@@ -107,6 +109,24 @@ impl Share {
     /// This will include also the [`InfoByte`] and the `sequence length`.
     pub fn to_vec(&self) -> Vec<u8> {
         self.as_ref().to_vec()
+    }
+
+    /// Return Share's `InfoByte`
+    pub fn info_byte(&self) -> InfoByte {
+        InfoByte::from_raw_unchecked(self.data[NS_SIZE])
+    }
+
+    /// For first share in a sequence, return sequence length, None for continuation shares
+    pub fn sequence_length(&self) -> Option<u32> {
+        if self.info_byte().is_sequence_start() {
+            let sequence_length_bytes = &self.data[SHARE_SEQUENCE_LENGTH_OFFSET
+                ..SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES];
+            Some(u32::from_be_bytes(
+                sequence_length_bytes.try_into().unwrap(),
+            ))
+        } else {
+            None
+        }
     }
 }
 
