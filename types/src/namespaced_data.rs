@@ -16,7 +16,7 @@ use tendermint_proto::Protobuf;
 
 use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
 use crate::row::RowId;
-use crate::{Error, Result};
+use crate::{DataAvailabilityHeader, Error, Result};
 
 /// The size of the [`NamespacedDataId`] hash in `multihash`.
 const NAMESPACED_DATA_ID_SIZE: usize = NamespacedDataId::size();
@@ -46,7 +46,7 @@ pub struct NamespacedDataId {
 /// shares belonging to a particular namespace and a proof of their inclusion. If, for
 /// particular EDS, shares from the namespace span multiple rows, one needs multiple
 /// NamespacedData instances to cover the whole range.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(try_from = "RawNamespacedData", into = "RawNamespacedData")]
 pub struct NamespacedData {
     /// Location of the shares on EDS
@@ -57,7 +57,50 @@ pub struct NamespacedData {
     pub shares: Vec<Vec<u8>>,
 }
 
-impl NamespacedData {}
+impl NamespacedData {
+    /// Verifies proof inside `NamespacedData` using a row root from [`DataAvailabilityHeader`]
+    ///
+    /// #Example
+    /// ```no_run
+    /// use celestia_types::nmt::Namespace;
+    /// # use celestia_types::{ExtendedDataSquare, ExtendedHeader};
+    /// # fn get_extended_data_square(height: usize) -> ExtendedDataSquare {
+    /// #    unimplemented!()
+    /// # }
+    /// # fn get_extended_header(height: usize) -> ExtendedHeader {
+    /// #    unimplemented!()
+    /// # }
+    ///
+    /// let block_height = 100;
+    /// let eds = get_extended_data_square(block_height);
+    /// let header = get_extended_header(block_height);
+    ///
+    /// let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
+    ///
+    /// let rows = eds.get_namespaced_data(namespace, &header.dah, block_height as u64).unwrap();
+    /// for namespaced_data in rows {
+    ///     namespaced_data.validate(&header.dah).unwrap()
+    /// }
+    /// ```
+    ///
+    /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
+    pub fn validate(&self, dah: &DataAvailabilityHeader) -> Result<()> {
+        if self.shares.is_empty() {
+            return Err(Error::WrongProofType);
+        }
+
+        let namespace = self.namespaced_data_id.namespace;
+
+        let row = self.namespaced_data_id.row.index;
+        let root = dah
+            .row_root(row.into())
+            .ok_or(Error::EdsIndexOutOfRange(row.into()))?;
+
+        self.proof
+            .verify_complete_namespace(&root, &self.shares, *namespace)
+            .map_err(Error::RangeProofError)
+    }
+}
 
 impl Protobuf<RawNamespacedData> for NamespacedData {}
 

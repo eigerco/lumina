@@ -1,7 +1,7 @@
 use std::result::Result as StdResult;
 
 use nmt_rs::NamespaceMerkleHasher;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::namespaced_data::{NamespacedData, NamespacedDataId};
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NS_SIZE};
@@ -131,7 +131,7 @@ impl TryFrom<u8> for AxisType {
 /// [`Nmt`]: crate::nmt::Nmt
 /// [`Share`]: crate::share::Share
 /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExtendedDataSquare {
     /// The raw data of the EDS.
     #[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]
@@ -144,8 +144,8 @@ pub struct ExtendedDataSquare {
 }
 
 impl ExtendedDataSquare {
-    /// Create a new EDS out of the provided shares. Returns error if share number doesn't
-    /// create a square
+    /// Create a new EDS out of the provided shares. Returns error if number of shares isn't
+    /// a square number
     pub fn new(shares: Vec<Vec<u8>>, codec: String) -> Result<Self> {
         let square_len = f64::sqrt(shares.len() as f64) as usize;
         if square_len * square_len != shares.len() {
@@ -213,11 +213,15 @@ impl ExtendedDataSquare {
             }
 
             let mut shares = Vec::with_capacity(self.square_len);
-
             let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
-            for s in self.row(i.into())? {
-                let ns = Namespace::from_raw(&s[..NS_SIZE])?;
-                tree.push_leaf(&s, *ns).map_err(Error::Nmt)?;
+            for (col, s) in self.row(i.into())?.iter().enumerate() {
+                let ns = if col < self.square_len / 2 {
+                    Namespace::from_raw(&s[..NS_SIZE])?
+                } else {
+                    Namespace::PARITY_SHARE
+                };
+
+                tree.push_leaf(s, *ns).map_err(Error::Nmt)?;
                 if ns == namespace {
                     shares.push(s.clone());
                 }
@@ -235,6 +239,29 @@ impl ExtendedDataSquare {
         }
 
         Ok(data)
+    }
+}
+
+#[derive(Deserialize)]
+struct RawExtendedDataSquare {
+    #[serde(with = "tendermint_proto::serializers::bytes::vec_base64string")]
+    pub data_square: Vec<Vec<u8>>,
+    pub codec: String,
+}
+
+impl<'de> Deserialize<'de> for ExtendedDataSquare {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let eds = RawExtendedDataSquare::deserialize(deserializer)?;
+        let share_number = eds.data_square.len();
+        ExtendedDataSquare::new(eds.data_square, eds.codec).map_err(|_| {
+            <D::Error as serde::de::Error>::invalid_length(
+                share_number,
+                &"number of shares must be a perfect square",
+            )
+        })
     }
 }
 
@@ -257,5 +284,33 @@ mod tests {
         assert!(matches!(axis_type_err, Error::InvalidAxis(2)));
         let axis_type_err = AxisType::try_from(99).unwrap_err();
         assert!(matches!(axis_type_err, Error::InvalidAxis(99)));
+    }
+
+    #[test]
+    fn get_namespaced_data() {
+        let eds_json = include_str!("../test_data/shwap_samples/eds.json");
+        let eds: ExtendedDataSquare = serde_json::from_str(eds_json).unwrap();
+        let dah_json = include_str!("../test_data/shwap_samples/dah.json");
+        let dah: DataAvailabilityHeader = serde_json::from_str(dah_json).unwrap();
+
+        let height = 45577;
+
+        let rows = eds
+            .get_namespaced_data(Namespace::new_v0(&[1, 170]).unwrap(), &dah, height)
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
+        row.validate(&dah).unwrap();
+        assert_eq!(row.shares.len(), 2);
+
+        let rows = eds
+            .get_namespaced_data(Namespace::new_v0(&[1, 187]).unwrap(), &dah, height)
+            .unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].shares.len(), 1);
+        assert_eq!(rows[1].shares.len(), 4);
+        for row in rows {
+            row.validate(&dah).unwrap();
+        }
     }
 }

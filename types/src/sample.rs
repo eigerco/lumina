@@ -74,10 +74,10 @@ impl Sample {
     ///
     /// # Example
     ///
-    /// ```
-    /// use celestia_types::rsmt2d::AxisType;
-    /// # use celestia_types::rsmt2d::ExtendedDataSquare;
-    /// # use celestia_types::ExtendedHeader;
+    /// ```no_run
+    /// use celestia_types::AxisType;
+    /// use celestia_types::sample::Sample;
+    /// # use celestia_types::{ExtendedDataSquare, ExtendedHeader};
     /// # fn get_extended_data_square(height: usize) -> ExtendedDataSquare {
     /// #    unimplemented!()
     /// # }
@@ -87,13 +87,13 @@ impl Sample {
     ///
     /// let block_height = 15;
     /// let eds = get_extended_data_square(block_height);
-    /// let index = 2 * eds.square_len() + 3 // 3rd row and 4th column as these are 0 indexed
+    /// let index = 2 * eds.square_len() + 3; // 3rd row and 4th column as these are 0 indexed
     ///
     /// let header = get_extended_header(block_height);
     ///
-    /// let sample = Sample::new(AxisType::Row, index, &eds, block_height).unwrap();
+    /// let sample = Sample::new(AxisType::Row, index, &eds, block_height as u64).unwrap();
     ///
-    /// sample.verify(&header.dah).unwrap();
+    /// sample.validate(&header.dah).unwrap();
     /// ```
     ///
     /// [`Share`]: crate::Share
@@ -143,7 +143,6 @@ impl Sample {
 
     /// Validate sample with root hash from ExtendedHeader
     pub fn validate(&self, dah: &DataAvailabilityHeader) -> Result<()> {
-        // TODO: tests
         let index = match self.sample_proof_type {
             AxisType::Row => self.sample_id.row.index,
             AxisType::Col => self.sample_id.index,
@@ -245,7 +244,7 @@ impl SampleId {
     ///     header_height,
     /// ).unwrap();
     ///
-    /// assert_eq!(sample_id.axis.index, row as u16);
+    /// assert_eq!(sample_id.row.index, row as u16);
     /// assert_eq!(sample_id.index, col as u16);
     /// ```
     ///
