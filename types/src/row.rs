@@ -84,7 +84,7 @@ impl Row {
             return Err(Error::RootMismatch);
         }
 
-        unimplemented!("unable to compute parity shares")
+        Ok(())
     }
 }
 
@@ -337,5 +337,24 @@ mod tests {
             let data = [0; SHARE_SIZE - NS_SIZE];
             assert_eq!(share[NS_SIZE..], data);
         }
+    }
+
+    #[test]
+    fn test_validate() {
+        let eds_json = include_str!("../test_data/shwap_samples/eds.json");
+        let eds: ExtendedDataSquare = serde_json::from_str(eds_json).unwrap();
+        let dah_json = include_str!("../test_data/shwap_samples/dah.json");
+        let dah: DataAvailabilityHeader = serde_json::from_str(dah_json).unwrap();
+
+        let index = 1;
+        let row = Row {
+            row_id: RowId {
+                block_height: 1,
+                index,
+            },
+            shares: eds.row(index.into()).unwrap(),
+        };
+
+        row.validate(&dah).unwrap();
     }
 }

@@ -60,8 +60,6 @@ pub struct Share {
     pub data: [u8; appconsts::SHARE_SIZE],
 }
 
-impl Share {}
-
 impl Share {
     /// Create a new [`Share`] from raw bytes.
     ///
