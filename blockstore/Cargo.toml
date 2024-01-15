@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "An IPLD blockstore capable of holding arbitrary data indexed by CID"
+authors = ["Eiger <hello@eiger.co>"]
+homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
 readme = "README.md"
 # crates.io is limited to 5 keywords and 5 categories
