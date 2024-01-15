@@ -618,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "blockstore"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "cid",
@@ -676,7 +676,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "celestia-tendermint-proto",
@@ -690,7 +690,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-rpc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -758,7 +758,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.21.5",
  "bech32",
@@ -2755,7 +2755,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "backoff",
