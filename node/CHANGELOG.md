@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/eigerco/lumina/compare/lumina-node-v0.1.0...lumina-node-v0.1.1) - 2024-01-15
+
+### Other
+- add authors and homepage ([#180](https://github.com/eigerco/lumina/pull/180))
+
 ## [0.1.0](https://github.com/eigerco/lumina/releases/tag/lumina-node-v0.1.0) - 2024-01-12
 
 ### Added
