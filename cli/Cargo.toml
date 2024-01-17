@@ -18,6 +18,8 @@ categories = [
   "network-programming",
   "wasm",
 ]
+# TODO: handle lumina-node-wasm artifacts - https://github.com/eigerco/lumina/issues/185
+publish = false
 
 [[bin]]
 name = "lumina"
