@@ -108,11 +108,11 @@ pub trait Store: Send + Sync + Debug {
 
     /// Append single header maintaining continuity from the genesis to the head.
     async fn append_single(&self, header: ExtendedHeader) -> Result<()> {
-        header.validate()?;
+        header.validate().map_err(StoreError::CelestiaTypes)?;
 
         match self.get_head().await {
             Ok(head) => {
-                head.verify(&header)?;
+                head.verify(&header).map_err(StoreError::CelestiaTypes)?;
             }
             // Empty store, we can not verify
             Err(StoreError::NotFound) => {}
@@ -124,11 +124,14 @@ pub trait Store: Send + Sync + Debug {
 
     /// Append a range of headers maintaining continuity from the genesis to the head.
     async fn append(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        validate_headers(&headers).await?;
+        validate_headers(&headers)
+            .await
+            .map_err(StoreError::CelestiaTypes)?;
 
         match self.get_head().await {
             Ok(head) => {
-                head.verify_adjacent_range(&headers)?;
+                head.verify_adjacent_range(&headers)
+                    .map_err(StoreError::CelestiaTypes)?;
             }
             // Empty store, we can not verify
             Err(StoreError::NotFound) => {}
@@ -171,8 +174,8 @@ pub enum StoreError {
     LostHash(Hash),
 
     /// An error propagated from the [`celestia_types`].
-    #[error(transparent)]
-    CelestiaTypes(#[from] celestia_types::Error),
+    #[error("Error in celestia_types: {0}")]
+    CelestiaTypes(celestia_types::Error),
 
     /// Storage corrupted.
     #[error("Stored data in inconsistent state, try reseting the store: {0}")]

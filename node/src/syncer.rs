@@ -46,8 +46,8 @@ pub enum SyncerError {
     Store(#[from] StoreError),
 
     /// An error propagated from the [`celestia_types`].
-    #[error(transparent)]
-    Celestia(#[from] celestia_types::Error),
+    #[error(" Celestia error: {0}")]
+    Celestia(celestia_types::Error),
 
     /// The worker has died.
     #[error("Worker died")]

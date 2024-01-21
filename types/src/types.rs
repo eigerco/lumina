@@ -7,9 +7,7 @@ pub use alloc::collections::{
 pub use alloc::vec::{self as vec, Vec};
 
 #[cfg(feature = "std")]
-pub use std::collections::{
-    btree_map, btree_set, BTreeMap, BTreeMap as HashMap, BTreeSet as HashSet,
-};
+pub use std::collections::{btree_map, btree_set, HashMap, HashSet};
 
 #[cfg(feature = "std")]
 pub use std::vec::{self as vec, Vec};
