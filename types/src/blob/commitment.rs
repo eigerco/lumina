@@ -1,8 +1,7 @@
-use std::io::Cursor;
-use std::num::NonZeroU64;
+use core::num::NonZeroU64;
 
 use base64::prelude::*;
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, BytesMut};
 use celestia_tendermint::crypto::sha256::HASH_SIZE;
 use celestia_tendermint::{crypto, merkle};
 use celestia_tendermint_proto::serializers::cow_str::CowStr;
@@ -11,6 +10,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::consts::appconsts;
 use crate::nmt::{Namespace, NamespacedHashExt, NamespacedSha2Hasher, Nmt, RawNamespacedHash};
+use crate::types::{ToString, Vec};
 use crate::{Error, Result};
 use crate::{InfoByte, Share};
 
@@ -143,10 +143,10 @@ pub(crate) fn split_blob_to_shares(
     }
 
     let mut shares = Vec::new();
-    let mut cursor = Cursor::new(blob_data);
+    let mut byte_pointer = 0;
 
-    while cursor.has_remaining() {
-        let share = build_sparse_share_v0(namespace, &mut cursor)?;
+    while byte_pointer < blob_data.len() {
+        let share = build_sparse_share_v0(namespace, blob_data, &mut byte_pointer)?;
         shares.push(share);
     }
     Ok(shares)
@@ -155,10 +155,11 @@ pub(crate) fn split_blob_to_shares(
 /// Build a sparse share from a cursor over data
 fn build_sparse_share_v0(
     namespace: Namespace,
-    data: &mut Cursor<impl AsRef<[u8]>>,
+    data: &[u8],
+    byte_pointer: &mut usize,
 ) -> Result<Share> {
-    let is_first_share = data.position() == 0;
-    let data_len = cursor_inner_length(data);
+    let is_first_share = *byte_pointer == 0;
+    let data_len = data.len();
     let mut bytes = BytesMut::with_capacity(appconsts::SHARE_SIZE);
 
     // Write the namespace
@@ -178,19 +179,24 @@ fn build_sparse_share_v0(
     // Calculate amount of bytes to read
     let current_size = bytes.len();
     let available_space = appconsts::SHARE_SIZE - current_size;
-    let read_amount = available_space.min(data.remaining());
+    let read_amount = available_space.min(data_len - *byte_pointer);
+
+    // Append the share
+    bytes.extend_from_slice(&data[*byte_pointer..*byte_pointer + read_amount]);
 
     // Resize to share size with 0 padding
     bytes.resize(appconsts::SHARE_SIZE, 0);
-    // Read the share data
-    data.copy_to_slice(&mut bytes[current_size..current_size + read_amount]);
+
+    // Update the byte pointer
+    *byte_pointer += read_amount;
 
     Share::from_raw(&bytes)
 }
 
-fn cursor_inner_length(cursor: &Cursor<impl AsRef<[u8]>>) -> usize {
-    cursor.get_ref().as_ref().len()
-}
+// use std::io::Cursor;
+// fn cursor_inner_length(cursor: &Cursor<impl AsRef<[u8]>>) -> usize {
+//     cursor.get_ref().as_ref().len()
+// }
 
 /// merkle_mountain_range_sizes returns the sizes (number of leaf nodes) of the
 /// trees in a merkle mountain range constructed for a given total_size and
@@ -289,12 +295,11 @@ mod tests {
     fn test_single_sparse_share() {
         let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();
         let data = vec![1, 2, 3, 4, 5, 6, 7];
-        let mut cursor = Cursor::new(&data);
+        let mut byte_pointer = 0;
+        let share = build_sparse_share_v0(namespace, &data, &mut byte_pointer).unwrap();
 
-        let share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
-
-        // check cursor
-        assert!(!cursor.has_remaining());
+        // check pointer
+        assert!(data.len() == byte_pointer);
 
         // check namespace
         let (share_ns, share_data) = share.as_ref().split_at(appconsts::NAMESPACE_SIZE);
@@ -321,15 +326,12 @@ mod tests {
         let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();
         let continuation_len = 7;
         let data = vec![7; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE + continuation_len];
-        let mut cursor = Cursor::new(&data);
+        let mut byte_pointer = 0;
 
-        let first_share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
+        let first_share = build_sparse_share_v0(namespace, &data, &mut byte_pointer).unwrap();
 
         // check cursor
-        assert_eq!(
-            cursor.position(),
-            appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE as u64
-        );
+        assert_eq!(byte_pointer, appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE);
 
         // check namespace
         let (share_ns, share_data) = first_share.as_ref().split_at(appconsts::NAMESPACE_SIZE);
@@ -350,10 +352,11 @@ mod tests {
         );
 
         // Continuation share
-        let continuation_share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
+        let continuation_share =
+            build_sparse_share_v0(namespace, &data, &mut byte_pointer).unwrap();
 
         // check cursor
-        assert!(!cursor.has_remaining());
+        assert!(byte_pointer == data.len());
 
         // check namespace
         let (share_ns, share_data) = continuation_share
@@ -381,16 +384,16 @@ mod tests {
     fn test_sparse_share_empty_data() {
         let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();
         let data = vec![];
-        let mut cursor = Cursor::new(&data);
+        let mut byte_pointer = 0;
         let expected_share_start: &[u8] = &[
             1, // info byte
             0, 0, 0, 0, // sequence len
         ];
 
-        let share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
+        let share = build_sparse_share_v0(namespace, &data, &mut byte_pointer).unwrap();
 
         // check cursor
-        assert!(!cursor.has_remaining());
+        assert!(data.len() == byte_pointer);
 
         // check namespace
         let (share_ns, share_data) = share.as_ref().split_at(appconsts::NAMESPACE_SIZE);

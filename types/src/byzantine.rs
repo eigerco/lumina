@@ -13,6 +13,7 @@ use crate::nmt::{
     NMT_MULTIHASH_CODE, NS_SIZE,
 };
 use crate::rsmt2d::AxisType;
+use crate::types::Vec;
 use crate::{Error, ExtendedHeader, Result, Share};
 
 type Cid = CidGeneric<NMT_ID_SIZE>;
@@ -104,9 +105,10 @@ impl FraudProof for BadEncodingFraudProof {
         };
 
         // verify if the root can be converted to a cid and back
-        let mh = Multihash::wrap(NMT_CODEC, &root.to_array())?;
+        let mh = Multihash::wrap(NMT_CODEC, &root.to_array()).map_err(Error::Multihash)?;
         let cid = Cid::new_v1(NMT_MULTIHASH_CODE, mh);
-        let root = NamespacedHash::try_from(cid.hash().digest())?;
+        let root =
+            NamespacedHash::try_from(cid.hash().digest()).map_err(Error::InvalidNamespacedHash)?;
 
         // verify that Merkle proofs correspond to particular shares.
         for share in &self.shares {
@@ -199,8 +201,8 @@ impl TryFrom<RawBadEncodingFraudProof> for BadEncodingFraudProof {
             .try_into()?;
 
         Ok(Self {
-            header_hash: value.header_hash.try_into()?,
-            block_height: value.height.try_into()?,
+            header_hash: value.header_hash.try_into().map_err(Error::Tendermint)?,
+            block_height: value.height.try_into().map_err(Error::Tendermint)?,
             shares: value
                 .shares
                 .into_iter()

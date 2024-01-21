@@ -1,4 +1,4 @@
-use std::result::Result as StdResult;
+use core::result::Result as StdResult;
 
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -6,6 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use crate::namespaced_data::{NamespacedData, NamespacedDataId};
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NS_SIZE};
 use crate::row::RowId;
+use crate::types::{String, Vec};
 use crate::{DataAvailabilityHeader, Error, Result};
 
 /// Represents either column or row of the [`ExtendedDataSquare`].

@@ -4,6 +4,7 @@ use celestia_tendermint::vote;
 use celestia_tendermint::{chain, Hash, Vote};
 
 use crate::consts::{genesis::MAX_CHAIN_ID_LEN, version};
+use crate::types::Vec;
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
 pub(crate) const GENESIS_HEIGHT: u64 = 1;
@@ -139,11 +140,13 @@ impl CommitExt for Commit {
             block_id: Some(self.block_id),
             timestamp: Some(timestamp),
             validator_address,
-            validator_index: signature_idx.try_into()?,
+            validator_index: signature_idx.try_into().map_err(Error::Tendermint)?,
             signature,
         };
 
-        Ok(vote.to_signable_vec(chain_id.clone())?)
+        Ok(vote
+            .to_signable_vec(chain_id.clone())
+            .map_err(Error::Protobuf)?)
     }
 }
 
@@ -155,8 +158,10 @@ fn is_zero(id: &Id) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::hash::HashExt;
+    use crate::types::ToOwned;
+
+    use super::*;
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;

@@ -15,6 +15,7 @@ use crate::block::{CommitExt, GENESIS_HEIGHT};
 use crate::consts::version;
 use crate::hash::{Hash, HashExt};
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
+use crate::types::{ToOwned, Vec};
 use crate::{DataAvailabilityHeader, ExtendedHeader, ValidatorSet};
 
 /// [`ExtendedHeader`] generator for testing purposes.

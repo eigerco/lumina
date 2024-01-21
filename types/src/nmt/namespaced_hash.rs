@@ -1,4 +1,5 @@
 use crate::nmt::{NamespacedHash, NamespacedSha2Hasher, NS_SIZE};
+use crate::types::Vec;
 use crate::{Error, Result};
 
 use nmt_rs::simple_merkle::tree::MerkleHash;
@@ -38,7 +39,9 @@ impl NamespacedHashExt for NamespacedHash {
     }
 
     fn from_raw(bytes: &[u8]) -> Result<NamespacedHash> {
-        Ok(bytes.try_into()?)
+        Ok(bytes
+            .try_into()
+            .map_err(|hash| Error::InvalidNamespacedHash(hash))?)
     }
 
     fn to_vec(&self) -> Vec<u8> {

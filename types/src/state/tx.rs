@@ -1,6 +1,8 @@
 use celestia_proto::cosmos::base::abci::v1beta1::TxResponse as RawTxResponse;
 use serde::{Deserialize, Serialize};
 
+use crate::types::Vec;
+
 /// Raw transaction data.
 ///
 /// # Note

@@ -2,6 +2,7 @@ use celestia_proto::cosmos::base::v1beta1::Coin as RawCoin;
 use serde::{Deserialize, Serialize};
 
 use crate::state::Uint;
+use crate::types::{String, ToOwned, ToString};
 use crate::{Error, Result};
 
 /// Representation of the account's balance.

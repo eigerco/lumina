@@ -6,10 +6,8 @@
 //! [`Share`]: crate::Share
 //! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 
-use std::io::Cursor;
-
 use blockstore::block::CidError;
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, BytesMut};
 use celestia_proto::share::p2p::shwap::Row as RawRow;
 use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
@@ -20,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::nmt::NS_SIZE;
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
 use crate::rsmt2d::ExtendedDataSquare;
+use crate::types::{ToString, Vec};
 use crate::{DataAvailabilityHeader, Error, Result};
 
 /// The size of the [`RowId`] hash in `multihash`.
@@ -94,7 +93,7 @@ impl TryFrom<RawRow> for Row {
     type Error = Error;
 
     fn try_from(row: RawRow) -> Result<Row, Self::Error> {
-        let row_id = RowId::decode(&row.row_id)?;
+        let row_id = RowId::decode(&row.row_id).map_err(Error::CidError)?;
         let shares = row.row_half;
 
         // TODO: only original data shares are sent over the wire, we need leopard codec to
@@ -162,9 +161,12 @@ impl RowId {
             return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
-        let mut cursor = Cursor::new(buffer);
-        let block_height = cursor.get_u64_le();
-        let index = cursor.get_u16_le();
+        // use std::io::Cursor;
+        // let mut cursor = Cursor::new(buffer);
+        // let block_height = cursor.get_u64_le();
+        // let index = cursor.get_u16_le();
+        let block_height = u64::from_le_bytes(buffer[..8].try_into().unwrap());
+        let index = u16::from_le_bytes(buffer[8..].try_into().unwrap());
 
         if block_height == 0 {
             return Err(CidError::InvalidCid("Zero block height".to_string()));

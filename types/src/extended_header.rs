@@ -1,6 +1,6 @@
-use std::fmt::{Display, Formatter};
+use core::fmt::{Display, Formatter};
 #[cfg(any(not(target_arch = "wasm32"), feature = "wasm-bindgen"))]
-use std::time::Duration;
+use core::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
 use celestia_tendermint::block::header::Header;
@@ -65,7 +65,7 @@ pub struct ExtendedHeader {
 }
 
 impl Display for ExtendedHeader {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "hash: {}; height: {}", self.hash(), self.height())
     }
 }
@@ -73,7 +73,7 @@ impl Display for ExtendedHeader {
 impl ExtendedHeader {
     /// Decode protobuf encoded header and then validate it.
     pub fn decode_and_validate(bytes: &[u8]) -> Result<Self> {
-        let header = ExtendedHeader::decode(bytes)?;
+        let header = ExtendedHeader::decode(bytes).map_err(Error::Protobuf)?;
         header.validate()?;
         Ok(header)
     }
@@ -280,7 +280,7 @@ impl ExtendedHeader {
     /// # Example
     ///
     /// ```
-    /// # use std::ops::Range;
+    /// # use core::ops::Range;
     /// # use celestia_types::ExtendedHeader;
     /// # let s = include_str!("../test_data/chain3/extended_header_block_1_to_256.json");
     /// # let headers: Vec<ExtendedHeader> = serde_json::from_str(s).unwrap();
@@ -331,7 +331,7 @@ impl ExtendedHeader {
     /// # Example
     ///
     /// ```
-    /// # use std::ops::Range;
+    /// # use core::ops::Range;
     /// # use celestia_types::ExtendedHeader;
     /// # let s = include_str!("../test_data/chain3/extended_header_block_1_to_256.json");
     /// # let headers: Vec<ExtendedHeader> = serde_json::from_str(s).unwrap();
@@ -408,6 +408,7 @@ impl From<ExtendedHeader> for RawExtendedHeader {
 mod tests {
     use super::*;
     use crate::test_utils::{invalidate, unverify};
+    use crate::types::Vec;
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;

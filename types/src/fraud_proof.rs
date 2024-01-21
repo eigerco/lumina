@@ -2,7 +2,7 @@
 //!
 //! A fraud proof is a proof of the detected malicious action done to the network.
 
-use std::convert::Infallible;
+use core::convert::Infallible;
 
 use celestia_tendermint::block::Height;
 use celestia_tendermint::Hash;
@@ -10,6 +10,7 @@ use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize, Serializer};
 
 pub use crate::byzantine::BadEncodingFraudProof;
+use crate::types::{String, ToOwned, Vec};
 use crate::{Error, ExtendedHeader, Result};
 
 /// A proof of the malicious actions done to the network.

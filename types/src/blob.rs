@@ -10,6 +10,7 @@ pub use self::commitment::Commitment;
 use crate::consts::appconsts;
 use crate::nmt::Namespace;
 use crate::serializers::none_as_negative_one;
+use crate::types::Vec;
 use crate::{bail_validation, Error, Result, Share};
 
 /// Options for configuring the blob submission to the network.

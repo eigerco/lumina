@@ -1,9 +1,9 @@
 //! Types related to the p2p layer of nodes in Celestia.
 
+use crate::types::{HashMap, String, Vec};
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use std::collections::HashMap;
 
 /// An id and addresses of a peer in p2p network.
 #[derive(Debug, Clone, Serialize, Deserialize)]

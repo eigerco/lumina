@@ -1,4 +1,4 @@
-use std::ops::{Deref, DerefMut};
+use core::ops::{Deref, DerefMut};
 
 use celestia_proto::proof::pb::Proof as RawProof;
 use celestia_tendermint_proto::Protobuf;
@@ -6,6 +6,7 @@ use nmt_rs::simple_merkle::proof::Proof as NmtProof;
 use serde::{Deserialize, Serialize};
 
 use crate::nmt::{NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, NS_SIZE};
+use crate::types::Vec;
 use crate::{Error, Result};
 
 type NmtNamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;

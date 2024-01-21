@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-
 use celestia_tendermint::block::CommitSig;
 use celestia_tendermint::crypto::default::signature::Verifier;
 use celestia_tendermint::validator::{Info, Set};
 use celestia_tendermint::{account, block, chain};
+
+use crate::types::HashMap;
 
 use crate::trust_level::TrustLevelRatio;
 use crate::{
@@ -163,6 +163,8 @@ mod tests {
     use super::*;
 
     use celestia_tendermint_proto::v0_34::types::ValidatorSet as RawValidatorSet;
+
+    use crate::types::ToString;
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;

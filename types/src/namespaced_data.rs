@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
 use crate::row::RowId;
+use crate::types::{ToString, Vec};
 use crate::{DataAvailabilityHeader, Error, Result};
 
 /// The size of the [`NamespacedDataId`] hash in `multihash`.
@@ -112,7 +113,8 @@ impl TryFrom<RawNamespacedData> for NamespacedData {
             return Err(Error::MissingProof);
         };
 
-        let namespaced_data_id = NamespacedDataId::decode(&namespaced_data.data_id)?;
+        let namespaced_data_id =
+            NamespacedDataId::decode(&namespaced_data.data_id).map_err(Error::CidError)?;
 
         Ok(NamespacedData {
             namespaced_data_id,

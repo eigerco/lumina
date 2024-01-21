@@ -35,6 +35,7 @@ pub use self::namespace_proof::{NamespaceProof, EMPTY_LEAVES};
 pub use self::namespaced_hash::{
     NamespacedHashExt, RawNamespacedHash, HASH_SIZE, NAMESPACED_HASH_SIZE,
 };
+use crate::types::ToString;
 use crate::{Error, Result};
 
 /// Namespace version size in bytes.
@@ -368,7 +369,7 @@ impl From<nmt_rs::NamespaceId<NS_SIZE>> for Namespace {
     }
 }
 
-impl std::ops::Deref for Namespace {
+impl core::ops::Deref for Namespace {
     type Target = nmt_rs::NamespaceId<NS_SIZE>;
 
     fn deref(&self) -> &Self::Target {

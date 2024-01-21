@@ -2,6 +2,8 @@ use celestia_tendermint::hash::Hash;
 use celestia_tendermint::time::Time;
 use serde::{Deserialize, Serialize};
 
+use crate::types::String;
+
 /// A state of the blockchain synchronization.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncState {

@@ -10,6 +10,7 @@ use crate::consts::data_availability_header::{
 use crate::hash::Hash;
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::rsmt2d::AxisType;
+use crate::types::Vec;
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
 /// Header with commitments of the data availability.

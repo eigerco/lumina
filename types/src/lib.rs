@@ -1,5 +1,10 @@
+#![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docs_rs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+
+#[cfg(not(feature = "std"))]
+#[macro_use]
+extern crate alloc;
 
 pub mod blob;
 mod block;
@@ -26,6 +31,7 @@ mod sync;
 #[cfg_attr(docs_rs, doc(cfg(feature = "test-utils")))]
 pub mod test_utils;
 pub mod trust_level;
+mod types;
 mod validate;
 mod validator_set;
 

@@ -7,7 +7,7 @@
 //! [`Share`]: crate::Share
 //! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 
-use std::mem::size_of;
+use core::mem::size_of;
 
 use blockstore::block::CidError;
 use bytes::{BufMut, BytesMut};
@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::nmt::{Namespace, NamespaceProof, NamespacedSha2Hasher, Nmt, NS_SIZE};
 use crate::row::RowId;
 use crate::rsmt2d::{AxisType, ExtendedDataSquare};
+use crate::types::Vec;
 use crate::{DataAvailabilityHeader, Error, Result};
 
 /// The size of the [`SampleId`] hash in `multihash`.
@@ -186,7 +187,7 @@ impl TryFrom<RawSample> for Sample {
             return Err(Error::MissingProof);
         };
 
-        let sample_id = SampleId::decode(&sample.sample_id)?;
+        let sample_id = SampleId::decode(&sample.sample_id).map_err(Error::CidError)?;
         let sample_proof_type = u8::try_from(sample.sample_type)
             .map_err(|_| Error::InvalidAxis(sample.sample_type))?
             .try_into()?;

@@ -12,6 +12,7 @@ use crate::nmt::{
     Namespace, NamespaceProof, NamespacedSha2Hasher, NMT_CODEC, NMT_ID_SIZE, NMT_MULTIHASH_CODE,
     NS_SIZE,
 };
+use crate::types::Vec;
 use crate::{Error, Result};
 
 mod info_byte;

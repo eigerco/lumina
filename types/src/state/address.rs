@@ -1,5 +1,5 @@
-use std::fmt::Display;
-use std::str::FromStr;
+use core::fmt::Display;
+use core::str::FromStr;
 
 use bech32::{FromBase32, ToBase32};
 use celestia_tendermint::account::Id;
@@ -7,6 +7,7 @@ use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
 
 use crate::consts::cosmos::*;
+use crate::types::{String, ToOwned, ToString, Vec};
 use crate::{Error, Result};
 
 /// A generic representation of an address in Celestia network.
@@ -119,7 +120,7 @@ impl FromStr for AddressKind {
 impl private::Sealed for Address {}
 
 impl Display for Address {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Address::AccAddress(v) => <AccAddress as Display>::fmt(v, f),
             Address::ValAddress(v) => <ValAddress as Display>::fmt(v, f),
@@ -179,7 +180,7 @@ impl AddressTrait for AccAddress {
 impl private::Sealed for AccAddress {}
 
 impl Display for AccAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let s = address_to_string(self);
         f.write_str(&s)
     }
@@ -235,7 +236,7 @@ impl AddressTrait for ValAddress {
 impl private::Sealed for ValAddress {}
 
 impl Display for ValAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let s = address_to_string(self);
         f.write_str(&s)
     }
@@ -291,7 +292,7 @@ impl AddressTrait for ConsAddress {
 impl private::Sealed for ConsAddress {}
 
 impl Display for ConsAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let s = address_to_string(self);
         f.write_str(&s)
     }
