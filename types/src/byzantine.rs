@@ -104,8 +104,8 @@ impl FraudProof for BadEncodingFraudProof {
         };
 
         // verify if the root can be converted to a cid and back
-        let mh = Multihash::wrap(NMT_CODEC, &root.to_array())?;
-        let cid = Cid::new_v1(NMT_MULTIHASH_CODE, mh);
+        let mh = Multihash::wrap(NMT_MULTIHASH_CODE, &root.to_array())?;
+        let cid = Cid::new_v1(NMT_CODEC, mh);
         let root = NamespacedHash::try_from(cid.hash().digest())?;
 
         // verify that Merkle proofs correspond to particular shares.
