@@ -8,7 +8,12 @@ use std::ops::RangeBounds;
 use std::sync::Arc;
 
 use celestia_types::hash::Hash;
+use celestia_types::namespaced_data::NamespacedData;
+use celestia_types::nmt::Namespace;
+use celestia_types::row::Row;
+use celestia_types::sample::Sample;
 use celestia_types::ExtendedHeader;
+use cid::Cid;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
@@ -156,6 +161,38 @@ where
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
         Ok(self.p2p.get_verified_headers_range(from, amount).await?)
+    }
+
+    pub async fn request_cid(&self, cid: Cid) -> Result<Vec<u8>> {
+        Ok(self.p2p.get_cid(cid).await?)
+    }
+
+    pub async fn request_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
+        Ok(self.p2p.get_row(row_index, block_height).await?)
+    }
+
+    pub async fn request_sample(
+        &self,
+        square_len: usize,
+        row_index: u16,
+        block_height: u64,
+    ) -> Result<Sample> {
+        Ok(self
+            .p2p
+            .get_sample(square_len, row_index, block_height)
+            .await?)
+    }
+
+    pub async fn request_namespaced_data(
+        &self,
+        namespace: Namespace,
+        row_index: u16,
+        block_height: u64,
+    ) -> Result<NamespacedData> {
+        Ok(self
+            .p2p
+            .get_namespaced_data(namespace, row_index, block_height)
+            .await?)
     }
 
     /// Get current header syncing info.
