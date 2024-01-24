@@ -163,14 +163,21 @@ where
         Ok(self.p2p.get_verified_headers_range(from, amount).await?)
     }
 
+    /// Request data of a [`Cid`] from the network.
     pub async fn request_cid(&self, cid: Cid) -> Result<Vec<u8>> {
         Ok(self.p2p.get_cid(cid).await?)
     }
 
+    /// Request a [`Row`] from the network.
+    ///
+    /// The result was not validated and [`Row::validate`] must be called.
     pub async fn request_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
         Ok(self.p2p.get_row(row_index, block_height).await?)
     }
 
+    /// Request a [`Sample`] from the network.
+    ///
+    /// The result was not validated and [`Sample::validate`] must be called.
     pub async fn request_sample(
         &self,
         square_len: usize,
@@ -183,6 +190,9 @@ where
             .await?)
     }
 
+    /// Request a [`NamespacedData`] from the network.
+    ///
+    /// The result was not validated and [`NamespacedData::validate`] must be called.
     pub async fn request_namespaced_data(
         &self,
         namespace: Namespace,

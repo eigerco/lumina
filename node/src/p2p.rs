@@ -130,6 +130,7 @@ pub enum P2pError {
     #[error("ProtoBuf decoding error: {0}")]
     ProtoDecodeFailed(celestia_tendermint_proto::Error),
 
+    /// An error propagated from [`celestia_types`] that is related to [`Cid`].
     #[error("CID error: {0}")]
     Cid(celestia_types::Error),
 }
@@ -386,6 +387,7 @@ where
         Ok(headers)
     }
 
+    /// Request a [`Cid`] on bitswap protocol.
     pub async fn get_cid(&self, cid: Cid) -> Result<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
 
@@ -398,12 +400,14 @@ where
         Ok(rx.await??)
     }
 
+    /// Request a [`Row`] on bitswap protocol.
     pub async fn get_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
         let cid = row_cid(row_index, block_height)?;
         let data = self.get_cid(cid).await?;
         Row::decode(&data[..]).map_err(P2pError::ProtoDecodeFailed)
     }
 
+    /// Request a [`Sample`] on bitswap protocol.
     pub async fn get_sample(
         &self,
         square_len: usize,
@@ -415,6 +419,7 @@ where
         Sample::decode(&data[..]).map_err(P2pError::ProtoDecodeFailed)
     }
 
+    /// Request a [`NamespacedData`] on bitswap protocol.
     pub async fn get_namespaced_data(
         &self,
         namespace: Namespace,
