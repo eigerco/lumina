@@ -410,11 +410,11 @@ where
     /// Request a [`Sample`] on bitswap protocol.
     pub async fn get_sample(
         &self,
+        index: usize,
         square_len: usize,
-        row_index: u16,
         block_height: u64,
     ) -> Result<Sample> {
-        let cid = sample_cid(square_len, row_index, block_height)?;
+        let cid = sample_cid(index, square_len, block_height)?;
         let data = self.get_cid(cid).await?;
         Sample::decode(&data[..]).map_err(P2pError::ProtoDecodeFailed)
     }

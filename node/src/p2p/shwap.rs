@@ -42,9 +42,8 @@ pub(super) fn row_cid(row_index: u16, block_height: u64) -> Result<Cid> {
     convert_cid(&cid)
 }
 
-pub(super) fn sample_cid(square_len: usize, row_index: u16, block_height: u64) -> Result<Cid> {
-    let sample_id =
-        SampleId::new(row_index as usize, square_len, block_height).map_err(P2pError::Cid)?;
+pub(super) fn sample_cid(index: usize, square_len: usize, block_height: u64) -> Result<Cid> {
+    let sample_id = SampleId::new(index, square_len, block_height).map_err(P2pError::Cid)?;
 
     const SIZE: usize = SampleId::size();
     let cid: CidGeneric<SIZE> = sample_id

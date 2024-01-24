@@ -180,14 +180,11 @@ where
     /// The result was not validated and [`Sample::validate`] must be called.
     pub async fn request_sample(
         &self,
+        index: usize,
         square_len: usize,
-        row_index: u16,
         block_height: u64,
     ) -> Result<Sample> {
-        Ok(self
-            .p2p
-            .get_sample(square_len, row_index, block_height)
-            .await?)
+        Ok(self.p2p.get_sample(index, square_len, block_height).await?)
     }
 
     /// Request a [`NamespacedData`] from the network.
