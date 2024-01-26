@@ -556,7 +556,7 @@ checksum = "b4682ae6287fcf752ecaabbfcc7b6f9b72aa33933dc23a554d853aea8eea8635"
 [[package]]
 name = "bitmingle"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/bitmingle?rev=ac4eb12#ac4eb121fc0a77ca76436d2ad1a20f4db692f82d"
+source = "git+https://github.com/eigerco/bitmingle?rev=e737dbe#e737dbe6eba659a2b86fcb901d1737c85ddb49e4"
 dependencies = [
  "asynchronous-codec 0.7.0",
  "blockstore",
