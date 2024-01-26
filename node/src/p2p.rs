@@ -69,13 +69,17 @@ use self::shwap::{namespaced_data_cid, row_cid, sample_cid};
 // If we have fewer peers than that, we will try to reconnect / discover
 // more aggresively.
 const MIN_CONNECTED_PEERS: u64 = 4;
+
 // Bootstrap procedure is a bit misleading as a name. It is actually
 // scanning the network thought the already known peers and find new
 // ones. It also recovers connectivity of previously known peers and
 // refreshes the routing table.
 //
-// libp2p team suggests to start bootstrap procedure every 5 minute
+// libp2p team suggests to start bootstrap procedure every 5 minute.
 const KADEMLIA_BOOTSTRAP_PERIOD: Duration = Duration::from_secs(5 * 60);
+
+// Maximum size of a [`Multihash`].
+const MAX_MH_SIZE: usize = 64;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
@@ -468,7 +472,7 @@ where
     S: Store + 'static,
 {
     autonat: autonat::Behaviour,
-    bitswap: BitswapBehaviour<64, InMemoryBlockstore<64>>,
+    bitswap: BitswapBehaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     header_ex: HeaderExBehaviour<S>,
@@ -929,7 +933,9 @@ where
     Ok(kademlia)
 }
 
-fn init_bitswap<S>(args: &P2pArgs<S>) -> Result<BitswapBehaviour<64, InMemoryBlockstore<64>>>
+fn init_bitswap<S>(
+    args: &P2pArgs<S>,
+) -> Result<BitswapBehaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>>
 where
     S: Store,
 {

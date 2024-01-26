@@ -13,13 +13,13 @@ use prost::Message;
 
 use crate::p2p::Result;
 
-use super::P2pError;
+use super::{P2pError, MAX_MH_SIZE};
 
 /// Multihasher for Shwap types.
 pub(super) struct ShwapMultihasher;
 
-impl Multihasher<64> for ShwapMultihasher {
-    fn digest(&self, multihash_code: u64, input: &[u8]) -> Option<Multihash<64>> {
+impl Multihasher<MAX_MH_SIZE> for ShwapMultihasher {
+    fn digest(&self, multihash_code: u64, input: &[u8]) -> Option<Multihash<MAX_MH_SIZE>> {
         let data = match multihash_code {
             NAMESPACED_DATA_ID_MULTIHASH_CODE => RawNamespacedData::decode(input).ok()?.data_id,
             ROW_ID_MULTIHASH_CODE => RawRow::decode(input).ok()?.row_id,
