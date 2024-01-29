@@ -41,12 +41,6 @@ jobs:
         version: "23.3"
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        target: wasm32-unknown-unknown
-
     - name: Run rustdoc check
       env:
         RUSTDOCFLAGS: -D warnings
@@ -131,12 +125,6 @@ jobs:
       with:
         version: "23.3"
         repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Install wasm Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        target: wasm32-unknown-unknown
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
