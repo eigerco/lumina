@@ -17,30 +17,53 @@ fn find_root() -> Result<PathBuf> {
 
 fn main() -> Result<()> {
     let project_root = find_root()?;
-    let wasm_node_path = project_root.join("node-wasm");
-    println!("cargo:rerun-if-changed={}", wasm_node_path.display());
+    let lumina_node_wasm_path = project_root.join("node-wasm");
+    println!("cargo:rerun-if-changed={}", lumina_node_wasm_path.display());
 
+    // separate target directory is needed so that the two running cargo builds don't lock
+    // eachother
     let dest_path = project_root.join("target-wasm");
 
-    let profile_flag = if env::var("PROFILE")? == "release" {
-        "--profile"
-    } else {
-        "--debug"
-    };
+    let release_build = env::var("PROFILE")? == "release";
+    let wasm_output = format!(
+        "{}/wasm32-unknown-unknown/{}/lumina_node_wasm.wasm",
+        dest_path.display(),
+        if release_build { "release" } else { "debug" }
+    );
 
-    let output = Command::new("wasm-pack")
-        .args(["build", "--target", "web", "--out-dir"])
+    let build_cmd = Command::new("cargo")
+        .current_dir(project_root)
+        .args([
+            "build",
+            "-p",
+            "lumina-node-wasm",
+            "--target=wasm32-unknown-unknown",
+            "--target-dir",
+        ])
         .arg(&dest_path)
-        .arg(profile_flag)
-        .arg(&wasm_node_path)
+        .args(["--profile", if release_build { "release" } else { "dev" }])
         .output()
-        .expect("to build wasm files successfully");
-
-    if !output.status.success() {
+        .expect("cargo build failed");
+    if !build_cmd.status.success() {
         panic!(
-            "Error while compiling node-wasm:\nstdout: {}\nstderr: {}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            "Error while compiling lumina-node-wasm:\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&build_cmd.stdout),
+            String::from_utf8_lossy(&build_cmd.stderr)
+        );
+    }
+
+    let bindgen_cmd = Command::new("wasm-bindgen")
+        .args(["--target=web", "--out-dir"])
+        .arg(&dest_path)
+        .arg(wasm_output)
+        .output()
+        .expect("wasm-bindgen failed");
+
+    if !bindgen_cmd.status.success() {
+        panic!(
+            "Error while running bindgen on lumina-node-wasm:\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&bindgen_cmd.stdout),
+            String::from_utf8_lossy(&bindgen_cmd.stderr)
         );
     }
 
