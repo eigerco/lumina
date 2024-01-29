@@ -24,11 +24,6 @@ jobs:
         components: clippy
         target: wasm32-unknown-unknown
 
-    - name: Install wasm-bindgen-cli
-      uses: taiki-e/cache-cargo-install-action@v1
-      with:
-        tool: wasm-bindgen-cli@0.2.88
-
     - name: Run clippy for native
       run: cargo clippy --all --all-targets -- -D warnings -D missing-docs
 
@@ -51,11 +46,6 @@ jobs:
       with:
         toolchain: stable
         target: wasm32-unknown-unknown
-
-    - name: Install wasm-bindgen-cli
-      uses: taiki-e/cache-cargo-install-action@v1
-      with:
-        tool: wasm-bindgen-cli@0.2.88
 
     - name: Run rustdoc check
       env:
@@ -94,11 +84,6 @@ jobs:
       uses: taiki-e/cache-cargo-install-action@v1
       with:
         tool: wasm-pack@0.12.1
-
-    - name: Install wasm-bindgen-cli
-      uses: taiki-e/cache-cargo-install-action@v1
-      with:
-        tool: wasm-bindgen-cli@0.2.88
 
     - name: Install chromedriver # we don't specify chrome version to match whatever's installed
       uses: nanasess/setup-chromedriver@v2
@@ -146,11 +131,6 @@ jobs:
       with:
         version: "23.3"
         repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Install wasm-bindgen-cli
-      uses: taiki-e/cache-cargo-install-action@v1
-      with:
-        tool: wasm-bindgen-cli@0.2.88
 
     - name: Install wasm Rust
       uses: actions-rs/toolchain@v1
@@ -227,11 +207,6 @@ jobs:
       with:
         toolchain: nightly
         target: wasm32-unknown-unknown
-
-    - name: Install wasm-bindgen-cli
-      uses: taiki-e/cache-cargo-install-action@v1
-      with:
-        tool: wasm-bindgen-cli@0.2.88
 
     - name: Check for unused dependencies
       run: cargo +nightly udeps --all-features --all-targets
