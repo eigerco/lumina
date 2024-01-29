@@ -190,12 +190,6 @@ jobs:
       with:
         tool: cargo-udeps@0.1.43
 
-    - name: Install nightly wasm Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        target: wasm32-unknown-unknown
-
     - name: Check for unused dependencies
       run: cargo +nightly udeps --all-features --all-targets
       env:
