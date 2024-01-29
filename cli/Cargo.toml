@@ -34,7 +34,7 @@ axum = "0.6.20"
 clap = { version = "4.4.4", features = ["derive"] }
 dotenvy = "0.15.7"
 mime_guess = "2.0"
-rust-embed = { version = "8.0.0", features = ["interpolate-folder-path"]}
+rust-embed = { version = "8.0.0", features = ["interpolate-folder-path"] }
 serde = "1.0.189"
 serde_repr = "0.1"
 tokio = { version = "1.29.0", features = ["macros", "rt-multi-thread"] }
