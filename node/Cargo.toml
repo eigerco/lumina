@@ -34,7 +34,7 @@ libp2p = { workspace = true, features = [
 ] }
 
 async-trait = "0.1.73"
-bitmingle = { git = "https://github.com/eigerco/bitmingle", rev = "e737dbe" }
+beetswap = { git = "https://github.com/eigerco/beetswap", rev = "e737dbe" }
 cid = "0.11.0"
 dashmap = "5.5.3"
 futures = "0.3.28"

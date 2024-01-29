@@ -1,4 +1,4 @@
-use bitmingle::multihasher::Multihasher;
+use beetswap::multihasher::Multihasher;
 use blockstore::block::CidError;
 use celestia_proto::share::p2p::shwap::{
     Data as RawNamespacedData, Row as RawRow, Sample as RawSample,
@@ -70,7 +70,7 @@ pub(super) fn namespaced_data_cid(
 }
 
 fn convert_cid<const S: usize>(cid: &CidGeneric<S>) -> Result<Cid> {
-    bitmingle::utils::convert_cid(cid).ok_or(P2pError::Cid(celestia_types::Error::CidError(
+    beetswap::utils::convert_cid(cid).ok_or(P2pError::Cid(celestia_types::Error::CidError(
         CidError::InvalidMultihashLength(64),
     )))
 }

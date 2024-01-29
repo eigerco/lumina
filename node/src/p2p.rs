@@ -16,8 +16,6 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
-use bitmingle::{BitswapBehaviour, BitswapError};
-use bitmingle::{BitswapEvent, BitswapQueryId};
 use blockstore::InMemoryBlockstore;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_tendermint_proto::Protobuf;
@@ -126,9 +124,9 @@ pub enum P2pError {
     #[error("Bootnode multiaddrs without peer ID: {0:?}")]
     BootnodeAddrsWithoutPeerId(Vec<Multiaddr>),
 
-    /// An error propagated from [`BitswapBehaviour`].
+    /// An error propagated from [`beetswap::Behaviour`].
     #[error("Bitswap: {0}")]
-    Bitswap(#[from] BitswapError),
+    Bitswap(#[from] beetswap::Error),
 
     /// ProtoBuf message failed to be decoded.
     #[error("ProtoBuf decoding error: {0}")]
@@ -197,9 +195,9 @@ pub(crate) enum P2pCmd {
         peer_id: PeerId,
         is_trusted: bool,
     },
-    BitswapGet {
+    GetCid {
         cid: Cid,
-        respond_to: OneshotResultSender<Vec<u8>, BitswapError>,
+        respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>,
     },
 }
 
@@ -395,7 +393,7 @@ where
     pub async fn get_cid(&self, cid: Cid) -> Result<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
 
-        self.send_command(P2pCmd::BitswapGet {
+        self.send_command(P2pCmd::GetCid {
             cid,
             respond_to: tx,
         })
@@ -472,7 +470,7 @@ where
     S: Store + 'static,
 {
     autonat: autonat::Behaviour,
-    bitswap: BitswapBehaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>,
+    bitswap: beetswap::Behaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     header_ex: HeaderExBehaviour<S>,
@@ -489,7 +487,7 @@ where
     cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
     header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
-    bitswap_queries: HashMap<BitswapQueryId, OneshotResultSender<Vec<u8>, BitswapError>>,
+    bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, beetswap::Error>>,
 }
 
 impl<S> Worker<S>
@@ -670,7 +668,7 @@ where
                     self.peer_tracker.set_trusted(peer_id, is_trusted);
                 }
             }
-            P2pCmd::BitswapGet { cid, respond_to } => {
+            P2pCmd::GetCid { cid, respond_to } => {
                 self.on_bitswap_get(cid, respond_to);
             }
         }
@@ -755,21 +753,25 @@ where
     }
 
     #[instrument(level = "trace", skip_all)]
-    fn on_bitswap_get(&mut self, cid: Cid, respond_to: OneshotResultSender<Vec<u8>, BitswapError>) {
+    fn on_bitswap_get(
+        &mut self,
+        cid: Cid,
+        respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>,
+    ) {
         trace!("Requesting CID {cid} from bitswap");
         let query_id = self.swarm.behaviour_mut().bitswap.get(&cid);
         self.bitswap_queries.insert(query_id, respond_to);
     }
 
     #[instrument(level = "trace", skip(self))]
-    async fn on_bitswap_event(&mut self, ev: BitswapEvent) {
+    async fn on_bitswap_event(&mut self, ev: beetswap::Event) {
         match ev {
-            BitswapEvent::GetQueryResponse { query_id, data } => {
+            beetswap::Event::GetQueryResponse { query_id, data } => {
                 if let Some(respond_to) = self.bitswap_queries.remove(&query_id) {
                     respond_to.maybe_send_ok(data);
                 }
             }
-            BitswapEvent::GetQueryError { query_id, error } => {
+            beetswap::Event::GetQueryError { query_id, error } => {
                 if let Some(respond_to) = self.bitswap_queries.remove(&query_id) {
                     respond_to.maybe_send_err(error);
                 }
@@ -935,15 +937,15 @@ where
 
 fn init_bitswap<S>(
     args: &P2pArgs<S>,
-) -> Result<BitswapBehaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>>
+) -> Result<beetswap::Behaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>>
 where
     S: Store,
 {
     let protocol_prefix = format!("/celestia/{}", args.network_id);
 
-    Ok(BitswapBehaviour::builder(InMemoryBlockstore::new())
-        .protocol_prefix(&protocol_prefix)
+    Ok(beetswap::Behaviour::builder(InMemoryBlockstore::new())
+        .protocol_prefix(&protocol_prefix)?
         .register_multihasher(ShwapMultihasher)
         .client_set_send_dont_have(false)
-        .build()?)
+        .build())
 }

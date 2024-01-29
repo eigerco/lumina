@@ -542,6 +542,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "beetswap"
+version = "0.1.0"
+dependencies = [
+ "asynchronous-codec 0.7.0",
+ "blockstore",
+ "bytes",
+ "cid",
+ "fnv",
+ "futures",
+ "futures-timer",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "multihash-codetable",
+ "quick-protobuf",
+ "smallvec",
+ "thiserror",
+ "unsigned-varint 0.8.0",
+ "void",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -552,28 +574,6 @@ name = "bitflags"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4682ae6287fcf752ecaabbfcc7b6f9b72aa33933dc23a554d853aea8eea8635"
-
-[[package]]
-name = "bitmingle"
-version = "0.1.0"
-source = "git+https://github.com/eigerco/bitmingle?rev=e737dbe#e737dbe6eba659a2b86fcb901d1737c85ddb49e4"
-dependencies = [
- "asynchronous-codec 0.7.0",
- "blockstore",
- "bytes",
- "cid",
- "fnv",
- "futures",
- "futures-timer",
- "libp2p",
- "multihash",
- "multihash-codetable",
- "quick-protobuf",
- "smallvec",
- "thiserror",
- "unsigned-varint 0.8.0",
- "void",
-]
 
 [[package]]
 name = "bitvec"
@@ -2767,7 +2767,7 @@ version = "0.1.1"
 dependencies = [
  "async-trait",
  "backoff",
- "bitmingle",
+ "beetswap",
  "blockstore",
  "bytes",
  "celestia-proto",
