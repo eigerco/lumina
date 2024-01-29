@@ -49,6 +49,9 @@ lumina node --help
 # build wasm-node to be bundled with lumina
 wasm-pack build --target web node-wasm
 
+# install lumina with wasm node embedded
+cargo install --path cli --features embedded-lumina
+
 # serve lumina node on default localhost:9876
 lumina browser
 ```

@@ -2,8 +2,6 @@ Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase th
 
 import init, { Node, NodeConfig } from "/wasm/lumina_node_wasm.js";
 
-console.log(init)
-
 async function fetch_config() {
   const response = await fetch('/cfg.json');
   const json = await response.json();
