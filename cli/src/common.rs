@@ -1,9 +1,13 @@
+use std::env::current_exe;
+
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use lumina_node::network::Network;
 use serde_repr::Serialize_repr;
 
-use crate::{native, server};
+use crate::native;
+#[cfg(feature = "embedded-lumina")]
+use crate::server;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize_repr)]
 #[repr(u8)]
@@ -20,17 +24,30 @@ pub(crate) enum CliArgs {
     /// Run native node locally
     Node(native::Params),
     /// Serve compiled wasm node to be run in the browser
+    #[cfg(feature = "embedded-lumina")]
     Browser(server::Params),
 }
 
 /// Run the Lumina node.
 pub async fn run() -> Result<()> {
     let _ = dotenvy::dotenv();
-    let args = CliArgs::parse();
+
+    let args = if current_exe()?
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        == "lumina-node"
+    {
+        CliArgs::Node(native::Params::parse())
+    } else {
+        CliArgs::parse()
+    };
+
     let _guard = init_tracing();
 
     match args {
         CliArgs::Node(args) => native::run(args).await,
+        #[cfg(feature = "embedded-lumina")]
         CliArgs::Browser(args) => server::run(args).await,
     }
 }

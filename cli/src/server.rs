@@ -27,7 +27,7 @@ struct WasmNodeArgs {
 }
 
 #[derive(RustEmbed)]
-#[folder = "$WASM_NODE_OUT_DIR"]
+#[folder = "../node-wasm/pkg"]
 struct WasmPackage;
 
 #[derive(RustEmbed)]

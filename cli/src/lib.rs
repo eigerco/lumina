@@ -3,6 +3,7 @@
 
 mod common;
 mod native;
+#[cfg(feature = "embedded-lumina")]
 mod server;
 
 pub use common::run;
