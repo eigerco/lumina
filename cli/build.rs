@@ -1,4 +1,4 @@
-//! Build script which compiles node-wasm so that lumina-cli can embed it
+//! Build script which makes sure that the wasm target directory exists and allows configuration
 
 use anyhow::Result;
 use serde::Deserialize;
