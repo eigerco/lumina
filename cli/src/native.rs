@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use celestia_rpc::prelude::*;
 use celestia_rpc::Client;
-use clap::Args;
+use clap::Parser;
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
 use lumina_node::node::{Node, NodeConfig};
@@ -17,7 +17,7 @@ use crate::common::ArgNetwork;
 
 const CELESTIA_LOCAL_BRIDGE_RPC_ADDR: &str = "ws://localhost:26658";
 
-#[derive(Debug, Args)]
+#[derive(Debug, Parser)]
 pub(crate) struct Params {
     /// Network to connect.
     #[arg(short, long, value_enum, default_value_t)]
