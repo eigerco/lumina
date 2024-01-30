@@ -6,7 +6,7 @@ use lumina_node::network::Network;
 use serde_repr::Serialize_repr;
 
 use crate::native;
-#[cfg(feature = "embedded-lumina")]
+#[cfg(feature = "browser-node")]
 use crate::server;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize_repr)]
@@ -24,7 +24,7 @@ pub(crate) enum CliArgs {
     /// Run native node locally
     Node(native::Params),
     /// Serve compiled wasm node to be run in the browser
-    #[cfg(feature = "embedded-lumina")]
+    #[cfg(feature = "browser-node")]
     Browser(server::Params),
 }
 
@@ -47,7 +47,7 @@ pub async fn run() -> Result<()> {
 
     match args {
         CliArgs::Node(args) => native::run(args).await,
-        #[cfg(feature = "embedded-lumina")]
+        #[cfg(feature = "browser-node")]
         CliArgs::Browser(args) => server::run(args).await,
     }
 }

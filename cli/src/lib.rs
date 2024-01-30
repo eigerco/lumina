@@ -3,7 +3,7 @@
 
 mod common;
 mod native;
-#[cfg(feature = "embedded-lumina")]
+#[cfg(feature = "browser-node")]
 mod server;
 
 pub use common::run;

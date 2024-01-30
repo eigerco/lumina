@@ -59,7 +59,7 @@ cargo install wasm-pack
 wasm-pack build --target web node-wasm
 
 # install lumina-cli
-cargo install --path cli --features embedded-wasm-node
+cargo install --path cli --features browser-node
 ```
 
 ## Running the node
