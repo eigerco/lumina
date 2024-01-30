@@ -13,11 +13,60 @@ Supported features:
 
 ## Running the node
 
-For detailed information about setup, building, and running Lumina node locally or in a browser see [lumina-cli](cli/README.md).
+### Installing with cargo
 
-### Run the node locally
+Install the node. Note that currently to serve lumina to run it from the browser, you need to compile `lumina-cli` manually.
+```bash
+cargo install lumina-cli --locked
+```
+Run the node
 ```bash
 lumina node --network mocha
+```
+
+### Building from source
+
+Install common dependencies
+
+```bash
+# install dependencies
+sudo apt-get install -y build-essential curl git protobuf-compiler
+
+# install rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# open a new terminal or run
+source "$HOME/.cargo/env"
+
+# clone the repository
+git clone https://github.com/eigerco/lumina
+cd lumina
+```
+
+#### Running the node natively
+
+```bash
+# install lumina
+cargo install --path cli
+
+# run lumina node
+lumina node --network mocha
+
+# check out help for more configuration options
+lumina node --help
+```
+
+#### Building and serving node-wasm
+
+```bash
+# build wasm-node to be bundled with lumina
+wasm-pack build --target web node-wasm
+
+# install lumina with wasm node embedded
+cargo install --path cli --features embedded-lumina
+
+# serve lumina node on default localhost:9876
+lumina browser
 ```
 
 ## Running Go celestia node for integration
