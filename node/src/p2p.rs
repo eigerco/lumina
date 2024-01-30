@@ -669,7 +669,7 @@ where
                 }
             }
             P2pCmd::GetCid { cid, respond_to } => {
-                self.on_bitswap_get(cid, respond_to);
+                self.on_get_cid(cid, respond_to);
             }
         }
 
@@ -753,11 +753,7 @@ where
     }
 
     #[instrument(level = "trace", skip_all)]
-    fn on_bitswap_get(
-        &mut self,
-        cid: Cid,
-        respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>,
-    ) {
+    fn on_get_cid(&mut self, cid: Cid, respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>) {
         trace!("Requesting CID {cid} from bitswap");
         let query_id = self.swarm.behaviour_mut().bitswap.get(&cid);
         self.bitswap_queries.insert(query_id, respond_to);

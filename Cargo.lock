@@ -544,6 +544,7 @@ dependencies = [
 [[package]]
 name = "beetswap"
 version = "0.1.0"
+source = "git+https://github.com/eigerco/beetswap?rev=64e65d5#64e65d57aff36b08dc87b88ca7fc6684a2178f18"
 dependencies = [
  "asynchronous-codec 0.7.0",
  "blockstore",
