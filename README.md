@@ -11,7 +11,7 @@ Supported features:
 - [ ] Data Availability Sampling
 - [ ] Creating, distributing, and listening for Fraud proofs
 
-## Running the node
+## Installing the node
 
 ### Installing with cargo
 
@@ -41,14 +41,32 @@ source "$HOME/.cargo/env"
 # clone the repository
 git clone https://github.com/eigerco/lumina
 cd lumina
-```
 
-#### Running the node natively
-
-```bash
 # install lumina
 cargo install --path cli
+```
 
+### Building wasm-node
+
+To build `lumina-cli` with support for serving wasm-node to browsers, currently
+you need to compile wasm node manually. Follow these additional steps:
+
+```bash
+# install wasm-pack
+cargo install wasm-pack
+
+# compile lumina to wasm
+wasm-pack build --target web node-wasm
+
+# install lumina-cli
+cargo install --path cli --features embedded-wasm-node
+```
+
+## Running the node
+
+### Running the node natively
+
+```bash
 # run lumina node
 lumina node --network mocha
 
@@ -56,17 +74,14 @@ lumina node --network mocha
 lumina node --help
 ```
 
-#### Building and serving node-wasm
+### Building and serving node-wasm
 
 ```bash
-# build wasm-node to be bundled with lumina
-wasm-pack build --target web node-wasm
-
-# install lumina with wasm node embedded
-cargo install --path cli --features embedded-lumina
-
 # serve lumina node on default localhost:9876
 lumina browser
+
+# check out help from more configuration options
+lumina browser --help
 ```
 
 ## Running Go celestia node for integration
