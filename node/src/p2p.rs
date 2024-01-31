@@ -10,14 +10,22 @@
 //! - header-ex client
 //! - header-ex server
 
+use std::collections::HashMap;
 use std::io;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
+use blockstore::InMemoryBlockstore;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
+use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
+use celestia_types::namespaced_data::NamespacedData;
+use celestia_types::nmt::Namespace;
+use celestia_types::row::Row;
+use celestia_types::sample::Sample;
 use celestia_types::ExtendedHeader;
+use cid::Cid;
 use futures::StreamExt;
 use instant::Instant;
 use libp2p::{
@@ -36,8 +44,11 @@ use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
+mod shwap;
+
 use crate::executor::{spawn, Interval};
 use crate::header_ex::{HeaderExBehaviour, HeaderExConfig};
+use crate::p2p::shwap::ShwapMultihasher;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::session::Session;
@@ -45,22 +56,28 @@ use crate::store::Store;
 use crate::swarm::new_swarm;
 use crate::utils::{
     celestia_protocol_id, gossipsub_ident_topic, MultiaddrExt, OneshotResultSender,
-    OneshotSenderExt,
+    OneshotResultSenderExt, OneshotSenderExt,
 };
 
 pub use crate::header_ex::HeaderExError;
+
+use self::shwap::{namespaced_data_cid, row_cid, sample_cid};
 
 // Minimal number of peers that we want to maintain connection to.
 // If we have fewer peers than that, we will try to reconnect / discover
 // more aggresively.
 const MIN_CONNECTED_PEERS: u64 = 4;
+
 // Bootstrap procedure is a bit misleading as a name. It is actually
 // scanning the network thought the already known peers and find new
 // ones. It also recovers connectivity of previously known peers and
 // refreshes the routing table.
 //
-// libp2p team suggests to start bootstrap procedure every 5 minute
+// libp2p team suggests to start bootstrap procedure every 5 minute.
 const KADEMLIA_BOOTSTRAP_PERIOD: Duration = Duration::from_secs(5 * 60);
+
+// Maximum size of a [`Multihash`].
+const MAX_MH_SIZE: usize = 64;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
@@ -106,6 +123,18 @@ pub enum P2pError {
     /// Bootnode address is missing its peer ID.
     #[error("Bootnode multiaddrs without peer ID: {0:?}")]
     BootnodeAddrsWithoutPeerId(Vec<Multiaddr>),
+
+    /// An error propagated from [`beetswap::Behaviour`].
+    #[error("Bitswap: {0}")]
+    Bitswap(#[from] beetswap::Error),
+
+    /// ProtoBuf message failed to be decoded.
+    #[error("ProtoBuf decoding error: {0}")]
+    ProtoDecodeFailed(#[from] celestia_tendermint_proto::Error),
+
+    /// An error propagated from [`celestia_types`] that is related to [`Cid`].
+    #[error("CID error: {0}")]
+    Cid(celestia_types::Error),
 }
 
 impl From<oneshot::error::RecvError> for P2pError {
@@ -165,6 +194,10 @@ pub(crate) enum P2pCmd {
     SetPeerTrust {
         peer_id: PeerId,
         is_trusted: bool,
+    },
+    GetCid {
+        cid: Cid,
+        respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>,
     },
 }
 
@@ -356,6 +389,50 @@ where
         Ok(headers)
     }
 
+    /// Request a [`Cid`] on bitswap protocol.
+    pub async fn get_cid(&self, cid: Cid) -> Result<Vec<u8>> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(P2pCmd::GetCid {
+            cid,
+            respond_to: tx,
+        })
+        .await?;
+
+        Ok(rx.await??)
+    }
+
+    /// Request a [`Row`] on bitswap protocol.
+    pub async fn get_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
+        let cid = row_cid(row_index, block_height)?;
+        let data = self.get_cid(cid).await?;
+        Ok(Row::decode(&data[..])?)
+    }
+
+    /// Request a [`Sample`] on bitswap protocol.
+    pub async fn get_sample(
+        &self,
+        index: usize,
+        square_len: usize,
+        block_height: u64,
+    ) -> Result<Sample> {
+        let cid = sample_cid(index, square_len, block_height)?;
+        let data = self.get_cid(cid).await?;
+        Ok(Sample::decode(&data[..])?)
+    }
+
+    /// Request a [`NamespacedData`] on bitswap protocol.
+    pub async fn get_namespaced_data(
+        &self,
+        namespace: Namespace,
+        row_index: u16,
+        block_height: u64,
+    ) -> Result<NamespacedData> {
+        let cid = namespaced_data_cid(namespace, row_index, block_height)?;
+        let data = self.get_cid(cid).await?;
+        Ok(NamespacedData::decode(&data[..])?)
+    }
+
     /// Get the addresses where [`P2p`] listens on for incoming connections.
     pub async fn listeners(&self) -> Result<Vec<Multiaddr>> {
         let (tx, rx) = oneshot::channel();
@@ -393,6 +470,7 @@ where
     S: Store + 'static,
 {
     autonat: autonat::Behaviour,
+    bitswap: beetswap::Behaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     header_ex: HeaderExBehaviour<S>,
@@ -409,6 +487,7 @@ where
     cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
     header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
+    bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, beetswap::Error>>,
 }
 
 impl<S> Worker<S>
@@ -424,6 +503,7 @@ where
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
         let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
+        let bitswap = init_bitswap(&args)?;
         let ping = ping::Behaviour::new(ping::Config::default());
 
         let identify = identify::Behaviour::new(identify::Config::new(
@@ -444,6 +524,7 @@ where
 
         let behaviour = Behaviour {
             autonat,
+            bitswap,
             ping,
             identify,
             gossipsub,
@@ -471,6 +552,7 @@ where
             header_sub_topic_hash: header_sub_topic.hash(),
             peer_tracker,
             header_sub_watcher,
+            bitswap_queries: HashMap::new(),
         })
     }
 
@@ -516,6 +598,7 @@ where
                 BehaviourEvent::Identify(ev) => self.on_identify_event(ev).await?,
                 BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await,
                 BehaviourEvent::Kademlia(ev) => self.on_kademlia_event(ev).await?,
+                BehaviourEvent::Bitswap(ev) => self.on_bitswap_event(ev).await,
                 BehaviourEvent::Autonat(_)
                 | BehaviourEvent::Ping(_)
                 | BehaviourEvent::HeaderEx(_) => {}
@@ -584,6 +667,9 @@ where
                 if *self.swarm.local_peer_id() != peer_id {
                     self.peer_tracker.set_trusted(peer_id, is_trusted);
                 }
+            }
+            P2pCmd::GetCid { cid, respond_to } => {
+                self.on_get_cid(cid, respond_to);
             }
         }
 
@@ -664,6 +750,29 @@ where
         }
 
         Ok(())
+    }
+
+    #[instrument(level = "trace", skip_all)]
+    fn on_get_cid(&mut self, cid: Cid, respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>) {
+        trace!("Requesting CID {cid} from bitswap");
+        let query_id = self.swarm.behaviour_mut().bitswap.get(&cid);
+        self.bitswap_queries.insert(query_id, respond_to);
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    async fn on_bitswap_event(&mut self, ev: beetswap::Event) {
+        match ev {
+            beetswap::Event::GetQueryResponse { query_id, data } => {
+                if let Some(respond_to) = self.bitswap_queries.remove(&query_id) {
+                    respond_to.maybe_send_ok(data);
+                }
+            }
+            beetswap::Event::GetQueryError { query_id, error } => {
+                if let Some(respond_to) = self.bitswap_queries.remove(&query_id) {
+                    respond_to.maybe_send_err(error);
+                }
+            }
+        }
     }
 
     #[instrument(skip_all, fields(peer_id = %peer_id))]
@@ -820,4 +929,19 @@ where
     }
 
     Ok(kademlia)
+}
+
+fn init_bitswap<S>(
+    args: &P2pArgs<S>,
+) -> Result<beetswap::Behaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>>
+where
+    S: Store,
+{
+    let protocol_prefix = format!("/celestia/{}", args.network_id);
+
+    Ok(beetswap::Behaviour::builder(InMemoryBlockstore::new())
+        .protocol_prefix(&protocol_prefix)?
+        .register_multihasher(ShwapMultihasher)
+        .client_set_send_dont_have(false)
+        .build())
 }
