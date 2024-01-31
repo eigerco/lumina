@@ -13,7 +13,8 @@ use sled::{Db, Error as SledError, Transactional, Tree};
 use tempdir::TempDir;
 use tokio::task::spawn_blocking;
 use tokio::task::JoinError;
-use tracing::debug;
+use tracing::{debug, info};
+use cid::Cid;
 
 use crate::store::{ExtendedHeaderMetadata, Result, Store, StoreError};
 
@@ -224,7 +225,7 @@ impl SledStore {
         Ok(())
     }
 
-    async fn mark_header_sampled(&self, height: u64, accepted: bool) -> Result<u64> {
+    async fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>) -> Result<u64> {
         let inner = self.inner.clone();
 
         spawn_blocking(move || {
@@ -237,17 +238,32 @@ impl SledStore {
 
             let metadata_key = height_to_key(height);
 
-            inner
+            let metadata = ExtendedHeaderMetadata {
+                accepted,
+                cids_sampled: cids,
+            };
+            let serialized = serde_json::to_vec(&metadata).unwrap();
+
+            if let Some(previous) = inner
                 .height_to_metadata
+                .insert(metadata_key, serialized)? {
+                    info!("Overriding existing sampling metadata for height {height}");
+            };
+
+
+                /*
                 .fetch_and_update(metadata_key, |old_metadata| {
                     let mut m = match old_metadata {
-                        Some(serialized) => serde_json::from_slice(serialized).unwrap(),
+                        Some(serialized) => {
+                            info!("Overriding existing sampling metadata for height {height}");
+                            serde_json::from_slice(serialized).unwrap()
+                        },
                         None => ExtendedHeaderMetadata::default(),
                     };
-                    m.accepted = Some(accepted);
+                    m.accepted = accepted;
                     Some(serde_json::to_vec(&m).unwrap())
                 })?;
-
+                */
             Ok(())
         })
         .await??;
@@ -333,8 +349,8 @@ impl Store for SledStore {
         self.get_heighest_sampled_height().await
     }
 
-    async fn mark_header_sampled(&self, height: u64, accepted: bool) -> Result<u64> {
-        self.mark_header_sampled(height, accepted).await
+    async fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>) -> Result<u64> {
+        self.mark_header_sampled(height, accepted, cids).await
     }
 }
 

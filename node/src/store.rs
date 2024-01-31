@@ -9,6 +9,7 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use cid::Cid;
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
@@ -29,7 +30,11 @@ pub struct ExtendedHeaderMetadata {
     /// Shows whether header was accepted by this node. `Some` indicates that header was
     /// verified, with the appropriate result set inside, while `None` means header wasn't yet
     /// sampled
-    pub accepted: Option<bool>,
+    pub accepted: bool,
+
+    /// List of CIDs used, when decision to accept or reject the header was taken. Can be used to
+    /// remove associated data from Blockstore, when cleaning up the old ExtendedHeaders
+    pub cids_sampled: Vec<Cid>,
 }
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;

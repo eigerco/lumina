@@ -5,16 +5,23 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use tracing::debug;
+use tracing::{debug, info};
+use cid::Cid;
 
 use crate::store::{ExtendedHeaderMetadata, Result, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
 pub struct InMemoryStore {
-    headers: DashMap<Hash, (ExtendedHeader, ExtendedHeaderMetadata)>,
+    /// Maps header Hash to the header itself, responsible for actually storing the header data
+    headers: DashMap<Hash, ExtendedHeader>,
+    /// Maps header height to the header sampling metadata, used by DAS
+    sampling_data: DashMap<u64, ExtendedHeaderMetadata>,
+    /// Maps header height to its hash, in case we need to do lookup by height
     height_to_hash: DashMap<u64, Hash>,
+    /// Cached height of the highest header in store
     head_height: AtomicU64,
+    /// Cached height of the highest header marked as sampled
     heighest_sampled_height: AtomicU64,
 }
 
@@ -23,6 +30,7 @@ impl InMemoryStore {
     pub fn new() -> Self {
         InMemoryStore {
             headers: DashMap::new(),
+            sampling_data: DashMap::new(),
             height_to_hash: DashMap::new(),
             head_height: AtomicU64::new(0),
             heighest_sampled_height: AtomicU64::new(0),
@@ -77,7 +85,7 @@ impl InMemoryStore {
         }
 
         debug!("Inserting header {hash} with height {height}");
-        hash_entry.insert((header, ExtendedHeaderMetadata::default()));
+        hash_entry.insert(header);
         height_entry.insert(hash);
 
         self.head_height.store(height, Ordering::Release);
@@ -98,7 +106,7 @@ impl InMemoryStore {
         self.headers
             .get(hash)
             .as_deref()
-            .map(|(eh, _)| eh.clone())
+            .map(|eh| eh.clone())
             .ok_or(StoreError::NotFound)
     }
 
@@ -122,7 +130,7 @@ impl InMemoryStore {
         self.headers
             .get(&hash)
             .as_deref()
-            .map(|(eh, _)| eh.clone())
+            .map(|eh| eh.clone())
             .ok_or(StoreError::LostHash(hash))
     }
 
@@ -164,20 +172,19 @@ impl Store for InMemoryStore {
         Ok(self.get_heighest_sampled_height())
     }
 
-    async fn mark_header_sampled(&self, height: u64, accepted: bool) -> Result<u64> {
+    async fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>) -> Result<u64> {
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
         }
-        let Some(hash) = self.height_to_hash.get(&height).as_deref().copied() else {
-            return Err(StoreError::LostHeight(height));
+
+        let metadata = ExtendedHeaderMetadata {
+            accepted,
+            cids_sampled: cids,
         };
 
-        let mut header = self
-            .headers
-            .get_mut(&hash)
-            .ok_or(StoreError::LostHash(hash))?;
-
-        header.1.accepted = Some(accepted);
+        if let Some(previous) = self.sampling_data.insert(height, metadata) {
+            info!("Overriding existing sampling metadata for height {height}");
+        }
 
         self.increment_sampled_height()?;
 
@@ -199,6 +206,7 @@ impl Clone for InMemoryStore {
     fn clone(&self) -> Self {
         InMemoryStore {
             headers: self.headers.clone(),
+            sampling_data: self.sampling_data.clone(),
             height_to_hash: self.height_to_hash.clone(),
             head_height: AtomicU64::new(self.head_height.load(Ordering::Acquire)),
             heighest_sampled_height: AtomicU64::new(self.head_height.load(Ordering::Acquire)),
