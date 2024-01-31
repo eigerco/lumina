@@ -15,8 +15,8 @@ use tokio::sync::oneshot;
 use tracing::{debug, instrument, trace};
 
 use crate::executor::{spawn, yield_now};
-use crate::header_ex::utils::{HeaderRequestExt, HeaderResponseExt};
-use crate::header_ex::{HeaderExError, ReqRespBehaviour};
+use crate::p2p::header_ex::utils::{HeaderRequestExt, HeaderResponseExt};
+use crate::p2p::header_ex::{HeaderExError, ReqRespBehaviour};
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
 use crate::utils::{OneshotResultSender, OneshotResultSenderExt, VALIDATIONS_PER_YIELD};
@@ -303,7 +303,7 @@ async fn decode_and_verify_responses(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::header_ex::utils::ExtendedHeaderExt;
+    use crate::p2p::header_ex::utils::ExtendedHeaderExt;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::consts::HASH_SIZE;
