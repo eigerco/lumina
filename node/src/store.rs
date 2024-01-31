@@ -7,9 +7,9 @@ use std::ops::{Bound, RangeBounds, RangeInclusive};
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use cid::Cid;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use cid::Cid;
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
@@ -100,7 +100,8 @@ pub trait Store: Send + Sync + Debug {
     /// Sets sampling result for header, updating last sampled height so that it points
     /// to the next that wasn't verified
     /// Returns new heighest sampled height or error, if occured
-    async fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>) -> Result<u64>;
+    async fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>)
+        -> Result<u64>;
 
     /// Returns true if hash exists in the store.
     async fn has(&self, hash: &Hash) -> bool;

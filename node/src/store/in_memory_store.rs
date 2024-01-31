@@ -3,10 +3,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use cid::Cid;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use tracing::{debug, info};
-use cid::Cid;
 
 use crate::store::{ExtendedHeaderMetadata, Result, Store, StoreError};
 
@@ -172,7 +172,12 @@ impl Store for InMemoryStore {
         Ok(self.get_heighest_sampled_height())
     }
 
-    async fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>) -> Result<u64> {
+    async fn mark_header_sampled(
+        &self,
+        height: u64,
+        accepted: bool,
+        cids: Vec<Cid>,
+    ) -> Result<u64> {
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
         }

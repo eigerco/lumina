@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use cid::Cid;
 use js_sys::Array;
 use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
@@ -13,10 +14,14 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_wasm_bindgen::{from_value, to_value};
 use wasm_bindgen::JsValue;
 
-use crate::store::{Result, Store, StoreError};
+use crate::store::{ExtendedHeaderMetadata, Result, Store, StoreError};
 
+/// indexeddb version, needs to be incremented on every schema schange
 const DB_VERSION: u32 = 4;
+
 const HEADER_STORE_NAME: &str = "headers";
+const METADATA_STORE_NAME: &str = "meatadata";
+
 const HASH_INDEX_NAME: &str = "hash";
 const HEIGHT_INDEX_NAME: &str = "height";
 const ACCEPTANCE_INDEX_NAME: &str = "accepted";
@@ -58,9 +63,9 @@ impl IndexedDbStore {
                     .auto_increment(true)
                     // These need to match names in `ExtendedHeaderEntry`
                     .add_index(Index::new(HASH_INDEX_NAME, "hash").unique(true))
-                    .add_index(Index::new(HEIGHT_INDEX_NAME, "height").unique(true))
-                    .add_index(Index::new(ACCEPTANCE_INDEX_NAME, "accepted").unique(true)),
+                    .add_index(Index::new(HEIGHT_INDEX_NAME, "height").unique(true)),
             )
+            .add_object_store(ObjectStore::new(METADATA_STORE_NAME).key_path("height"))
             .build()
             .await
             .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
@@ -229,7 +234,12 @@ impl IndexedDbStore {
         height <= head_height
     }
 
-    async fn mark_header_sampled(&self, height: u64, accepted: bool) -> Result<u64> {
+    async fn mark_header_sampled(
+        &self,
+        height: u64,
+        accepted: bool,
+        cids: Vec<Cid>,
+    ) -> Result<u64> {
         // quick check with contains_height, which uses cached head
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
@@ -237,13 +247,23 @@ impl IndexedDbStore {
 
         let tx = self
             .db
-            .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadWrite)?;
-        let header_store = tx.store(HEADER_STORE_NAME)?;
+            .transaction(&[METADATA_STORE_NAME], TransactionMode::ReadWrite)?;
+        let metadata_store = tx.store(METADATA_STORE_NAME)?;
 
-        let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
+        //let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
+        let metadata = ExtendedHeaderMetadata {
+            accepted,
+            cids_sampled: cids,
+        };
+        let metadata_jsvalue = to_value(&metadata)?;
 
         let height_key = to_value(&height)?;
-        let height_entry_jsvalue = height_index.get(&height_key).await?;
+        metadata_store
+            .put(&metadata_jsvalue, Some(&height_key))
+            .await?;
+        //let height_entry_jsvalue = metadata_store.get(&height_key).await?;
+
+        /*
 
         if height_entry_jsvalue.is_falsy() {
             return Err(StoreError::LostHeight(height));
@@ -254,6 +274,7 @@ impl IndexedDbStore {
 
         let jsvalue_header = to_value(&header_entry)?;
         header_store.put(&jsvalue_header, None).await?;
+        */
 
         tx.commit().await?;
 
@@ -304,8 +325,13 @@ impl Store for IndexedDbStore {
         Ok(*self.highest_sampled_height.borrow())
     }
 
-    async fn mark_header_sampled(&self, height: u64, accepted: bool) -> Result<u64> {
-        let fut = SendWrapper::new(self.mark_header_sampled(height, accepted));
+    async fn mark_header_sampled(
+        &self,
+        height: u64,
+        accepted: bool,
+        cids: Vec<Cid>,
+    ) -> Result<u64> {
+        let fut = SendWrapper::new(self.mark_header_sampled(height, accepted, cids));
         fut.await
     }
 }
@@ -390,12 +416,13 @@ async fn get_highest_sampled_height_from_database(db: &Rexie) -> Result<u64> {
     else {
         return Ok(0);
     };
-    */
     let last_sampled = u64::max(last_accepted.unwrap_or(0), last_rejected.unwrap_or(0));
+    */
 
-    println!("highest: {:?}", last_sampled);
+    //println!("highest: {:?}", last_sampled);
 
-    Ok(from_value::<ExtendedHeaderEntry>(last_sampled.1)?.height)
+    //Ok(from_value::<ExtendedHeaderEntry>(last_sampled.1)?.height)
+    todo!()
 }
 
 async fn get_head_from_database(db: &Rexie) -> Result<ExtendedHeader> {
@@ -672,12 +699,12 @@ pub mod tests {
     async fn test_sampling_height() {
         let (store, _) = gen_filled_store(9, function_name!()).await;
 
-        store.mark_header_sampled(1, true).await.unwrap();
-        store.mark_header_sampled(2, true).await.unwrap();
-        store.mark_header_sampled(3, false).await.unwrap();
-        store.mark_header_sampled(4, true).await.unwrap();
-        store.mark_header_sampled(5, false).await.unwrap();
-        store.mark_header_sampled(6, false).await.unwrap();
+        store.mark_header_sampled(1, true, vec![]).await.unwrap();
+        store.mark_header_sampled(2, true, vec![]).await.unwrap();
+        store.mark_header_sampled(3, false, vec![]).await.unwrap();
+        store.mark_header_sampled(4, true, vec![]).await.unwrap();
+        store.mark_header_sampled(5, false, vec![]).await.unwrap();
+        store.mark_header_sampled(6, false, vec![]).await.unwrap();
 
         assert_eq!(store.highest_sampled_height().await.unwrap(), 6);
     }
