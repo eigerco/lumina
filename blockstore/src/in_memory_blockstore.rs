@@ -65,6 +65,7 @@ impl<const MAX_MULTIHASH_SIZE: usize> Default for InMemoryBlockstore<MAX_MULTIHA
 mod tests {
     use super::*;
     use crate::block::{Block, CidError};
+    use multihash::Multihash;
     use std::iter::zip;
     use std::result::Result as StdResult;
 

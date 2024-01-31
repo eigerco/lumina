@@ -40,3 +40,33 @@ impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for LruBlockstore<MAX_MULTIHASH
         Ok(cache.contains(&cid))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use cid::Cid;
+    use multihash::Multihash;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn insert_get() {
+        // Blockstore that can hold the last 2 items.
+        let store = LruBlockstore::<64>::new(NonZeroUsize::new(2).unwrap());
+
+        let cid1 = Cid::new_v1(1, Multihash::wrap(2, &[1]).unwrap());
+        let cid2 = Cid::new_v1(1, Multihash::wrap(2, &[2]).unwrap());
+        let cid3 = Cid::new_v1(1, Multihash::wrap(2, &[3]).unwrap());
+
+        store.put_keyed(&cid1, b"1").await.unwrap();
+        assert_eq!(store.get(&cid1).await.unwrap().unwrap(), b"1");
+
+        store.put_keyed(&cid2, b"2").await.unwrap();
+        assert_eq!(store.get(&cid2).await.unwrap().unwrap(), b"2");
+        assert!(store.has(&cid1).await.unwrap());
+
+        store.put_keyed(&cid3, b"3").await.unwrap();
+        assert_eq!(store.get(&cid3).await.unwrap().unwrap(), b"3");
+        assert!(store.has(&cid2).await.unwrap());
+        assert!(!store.has(&cid1).await.unwrap());
+    }
+}
