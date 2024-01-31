@@ -23,20 +23,20 @@ impl<const MAX_MULTIHASH_SIZE: usize> LruBlockstore<MAX_MULTIHASH_SIZE> {
 impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for LruBlockstore<MAX_MULTIHASH_SIZE> {
     async fn get<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<Option<Vec<u8>>> {
         let cid = convert_cid(cid)?;
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = self.cache.lock().expect("lock failed");
         Ok(cache.get(&cid).map(ToOwned::to_owned))
     }
 
     async fn put_keyed<const S: usize>(&self, cid: &CidGeneric<S>, data: &[u8]) -> Result<()> {
         let cid = convert_cid(cid)?;
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = self.cache.lock().expect("lock failed");
         cache.put(cid, data.to_vec());
         Ok(())
     }
 
     async fn has<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<bool> {
         let cid = convert_cid(cid)?;
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().expect("lock failed");
         Ok(cache.contains(&cid))
     }
 }
