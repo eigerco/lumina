@@ -15,12 +15,13 @@ use tokio::task::spawn_blocking;
 use tokio::task::JoinError;
 use tracing::debug;
 
-use crate::store::Store;
-use crate::store::{Result, StoreError};
+use crate::store::{ExtendedHeaderMetadata, Result, Store, StoreError};
 
 const HEAD_HEIGHT_KEY: &[u8] = b"KEY.HEAD_HEIGHT";
+const SAMPLED_HEIGHT_KEY: &[u8] = b"KEY.SAMPLED_HEIGHT";
 const HASH_TREE_ID: &[u8] = b"HASH";
 const HEIGHT_TO_HASH_TREE_ID: &[u8] = b"HEIGHT";
+const HEIGHT_TO_METADATA_TREE_ID: &[u8] = b"METADATA";
 
 /// A [`Store`] implementation based on a [`sled`] database.
 #[derive(Debug)]
@@ -30,9 +31,14 @@ pub struct SledStore {
 
 #[derive(Debug)]
 struct Inner {
+    /// Reference to the entire sled db
     db: Db,
+    /// sub-tree which maps header hash to header
     headers: Tree,
+    /// sub-tree which maps header height to its hash
     height_to_hash: Tree,
+    /// sub-tree which maps header height to its metadata
+    height_to_metadata: Tree,
 }
 
 impl SledStore {
@@ -88,12 +94,14 @@ impl SledStore {
     fn init(db: Db) -> sled::Result<Self> {
         let headers = db.open_tree(HASH_TREE_ID)?;
         let height_to_hash = db.open_tree(HEIGHT_TO_HASH_TREE_ID)?;
+        let height_to_metadata = db.open_tree(HEIGHT_TO_METADATA_TREE_ID)?;
 
         Ok(Self {
             inner: Arc::new(Inner {
                 db,
                 headers,
                 height_to_hash,
+                height_to_metadata,
             }),
         })
     }
@@ -102,6 +110,12 @@ impl SledStore {
         let inner = self.inner.clone();
 
         spawn_blocking(move || read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY)).await?
+    }
+
+    async fn get_heighest_sampled_height(&self) -> Result<u64> {
+        let inner = self.inner.clone();
+
+        spawn_blocking(move || read_height_by_db_key(&inner.db, SAMPLED_HEIGHT_KEY)).await?
     }
 
     async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
@@ -210,6 +224,41 @@ impl SledStore {
         Ok(())
     }
 
+    async fn mark_header_sampled(&self, height: u64, accepted: bool) -> Result<u64> {
+        let inner = self.inner.clone();
+
+        spawn_blocking(move || {
+            let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY).unwrap_or(0);
+
+            // A light check before checking the whole map
+            if head_height > 0 && height <= head_height {
+                return Err(StoreError::HeightExists(height));
+            }
+
+            let metadata_key = height_to_key(height);
+
+            inner
+                .height_to_metadata
+                .fetch_and_update(metadata_key, |old_metadata| {
+                    let mut m = match old_metadata {
+                        Some(serialized) => serde_json::from_slice(serialized).unwrap(),
+                        None => ExtendedHeaderMetadata::default(),
+                    };
+                    m.accepted = Some(accepted);
+                    Some(serde_json::to_vec(&m).unwrap())
+                })?;
+
+            Ok(())
+        })
+        .await??;
+
+        self.increment_sampled_height()
+    }
+
+    fn increment_sampled_height(&self) -> Result<u64> {
+        todo!()
+    }
+
     /// Flush the store's state to the filesystem.
     pub async fn flush_to_storage(&self) -> Result<()> {
         self.inner.db.flush_async().await?;
@@ -279,6 +328,14 @@ impl Store for SledStore {
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
         self.append_single_unchecked(header).await
     }
+
+    async fn highest_sampled_height(&self) -> Result<u64> {
+        self.get_heighest_sampled_height().await
+    }
+
+    async fn mark_header_sampled(&self, height: u64, accepted: bool) -> Result<u64> {
+        self.mark_header_sampled(height, accepted).await
+    }
 }
 
 #[inline]
@@ -313,6 +370,17 @@ fn read_header_by_db_key(tree: &Tree, db_key: &[u8]) -> Result<ExtendedHeader> {
 
     ExtendedHeader::decode(serialized.as_ref()).map_err(|e| StoreError::CelestiaTypes(e.into()))
 }
+
+/*
+#[inline]
+fn read_metadata_by_db_key(tree: &TransactionalTree, db_key: &[u8]) -> Result<ExtendedHeaderMetadata> {
+    let serialized = tree.get(db_key)?.ok_or(StoreError::NotFound)?;
+    // TODO: no json
+    serde_json::from_str(serialized.as_ref())
+
+    //ExtendedHeaderMetadata::decode(serialized.as_ref()).map_err(|e| StoreError::CelestiaTypes(e.into()))
+}
+*/
 
 #[inline]
 fn height_to_key(height: u64) -> [u8; 8] {

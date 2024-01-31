@@ -7,6 +7,7 @@ use std::ops::{Bound, RangeBounds, RangeInclusive};
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use in_memory_store::InMemoryStore;
@@ -22,6 +23,14 @@ mod indexed_db_store;
 mod sled_store;
 
 use crate::utils::validate_headers;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ExtendedHeaderMetadata {
+    /// Shows whether header was accepted by this node. `Some` indicates that header was
+    /// verified, with the appropriate result set inside, while `None` means header wasn't yet
+    /// sampled
+    pub accepted: Option<bool>,
+}
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
 
@@ -79,6 +88,14 @@ pub trait Store: Send + Sync + Debug {
 
     /// Returns the highest known height.
     async fn head_height(&self) -> Result<u64>;
+
+    /// Returns last sampled height
+    async fn highest_sampled_height(&self) -> Result<u64>;
+
+    /// Sets sampling result for header, updating last sampled height so that it points
+    /// to the next that wasn't verified
+    /// Returns new heighest sampled height or error, if occured
+    async fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>) -> Result<u64>;
 
     /// Returns true if hash exists in the store.
     async fn has(&self, hash: &Hash) -> bool;

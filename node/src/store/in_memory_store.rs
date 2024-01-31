@@ -7,14 +7,15 @@ use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use tracing::debug;
 
-use crate::store::{Result, Store, StoreError};
+use crate::store::{ExtendedHeaderMetadata, Result, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
 pub struct InMemoryStore {
-    headers: DashMap<Hash, ExtendedHeader>,
+    headers: DashMap<Hash, (ExtendedHeader, ExtendedHeaderMetadata)>,
     height_to_hash: DashMap<u64, Hash>,
     head_height: AtomicU64,
+    heighest_sampled_height: AtomicU64,
 }
 
 impl InMemoryStore {
@@ -24,6 +25,7 @@ impl InMemoryStore {
             headers: DashMap::new(),
             height_to_hash: DashMap::new(),
             head_height: AtomicU64::new(0),
+            heighest_sampled_height: AtomicU64::new(0),
         }
     }
 
@@ -36,6 +38,11 @@ impl InMemoryStore {
         } else {
             Ok(height)
         }
+    }
+
+    #[inline]
+    fn get_heighest_sampled_height(&self) -> u64 {
+        self.heighest_sampled_height.load(Ordering::Acquire)
     }
 
     pub(crate) fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
@@ -70,7 +77,7 @@ impl InMemoryStore {
         }
 
         debug!("Inserting header {hash} with height {height}");
-        hash_entry.insert(header);
+        hash_entry.insert((header, ExtendedHeaderMetadata::default()));
         height_entry.insert(hash);
 
         self.head_height.store(height, Ordering::Release);
@@ -91,7 +98,7 @@ impl InMemoryStore {
         self.headers
             .get(hash)
             .as_deref()
-            .cloned()
+            .map(|(eh, _)| eh.clone())
             .ok_or(StoreError::NotFound)
     }
 
@@ -115,8 +122,15 @@ impl InMemoryStore {
         self.headers
             .get(&hash)
             .as_deref()
-            .cloned()
+            .map(|(eh, _)| eh.clone())
             .ok_or(StoreError::LostHash(hash))
+    }
+
+    fn increment_sampled_height(&self) -> Result<()> {
+        self.heighest_sampled_height.fetch_add(1, Ordering::SeqCst);
+
+        // TODO: update height to the last available height
+        Ok(())
     }
 }
 
@@ -146,6 +160,30 @@ impl Store for InMemoryStore {
         self.contains_height(height)
     }
 
+    async fn highest_sampled_height(&self) -> Result<u64> {
+        Ok(self.get_heighest_sampled_height())
+    }
+
+    async fn mark_header_sampled(&self, height: u64, accepted: bool) -> Result<u64> {
+        if !self.contains_height(height) {
+            return Err(StoreError::NotFound);
+        }
+        let Some(hash) = self.height_to_hash.get(&height).as_deref().copied() else {
+            return Err(StoreError::LostHeight(height));
+        };
+
+        let mut header = self
+            .headers
+            .get_mut(&hash)
+            .ok_or(StoreError::LostHash(hash))?;
+
+        header.1.accepted = Some(accepted);
+
+        self.increment_sampled_height()?;
+
+        Ok(self.get_heighest_sampled_height())
+    }
+
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
         self.append_single_unchecked(header)
     }
@@ -163,6 +201,7 @@ impl Clone for InMemoryStore {
             headers: self.headers.clone(),
             height_to_hash: self.height_to_hash.clone(),
             head_height: AtomicU64::new(self.head_height.load(Ordering::Acquire)),
+            heighest_sampled_height: AtomicU64::new(self.head_height.load(Ordering::Acquire)),
         }
     }
 }

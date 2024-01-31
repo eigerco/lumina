@@ -5,24 +5,37 @@ use async_trait::async_trait;
 use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use js_sys::Array;
 use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_wasm_bindgen::{from_value, to_value};
+use wasm_bindgen::JsValue;
 
 use crate::store::{Result, Store, StoreError};
 
-const DB_VERSION: u32 = 1;
+const DB_VERSION: u32 = 4;
 const HEADER_STORE_NAME: &str = "headers";
 const HASH_INDEX_NAME: &str = "hash";
 const HEIGHT_INDEX_NAME: &str = "height";
+const ACCEPTANCE_INDEX_NAME: &str = "accepted";
+
+#[derive(Serialize_repr, Deserialize_repr, Debug, PartialEq)]
+#[repr(u8)]
+enum HeaderAccepted {
+    Rejected = 1,
+    Accepted = 2,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ExtendedHeaderEntry {
+    id: u64,
     // We use those fields as indexes, names need to match ones in `add_index`
     height: u64,
     hash: Hash,
     header: Vec<u8>,
+    accepted: Option<HeaderAccepted>,
 }
 
 /// A [`Store`] implementation based on a `IndexedDB` browser database.
@@ -30,6 +43,7 @@ struct ExtendedHeaderEntry {
 pub struct IndexedDbStore {
     // SendWrapper usage is safe in wasm because we're running on a single thread
     head: SendWrapper<RefCell<Option<ExtendedHeader>>>,
+    highest_sampled_height: SendWrapper<RefCell<u64>>,
     db: SendWrapper<Rexie>,
 }
 
@@ -44,7 +58,8 @@ impl IndexedDbStore {
                     .auto_increment(true)
                     // These need to match names in `ExtendedHeaderEntry`
                     .add_index(Index::new(HASH_INDEX_NAME, "hash").unique(true))
-                    .add_index(Index::new(HEIGHT_INDEX_NAME, "height").unique(true)),
+                    .add_index(Index::new(HEIGHT_INDEX_NAME, "height").unique(true))
+                    .add_index(Index::new(ACCEPTANCE_INDEX_NAME, "accepted").unique(true)),
             )
             .build()
             .await
@@ -56,8 +71,11 @@ impl IndexedDbStore {
             Err(e) => return Err(e),
         };
 
+        let last_sampled = get_highest_sampled_height_from_database(&rexie).await?;
+
         Ok(Self {
             head: SendWrapper::new(RefCell::new(db_head)),
+            highest_sampled_height: SendWrapper::new(RefCell::new(last_sampled)),
             db: SendWrapper::new(rexie),
         })
     }
@@ -96,7 +114,6 @@ impl IndexedDbStore {
         let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
 
         let height_key = to_value(&height)?;
-
         let header_entry = height_index.get(&height_key).await?;
 
         // querying unset key returns empty value
@@ -169,16 +186,18 @@ impl IndexedDbStore {
         // make sure Result is Infallible, we unwrap it later
         let serialized_header: std::result::Result<_, Infallible> = header.encode_vec();
 
+        let header_height = header.height().value();
         let header_entry = ExtendedHeaderEntry {
-            height: header.height().value(),
+            id: header_height,
+            height: header_height,
             hash: header.hash(),
             header: serialized_header.unwrap(),
+            accepted: None,
         };
 
         let jsvalue_header = to_value(&header_entry)?;
 
         header_store.add(&jsvalue_header, None).await?;
-
         tx.commit().await?;
 
         // this shouldn't panic, we don't borrow across await points and wasm is single threaded
@@ -208,6 +227,41 @@ impl IndexedDbStore {
         };
 
         height <= head_height
+    }
+
+    async fn mark_header_sampled(&self, height: u64, accepted: bool) -> Result<u64> {
+        // quick check with contains_height, which uses cached head
+        if !self.contains_height(height) {
+            return Err(StoreError::NotFound);
+        }
+
+        let tx = self
+            .db
+            .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadWrite)?;
+        let header_store = tx.store(HEADER_STORE_NAME)?;
+
+        let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
+
+        let height_key = to_value(&height)?;
+        let height_entry_jsvalue = height_index.get(&height_key).await?;
+
+        if height_entry_jsvalue.is_falsy() {
+            return Err(StoreError::LostHeight(height));
+        }
+
+        let mut header_entry = from_value::<ExtendedHeaderEntry>(height_entry_jsvalue)?;
+        header_entry.accepted = Some(accepted.into());
+
+        let jsvalue_header = to_value(&header_entry)?;
+        header_store.put(&jsvalue_header, None).await?;
+
+        tx.commit().await?;
+
+        let new_highest_sampled_height = get_highest_sampled_height_from_database(&self.db).await?;
+        self.highest_sampled_height
+            .replace(new_highest_sampled_height);
+
+        Ok(new_highest_sampled_height)
     }
 }
 
@@ -244,6 +298,16 @@ impl Store for IndexedDbStore {
         let fut = SendWrapper::new(self.append_single_unchecked(header));
         fut.await
     }
+
+    async fn highest_sampled_height(&self) -> Result<u64> {
+        // this shouldn't panic, we don't borrow across await points and wasm is single threaded
+        Ok(*self.highest_sampled_height.borrow())
+    }
+
+    async fn mark_header_sampled(&self, height: u64, accepted: bool) -> Result<u64> {
+        let fut = SendWrapper::new(self.mark_header_sampled(height, accepted));
+        fut.await
+    }
 }
 
 impl From<rexie::Error> for StoreError {
@@ -260,6 +324,78 @@ impl From<serde_wasm_bindgen::Error> for StoreError {
     fn from(error: serde_wasm_bindgen::Error) -> StoreError {
         StoreError::StoredDataError(format!("Error de/serializing: {error}"))
     }
+}
+
+impl From<HeaderAccepted> for bool {
+    fn from(accepted: HeaderAccepted) -> bool {
+        accepted == HeaderAccepted::Accepted
+    }
+}
+
+impl From<bool> for HeaderAccepted {
+    fn from(accepted: bool) -> Self {
+        if accepted {
+            HeaderAccepted::Accepted
+        } else {
+            HeaderAccepted::Rejected
+        }
+    }
+}
+
+async fn get_highest_sampled_height_from_database(db: &Rexie) -> Result<u64> {
+    let last_accepted = KeyRange::only(&JsValue::from(HeaderAccepted::Accepted as u8))?;
+    let last_rejected = KeyRange::only(&JsValue::from(HeaderAccepted::Rejected as u8))?;
+    /*
+    let sampled_key = &KeyRange::bound(
+            &Array::of2(
+                &JsValue::from(1),
+                &JsValue::from(HeaderAccepted::Rejected as u8),
+            ),
+            &Array::of2(
+                &JsValue::from(u64::MAX),
+                &JsValue::from(HeaderAccepted::Accepted as u8),
+            ),
+            false,
+            false,
+            ).unwrap();
+    */
+    /*
+    let sampled_key = KeyRange::bound(
+        &JsValue::from(HeaderAccepted::Rejected as u8),
+        &JsValue::from(HeaderAccepted::Accepted as u8 + 1),
+        false,
+        false,
+    )
+    .unwrap();
+    */
+
+    let tx = db.transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
+    let store = tx.store(HEADER_STORE_NAME)?;
+    let acceptance_index = store.index(ACCEPTANCE_INDEX_NAME)?;
+
+    let last_accepted = acceptance_index
+        .get_all(Some(&last_accepted), Some(1), None, Some(Direction::Prev))
+        .await?
+        .pop();
+    let last_rejected = acceptance_index
+        .get_all(Some(&last_rejected), Some(1), None, Some(Direction::Prev))
+        .await?
+        .pop();
+
+    /*
+    let Some(last_sampled) = acceptance_index
+        .get_all(Some(&sampled_key), Some(1), None, Some(Direction::Prev))
+        .await?
+        .pop()
+    else {
+        return Ok(0);
+    };
+    */
+    let last_sampled = u64::max(last_accepted.unwrap_or(0), last_rejected.unwrap_or(0));
+
+    println!("highest: {:?}", last_sampled);
+
+    Ok(from_value::<ExtendedHeaderEntry>(last_sampled.1)?.height)
 }
 
 async fn get_head_from_database(db: &Rexie) -> Result<ExtendedHeader> {
@@ -529,6 +665,21 @@ pub mod tests {
             same_name_store.get_head_height(),
             Err(StoreError::NotFound)
         ));
+    }
+
+    #[named]
+    #[wasm_bindgen_test]
+    async fn test_sampling_height() {
+        let (store, _) = gen_filled_store(9, function_name!()).await;
+
+        store.mark_header_sampled(1, true).await.unwrap();
+        store.mark_header_sampled(2, true).await.unwrap();
+        store.mark_header_sampled(3, false).await.unwrap();
+        store.mark_header_sampled(4, true).await.unwrap();
+        store.mark_header_sampled(5, false).await.unwrap();
+        store.mark_header_sampled(6, false).await.unwrap();
+
+        assert_eq!(store.highest_sampled_height().await.unwrap(), 6);
     }
 
     // open IndexedDB with unique per-test name to avoid interference and make cleanup easier
