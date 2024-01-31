@@ -5,7 +5,7 @@ use celestia_types::consts::HASH_SIZE;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 
-use crate::header_ex::HeaderExError;
+use crate::p2p::header_ex::HeaderExError;
 
 pub(crate) trait HeaderRequestExt {
     fn with_origin(origin: u64, amount: u64) -> HeaderRequest;
