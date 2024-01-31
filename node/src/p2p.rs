@@ -44,24 +44,25 @@ use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
+mod header_ex;
+mod header_session;
 mod shwap;
+mod swarm;
 
 use crate::executor::{spawn, Interval};
-use crate::header_ex::{HeaderExBehaviour, HeaderExConfig};
-use crate::p2p::shwap::ShwapMultihasher;
+use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
+use crate::p2p::header_session::HeaderSession;
+use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihasher};
+use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::session::Session;
 use crate::store::Store;
-use crate::swarm::new_swarm;
 use crate::utils::{
     celestia_protocol_id, gossipsub_ident_topic, MultiaddrExt, OneshotResultSender,
     OneshotResultSenderExt, OneshotSenderExt,
 };
 
-pub use crate::header_ex::HeaderExError;
-
-use self::shwap::{namespaced_data_cid, row_cid, sample_cid};
+pub use crate::p2p::header_ex::HeaderExError;
 
 // Minimal number of peers that we want to maintain connection to.
 // If we have fewer peers than that, we will try to reconnect / discover
@@ -380,7 +381,7 @@ where
 
         let height = from.height().value() + 1;
 
-        let mut session = Session::new(height, amount, self.cmd_tx.clone())?;
+        let mut session = HeaderSession::new(height, amount, self.cmd_tx.clone())?;
         let headers = session.run().await?;
 
         from.verify_adjacent_range(&headers)

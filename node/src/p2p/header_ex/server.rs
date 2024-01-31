@@ -12,8 +12,8 @@ use tokio::sync::mpsc::{self, error::TrySendError};
 use tracing::{instrument, trace};
 
 use crate::executor::spawn;
-use crate::header_ex::utils::{ExtendedHeaderExt, HeaderRequestExt, HeaderResponseExt};
-use crate::header_ex::{ReqRespBehaviour, ResponseType};
+use crate::p2p::header_ex::utils::{ExtendedHeaderExt, HeaderRequestExt, HeaderResponseExt};
+use crate::p2p::header_ex::{ReqRespBehaviour, ResponseType};
 use crate::store::Store;
 
 const MAX_HEADERS_AMOUNT_RESPONSE: u64 = 512;
@@ -205,7 +205,7 @@ fn parse_request(request: HeaderRequest) -> Option<(u64, header_request::Data)> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::header_ex::utils::HeaderRequestExt;
+    use crate::p2p::header_ex::utils::HeaderRequestExt;
     use crate::test_utils::gen_filled_store;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::{HeaderRequest, StatusCode};
