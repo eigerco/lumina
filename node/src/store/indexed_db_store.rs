@@ -334,6 +334,11 @@ impl Store for IndexedDbStore {
         let fut = SendWrapper::new(self.mark_header_sampled(height, accepted, cids));
         fut.await
     }
+
+    async fn get_sampled_cids_for_height(&self, height: u64) -> Result<Vec<Cid>> {
+        todo!()
+    }
+
 }
 
 impl From<rexie::Error> for StoreError {

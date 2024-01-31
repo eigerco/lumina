@@ -196,6 +196,10 @@ impl Store for InMemoryStore {
         Ok(self.get_heighest_sampled_height())
     }
 
+    async fn get_sampled_cids_for_height(&self, height: u64) -> Result<Vec<Cid>> {
+        todo!()
+    }
+
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
         self.append_single_unchecked(header)
     }

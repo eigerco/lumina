@@ -103,6 +103,8 @@ pub trait Store: Send + Sync + Debug {
     async fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>)
         -> Result<u64>;
 
+    async fn get_sampled_cids_for_height(&self, height: u64) -> Result<Vec<Cid>>;
+
     /// Returns true if hash exists in the store.
     async fn has(&self, hash: &Hash) -> bool;
 

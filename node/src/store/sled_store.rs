@@ -359,6 +359,11 @@ impl Store for SledStore {
     ) -> Result<u64> {
         self.mark_header_sampled(height, accepted, cids).await
     }
+
+    async fn get_sampled_cids_for_height(&self, height: u64) -> Result<Vec<Cid>> {
+        todo!()
+    }
+
 }
 
 #[inline]
