@@ -708,6 +708,7 @@ dependencies = [
  "celestia-types",
  "dotenvy",
  "futures",
+ "getrandom",
  "http",
  "jsonrpsee",
  "libp2p",
@@ -717,6 +718,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "wasm-bindgen-test",
 ]
 
 [[package]]

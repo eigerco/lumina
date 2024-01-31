@@ -7,6 +7,9 @@
 #[cfg(not(target_arch = "wasm32"))]
 pub use self::native::Client;
 
+#[cfg(target_arch = "wasm32")]
+pub use self::wasm::Client;
+
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
     use std::fmt;
@@ -155,28 +158,35 @@ mod wasm {
     use std::fmt;
     use std::result::Result as StdResult;
 
-    use crate::Result;
+    use crate::{Error, Result};
     use async_trait::async_trait;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
     use jsonrpsee::core::Error as JrpcError;
-    use jsonrpsee::wasm_client::{Client, WasmClientBuilder};
+    use jsonrpsee::wasm_client::{Client as WasmClient, WasmClientBuilder};
     use serde::de::DeserializeOwned;
 
-    pub struct WasmClient {
-        client: Client,
+    pub struct Client {
+        client: WasmClient,
     }
 
-    impl WasmClient {
-        pub async fn new(_conn_str: &str) -> Result<Self> {
-            let client = WasmClientBuilder::default().build(_conn_str).await?;
-            Ok(WasmClient { client })
+    impl Client {
+        pub async fn new(conn_str: &str) -> Result<Self> {
+            // Since headers are not supported in the current version of `jsonrpsee-wasm-client`,
+            // celestia-node requires disabling authentication (--rpc.skip-auth) to use wasm.
+            let protocol = conn_str.split_once(':').map(|(proto, _)| proto);
+            let client = match protocol {
+                Some("ws") | Some("wss") => WasmClientBuilder::default().build(conn_str).await?,
+                _ => return Err(Error::ProtocolNotSupported(conn_str.into())),
+            };
+
+            Ok(Client { client })
         }
     }
 
     #[async_trait]
-    impl ClientT for WasmClient {
+    impl ClientT for Client {
         async fn notification<Params>(
             &self,
             method: &str,
@@ -208,7 +218,7 @@ mod wasm {
     }
 
     #[async_trait]
-    impl SubscriptionClientT for WasmClient {
+    impl SubscriptionClientT for Client {
         async fn subscribe<'a, N, Params>(
             &self,
             subscribe_method: &'a str,
