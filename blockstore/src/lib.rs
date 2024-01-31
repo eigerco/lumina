@@ -6,13 +6,16 @@ use thiserror::Error;
 
 use crate::block::{Block, CidError};
 
-pub use crate::in_memory_blockstore::InMemoryBlockstore;
-pub use crate::lru_blockstore::LruBlockstore;
-
 /// Utilities related to computing CID for the inserted data
 pub mod block;
 mod in_memory_blockstore;
+#[cfg(feature = "lru")]
 mod lru_blockstore;
+
+pub use crate::in_memory_blockstore::InMemoryBlockstore;
+#[cfg(feature = "lru")]
+#[cfg_attr(docs_rs, doc(cfg(feature = "lru")))]
+pub use crate::lru_blockstore::LruBlockstore;
 
 /// Error returned when performing operations on [`Blockstore`]
 #[derive(Debug, PartialEq, Error)]
