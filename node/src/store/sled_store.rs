@@ -233,6 +233,8 @@ impl SledStore {
     ) -> Result<u64> {
         let inner = self.inner.clone();
 
+        //let unsampled_height = self.get_next_unsampled_height().await?;
+
         spawn_blocking(move || {
             let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY).unwrap_or(0);
 
@@ -240,28 +242,24 @@ impl SledStore {
             if height > head_height {
                 return Err(StoreError::NotFound);
             }
-
             let metadata_key = height_to_key(height);
 
             let metadata = SamplingMetadata {
                 accepted,
                 cids_sampled: cids,
             };
-            let serialized = serde_json::to_vec(&metadata).unwrap();
 
-            if inner.sampling_metadata.insert(metadata_key, serialized)?.is_some() {
+            let serialized = serde_json::to_vec(&metadata).expect("metadata key");
+
+            if inner.sampling_metadata.insert(&metadata_key, serialized)?.is_some() {
                 info!("Overriding existing sampling metadata for height {height}");
-            };
+                read_height_by_db_key(&inner.db, SAMPLED_HEIGHT_KEY)
+            } else {
+                update_cached_sampling_height(&inner.db, &inner.sampling_metadata)
+            }
 
-            Ok(())
         })
-        .await??;
-
-        self.update_cached_sampling_height()
-    }
-
-    fn update_cached_sampling_height(&self) -> Result<u64> {
-        todo!()
+        .await?
     }
 
     async fn sampled_cids_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -271,8 +269,8 @@ impl SledStore {
             let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY).unwrap_or(0);
 
             // A light check before checking the whole map
-            if head_height > 0 && height <= head_height {
-                return Err(StoreError::HeightExists(height));
+            if height > head_height {
+                return Err(StoreError::NotFound);
             }
             let metadata_key = height_to_key(height);
 
@@ -401,22 +399,24 @@ fn read_hash_by_db_key(tree: &Tree, db_key: &[u8]) -> Result<Hash> {
 }
 
 #[inline]
+fn update_cached_sampling_height(db: &Tree, sampling_metadata: &Tree) -> Result<u64> {
+    // TODO: cmpxchg
+    let mut new_height = read_height_by_db_key(&db, SAMPLED_HEIGHT_KEY).unwrap_or(1);
+    while sampling_metadata.contains_key(&height_to_key(new_height)).expect("err contains") {
+        new_height += 1;
+    }
+
+    db.insert(SAMPLED_HEIGHT_KEY, &height_to_key(new_height)).expect("insert");
+
+    Ok(new_height)
+}
+
+#[inline]
 fn read_header_by_db_key(tree: &Tree, db_key: &[u8]) -> Result<ExtendedHeader> {
     let serialized = tree.get(db_key)?.ok_or(StoreError::NotFound)?;
 
     ExtendedHeader::decode(serialized.as_ref()).map_err(|e| StoreError::CelestiaTypes(e.into()))
 }
-
-/*
-#[inline]
-fn read_metadata_by_db_key(tree: &TransactionalTree, db_key: &[u8]) -> Result<SamplingMetadata> {
-    let serialized = tree.get(db_key)?.ok_or(StoreError::NotFound)?;
-    // TODO: no json
-    serde_json::from_str(serialized.as_ref())
-
-    //SamplingMetadata::decode(serialized.as_ref()).map_err(|e| StoreError::CelestiaTypes(e.into()))
-}
-*/
 
 #[inline]
 fn height_to_key(height: u64) -> [u8; 8] {

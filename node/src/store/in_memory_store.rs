@@ -159,6 +159,7 @@ impl InMemoryStore {
     }
 
     fn update_cached_sampling_height(&self) -> Result<u64> {
+        // TODO: cmpxchg
         let mut current_height = self.lowest_unsampled_height.load(Ordering::Acquire);
         while self.sampling_data.contains_key(&current_height) {
             current_height += 1;
