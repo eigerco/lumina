@@ -16,7 +16,7 @@ use tokio::task::spawn_blocking;
 use tokio::task::JoinError;
 use tracing::{debug, info};
 
-use crate::store::{ExtendedHeaderMetadata, Result, Store, StoreError};
+use crate::store::{SamplingMetadata, Result, Store, StoreError};
 
 const HEAD_HEIGHT_KEY: &[u8] = b"KEY.HEAD_HEIGHT";
 const SAMPLED_HEIGHT_KEY: &[u8] = b"KEY.SAMPLED_HEIGHT";
@@ -39,7 +39,7 @@ struct Inner {
     /// sub-tree which maps header height to its hash
     height_to_hash: Tree,
     /// sub-tree which maps header height to its metadata
-    height_to_metadata: Tree,
+    sampling_metadata: Tree,
 }
 
 impl SledStore {
@@ -95,14 +95,14 @@ impl SledStore {
     fn init(db: Db) -> sled::Result<Self> {
         let headers = db.open_tree(HASH_TREE_ID)?;
         let height_to_hash = db.open_tree(HEIGHT_TO_HASH_TREE_ID)?;
-        let height_to_metadata = db.open_tree(HEIGHT_TO_METADATA_TREE_ID)?;
+        let sampling_metadata = db.open_tree(HEIGHT_TO_METADATA_TREE_ID)?;
 
         Ok(Self {
             inner: Arc::new(Inner {
                 db,
                 headers,
                 height_to_hash,
-                height_to_metadata,
+                sampling_metadata,
             }),
         })
     }
@@ -113,7 +113,7 @@ impl SledStore {
         spawn_blocking(move || read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY)).await?
     }
 
-    async fn get_heighest_sampled_height(&self) -> Result<u64> {
+    async fn get_next_unsampled_height(&self) -> Result<u64> {
         let inner = self.inner.clone();
 
         spawn_blocking(move || read_height_by_db_key(&inner.db, SAMPLED_HEIGHT_KEY)).await?
@@ -237,44 +237,53 @@ impl SledStore {
             let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY).unwrap_or(0);
 
             // A light check before checking the whole map
-            if head_height > 0 && height <= head_height {
-                return Err(StoreError::HeightExists(height));
+            if height > head_height {
+                return Err(StoreError::NotFound);
             }
 
             let metadata_key = height_to_key(height);
 
-            let metadata = ExtendedHeaderMetadata {
+            let metadata = SamplingMetadata {
                 accepted,
                 cids_sampled: cids,
             };
             let serialized = serde_json::to_vec(&metadata).unwrap();
 
-            if let Some(previous) = inner.height_to_metadata.insert(metadata_key, serialized)? {
+            if inner.sampling_metadata.insert(metadata_key, serialized)?.is_some() {
                 info!("Overriding existing sampling metadata for height {height}");
             };
 
-            /*
-            .fetch_and_update(metadata_key, |old_metadata| {
-                let mut m = match old_metadata {
-                    Some(serialized) => {
-                        info!("Overriding existing sampling metadata for height {height}");
-                        serde_json::from_slice(serialized).unwrap()
-                    },
-                    None => ExtendedHeaderMetadata::default(),
-                };
-                m.accepted = accepted;
-                Some(serde_json::to_vec(&m).unwrap())
-            })?;
-            */
             Ok(())
         })
         .await??;
 
-        self.increment_sampled_height()
+        self.update_cached_sampling_height()
     }
 
-    fn increment_sampled_height(&self) -> Result<u64> {
+    fn update_cached_sampling_height(&self) -> Result<u64> {
         todo!()
+    }
+
+    async fn sampled_cids_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+        let inner = self.inner.clone();
+
+        spawn_blocking(move || {
+            let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY).unwrap_or(0);
+
+            // A light check before checking the whole map
+            if head_height > 0 && height <= head_height {
+                return Err(StoreError::HeightExists(height));
+            }
+            let metadata_key = height_to_key(height);
+
+            let Some(serialized) = inner.sampling_metadata.get(metadata_key)? else {
+                return Ok(None);
+            };
+
+            let metadata : SamplingMetadata = serde_json::from_slice(serialized.as_ref()).unwrap();
+
+            Ok(Some(metadata))
+        }).await?
     }
 
     /// Flush the store's state to the filesystem.
@@ -347,8 +356,8 @@ impl Store for SledStore {
         self.append_single_unchecked(header).await
     }
 
-    async fn highest_sampled_height(&self) -> Result<u64> {
-        self.get_heighest_sampled_height().await
+    async fn next_unsampled_height(&self) -> Result<u64> {
+        self.get_next_unsampled_height().await
     }
 
     async fn mark_header_sampled(
@@ -360,10 +369,9 @@ impl Store for SledStore {
         self.mark_header_sampled(height, accepted, cids).await
     }
 
-    async fn get_sampled_cids_for_height(&self, height: u64) -> Result<Vec<Cid>> {
-        todo!()
+    async fn get_sampling_data_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+        self.sampled_cids_for_height(height).await
     }
-
 }
 
 #[inline]
@@ -401,12 +409,12 @@ fn read_header_by_db_key(tree: &Tree, db_key: &[u8]) -> Result<ExtendedHeader> {
 
 /*
 #[inline]
-fn read_metadata_by_db_key(tree: &TransactionalTree, db_key: &[u8]) -> Result<ExtendedHeaderMetadata> {
+fn read_metadata_by_db_key(tree: &TransactionalTree, db_key: &[u8]) -> Result<SamplingMetadata> {
     let serialized = tree.get(db_key)?.ok_or(StoreError::NotFound)?;
     // TODO: no json
     serde_json::from_str(serialized.as_ref())
 
-    //ExtendedHeaderMetadata::decode(serialized.as_ref()).map_err(|e| StoreError::CelestiaTypes(e.into()))
+    //SamplingMetadata::decode(serialized.as_ref()).map_err(|e| StoreError::CelestiaTypes(e.into()))
 }
 */
 
@@ -643,6 +651,59 @@ pub mod tests {
 
         assert_eq!(store0.head_height().await.unwrap(), 15);
         assert_eq!(store1.head_height().await.unwrap(), 16);
+    }
+
+    #[tokio::test]
+    async fn test_sampling_height() {
+        let (store, _) = gen_filled_store(9, None).await;
+
+        store.mark_header_sampled(1, true, vec![]).await.unwrap();
+        store.mark_header_sampled(2, true, vec![]).await.unwrap();
+        store.mark_header_sampled(3, false, vec![]).await.unwrap();
+        store.mark_header_sampled(4, true, vec![]).await.unwrap();
+        store.mark_header_sampled(5, false, vec![]).await.unwrap();
+        store.mark_header_sampled(6, false, vec![]).await.unwrap();
+
+        store.mark_header_sampled(8, true, vec![]).await.unwrap();
+
+        assert_eq!(store.next_unsampled_height().await.unwrap(), 7);
+    }
+
+    #[tokio::test]
+    async fn test_sampled_cids() {
+        let (store, _) = gen_filled_store(5, None).await;
+
+        let cids : Vec<Cid> = [
+            "bafkreieq5jui4j25lacwomsqgjeswwl3y5zcdrresptwgmfylxo2depppq",
+            "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+            "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ",
+            "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA",
+        ].iter().map(|s| s.parse().unwrap()).collect();
+
+        store.mark_header_sampled(1, true, cids.clone()).await.unwrap();
+        store.mark_header_sampled(2, true, cids[0..1].to_vec()).await.unwrap();
+        store.mark_header_sampled(4, false, cids[3..].to_vec()).await.unwrap();
+        store.mark_header_sampled(5, false, vec![]).await.unwrap();
+
+        assert_eq!(store.next_unsampled_height().await.unwrap(), 3);
+
+        let sampling_data = store.get_sampling_data_for_height(1).await.unwrap().unwrap();
+        assert_eq!(sampling_data.cids_sampled, cids);
+        assert!(sampling_data.accepted);
+
+        let sampling_data = store.get_sampling_data_for_height(2).await.unwrap().unwrap();
+        assert_eq!(sampling_data.cids_sampled, cids[0..1]);
+        assert!(sampling_data.accepted);
+
+        assert!(store.get_sampling_data_for_height(3).await.unwrap().is_none());
+
+        let sampling_data = store.get_sampling_data_for_height(4).await.unwrap().unwrap();
+        assert_eq!(sampling_data.cids_sampled, cids[3..]);
+        assert!(!sampling_data.accepted);
+
+        let sampling_data = store.get_sampling_data_for_height(5).await.unwrap().unwrap();
+        assert_eq!(sampling_data.cids_sampled, vec![]);
+        assert!(!sampling_data.accepted);
     }
 
     pub async fn gen_filled_store(

@@ -8,7 +8,7 @@ use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use tracing::{debug, info};
 
-use crate::store::{ExtendedHeaderMetadata, Result, Store, StoreError};
+use crate::store::{SamplingMetadata, Result, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -16,13 +16,13 @@ pub struct InMemoryStore {
     /// Maps header Hash to the header itself, responsible for actually storing the header data
     headers: DashMap<Hash, ExtendedHeader>,
     /// Maps header height to the header sampling metadata, used by DAS
-    sampling_data: DashMap<u64, ExtendedHeaderMetadata>,
+    sampling_data: DashMap<u64, SamplingMetadata>,
     /// Maps header height to its hash, in case we need to do lookup by height
     height_to_hash: DashMap<u64, Hash>,
     /// Cached height of the highest header in store
     head_height: AtomicU64,
-    /// Cached height of the highest header marked as sampled
-    heighest_sampled_height: AtomicU64,
+    /// Cached height of the lowest header that wasn't sampled yet
+    lowest_unsampled_height: AtomicU64,
 }
 
 impl InMemoryStore {
@@ -33,7 +33,7 @@ impl InMemoryStore {
             sampling_data: DashMap::new(),
             height_to_hash: DashMap::new(),
             head_height: AtomicU64::new(0),
-            heighest_sampled_height: AtomicU64::new(0),
+            lowest_unsampled_height: AtomicU64::new(1),
         }
     }
 
@@ -49,8 +49,8 @@ impl InMemoryStore {
     }
 
     #[inline]
-    fn get_heighest_sampled_height(&self) -> u64 {
-        self.heighest_sampled_height.load(Ordering::Acquire)
+    fn get_next_unsampled_height(&self) -> u64 {
+        self.lowest_unsampled_height.load(Ordering::Acquire)
     }
 
     pub(crate) fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
@@ -106,7 +106,7 @@ impl InMemoryStore {
         self.headers
             .get(hash)
             .as_deref()
-            .map(|eh| eh.clone())
+            .cloned()
             .ok_or(StoreError::NotFound)
     }
 
@@ -130,15 +130,55 @@ impl InMemoryStore {
         self.headers
             .get(&hash)
             .as_deref()
-            .map(|eh| eh.clone())
+            .cloned()
             .ok_or(StoreError::LostHash(hash))
     }
 
-    fn increment_sampled_height(&self) -> Result<()> {
-        self.heighest_sampled_height.fetch_add(1, Ordering::SeqCst);
+    fn mark_header_sampled(
+        &self,
+        height: u64,
+        accepted: bool,
+        cids: Vec<Cid>,
+    ) -> Result<u64> {
+        if !self.contains_height(height) {
+            return Err(StoreError::NotFound);
+        }
 
-        // TODO: update height to the last available height
-        Ok(())
+        let metadata = SamplingMetadata {
+            accepted,
+            cids_sampled: cids,
+        };
+
+        if self.sampling_data.insert(height, metadata).is_some() {
+            info!("Overriding existing sampling metadata for height {height}");
+            // modified header wasn't new, no need to update the height
+            Ok(self.get_next_unsampled_height())
+        } else {
+            self.update_cached_sampling_height()
+        }
+    }
+
+    fn update_cached_sampling_height(&self) -> Result<u64> {
+        let mut current_height = self.lowest_unsampled_height.load(Ordering::Acquire);
+        while self.sampling_data.contains_key(&current_height) {
+            current_height += 1;
+        }
+
+        self.lowest_unsampled_height.store(current_height, Ordering::Release);
+
+        Ok(current_height)
+    }
+
+    fn sampled_cids_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+        if !self.contains_height(height) {
+            return Err(StoreError::NotFound);
+        }
+
+        let Some(metadata) = self.sampling_data.get(&height) else {
+            return Ok(None)
+        };
+
+        Ok(Some(metadata.clone()))
     }
 }
 
@@ -168,8 +208,12 @@ impl Store for InMemoryStore {
         self.contains_height(height)
     }
 
-    async fn highest_sampled_height(&self) -> Result<u64> {
-        Ok(self.get_heighest_sampled_height())
+    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
+        self.append_single_unchecked(header)
+    }
+
+    async fn next_unsampled_height(&self) -> Result<u64> {
+        Ok(self.get_next_unsampled_height())
     }
 
     async fn mark_header_sampled(
@@ -178,31 +222,13 @@ impl Store for InMemoryStore {
         accepted: bool,
         cids: Vec<Cid>,
     ) -> Result<u64> {
-        if !self.contains_height(height) {
-            return Err(StoreError::NotFound);
-        }
-
-        let metadata = ExtendedHeaderMetadata {
-            accepted,
-            cids_sampled: cids,
-        };
-
-        if let Some(previous) = self.sampling_data.insert(height, metadata) {
-            info!("Overriding existing sampling metadata for height {height}");
-        }
-
-        self.increment_sampled_height()?;
-
-        Ok(self.get_heighest_sampled_height())
+        self.mark_header_sampled(height, accepted, cids)
     }
 
-    async fn get_sampled_cids_for_height(&self, height: u64) -> Result<Vec<Cid>> {
-        todo!()
+    async fn get_sampling_data_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+        self.sampled_cids_for_height(height)
     }
 
-    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
-        self.append_single_unchecked(header)
-    }
 }
 
 impl Default for InMemoryStore {
@@ -218,7 +244,7 @@ impl Clone for InMemoryStore {
             sampling_data: self.sampling_data.clone(),
             height_to_hash: self.height_to_hash.clone(),
             head_height: AtomicU64::new(self.head_height.load(Ordering::Acquire)),
-            heighest_sampled_height: AtomicU64::new(self.head_height.load(Ordering::Acquire)),
+            lowest_unsampled_height: AtomicU64::new(self.lowest_unsampled_height.load(Ordering::Acquire)),
         }
     }
 }
@@ -360,6 +386,59 @@ pub mod tests {
             s.append_single_unchecked(header5),
             Err(StoreError::NonContinuousAppend(0, 5))
         ));
+    }
+
+    #[async_test]
+    async fn test_sampling_height() {
+        let (store, _) = gen_filled_store(9);
+
+        store.mark_header_sampled(1, true, vec![]).unwrap();
+        store.mark_header_sampled(2, true, vec![]).unwrap();
+        store.mark_header_sampled(3, false, vec![]).unwrap();
+        store.mark_header_sampled(4, true, vec![]).unwrap();
+        store.mark_header_sampled(5, false, vec![]).unwrap();
+        store.mark_header_sampled(6, false, vec![]).unwrap();
+
+        store.mark_header_sampled(8, true, vec![]).unwrap();
+
+        assert_eq!(store.next_unsampled_height().await.unwrap(), 7);
+    }
+
+    #[async_test]
+    async fn test_sampled_cids() {
+        let (store, _) = gen_filled_store(5);
+
+        let cids : Vec<Cid> = [
+            "bafkreieq5jui4j25lacwomsqgjeswwl3y5zcdrresptwgmfylxo2depppq",
+            "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+            "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ",
+            "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA",
+        ].iter().map(|s| s.parse().unwrap()).collect();
+
+        store.mark_header_sampled(1, true, cids.clone()).unwrap();
+        store.mark_header_sampled(2, true, cids[0..1].to_vec()).unwrap();
+        store.mark_header_sampled(4, false, cids[3..].to_vec()).unwrap();
+        store.mark_header_sampled(5, false, vec![]).unwrap();
+
+        assert_eq!(store.next_unsampled_height().await.unwrap(), 3);
+
+        let sampling_data = store.get_sampling_data_for_height(1).await.unwrap().unwrap();
+        assert_eq!(sampling_data.cids_sampled, cids);
+        assert!(sampling_data.accepted);
+
+        let sampling_data = store.get_sampling_data_for_height(2).await.unwrap().unwrap();
+        assert_eq!(sampling_data.cids_sampled, cids[0..1]);
+        assert!(sampling_data.accepted);
+
+        assert!(store.get_sampling_data_for_height(3).await.unwrap().is_none());
+
+        let sampling_data = store.get_sampling_data_for_height(4).await.unwrap().unwrap();
+        assert_eq!(sampling_data.cids_sampled, cids[3..]);
+        assert!(!sampling_data.accepted);
+
+        let sampling_data = store.get_sampling_data_for_height(5).await.unwrap().unwrap();
+        assert_eq!(sampling_data.cids_sampled, vec![]);
+        assert!(!sampling_data.accepted);
     }
 
     pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {

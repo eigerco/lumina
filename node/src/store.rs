@@ -25,15 +25,16 @@ mod sled_store;
 
 use crate::utils::validate_headers;
 
+/// Sampling status for a header.
+///
+/// This struct persists DAS-ing information in a header store for future reference.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ExtendedHeaderMetadata {
-    /// Shows whether header was accepted by this node. `Some` indicates that header was
-    /// verified, with the appropriate result set inside, while `None` means header wasn't yet
-    /// sampled
+pub struct SamplingMetadata {
+    /// Indicates whether this node was able to successfuly sample the block
     pub accepted: bool,
 
-    /// List of CIDs used, when decision to accept or reject the header was taken. Can be used to
-    /// remove associated data from Blockstore, when cleaning up the old ExtendedHeaders
+    /// List of CIDs used, when decision to accept or reject the header was taken. Can be used
+    /// to remove associated data from Blockstore, when cleaning up the old ExtendedHeaders
     pub cids_sampled: Vec<Cid>,
 }
 
@@ -94,17 +95,6 @@ pub trait Store: Send + Sync + Debug {
     /// Returns the highest known height.
     async fn head_height(&self) -> Result<u64>;
 
-    /// Returns last sampled height
-    async fn highest_sampled_height(&self) -> Result<u64>;
-
-    /// Sets sampling result for header, updating last sampled height so that it points
-    /// to the next that wasn't verified
-    /// Returns new heighest sampled height or error, if occured
-    async fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>)
-        -> Result<u64>;
-
-    async fn get_sampled_cids_for_height(&self, height: u64) -> Result<Vec<Cid>>;
-
     /// Returns true if hash exists in the store.
     async fn has(&self, hash: &Hash) -> bool;
 
@@ -117,6 +107,19 @@ pub trait Store: Send + Sync + Debug {
     ///
     /// This method does not validate or verify that `header` is indeed correct.
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()>;
+
+    /// Returns height of the lowest header that wasn't sampled yet
+    async fn next_unsampled_height(&self) -> Result<u64>;
+
+    /// Sets sampling result for header, updating last sampled height so that it points
+    /// to the next that wasn't verified
+    /// Returns new highest sampled height or error, if occured
+    async fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>)
+        -> Result<u64>;
+
+    /// Gets the sampling data for height. `Ok(None)` indicates that the sampling data
+    /// wasn't set in store
+    async fn get_sampling_data_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 
     /// Append a range of headers maintaining continuity from the genesis to the head.
     ///
