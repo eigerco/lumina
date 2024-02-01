@@ -84,6 +84,10 @@ lumina browser
 lumina browser --help
 ```
 
+#### WebTransport and Secure Contexts
+
+For security reasons, browsers only allow WebTransport to be used in [Secure Context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts). When running Lumina in a browser make sure to access it either locally or over HTTPS.
+
 ## Running Go celestia node for integration
 
 Follow [this guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)
