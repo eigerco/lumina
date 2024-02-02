@@ -16,10 +16,10 @@ use tokio::task::spawn_blocking;
 use tokio::task::JoinError;
 use tracing::{debug, info};
 
-use crate::store::{SamplingMetadata, Result, Store, StoreError};
+use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
 const HEAD_HEIGHT_KEY: &[u8] = b"KEY.HEAD_HEIGHT";
-const SAMPLED_HEIGHT_KEY: &[u8] = b"KEY.SAMPLED_HEIGHT";
+const NEXT_UNSAMPLED_HEIGHT_KEY: &[u8] = b"KEY.UNSAMPLED_HEIGHT";
 const HASH_TREE_ID: &[u8] = b"HASH";
 const HEIGHT_TO_HASH_TREE_ID: &[u8] = b"HEIGHT";
 const HEIGHT_TO_METADATA_TREE_ID: &[u8] = b"METADATA";
@@ -61,7 +61,7 @@ impl SledStore {
         .await?
     }
 
-    /// Create a persistent store in a temporary directory.
+    /// Create a new persistent store in a temporary directory.
     pub async fn new_temp() -> Result<Self> {
         spawn_blocking(move || {
             let tmp_path = TempDir::new("celestia")?.into_path();
@@ -77,7 +77,7 @@ impl SledStore {
         .map_err(|e| StoreError::OpenFailed(e.to_string()))
     }
 
-    /// Create a persistent store in a given path.
+    /// Create or open a persistent store in a given path.
     pub async fn new_in_path<P>(path: P) -> Result<Self>
     where
         P: AsRef<Path>,
@@ -96,6 +96,17 @@ impl SledStore {
         let headers = db.open_tree(HASH_TREE_ID)?;
         let height_to_hash = db.open_tree(HEIGHT_TO_HASH_TREE_ID)?;
         let sampling_metadata = db.open_tree(HEIGHT_TO_METADATA_TREE_ID)?;
+
+        if db
+            .compare_and_swap(
+                NEXT_UNSAMPLED_HEIGHT_KEY,
+                None as Option<&[u8]>,
+                Some(&height_to_key(1)),
+            )?
+            .is_ok()
+        {
+            debug!("initialised sampling height");
+        }
 
         Ok(Self {
             inner: Arc::new(Inner {
@@ -116,7 +127,7 @@ impl SledStore {
     async fn get_next_unsampled_height(&self) -> Result<u64> {
         let inner = self.inner.clone();
 
-        spawn_blocking(move || read_height_by_db_key(&inner.db, SAMPLED_HEIGHT_KEY)).await?
+        spawn_blocking(move || read_height_by_db_key(&inner.db, NEXT_UNSAMPLED_HEIGHT_KEY)).await?
     }
 
     async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
@@ -233,31 +244,31 @@ impl SledStore {
     ) -> Result<u64> {
         let inner = self.inner.clone();
 
-        //let unsampled_height = self.get_next_unsampled_height().await?;
-
         spawn_blocking(move || {
+            // Make sure we have the header being marked
             let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY).unwrap_or(0);
-
-            // A light check before checking the whole map
             if height > head_height {
                 return Err(StoreError::NotFound);
             }
+
             let metadata_key = height_to_key(height);
 
-            let metadata = SamplingMetadata {
+            let serialized = serde_json::to_vec(&SamplingMetadata {
                 accepted,
                 cids_sampled: cids,
-            };
+            })
+            .expect("failed to serialize");
 
-            let serialized = serde_json::to_vec(&metadata).expect("metadata key");
-
-            if inner.sampling_metadata.insert(&metadata_key, serialized)?.is_some() {
+            if inner
+                .sampling_metadata
+                .insert(metadata_key, serialized)?
+                .is_some()
+            {
                 info!("Overriding existing sampling metadata for height {height}");
-                read_height_by_db_key(&inner.db, SAMPLED_HEIGHT_KEY)
+                read_height_by_db_key(&inner.db, NEXT_UNSAMPLED_HEIGHT_KEY)
             } else {
                 update_cached_sampling_height(&inner.db, &inner.sampling_metadata)
             }
-
         })
         .await?
     }
@@ -266,22 +277,16 @@ impl SledStore {
         let inner = self.inner.clone();
 
         spawn_blocking(move || {
-            let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY).unwrap_or(0);
-
-            // A light check before checking the whole map
-            if height > head_height {
-                return Err(StoreError::NotFound);
-            }
             let metadata_key = height_to_key(height);
-
             let Some(serialized) = inner.sampling_metadata.get(metadata_key)? else {
                 return Ok(None);
             };
 
-            let metadata : SamplingMetadata = serde_json::from_slice(serialized.as_ref()).unwrap();
+            let metadata: SamplingMetadata = serde_json::from_slice(serialized.as_ref()).unwrap();
 
             Ok(Some(metadata))
-        }).await?
+        })
+        .await?
     }
 
     /// Flush the store's state to the filesystem.
@@ -400,15 +405,24 @@ fn read_hash_by_db_key(tree: &Tree, db_key: &[u8]) -> Result<Hash> {
 
 #[inline]
 fn update_cached_sampling_height(db: &Tree, sampling_metadata: &Tree) -> Result<u64> {
-    // TODO: cmpxchg
-    let mut new_height = read_height_by_db_key(&db, SAMPLED_HEIGHT_KEY).unwrap_or(1);
-    while sampling_metadata.contains_key(&height_to_key(new_height)).expect("err contains") {
-        new_height += 1;
+    loop {
+        let previous_height = read_height_by_db_key(db, NEXT_UNSAMPLED_HEIGHT_KEY)?;
+        let mut current_height = previous_height;
+        while sampling_metadata.contains_key(height_to_key(current_height))? {
+            current_height += 1;
+        }
+
+        if db
+            .compare_and_swap(
+                NEXT_UNSAMPLED_HEIGHT_KEY,
+                Some(&height_to_key(previous_height)),
+                Some(&height_to_key(current_height)),
+            )?
+            .is_ok()
+        {
+            break Ok(current_height);
+        }
     }
-
-    db.insert(SAMPLED_HEIGHT_KEY, &height_to_key(new_height)).expect("insert");
-
-    Ok(new_height)
 }
 
 #[inline]
@@ -654,6 +668,37 @@ pub mod tests {
     }
 
     #[tokio::test]
+    async fn test_sampling_override() {
+        let (store, _) = gen_filled_store(1, None).await;
+        let first_cid = vec!["zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ"
+            .parse()
+            .unwrap()];
+        let final_cid = vec!["zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA"
+            .parse()
+            .unwrap()];
+        store
+            .mark_header_sampled(1, false, first_cid)
+            .await
+            .unwrap();
+        store.mark_header_sampled(1, false, vec![]).await.unwrap();
+        store
+            .mark_header_sampled(1, true, final_cid.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
+
+        let sampling_data = store
+            .get_sampling_data_for_height(1)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(sampling_data.accepted);
+        assert_eq!(sampling_data.cids_sampled, final_cid);
+    }
+
+    #[tokio::test]
     async fn test_sampling_height() {
         let (store, _) = gen_filled_store(9, None).await;
 
@@ -666,6 +711,19 @@ pub mod tests {
 
         store.mark_header_sampled(8, true, vec![]).await.unwrap();
 
+        store
+            .mark_header_sampled(10, true, vec![])
+            .await
+            .unwrap_err();
+        store
+            .mark_header_sampled(10, false, vec![])
+            .await
+            .unwrap_err();
+        store
+            .mark_header_sampled(20, true, vec![])
+            .await
+            .unwrap_err();
+
         assert_eq!(store.next_unsampled_height().await.unwrap(), 7);
     }
 
@@ -673,37 +731,147 @@ pub mod tests {
     async fn test_sampled_cids() {
         let (store, _) = gen_filled_store(5, None).await;
 
-        let cids : Vec<Cid> = [
+        let cids: Vec<Cid> = [
             "bafkreieq5jui4j25lacwomsqgjeswwl3y5zcdrresptwgmfylxo2depppq",
             "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
             "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ",
             "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA",
-        ].iter().map(|s| s.parse().unwrap()).collect();
+        ]
+        .iter()
+        .map(|s| s.parse().unwrap())
+        .collect();
 
-        store.mark_header_sampled(1, true, cids.clone()).await.unwrap();
-        store.mark_header_sampled(2, true, cids[0..1].to_vec()).await.unwrap();
-        store.mark_header_sampled(4, false, cids[3..].to_vec()).await.unwrap();
+        store
+            .mark_header_sampled(1, true, cids.clone())
+            .await
+            .unwrap();
+        store
+            .mark_header_sampled(2, true, cids[0..1].to_vec())
+            .await
+            .unwrap();
+        store
+            .mark_header_sampled(4, false, cids[3..].to_vec())
+            .await
+            .unwrap();
         store.mark_header_sampled(5, false, vec![]).await.unwrap();
 
         assert_eq!(store.next_unsampled_height().await.unwrap(), 3);
 
-        let sampling_data = store.get_sampling_data_for_height(1).await.unwrap().unwrap();
+        let sampling_data = store
+            .get_sampling_data_for_height(1)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(sampling_data.cids_sampled, cids);
         assert!(sampling_data.accepted);
 
-        let sampling_data = store.get_sampling_data_for_height(2).await.unwrap().unwrap();
+        let sampling_data = store
+            .get_sampling_data_for_height(2)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(sampling_data.cids_sampled, cids[0..1]);
         assert!(sampling_data.accepted);
 
-        assert!(store.get_sampling_data_for_height(3).await.unwrap().is_none());
+        assert!(store
+            .get_sampling_data_for_height(3)
+            .await
+            .unwrap()
+            .is_none());
 
-        let sampling_data = store.get_sampling_data_for_height(4).await.unwrap().unwrap();
+        let sampling_data = store
+            .get_sampling_data_for_height(4)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(sampling_data.cids_sampled, cids[3..]);
         assert!(!sampling_data.accepted);
 
-        let sampling_data = store.get_sampling_data_for_height(5).await.unwrap().unwrap();
+        let sampling_data = store
+            .get_sampling_data_for_height(5)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(sampling_data.cids_sampled, vec![]);
         assert!(!sampling_data.accepted);
+    }
+
+    mod migration_v1 {
+        use super::*;
+        use std::path::PathBuf;
+        use tokio::time::{sleep, Duration};
+
+        // Initialise a Store v1 (original design, only the extended headers and heights are
+        // stored) and return a path to it.
+        async fn init_store(hs: Vec<ExtendedHeader>) -> PathBuf {
+            let tmp_path = TempDir::new("celestia").unwrap().into_path();
+            let sled_path = tmp_path.clone();
+
+            spawn_blocking(move || {
+                let db = sled::Config::default()
+                    .path(tmp_path)
+                    .create_new(true) // make sure we fail if db is already there
+                    .open()
+                    .unwrap();
+
+                let headers = db.open_tree(HASH_TREE_ID).unwrap();
+                let height_to_hash = db.open_tree(HEIGHT_TO_HASH_TREE_ID).unwrap();
+
+                // head height key is set only if there are headers present
+                if let Some(head) = hs.last() {
+                    db.insert(HEAD_HEIGHT_KEY, &height_to_key(head.height().value()))
+                        .unwrap();
+                }
+
+                for header in hs {
+                    let hash = header.hash();
+                    let height = header.height().value();
+                    let serialized_header = header.encode_vec().unwrap();
+
+                    height_to_hash
+                        .insert(height_to_key(height), hash.as_bytes())
+                        .unwrap();
+                    headers.insert(hash.as_bytes(), serialized_header).unwrap();
+                }
+
+                db.flush().unwrap();
+            })
+            .await
+            .unwrap();
+
+            // Add ~10ms wait so that any locks and opens properly close and unlock,
+            // otherwise we might get spurious test failures
+            // https://github.com/spacejam/sled/issues/1234#issuecomment-754769425
+            sleep(Duration::from_millis(10)).await;
+
+            sled_path
+        }
+
+        #[tokio::test]
+        async fn migration_test() {
+            let mut gen = ExtendedHeaderGenerator::new();
+            let headers = gen.next_many(20);
+
+            let v1_path = init_store(headers.clone()).await;
+
+            let store = SledStore::new_in_path(v1_path).await.unwrap();
+
+            assert_eq!(store.head_height().await.unwrap(), 20);
+
+            for header in headers {
+                let height = header.height().value();
+
+                let header_by_hash = store.get_by_hash(&header.hash()).await.unwrap();
+                assert_eq!(header, header_by_hash);
+
+                let header_by_height = store.get_by_height(height).await.unwrap();
+                assert_eq!(header, header_by_height);
+
+                // migrated headers should be marked as not sampled
+                let sampling_data = store.get_sampling_data_for_height(height).await.unwrap();
+                assert!(sampling_data.is_none());
+            }
+        }
     }
 
     pub async fn gen_filled_store(

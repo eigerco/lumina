@@ -8,7 +8,7 @@ use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use tracing::{debug, info};
 
-use crate::store::{SamplingMetadata, Result, Store, StoreError};
+use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -134,12 +134,7 @@ impl InMemoryStore {
             .ok_or(StoreError::LostHash(hash))
     }
 
-    fn mark_header_sampled(
-        &self,
-        height: u64,
-        accepted: bool,
-        cids: Vec<Cid>,
-    ) -> Result<u64> {
+    fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>) -> Result<u64> {
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
         }
@@ -159,15 +154,23 @@ impl InMemoryStore {
     }
 
     fn update_cached_sampling_height(&self) -> Result<u64> {
-        // TODO: cmpxchg
-        let mut current_height = self.lowest_unsampled_height.load(Ordering::Acquire);
-        while self.sampling_data.contains_key(&current_height) {
-            current_height += 1;
+        loop {
+            let previous_height = self.lowest_unsampled_height.load(Ordering::Acquire);
+            let mut current_height = previous_height;
+            while self.sampling_data.contains_key(&current_height) {
+                current_height += 1;
+            }
+
+            if self.lowest_unsampled_height.compare_exchange(
+                previous_height,
+                current_height,
+                Ordering::Release,
+                Ordering::Relaxed,
+            ) == Ok(previous_height)
+            {
+                break Ok(current_height);
+            }
         }
-
-        self.lowest_unsampled_height.store(current_height, Ordering::Release);
-
-        Ok(current_height)
     }
 
     fn sampled_cids_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -176,7 +179,7 @@ impl InMemoryStore {
         }
 
         let Some(metadata) = self.sampling_data.get(&height) else {
-            return Ok(None)
+            return Ok(None);
         };
 
         Ok(Some(metadata.clone()))
@@ -229,7 +232,6 @@ impl Store for InMemoryStore {
     async fn get_sampling_data_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         self.sampled_cids_for_height(height)
     }
-
 }
 
 impl Default for InMemoryStore {
@@ -245,7 +247,9 @@ impl Clone for InMemoryStore {
             sampling_data: self.sampling_data.clone(),
             height_to_hash: self.height_to_hash.clone(),
             head_height: AtomicU64::new(self.head_height.load(Ordering::Acquire)),
-            lowest_unsampled_height: AtomicU64::new(self.lowest_unsampled_height.load(Ordering::Acquire)),
+            lowest_unsampled_height: AtomicU64::new(
+                self.lowest_unsampled_height.load(Ordering::Acquire),
+            ),
         }
     }
 }
@@ -409,35 +413,62 @@ pub mod tests {
     async fn test_sampled_cids() {
         let (store, _) = gen_filled_store(5);
 
-        let cids : Vec<Cid> = [
+        let cids: Vec<Cid> = [
             "bafkreieq5jui4j25lacwomsqgjeswwl3y5zcdrresptwgmfylxo2depppq",
             "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
             "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ",
             "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA",
-        ].iter().map(|s| s.parse().unwrap()).collect();
+        ]
+        .iter()
+        .map(|s| s.parse().unwrap())
+        .collect();
 
         store.mark_header_sampled(1, true, cids.clone()).unwrap();
-        store.mark_header_sampled(2, true, cids[0..1].to_vec()).unwrap();
-        store.mark_header_sampled(4, false, cids[3..].to_vec()).unwrap();
+        store
+            .mark_header_sampled(2, true, cids[0..1].to_vec())
+            .unwrap();
+        store
+            .mark_header_sampled(4, false, cids[3..].to_vec())
+            .unwrap();
         store.mark_header_sampled(5, false, vec![]).unwrap();
 
         assert_eq!(store.next_unsampled_height().await.unwrap(), 3);
 
-        let sampling_data = store.get_sampling_data_for_height(1).await.unwrap().unwrap();
+        let sampling_data = store
+            .get_sampling_data_for_height(1)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(sampling_data.cids_sampled, cids);
         assert!(sampling_data.accepted);
 
-        let sampling_data = store.get_sampling_data_for_height(2).await.unwrap().unwrap();
+        let sampling_data = store
+            .get_sampling_data_for_height(2)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(sampling_data.cids_sampled, cids[0..1]);
         assert!(sampling_data.accepted);
 
-        assert!(store.get_sampling_data_for_height(3).await.unwrap().is_none());
+        assert!(store
+            .get_sampling_data_for_height(3)
+            .await
+            .unwrap()
+            .is_none());
 
-        let sampling_data = store.get_sampling_data_for_height(4).await.unwrap().unwrap();
+        let sampling_data = store
+            .get_sampling_data_for_height(4)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(sampling_data.cids_sampled, cids[3..]);
         assert!(!sampling_data.accepted);
 
-        let sampling_data = store.get_sampling_data_for_height(5).await.unwrap().unwrap();
+        let sampling_data = store
+            .get_sampling_data_for_height(5)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(sampling_data.cids_sampled, vec![]);
         assert!(!sampling_data.accepted);
     }
