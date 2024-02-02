@@ -1,9 +1,8 @@
 use cid::CidGeneric;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use multihash::Multihash;
 
-use crate::{Blockstore, BlockstoreError, Result};
+use crate::{convert_cid, Blockstore, BlockstoreError, Result};
 
 /// Simple in-memory blockstore implementation.
 pub struct InMemoryBlockstore<const MAX_MULTIHASH_SIZE: usize> {
@@ -40,26 +39,18 @@ impl<const MAX_MULTIHASH_SIZE: usize> InMemoryBlockstore<MAX_MULTIHASH_SIZE> {
 
 #[cfg_attr(not(docs_rs), async_trait::async_trait)]
 impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for InMemoryBlockstore<MAX_MULTIHASH_SIZE> {
-    async fn get<const SS: usize>(&self, cid: &CidGeneric<SS>) -> Result<Option<Vec<u8>>> {
-        let hash = cid.hash();
-        let hash =
-            Multihash::wrap(hash.code(), hash.digest()).map_err(|_| BlockstoreError::CidTooLong)?;
-        let cid = CidGeneric::new_v1(cid.codec(), hash);
-
+    async fn get<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<Option<Vec<u8>>> {
+        let cid = convert_cid(cid)?;
         self.get_cid(&cid)
     }
 
-    async fn put_keyed<const SS: usize>(&self, cid: &CidGeneric<SS>, data: &[u8]) -> Result<()> {
-        let hash = cid.hash();
-        let hash =
-            Multihash::wrap(hash.code(), hash.digest()).map_err(|_| BlockstoreError::CidTooLong)?;
-        let cid = CidGeneric::new_v1(cid.codec(), hash);
-
+    async fn put_keyed<const S: usize>(&self, cid: &CidGeneric<S>, data: &[u8]) -> Result<()> {
+        let cid = convert_cid(cid)?;
         self.insert_cid(cid, data)
     }
 
-    async fn has<const SS: usize>(&self, cid: &CidGeneric<SS>) -> Result<bool> {
-        let cid = get_internal_cid(cid)?;
+    async fn has<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<bool> {
+        let cid = convert_cid(cid)?;
         Ok(self.contains_cid(&cid))
     }
 }
@@ -70,19 +61,11 @@ impl<const MAX_MULTIHASH_SIZE: usize> Default for InMemoryBlockstore<MAX_MULTIHA
     }
 }
 
-fn get_internal_cid<const S0: usize, const S1: usize>(
-    cid: &CidGeneric<S0>,
-) -> Result<CidGeneric<S1>> {
-    let hash = cid.hash();
-    let hash =
-        Multihash::wrap(hash.code(), hash.digest()).map_err(|_| BlockstoreError::CidTooLong)?;
-    Ok(CidGeneric::new_v1(cid.codec(), hash))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::block::{Block, CidError};
+    use multihash::Multihash;
     use std::iter::zip;
     use std::result::Result as StdResult;
 
