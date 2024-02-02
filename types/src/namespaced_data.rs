@@ -79,12 +79,12 @@ impl NamespacedData {
     ///
     /// let rows = eds.get_namespaced_data(namespace, &header.dah, block_height as u64).unwrap();
     /// for namespaced_data in rows {
-    ///     namespaced_data.validate(&header.dah).unwrap()
+    ///     namespaced_data.verify(&header.dah).unwrap()
     /// }
     /// ```
     ///
     /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
-    pub fn validate(&self, dah: &DataAvailabilityHeader) -> Result<()> {
+    pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
         if self.shares.is_empty() {
             return Err(Error::WrongProofType);
         }

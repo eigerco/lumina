@@ -59,8 +59,8 @@ impl Row {
         Ok(Row { row_id, shares })
     }
 
-    /// Validate the row against roots from DAH
-    pub fn validate(&self, dah: &DataAvailabilityHeader) -> Result<()> {
+    /// verify the row against roots from DAH
+    pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
         let square_len = self.shares.len();
 
         let (data_shares, parity_shares) = self.shares.split_at(square_len / 2);
@@ -355,6 +355,6 @@ mod tests {
             shares: eds.row(index.into()).unwrap(),
         };
 
-        row.validate(&dah).unwrap();
+        row.verify(&dah).unwrap();
     }
 }

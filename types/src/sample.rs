@@ -93,7 +93,7 @@ impl Sample {
     ///
     /// let sample = Sample::new(AxisType::Row, index, &eds, block_height as u64).unwrap();
     ///
-    /// sample.validate(&header.dah).unwrap();
+    /// sample.verify(&header.dah).unwrap();
     /// ```
     ///
     /// [`Share`]: crate::Share
@@ -141,8 +141,8 @@ impl Sample {
         })
     }
 
-    /// Validate sample with root hash from ExtendedHeader
-    pub fn validate(&self, dah: &DataAvailabilityHeader) -> Result<()> {
+    /// verify sample with root hash from ExtendedHeader
+    pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
         let index = match self.sample_proof_type {
             AxisType::Row => self.sample_id.row.index,
             AxisType::Col => self.sample_id.index,
