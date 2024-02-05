@@ -1,5 +1,7 @@
 #![doc = include_str!("../README.md")]
 
+use std::io;
+
 use cid::CidGeneric;
 use multihash::Multihash;
 use thiserror::Error;
@@ -23,7 +25,7 @@ pub use crate::lru_blockstore::LruBlockstore;
 pub use crate::sled_blockstore::SledBlockstore;
 
 /// Error returned when performing operations on [`Blockstore`]
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, Error)]
 pub enum BlockstoreError {
     /// Provided CID already exists in blockstore when trying to insert it
     #[error("CID already exists in the store")]

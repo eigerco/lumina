@@ -126,7 +126,7 @@ mod tests {
         store.put_keyed(&cid0, &[0x01; 1]).await.unwrap();
         store.put_keyed(&cid1, &[0x02; 1]).await.unwrap();
         let insert_err = store.put_keyed(&cid1, &[0x03; 1]).await.unwrap_err();
-        assert_eq!(insert_err, BlockstoreError::CidExists);
+        assert!(matches!(insert_err, BlockstoreError::CidExists));
     }
 
     #[tokio::test]
@@ -177,10 +177,10 @@ mod tests {
 
         let store = InMemoryBlockstore::<8>::new();
         let insert_err = store.put_keyed(&cid, [0x00, 1].as_ref()).await.unwrap_err();
-        assert_eq!(insert_err, BlockstoreError::CidTooLong);
+        assert!(matches!(insert_err, BlockstoreError::CidTooLong));
 
         let insert_err = store.get(&cid).await.unwrap_err();
-        assert_eq!(insert_err, BlockstoreError::CidTooLong);
+        assert!(matches!(insert_err, BlockstoreError::CidTooLong));
     }
 
     #[tokio::test]
