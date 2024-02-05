@@ -10,7 +10,7 @@ use celestia_types::ExtendedHeader;
 use directories::ProjectDirs;
 use sled::transaction::{ConflictableTransactionError, TransactionError};
 use sled::{Db, Error as SledError, Transactional, Tree};
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tokio::task::spawn_blocking;
 use tokio::task::JoinError;
 use tracing::debug;
@@ -57,7 +57,7 @@ impl SledStore {
     /// Create a persistent store in a temporary directory.
     pub async fn new_temp() -> Result<Self> {
         spawn_blocking(move || {
-            let tmp_path = TempDir::new("celestia")?.into_path();
+            let tmp_path = TempDir::with_prefix("celestia")?.into_path();
 
             sled::Config::default()
                 .path(tmp_path)
@@ -463,7 +463,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_store_persistence() {
-        let db_dir = TempDir::new("celestia.test").unwrap();
+        let db_dir = TempDir::with_prefix("celestia.test").unwrap();
         let (original_store, mut gen) = gen_filled_store(0, Some(db_dir.path())).await;
         let mut original_headers = gen.next_many(20);
 
