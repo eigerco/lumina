@@ -391,7 +391,6 @@ async fn get_next_unsampled_height_from_database(
 
     let mut potential_new_height = last_known_unsampled;
     for (height, _) in pending_sampled_headers {
-        //panic!("testing: {potential_new_height}, h: {height:?}");
         if height.as_f64() == Some(potential_new_height as f64) {
             potential_new_height += 1;
         } else {
