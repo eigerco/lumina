@@ -253,15 +253,15 @@ impl SledStore {
 
             let metadata_key = height_to_key(height);
 
-            let serialized = serde_json::to_vec(&SamplingMetadata {
+            let serialized: Result<_, Infallible> = SamplingMetadata {
                 accepted,
                 cids_sampled: cids,
-            })
-            .expect("failed to serialize");
+            }
+            .encode_vec();
 
             if inner
                 .sampling_metadata
-                .insert(metadata_key, serialized)?
+                .insert(metadata_key, serialized.unwrap())?
                 .is_some()
             {
                 info!("Overriding existing sampling metadata for height {height}");
@@ -282,7 +282,8 @@ impl SledStore {
                 return Ok(None);
             };
 
-            let metadata: SamplingMetadata = serde_json::from_slice(serialized.as_ref()).unwrap();
+            let metadata = SamplingMetadata::decode_vec(serialized.as_ref())
+                .map_err(|e| StoreError::StoredDataError(e.to_string()))?;
 
             Ok(Some(metadata))
         })
@@ -871,6 +872,14 @@ pub mod tests {
                 let sampling_data = store.get_sampling_data_for_height(height).await.unwrap();
                 assert!(sampling_data.is_none());
             }
+
+            store.mark_header_sampled(1, true, vec![]).await.unwrap();
+            let sampling_data = store
+                .get_sampling_data_for_height(1)
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(sampling_data.accepted);
         }
     }
 

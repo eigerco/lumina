@@ -1,13 +1,15 @@
 //! Primitives related to the [`ExtendedHeader`] storage.
 
 use std::fmt::Debug;
-use std::io;
+use std::io::{self, Cursor};
 use std::ops::{Bound, RangeBounds, RangeInclusive};
 
 use async_trait::async_trait;
+use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -28,7 +30,7 @@ use crate::utils::validate_headers;
 /// Sampling status for a header.
 ///
 /// This struct persists DAS-ing information in a header store for future reference.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SamplingMetadata {
     /// Indicates whether this node was able to successfuly sample the block
     pub accepted: bool,
@@ -225,6 +227,48 @@ pub enum StoreError {
     /// Invalid range of headers provided.
     #[error("Invalid headers range")]
     InvalidHeadersRange,
+}
+
+#[derive(Message)]
+struct RawSamplingMetadata {
+    #[prost(bool, tag = "1")]
+    pub accepted: bool,
+
+    #[prost(message, repeated, tag = "2")]
+    pub cids_sampled: Vec<Vec<u8>>,
+}
+
+impl Protobuf<RawSamplingMetadata> for SamplingMetadata {}
+
+impl TryFrom<RawSamplingMetadata> for SamplingMetadata {
+    type Error = cid::Error;
+
+    fn try_from(item: RawSamplingMetadata) -> Result<Self, Self::Error> {
+        let cids_sampled = item
+            .cids_sampled
+            .iter()
+            .map(|cid| {
+                let buffer = Cursor::new(cid);
+                Cid::read_bytes(buffer)
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(SamplingMetadata {
+            accepted: item.accepted,
+            cids_sampled,
+        })
+    }
+}
+
+impl From<SamplingMetadata> for RawSamplingMetadata {
+    fn from(item: SamplingMetadata) -> Self {
+        let cids_sampled = item.cids_sampled.iter().map(|cid| cid.to_bytes()).collect();
+
+        RawSamplingMetadata {
+            accepted: item.accepted,
+            cids_sampled,
+        }
+    }
 }
 
 /// a helper function to convert any kind of range to the inclusive range of header heights.

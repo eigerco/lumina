@@ -9,7 +9,6 @@ use cid::Cid;
 use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
-use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_wasm_bindgen::{from_value, to_value};
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
@@ -24,13 +23,6 @@ const SAMPLING_STORE_NAME: &str = "sampling";
 // Additional indexes set on HEADER_STORE, for querying by height and hash
 const HASH_INDEX_NAME: &str = "hash";
 const HEIGHT_INDEX_NAME: &str = "height";
-
-#[derive(Serialize_repr, Deserialize_repr, Debug, PartialEq)]
-#[repr(u8)]
-enum HeaderAccepted {
-    Rejected = 1,
-    Accepted = 2,
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ExtendedHeaderEntry {
@@ -357,22 +349,6 @@ impl From<rexie::Error> for StoreError {
 impl From<serde_wasm_bindgen::Error> for StoreError {
     fn from(error: serde_wasm_bindgen::Error) -> StoreError {
         StoreError::StoredDataError(format!("Error de/serializing: {error}"))
-    }
-}
-
-impl From<HeaderAccepted> for bool {
-    fn from(accepted: HeaderAccepted) -> bool {
-        accepted == HeaderAccepted::Accepted
-    }
-}
-
-impl From<bool> for HeaderAccepted {
-    fn from(accepted: bool) -> Self {
-        if accepted {
-            HeaderAccepted::Accepted
-        } else {
-            HeaderAccepted::Rejected
-        }
     }
 }
 
@@ -816,6 +792,9 @@ pub mod tests {
 
         const PREVIOUS_DB_VERSION: u32 = 1;
 
+        // this fn sets upt the store manually with v1 schema (original, ExtendedHeader only),
+        // and fills it with `hs` headers. It is a caller responsibility to make sure provided
+        // headers are correct and in order.
         async fn init_store(name: &str, hs: Vec<ExtendedHeader>) {
             Rexie::delete(name).await.unwrap();
             let rexie = Rexie::builder(name)
@@ -876,6 +855,14 @@ pub mod tests {
                 let sampling_data = store.get_sampling_data_for_height(height).await.unwrap();
                 assert!(sampling_data.is_none());
             }
+
+            store.mark_header_sampled(1, true, vec![]).await.unwrap();
+            let sampling_data = store
+                .get_sampling_data_for_height(1)
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(sampling_data.accepted);
         }
     }
 

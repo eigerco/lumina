@@ -149,11 +149,11 @@ impl InMemoryStore {
             // modified header wasn't new, no need to update the height
             Ok(self.get_next_unsampled_height())
         } else {
-            self.update_cached_sampling_height()
+            self.update_lowest_unsampled_height()
         }
     }
 
-    fn update_cached_sampling_height(&self) -> Result<u64> {
+    fn update_lowest_unsampled_height(&self) -> Result<u64> {
         loop {
             let previous_height = self.lowest_unsampled_height.load(Ordering::Acquire);
             let mut current_height = previous_height;
