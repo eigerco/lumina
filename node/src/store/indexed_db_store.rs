@@ -292,7 +292,7 @@ impl IndexedDbStore {
             return Ok(None);
         }
 
-        Ok(Some(from_value::<SamplingMetadata>(sampling_entry)?))
+        Ok(Some(from_value(sampling_entry)?))
     }
 }
 
