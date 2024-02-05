@@ -59,8 +59,8 @@ impl Row {
         Ok(Row { row_id, shares })
     }
 
-    /// Validate the row against roots from DAH
-    pub fn validate(&self, dah: &DataAvailabilityHeader) -> Result<()> {
+    /// verify the row against roots from DAH
+    pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
         let square_len = self.shares.len();
 
         let (data_shares, parity_shares) = self.shares.split_at(square_len / 2);
@@ -202,16 +202,14 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for RowId {
     }
 }
 
-impl TryFrom<RowId> for CidGeneric<ROW_ID_SIZE> {
-    type Error = CidError;
-
-    fn try_from(row: RowId) -> Result<Self, Self::Error> {
+impl From<RowId> for CidGeneric<ROW_ID_SIZE> {
+    fn from(row: RowId) -> Self {
         let mut bytes = BytesMut::with_capacity(ROW_ID_SIZE);
         row.encode(&mut bytes);
         // length is correct, so unwrap is safe
         let mh = Multihash::wrap(ROW_ID_MULTIHASH_CODE, &bytes[..]).unwrap();
 
-        Ok(CidGeneric::new_v1(ROW_ID_CODEC, mh))
+        CidGeneric::new_v1(ROW_ID_CODEC, mh)
     }
 }
 
@@ -224,7 +222,7 @@ mod tests {
     #[test]
     fn round_trip_test() {
         let row_id = RowId::new(5, 100).unwrap();
-        let cid = CidGeneric::try_from(row_id).unwrap();
+        let cid = CidGeneric::from(row_id);
 
         let multihash = cid.hash();
         assert_eq!(multihash.code(), ROW_ID_MULTIHASH_CODE);
@@ -355,6 +353,6 @@ mod tests {
             shares: eds.row(index.into()).unwrap(),
         };
 
-        row.validate(&dah).unwrap();
+        row.verify(&dah).unwrap();
     }
 }

@@ -79,12 +79,12 @@ impl NamespacedData {
     ///
     /// let rows = eds.get_namespaced_data(namespace, &header.dah, block_height as u64).unwrap();
     /// for namespaced_data in rows {
-    ///     namespaced_data.validate(&header.dah).unwrap()
+    ///     namespaced_data.verify(&header.dah).unwrap()
     /// }
     /// ```
     ///
     /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
-    pub fn validate(&self, dah: &DataAvailabilityHeader) -> Result<()> {
+    pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
         if self.shares.is_empty() {
             return Err(Error::WrongProofType);
         }
@@ -211,16 +211,14 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for NamespacedDataId {
     }
 }
 
-impl TryFrom<NamespacedDataId> for CidGeneric<NAMESPACED_DATA_ID_SIZE> {
-    type Error = CidError;
-
-    fn try_from(namespaced_data_id: NamespacedDataId) -> Result<Self, Self::Error> {
+impl From<NamespacedDataId> for CidGeneric<NAMESPACED_DATA_ID_SIZE> {
+    fn from(namespaced_data_id: NamespacedDataId) -> Self {
         let mut bytes = BytesMut::with_capacity(NAMESPACED_DATA_ID_SIZE);
         namespaced_data_id.encode(&mut bytes);
         // length is correct, so the unwrap is safe
         let mh = Multihash::wrap(NAMESPACED_DATA_ID_MULTIHASH_CODE, &bytes[..]).unwrap();
 
-        Ok(CidGeneric::new_v1(NAMESPACED_DATA_ID_CODEC, mh))
+        CidGeneric::new_v1(NAMESPACED_DATA_ID_CODEC, mh)
     }
 }
 
@@ -233,7 +231,7 @@ mod tests {
     fn round_trip() {
         let ns = Namespace::new_v0(&[0, 1]).unwrap();
         let data_id = NamespacedDataId::new(ns, 5, 100).unwrap();
-        let cid = CidGeneric::try_from(data_id).unwrap();
+        let cid = CidGeneric::from(data_id);
 
         let multihash = cid.hash();
         assert_eq!(multihash.code(), NAMESPACED_DATA_ID_MULTIHASH_CODE);

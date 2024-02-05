@@ -1,15 +1,21 @@
 #![doc = include_str!("../README.md")]
 
 use cid::CidGeneric;
+use multihash::Multihash;
 use thiserror::Error;
 
 use crate::block::{Block, CidError};
 
-pub use crate::in_memory_blockstore::InMemoryBlockstore;
-
 /// Utilities related to computing CID for the inserted data
 pub mod block;
 mod in_memory_blockstore;
+#[cfg(feature = "lru")]
+mod lru_blockstore;
+
+pub use crate::in_memory_blockstore::InMemoryBlockstore;
+#[cfg(feature = "lru")]
+#[cfg_attr(docs_rs, doc(cfg(feature = "lru")))]
+pub use crate::lru_blockstore::LruBlockstore;
 
 /// Error returned when performing operations on [`Blockstore`]
 #[derive(Debug, PartialEq, Error)]
@@ -35,7 +41,6 @@ type Result<T> = std::result::Result<T, BlockstoreError>;
 /// will fail with [`CidTooLong`].
 ///
 /// [`CidTooLong`]: BlockstoreError::CidTooLong
-
 #[cfg_attr(not(docs_rs), async_trait::async_trait)]
 pub trait Blockstore {
     /// Gets the block from the blockstore
@@ -90,4 +95,16 @@ pub trait Blockstore {
         }
         Ok(())
     }
+}
+
+pub(crate) fn convert_cid<const S: usize, const NEW_S: usize>(
+    cid: &CidGeneric<S>,
+) -> Result<CidGeneric<NEW_S>> {
+    let hash = Multihash::<NEW_S>::wrap(cid.hash().code(), cid.hash().digest())
+        .map_err(|_| BlockstoreError::CidTooLong)?;
+
+    // Safe to unwrap because check was done from previous construction.
+    let cid = CidGeneric::new(cid.version(), cid.codec(), hash).expect("malformed cid");
+
+    Ok(cid)
 }
