@@ -11,11 +11,16 @@ pub mod block;
 mod in_memory_blockstore;
 #[cfg(feature = "lru")]
 mod lru_blockstore;
+#[cfg(feature = "sled")]
+mod sled_blockstore;
 
 pub use crate::in_memory_blockstore::InMemoryBlockstore;
 #[cfg(feature = "lru")]
 #[cfg_attr(docs_rs, doc(cfg(feature = "lru")))]
 pub use crate::lru_blockstore::LruBlockstore;
+#[cfg(feature = "sled")]
+#[cfg_attr(docs_rs, doc(cfg(feature = "sled")))]
+pub use crate::sled_blockstore::SledBlockstore;
 
 /// Error returned when performing operations on [`Blockstore`]
 #[derive(Debug, PartialEq, Error)]
@@ -31,6 +36,26 @@ pub enum BlockstoreError {
     /// Error occured when trying to compute CID.
     #[error("Error generating CID: {0}")]
     CidError(#[from] CidError),
+
+    /// Opening a database failed.
+    #[cfg(feature = "sled")]
+    #[error("Opening a database failed: {0}")]
+    OpenFailed(String),
+
+    /// An error propagated from the IO operation.
+    #[cfg(feature = "sled")]
+    #[error("Received io error from persistent storage: {0}")]
+    IoError(#[from] std::io::Error),
+
+    /// Storage corrupted. Try reseting the blockstore.
+    #[cfg(feature = "sled")]
+    #[error("Stored data in inconsistent state, try reseting the store: {0}")]
+    StorageCorrupted(String),
+
+    /// Unrecoverable error reported by the backing store.
+    #[cfg(feature = "sled")]
+    #[error("Persistent storage reported unrecoverable error: {0}")]
+    BackingStoreError(String),
 }
 
 type Result<T> = std::result::Result<T, BlockstoreError>;
