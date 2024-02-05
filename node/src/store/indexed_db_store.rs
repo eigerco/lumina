@@ -24,6 +24,9 @@ const SAMPLING_STORE_NAME: &str = "sampling";
 const HASH_INDEX_NAME: &str = "hash";
 const HEIGHT_INDEX_NAME: &str = "height";
 
+// Maximumum number of headers to fetch at once when updating sampling height from database
+const MAX_UNSAMPLED_HEIGHT_SCAN_BATCH_SIZE: u32 = 100;
+
 #[derive(Debug, Serialize, Deserialize)]
 struct ExtendedHeaderEntry {
     // We use those fields as indexes, names need to match ones in `add_index`
@@ -251,13 +254,25 @@ impl IndexedDbStore {
 
         tx.commit().await?;
 
-        let previously_lowest_unsampled = *self.lowest_unsampled_height.borrow();
-        let new_highest_sampled_height =
-            get_next_unsampled_height_from_database(&self.db, previously_lowest_unsampled).await?;
-        self.lowest_unsampled_height
-            .replace(new_highest_sampled_height);
+        self.update_unsampled_height().await
+    }
 
-        Ok(new_highest_sampled_height)
+    async fn update_unsampled_height(&self) -> Result<u64> {
+        loop {
+            let previously_lowest_unsampled = *self.lowest_unsampled_height.borrow();
+            let new_highest_sampled_height =
+                get_next_unsampled_height_from_database(&self.db, previously_lowest_unsampled)
+                    .await?;
+
+            // wasm is single threaded, but the value could have changed on await point, re-check
+            if previously_lowest_unsampled != *self.lowest_unsampled_height.borrow() {
+                continue;
+            }
+
+            self.lowest_unsampled_height
+                .replace(new_highest_sampled_height);
+            return Ok(new_highest_sampled_height);
+        }
     }
 
     async fn sampling_data_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -376,29 +391,36 @@ async fn get_next_unsampled_height_from_database(
     db: &Rexie,
     last_known_unsampled: u64,
 ) -> Result<u64> {
+    let mut starting_index = last_known_unsampled;
     let tx = db.transaction(&[SAMPLING_STORE_NAME], TransactionMode::ReadOnly)?;
     let store = tx.store(SAMPLING_STORE_NAME)?;
 
-    let pending_headers_keyrange = KeyRange::lower_bound(&to_value(&last_known_unsampled)?, false)?;
-    let pending_sampled_headers = store
-        .get_all(
-            Some(&pending_headers_keyrange),
-            None,
-            None,
-            Some(Direction::Next),
-        )
-        .await?;
+    loop {
+        let pending_headers_keyrange = KeyRange::lower_bound(&to_value(&starting_index)?, false)?;
+        let pending_sampled_headers = store
+            .get_all(
+                Some(&pending_headers_keyrange),
+                Some(MAX_UNSAMPLED_HEIGHT_SCAN_BATCH_SIZE),
+                None,
+                Some(Direction::Next),
+            )
+            .await?;
 
-    let mut potential_new_height = last_known_unsampled;
-    for (height, _) in pending_sampled_headers {
-        if height.as_f64() == Some(potential_new_height as f64) {
-            potential_new_height += 1;
+        let mut potential_new_height = starting_index;
+        for (height, _) in pending_sampled_headers {
+            if height.as_f64() == Some(potential_new_height as f64) {
+                potential_new_height += 1;
+            } else {
+                break;
+            }
+        }
+
+        if potential_new_height - starting_index == MAX_UNSAMPLED_HEIGHT_SCAN_BATCH_SIZE as u64 {
+            starting_index += MAX_UNSAMPLED_HEIGHT_SCAN_BATCH_SIZE as u64;
         } else {
-            break;
+            return Ok(potential_new_height);
         }
     }
-
-    Ok(potential_new_height)
 }
 
 #[cfg(test)]
@@ -568,14 +590,26 @@ pub mod tests {
 
         let mut gen = ExtendedHeaderGenerator::new_from_height(next_height);
 
-        for _ in 0..=1_000 {
+        for h in 0..=1_000 {
             s.append_single_unchecked(gen.next())
                 .await
                 .expect("inserting test data failed");
+            s.mark_header_sampled(h, true, vec![])
+                .await
+                .expect("marking sampled failed");
         }
 
         let expected_height = next_height + 1_000;
         assert_eq!(s.get_head().unwrap().height().value(), expected_height);
+        assert_eq!(s.next_unsampled_height().await.unwrap(), expected_height);
+
+        drop(s);
+        // re-open the store, to force `lowest_unsampled_height` re-calculation from db
+        let s = IndexedDbStore::new(store_name)
+            .await
+            .expect("re-opening large test store failed");
+
+        assert_eq!(s.next_unsampled_height().await.unwrap(), expected_height);
     }
 
     #[named]
