@@ -93,7 +93,7 @@ impl Sample {
     ///
     /// let sample = Sample::new(AxisType::Row, index, &eds, block_height as u64).unwrap();
     ///
-    /// sample.validate(&header.dah).unwrap();
+    /// sample.verify(&header.dah).unwrap();
     /// ```
     ///
     /// [`Share`]: crate::Share
@@ -141,8 +141,8 @@ impl Sample {
         })
     }
 
-    /// Validate sample with root hash from ExtendedHeader
-    pub fn validate(&self, dah: &DataAvailabilityHeader) -> Result<()> {
+    /// verify sample with root hash from ExtendedHeader
+    pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
         let index = match self.sample_proof_type {
             AxisType::Row => self.sample_id.row.index,
             AxisType::Col => self.sample_id.index,
@@ -325,17 +325,15 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for SampleId {
     }
 }
 
-impl TryFrom<SampleId> for CidGeneric<SAMPLE_ID_SIZE> {
-    type Error = CidError;
-
-    fn try_from(sample_id: SampleId) -> Result<Self, Self::Error> {
+impl From<SampleId> for CidGeneric<SAMPLE_ID_SIZE> {
+    fn from(sample_id: SampleId) -> Self {
         let mut bytes = BytesMut::with_capacity(SAMPLE_ID_SIZE);
         // length is correct, so unwrap is safe
         sample_id.encode(&mut bytes);
 
         let mh = Multihash::wrap(SAMPLE_ID_MULTIHASH_CODE, &bytes[..]).unwrap();
 
-        Ok(CidGeneric::new_v1(SAMPLE_ID_CODEC, mh))
+        CidGeneric::new_v1(SAMPLE_ID_CODEC, mh)
     }
 }
 
@@ -347,7 +345,7 @@ mod tests {
     #[test]
     fn round_trip() {
         let sample_id = SampleId::new(5, 10, 100).unwrap();
-        let cid = CidGeneric::try_from(sample_id).unwrap();
+        let cid = CidGeneric::from(sample_id);
 
         let multihash = cid.hash();
         assert_eq!(multihash.code(), SAMPLE_ID_MULTIHASH_CODE);

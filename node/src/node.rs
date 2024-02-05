@@ -170,14 +170,14 @@ where
 
     /// Request a [`Row`] from the network.
     ///
-    /// The result was not validated and [`Row::validate`] must be called.
+    /// The result was not verified and [`Row::verify`] must be called.
     pub async fn request_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
         Ok(self.p2p.get_row(row_index, block_height).await?)
     }
 
     /// Request a [`Sample`] from the network.
     ///
-    /// The result was not validated and [`Sample::validate`] must be called.
+    /// The result was not verified and [`Sample::verify`] must be called.
     pub async fn request_sample(
         &self,
         index: usize,
@@ -189,7 +189,7 @@ where
 
     /// Request a [`NamespacedData`] from the network.
     ///
-    /// The result was not validated and [`NamespacedData::validate`] must be called.
+    /// The result was not verified and [`NamespacedData::verify`] must be called.
     pub async fn request_namespaced_data(
         &self,
         namespace: Namespace,

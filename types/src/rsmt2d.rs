@@ -300,7 +300,7 @@ mod tests {
             .unwrap();
         assert_eq!(rows.len(), 1);
         let row = &rows[0];
-        row.validate(&dah).unwrap();
+        row.verify(&dah).unwrap();
         assert_eq!(row.shares.len(), 2);
 
         let rows = eds
@@ -310,7 +310,7 @@ mod tests {
         assert_eq!(rows[0].shares.len(), 1);
         assert_eq!(rows[1].shares.len(), 4);
         for row in rows {
-            row.validate(&dah).unwrap();
+            row.verify(&dah).unwrap();
         }
     }
 }
