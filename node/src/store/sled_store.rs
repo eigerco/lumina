@@ -246,8 +246,8 @@ impl SledStore {
 
         spawn_blocking(move || {
             // Make sure we have the header being marked
-            let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY).unwrap_or(0);
-            if height > head_height {
+            let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY)?;
+            if height == 0 || height > head_height {
                 return Err(StoreError::NotFound);
             }
 
@@ -445,6 +445,16 @@ pub mod tests {
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::Height;
+
+    #[tokio::test]
+    async fn test_contains_height() {
+        let s = gen_filled_store(2, None).await.0;
+
+        assert!(!s.has_at(0).await);
+        assert!(s.has_at(1).await);
+        assert!(s.has_at(2).await);
+        assert!(!s.has_at(3).await);
+    }
 
     #[tokio::test]
     async fn test_empty_store() {
@@ -700,9 +710,26 @@ pub mod tests {
     }
 
     #[tokio::test]
+    async fn test_sampling_height_empty_store() {
+        let (store, _) = gen_filled_store(0, None).await;
+        store
+            .mark_header_sampled(0, true, vec![])
+            .await
+            .unwrap_err();
+        store
+            .mark_header_sampled(1, true, vec![])
+            .await
+            .unwrap_err();
+    }
+
+    #[tokio::test]
     async fn test_sampling_height() {
         let (store, _) = gen_filled_store(9, None).await;
 
+        store
+            .mark_header_sampled(0, true, vec![])
+            .await
+            .unwrap_err();
         store.mark_header_sampled(1, true, vec![]).await.unwrap();
         store.mark_header_sampled(2, true, vec![]).await.unwrap();
         store.mark_header_sampled(3, false, vec![]).await.unwrap();

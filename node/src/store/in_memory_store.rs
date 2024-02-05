@@ -115,7 +115,7 @@ impl InMemoryStore {
             return false;
         };
 
-        height <= head_height
+        height != 0 && height <= head_height
     }
 
     fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
@@ -265,6 +265,16 @@ pub mod tests {
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
+    #[async_test]
+    async fn test_contains_height() {
+        let s = gen_filled_store(2).0;
+
+        assert!(!s.has_at(0).await);
+        assert!(s.has_at(1).await);
+        assert!(s.has_at(2).await);
+        assert!(!s.has_at(3).await);
+    }
+
     #[test]
     fn test_empty_store() {
         let s = InMemoryStore::new();
@@ -394,9 +404,17 @@ pub mod tests {
     }
 
     #[async_test]
+    async fn test_sampling_height_empty_store() {
+        let (store, _) = gen_filled_store(0);
+        store.mark_header_sampled(0, true, vec![]).unwrap_err();
+        store.mark_header_sampled(1, true, vec![]).unwrap_err();
+    }
+
+    #[async_test]
     async fn test_sampling_height() {
         let (store, _) = gen_filled_store(9);
 
+        store.mark_header_sampled(0, true, vec![]).unwrap_err();
         store.mark_header_sampled(1, true, vec![]).unwrap();
         store.mark_header_sampled(2, true, vec![]).unwrap();
         store.mark_header_sampled(3, false, vec![]).unwrap();

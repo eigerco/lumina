@@ -222,7 +222,7 @@ impl IndexedDbStore {
             return false;
         };
 
-        height <= head_height
+        height > 0 && height <= head_height
     }
 
     async fn mark_header_sampled(
@@ -435,6 +435,17 @@ pub mod tests {
 
     #[named]
     #[wasm_bindgen_test]
+    async fn test_contains_height() {
+        let s = gen_filled_store(2, function_name!()).await.0;
+
+        assert!(!s.has_at(0).await);
+        assert!(s.has_at(1).await);
+        assert!(s.has_at(2).await);
+        assert!(!s.has_at(3).await);
+    }
+
+    #[named]
+    #[wasm_bindgen_test]
     async fn test_empty_store() {
         let s = gen_filled_store(0, function_name!()).await.0;
         assert!(matches!(s.get_head_height(), Err(StoreError::NotFound)));
@@ -485,7 +496,7 @@ pub mod tests {
         let (s, mut gen) = gen_filled_store(100, function_name!()).await;
         let header101 = gen.next();
         s.append_single_unchecked(header101.clone()).await.unwrap();
-        //assert_eq!(s.append_single_unchecked(header101.clone()).await.unwrap(), ());
+
         assert!(matches!(
             s.append_single_unchecked(header101).await,
             Err(StoreError::HeightExists(101))
@@ -586,11 +597,10 @@ pub mod tests {
             .await
             .expect("creating test store failed");
 
-        let next_height = s.get_head_height().unwrap_or(0) + 1;
+        let mut gen = ExtendedHeaderGenerator::new();
+        let expected_height = 1_000;
 
-        let mut gen = ExtendedHeaderGenerator::new_from_height(next_height);
-
-        for h in 0..=1_000 {
+        for h in 1..=expected_height {
             s.append_single_unchecked(gen.next())
                 .await
                 .expect("inserting test data failed");
@@ -599,17 +609,23 @@ pub mod tests {
                 .expect("marking sampled failed");
         }
 
-        let expected_height = next_height + 1_000;
         assert_eq!(s.get_head().unwrap().height().value(), expected_height);
-        assert_eq!(s.next_unsampled_height().await.unwrap(), expected_height);
+        assert_eq!(
+            s.next_unsampled_height().await.unwrap(),
+            expected_height + 1
+        );
 
         drop(s);
-        // re-open the store, to force `lowest_unsampled_height` re-calculation from db
+        // re-open the store, to force re-calculation of the cached heights
         let s = IndexedDbStore::new(store_name)
             .await
             .expect("re-opening large test store failed");
 
-        assert_eq!(s.next_unsampled_height().await.unwrap(), expected_height);
+        assert_eq!(s.get_head().unwrap().height().value(), expected_height);
+        assert_eq!(
+            s.next_unsampled_height().await.unwrap(),
+            expected_height + 1
+        );
     }
 
     #[named]
@@ -722,9 +738,27 @@ pub mod tests {
 
     #[named]
     #[wasm_bindgen_test]
+    async fn test_sampling_height_empty_store() {
+        let (store, _) = gen_filled_store(0, function_name!()).await;
+        store
+            .mark_header_sampled(0, true, vec![])
+            .await
+            .unwrap_err();
+        store
+            .mark_header_sampled(1, true, vec![])
+            .await
+            .unwrap_err();
+    }
+
+    #[named]
+    #[wasm_bindgen_test]
     async fn test_sampling_height() {
         let (store, _) = gen_filled_store(9, function_name!()).await;
 
+        store
+            .mark_header_sampled(0, true, vec![])
+            .await
+            .unwrap_err();
         store.mark_header_sampled(1, true, vec![]).await.unwrap();
         store.mark_header_sampled(2, true, vec![]).await.unwrap();
         store.mark_header_sampled(3, false, vec![]).await.unwrap();
