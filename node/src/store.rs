@@ -113,9 +113,12 @@ pub trait Store: Send + Sync + Debug {
     /// Returns height of the lowest header that wasn't sampled yet
     async fn next_unsampled_height(&self) -> Result<u64>;
 
-    /// Sets sampling result for header, updating last sampled height so that it points
-    /// to the next that wasn't verified
-    /// Returns new highest sampled height or error, if occured
+    /// Sets or updates sampling result for the header.
+    ///
+    /// In case of update, provided CID list is appended onto the existing one, as not to lose
+    /// references to previously sampled blocks.
+    ///
+    /// Returns next unsampled header or error, if occured
     async fn update_sampling_metadata(
         &self,
         height: u64,
@@ -123,8 +126,8 @@ pub trait Store: Send + Sync + Debug {
         cids: Vec<Cid>,
     ) -> Result<u64>;
 
-    /// Gets the sampling data for height. `Ok(None)` indicates that the sampling data
-    /// wasn't set in store
+    /// Gets the sampling data for the height. `Ok(None)` indicates that sampling data
+    /// wasn't set in the store
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 
     /// Append a range of headers maintaining continuity from the genesis to the head.
