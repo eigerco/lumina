@@ -139,13 +139,6 @@ impl InMemoryStore {
             return Err(StoreError::NotFound);
         }
 
-        /*
-        let metadata = SamplingMetadata {
-            accepted,
-            cids_sampled: cids,
-        };
-        */
-
         let new_inserted = match self.sampling_data.entry(height) {
             Entry::Vacant(entry) => {
                 entry.insert(SamplingMetadata {
