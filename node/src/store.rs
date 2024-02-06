@@ -116,12 +116,16 @@ pub trait Store: Send + Sync + Debug {
     /// Sets sampling result for header, updating last sampled height so that it points
     /// to the next that wasn't verified
     /// Returns new highest sampled height or error, if occured
-    async fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>)
-        -> Result<u64>;
+    async fn set_sampling_metadata(
+        &self,
+        height: u64,
+        accepted: bool,
+        cids: Vec<Cid>,
+    ) -> Result<u64>;
 
     /// Gets the sampling data for height. `Ok(None)` indicates that the sampling data
     /// wasn't set in store
-    async fn get_sampling_data_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>>;
+    async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 
     /// Append a range of headers maintaining continuity from the genesis to the head.
     ///

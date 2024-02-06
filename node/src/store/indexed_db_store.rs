@@ -225,7 +225,7 @@ impl IndexedDbStore {
         height > 0 && height <= head_height
     }
 
-    async fn mark_header_sampled(
+    async fn set_sampling_metadata(
         &self,
         height: u64,
         accepted: bool,
@@ -275,7 +275,7 @@ impl IndexedDbStore {
         }
     }
 
-    async fn sampling_data_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+    async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
         }
@@ -335,18 +335,18 @@ impl Store for IndexedDbStore {
         Ok(*self.lowest_unsampled_height.borrow())
     }
 
-    async fn mark_header_sampled(
+    async fn set_sampling_metadata(
         &self,
         height: u64,
         accepted: bool,
         cids: Vec<Cid>,
     ) -> Result<u64> {
-        let fut = SendWrapper::new(self.mark_header_sampled(height, accepted, cids));
+        let fut = SendWrapper::new(self.set_sampling_metadata(height, accepted, cids));
         fut.await
     }
 
-    async fn get_sampling_data_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
-        let fut = SendWrapper::new(self.sampling_data_for_height(height));
+    async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+        let fut = SendWrapper::new(self.get_sampling_metadata(height));
         fut.await
     }
 }
@@ -604,7 +604,7 @@ pub mod tests {
             s.append_single_unchecked(gen.next())
                 .await
                 .expect("inserting test data failed");
-            s.mark_header_sampled(h, true, vec![])
+            s.set_sampling_metadata(h, true, vec![])
                 .await
                 .expect("marking sampled failed");
         }
@@ -715,22 +715,18 @@ pub mod tests {
             .parse()
             .unwrap()];
         store
-            .mark_header_sampled(1, false, first_cid)
+            .set_sampling_metadata(1, false, first_cid)
             .await
             .unwrap();
-        store.mark_header_sampled(1, false, vec![]).await.unwrap();
+        store.set_sampling_metadata(1, false, vec![]).await.unwrap();
         store
-            .mark_header_sampled(1, true, final_cid.clone())
+            .set_sampling_metadata(1, true, final_cid.clone())
             .await
             .unwrap();
 
         assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
 
-        let sampling_data = store
-            .get_sampling_data_for_height(1)
-            .await
-            .unwrap()
-            .unwrap();
+        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
 
         assert!(sampling_data.accepted);
         assert_eq!(sampling_data.cids_sampled, final_cid);
@@ -741,11 +737,11 @@ pub mod tests {
     async fn test_sampling_height_empty_store() {
         let (store, _) = gen_filled_store(0, function_name!()).await;
         store
-            .mark_header_sampled(0, true, vec![])
+            .set_sampling_metadata(0, true, vec![])
             .await
             .unwrap_err();
         store
-            .mark_header_sampled(1, true, vec![])
+            .set_sampling_metadata(1, true, vec![])
             .await
             .unwrap_err();
     }
@@ -756,28 +752,28 @@ pub mod tests {
         let (store, _) = gen_filled_store(9, function_name!()).await;
 
         store
-            .mark_header_sampled(0, true, vec![])
+            .set_sampling_metadata(0, true, vec![])
             .await
             .unwrap_err();
-        store.mark_header_sampled(1, true, vec![]).await.unwrap();
-        store.mark_header_sampled(2, true, vec![]).await.unwrap();
-        store.mark_header_sampled(3, false, vec![]).await.unwrap();
-        store.mark_header_sampled(4, true, vec![]).await.unwrap();
-        store.mark_header_sampled(5, false, vec![]).await.unwrap();
-        store.mark_header_sampled(6, false, vec![]).await.unwrap();
+        store.set_sampling_metadata(1, true, vec![]).await.unwrap();
+        store.set_sampling_metadata(2, true, vec![]).await.unwrap();
+        store.set_sampling_metadata(3, false, vec![]).await.unwrap();
+        store.set_sampling_metadata(4, true, vec![]).await.unwrap();
+        store.set_sampling_metadata(5, false, vec![]).await.unwrap();
+        store.set_sampling_metadata(6, false, vec![]).await.unwrap();
 
-        store.mark_header_sampled(8, true, vec![]).await.unwrap();
+        store.set_sampling_metadata(8, true, vec![]).await.unwrap();
 
         store
-            .mark_header_sampled(10, true, vec![])
+            .set_sampling_metadata(10, true, vec![])
             .await
             .unwrap_err();
         store
-            .mark_header_sampled(10, false, vec![])
+            .set_sampling_metadata(10, false, vec![])
             .await
             .unwrap_err();
         store
-            .mark_header_sampled(20, true, vec![])
+            .set_sampling_metadata(20, true, vec![])
             .await
             .unwrap_err();
 
@@ -800,56 +796,36 @@ pub mod tests {
         .collect();
 
         store
-            .mark_header_sampled(1, true, cids.clone())
+            .set_sampling_metadata(1, true, cids.clone())
             .await
             .unwrap();
         store
-            .mark_header_sampled(2, true, cids[0..1].to_vec())
+            .set_sampling_metadata(2, true, cids[0..1].to_vec())
             .await
             .unwrap();
         store
-            .mark_header_sampled(4, false, cids[3..].to_vec())
+            .set_sampling_metadata(4, false, cids[3..].to_vec())
             .await
             .unwrap();
-        store.mark_header_sampled(5, false, vec![]).await.unwrap();
+        store.set_sampling_metadata(5, false, vec![]).await.unwrap();
 
         assert_eq!(store.next_unsampled_height().await.unwrap(), 3);
 
-        let sampling_data = store
-            .get_sampling_data_for_height(1)
-            .await
-            .unwrap()
-            .unwrap();
+        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids_sampled, cids);
         assert!(sampling_data.accepted);
 
-        let sampling_data = store
-            .get_sampling_data_for_height(2)
-            .await
-            .unwrap()
-            .unwrap();
+        let sampling_data = store.get_sampling_metadata(2).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids_sampled, cids[0..1]);
         assert!(sampling_data.accepted);
 
-        assert!(store
-            .get_sampling_data_for_height(3)
-            .await
-            .unwrap()
-            .is_none());
+        assert!(store.get_sampling_metadata(3).await.unwrap().is_none());
 
-        let sampling_data = store
-            .get_sampling_data_for_height(4)
-            .await
-            .unwrap()
-            .unwrap();
+        let sampling_data = store.get_sampling_metadata(4).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids_sampled, cids[3..]);
         assert!(!sampling_data.accepted);
 
-        let sampling_data = store
-            .get_sampling_data_for_height(5)
-            .await
-            .unwrap()
-            .unwrap();
+        let sampling_data = store.get_sampling_metadata(5).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids_sampled, vec![]);
         assert!(!sampling_data.accepted);
     }
@@ -919,16 +895,12 @@ pub mod tests {
                 assert_eq!(header, header_by_height);
 
                 // migrated headers should be marked as not sampled
-                let sampling_data = store.get_sampling_data_for_height(height).await.unwrap();
+                let sampling_data = store.get_sampling_metadata(height).await.unwrap();
                 assert!(sampling_data.is_none());
             }
 
-            store.mark_header_sampled(1, true, vec![]).await.unwrap();
-            let sampling_data = store
-                .get_sampling_data_for_height(1)
-                .await
-                .unwrap()
-                .unwrap();
+            store.set_sampling_metadata(1, true, vec![]).await.unwrap();
+            let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
             assert!(sampling_data.accepted);
         }
     }

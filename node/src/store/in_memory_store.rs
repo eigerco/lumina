@@ -134,7 +134,7 @@ impl InMemoryStore {
             .ok_or(StoreError::LostHash(hash))
     }
 
-    fn mark_header_sampled(&self, height: u64, accepted: bool, cids: Vec<Cid>) -> Result<u64> {
+    fn set_sampling_metadata(&self, height: u64, accepted: bool, cids: Vec<Cid>) -> Result<u64> {
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
         }
@@ -173,7 +173,7 @@ impl InMemoryStore {
         }
     }
 
-    fn sampled_cids_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+    fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
         }
@@ -220,17 +220,17 @@ impl Store for InMemoryStore {
         Ok(self.get_next_unsampled_height())
     }
 
-    async fn mark_header_sampled(
+    async fn set_sampling_metadata(
         &self,
         height: u64,
         accepted: bool,
         cids: Vec<Cid>,
     ) -> Result<u64> {
-        self.mark_header_sampled(height, accepted, cids)
+        self.set_sampling_metadata(height, accepted, cids)
     }
 
-    async fn get_sampling_data_for_height(&self, height: u64) -> Result<Option<SamplingMetadata>> {
-        self.sampled_cids_for_height(height)
+    async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+        self.get_sampling_metadata(height)
     }
 }
 
@@ -406,29 +406,29 @@ pub mod tests {
     #[async_test]
     async fn test_sampling_height_empty_store() {
         let (store, _) = gen_filled_store(0);
-        store.mark_header_sampled(0, true, vec![]).unwrap_err();
-        store.mark_header_sampled(1, true, vec![]).unwrap_err();
+        store.set_sampling_metadata(0, true, vec![]).unwrap_err();
+        store.set_sampling_metadata(1, true, vec![]).unwrap_err();
     }
 
     #[async_test]
     async fn test_sampling_height() {
         let (store, _) = gen_filled_store(9);
 
-        store.mark_header_sampled(0, true, vec![]).unwrap_err();
-        store.mark_header_sampled(1, true, vec![]).unwrap();
-        store.mark_header_sampled(2, true, vec![]).unwrap();
-        store.mark_header_sampled(3, false, vec![]).unwrap();
-        store.mark_header_sampled(4, true, vec![]).unwrap();
-        store.mark_header_sampled(5, false, vec![]).unwrap();
-        store.mark_header_sampled(6, false, vec![]).unwrap();
+        store.set_sampling_metadata(0, true, vec![]).unwrap_err();
+        store.set_sampling_metadata(1, true, vec![]).unwrap();
+        store.set_sampling_metadata(2, true, vec![]).unwrap();
+        store.set_sampling_metadata(3, false, vec![]).unwrap();
+        store.set_sampling_metadata(4, true, vec![]).unwrap();
+        store.set_sampling_metadata(5, false, vec![]).unwrap();
+        store.set_sampling_metadata(6, false, vec![]).unwrap();
 
-        store.mark_header_sampled(8, true, vec![]).unwrap();
+        store.set_sampling_metadata(8, true, vec![]).unwrap();
 
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 7);
+        assert_eq!(store.get_next_unsampled_height(), 7);
     }
 
-    #[async_test]
-    async fn test_sampled_cids() {
+    #[test]
+    fn test_sampled_cids() {
         let (store, _) = gen_filled_store(5);
 
         let cids: Vec<Cid> = [
@@ -441,52 +441,32 @@ pub mod tests {
         .map(|s| s.parse().unwrap())
         .collect();
 
-        store.mark_header_sampled(1, true, cids.clone()).unwrap();
+        store.set_sampling_metadata(1, true, cids.clone()).unwrap();
         store
-            .mark_header_sampled(2, true, cids[0..1].to_vec())
+            .set_sampling_metadata(2, true, cids[0..1].to_vec())
             .unwrap();
         store
-            .mark_header_sampled(4, false, cids[3..].to_vec())
+            .set_sampling_metadata(4, false, cids[3..].to_vec())
             .unwrap();
-        store.mark_header_sampled(5, false, vec![]).unwrap();
+        store.set_sampling_metadata(5, false, vec![]).unwrap();
 
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 3);
+        assert_eq!(store.get_next_unsampled_height(), 3);
 
-        let sampling_data = store
-            .get_sampling_data_for_height(1)
-            .await
-            .unwrap()
-            .unwrap();
+        let sampling_data = store.get_sampling_metadata(1).unwrap().unwrap();
         assert_eq!(sampling_data.cids_sampled, cids);
         assert!(sampling_data.accepted);
 
-        let sampling_data = store
-            .get_sampling_data_for_height(2)
-            .await
-            .unwrap()
-            .unwrap();
+        let sampling_data = store.get_sampling_metadata(2).unwrap().unwrap();
         assert_eq!(sampling_data.cids_sampled, cids[0..1]);
         assert!(sampling_data.accepted);
 
-        assert!(store
-            .get_sampling_data_for_height(3)
-            .await
-            .unwrap()
-            .is_none());
+        assert!(store.get_sampling_metadata(3).unwrap().is_none());
 
-        let sampling_data = store
-            .get_sampling_data_for_height(4)
-            .await
-            .unwrap()
-            .unwrap();
+        let sampling_data = store.get_sampling_metadata(4).unwrap().unwrap();
         assert_eq!(sampling_data.cids_sampled, cids[3..]);
         assert!(!sampling_data.accepted);
 
-        let sampling_data = store
-            .get_sampling_data_for_height(5)
-            .await
-            .unwrap()
-            .unwrap();
+        let sampling_data = store.get_sampling_metadata(5).unwrap().unwrap();
         assert_eq!(sampling_data.cids_sampled, vec![]);
         assert!(!sampling_data.accepted);
     }
