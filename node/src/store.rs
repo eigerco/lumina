@@ -30,7 +30,7 @@ use crate::utils::validate_headers;
 /// Sampling status for a header.
 ///
 /// This struct persists DAS-ing information in a header store for future reference.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct SamplingMetadata {
     /// Indicates whether this node was able to successfuly sample the block
     pub accepted: bool,

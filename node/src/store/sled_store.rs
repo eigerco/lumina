@@ -9,7 +9,7 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
 use directories::ProjectDirs;
-use sled::transaction::{ConflictableTransactionError, TransactionError};
+use sled::transaction::{abort, ConflictableTransactionError, TransactionError};
 use sled::{Db, Error as SledError, Transactional, Tree};
 use tempdir::TempDir;
 use tokio::task::spawn_blocking;
@@ -206,9 +206,7 @@ impl SledStore {
                         .insert(&height_key, hash.as_bytes())?
                         .is_some()
                     {
-                        return Err(ConflictableTransactionError::Abort(
-                            StoreError::HeightExists(height),
-                        ));
+                        return abort(StoreError::HeightExists(height));
                     }
 
                     db.insert(HEAD_HEIGHT_KEY, &height_key)?;
@@ -253,21 +251,47 @@ impl SledStore {
 
             let metadata_key = height_to_key(height);
 
-            let serialized: Result<_, Infallible> = SamplingMetadata {
-                accepted,
-                cids_sampled: cids,
-            }
-            .encode_vec();
-
-            if inner
+            let new_inserted = &inner
                 .sampling_metadata
-                .insert(metadata_key, serialized.unwrap())?
-                .is_some()
-            {
+                .transaction(move |sampling_metadata| {
+                    let previous: Option<SamplingMetadata> = sampling_metadata
+                        .get(metadata_key)?
+                        .as_deref()
+                        .map(Protobuf::decode_vec)
+                        .transpose()
+                        .map_err(|e| {
+                            ConflictableTransactionError::Abort(StoreError::StoredDataError(
+                                e.to_string(),
+                            ))
+                        })?;
+                    let update_sampling_height = previous.is_none();
+
+                    let entry = match previous {
+                        Some(mut previous) => {
+                            previous.accepted = accepted;
+                            previous.cids_sampled.extend_from_slice(&cids);
+                            previous
+                        }
+                        None => SamplingMetadata {
+                            accepted,
+                            cids_sampled: cids.clone(),
+                        },
+                    };
+
+                    let serialized: Result<_, Infallible> = entry.encode_vec();
+                    sampling_metadata.insert(&metadata_key, serialized.unwrap())?;
+
+                    Ok(update_sampling_height)
+                })?;
+
+            if *new_inserted {
+                // sled does not have contains_key for TransactionalTree, so to scan the db
+                // for new height, we'd have to actually pull the data out.  Instead, update
+                // the height outside of txn and manually take care of synchronisation.
+                update_cached_sampling_height(&inner.db, &inner.sampling_metadata)
+            } else {
                 info!("Overriding existing sampling metadata for height {height}");
                 read_height_by_db_key(&inner.db, NEXT_UNSAMPLED_HEIGHT_KEY)
-            } else {
-                update_cached_sampling_height(&inner.db, &inner.sampling_metadata)
             }
         })
         .await?
@@ -679,33 +703,6 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn test_sampling_override() {
-        let (store, _) = gen_filled_store(1, None).await;
-        let first_cid = vec!["zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ"
-            .parse()
-            .unwrap()];
-        let final_cid = vec!["zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA"
-            .parse()
-            .unwrap()];
-        store
-            .set_sampling_metadata(1, false, first_cid)
-            .await
-            .unwrap();
-        store.set_sampling_metadata(1, false, vec![]).await.unwrap();
-        store
-            .set_sampling_metadata(1, true, final_cid.clone())
-            .await
-            .unwrap();
-
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
-
-        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-
-        assert!(sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, final_cid);
-    }
-
-    #[tokio::test]
     async fn test_sampling_height_empty_store() {
         let (store, _) = gen_filled_store(0, None).await;
         store
@@ -749,6 +746,34 @@ pub mod tests {
             .unwrap_err();
 
         assert_eq!(store.next_unsampled_height().await.unwrap(), 7);
+    }
+
+    #[tokio::test]
+    async fn test_sampling_merge() {
+        let (store, _) = gen_filled_store(1, None).await;
+        let cid0 = "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ".parse().unwrap();
+        let cid1 = "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA".parse().unwrap();
+
+        store
+            .set_sampling_metadata(1, false, vec![cid0])
+            .await
+            .unwrap();
+        store.set_sampling_metadata(1, false, vec![]).await.unwrap();
+
+        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
+        assert!(!sampling_data.accepted);
+        assert_eq!(sampling_data.cids_sampled, vec![cid0]);
+
+        store
+            .set_sampling_metadata(1, true, vec![cid1])
+            .await
+            .unwrap();
+
+        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
+
+        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
+        assert!(sampling_data.accepted);
+        assert_eq!(sampling_data.cids_sampled, vec![cid0, cid1]);
     }
 
     #[tokio::test]

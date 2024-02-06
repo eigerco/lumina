@@ -139,17 +139,35 @@ impl InMemoryStore {
             return Err(StoreError::NotFound);
         }
 
+        /*
         let metadata = SamplingMetadata {
             accepted,
             cids_sampled: cids,
         };
+        */
 
-        if self.sampling_data.insert(height, metadata).is_some() {
+        let new_inserted = match self.sampling_data.entry(height) {
+            Entry::Vacant(entry) => {
+                entry.insert( SamplingMetadata {
+                    accepted,
+                    cids_sampled: cids,
+                });
+                true
+            },
+            Entry::Occupied(mut entry) => {
+                let metadata = entry.get_mut();
+                metadata.accepted = accepted;
+                metadata.cids_sampled.extend_from_slice(&cids);
+                false
+            }
+        };
+
+        if new_inserted {
+            self.update_lowest_unsampled_height()
+        } else {
             info!("Overriding existing sampling metadata for height {height}");
             // modified header wasn't new, no need to update the height
             Ok(self.get_next_unsampled_height())
-        } else {
-            self.update_lowest_unsampled_height()
         }
     }
 
@@ -426,6 +444,33 @@ pub mod tests {
 
         assert_eq!(store.get_next_unsampled_height(), 7);
     }
+
+    #[test]
+    fn test_sampling_merge() {
+        let (store, _) = gen_filled_store(1);
+        let cid0 = "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ".parse().unwrap();
+        let cid1 = "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA".parse().unwrap();
+
+        store
+            .set_sampling_metadata(1, false, vec![cid0])
+            .unwrap();
+        store.set_sampling_metadata(1, false, vec![]).unwrap();
+
+        let sampling_data = store.get_sampling_metadata(1).unwrap().unwrap();
+        assert!(!sampling_data.accepted);
+        assert_eq!(sampling_data.cids_sampled, vec![cid0]);
+
+        store
+            .set_sampling_metadata(1, true, vec![cid1])
+            .unwrap();
+
+        assert_eq!(store.get_next_unsampled_height(), 2);
+
+        let sampling_data = store.get_sampling_metadata(1).unwrap().unwrap();
+        assert!(sampling_data.accepted);
+        assert_eq!(sampling_data.cids_sampled, vec![cid0, cid1]);
+    }
+
 
     #[test]
     fn test_sampled_cids() {

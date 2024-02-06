@@ -236,17 +236,27 @@ impl IndexedDbStore {
             return Err(StoreError::NotFound);
         }
 
+        let height_key = to_value(&height)?;
+
         let tx = self
             .db
             .transaction(&[SAMPLING_STORE_NAME], TransactionMode::ReadWrite)?;
         let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
 
-        let metadata = SamplingMetadata {
-            accepted,
-            cids_sampled: cids,
+        let previous_entry = sampling_store.get(&height_key).await?;
+        let new_entry = if previous_entry.is_falsy() {
+            SamplingMetadata {
+                accepted,
+                cids_sampled: cids
+            }
+        } else {
+            let mut value : SamplingMetadata = from_value(previous_entry)?;
+            value.accepted = accepted;
+            value.cids_sampled.extend_from_slice(&cids);
+            value
         };
-        let metadata_jsvalue = to_value(&metadata)?;
-        let height_key = to_value(&height)?;
+
+        let metadata_jsvalue = to_value(&new_entry)?;
 
         sampling_store
             .put(&metadata_jsvalue, Some(&height_key))
@@ -706,21 +716,23 @@ pub mod tests {
 
     #[named]
     #[wasm_bindgen_test]
-    async fn test_sampling_override() {
+    async fn test_sampling_merge() {
         let (store, _) = gen_filled_store(1, function_name!()).await;
-        let first_cid = vec!["zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ"
-            .parse()
-            .unwrap()];
-        let final_cid = vec!["zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA"
-            .parse()
-            .unwrap()];
+        let cid0 = "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ".parse().unwrap();
+        let cid1 = "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA".parse().unwrap();
+
         store
-            .set_sampling_metadata(1, false, first_cid)
+            .set_sampling_metadata(1, false, vec![cid0])
             .await
             .unwrap();
         store.set_sampling_metadata(1, false, vec![]).await.unwrap();
+
+        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
+        assert!(!sampling_data.accepted);
+        assert_eq!(sampling_data.cids_sampled, vec![cid0]);
+
         store
-            .set_sampling_metadata(1, true, final_cid.clone())
+            .set_sampling_metadata(1, true, vec![cid1])
             .await
             .unwrap();
 
@@ -729,7 +741,7 @@ pub mod tests {
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
 
         assert!(sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, final_cid);
+        assert_eq!(sampling_data.cids_sampled, vec![cid0, cid1]);
     }
 
     #[named]
