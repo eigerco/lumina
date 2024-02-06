@@ -225,7 +225,7 @@ impl IndexedDbStore {
         height > 0 && height <= head_height
     }
 
-    async fn set_sampling_metadata(
+    async fn update_sampling_metadata(
         &self,
         height: u64,
         accepted: bool,
@@ -247,10 +247,10 @@ impl IndexedDbStore {
         let new_entry = if previous_entry.is_falsy() {
             SamplingMetadata {
                 accepted,
-                cids_sampled: cids
+                cids_sampled: cids,
             }
         } else {
-            let mut value : SamplingMetadata = from_value(previous_entry)?;
+            let mut value: SamplingMetadata = from_value(previous_entry)?;
             value.accepted = accepted;
             value.cids_sampled.extend_from_slice(&cids);
             value
@@ -345,13 +345,13 @@ impl Store for IndexedDbStore {
         Ok(*self.lowest_unsampled_height.borrow())
     }
 
-    async fn set_sampling_metadata(
+    async fn update_sampling_metadata(
         &self,
         height: u64,
         accepted: bool,
         cids: Vec<Cid>,
     ) -> Result<u64> {
-        let fut = SendWrapper::new(self.set_sampling_metadata(height, accepted, cids));
+        let fut = SendWrapper::new(self.update_sampling_metadata(height, accepted, cids));
         fut.await
     }
 
@@ -614,7 +614,7 @@ pub mod tests {
             s.append_single_unchecked(gen.next())
                 .await
                 .expect("inserting test data failed");
-            s.set_sampling_metadata(h, true, vec![])
+            s.update_sampling_metadata(h, true, vec![])
                 .await
                 .expect("marking sampled failed");
         }
@@ -718,21 +718,28 @@ pub mod tests {
     #[wasm_bindgen_test]
     async fn test_sampling_merge() {
         let (store, _) = gen_filled_store(1, function_name!()).await;
-        let cid0 = "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ".parse().unwrap();
-        let cid1 = "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA".parse().unwrap();
+        let cid0 = "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ"
+            .parse()
+            .unwrap();
+        let cid1 = "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA"
+            .parse()
+            .unwrap();
 
         store
-            .set_sampling_metadata(1, false, vec![cid0])
+            .update_sampling_metadata(1, false, vec![cid0])
             .await
             .unwrap();
-        store.set_sampling_metadata(1, false, vec![]).await.unwrap();
+        store
+            .update_sampling_metadata(1, false, vec![])
+            .await
+            .unwrap();
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
         assert!(!sampling_data.accepted);
         assert_eq!(sampling_data.cids_sampled, vec![cid0]);
 
         store
-            .set_sampling_metadata(1, true, vec![cid1])
+            .update_sampling_metadata(1, true, vec![cid1])
             .await
             .unwrap();
 
@@ -749,11 +756,11 @@ pub mod tests {
     async fn test_sampling_height_empty_store() {
         let (store, _) = gen_filled_store(0, function_name!()).await;
         store
-            .set_sampling_metadata(0, true, vec![])
+            .update_sampling_metadata(0, true, vec![])
             .await
             .unwrap_err();
         store
-            .set_sampling_metadata(1, true, vec![])
+            .update_sampling_metadata(1, true, vec![])
             .await
             .unwrap_err();
     }
@@ -764,28 +771,49 @@ pub mod tests {
         let (store, _) = gen_filled_store(9, function_name!()).await;
 
         store
-            .set_sampling_metadata(0, true, vec![])
+            .update_sampling_metadata(0, true, vec![])
             .await
             .unwrap_err();
-        store.set_sampling_metadata(1, true, vec![]).await.unwrap();
-        store.set_sampling_metadata(2, true, vec![]).await.unwrap();
-        store.set_sampling_metadata(3, false, vec![]).await.unwrap();
-        store.set_sampling_metadata(4, true, vec![]).await.unwrap();
-        store.set_sampling_metadata(5, false, vec![]).await.unwrap();
-        store.set_sampling_metadata(6, false, vec![]).await.unwrap();
+        store
+            .update_sampling_metadata(1, true, vec![])
+            .await
+            .unwrap();
+        store
+            .update_sampling_metadata(2, true, vec![])
+            .await
+            .unwrap();
+        store
+            .update_sampling_metadata(3, false, vec![])
+            .await
+            .unwrap();
+        store
+            .update_sampling_metadata(4, true, vec![])
+            .await
+            .unwrap();
+        store
+            .update_sampling_metadata(5, false, vec![])
+            .await
+            .unwrap();
+        store
+            .update_sampling_metadata(6, false, vec![])
+            .await
+            .unwrap();
 
-        store.set_sampling_metadata(8, true, vec![]).await.unwrap();
+        store
+            .update_sampling_metadata(8, true, vec![])
+            .await
+            .unwrap();
 
         store
-            .set_sampling_metadata(10, true, vec![])
+            .update_sampling_metadata(10, true, vec![])
             .await
             .unwrap_err();
         store
-            .set_sampling_metadata(10, false, vec![])
+            .update_sampling_metadata(10, false, vec![])
             .await
             .unwrap_err();
         store
-            .set_sampling_metadata(20, true, vec![])
+            .update_sampling_metadata(20, true, vec![])
             .await
             .unwrap_err();
 
@@ -808,18 +836,21 @@ pub mod tests {
         .collect();
 
         store
-            .set_sampling_metadata(1, true, cids.clone())
+            .update_sampling_metadata(1, true, cids.clone())
             .await
             .unwrap();
         store
-            .set_sampling_metadata(2, true, cids[0..1].to_vec())
+            .update_sampling_metadata(2, true, cids[0..1].to_vec())
             .await
             .unwrap();
         store
-            .set_sampling_metadata(4, false, cids[3..].to_vec())
+            .update_sampling_metadata(4, false, cids[3..].to_vec())
             .await
             .unwrap();
-        store.set_sampling_metadata(5, false, vec![]).await.unwrap();
+        store
+            .update_sampling_metadata(5, false, vec![])
+            .await
+            .unwrap();
 
         assert_eq!(store.next_unsampled_height().await.unwrap(), 3);
 
@@ -911,7 +942,10 @@ pub mod tests {
                 assert!(sampling_data.is_none());
             }
 
-            store.set_sampling_metadata(1, true, vec![]).await.unwrap();
+            store
+                .update_sampling_metadata(1, true, vec![])
+                .await
+                .unwrap();
             let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
             assert!(sampling_data.accepted);
         }

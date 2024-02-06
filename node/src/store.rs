@@ -116,7 +116,7 @@ pub trait Store: Send + Sync + Debug {
     /// Sets sampling result for header, updating last sampled height so that it points
     /// to the next that wasn't verified
     /// Returns new highest sampled height or error, if occured
-    async fn set_sampling_metadata(
+    async fn update_sampling_metadata(
         &self,
         height: u64,
         accepted: bool,
