@@ -239,10 +239,10 @@ pub enum StoreError {
 #[derive(Message)]
 struct RawSamplingMetadata {
     #[prost(bool, tag = "1")]
-    pub accepted: bool,
+    accepted: bool,
 
     #[prost(message, repeated, tag = "2")]
-    pub cids_sampled: Vec<Vec<u8>>,
+    cids_sampled: Vec<Vec<u8>>,
 }
 
 impl Protobuf<RawSamplingMetadata> for SamplingMetadata {}
