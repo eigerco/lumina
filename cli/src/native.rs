@@ -6,12 +6,18 @@ use anyhow::{bail, Context, Result};
 use celestia_rpc::prelude::*;
 use celestia_rpc::Client;
 use clap::Parser;
+use directories::ProjectDirs;
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
+use lumina_node::blockstore::SledBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
 use lumina_node::node::{Node, NodeConfig};
 use lumina_node::store::{SledStore, Store};
+use sled::Db;
+use tokio::fs;
+use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 use tracing::info;
+use tracing::warn;
 
 use crate::common::ArgNetwork;
 
@@ -53,12 +59,9 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     let genesis_hash = network_genesis(network);
 
     info!("Initializing store");
-
-    let store = if let Some(db_path) = args.store {
-        SledStore::new_in_path(db_path).await?
-    } else {
-        SledStore::new(network_id.clone()).await?
-    };
+    let db = open_db(args.store, &network_id).await?;
+    let store = SledStore::new(db.clone()).await?;
+    let blockstore = SledBlockstore::new(db).await?;
 
     match store.head_height().await {
         Ok(height) => info!("Initialised store with head height: {height}"),
@@ -71,6 +74,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         p2p_local_keypair,
         p2p_bootnodes,
         p2p_listen_on: args.listen_addrs,
+        blockstore,
         store,
     })
     .await
@@ -82,6 +86,37 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     loop {
         sleep(Duration::from_secs(1)).await;
     }
+}
+
+async fn open_db(path: Option<PathBuf>, network_id: &str) -> Result<Db> {
+    if let Some(path) = path {
+        let db = spawn_blocking(|| sled::open(path)).await??;
+        return Ok(db);
+    }
+
+    let cache_dir =
+        ProjectDirs::from("co", "eiger", "lumina").context("Couldn't find lumina's cache dir")?;
+    let mut cache_dir = cache_dir.cache_dir().to_owned();
+
+    // TODO: remove it after we publish a new version to crates.io?
+    // If we find an old ('celestia') cache dir, move it to the new one.
+    if let Some(old_cache_dir) = ProjectDirs::from("co", "eiger", "celestia") {
+        let old_cache_dir = old_cache_dir.cache_dir();
+        if old_cache_dir.exists() && !cache_dir.exists() {
+            warn!(
+                "Migrating old cache dir to a new location: {} -> {}",
+                old_cache_dir.display(),
+                cache_dir.display()
+            );
+            fs::rename(old_cache_dir, &cache_dir).await?;
+        }
+    }
+
+    cache_dir.push(network_id);
+    // TODO: should we create there also a subdirectory for the 'db'
+    // in case we want to put there some other stuff too?
+    let db = spawn_blocking(|| sled::open(cache_dir)).await??;
+    Ok(db)
 }
 
 /// Get the address of the local bridge node

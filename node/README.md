@@ -4,11 +4,13 @@ A crate to configure, run and interact with Celestia's data availability nodes.
 
 ```rust,no_run
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
+use lumina_node::blockstore::SledBlockstore;
 use lumina_node::network::{
     canonical_network_bootnodes, network_genesis, network_id, Network,
 };
 use lumina_node::node::{Node, NodeConfig};
 use lumina_node::store::SledStore;
+use tokio::task::spawn_blocking;
 
 #[tokio::main]
 async fn main() {
@@ -18,9 +20,15 @@ async fn main() {
     let genesis_hash = network_genesis(network);
     let p2p_bootnodes = canonical_network_bootnodes(network).collect();
 
-    let store = SledStore::new(network_id.clone())
+    let db = spawn_blocking(|| sled::open("path/to/db").expect("Failed to open the database"))
+        .await
+        .expect("Failed to join");
+    let store = SledStore::new(db.clone())
         .await
         .expect("Failed to create a store");
+    let blockstore = SledBlockstore::new(db)
+        .await
+        .expect("Failed to create a blockstore");
 
     let node = Node::new(NodeConfig {
         network_id,
@@ -28,6 +36,7 @@ async fn main() {
         p2p_local_keypair,
         p2p_bootnodes,
         p2p_listen_on: vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()],
+        blockstore,
         store,
     })
     .await
