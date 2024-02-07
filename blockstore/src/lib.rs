@@ -6,20 +6,28 @@ use thiserror::Error;
 
 use crate::block::{Block, CidError};
 
+#[cfg(test)]
+pub(crate) mod test_utils;
+
 /// Utilities related to computing CID for the inserted data
 pub mod block;
 mod in_memory_blockstore;
+#[cfg(all(target_arch = "wasm32", feature = "indexeddb"))]
+mod indexed_db_blockstore;
 #[cfg(feature = "lru")]
 mod lru_blockstore;
-#[cfg(feature = "sled")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "sled"))]
 mod sled_blockstore;
 
 pub use crate::in_memory_blockstore::InMemoryBlockstore;
+#[cfg(all(target_arch = "wasm32", feature = "indexeddb"))]
+#[cfg_attr(docs_rs, doc(cfg(all(target_arch = "wasm32", feature = "indexeddb"))))]
+pub use crate::indexed_db_blockstore::IndexedDbBlockstore;
 #[cfg(feature = "lru")]
 #[cfg_attr(docs_rs, doc(cfg(feature = "lru")))]
 pub use crate::lru_blockstore::LruBlockstore;
-#[cfg(feature = "sled")]
-#[cfg_attr(docs_rs, doc(cfg(feature = "sled")))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "sled"))]
+#[cfg_attr(docs_rs, doc(cfg(all(not(target_arch = "wasm32"), feature = "sled"))))]
 pub use crate::sled_blockstore::SledBlockstore;
 
 /// Error returned when performing operations on [`Blockstore`]

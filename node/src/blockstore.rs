@@ -12,3 +12,9 @@ pub type InMemoryBlockstore = blockstore::InMemoryBlockstore<MAX_MH_SIZE>;
 ///
 /// [`SledBlockstore`]: blockstore::SledBlockstore
 pub type SledBlockstore = blockstore::SledBlockstore<MAX_MH_SIZE>;
+
+#[cfg(target_arch = "wasm32")]
+/// A [`IndexedDbBlockstore`] with maximum multihash size used by lumina.
+///
+/// [`IndexedDbBlockstore`]: blockstore::IndexedDbBlockstore
+pub type IndexedDbBlockstore = blockstore::IndexedDbBlockstore<MAX_MH_SIZE>;

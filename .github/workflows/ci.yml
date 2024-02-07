@@ -97,6 +97,9 @@ jobs:
     - name: Test node-wasm crate
       run: wasm-pack test --headless --chrome node-wasm
 
+    - name: Test blockstore crate
+      run: wasm-pack test --headless --chrome blockstore --all-features
+
     - name: Build and pack node-wasm
       run: wasm-pack build --release --target web node-wasm && wasm-pack pack node-wasm
 

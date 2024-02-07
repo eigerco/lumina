@@ -123,97 +123,57 @@ impl From<JoinError> for BlockstoreError {
 
 #[cfg(test)]
 mod tests {
-    use cid::Cid;
-    use multihash::Multihash;
+    use std::path::Path;
+
+    use crate::test_utils::{blockstore_tests, cid_v1};
 
     use super::*;
 
-    #[tokio::test]
-    async fn test_insert_get() {
-        let cid = cid_v1::<64>(b"1");
-        let data = b"3";
-
-        let store = temp_blockstore::<64>().await;
-        store.put_keyed(&cid, data).await.unwrap();
-
-        let retrieved_data = store.get(&cid).await.unwrap().unwrap();
-        assert_eq!(&retrieved_data, data);
-        assert!(store.has(&cid).await.unwrap());
-
-        let another_cid = Cid::default();
-        let missing_block = store.get(&another_cid).await.unwrap();
-        assert_eq!(missing_block, None);
-        assert!(!store.has(&another_cid).await.unwrap());
-    }
+    blockstore_tests!(create_unique_store, tokio::test);
 
     #[tokio::test]
-    async fn test_duplicate_insert() {
-        let cid0 = cid_v1::<64>(b"1");
-        let cid1 = cid_v1::<64>(b"2");
-
-        let store = temp_blockstore::<64>().await;
-
-        store.put_keyed(&cid0, b"1").await.unwrap();
-        store.put_keyed(&cid1, b"2").await.unwrap();
-
-        let insert_err = store.put_keyed(&cid1, b"3").await.unwrap_err();
-        assert!(matches!(insert_err, BlockstoreError::CidExists));
-    }
-
-    #[tokio::test]
-    async fn different_cid_size() {
-        let cid0 = cid_v1::<32>(b"1");
-        let cid1 = cid_v1::<64>(b"1");
-        let cid2 = cid_v1::<128>(b"1");
-        let data = b"2";
-
-        let store = temp_blockstore::<128>().await;
-        store.put_keyed(&cid0, data).await.unwrap();
-
-        let received = store.get(&cid0).await.unwrap().unwrap();
-        assert_eq!(&received, data);
-        let received = store.get(&cid1).await.unwrap().unwrap();
-        assert_eq!(&received, data);
-        let received = store.get(&cid2).await.unwrap().unwrap();
-        assert_eq!(&received, data);
-    }
-
-    #[tokio::test]
-    async fn too_large_cid() {
-        let small_cid = cid_v1::<64>([1u8; 8]);
-        let big_cid = cid_v1::<64>([1u8; 64]);
-
-        let store = temp_blockstore::<8>().await;
-
-        store.put_keyed(&small_cid, b"1").await.unwrap();
-        let put_err = store.put_keyed(&big_cid, b"1").await.unwrap_err();
-        assert!(matches!(put_err, BlockstoreError::CidTooLong));
-
-        store.get(&small_cid).await.unwrap();
-        let get_err = store.get(&big_cid).await.unwrap_err();
-        assert!(matches!(get_err, BlockstoreError::CidTooLong));
-
-        store.has(&small_cid).await.unwrap();
-        let has_err = store.has(&big_cid).await.unwrap_err();
-        assert!(matches!(has_err, BlockstoreError::CidTooLong));
-    }
-
-    fn cid_v1<const S: usize>(data: impl AsRef<[u8]>) -> CidGeneric<S> {
-        CidGeneric::new_v1(1, Multihash::wrap(1, data.as_ref()).unwrap())
-    }
-
-    async fn temp_blockstore<const SIZE: usize>() -> SledBlockstore<SIZE> {
-        let test_dir = tempfile::TempDir::with_prefix("sled-blockstore-test")
+    async fn store_persists() {
+        let path = tempfile::TempDir::with_prefix("sled-blockstore-test")
             .unwrap()
             .into_path();
 
-        let db = sled::Config::default()
-            .path(test_dir)
-            .temporary(true)
-            .create_new(true)
-            .open()
-            .unwrap();
+        let store = create_store::<64>(Some(&path)).await;
+        let cid = cid_v1::<64>(b"1");
+        let data = b"data";
+
+        store.put_keyed(&cid, data).await.unwrap();
+
+        spawn_blocking(move || drop(store)).await.unwrap();
+
+        let store = create_store::<64>(Some(&path)).await;
+        let received = store.get(&cid).await.unwrap();
+
+        assert_eq!(received, Some(data.to_vec()));
+    }
+
+    async fn create_store<const S: usize>(path: Option<&Path>) -> SledBlockstore<S> {
+        let is_temp = path.is_none();
+        let test_dir = path.map(ToOwned::to_owned).unwrap_or_else(|| {
+            tempfile::TempDir::with_prefix("sled-blockstore-test")
+                .unwrap()
+                .into_path()
+        });
+
+        let db = spawn_blocking(move || {
+            sled::Config::default()
+                .path(&test_dir)
+                .temporary(is_temp)
+                .create_new(is_temp)
+                .open()
+                .unwrap()
+        })
+        .await
+        .unwrap();
 
         SledBlockstore::new(db).await.unwrap()
+    }
+
+    async fn create_unique_store<const S: usize>() -> SledBlockstore<S> {
+        create_store::<S>(None).await
     }
 }

@@ -655,13 +655,19 @@ dependencies = [
  "async-trait",
  "cid",
  "dashmap",
+ "js-sys",
  "lru",
  "multihash",
  "multihash-codetable",
+ "rexie",
+ "send_wrapper 0.6.0",
  "sled",
  "tempfile",
  "thiserror",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+ "web-sys",
 ]
 
 [[package]]
