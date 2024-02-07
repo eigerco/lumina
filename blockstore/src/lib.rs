@@ -1,7 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-use std::io;
-
 use cid::CidGeneric;
 use multihash::Multihash;
 use thiserror::Error;
@@ -69,7 +67,7 @@ type Result<T> = std::result::Result<T, BlockstoreError>;
 ///
 /// [`CidTooLong`]: BlockstoreError::CidTooLong
 #[cfg_attr(not(docs_rs), async_trait::async_trait)]
-pub trait Blockstore {
+pub trait Blockstore: Send + Sync {
     /// Gets the block from the blockstore
     async fn get<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<Option<Vec<u8>>>;
 
