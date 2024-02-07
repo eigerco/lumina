@@ -37,15 +37,15 @@ impl<const MAX_MULTIHASH_SIZE: usize> SledBlockstore<MAX_MULTIHASH_SIZE> {
     /// # }
     /// ```
     pub async fn new(db: Db) -> Result<Self> {
-        spawn_blocking(move || {
+        let blockstore = spawn_blocking(move || {
             let blocks = db.open_tree(BLOCKS_TREE_ID)?;
 
-            Ok(Self {
+            Ok::<_, SledError>(Self {
                 inner: Arc::new(Inner { _db: db, blocks }),
             })
         })
-        .await
-        .map_err(|e| BlockstoreError::OpenFailed(e.to_string()))?
+        .await??;
+        Ok(blockstore)
     }
 
     async fn get<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<Option<Vec<u8>>> {

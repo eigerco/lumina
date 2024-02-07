@@ -37,11 +37,6 @@ pub enum BlockstoreError {
     #[error("Error generating CID: {0}")]
     CidError(#[from] CidError),
 
-    /// Opening a database failed.
-    #[cfg(feature = "sled")]
-    #[error("Opening a database failed: {0}")]
-    OpenFailed(String),
-
     /// An error propagated from the IO operation.
     #[cfg(feature = "sled")]
     #[error("Received io error from persistent storage: {0}")]
