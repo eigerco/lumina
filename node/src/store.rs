@@ -1,12 +1,16 @@
 //! Primitives related to the [`ExtendedHeader`] storage.
 
 use std::fmt::Debug;
-use std::io;
+use std::io::{self, Cursor};
 use std::ops::{Bound, RangeBounds, RangeInclusive};
 
 use async_trait::async_trait;
+use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use cid::Cid;
+use prost::Message;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use in_memory_store::InMemoryStore;
@@ -22,6 +26,19 @@ mod indexed_db_store;
 mod sled_store;
 
 use crate::utils::validate_headers;
+
+/// Sampling status for a header.
+///
+/// This struct persists DAS-ing information in a header store for future reference.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct SamplingMetadata {
+    /// Indicates whether this node was able to successfuly sample the block
+    pub accepted: bool,
+
+    /// List of CIDs used, when decision to accept or reject the header was taken. Can be used
+    /// to remove associated data from Blockstore, when cleaning up the old ExtendedHeaders
+    pub cids_sampled: Vec<Cid>,
+}
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
 
@@ -92,6 +109,26 @@ pub trait Store: Send + Sync + Debug {
     ///
     /// This method does not validate or verify that `header` is indeed correct.
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()>;
+
+    /// Returns height of the lowest header that wasn't sampled yet
+    async fn next_unsampled_height(&self) -> Result<u64>;
+
+    /// Sets or updates sampling result for the header.
+    ///
+    /// In case of update, provided CID list is appended onto the existing one, as not to lose
+    /// references to previously sampled blocks.
+    ///
+    /// Returns next unsampled header or error, if occured
+    async fn update_sampling_metadata(
+        &self,
+        height: u64,
+        accepted: bool,
+        cids: Vec<Cid>,
+    ) -> Result<u64>;
+
+    /// Gets the sampling data for the height. `Ok(None)` indicates that sampling data
+    /// wasn't set in the store
+    async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 
     /// Append a range of headers maintaining continuity from the genesis to the head.
     ///
@@ -197,6 +234,48 @@ pub enum StoreError {
     /// Invalid range of headers provided.
     #[error("Invalid headers range")]
     InvalidHeadersRange,
+}
+
+#[derive(Message)]
+struct RawSamplingMetadata {
+    #[prost(bool, tag = "1")]
+    accepted: bool,
+
+    #[prost(message, repeated, tag = "2")]
+    cids_sampled: Vec<Vec<u8>>,
+}
+
+impl Protobuf<RawSamplingMetadata> for SamplingMetadata {}
+
+impl TryFrom<RawSamplingMetadata> for SamplingMetadata {
+    type Error = cid::Error;
+
+    fn try_from(item: RawSamplingMetadata) -> Result<Self, Self::Error> {
+        let cids_sampled = item
+            .cids_sampled
+            .iter()
+            .map(|cid| {
+                let buffer = Cursor::new(cid);
+                Cid::read_bytes(buffer)
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(SamplingMetadata {
+            accepted: item.accepted,
+            cids_sampled,
+        })
+    }
+}
+
+impl From<SamplingMetadata> for RawSamplingMetadata {
+    fn from(item: SamplingMetadata) -> Self {
+        let cids_sampled = item.cids_sampled.iter().map(|cid| cid.to_bytes()).collect();
+
+        RawSamplingMetadata {
+            accepted: item.accepted,
+            cids_sampled,
+        }
+    }
 }
 
 /// a helper function to convert any kind of range to the inclusive range of header heights.
