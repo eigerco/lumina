@@ -38,17 +38,14 @@ pub enum BlockstoreError {
     CidError(#[from] CidError),
 
     /// An error propagated from the IO operation.
-    #[cfg(feature = "sled")]
     #[error("Received io error from persistent storage: {0}")]
     IoError(#[from] std::io::Error),
 
     /// Storage corrupted. Try reseting the blockstore.
-    #[cfg(feature = "sled")]
     #[error("Stored data in inconsistent state, try reseting the store: {0}")]
     StorageCorrupted(String),
 
     /// Unrecoverable error reported by the backing store.
-    #[cfg(feature = "sled")]
     #[error("Persistent storage reported unrecoverable error: {0}")]
     BackingStoreError(String),
 }
