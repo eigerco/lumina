@@ -12,6 +12,7 @@ use cid::Cid;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::sync::watch;
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
@@ -129,6 +130,9 @@ pub trait Store: Send + Sync + Debug {
     /// Gets the sampling data for the height. `Ok(None)` indicates that sampling data
     /// wasn't set in the store
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
+
+    /// Watcher for the latest header inserted into the store.
+    fn header_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>>;
 
     /// Append a range of headers maintaining continuity from the genesis to the head.
     ///

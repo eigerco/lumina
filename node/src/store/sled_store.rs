@@ -15,6 +15,7 @@ use tempfile::TempDir;
 use tokio::task::spawn_blocking;
 use tokio::task::JoinError;
 use tracing::{debug, info};
+use tokio::sync::watch;
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
@@ -399,6 +400,10 @@ impl Store for SledStore {
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         self.get_sampling_metadata(height).await
+    }
+
+    fn header_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
+        todo!()
     }
 }
 

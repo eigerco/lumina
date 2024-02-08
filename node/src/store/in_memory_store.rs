@@ -7,6 +7,7 @@ use cid::Cid;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use tracing::{debug, info};
+use tokio::sync::watch;
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
@@ -23,17 +24,24 @@ pub struct InMemoryStore {
     head_height: AtomicU64,
     /// Cached height of the lowest header that wasn't sampled yet
     lowest_unsampled_height: AtomicU64,
+
+    header_watch_tx: watch::Sender<Option<ExtendedHeader>>,
+    header_watch_rx: watch::Receiver<Option<ExtendedHeader>>,
+
 }
 
 impl InMemoryStore {
     /// Create a new store.
     pub fn new() -> Self {
+        let (header_watch_tx, header_watch_rx) = watch::channel(None);
         InMemoryStore {
             headers: DashMap::new(),
             sampling_data: DashMap::new(),
             height_to_hash: DashMap::new(),
             head_height: AtomicU64::new(0),
             lowest_unsampled_height: AtomicU64::new(1),
+            header_watch_tx,
+            header_watch_rx
         }
     }
 
@@ -85,10 +93,12 @@ impl InMemoryStore {
         }
 
         debug!("Inserting header {hash} with height {height}");
-        hash_entry.insert(header);
+        hash_entry.insert(header.clone());
         height_entry.insert(hash);
 
         self.head_height.store(height, Ordering::Release);
+
+        self.header_watch_tx.send_replace(Some(header));
 
         Ok(())
     }
@@ -195,6 +205,10 @@ impl InMemoryStore {
 
         Ok(Some(metadata.clone()))
     }
+
+    fn header_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
+        self.header_watch_rx.clone()
+    }
 }
 
 #[async_trait]
@@ -243,6 +257,10 @@ impl Store for InMemoryStore {
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         self.get_sampling_metadata(height)
     }
+
+    fn header_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
+        self.header_watcher()
+    }
 }
 
 impl Default for InMemoryStore {
@@ -253,6 +271,9 @@ impl Default for InMemoryStore {
 
 impl Clone for InMemoryStore {
     fn clone(&self) -> Self {
+        let (header_watch_tx, header_watch_rx) = watch::channel(None);
+        header_watch_tx.send_replace(self.get_head().ok()); // XXX ?
+
         InMemoryStore {
             headers: self.headers.clone(),
             sampling_data: self.sampling_data.clone(),
@@ -261,6 +282,8 @@ impl Clone for InMemoryStore {
             lowest_unsampled_height: AtomicU64::new(
                 self.lowest_unsampled_height.load(Ordering::Acquire),
             ),
+            header_watch_tx,
+            header_watch_rx,
         }
     }
 }
@@ -512,6 +535,35 @@ pub mod tests {
         assert!(!sampling_data.accepted);
     }
 
+    #[test]
+    fn test_watcher() {
+        let (store, mut gen) = gen_filled_store(5);
+        let watcher = store.header_watcher();
+
+        assert_eq!(store.get_head().ok(), *watcher.borrow());
+
+        let next = gen.next();
+        store.append_single_unchecked(next.clone()).unwrap();
+
+        assert_eq!(Some(next), *watcher.borrow());
+    }
+
+    #[async_test]
+    #[should_panic(expected = "ok")]
+    async fn test_awaiter() {
+        let (store, mut gen) = gen_filled_store(5);
+        let mut watcher = store.header_watcher();
+
+        crate::executor::spawn(async move {
+            let next = gen.next();
+            store.append_single_unchecked(next).unwrap();
+        });
+
+        watcher.wait_for(|h| { h.as_ref().map( |h| h.height().value()) == Some(6)}).await.unwrap();
+
+        panic!("ok");
+    }
+
     pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
         let s = InMemoryStore::new();
         let mut gen = ExtendedHeaderGenerator::new();
@@ -525,4 +577,5 @@ pub mod tests {
 
         (s, gen)
     }
+
 }
