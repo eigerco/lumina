@@ -10,6 +10,7 @@ use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
+use tokio::sync::watch;
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
@@ -39,9 +40,11 @@ struct ExtendedHeaderEntry {
 #[derive(Debug)]
 pub struct IndexedDbStore {
     // SendWrapper usage is safe in wasm because we're running on a single thread
-    head: SendWrapper<RefCell<Option<ExtendedHeader>>>,
+    //head: SendWrapper<RefCell<Option<ExtendedHeader>>>,
     lowest_unsampled_height: SendWrapper<RefCell<u64>>,
     db: SendWrapper<Rexie>,
+
+    header_watch_tx: watch::Sender<Option<ExtendedHeader>>,
 }
 
 impl IndexedDbStore {
@@ -71,10 +74,14 @@ impl IndexedDbStore {
         // 1 is lowest valid header heigth, start from there
         let last_sampled = get_next_unsampled_height_from_database(&rexie, 1).await?;
 
+        let (header_watch_tx, _) = watch::channel(None);
+        header_watch_tx.send_replace(db_head);
+
         Ok(Self {
-            head: SendWrapper::new(RefCell::new(db_head)),
+            //head: SendWrapper::new(RefCell::new(db_head)),
             lowest_unsampled_height: SendWrapper::new(RefCell::new(last_sampled)),
             db: SendWrapper::new(rexie),
+            header_watch_tx,
         })
     }
 
@@ -87,12 +94,16 @@ impl IndexedDbStore {
 
     fn get_head(&self) -> Result<ExtendedHeader> {
         // this shouldn't panic, we don't borrow across await points and wasm is single threaded
-        self.head.borrow().clone().ok_or(StoreError::NotFound)
+        //self.head.borrow().clone().ok_or(StoreError::NotFound)
+        self.header_watch_tx
+            .borrow()
+            .clone()
+            .ok_or(StoreError::NotFound)
     }
 
     fn get_head_height(&self) -> Result<u64> {
         // this shouldn't panic, we don't borrow across await points and wasm is single threaded
-        self.head
+        self.header_watch_tx
             .borrow()
             .as_ref()
             .map(|h| h.height().value())
@@ -197,7 +208,8 @@ impl IndexedDbStore {
         tx.commit().await?;
 
         // this shouldn't panic, we don't borrow across await points and wasm is single threaded
-        self.head.replace(Some(header));
+        //self.head.replace(Some(header));
+        self.header_watch_tx.send_replace(Some(header));
 
         Ok(())
     }
@@ -304,6 +316,11 @@ impl IndexedDbStore {
 
         Ok(Some(from_value(sampling_entry)?))
     }
+
+    /// Watcher for the latest header inserted into the store.
+    fn header_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
+        self.header_watch_tx.subscribe()
+    }
 }
 
 #[async_trait]
@@ -358,6 +375,11 @@ impl Store for IndexedDbStore {
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         let fut = SendWrapper::new(self.get_sampling_metadata(height));
         fut.await
+    }
+
+    /// Watcher for the latest header inserted into the store.
+    fn header_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
+        self.header_watcher()
     }
 }
 
@@ -871,6 +893,40 @@ pub mod tests {
         let sampling_data = store.get_sampling_metadata(5).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids_sampled, vec![]);
         assert!(!sampling_data.accepted);
+    }
+
+    #[named]
+    #[wasm_bindgen_test]
+    async fn test_watcher() {
+        let (store, mut gen) = gen_filled_store(5, function_name!()).await;
+        let watcher = store.header_watcher();
+
+        assert_eq!(store.get_head().ok(), *watcher.borrow());
+
+        let next = gen.next();
+        store.append_single_unchecked(next.clone()).await.unwrap();
+
+        assert_eq!(Some(next), *watcher.borrow());
+    }
+
+    #[named]
+    #[wasm_bindgen_test]
+    #[should_panic(expected = "ok")]
+    async fn test_awaiter() {
+        let (store, mut gen) = gen_filled_store(5, function_name!()).await;
+        let mut watcher = store.header_watcher();
+
+        crate::executor::spawn(SendWrapper::new(async move {
+            let next = gen.next();
+            store.append_single_unchecked(next).await.unwrap();
+        }));
+
+        watcher
+            .wait_for(|h| h.as_ref().map(|h| h.height().value()) == Some(6))
+            .await
+            .unwrap();
+
+        panic!("ok");
     }
 
     mod migration_v1 {

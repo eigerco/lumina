@@ -6,8 +6,8 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use tracing::{debug, info};
 use tokio::sync::watch;
+use tracing::{debug, info};
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
@@ -26,14 +26,12 @@ pub struct InMemoryStore {
     lowest_unsampled_height: AtomicU64,
 
     header_watch_tx: watch::Sender<Option<ExtendedHeader>>,
-    header_watch_rx: watch::Receiver<Option<ExtendedHeader>>,
-
 }
 
 impl InMemoryStore {
     /// Create a new store.
     pub fn new() -> Self {
-        let (header_watch_tx, header_watch_rx) = watch::channel(None);
+        let (header_watch_tx, _) = watch::channel(None);
         InMemoryStore {
             headers: DashMap::new(),
             sampling_data: DashMap::new(),
@@ -41,7 +39,6 @@ impl InMemoryStore {
             head_height: AtomicU64::new(0),
             lowest_unsampled_height: AtomicU64::new(1),
             header_watch_tx,
-            header_watch_rx
         }
     }
 
@@ -207,7 +204,7 @@ impl InMemoryStore {
     }
 
     fn header_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
-        self.header_watch_rx.clone()
+        self.header_watch_tx.subscribe()
     }
 }
 
@@ -271,7 +268,7 @@ impl Default for InMemoryStore {
 
 impl Clone for InMemoryStore {
     fn clone(&self) -> Self {
-        let (header_watch_tx, header_watch_rx) = watch::channel(None);
+        let (header_watch_tx, _) = watch::channel(None);
         header_watch_tx.send_replace(self.get_head().ok()); // XXX ?
 
         InMemoryStore {
@@ -283,7 +280,6 @@ impl Clone for InMemoryStore {
                 self.lowest_unsampled_height.load(Ordering::Acquire),
             ),
             header_watch_tx,
-            header_watch_rx,
         }
     }
 }
@@ -559,7 +555,10 @@ pub mod tests {
             store.append_single_unchecked(next).unwrap();
         });
 
-        watcher.wait_for(|h| { h.as_ref().map( |h| h.height().value()) == Some(6)}).await.unwrap();
+        watcher
+            .wait_for(|h| h.as_ref().map(|h| h.height().value()) == Some(6))
+            .await
+            .unwrap();
 
         panic!("ok");
     }
@@ -577,5 +576,4 @@ pub mod tests {
 
         (s, gen)
     }
-
 }

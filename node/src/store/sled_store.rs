@@ -12,10 +12,10 @@ use directories::ProjectDirs;
 use sled::transaction::{abort, ConflictableTransactionError, TransactionError};
 use sled::{Db, Error as SledError, Transactional, Tree};
 use tempfile::TempDir;
+use tokio::sync::watch;
 use tokio::task::spawn_blocking;
 use tokio::task::JoinError;
 use tracing::{debug, info};
-use tokio::sync::watch;
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
@@ -41,6 +41,8 @@ struct Inner {
     height_to_hash: Tree,
     /// sub-tree which maps header height to its metadata
     sampling_metadata: Tree,
+
+    header_watch_tx: watch::Sender<Option<ExtendedHeader>>,
 }
 
 impl SledStore {
@@ -109,12 +111,14 @@ impl SledStore {
             debug!("initialised sampling height");
         }
 
+        let (header_watch_tx, _) = watch::channel(None);
         Ok(Self {
             inner: Arc::new(Inner {
                 db,
                 headers,
                 height_to_hash,
                 sampling_metadata,
+                header_watch_tx,
             }),
         })
     }
@@ -201,7 +205,7 @@ impl SledStore {
 
             // Do actual inserts as a transaction, failing if keys already exist
             (inner.db.deref(), &inner.headers, &inner.height_to_hash).transaction(
-                move |(db, headers, height_to_hash)| {
+                |(db, headers, height_to_hash)| {
                     let height_key = height_to_key(height);
                     if height_to_hash
                         .insert(&height_key, hash.as_bytes())?
@@ -227,6 +231,9 @@ impl SledStore {
                     Ok(())
                 },
             )?;
+
+            inner.header_watch_tx.send_replace(Some(header));
+
             Ok(())
         })
         .await??;
@@ -313,6 +320,10 @@ impl SledStore {
             Ok(Some(metadata))
         })
         .await?
+    }
+
+    fn header_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
+        self.inner.header_watch_tx.subscribe()
     }
 
     /// Flush the store's state to the filesystem.
@@ -403,7 +414,7 @@ impl Store for SledStore {
     }
 
     fn header_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
-        todo!()
+        self.header_watcher()
     }
 }
 
@@ -859,6 +870,38 @@ pub mod tests {
         let sampling_data = store.get_sampling_metadata(5).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids_sampled, vec![]);
         assert!(!sampling_data.accepted);
+    }
+
+    #[tokio::test]
+    async fn test_watcher() {
+        let (store, mut gen) = gen_filled_store(5, None).await;
+        let watcher = store.header_watcher();
+
+        assert_eq!(store.get_head().await.ok(), *watcher.borrow());
+
+        let next = gen.next();
+        store.append_single_unchecked(next.clone()).await.unwrap();
+
+        assert_eq!(Some(next), *watcher.borrow());
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "ok")]
+    async fn test_awaiter() {
+        let (store, mut gen) = gen_filled_store(5, None).await;
+        let mut watcher = store.header_watcher();
+
+        crate::executor::spawn(async move {
+            let next = gen.next();
+            store.append_single_unchecked(next).await.unwrap();
+        });
+
+        watcher
+            .wait_for(|h| h.as_ref().map(|h| h.height().value()) == Some(6))
+            .await
+            .unwrap();
+
+        panic!("ok");
     }
 
     mod migration_v1 {
