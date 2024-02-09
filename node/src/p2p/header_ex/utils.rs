@@ -9,7 +9,9 @@ use crate::p2p::header_ex::HeaderExError;
 
 pub(crate) trait HeaderRequestExt {
     fn with_origin(origin: u64, amount: u64) -> HeaderRequest;
+    #[allow(unused)]
     fn with_hash(hash: Hash) -> HeaderRequest;
+    #[allow(unused)]
     fn head_request() -> HeaderRequest;
     fn is_valid(&self) -> bool;
     fn is_head_request(&self) -> bool;
