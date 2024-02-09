@@ -12,21 +12,28 @@ use crate::nmt::Namespace;
 use crate::serializers::none_as_negative_one;
 use crate::{bail_validation, Error, Result, Share};
 
-/// Options for configuring the blob submission to the network.
+/// GasPrice represents the amount to be paid per gas unit.
 ///
-/// If no options are provided, then the default ones will be used.
+/// Fee is set by multiplying GasPrice by GasLimit, which is determined by the blob sizes.
+/// If no value is provided, then this will be serialized to `-1.0` which means the node that
+/// receives the request will calculate the GasPrice for given blob.
 /// Read more about the mechanisms of fees and gas usage in [`submitting data blobs`].
 ///
 /// [`submitting data blobs`]: https://docs.celestia.org/developers/submit-data#fees-and-gas-limits
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct SubmitOptions {
-    /// A fee for the validator. Transactions will be prioritized based on their fees.
-    #[serde(with = "none_as_negative_one")]
-    pub fee: Option<u64>,
-    /// A maximum gas amount that can be used by a validator when trying to include the
-    /// transaction.
-    pub gas_limit: Option<u64>,
+#[derive(Debug, Default, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct GasPrice(#[serde(serialize_with = "none_as_negative_one::serialize")] Option<f64>);
+
+impl From<f64> for GasPrice {
+    fn from(value: f64) -> Self {
+        Self(Some(value))
+    }
+}
+
+impl From<Option<f64>> for GasPrice {
+    fn from(value: Option<f64>) -> Self {
+        Self(value)
+    }
 }
 
 /// Arbitrary data that can be stored in the network within certain [`Namespace`].

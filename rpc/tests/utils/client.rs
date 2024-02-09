@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use celestia_rpc::prelude::*;
 use celestia_rpc::Client;
-use celestia_types::{blob::SubmitOptions, Blob};
+use celestia_types::{blob::GasPrice, Blob};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::Error;
 use tokio::sync::{Mutex, MutexGuard};
@@ -55,5 +55,5 @@ where
     C: ClientT + Sync,
 {
     let _guard = write_lock().await;
-    client.blob_submit(blobs, SubmitOptions::default()).await
+    client.blob_submit(blobs, GasPrice::default()).await
 }
