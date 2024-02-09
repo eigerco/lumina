@@ -11,14 +11,19 @@ pub mod block;
 mod in_memory_blockstore;
 #[cfg(feature = "lru")]
 mod lru_blockstore;
+#[cfg(feature = "sled")]
+mod sled_blockstore;
 
 pub use crate::in_memory_blockstore::InMemoryBlockstore;
 #[cfg(feature = "lru")]
 #[cfg_attr(docs_rs, doc(cfg(feature = "lru")))]
 pub use crate::lru_blockstore::LruBlockstore;
+#[cfg(feature = "sled")]
+#[cfg_attr(docs_rs, doc(cfg(feature = "sled")))]
+pub use crate::sled_blockstore::SledBlockstore;
 
 /// Error returned when performing operations on [`Blockstore`]
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, Error)]
 pub enum BlockstoreError {
     /// Provided CID already exists in blockstore when trying to insert it
     #[error("CID already exists in the store")]
@@ -31,6 +36,18 @@ pub enum BlockstoreError {
     /// Error occured when trying to compute CID.
     #[error("Error generating CID: {0}")]
     CidError(#[from] CidError),
+
+    /// An error propagated from the IO operation.
+    #[error("Received io error from persistent storage: {0}")]
+    IoError(#[from] std::io::Error),
+
+    /// Storage corrupted. Try reseting the blockstore.
+    #[error("Stored data in inconsistent state, try reseting the store: {0}")]
+    StorageCorrupted(String),
+
+    /// Unrecoverable error reported by the backing store.
+    #[error("Persistent storage reported unrecoverable error: {0}")]
+    BackingStoreError(String),
 }
 
 type Result<T> = std::result::Result<T, BlockstoreError>;
@@ -42,7 +59,7 @@ type Result<T> = std::result::Result<T, BlockstoreError>;
 ///
 /// [`CidTooLong`]: BlockstoreError::CidTooLong
 #[cfg_attr(not(docs_rs), async_trait::async_trait)]
-pub trait Blockstore {
+pub trait Blockstore: Send + Sync {
     /// Gets the block from the blockstore
     async fn get<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<Option<Vec<u8>>>;
 

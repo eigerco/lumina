@@ -658,6 +658,8 @@ dependencies = [
  "lru",
  "multihash",
  "multihash-codetable",
+ "sled",
+ "tempfile",
  "thiserror",
  "tokio",
 ]
