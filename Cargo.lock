@@ -542,8 +542,9 @@ dependencies = [
 [[package]]
 name = "beetswap"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/beetswap?rev=9316bd6#9316bd600fe745e685ef158ee54c98b5e48a3309"
+source = "git+https://github.com/eigerco/beetswap?rev=f69ddd8#f69ddd8e429a4913aa3fb29b41b4a0913c221a63"
 dependencies = [
+ "async-trait",
  "asynchronous-codec 0.7.0",
  "blockstore",
  "bytes",
@@ -558,6 +559,7 @@ dependencies = [
  "quick-protobuf",
  "smallvec",
  "thiserror",
+ "tracing",
  "unsigned-varint 0.8.0",
  "void",
 ]

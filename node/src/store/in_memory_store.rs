@@ -1,3 +1,4 @@
+use std::pin::pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
@@ -6,6 +7,7 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
+use tokio::sync::Notify;
 use tracing::{debug, info};
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
@@ -23,6 +25,8 @@ pub struct InMemoryStore {
     head_height: AtomicU64,
     /// Cached height of the lowest header that wasn't sampled yet
     lowest_unsampled_height: AtomicU64,
+    /// Notifier for height
+    check_height_notifier: Notify,
 }
 
 impl InMemoryStore {
@@ -34,6 +38,7 @@ impl InMemoryStore {
             height_to_hash: DashMap::new(),
             head_height: AtomicU64::new(0),
             lowest_unsampled_height: AtomicU64::new(1),
+            check_height_notifier: Notify::new(),
         }
     }
 
@@ -211,6 +216,26 @@ impl Store for InMemoryStore {
         self.get_by_height(height)
     }
 
+    async fn wait_height(&self, height: u64) -> Result<()> {
+        let mut notifier = pin!(self.check_height_notifier.notified());
+
+        loop {
+            // Make sure no notifications are lost by enable notifier
+            // before the check.
+            notifier.as_mut().enable();
+
+            if self.contains_height(height) {
+                return Ok(());
+            }
+
+            // Await for a notification
+            notifier.as_mut().await;
+
+            // Reset notifier
+            notifier.set(self.check_height_notifier.notified());
+        }
+    }
+
     async fn head_height(&self) -> Result<u64> {
         self.get_head_height()
     }
@@ -261,6 +286,7 @@ impl Clone for InMemoryStore {
             lowest_unsampled_height: AtomicU64::new(
                 self.lowest_unsampled_height.load(Ordering::Acquire),
             ),
+            check_height_notifier: Notify::new(),
         }
     }
 }

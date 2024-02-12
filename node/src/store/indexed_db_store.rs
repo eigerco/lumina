@@ -10,6 +10,7 @@ use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
+use tokio::sync::Notify;
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
@@ -42,6 +43,7 @@ pub struct IndexedDbStore {
     head: SendWrapper<RefCell<Option<ExtendedHeader>>>,
     lowest_unsampled_height: SendWrapper<RefCell<u64>>,
     db: SendWrapper<Rexie>,
+    check_height_notifier: Notify,
 }
 
 impl IndexedDbStore {
@@ -75,6 +77,7 @@ impl IndexedDbStore {
             head: SendWrapper::new(RefCell::new(db_head)),
             lowest_unsampled_height: SendWrapper::new(RefCell::new(last_sampled)),
             db: SendWrapper::new(rexie),
+            check_height_notifier: Notify::new(),
         })
     }
 
@@ -198,6 +201,7 @@ impl IndexedDbStore {
 
         // this shouldn't panic, we don't borrow across await points and wasm is single threaded
         self.head.replace(Some(header));
+        self.check_height_notifier.notify_waiters();
 
         Ok(())
     }
@@ -320,6 +324,26 @@ impl Store for IndexedDbStore {
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let fut = SendWrapper::new(self.get_by_height(height));
         fut.await
+    }
+
+    async fn wait_height(&self, height: u64) -> Result<()> {
+        let mut notifier = pin!(self.check_height_notifier.notified());
+
+        loop {
+            // Make sure no notifications are lost by enable notifier
+            // before the check.
+            notifier.as_mut().enable();
+
+            if self.contains_height(height) {
+                return Ok(());
+            }
+
+            // Await for a notification
+            notifier.as_mut().await;
+
+            // Reset notifier
+            notifier.set(self.check_height_notifier.notified());
+        }
     }
 
     async fn head_height(&self) -> Result<u64> {

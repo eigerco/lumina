@@ -6,6 +6,7 @@
 
 use std::ops::RangeBounds;
 use std::sync::Arc;
+use std::time::Duration;
 
 use celestia_types::hash::Hash;
 use celestia_types::namespaced_data::NamespacedData;
@@ -18,6 +19,7 @@ use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
 
+use crate::daser::{Daser, DaserArgs, DaserError};
 use crate::p2p::{P2p, P2pArgs, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::{Store, StoreError};
@@ -39,6 +41,10 @@ pub enum NodeError {
     /// An error propagated from the [`Store`] module.
     #[error(transparent)]
     Store(#[from] StoreError),
+
+    /// An error propagated from the [`Daser`] module.
+    #[error(transparent)]
+    Daser(#[from] DaserError),
 }
 
 /// Node conifguration.
@@ -68,6 +74,7 @@ where
     p2p: Arc<P2p<S>>,
     store: Arc<S>,
     syncer: Arc<Syncer<S>>,
+    daser: Arc<Daser<S>>,
 }
 
 impl<S> Node<S>
@@ -92,7 +99,17 @@ where
             p2p: p2p.clone(),
         })?);
 
-        Ok(Node { p2p, store, syncer })
+        let daser = Arc::new(Daser::start(DaserArgs {
+            p2p: p2p.clone(),
+            store: store.clone(),
+        })?);
+
+        Ok(Node {
+            p2p,
+            store,
+            syncer,
+            daser,
+        })
     }
 
     /// Get node's local peer ID.
@@ -164,8 +181,12 @@ where
     }
 
     /// Request data of a [`Cid`] from the network.
-    pub async fn request_cid(&self, cid: Cid) -> Result<Vec<u8>> {
-        Ok(self.p2p.get_cid(cid).await?)
+    pub async fn request_cid(
+        &self,
+        cid: Cid,
+        timeout: impl Into<Option<Duration>>,
+    ) -> Result<Vec<u8>> {
+        Ok(self.p2p.get_cid(cid, timeout).await?)
     }
 
     /// Request a [`Row`] from the network.

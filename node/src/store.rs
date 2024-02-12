@@ -57,6 +57,9 @@ pub trait Store: Send + Sync + Debug {
     /// Returns the header of a specific height.
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
 
+    /// Returns when `height` is available in the `Store`.
+    async fn wait_height(&self, height: u64) -> Result<()>;
+
     /// Returns the headers from the given heights range.
     ///
     /// If start of the range is unbounded, the first returned header will be of height 1.

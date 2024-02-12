@@ -11,9 +11,11 @@
 //! - header-ex server
 
 use std::collections::HashMap;
+use std::future::poll_fn;
 use std::io;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::task::Poll;
 use std::time::Duration;
 
 use blockstore::InMemoryBlockstore;
@@ -40,16 +42,17 @@ use libp2p::{
     swarm::{ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent},
     Multiaddr, PeerId, TransportError,
 };
+use smallvec::SmallVec;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
 mod header_ex;
 mod header_session;
-mod shwap;
+pub(crate) mod shwap;
 mod swarm;
 
-use crate::executor::{spawn, Interval};
+use crate::executor::{self, spawn, Interval};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
 use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihasher};
@@ -78,7 +81,9 @@ const MIN_CONNECTED_PEERS: u64 = 4;
 const KADEMLIA_BOOTSTRAP_PERIOD: Duration = Duration::from_secs(5 * 60);
 
 // Maximum size of a [`Multihash`].
-const MAX_MH_SIZE: usize = 64;
+pub(crate) const MAX_MH_SIZE: usize = 64;
+
+const GET_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
@@ -136,6 +141,9 @@ pub enum P2pError {
     /// An error propagated from [`celestia_types`] that is related to [`Cid`].
     #[error("CID error: {0}")]
     Cid(celestia_types::Error),
+
+    #[error("Bitswap query timeout")]
+    BitswapQueryTimeout,
 }
 
 impl From<oneshot::error::RecvError> for P2pError {
@@ -391,7 +399,7 @@ where
     }
 
     /// Request a [`Cid`] on bitswap protocol.
-    pub async fn get_cid(&self, cid: Cid) -> Result<Vec<u8>> {
+    pub async fn get_cid(&self, cid: Cid, timeout: impl Into<Option<Duration>>) -> Result<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::GetCid {
@@ -400,17 +408,28 @@ where
         })
         .await?;
 
-        Ok(rx.await??)
+        let data = match timeout.into() {
+            Some(dur) => executor::timeout(dur, rx)
+                .await
+                .map_err(|_| P2pError::BitswapQueryTimeout)???,
+            None => rx.await??,
+        };
+
+        Ok(data)
     }
 
     /// Request a [`Row`] on bitswap protocol.
     pub async fn get_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
         let cid = row_cid(row_index, block_height)?;
-        let data = self.get_cid(cid).await?;
+        let data = self.get_cid(cid, None).await?;
         Ok(Row::decode(&data[..])?)
     }
 
     /// Request a [`Sample`] on bitswap protocol.
+    ///
+    /// This method awaits for a verified `Sample` until timeout of 10 second
+    /// is reached. On timeout it is safe to assume that sampling of the block
+    /// failed.
     pub async fn get_sample(
         &self,
         index: usize,
@@ -418,7 +437,7 @@ where
         block_height: u64,
     ) -> Result<Sample> {
         let cid = sample_cid(index, square_len, block_height)?;
-        let data = self.get_cid(cid).await?;
+        let data = self.get_cid(cid, GET_SAMPLE_TIMEOUT).await?;
         Ok(Sample::decode(&data[..])?)
     }
 
@@ -430,7 +449,7 @@ where
         block_height: u64,
     ) -> Result<NamespacedData> {
         let cid = namespaced_data_cid(namespace, row_index, block_height)?;
-        let data = self.get_cid(cid).await?;
+        let data = self.get_cid(cid, None).await?;
         Ok(NamespacedData::decode(&data[..])?)
     }
 
@@ -579,6 +598,9 @@ where
                         kademlia_last_bootstrap = Instant::now();
                     }
                 }
+                _ = poll_closed(&mut self.bitswap_queries) => {
+                    self.prune_canceled_bitswap_queries();
+                }
                 ev = self.swarm.select_next_some() => {
                     if let Err(e) = self.on_swarm_event(ev).await {
                         warn!("Failure while handling swarm event: {e}");
@@ -590,6 +612,21 @@ where
                     }
                 }
             }
+        }
+    }
+
+    fn prune_canceled_bitswap_queries(&mut self) {
+        let mut cancelled = SmallVec::<[_; 16]>::new();
+
+        for (query_id, chan) in &self.bitswap_queries {
+            if chan.is_closed() {
+                cancelled.push(*query_id);
+            }
+        }
+
+        for query_id in cancelled {
+            self.bitswap_queries.remove(&query_id);
+            self.swarm.behaviour_mut().bitswap.cancel(query_id);
         }
     }
 
@@ -860,6 +897,23 @@ where
     }
 }
 
+/// Awaits at least one channel from the `bitswap_queries` to close.
+async fn poll_closed(
+    bitswap_queries: &mut HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, beetswap::Error>>,
+) {
+    poll_fn(|cx| {
+        for chan in bitswap_queries.values_mut() {
+            match chan.poll_closed(cx) {
+                Poll::Pending => continue,
+                Poll::Ready(_) => return Poll::Ready(()),
+            }
+        }
+
+        Poll::Pending
+    })
+    .await
+}
+
 fn validate_bootnode_addrs(addrs: &[Multiaddr]) -> Result<(), P2pError> {
     let mut invalid_addrs = Vec::new();
 
@@ -942,7 +996,7 @@ where
 
     Ok(beetswap::Behaviour::builder(InMemoryBlockstore::new())
         .protocol_prefix(&protocol_prefix)?
-        .register_multihasher(ShwapMultihasher)
+        .register_multihasher(ShwapMultihasher::new(args.store.clone()))
         .client_set_send_dont_have(false)
         .build())
 }
