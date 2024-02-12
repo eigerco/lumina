@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use celestia_types::ExtendedHeader;
@@ -30,13 +29,9 @@ pub enum DaserError {
     Store(#[from] StoreError),
 }
 
-pub struct Daser<S>
-where
-    S: Store + 'static,
-{
+pub struct Daser {
     cmd_tx: mpsc::Sender<DaserCmd>,
     cancellation_token: CancellationToken,
-    _store: PhantomData<S>,
 }
 
 pub struct DaserArgs<S>
@@ -50,11 +45,11 @@ where
 #[derive(Debug)]
 enum DaserCmd {}
 
-impl<S> Daser<S>
-where
-    S: Store,
-{
-    pub fn start(args: DaserArgs<S>) -> Result<Self> {
+impl Daser {
+    pub fn start<S>(args: DaserArgs<S>) -> Result<Self>
+    where
+        S: Store,
+    {
         let cancellation_token = CancellationToken::new();
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let mut worker = Worker::new(args, cancellation_token.child_token(), cmd_rx)?;
@@ -68,7 +63,6 @@ where
         Ok(Daser {
             cancellation_token,
             cmd_tx,
-            _store: PhantomData,
         })
     }
 
@@ -79,10 +73,7 @@ where
     }
 }
 
-impl<S> Drop for Daser<S>
-where
-    S: Store,
-{
+impl Drop for Daser {
     fn drop(&mut self) {
         self.cancellation_token.cancel();
     }

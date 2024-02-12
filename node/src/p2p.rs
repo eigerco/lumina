@@ -204,8 +204,9 @@ pub(crate) enum P2pCmd {
         peer_id: PeerId,
         is_trusted: bool,
     },
-    GetCid {
+    GetShwapCid {
         cid: Cid,
+        block_height: u64,
         respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>,
     },
 }
@@ -399,16 +400,22 @@ where
     }
 
     /// Request a [`Cid`] on bitswap protocol.
-    pub async fn get_cid(&self, cid: Cid, timeout: impl Into<Option<Duration>>) -> Result<Vec<u8>> {
+    async fn get_shwap_cid(
+        &self,
+        cid: Cid,
+        block_height: u64,
+        timeout: Option<Duration>,
+    ) -> Result<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
 
-        self.send_command(P2pCmd::GetCid {
+        self.send_command(P2pCmd::GetShwapCid {
             cid,
+            block_height,
             respond_to: tx,
         })
         .await?;
 
-        let data = match timeout.into() {
+        let data = match timeout {
             Some(dur) => executor::timeout(dur, rx)
                 .await
                 .map_err(|_| P2pError::BitswapQueryTimeout)???,
@@ -421,7 +428,8 @@ where
     /// Request a [`Row`] on bitswap protocol.
     pub async fn get_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
         let cid = row_cid(row_index, block_height)?;
-        let data = self.get_cid(cid, None).await?;
+        // TODO: add timeout
+        let data = self.get_shwap_cid(cid, block_height, None).await?;
         Ok(Row::decode(&data[..])?)
     }
 
@@ -437,7 +445,9 @@ where
         block_height: u64,
     ) -> Result<Sample> {
         let cid = sample_cid(index, square_len, block_height)?;
-        let data = self.get_cid(cid, GET_SAMPLE_TIMEOUT).await?;
+        let data = self
+            .get_shwap_cid(cid, block_height, Some(GET_SAMPLE_TIMEOUT))
+            .await?;
         Ok(Sample::decode(&data[..])?)
     }
 
@@ -449,7 +459,8 @@ where
         block_height: u64,
     ) -> Result<NamespacedData> {
         let cid = namespaced_data_cid(namespace, row_index, block_height)?;
-        let data = self.get_cid(cid, None).await?;
+        // TODO: add timeout
+        let data = self.get_shwap_cid(cid, block_height, None).await?;
         Ok(NamespacedData::decode(&data[..])?)
     }
 
@@ -706,8 +717,12 @@ where
                     self.peer_tracker.set_trusted(peer_id, is_trusted);
                 }
             }
-            P2pCmd::GetCid { cid, respond_to } => {
-                self.on_get_cid(cid, respond_to);
+            P2pCmd::GetShwapCid {
+                cid,
+                block_height,
+                respond_to,
+            } => {
+                self.on_get_shwap_cid(cid, block_height, respond_to);
             }
         }
 
@@ -791,7 +806,12 @@ where
     }
 
     #[instrument(level = "trace", skip_all)]
-    fn on_get_cid(&mut self, cid: Cid, respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>) {
+    fn on_get_shwap_cid(
+        &mut self,
+        cid: Cid,
+        _block_height: u64,
+        respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>,
+    ) {
         trace!("Requesting CID {cid} from bitswap");
         let query_id = self.swarm.behaviour_mut().bitswap.get(&cid);
         self.bitswap_queries.insert(query_id, respond_to);

@@ -6,7 +6,6 @@
 
 use std::ops::RangeBounds;
 use std::sync::Arc;
-use std::time::Duration;
 
 use celestia_types::hash::Hash;
 use celestia_types::namespaced_data::NamespacedData;
@@ -14,7 +13,6 @@ use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
 use celestia_types::sample::Sample;
 use celestia_types::ExtendedHeader;
-use cid::Cid;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
@@ -74,7 +72,7 @@ where
     p2p: Arc<P2p<S>>,
     store: Arc<S>,
     syncer: Arc<Syncer<S>>,
-    daser: Arc<Daser<S>>,
+    daser: Arc<Daser>,
 }
 
 impl<S> Node<S>
@@ -178,15 +176,6 @@ where
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
         Ok(self.p2p.get_verified_headers_range(from, amount).await?)
-    }
-
-    /// Request data of a [`Cid`] from the network.
-    pub async fn request_cid(
-        &self,
-        cid: Cid,
-        timeout: impl Into<Option<Duration>>,
-    ) -> Result<Vec<u8>> {
-        Ok(self.p2p.get_cid(cid, timeout).await?)
     }
 
     /// Request a [`Row`] from the network.
