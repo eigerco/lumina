@@ -897,13 +897,11 @@ pub mod tests {
 
     pub async fn create_store(path: Option<&Path>) -> SledStore {
         let is_temp = path.is_none();
-        let path = if let Some(path) = path {
-            path.to_owned()
-        } else {
+        let path = path.map(ToOwned::to_owned).unwrap_or_else(|| {
             TempDir::with_prefix("lumina.store.test")
                 .unwrap()
                 .into_path()
-        };
+        });
         let db = spawn_blocking(move || {
             sled::Config::default()
                 .path(path)
