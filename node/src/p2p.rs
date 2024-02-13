@@ -49,6 +49,7 @@ mod shwap;
 mod swarm;
 
 use crate::executor::{spawn, Interval};
+use crate::network::Network;
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
 use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihasher};
@@ -159,7 +160,7 @@ where
     S: Store,
 {
     /// An id of the network to connect to.
-    pub network_id: String,
+    pub network: Network,
     /// The keypair to be used as the identity.
     pub local_keypair: Keypair,
     /// List of bootstrap nodes to connect to and trust.
@@ -511,14 +512,14 @@ where
             args.local_keypair.public(),
         ));
 
-        let header_sub_topic = gossipsub_ident_topic(&args.network_id, "/header-sub/v0.0.1");
+        let header_sub_topic = gossipsub_ident_topic(args.network.id(), "/header-sub/v0.0.1");
         let gossipsub = init_gossipsub(&args, [&header_sub_topic])?;
 
         let kademlia = init_kademlia(&args)?;
-        let bitswap = init_bitswap(args.blockstore, &args.network_id)?;
+        let bitswap = init_bitswap(args.blockstore, args.network)?;
 
         let header_ex = HeaderExBehaviour::new(HeaderExConfig {
-            network_id: &args.network_id,
+            network: args.network,
             peer_tracker: peer_tracker.clone(),
             header_store: args.store.clone(),
         });
@@ -914,7 +915,7 @@ where
     let local_peer_id = PeerId::from(args.local_keypair.public());
     let mut config = kad::Config::default();
 
-    let protocol_id = celestia_protocol_id(&args.network_id, "/kad/1.0.0");
+    let protocol_id = celestia_protocol_id(args.network.id(), "/kad/1.0.0");
 
     config.set_protocol_names(vec![protocol_id]);
 
@@ -934,11 +935,11 @@ where
     Ok(kademlia)
 }
 
-fn init_bitswap<B>(blockstore: B, network_id: &str) -> Result<beetswap::Behaviour<MAX_MH_SIZE, B>>
+fn init_bitswap<B>(blockstore: B, network: Network) -> Result<beetswap::Behaviour<MAX_MH_SIZE, B>>
 where
     B: Blockstore,
 {
-    let protocol_prefix = format!("/celestia/{}", network_id);
+    let protocol_prefix = format!("/celestia/{}", network.id());
 
     Ok(beetswap::Behaviour::builder(blockstore)
         .protocol_prefix(&protocol_prefix)?

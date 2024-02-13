@@ -25,6 +25,7 @@ mod server;
 pub(crate) mod utils;
 
 use crate::executor::timeout;
+use crate::network::Network;
 use crate::p2p::header_ex::client::HeaderExClientHandler;
 use crate::p2p::header_ex::server::HeaderExServerHandler;
 use crate::p2p::P2pError;
@@ -59,8 +60,8 @@ where
     server_handler: HeaderExServerHandler<S>,
 }
 
-pub(crate) struct HeaderExConfig<'a, S> {
-    pub network_id: &'a str,
+pub(crate) struct HeaderExConfig<S> {
+    pub network: Network,
     pub peer_tracker: Arc<PeerTracker>,
     pub header_store: Arc<S>,
 }
@@ -93,11 +94,11 @@ impl<S> HeaderExBehaviour<S>
 where
     S: Store + 'static,
 {
-    pub(crate) fn new(config: HeaderExConfig<'_, S>) -> Self {
+    pub(crate) fn new(config: HeaderExConfig<S>) -> Self {
         HeaderExBehaviour {
             req_resp: ReqRespBehaviour::new(
                 [(
-                    protocol_id(config.network_id, "/header-ex/v0.0.3"),
+                    protocol_id(config.network.id(), "/header-ex/v0.0.3"),
                     ProtocolSupport::Full,
                 )],
                 request_response::Config::default(),
