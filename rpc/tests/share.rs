@@ -152,23 +152,11 @@ async fn get_eds() {
     let eds = client.share_get_eds(&header).await.unwrap();
     let width = header.dah.square_len();
 
-    for (y, chunk) in eds.data_square.chunks(width).enumerate() {
-        let mut nmt = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+    for i in 0..header.dah.square_len() {
+        let row_root = eds.row_nmt(i).unwrap().root();
+        assert_eq!(row_root, header.dah.row_root(i).unwrap());
 
-        for (x, leaf) in chunk.iter().enumerate() {
-            if x < width / 2 && y < width / 2 {
-                // the `OriginalDataSquare` part of the `EDS`
-                let share = Share::from_raw(leaf).unwrap();
-                let ns = share.namespace();
-                nmt.push_leaf(share.as_ref(), *ns).unwrap();
-            } else {
-                // the parity data computed using `eds.codec`
-                nmt.push_leaf(leaf, *Namespace::PARITY_SHARE).unwrap();
-            }
-        }
-
-        // check if the root corresponds to the one from the dah
-        let root = nmt.root();
-        assert_eq!(root, header.dah.row_root(y).unwrap());
+        let column_root = eds.column_nmt(i).unwrap().root();
+        assert_eq!(column_root, header.dah.column_root(i).unwrap());
     }
 }

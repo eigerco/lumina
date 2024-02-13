@@ -138,7 +138,15 @@ pub(crate) fn convert_cid<const S: usize>(cid: &CidGeneric<S>) -> Result<Cid> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use celestia_types::consts::appconsts::SHARE_SIZE;
+    use celestia_types::nmt::NS_SIZE;
+    use celestia_types::test_utils::ExtendedHeaderGenerator;
+    use celestia_types::{DataAvailabilityHeader, ExtendedDataSquare};
 
+    use celestia_types::nmt::{NamespaceMerkleHasher, NamespacedSha2Hasher, Nmt};
+    use rand::RngCore;
+
+    /*
     #[test]
     fn digest() {
         let hash = ShwapMultihasher
@@ -157,5 +165,53 @@ mod tests {
         let expected_hash = cid.hash();
 
         assert_eq!(hash, *expected_hash);
+
+        }
+    */
+
+    fn random_namespaced_data(ns: Namespace) -> Vec<u8> {
+        let mut buf = vec![0u8; SHARE_SIZE];
+
+        buf[..NS_SIZE].copy_from_slice(ns.as_bytes());
+        rand::thread_rng().fill_bytes(&mut buf[NS_SIZE..]);
+
+        buf
+    }
+
+    fn generate_fake_eds() -> ExtendedDataSquare {
+        let shares = vec![
+            random_namespaced_data(Namespace::const_v0(rand::random())),
+            random_namespaced_data(Namespace::PARITY_SHARE),
+            random_namespaced_data(Namespace::PARITY_SHARE),
+            random_namespaced_data(Namespace::PARITY_SHARE),
+        ];
+
+        ExtendedDataSquare::new(shares, "fake".to_string()).unwrap()
+    }
+
+    fn dah_of_eds(eds: &ExtendedDataSquare) -> DataAvailabilityHeader {
+        let mut dah = DataAvailabilityHeader {
+            row_roots: Vec::new(),
+            column_roots: Vec::new(),
+        };
+
+        for i in 0..eds.square_len() {
+            let row_root = eds.row_nmt(i).unwrap().root();
+            dah.row_roots.push(row_root);
+
+            let column_root = eds.column_nmt(i).unwrap().root();
+            dah.column_roots.push(column_root);
+        }
+
+        dah
+    }
+
+    #[test]
+    fn blabla() {
+        let eds = generate_fake_eds();
+        let dah = dah_of_eds(&eds);
+
+        let mut gen = ExtendedHeaderGenerator::new();
+        let header = gen.next_with_dah(dah);
     }
 }

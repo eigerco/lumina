@@ -111,20 +111,13 @@ impl Sample {
             AxisType::Col => (index % square_len, index / square_len),
         };
 
-        let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+        let share = eds
+            .axis_iter(axis_type, axis_index)?
+            .nth(sample_index)
+            .ok_or(Error::EdsIndexOutOfRange(sample_index))?
+            .to_owned();
 
-        let shares = eds.axis(axis_type, axis_index)?;
-        let (data_shares, parity_shares) = shares.split_at(square_len / 2);
-
-        for s in data_shares {
-            let ns = Namespace::from_raw(&s[..NS_SIZE])?;
-            tree.push_leaf(s, *ns).map_err(Error::Nmt)?;
-        }
-
-        for s in parity_shares {
-            tree.push_leaf(s, *Namespace::PARITY_SHARE)
-                .map_err(Error::Nmt)?;
-        }
+        let mut tree = eds.axis_nmt(axis_type, axis_index)?;
 
         let proof = NmtNamespaceProof::PresenceProof {
             proof: tree.build_range_proof(sample_index..sample_index + 1),
@@ -136,7 +129,7 @@ impl Sample {
         Ok(Sample {
             sample_id,
             sample_proof_type: axis_type,
-            share: shares[sample_index].clone(),
+            share,
             proof: proof.into(),
         })
     }

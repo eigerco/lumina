@@ -4,7 +4,7 @@ use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::namespaced_data::{NamespacedData, NamespacedDataId};
-use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NS_SIZE};
+use crate::nmt::{Namespace, NamespaceProof, NamespacedSha2Hasher, Nmt, NS_SIZE};
 use crate::row::RowId;
 use crate::{DataAvailabilityHeader, Error, Result};
 
@@ -135,9 +135,9 @@ impl TryFrom<u8> for AxisType {
 pub struct ExtendedDataSquare {
     /// The raw data of the EDS.
     #[serde(with = "celestia_tendermint_proto::serializers::bytes::vec_base64string")]
-    pub data_square: Vec<Vec<u8>>,
+    data_square: Vec<Vec<u8>>,
     /// The codec used to encode parity shares.
-    pub codec: String,
+    codec: String,
     /// pre-calculated square length
     #[serde(skip)]
     square_len: usize,
@@ -159,28 +159,105 @@ impl ExtendedDataSquare {
         })
     }
 
+    /// The raw data of the EDS.
+    pub fn data_square(&self) -> &[Vec<u8>] {
+        &self.data_square
+    }
+
+    /// The codec used to encode parity shares.
+    pub fn codec(&self) -> &str {
+        self.codec.as_str()
+    }
+
+    /// Iterator of shares of row
+    fn row_iter(&self, index: usize) -> Result<impl Iterator<Item = &[u8]>> {
+        if index >= self.square_len {
+            return Err(Error::EdsIndexOutOfRange(index));
+        }
+
+        Ok(
+            self.data_square[index * self.square_len..(index + 1) * self.square_len]
+                .into_iter()
+                .map(Vec::as_slice),
+        )
+    }
+
     /// Return row with index
     pub fn row(&self, index: usize) -> Result<Vec<Vec<u8>>> {
-        Ok(self
-            .data_square
-            .get(index * self.square_len..(index + 1) * self.square_len)
-            .ok_or(Error::EdsIndexOutOfRange(index))?
-            .to_vec())
+        Ok(self.row_iter(index)?.map(ToOwned::to_owned).collect())
+    }
+
+    /// Returns the [`Nmt`] of a row
+    pub fn row_nmt(&self, index: usize) -> Result<Nmt> {
+        let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+        let square_len = self.square_len;
+
+        for (i, share) in self.row_iter(index)?.enumerate() {
+            let ns = if i < square_len / 2 {
+                Namespace::from_raw(&share[..NS_SIZE])?
+            } else {
+                Namespace::PARITY_SHARE
+            };
+
+            tree.push_leaf(share, *ns).map_err(Error::Nmt)?;
+        }
+
+        Ok(tree)
+    }
+
+    /// Iterator of shares of column
+    fn column_iter(&self, index: usize) -> Result<impl Iterator<Item = &[u8]>> {
+        if index >= self.square_len {
+            return Err(Error::EdsIndexOutOfRange(index));
+        }
+
+        Ok((index..self.data_square.len())
+            .step_by(self.square_len)
+            .map(|index| &self.data_square[index][..]))
     }
 
     /// Return colum with index
-    pub fn column(&self, mut index: usize) -> Result<Vec<Vec<u8>>> {
-        let mut r = Vec::with_capacity(self.square_len);
-        while index < self.data_square.len() {
-            r.push(
-                self.data_square
-                    .get(index)
-                    .ok_or(Error::EdsIndexOutOfRange(index))?
-                    .to_vec(),
-            );
-            index += self.square_len;
+    pub fn column(&self, index: usize) -> Result<Vec<Vec<u8>>> {
+        Ok(self.column_iter(index)?.map(ToOwned::to_owned).collect())
+    }
+
+    /// Returns the [`Nmt`] of a column
+    pub fn column_nmt(&self, index: usize) -> Result<Nmt> {
+        let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+        let square_len = self.square_len;
+
+        for (i, share) in self.column_iter(index)?.enumerate() {
+            let ns = if i < square_len / 2 {
+                Namespace::from_raw(&share[..NS_SIZE])?
+            } else {
+                Namespace::PARITY_SHARE
+            };
+
+            tree.push_leaf(share, *ns).map_err(Error::Nmt)?;
         }
-        Ok(r)
+
+        Ok(tree)
+    }
+
+    pub(crate) fn axis_iter(
+        &self,
+        axis: AxisType,
+        index: usize,
+    ) -> Result<impl Iterator<Item = &[u8]>> {
+        if index >= self.square_len {
+            return Err(Error::EdsIndexOutOfRange(index));
+        }
+
+        Ok((axis == AxisType::Col)
+            .then(|| self.column_iter(index).unwrap())
+            .into_iter()
+            .flatten()
+            .chain(
+                (axis == AxisType::Row)
+                    .then(|| self.row_iter(index).unwrap())
+                    .into_iter()
+                    .flatten(),
+            ))
     }
 
     /// Return column or row with the provided index
@@ -188,6 +265,14 @@ impl ExtendedDataSquare {
         match axis {
             AxisType::Col => self.column(index),
             AxisType::Row => self.row(index),
+        }
+    }
+
+    /// Returns the [`Nmt`] of a column or a row
+    pub fn axis_nmt(&self, axis: AxisType, index: usize) -> Result<Nmt> {
+        match axis {
+            AxisType::Col => self.column_nmt(index),
+            AxisType::Row => self.row_nmt(index),
         }
     }
 

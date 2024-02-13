@@ -25,7 +25,6 @@ use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::simple_merkle::db::MemDb;
 use nmt_rs::simple_merkle::tree::MerkleHash;
-use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 mod namespace_proof;
@@ -36,6 +35,8 @@ pub use self::namespaced_hash::{
     NamespacedHashExt, RawNamespacedHash, HASH_SIZE, NAMESPACED_HASH_SIZE,
 };
 use crate::{Error, Result};
+
+pub use nmt_rs::NamespaceMerkleHasher;
 
 /// Namespace version size in bytes.
 pub const NS_VER_SIZE: usize = 1;
