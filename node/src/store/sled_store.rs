@@ -378,10 +378,6 @@ impl Store for SledStore {
         let mut notifier = pin!(self.inner.check_height_notifier.notified());
 
         loop {
-            // Make sure no notifications are lost by enable notifier
-            // before the check.
-            notifier.as_mut().enable();
-
             if self.contains_height(height).await {
                 return Ok(());
             }

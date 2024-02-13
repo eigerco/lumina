@@ -330,10 +330,6 @@ impl Store for IndexedDbStore {
         let mut notifier = pin!(self.check_height_notifier.notified());
 
         loop {
-            // Make sure no notifications are lost by enable notifier
-            // before the check.
-            notifier.as_mut().enable();
-
             if self.contains_height(height) {
                 return Ok(());
             }
