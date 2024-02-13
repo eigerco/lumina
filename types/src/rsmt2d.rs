@@ -169,8 +169,8 @@ impl ExtendedDataSquare {
         self.codec.as_str()
     }
 
-    pub fn share(&self, row_index: usize, column_index: usize) -> Result<&[u8]> {
-        let index = row_index * self.square_len + column_index;
+    pub fn share(&self, x: usize, y: usize) -> Result<&[u8]> {
+        let index = x * self.square_len + y;
 
         self.data_square
             .get(index)
@@ -179,20 +179,20 @@ impl ExtendedDataSquare {
     }
 
     /// Return row with index
-    pub fn row(&self, row_index: usize) -> Result<Vec<Vec<u8>>> {
+    pub fn row(&self, index: usize) -> Result<Vec<Vec<u8>>> {
         (0..self.square_len)
-            .map(|column_index| self.share(row_index, column_index).map(ToOwned::to_owned))
+            .map(|y| self.share(index, y).map(ToOwned::to_owned))
             .collect()
     }
 
     /// Returns the [`Nmt`] of a row
-    pub fn row_nmt(&self, row_index: usize) -> Result<Nmt> {
+    pub fn row_nmt(&self, index: usize) -> Result<Nmt> {
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
 
-        for column_index in 0..self.square_len {
-            let share = self.share(row_index, column_index)?;
+        for y in 0..self.square_len {
+            let share = self.share(index, y)?;
 
-            let ns = if column_index < self.square_len / 2 {
+            let ns = if y < self.square_len / 2 {
                 Namespace::from_raw(&share[..NS_SIZE])?
             } else {
                 Namespace::PARITY_SHARE
@@ -205,20 +205,20 @@ impl ExtendedDataSquare {
     }
 
     /// Return colum with index
-    pub fn column(&self, column_index: usize) -> Result<Vec<Vec<u8>>> {
+    pub fn column(&self, index: usize) -> Result<Vec<Vec<u8>>> {
         (0..self.square_len)
-            .map(|row_index| self.share(row_index, column_index).map(ToOwned::to_owned))
+            .map(|x| self.share(x, index).map(ToOwned::to_owned))
             .collect()
     }
 
     /// Returns the [`Nmt`] of a column
-    pub fn column_nmt(&self, column_index: usize) -> Result<Nmt> {
+    pub fn column_nmt(&self, index: usize) -> Result<Nmt> {
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
 
-        for row_index in 0..self.square_len {
-            let share = self.share(row_index, column_index)?;
+        for x in 0..self.square_len {
+            let share = self.share(x, index)?;
 
-            let ns = if row_index < self.square_len / 2 {
+            let ns = if x < self.square_len / 2 {
                 Namespace::from_raw(&share[..NS_SIZE])?
             } else {
                 Namespace::PARITY_SHARE
