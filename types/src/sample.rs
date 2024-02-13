@@ -111,11 +111,12 @@ impl Sample {
             AxisType::Col => (index % square_len, index / square_len),
         };
 
-        let share = eds
-            .axis_iter(axis_type, axis_index)?
-            .nth(sample_index)
-            .ok_or(Error::EdsIndexOutOfRange(sample_index))?
-            .to_owned();
+        let (row_index, column_index) = match axis_type {
+            AxisType::Row => (axis_index, sample_index),
+            AxisType::Col => (sample_index, axis_index),
+        };
+
+        let share = eds.share(row_index, column_index)?.to_owned();
 
         let mut tree = eds.axis_nmt(axis_type, axis_index)?;
 
