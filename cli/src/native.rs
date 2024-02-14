@@ -6,11 +6,11 @@ use anyhow::{bail, Context, Result};
 use celestia_rpc::prelude::*;
 use celestia_rpc::Client;
 use clap::Parser;
-use directories::ProjectDirs;
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use lumina_node::blockstore::SledBlockstore;
-use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
-use lumina_node::node::{Node, NodeConfig};
+use lumina_node::network::Network;
+use lumina_node::node::Node;
+use lumina_node::node::NodeBuilder;
 use lumina_node::store::{SledStore, Store};
 use sled::Db;
 use tokio::fs;
@@ -44,22 +44,17 @@ pub(crate) struct Params {
 
 pub(crate) async fn run(args: Params) -> Result<()> {
     let network = args.network.into();
-    let p2p_local_keypair = identity::Keypair::generate_ed25519();
 
-    let p2p_bootnodes = if args.bootnodes.is_empty() {
+    let bootnodes = if args.bootnodes.is_empty() {
         match network {
             Network::Private => fetch_bridge_multiaddrs(CELESTIA_LOCAL_BRIDGE_RPC_ADDR).await?,
-            network => canonical_network_bootnodes(network).collect(),
+            network => network.canonical_bootnodes().collect(),
         }
     } else {
         args.bootnodes
     };
 
-    let network_id = network_id(network).to_owned();
-    let genesis_hash = network_genesis(network);
-
-    info!("Initializing store");
-    let db = open_db(args.store, &network_id).await?;
+    let db = open_db(args.store.unwrap()).await?;
     let store = SledStore::new(db.clone()).await?;
     let blockstore = SledBlockstore::new(db).await?;
 
@@ -68,17 +63,12 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         Err(_) => info!("Initialised new store"),
     }
 
-    let node = Node::new(NodeConfig {
-        network_id,
-        genesis_hash,
-        p2p_local_keypair,
-        p2p_bootnodes,
-        p2p_listen_on: args.listen_addrs,
-        blockstore,
-        store,
-    })
-    .await
-    .context("Failed to start node")?;
+    let node = NodeBuilder::from_network_with_defaults(network)
+        .await?
+        .with_bootnodes(bootnodes)
+        .build()
+        .await
+        .context("Failed to start node")?;
 
     node.wait_connected_trusted().await?;
 
@@ -88,35 +78,9 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     }
 }
 
-async fn open_db(path: Option<PathBuf>, network_id: &str) -> Result<Db> {
-    if let Some(path) = path {
-        let db = spawn_blocking(|| sled::open(path)).await??;
-        return Ok(db);
-    }
-
-    let cache_dir =
-        ProjectDirs::from("co", "eiger", "lumina").context("Couldn't find lumina's cache dir")?;
-    let mut cache_dir = cache_dir.cache_dir().to_owned();
-
-    // TODO: remove it in 2 months or after a few releases
-    // If we find an old ('celestia') cache dir, move it to the new one.
-    if let Some(old_cache_dir) = ProjectDirs::from("co", "eiger", "celestia") {
-        let old_cache_dir = old_cache_dir.cache_dir();
-        if old_cache_dir.exists() && !cache_dir.exists() {
-            warn!(
-                "Migrating old cache dir to a new location: {} -> {}",
-                old_cache_dir.display(),
-                cache_dir.display()
-            );
-            fs::rename(old_cache_dir, &cache_dir).await?;
-        }
-    }
-
-    cache_dir.push(network_id);
-    // TODO: should we create there also a subdirectory for the 'db'
-    // in case we want to put there some other stuff too?
-    let db = spawn_blocking(|| sled::open(cache_dir)).await??;
-    Ok(db)
+async fn open_db(path: PathBuf) -> Result<Db> {
+    let db = spawn_blocking(|| sled::open(path)).await??;
+    return Ok(db);
 }
 
 /// Get the address of the local bridge node

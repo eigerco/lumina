@@ -132,21 +132,28 @@ where
         self
     }
 
+    pub fn from_network(network: Network) -> Self {
+        Self::new()
+            .with_network(network)
+            .with_genesis(network.genesis())
+            .with_bootnodes(network.canonical_bootnodes().collect())
+    }
+
     pub async fn build(self) -> Result<Node<S>> {
         let network = self
             .network
             .ok_or_else(|| NodeBuilderError::SettingMissing("network".into()))?;
-        let local_keypair = self
-            .p2p_local_keypair
-            .ok_or_else(|| NodeBuilderError::SettingMissing("p2p_local_keypair".into()))?;
         let blockstore = self
             .blockstore
             .ok_or_else(|| NodeBuilderError::SettingMissing("blockstore".into()))?;
         let store = self
             .store
+            .map(Arc::new)
             .ok_or_else(|| NodeBuilderError::SettingMissing("store".into()))?;
 
-        let store = Arc::new(store);
+        let local_keypair = self
+            .p2p_local_keypair
+            .unwrap_or_else(Keypair::generate_ed25519);
 
         let p2p = Arc::new(P2p::start(P2pArgs {
             network,
@@ -232,6 +239,16 @@ mod native {
             let db = self.get_sled_db().await?;
             self.store = Some(SledStore::new(db).await?);
             Ok(self)
+        }
+    }
+
+    impl NodeBuilder<SledBlockstore, SledStore> {
+        pub async fn from_network_with_defaults(network: Network) -> Result<Self> {
+            Self::from_network(network)
+                .with_default_blockstore()
+                .await?
+                .with_default_store()
+                .await
         }
     }
 

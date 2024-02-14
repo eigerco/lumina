@@ -7,6 +7,7 @@
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
+use blockstore::Blockstore;
 use celestia_types::hash::Hash;
 use celestia_types::namespaced_data::NamespacedData;
 use celestia_types::nmt::Namespace;
@@ -17,6 +18,7 @@ use cid::Cid;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
 
+use crate::network::Network;
 use crate::p2p::{P2p, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::{Store, StoreError};
@@ -59,6 +61,20 @@ where
     /// Creates and starts a new celestia node with a given config.
     pub(crate) fn new(p2p: Arc<P2p>, syncer: Arc<Syncer<S>>, store: Arc<S>) -> Self {
         Node { p2p, store, syncer }
+    }
+
+    pub fn builder<B>() -> NodeBuilder<B, S>
+    where
+        B: Blockstore + 'static,
+    {
+        NodeBuilder::new()
+    }
+
+    pub fn from_network<B>(network: Network) -> NodeBuilder<B, S>
+    where
+        B: Blockstore + 'static,
+    {
+        NodeBuilder::from_network(network)
     }
 
     /// Get node's local peer ID.

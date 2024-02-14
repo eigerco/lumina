@@ -11,7 +11,7 @@ use crate::{
     blockstore::InMemoryBlockstore,
     executor::timeout,
     network::Network,
-    node::NodeBuilder,
+    node::{Node, NodeBuilder},
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
     store::InMemoryStore,
@@ -38,7 +38,7 @@ pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator)
 /// Can be used to fill the missing fields with `..test_node_config()` syntax.
 pub fn test_node_builder() -> NodeBuilder<InMemoryBlockstore, InMemoryStore> {
     let node_keypair = identity::Keypair::generate_ed25519();
-    NodeBuilder::new()
+    Node::builder()
         .with_network(Network::Private)
         .with_p2p_keypair(node_keypair)
         .with_blockstore(InMemoryBlockstore::new())
