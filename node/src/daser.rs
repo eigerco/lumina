@@ -126,7 +126,7 @@ where
         self.store.wait_height(height).await?;
 
         let header = self.store.get_by_height(height).await?;
-        let (sampled_cids, accepted) = dbg!(self.sample_block(&header).await?);
+        let (sampled_cids, accepted) = self.sample_block(&header).await?;
 
         self.store
             .update_sampling_metadata(height, accepted, sampled_cids)

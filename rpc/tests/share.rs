@@ -5,9 +5,8 @@ use celestia_types::consts::appconsts::{
     CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SEQUENCE_LEN_BYTES,
     SHARE_INFO_BYTES,
 };
-use celestia_types::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
-use celestia_types::{Blob, Share};
-use nmt_rs::NamespaceMerkleHasher;
+use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
+use celestia_types::Blob;
 
 pub mod utils;
 
@@ -148,9 +147,7 @@ async fn get_eds() {
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
     let header = client.header_get_by_height(submitted_height).await.unwrap();
-
     let eds = client.share_get_eds(&header).await.unwrap();
-    let width = header.dah.square_len();
 
     for i in 0..header.dah.square_len() {
         let row_root = eds.row_nmt(i).unwrap().root();

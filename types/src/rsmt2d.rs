@@ -4,7 +4,7 @@ use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::namespaced_data::{NamespacedData, NamespacedDataId};
-use crate::nmt::{Namespace, NamespaceProof, NamespacedSha2Hasher, Nmt, NS_SIZE};
+use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NS_SIZE};
 use crate::row::RowId;
 use crate::{DataAvailabilityHeader, Error, Result};
 
@@ -169,8 +169,8 @@ impl ExtendedDataSquare {
         self.codec.as_str()
     }
 
-    pub fn share(&self, x: usize, y: usize) -> Result<&[u8]> {
-        let index = x * self.square_len + y;
+    pub fn share(&self, row: usize, column: usize) -> Result<&[u8]> {
+        let index = row * self.square_len + column;
 
         self.data_square
             .get(index)
@@ -192,7 +192,7 @@ impl ExtendedDataSquare {
         for y in 0..self.square_len {
             let share = self.share(index, y)?;
 
-            let ns = if y < self.square_len / 2 {
+            let ns = if is_ods_square(index, y, self.square_len) {
                 Namespace::from_raw(&share[..NS_SIZE])?
             } else {
                 Namespace::PARITY_SHARE
@@ -218,7 +218,7 @@ impl ExtendedDataSquare {
         for x in 0..self.square_len {
             let share = self.share(x, index)?;
 
-            let ns = if x < self.square_len / 2 {
+            let ns = if is_ods_square(x, index, self.square_len) {
                 Namespace::from_raw(&share[..NS_SIZE])?
             } else {
                 Namespace::PARITY_SHARE
@@ -261,29 +261,33 @@ impl ExtendedDataSquare {
     ) -> Result<Vec<NamespacedData>> {
         let mut data = Vec::new();
 
-        for i in 0u16..self.square_len as u16 {
-            let row_root = dah.row_root(i.into()).unwrap();
+        for row in 0..self.square_len {
+            let Some(row_root) = dah.row_root(row) else {
+                continue;
+            };
+
             if !row_root.contains::<NamespacedSha2Hasher>(*namespace) {
                 continue;
             }
 
             let mut shares = Vec::with_capacity(self.square_len);
-            let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
-            for (col, s) in self.row(i.into())?.iter().enumerate() {
-                let ns = if col < self.square_len / 2 {
-                    Namespace::from_raw(&s[..NS_SIZE])?
+
+            for col in 0..self.square_len {
+                let share = self.share(row, col)?;
+
+                let ns = if is_ods_square(row, col, self.square_len) {
+                    Namespace::from_raw(&share[..NS_SIZE])?
                 } else {
                     Namespace::PARITY_SHARE
                 };
 
-                tree.push_leaf(s, *ns).map_err(Error::Nmt)?;
                 if ns == namespace {
-                    shares.push(s.clone());
+                    shares.push(share.to_owned());
                 }
             }
-            let row = RowId::new(i, height)?;
 
-            let proof = tree.get_namespace_proof(*namespace);
+            let proof = self.row_nmt(row)?.get_namespace_proof(*namespace);
+            let row = RowId::new(row as u16, height)?;
             let namespaced_data_id = NamespacedDataId { row, namespace };
 
             data.push(NamespacedData {
@@ -320,6 +324,13 @@ impl<'de> Deserialize<'de> for ExtendedDataSquare {
     }
 }
 
+/// Returns true if and only if the provided coordinates belongs to Original Data Square
+/// (i.e. first quadrant of Extended Data Square).
+pub fn is_ods_square(row: usize, column: usize, square_len: usize) -> bool {
+    let half_square_len = square_len / 2;
+    row < half_square_len && column < half_square_len
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -345,6 +356,7 @@ mod tests {
     fn get_namespaced_data() {
         let eds_json = include_str!("../test_data/shwap_samples/eds.json");
         let eds: ExtendedDataSquare = serde_json::from_str(eds_json).unwrap();
+
         let dah_json = include_str!("../test_data/shwap_samples/dah.json");
         let dah: DataAvailabilityHeader = serde_json::from_str(dah_json).unwrap();
 
@@ -367,5 +379,97 @@ mod tests {
         for row in rows {
             row.verify(&dah).unwrap();
         }
+    }
+
+    #[test]
+    fn nmt_roots() {
+        let eds_json = include_str!("../test_data/shwap_samples/eds.json");
+        let eds: ExtendedDataSquare = serde_json::from_str(eds_json).unwrap();
+
+        let dah_json = include_str!("../test_data/shwap_samples/dah.json");
+        let dah: DataAvailabilityHeader = serde_json::from_str(dah_json).unwrap();
+
+        assert_eq!(dah.row_roots.len(), eds.square_len());
+        assert_eq!(dah.column_roots.len(), eds.square_len());
+
+        for (i, root) in dah.row_roots.iter().enumerate() {
+            let mut tree = eds.row_nmt(i).unwrap();
+            assert_eq!(*root, tree.root());
+        }
+
+        for (i, root) in dah.column_roots.iter().enumerate() {
+            let mut tree = eds.column_nmt(i).unwrap();
+            assert_eq!(*root, tree.root());
+        }
+    }
+
+    #[test]
+    fn ods_square() {
+        assert!(is_ods_square(0, 0, 4));
+        assert!(is_ods_square(0, 1, 4));
+        assert!(is_ods_square(1, 0, 4));
+        assert!(is_ods_square(1, 1, 4));
+
+        assert!(!is_ods_square(0, 2, 4));
+        assert!(!is_ods_square(0, 3, 4));
+        assert!(!is_ods_square(1, 2, 4));
+        assert!(!is_ods_square(1, 3, 4));
+
+        assert!(!is_ods_square(2, 0, 4));
+        assert!(!is_ods_square(2, 1, 4));
+        assert!(!is_ods_square(3, 0, 4));
+        assert!(!is_ods_square(3, 1, 4));
+
+        assert!(!is_ods_square(2, 2, 4));
+        assert!(!is_ods_square(2, 3, 4));
+        assert!(!is_ods_square(3, 2, 4));
+        assert!(!is_ods_square(3, 3, 4));
+    }
+
+    #[test]
+    fn get_row_and_col() {
+        #[rustfmt::skip]
+        let shares = vec![
+            vec![0, 0], vec![0, 1], vec![0, 2], vec![0, 3],
+            vec![1, 0], vec![1, 1], vec![1, 2], vec![1, 3],
+            vec![2, 0], vec![2, 1], vec![2, 2], vec![2, 3],
+            vec![3, 0], vec![3, 1], vec![3, 2], vec![3, 3],
+        ];
+
+        let eds = ExtendedDataSquare::new(shares, "fake".to_string()).unwrap();
+
+        assert_eq!(
+            eds.row(0).unwrap(),
+            vec![vec![0, 0], vec![0, 1], vec![0, 2], vec![0, 3]]
+        );
+        assert_eq!(
+            eds.row(1).unwrap(),
+            vec![vec![1, 0], vec![1, 1], vec![1, 2], vec![1, 3]]
+        );
+        assert_eq!(
+            eds.row(2).unwrap(),
+            vec![vec![2, 0], vec![2, 1], vec![2, 2], vec![2, 3]]
+        );
+        assert_eq!(
+            eds.row(3).unwrap(),
+            vec![vec![3, 0], vec![3, 1], vec![3, 2], vec![3, 3]]
+        );
+
+        assert_eq!(
+            eds.column(0).unwrap(),
+            vec![vec![0, 0], vec![1, 0], vec![2, 0], vec![3, 0]]
+        );
+        assert_eq!(
+            eds.column(1).unwrap(),
+            vec![vec![0, 1], vec![1, 1], vec![2, 1], vec![3, 1]]
+        );
+        assert_eq!(
+            eds.column(2).unwrap(),
+            vec![vec![0, 2], vec![1, 2], vec![2, 2], vec![3, 2]]
+        );
+        assert_eq!(
+            eds.column(3).unwrap(),
+            vec![vec![0, 3], vec![1, 3], vec![2, 3], vec![3, 3]]
+        );
     }
 }

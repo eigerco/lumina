@@ -8,12 +8,9 @@ use crate::consts::data_availability_header::{
     MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
 };
 use crate::hash::Hash;
-use crate::nmt::{
-    Namespace, NamespaceMerkleHasher, NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, Nmt,
-    NS_SIZE,
-};
+use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::rsmt2d::AxisType;
-use crate::{bail_validation, Error, ExtendedDataSquare, Result, ValidateBasic, ValidationError};
+use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
 /// Header with commitments of the data availability.
 ///

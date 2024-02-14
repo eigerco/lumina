@@ -16,12 +16,11 @@ use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
-use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 
-use crate::nmt::{Namespace, NamespaceProof, NamespacedSha2Hasher, Nmt, NS_SIZE};
+use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
 use crate::row::RowId;
-use crate::rsmt2d::{AxisType, ExtendedDataSquare};
+use crate::rsmt2d::{is_ods_square, AxisType, ExtendedDataSquare};
 use crate::{DataAvailabilityHeader, Error, Result};
 
 /// The size of the [`SampleId`] hash in `multihash`.
@@ -147,7 +146,11 @@ impl Sample {
             .root(self.sample_proof_type, index)
             .ok_or(Error::EdsIndexOutOfRange(index))?;
 
-        let ns = if self.is_ods_sample(dah.square_len()) {
+        let ns = if is_ods_square(
+            self.sample_id.row.index.into(),
+            self.sample_id.index.into(),
+            dah.square_len(),
+        ) {
             Namespace::from_raw(&self.share[..NS_SIZE])?
         } else {
             Namespace::PARITY_SHARE
@@ -156,17 +159,6 @@ impl Sample {
         self.proof
             .verify_range(&root, &[&self.share], *ns)
             .map_err(Error::RangeProofError)
-    }
-
-    /// Returns true if and only if provided sample belongs to Original Data Square, first
-    /// quadrant of Extended Data Square
-    fn is_ods_sample(&self, square_len: usize) -> bool {
-        let row_index = usize::from(self.sample_id.row.index);
-        let column_index = usize::from(self.sample_id.index);
-
-        let half_square_len = square_len / 2;
-
-        row_index < half_square_len && column_index < half_square_len
     }
 }
 
