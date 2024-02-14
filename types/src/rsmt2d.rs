@@ -144,8 +144,9 @@ pub struct ExtendedDataSquare {
 }
 
 impl ExtendedDataSquare {
-    /// Create a new EDS out of the provided shares. Returns error if number of shares isn't
-    /// a square number
+    /// Create a new EDS out of the provided shares.
+    ///
+    /// Returns error if number of shares isn't a square number.
     pub fn new(shares: Vec<Vec<u8>>, codec: String) -> Result<Self> {
         let square_len = f64::sqrt(shares.len() as f64) as usize;
         if square_len * square_len != shares.len() {
@@ -169,6 +170,7 @@ impl ExtendedDataSquare {
         self.codec.as_str()
     }
 
+    /// Returns the share of the provided coordinates.
     pub fn share(&self, row: usize, column: usize) -> Result<&[u8]> {
         let index = row * self.square_len + column;
 
@@ -178,14 +180,14 @@ impl ExtendedDataSquare {
             .ok_or(Error::EdsIndexOutOfRange(index))
     }
 
-    /// Return row with index
+    /// Returns the shares of a row.
     pub fn row(&self, index: usize) -> Result<Vec<Vec<u8>>> {
         (0..self.square_len)
             .map(|y| self.share(index, y).map(ToOwned::to_owned))
             .collect()
     }
 
-    /// Returns the [`Nmt`] of a row
+    /// Returns the [`Nmt`] of a row.
     pub fn row_nmt(&self, index: usize) -> Result<Nmt> {
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
 
@@ -204,14 +206,14 @@ impl ExtendedDataSquare {
         Ok(tree)
     }
 
-    /// Return colum with index
+    /// Returns the shares of a column.
     pub fn column(&self, index: usize) -> Result<Vec<Vec<u8>>> {
         (0..self.square_len)
             .map(|x| self.share(x, index).map(ToOwned::to_owned))
             .collect()
     }
 
-    /// Returns the [`Nmt`] of a column
+    /// Returns the [`Nmt`] of a column.
     pub fn column_nmt(&self, index: usize) -> Result<Nmt> {
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
 
@@ -230,7 +232,7 @@ impl ExtendedDataSquare {
         Ok(tree)
     }
 
-    /// Return column or row with the provided index
+    /// Returns the shares of column or row.
     pub fn axis(&self, axis: AxisType, index: usize) -> Result<Vec<Vec<u8>>> {
         match axis {
             AxisType::Col => self.column(index),
@@ -238,7 +240,7 @@ impl ExtendedDataSquare {
         }
     }
 
-    /// Returns the [`Nmt`] of a column or a row
+    /// Returns the [`Nmt`] of column or row.
     pub fn axis_nmt(&self, axis: AxisType, index: usize) -> Result<Nmt> {
         match axis {
             AxisType::Col => self.column_nmt(index),
@@ -246,13 +248,13 @@ impl ExtendedDataSquare {
         }
     }
 
-    /// Get EDS square length
+    /// Get EDS square length.
     pub fn square_len(&self) -> usize {
         self.square_len
     }
 
     /// Return all the shares that belong to the provided namespace in the EDS.
-    /// Results are returned as a list of rows of shares with the inclusion proof
+    /// Results are returned as a list of rows of shares with the inclusion proof.
     pub fn get_namespaced_data(
         &self,
         namespace: Namespace,
