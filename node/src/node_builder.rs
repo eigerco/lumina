@@ -37,9 +37,9 @@ pub enum NodeBuilderError {
     #[error("Received io error from persistent storage: {0}")]
     IoError(#[from] io::Error),
 
-    /// A required setting wasn't provided.
-    #[error("Required setting not provided: {0}")]
-    SettingMissing(String),
+    /// Network was required but not provided.
+    #[error("Network not provided. Consider calling `.with_network`")]
+    NetworkMissing,
 }
 
 /// Node conifguration.
@@ -62,10 +62,6 @@ where
     blockstore: Option<B>,
     /// The store for headers.
     store: Option<S>,
-    /// A handle for the [`sled::Db`] to initialize default sled store and blockstore
-    /// within the same instance.
-    #[cfg(not(target_arch = "wasm32"))]
-    sled_db: Option<sled::Db>,
 }
 
 impl<B, S> Default for NodeBuilder<B, S>
@@ -82,8 +78,6 @@ where
             p2p_listen_on: vec![],
             blockstore: None,
             store: None,
-            #[cfg(not(target_arch = "wasm32"))]
-            sled_db: None,
         }
     }
 }
@@ -140,20 +134,28 @@ where
     }
 
     pub async fn build(self) -> Result<Node<S>> {
-        let network = self
-            .network
-            .ok_or_else(|| NodeBuilderError::SettingMissing("network".into()))?;
-        let blockstore = self
-            .blockstore
-            .ok_or_else(|| NodeBuilderError::SettingMissing("blockstore".into()))?;
-        let store = self
-            .store
-            .map(Arc::new)
-            .ok_or_else(|| NodeBuilderError::SettingMissing("store".into()))?;
-
+        let network = self.network.ok_or(NodeBuilderError::NetworkMissing)?;
         let local_keypair = self
             .p2p_local_keypair
             .unwrap_or_else(Keypair::generate_ed25519);
+
+        if self.blockstore.is_none() || self.store.is_none() {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let db = native::default_sled_db(network).await?;
+                if self.blockstore.is_none() {
+                    let blockstore = crate::blockstore::SledBlockstore::new(db.clone()).await?;
+                    self.blockstore = Some(blockstore);
+                }
+                if self.store.is_none() {
+                    let store = crate::store::SledStore::new(db).await?;
+                    self.store = Some(store);
+                }
+            }
+        }
+
+        let blockstore = self.blockstore.unwrap();
+        let store = Arc::new(self.store.unwrap());
 
         let p2p = Arc::new(P2p::start(P2pArgs {
             network,
@@ -186,42 +188,28 @@ mod native {
 
     use super::*;
 
+    pub(super) async fn default_sled_db(network: Network) -> Result<sled::Db> {
+        let network_id = network.id();
+        let mut data_dir = utils::data_dir()
+            .ok_or_else(|| StoreError::OpenFailed("Can't find home of current user".into()))?;
+
+        // TODO(02.2024): remove in 3 months or after few releases
+        migrate_from_old_cache_dir(&data_dir).await?;
+
+        data_dir.push(network_id);
+        data_dir.push("db");
+
+        let db = spawn_blocking(|| sled::open(data_dir))
+            .await
+            .map_err(io::Error::from)?
+            .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
+
+        Ok(db)
+    }
+
     impl<B, S> NodeBuilder<B, S>
     where
         B: Blockstore,
-        S: Store,
-    {
-        async fn get_sled_db(&mut self) -> Result<sled::Db> {
-            if let Some(db) = self.sled_db.clone() {
-                return Ok(db);
-            }
-
-            let network_id = self
-                .network
-                .ok_or_else(|| NodeBuilderError::SettingMissing("network".into()))?
-                .id();
-            let mut data_dir = utils::data_dir()
-                .ok_or_else(|| StoreError::OpenFailed("Can't find home of current user".into()))?;
-
-            // TODO(02.2024): remove in 3 months or after few releases
-            migrate_from_old_cache_dir(&data_dir).await?;
-
-            data_dir.push(network_id);
-            data_dir.push("db");
-
-            let db = spawn_blocking(|| sled::open(data_dir))
-                .await
-                .map_err(io::Error::from)?
-                .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
-
-            self.sled_db = Some(db.clone());
-
-            Ok(db)
-        }
-    }
-
-    impl<S> NodeBuilder<SledBlockstore, S>
-    where
         S: Store,
     {
         pub async fn with_default_blockstore(mut self) -> Result<Self> {
