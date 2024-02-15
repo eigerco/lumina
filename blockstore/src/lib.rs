@@ -367,14 +367,16 @@ pub(crate) mod tests {
 
     #[cfg(all(target_arch = "wasm32", feature = "indexeddb"))]
     async fn new_indexeddb<const S: usize>() -> IndexedDbBlockstore<S> {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
         static NAME: AtomicU32 = AtomicU32::new(0);
 
         let name = NAME.fetch_add(1, Ordering::SeqCst);
         let name = format!("indexeddb-blockstore-test-{name}");
 
         // the db's don't seem to persist but for extra safety make a cleanup
-        Rexie::delete(name).await.unwrap();
-        IndexedDbBlockstore::new(name).await.unwrap()
+        rexie::Rexie::delete(&name).await.unwrap();
+        IndexedDbBlockstore::new(&name).await.unwrap()
     }
 
     #[derive(Debug, PartialEq, Clone, Copy)]

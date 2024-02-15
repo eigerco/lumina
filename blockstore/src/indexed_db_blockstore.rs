@@ -133,7 +133,6 @@ async fn has_key(store: &Store, key: &JsValue) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU32, Ordering};
     use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
     use crate::tests::cid_v1;
