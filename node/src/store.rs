@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 use std::io::{self, Cursor};
 use std::ops::{Bound, RangeBounds, RangeInclusive};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use celestia_tendermint_proto::Protobuf;
@@ -235,6 +236,56 @@ pub enum StoreError {
     #[error("Invalid headers range")]
     InvalidHeadersRange,
 }
+
+// impl<S> Store for Arc<S>
+// where
+//     S: Store + ?Sized,
+// {
+//     async fn get_head(&self) -> Result<ExtendedHeader> {
+//         self.get_head()
+//     }
+
+//     async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
+//         self.get_by_hash(hash)
+//     }
+
+//     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
+//         self.get_by_height(height)
+//     }
+
+//     async fn head_height(&self) -> Result<u64> {
+//         self.head_height()
+//     }
+
+//     async fn has(&self, hash: &Hash) -> bool {
+//         self.has(hash)
+//     }
+
+//     async fn has_at(&self, height: u64) -> bool {
+//         self.has_at(height)
+//     }
+
+//     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
+//         self.append_single_unchecked(header)
+//     }
+
+//     async fn next_unsampled_height(&self) -> Result<u64> {
+//         self.next_unsampled_height()
+//     }
+
+//     async fn update_sampling_metadata(
+//         &self,
+//         height: u64,
+//         accepted: bool,
+//         cids: Vec<Cid>,
+//     ) -> Result<u64> {
+//         self.update_sampling_metadata(height, accepted, cids)
+//     }
+
+//     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+//         self.get_sampling_metadata(height)
+//     }
+// }
 
 #[derive(Message)]
 struct RawSamplingMetadata {

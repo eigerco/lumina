@@ -43,10 +43,9 @@ pub enum NodeBuilderError {
 }
 
 /// Node conifguration.
-pub struct NodeBuilder<B, S>
+pub struct NodeBuilder<B>
 where
     B: Blockstore,
-    S: Store,
 {
     /// An id of the network to connect to.
     network: Option<Network>,
@@ -61,13 +60,12 @@ where
     /// The blockstore for bitswap.
     blockstore: Option<B>,
     /// The store for headers.
-    store: Option<S>,
+    store: Option<Arc<dyn Store>>,
 }
 
-impl<B, S> Default for NodeBuilder<B, S>
+impl<B> Default for NodeBuilder<B>
 where
     B: Blockstore,
-    S: Store,
 {
     fn default() -> Self {
         Self {
@@ -82,10 +80,9 @@ where
     }
 }
 
-impl<B, S> NodeBuilder<B, S>
+impl<B> NodeBuilder<B>
 where
     B: Blockstore + 'static,
-    S: Store,
 {
     pub fn new() -> Self {
         Self::default()
@@ -121,8 +118,8 @@ where
         self
     }
 
-    pub fn with_store(mut self, store: S) -> Self {
-        self.store = Some(store);
+    pub fn with_store<S: Store>(mut self, store: S) -> Self {
+        self.store = Some(Arc::new(store));
         self
     }
 
@@ -133,7 +130,7 @@ where
             .with_bootnodes(network.canonical_bootnodes().collect())
     }
 
-    pub async fn build(self) -> Result<Node<S>> {
+    pub async fn build(self) -> Result<Node> {
         let network = self.network.ok_or(NodeBuilderError::NetworkMissing)?;
         let local_keypair = self
             .p2p_local_keypair
@@ -155,7 +152,7 @@ where
         }
 
         let blockstore = self.blockstore.unwrap();
-        let store = Arc::new(self.store.unwrap());
+        let store = self.store.unwrap();
 
         let p2p = Arc::new(P2p::start(P2pArgs {
             network,
@@ -205,39 +202,6 @@ mod native {
             .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
 
         Ok(db)
-    }
-
-    impl<B, S> NodeBuilder<B, S>
-    where
-        B: Blockstore,
-        S: Store,
-    {
-        pub async fn with_default_blockstore(mut self) -> Result<Self> {
-            let db = self.get_sled_db().await?;
-            self.blockstore = Some(SledBlockstore::new(db).await?);
-            Ok(self)
-        }
-    }
-
-    impl<B> NodeBuilder<B, SledStore>
-    where
-        B: Blockstore,
-    {
-        pub async fn with_default_store(mut self) -> Result<Self> {
-            let db = self.get_sled_db().await?;
-            self.store = Some(SledStore::new(db).await?);
-            Ok(self)
-        }
-    }
-
-    impl NodeBuilder<SledBlockstore, SledStore> {
-        pub async fn from_network_with_defaults(network: Network) -> Result<Self> {
-            Self::from_network(network)
-                .with_default_blockstore()
-                .await?
-                .with_default_store()
-                .await
-        }
     }
 
     // TODO(02.2024): remove in 3 months or after few releases

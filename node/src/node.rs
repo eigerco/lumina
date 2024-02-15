@@ -45,34 +45,28 @@ pub enum NodeError {
 }
 
 /// Celestia node.
-pub struct Node<S>
-where
-    S: Store + 'static,
-{
+pub struct Node {
     p2p: Arc<P2p>,
-    syncer: Arc<Syncer<S>>,
-    store: Arc<S>,
+    syncer: Arc<Syncer>,
+    store: Arc<dyn Store>,
 }
 
-impl<S> Node<S>
-where
-    S: Store,
-{
+impl Node {
     /// Creates and starts a new celestia node with a given config.
-    pub(crate) fn new(p2p: Arc<P2p>, syncer: Arc<Syncer<S>>, store: Arc<S>) -> Self {
+    pub(crate) fn new(p2p: Arc<P2p>, syncer: Arc<Syncer>, store: Arc<dyn Store>) -> Self {
         Node { p2p, store, syncer }
     }
 
-    pub fn builder<B>() -> NodeBuilder<B, S>
+    pub fn builder<B>() -> NodeBuilder<B>
     where
-        B: Blockstore + 'static,
+        B: Blockstore,
     {
         NodeBuilder::new()
     }
 
-    pub fn from_network<B>(network: Network) -> NodeBuilder<B, S>
+    pub fn from_network<B>(network: Network) -> NodeBuilder<B>
     where
-        B: Blockstore + 'static,
+        B: Blockstore,
     {
         NodeBuilder::from_network(network)
     }

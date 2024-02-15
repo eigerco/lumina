@@ -9,7 +9,6 @@
 //! headers announced on the `header-sub` p2p protocol to keep the `subjective_head` as close
 //! to the `network_head` as possible.
 
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -66,26 +65,19 @@ impl From<oneshot::error::RecvError> for SyncerError {
 
 /// Component responsible for synchronizing block headers from the network.
 #[derive(Debug)]
-pub struct Syncer<S>
-where
-    S: Store + 'static,
-{
+pub struct Syncer {
     cmd_tx: mpsc::Sender<SyncerCmd>,
     cancellation_token: CancellationToken,
-    _store: PhantomData<S>,
 }
 
 /// Arguments used to configure the [`Syncer`].
-pub struct SyncerArgs<S>
-where
-    S: Store + 'static,
-{
+pub struct SyncerArgs {
     /// Hash of the genesis block.
     pub genesis_hash: Option<Hash>,
     /// Handler for the peer to peer messaging.
     pub p2p: Arc<P2p>,
     /// Headers storage.
-    pub store: Arc<S>,
+    pub store: Arc<dyn Store>,
 }
 
 #[derive(Debug)]
@@ -104,12 +96,9 @@ pub struct SyncingInfo {
     pub subjective_head: u64,
 }
 
-impl<S> Syncer<S>
-where
-    S: Store,
-{
+impl Syncer {
     /// Create and start the [`Syncer`].
-    pub fn start(args: SyncerArgs<S>) -> Result<Self> {
+    pub fn start(args: SyncerArgs) -> Result<Self> {
         let cancellation_token = CancellationToken::new();
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let mut worker = Worker::new(args, cancellation_token.child_token(), cmd_rx)?;
@@ -121,7 +110,6 @@ where
         Ok(Syncer {
             cancellation_token,
             cmd_tx,
-            _store: PhantomData,
         })
     }
 
@@ -154,23 +142,17 @@ where
     }
 }
 
-impl<S> Drop for Syncer<S>
-where
-    S: Store,
-{
+impl Drop for Syncer {
     fn drop(&mut self) {
         self.cancellation_token.cancel();
     }
 }
 
-struct Worker<S>
-where
-    S: Store + 'static,
-{
+struct Worker {
     cancellation_token: CancellationToken,
     cmd_rx: mpsc::Receiver<SyncerCmd>,
     p2p: Arc<P2p>,
-    store: Arc<S>,
+    store: Arc<dyn Store>,
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     genesis_hash: Option<Hash>,
     subjective_head_height: Option<u64>,
@@ -185,12 +167,9 @@ struct Ongoing {
     cancellation_token: CancellationToken,
 }
 
-impl<S> Worker<S>
-where
-    S: Store,
-{
+impl Worker {
     fn new(
-        args: SyncerArgs<S>,
+        args: SyncerArgs,
         cancellation_token: CancellationToken,
         cmd_rx: mpsc::Receiver<SyncerCmd>,
     ) -> Result<Self> {

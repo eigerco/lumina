@@ -36,7 +36,7 @@ pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator)
 /// [`NodeBuilder`] with default values for the usage in tests.
 ///
 /// Can be used to fill the missing fields with `..test_node_config()` syntax.
-pub fn test_node_builder() -> NodeBuilder<InMemoryBlockstore, InMemoryStore> {
+pub fn test_node_builder() -> NodeBuilder<InMemoryBlockstore> {
     let node_keypair = identity::Keypair::generate_ed25519();
     Node::builder()
         .with_network(Network::Private)
@@ -46,14 +46,12 @@ pub fn test_node_builder() -> NodeBuilder<InMemoryBlockstore, InMemoryStore> {
 }
 
 /// [`NodeBuilder`] with listen address and default values for the usage in tests.
-pub fn listening_test_node_config() -> NodeBuilder<InMemoryBlockstore, InMemoryStore> {
+pub fn listening_test_node_config() -> NodeBuilder<InMemoryBlockstore> {
     test_node_builder().with_listeners(vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()])
 }
 
 /// [`NodeBuilder`] with given keypair and default values for the usage in tests.
-pub fn test_node_config_with_keypair(
-    keypair: Keypair,
-) -> NodeBuilder<InMemoryBlockstore, InMemoryStore> {
+pub fn test_node_config_with_keypair(keypair: Keypair) -> NodeBuilder<InMemoryBlockstore> {
     test_node_builder().with_p2p_keypair(keypair)
 }
 
