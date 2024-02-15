@@ -60,19 +60,3 @@ impl<const MAX_MULTIHASH_SIZE: usize> Default for InMemoryBlockstore<MAX_MULTIHA
         Self::new()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::InMemoryBlockstore;
-
-    #[cfg(not(target_arch = "wasm32"))]
-    use tokio::test as async_test;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_bindgen_test::wasm_bindgen_test as async_test;
-
-    crate::test_utils::blockstore_tests!(create_store, async_test);
-
-    async fn create_store<const S: usize>() -> InMemoryBlockstore<S> {
-        InMemoryBlockstore::new()
-    }
-}

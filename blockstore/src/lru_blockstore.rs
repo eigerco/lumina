@@ -47,18 +47,16 @@ impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for LruBlockstore<MAX_MULTIHASH
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::{blockstore_tests, cid_v1};
-
     #[cfg(not(target_arch = "wasm32"))]
     use tokio::test as async_test;
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
+    use crate::tests::cid_v1;
+
     use super::*;
 
-    blockstore_tests!(create_store, async_test);
-
-    #[tokio::test]
+    #[async_test]
     async fn insert_get_overflowing_cache_size() {
         // Blockstore that can hold the last 2 items.
         let store = LruBlockstore::<64>::new(NonZeroUsize::new(2).unwrap());
@@ -78,9 +76,5 @@ mod tests {
         assert_eq!(store.get(&cid3).await.unwrap().unwrap(), b"3");
         assert!(store.has(&cid2).await.unwrap());
         assert!(!store.has(&cid1).await.unwrap());
-    }
-
-    async fn create_store<const S: usize>() -> LruBlockstore<S> {
-        LruBlockstore::new(NonZeroUsize::new(128).unwrap())
     }
 }

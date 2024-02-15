@@ -125,11 +125,9 @@ impl From<JoinError> for BlockstoreError {
 mod tests {
     use std::path::Path;
 
-    use crate::test_utils::{blockstore_tests, cid_v1};
+    use crate::tests::cid_v1;
 
     use super::*;
-
-    blockstore_tests!(create_unique_store, tokio::test);
 
     #[tokio::test]
     async fn store_persists() {
@@ -137,7 +135,7 @@ mod tests {
             .unwrap()
             .into_path();
 
-        let store = create_store::<64>(Some(&path)).await;
+        let store = new_sled_blockstore(&path).await;
         let cid = cid_v1::<64>(b"1");
         let data = b"data";
 
@@ -145,25 +143,19 @@ mod tests {
 
         spawn_blocking(move || drop(store)).await.unwrap();
 
-        let store = create_store::<64>(Some(&path)).await;
+        let store = new_sled_blockstore(&path).await;
         let received = store.get(&cid).await.unwrap();
 
         assert_eq!(received, Some(data.to_vec()));
     }
 
-    async fn create_store<const S: usize>(path: Option<&Path>) -> SledBlockstore<S> {
-        let is_temp = path.is_none();
-        let test_dir = path.map(ToOwned::to_owned).unwrap_or_else(|| {
-            tempfile::TempDir::with_prefix("sled-blockstore-test")
-                .unwrap()
-                .into_path()
-        });
-
-        let db = spawn_blocking(move || {
+    async fn new_sled_blockstore(path: impl AsRef<Path>) -> SledBlockstore<64> {
+        let path = path.as_ref().to_owned();
+        let db = tokio::task::spawn_blocking(move || {
             sled::Config::default()
-                .path(&test_dir)
-                .temporary(is_temp)
-                .create_new(is_temp)
+                .path(path)
+                .temporary(false)
+                .create_new(false)
                 .open()
                 .unwrap()
         })
@@ -171,9 +163,5 @@ mod tests {
         .unwrap();
 
         SledBlockstore::new(db).await.unwrap()
-    }
-
-    async fn create_unique_store<const S: usize>() -> SledBlockstore<S> {
-        create_store::<S>(None).await
     }
 }

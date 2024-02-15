@@ -136,12 +136,11 @@ mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
     use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
-    use crate::test_utils::{blockstore_tests, cid_v1};
+    use crate::tests::cid_v1;
 
     use super::*;
 
     wasm_bindgen_test_configure!(run_in_browser);
-    blockstore_tests!(create_unique_store, wasm_bindgen_test);
 
     #[wasm_bindgen_test]
     async fn store_persists() {
@@ -160,20 +159,5 @@ mod tests {
         let received = store.get(&cid).await.unwrap();
 
         assert_eq!(received, Some(data.to_vec()));
-    }
-
-    async fn create_store<const S: usize>(name: &str) -> IndexedDbBlockstore<S> {
-        // the db's don't seem to persist but for extra safety make a cleanup
-        Rexie::delete(name).await.unwrap();
-        IndexedDbBlockstore::new(name).await.unwrap()
-    }
-
-    async fn create_unique_store<const S: usize>() -> IndexedDbBlockstore<S> {
-        static NAME: AtomicU32 = AtomicU32::new(0);
-
-        let name = NAME.fetch_add(1, Ordering::SeqCst);
-        let name = format!("indexeddb-blockstore-test-{name}");
-
-        create_store(&name).await
     }
 }
