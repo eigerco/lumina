@@ -98,7 +98,7 @@ async fn open_db(path: Option<PathBuf>, network_id: &str) -> Result<Db> {
         ProjectDirs::from("co", "eiger", "lumina").context("Couldn't find lumina's cache dir")?;
     let mut cache_dir = cache_dir.cache_dir().to_owned();
 
-    // TODO: remove it after we publish a new version to crates.io?
+    // TODO: remove it in 2 months or after a few releases
     // If we find an old ('celestia') cache dir, move it to the new one.
     if let Some(old_cache_dir) = ProjectDirs::from("co", "eiger", "celestia") {
         let old_cache_dir = old_cache_dir.cache_dir();
