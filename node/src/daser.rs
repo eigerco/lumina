@@ -36,7 +36,7 @@ pub struct Daser {
 
 pub struct DaserArgs<S>
 where
-    S: Store + 'static,
+    S: Store,
 {
     pub p2p: Arc<P2p>,
     pub store: Arc<S>,
@@ -48,7 +48,7 @@ enum DaserCmd {}
 impl Daser {
     pub fn start<S>(args: DaserArgs<S>) -> Result<Self>
     where
-        S: Store,
+        S: Store + 'static,
     {
         let cancellation_token = CancellationToken::new();
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
