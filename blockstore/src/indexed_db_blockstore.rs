@@ -34,10 +34,7 @@ impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
     pub async fn new(name: &str) -> Result<Self> {
         let rexie = Rexie::builder(name)
             .version(DB_VERSION)
-            .add_object_store(
-                ObjectStore::new(BLOCKS_STORE)
-                    .auto_increment(false),
-            )
+            .add_object_store(ObjectStore::new(BLOCKS_STORE).auto_increment(false))
             .build()
             .await
             .map_err(|e| BlockstoreError::BackingStoreError(e.to_string()))?;
