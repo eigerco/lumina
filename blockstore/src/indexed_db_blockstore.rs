@@ -36,7 +36,6 @@ impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
             .version(DB_VERSION)
             .add_object_store(
                 ObjectStore::new(BLOCKS_STORE)
-                    // .key_path("cid")
                     .auto_increment(false),
             )
             .build()
