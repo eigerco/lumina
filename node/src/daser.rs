@@ -182,26 +182,3 @@ fn random_indexes(block_len: usize, max_samples_needed: usize) -> HashSet<usize>
 
     indexes
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::store::InMemoryStore;
-    use celestia_types::test_utils::ExtendedHeaderGenerator;
-
-    #[tokio::test]
-    async fn bla() {
-        let (mock, mut handle) = P2p::mocked();
-        let store = Arc::new(InMemoryStore::new());
-
-        let _daser = Daser::start(DaserArgs {
-            p2p: Arc::new(mock),
-            store: store.clone(),
-        })
-        .unwrap();
-
-        handle.expect_no_cmd().await;
-
-        let mut gen = ExtendedHeaderGenerator::new();
-    }
-}
