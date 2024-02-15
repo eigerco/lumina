@@ -76,7 +76,7 @@ where
     p2p: Arc<P2p>,
     store: Arc<S>,
     syncer: Arc<Syncer<S>>,
-    daser: Arc<Daser>,
+    _daser: Arc<Daser>,
 }
 
 impl<S> Node<S>
@@ -114,7 +114,7 @@ where
             p2p,
             store,
             syncer,
-            daser,
+            _daser: daser,
         })
     }
 

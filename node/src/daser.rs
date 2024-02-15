@@ -1,3 +1,10 @@
+//! Component responsible for data availability sampling of the already synchronized block
+//! headers announced in the Celestia network.
+//!
+//! When a new header is insert in the [`Store`], [`Daser`] gets informed, then it fetches
+//! random [`Sample`]s of the block via Shwap protocol and verifies them. If all samples
+//! get verified successfuly, then block is marked as accepted.
+
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -7,7 +14,6 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rand::Rng;
 use tokio::select;
-use tokio::sync::mpsc;
 use tokio::task::spawn;
 use tokio_util::sync::CancellationToken;
 use tracing::error;
@@ -20,25 +26,31 @@ const DEFAULT_MAX_SAMPLES_NEEDED: usize = 16;
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
 
+/// Representation of all the errors that can occur when interacting with the [`Daser`].
 #[derive(Debug, thiserror::Error)]
 pub enum DaserError {
+    /// An error propagated from the [`P2p`] module.
     #[error(transparent)]
     P2p(#[from] P2pError),
 
+    /// An error propagated from the [`Store`] module.
     #[error(transparent)]
     Store(#[from] StoreError),
 }
 
+/// Component responsible for data availability sampling of blocks from the network.
 pub struct Daser {
-    cmd_tx: mpsc::Sender<DaserCmd>,
     cancellation_token: CancellationToken,
 }
 
+/// Arguments used to configure the [`Daser`].
 pub struct DaserArgs<S>
 where
     S: Store,
 {
+    /// Handler for the peer to peer messaging.
     pub p2p: Arc<P2p>,
+    /// Headers storage.
     pub store: Arc<S>,
 }
 
@@ -46,13 +58,13 @@ where
 enum DaserCmd {}
 
 impl Daser {
+    /// Create and start the [`Daser`].
     pub fn start<S>(args: DaserArgs<S>) -> Result<Self>
     where
         S: Store + 'static,
     {
         let cancellation_token = CancellationToken::new();
-        let (cmd_tx, cmd_rx) = mpsc::channel(16);
-        let mut worker = Worker::new(args, cancellation_token.child_token(), cmd_rx)?;
+        let mut worker = Worker::new(args, cancellation_token.child_token())?;
 
         spawn(async move {
             if let Err(e) = worker.run().await {
@@ -60,12 +72,10 @@ impl Daser {
             }
         });
 
-        Ok(Daser {
-            cancellation_token,
-            cmd_tx,
-        })
+        Ok(Daser { cancellation_token })
     }
 
+    /// Stop the [`Daser`].
     pub fn stop(&self) {
         // Singal the Worker to stop.
         // TODO: Should we wait for the Worker to stop?
@@ -84,7 +94,6 @@ where
     S: Store + 'static,
 {
     cancellation_token: CancellationToken,
-    cmd_rx: mpsc::Receiver<DaserCmd>,
     p2p: Arc<P2p>,
     store: Arc<S>,
     max_samples_needed: usize,
@@ -94,14 +103,9 @@ impl<S> Worker<S>
 where
     S: Store,
 {
-    fn new(
-        args: DaserArgs<S>,
-        cancellation_token: CancellationToken,
-        cmd_rx: mpsc::Receiver<DaserCmd>,
-    ) -> Result<Worker<S>> {
+    fn new(args: DaserArgs<S>, cancellation_token: CancellationToken) -> Result<Worker<S>> {
         Ok(Worker {
             cancellation_token,
-            cmd_rx,
             p2p: args.p2p,
             store: args.store,
             max_samples_needed: DEFAULT_MAX_SAMPLES_NEEDED,

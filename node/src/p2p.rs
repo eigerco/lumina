@@ -141,7 +141,8 @@ pub enum P2pError {
     #[error("CID error: {0}")]
     Cid(celestia_types::Error),
 
-    #[error("Bitswap query timeout")]
+    /// Bitswap query timed out.
+    #[error("Bitswap query timed out")]
     BitswapQueryTimeout,
 }
 

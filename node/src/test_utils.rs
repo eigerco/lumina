@@ -200,6 +200,9 @@ impl MockP2pHandle {
         }
     }
 
+    /// Assert that a CID request was sent to the [`P2p`] worker and obtain a response channel.
+    ///
+    /// [`P2p`]: crate::p2p::P2p
     pub async fn expect_get_shwap_cid(
         &mut self,
     ) -> (Cid, OneshotResultSender<Vec<u8>, beetswap::Error>) {
