@@ -12,11 +12,10 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
-use blockstore::InMemoryBlockstore;
+use blockstore::Blockstore;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
@@ -78,7 +77,7 @@ const MIN_CONNECTED_PEERS: u64 = 4;
 const KADEMLIA_BOOTSTRAP_PERIOD: Duration = Duration::from_secs(5 * 60);
 
 // Maximum size of a [`Multihash`].
-const MAX_MH_SIZE: usize = 64;
+pub(crate) const MAX_MH_SIZE: usize = 64;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
@@ -146,21 +145,18 @@ impl From<oneshot::error::RecvError> for P2pError {
 
 /// Component responsible for the peer to peer networking handling.
 #[derive(Debug)]
-pub struct P2p<S>
-where
-    S: Store + 'static,
-{
+pub struct P2p {
     cmd_tx: mpsc::Sender<P2pCmd>,
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     peer_tracker_info_watcher: watch::Receiver<PeerTrackerInfo>,
     local_peer_id: PeerId,
-    _store: PhantomData<S>,
 }
 
 /// Arguments used to configure the [`P2p`].
-pub struct P2pArgs<S>
+pub struct P2pArgs<B, S>
 where
-    S: Store + 'static,
+    B: Blockstore,
+    S: Store,
 {
     /// An id of the network to connect to.
     pub network_id: String,
@@ -170,6 +166,8 @@ where
     pub bootnodes: Vec<Multiaddr>,
     /// List of the addresses on which to listen for incoming connections.
     pub listen_on: Vec<Multiaddr>,
+    /// The store for headers.
+    pub blockstore: B,
     /// The store for headers.
     pub store: Arc<S>,
 }
@@ -202,12 +200,13 @@ pub(crate) enum P2pCmd {
     },
 }
 
-impl<S> P2p<S>
-where
-    S: Store,
-{
+impl P2p {
     /// Creates and starts a new p2p handler.
-    pub fn start(args: P2pArgs<S>) -> Result<Self> {
+    pub fn start<B, S>(args: P2pArgs<B, S>) -> Result<Self>
+    where
+        B: Blockstore + 'static,
+        S: Store + 'static,
+    {
         validate_bootnode_addrs(&args.bootnodes)?;
 
         let local_peer_id = PeerId::from(args.local_keypair.public());
@@ -229,7 +228,6 @@ where
             header_sub_watcher: header_sub_rx,
             peer_tracker_info_watcher,
             local_peer_id,
-            _store: PhantomData,
         })
     }
 
@@ -245,7 +243,6 @@ where
             header_sub_watcher: header_sub_rx,
             peer_tracker_info_watcher: peer_tracker_rx,
             local_peer_id: PeerId::random(),
-            _store: PhantomData,
         };
 
         let handle = crate::test_utils::MockP2pHandle {
@@ -466,12 +463,13 @@ where
 
 /// Our network behaviour.
 #[derive(NetworkBehaviour)]
-struct Behaviour<S>
+struct Behaviour<B, S>
 where
+    B: Blockstore + 'static,
     S: Store + 'static,
 {
     autonat: autonat::Behaviour,
-    bitswap: beetswap::Behaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>,
+    bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     header_ex: HeaderExBehaviour<S>,
@@ -479,11 +477,12 @@ where
     kademlia: kad::Behaviour<kad::store::MemoryStore>,
 }
 
-struct Worker<S>
+struct Worker<B, S>
 where
+    B: Blockstore + 'static,
     S: Store + 'static,
 {
-    swarm: Swarm<Behaviour<S>>,
+    swarm: Swarm<Behaviour<B, S>>,
     header_sub_topic_hash: TopicHash,
     cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
@@ -491,12 +490,13 @@ where
     bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, beetswap::Error>>,
 }
 
-impl<S> Worker<S>
+impl<B, S> Worker<B, S>
 where
+    B: Blockstore,
     S: Store,
 {
     fn new(
-        args: P2pArgs<S>,
+        args: P2pArgs<B, S>,
         cmd_rx: mpsc::Receiver<P2pCmd>,
         header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
         peer_tracker: Arc<PeerTracker>,
@@ -504,7 +504,6 @@ where
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
         let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
-        let bitswap = init_bitswap(&args)?;
         let ping = ping::Behaviour::new(ping::Config::default());
 
         let identify = identify::Behaviour::new(identify::Config::new(
@@ -516,6 +515,7 @@ where
         let gossipsub = init_gossipsub(&args, [&header_sub_topic])?;
 
         let kademlia = init_kademlia(&args)?;
+        let bitswap = init_bitswap(args.blockstore, &args.network_id)?;
 
         let header_ex = HeaderExBehaviour::new(HeaderExConfig {
             network_id: &args.network_id,
@@ -593,7 +593,7 @@ where
         }
     }
 
-    async fn on_swarm_event(&mut self, ev: SwarmEvent<BehaviourEvent<S>>) -> Result<()> {
+    async fn on_swarm_event(&mut self, ev: SwarmEvent<BehaviourEvent<B, S>>) -> Result<()> {
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {
                 BehaviourEvent::Identify(ev) => self.on_identify_event(ev).await?,
@@ -876,11 +876,12 @@ fn validate_bootnode_addrs(addrs: &[Multiaddr]) -> Result<(), P2pError> {
     }
 }
 
-fn init_gossipsub<'a, S>(
-    args: &'a P2pArgs<S>,
+fn init_gossipsub<'a, B, S>(
+    args: &'a P2pArgs<B, S>,
     topics: impl IntoIterator<Item = &'a gossipsub::IdentTopic>,
 ) -> Result<gossipsub::Behaviour>
 where
+    B: Blockstore,
     S: Store,
 {
     // Set the message authenticity - How we expect to publish messages
@@ -905,8 +906,9 @@ where
     Ok(gossipsub)
 }
 
-fn init_kademlia<S>(args: &P2pArgs<S>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
+fn init_kademlia<B, S>(args: &P2pArgs<B, S>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
 where
+    B: Blockstore,
     S: Store,
 {
     let local_peer_id = PeerId::from(args.local_keypair.public());
@@ -932,15 +934,13 @@ where
     Ok(kademlia)
 }
 
-fn init_bitswap<S>(
-    args: &P2pArgs<S>,
-) -> Result<beetswap::Behaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>>
+fn init_bitswap<B>(blockstore: B, network_id: &str) -> Result<beetswap::Behaviour<MAX_MH_SIZE, B>>
 where
-    S: Store,
+    B: Blockstore,
 {
-    let protocol_prefix = format!("/celestia/{}", args.network_id);
+    let protocol_prefix = format!("/celestia/{}", network_id);
 
-    Ok(beetswap::Behaviour::builder(InMemoryBlockstore::new())
+    Ok(beetswap::Behaviour::builder(blockstore)
         .protocol_prefix(&protocol_prefix)?
         .register_multihasher(ShwapMultihasher)
         .client_set_send_dont_have(false)
