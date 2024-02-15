@@ -147,10 +147,10 @@ pub(crate) mod tests {
     const TEST_MH_CODE: u64 = 0x0A;
 
     #[rstest]
-    #[case(new_in_memory_blockstore::<64>())]
-    #[cfg_attr(feature = "lru", case(new_lru_blockstore::<64>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled_blockstore::<64>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb_blockstore::<64>()))]
+    #[case(new_in_memory::<64>())]
+    #[cfg_attr(feature = "lru", case(new_lru::<64>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<64>()))]
+    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<64>()))]
     #[self::test]
     async fn test_insert_get<B: Blockstore>(
         #[case]
@@ -172,10 +172,10 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[case(new_in_memory_blockstore::<64>())]
-    #[cfg_attr(feature = "lru", case(new_lru_blockstore::<64>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled_blockstore::<64>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb_blockstore::<64>()))]
+    #[case(new_in_memory::<64>())]
+    #[cfg_attr(feature = "lru", case(new_lru::<64>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<64>()))]
+    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<64>()))]
     #[self::test]
     async fn test_duplicate_insert<B: Blockstore>(
         #[case]
@@ -193,10 +193,10 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[case(new_in_memory_blockstore::<128>())]
-    #[cfg_attr(feature = "lru", case(new_lru_blockstore::<128>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled_blockstore::<128>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb_blockstore::<128>()))]
+    #[case(new_in_memory::<128>())]
+    #[cfg_attr(feature = "lru", case(new_lru::<128>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<128>()))]
+    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<128>()))]
     #[self::test]
     async fn different_cid_size<B: Blockstore>(
         #[case]
@@ -219,10 +219,10 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[case(new_in_memory_blockstore::<8>())]
-    #[cfg_attr(feature = "lru", case(new_lru_blockstore::<8>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled_blockstore::<8>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb_blockstore::<8>()))]
+    #[case(new_in_memory::<8>())]
+    #[cfg_attr(feature = "lru", case(new_lru::<8>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<8>()))]
+    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<8>()))]
     #[self::test]
     async fn too_large_cid<B: Blockstore>(
         #[case]
@@ -246,10 +246,10 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[case(new_in_memory_blockstore::<8>())]
-    #[cfg_attr(feature = "lru", case(new_lru_blockstore::<8>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled_blockstore::<8>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb_blockstore::<8>()))]
+    #[case(new_in_memory::<8>())]
+    #[cfg_attr(feature = "lru", case(new_lru::<8>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<8>()))]
+    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<8>()))]
     #[self::test]
     async fn test_block_insert<B: Blockstore>(
         #[case]
@@ -264,10 +264,10 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[case(new_in_memory_blockstore::<8>())]
-    #[cfg_attr(feature = "lru", case(new_lru_blockstore::<8>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled_blockstore::<8>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb_blockstore::<8>()))]
+    #[case(new_in_memory::<8>())]
+    #[cfg_attr(feature = "lru", case(new_lru::<8>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<8>()))]
+    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<8>()))]
     #[self::test]
     async fn test_multiple_blocks_insert<B: Blockstore>(
         #[case]
@@ -308,10 +308,10 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[case(new_in_memory_blockstore::<8>())]
-    #[cfg_attr(feature = "lru", case(new_lru_blockstore::<8>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled_blockstore::<8>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb_blockstore::<8>()))]
+    #[case(new_in_memory::<8>())]
+    #[cfg_attr(feature = "lru", case(new_lru::<8>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<8>()))]
+    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<8>()))]
     #[self::test]
     async fn test_multiple_keyed<B: Blockstore>(
         #[case]
@@ -336,17 +336,17 @@ pub(crate) mod tests {
         }
     }
 
-    async fn new_in_memory_blockstore<const S: usize>() -> InMemoryBlockstore<S> {
+    async fn new_in_memory<const S: usize>() -> InMemoryBlockstore<S> {
         InMemoryBlockstore::new()
     }
 
     #[cfg(feature = "lru")]
-    async fn new_lru_blockstore<const S: usize>() -> LruBlockstore<S> {
+    async fn new_lru<const S: usize>() -> LruBlockstore<S> {
         LruBlockstore::new(std::num::NonZeroUsize::new(128).unwrap())
     }
 
     #[cfg(all(not(target_arch = "wasm32"), feature = "sled"))]
-    async fn new_sled_blockstore<const S: usize>() -> SledBlockstore<S> {
+    async fn new_sled<const S: usize>() -> SledBlockstore<S> {
         let path = tempfile::TempDir::with_prefix("sled-blockstore-test")
             .unwrap()
             .into_path();
