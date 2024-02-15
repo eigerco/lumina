@@ -14,10 +14,10 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rand::Rng;
 use tokio::select;
-use tokio::task::spawn;
 use tokio_util::sync::CancellationToken;
 use tracing::error;
 
+use crate::executor::spawn;
 use crate::p2p::shwap::convert_cid;
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};

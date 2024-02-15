@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::convert::Infallible;
+use std::pin::pin;
 
 use async_trait::async_trait;
 use celestia_tendermint_proto::Protobuf;
