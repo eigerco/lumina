@@ -366,7 +366,7 @@ pub(crate) mod tests {
     }
 
     #[cfg(all(target_arch = "wasm32", feature = "indexeddb"))]
-    async fn create_indexeddb_blockstore<const S: usize>() -> IndexedDbBlockstore<S> {
+    async fn new_indexeddb<const S: usize>() -> IndexedDbBlockstore<S> {
         static NAME: AtomicU32 = AtomicU32::new(0);
 
         let name = NAME.fetch_add(1, Ordering::SeqCst);
