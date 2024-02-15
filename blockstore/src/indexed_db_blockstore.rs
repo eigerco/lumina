@@ -11,23 +11,21 @@ const DB_VERSION: u32 = 1;
 
 const BLOCKS_STORE: &str = "BLOCKSTORE.BLOCKS";
 
-/// A [`Blockstore`] implementation backed by a [`sled`] database.
+/// A [`Blockstore`] implementation backed by an `IndexedDb` database.
 #[derive(Debug)]
 pub struct IndexedDbBlockstore<const MAX_MULTIHASH_SIZE: usize> {
     db: SendWrapper<Rexie>,
 }
 
 impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
-    /// Create or open a [`IndexedDbBlockstore`] in a given sled [`Db`].
+    /// Create or open a [`IndexedDbBlockstore`] with a given name.
     ///
     /// # Example
     /// ```
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// use blockstore::IndexedDbBlockstore;
-    /// use tokio::task::spawn_blocking;
     ///
-    /// let db = spawn_blocking(|| sled::open("path/to/db")).await??;
-    /// let blockstore = IndexedDbBlockstore::<64>::new(db).await?;
+    /// let blockstore = IndexedDbBlockstore::<64>::new("blocks").await?;
     /// # Ok(())
     /// # }
     /// ```
