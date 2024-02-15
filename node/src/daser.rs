@@ -54,9 +54,6 @@ where
     pub store: Arc<S>,
 }
 
-#[derive(Debug)]
-enum DaserCmd {}
-
 impl Daser {
     /// Create and start the [`Daser`].
     pub fn start<S>(args: DaserArgs<S>) -> Result<Self>
