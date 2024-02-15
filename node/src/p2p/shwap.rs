@@ -139,11 +139,9 @@ pub(crate) fn convert_cid<const S: usize>(cid: &CidGeneric<S>) -> Result<Cid> {
 mod tests {
     use super::*;
     use crate::store::InMemoryStore;
-    use celestia_types::consts::appconsts::SHARE_SIZE;
-    use celestia_types::nmt::NS_SIZE;
+    use crate::test_utils::{dah_of_eds, generate_fake_eds};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
-    use rand::RngCore;
+    use celestia_types::AxisType;
 
     #[tokio::test]
     async fn hash() {
@@ -168,69 +166,5 @@ mod tests {
             .unwrap();
 
         assert_eq!(hash, *cid.hash());
-    }
-
-    fn random_bytes(len: usize) -> Vec<u8> {
-        let mut buf = vec![0u8; len];
-        rand::thread_rng().fill_bytes(&mut buf);
-        buf
-    }
-
-    fn generate_fake_eds() -> ExtendedDataSquare {
-        let ns = Namespace::const_v0(rand::random());
-
-        let shares = vec![
-            // row 0 col 0 (ods)
-            [ns.as_bytes(), &random_bytes(SHARE_SIZE - NS_SIZE)[..]].concat(),
-            // row 0 col 1 (ods)
-            [ns.as_bytes(), &random_bytes(SHARE_SIZE - NS_SIZE)[..]].concat(),
-            // row 0 col 2 (parity share)
-            random_bytes(SHARE_SIZE),
-            // row 0 col 3 (parity share)
-            random_bytes(SHARE_SIZE),
-            // row 1 col 0 (ods)
-            [ns.as_bytes(), &random_bytes(SHARE_SIZE - NS_SIZE)[..]].concat(),
-            // row 1 col 1 (ods)
-            [ns.as_bytes(), &random_bytes(SHARE_SIZE - NS_SIZE)[..]].concat(),
-            // row 1 col 2 (parity share)
-            random_bytes(SHARE_SIZE),
-            // row 1 col 3 (parity share)
-            random_bytes(SHARE_SIZE),
-            // row 2 col 0 (parity share)
-            random_bytes(SHARE_SIZE),
-            // row 2 col 1 (parity share)
-            random_bytes(SHARE_SIZE),
-            // row 2 col 2 (parity share)
-            random_bytes(SHARE_SIZE),
-            // row 2 col 3 (parity share)
-            random_bytes(SHARE_SIZE),
-            // row 3 col 0 (parity share)
-            random_bytes(SHARE_SIZE),
-            // row 3 col 1 (parity share)
-            random_bytes(SHARE_SIZE),
-            // row 3 col 2 (parity share)
-            random_bytes(SHARE_SIZE),
-            // row 3 col 3 (parity share)
-            random_bytes(SHARE_SIZE),
-        ];
-
-        ExtendedDataSquare::new(shares, "fake".to_string()).unwrap()
-    }
-
-    fn dah_of_eds(eds: &ExtendedDataSquare) -> DataAvailabilityHeader {
-        let mut dah = DataAvailabilityHeader {
-            row_roots: Vec::new(),
-            column_roots: Vec::new(),
-        };
-
-        for i in 0..eds.square_len() {
-            let row_root = eds.row_nmt(i).unwrap().root();
-            dah.row_roots.push(row_root);
-
-            let column_root = eds.column_nmt(i).unwrap().root();
-            dah.column_roots.push(column_root);
-        }
-
-        dah
     }
 }

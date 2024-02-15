@@ -206,7 +206,6 @@ pub(crate) enum P2pCmd {
     },
     GetShwapCid {
         cid: Cid,
-        block_height: u64,
         respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>,
     },
 }
@@ -400,17 +399,11 @@ where
     }
 
     /// Request a [`Cid`] on bitswap protocol.
-    async fn get_shwap_cid(
-        &self,
-        cid: Cid,
-        block_height: u64,
-        timeout: Option<Duration>,
-    ) -> Result<Vec<u8>> {
+    async fn get_shwap_cid(&self, cid: Cid, timeout: Option<Duration>) -> Result<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::GetShwapCid {
             cid,
-            block_height,
             respond_to: tx,
         })
         .await?;
@@ -429,7 +422,7 @@ where
     pub async fn get_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
         let cid = row_cid(row_index, block_height)?;
         // TODO: add timeout
-        let data = self.get_shwap_cid(cid, block_height, None).await?;
+        let data = self.get_shwap_cid(cid, None).await?;
         Ok(Row::decode(&data[..])?)
     }
 
@@ -445,9 +438,7 @@ where
         block_height: u64,
     ) -> Result<Sample> {
         let cid = sample_cid(index, square_len, block_height)?;
-        let data = self
-            .get_shwap_cid(cid, block_height, Some(GET_SAMPLE_TIMEOUT))
-            .await?;
+        let data = self.get_shwap_cid(cid, Some(GET_SAMPLE_TIMEOUT)).await?;
         Ok(Sample::decode(&data[..])?)
     }
 
@@ -460,7 +451,7 @@ where
     ) -> Result<NamespacedData> {
         let cid = namespaced_data_cid(namespace, row_index, block_height)?;
         // TODO: add timeout
-        let data = self.get_shwap_cid(cid, block_height, None).await?;
+        let data = self.get_shwap_cid(cid, None).await?;
         Ok(NamespacedData::decode(&data[..])?)
     }
 
@@ -717,12 +708,8 @@ where
                     self.peer_tracker.set_trusted(peer_id, is_trusted);
                 }
             }
-            P2pCmd::GetShwapCid {
-                cid,
-                block_height,
-                respond_to,
-            } => {
-                self.on_get_shwap_cid(cid, block_height, respond_to);
+            P2pCmd::GetShwapCid { cid, respond_to } => {
+                self.on_get_shwap_cid(cid, respond_to);
             }
         }
 
@@ -809,7 +796,6 @@ where
     fn on_get_shwap_cid(
         &mut self,
         cid: Cid,
-        _block_height: u64,
         respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>,
     ) {
         trace!("Requesting CID {cid} from bitswap");

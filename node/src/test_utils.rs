@@ -3,9 +3,21 @@
 use std::time::Duration;
 
 use celestia_proto::p2p::pb::{header_request::Data, HeaderRequest};
-use celestia_types::{hash::Hash, test_utils::ExtendedHeaderGenerator, ExtendedHeader};
+use celestia_types::hash::Hash;
+use celestia_types::test_utils::ExtendedHeaderGenerator;
+use celestia_types::ExtendedHeader;
+use cid::Cid;
 use libp2p::identity::{self, Keypair};
 use tokio::sync::{mpsc, watch};
+
+#[cfg(test)]
+use celestia_types::consts::appconsts::SHARE_SIZE;
+#[cfg(test)]
+use celestia_types::nmt::{Namespace, NS_SIZE};
+#[cfg(test)]
+use celestia_types::{DataAvailabilityHeader, ExtendedDataSquare};
+#[cfg(test)]
+use rand::RngCore;
 
 use crate::{
     executor::timeout,
@@ -183,4 +195,80 @@ impl MockP2pHandle {
             cmd => panic!("Expecting InitHeaderSub, but received: {cmd:?}"),
         }
     }
+
+    pub async fn expect_get_shwap_cid(
+        &mut self,
+    ) -> (Cid, OneshotResultSender<Vec<u8>, beetswap::Error>) {
+        match self.expect_cmd().await {
+            P2pCmd::GetShwapCid { cid, respond_to } => (cid, respond_to),
+            cmd => panic!("Expecting GetShwapCid, but received: {cmd:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn random_bytes(len: usize) -> Vec<u8> {
+    let mut buf = vec![0u8; len];
+    rand::thread_rng().fill_bytes(&mut buf);
+    buf
+}
+
+#[cfg(test)]
+pub(crate) fn generate_fake_eds() -> ExtendedDataSquare {
+    let ns = Namespace::const_v0(rand::random());
+
+    let shares = vec![
+        // row 0 col 0 (ods)
+        [ns.as_bytes(), &random_bytes(SHARE_SIZE - NS_SIZE)[..]].concat(),
+        // row 0 col 1 (ods)
+        [ns.as_bytes(), &random_bytes(SHARE_SIZE - NS_SIZE)[..]].concat(),
+        // row 0 col 2 (parity share)
+        random_bytes(SHARE_SIZE),
+        // row 0 col 3 (parity share)
+        random_bytes(SHARE_SIZE),
+        // row 1 col 0 (ods)
+        [ns.as_bytes(), &random_bytes(SHARE_SIZE - NS_SIZE)[..]].concat(),
+        // row 1 col 1 (ods)
+        [ns.as_bytes(), &random_bytes(SHARE_SIZE - NS_SIZE)[..]].concat(),
+        // row 1 col 2 (parity share)
+        random_bytes(SHARE_SIZE),
+        // row 1 col 3 (parity share)
+        random_bytes(SHARE_SIZE),
+        // row 2 col 0 (parity share)
+        random_bytes(SHARE_SIZE),
+        // row 2 col 1 (parity share)
+        random_bytes(SHARE_SIZE),
+        // row 2 col 2 (parity share)
+        random_bytes(SHARE_SIZE),
+        // row 2 col 3 (parity share)
+        random_bytes(SHARE_SIZE),
+        // row 3 col 0 (parity share)
+        random_bytes(SHARE_SIZE),
+        // row 3 col 1 (parity share)
+        random_bytes(SHARE_SIZE),
+        // row 3 col 2 (parity share)
+        random_bytes(SHARE_SIZE),
+        // row 3 col 3 (parity share)
+        random_bytes(SHARE_SIZE),
+    ];
+
+    ExtendedDataSquare::new(shares, "fake".to_string()).unwrap()
+}
+
+#[cfg(test)]
+pub(crate) fn dah_of_eds(eds: &ExtendedDataSquare) -> DataAvailabilityHeader {
+    let mut dah = DataAvailabilityHeader {
+        row_roots: Vec::new(),
+        column_roots: Vec::new(),
+    };
+
+    for i in 0..eds.square_len() {
+        let row_root = eds.row_nmt(i).unwrap().root();
+        dah.row_roots.push(row_root);
+
+        let column_root = eds.column_nmt(i).unwrap().root();
+        dah.column_roots.push(column_root);
+    }
+
+    dah
 }
