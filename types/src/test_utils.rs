@@ -62,6 +62,13 @@ impl ExtendedHeaderGenerator {
     }
 
     /// Generates the next header.
+    ///
+    /// ```
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    ///
+    /// let mut gen = ExtendedHeaderGenerator::new();
+    /// let header1 = gen.next();
+    /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> ExtendedHeader {
         let header = match self.current_header {
@@ -74,6 +81,16 @@ impl ExtendedHeaderGenerator {
     }
 
     /// Generates the next header with the given [`DataAvailabilityHeader`]
+    ///
+    /// ```
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    /// # fn generate_dah() -> celestia_types::DataAvailabilityHeader {
+    /// #    unimplemented!();
+    /// # }
+    ///
+    /// let mut gen = ExtendedHeaderGenerator::new();
+    /// let header1 = gen.next_with_dah(generate_dah());
+    /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next_with_dah(&mut self, dah: DataAvailabilityHeader) -> ExtendedHeader {
         let header = match self.current_header {
@@ -122,7 +139,7 @@ impl ExtendedHeaderGenerator {
     ///
     /// ```
     /// use celestia_types::test_utils::ExtendedHeaderGenerator;
-    /// # fn generate_dah() -> DataAvailabilityHeader {
+    /// # fn generate_dah() -> celestia_types::DataAvailabilityHeader {
     /// #    unimplemented!();
     /// # }
     ///

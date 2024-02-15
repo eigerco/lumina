@@ -35,6 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
+
+    - name: Install toolchain
+      uses: dtolnay/rust-toolchain@nightly
+
     - name: Install Protoc
       uses: arduino/setup-protoc@v2
       with:
@@ -43,8 +47,8 @@ jobs:
 
     - name: Run rustdoc check
       env:
-        RUSTDOCFLAGS: -D warnings
-      run: cargo doc
+        RUSTDOCFLAGS: --cfg docs_rs -D warnings
+      run: cargo +nightly doc
 
 
   fmt:
