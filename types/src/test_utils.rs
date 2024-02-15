@@ -82,7 +82,7 @@ impl ExtendedHeaderGenerator {
 
     /// Generates the next header with the given [`DataAvailabilityHeader`]
     ///
-    /// ```
+    /// ```no_run
     /// use celestia_types::test_utils::ExtendedHeaderGenerator;
     /// # fn generate_dah() -> celestia_types::DataAvailabilityHeader {
     /// #    unimplemented!();
@@ -137,7 +137,7 @@ impl ExtendedHeaderGenerator {
     ///
     /// This can be used to create two headers of same height but different hash.
     ///
-    /// ```
+    /// ```no_run
     /// use celestia_types::test_utils::ExtendedHeaderGenerator;
     /// # fn generate_dah() -> celestia_types::DataAvailabilityHeader {
     /// #    unimplemented!();
