@@ -1,6 +1,5 @@
 use std::convert::Infallible;
 use std::ops::Deref;
-use std::path::Path;
 use std::pin::pin;
 use std::sync::Arc;
 
@@ -9,10 +8,8 @@ use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
-use directories::ProjectDirs;
 use sled::transaction::{abort, ConflictableTransactionError, TransactionError};
 use sled::{Db, Error as SledError, Transactional, Tree};
-use tempfile::TempDir;
 use tokio::sync::Notify;
 use tokio::task::{spawn_blocking, JoinError};
 use tracing::{debug, info};
@@ -47,79 +44,35 @@ struct Inner {
 
 impl SledStore {
     /// Create or open a persistent store.
-    pub async fn new(network_id: String) -> Result<Self> {
+    pub async fn new(db: Db) -> Result<Self> {
         spawn_blocking(move || {
-            let Some(project_dirs) = ProjectDirs::from("co", "eiger", "celestia") else {
-                return Err(StoreError::OpenFailed(
-                    "Unable to get system cache path to open header store".to_string(),
-                ));
-            };
-            let mut db_path = project_dirs.cache_dir().to_owned();
-            db_path.push(network_id);
+            let headers = db.open_tree(HASH_TREE_ID)?;
+            let height_to_hash = db.open_tree(HEIGHT_TO_HASH_TREE_ID)?;
+            let sampling_metadata = db.open_tree(HEIGHT_TO_METADATA_TREE_ID)?;
 
-            sled::open(db_path)
-                .and_then(Self::init)
-                .map_err(|e| StoreError::OpenFailed(e.to_string()))
-        })
-        .await?
-    }
+            if db
+                .compare_and_swap(
+                    NEXT_UNSAMPLED_HEIGHT_KEY,
+                    None as Option<&[u8]>,
+                    Some(&height_to_key(1)),
+                )?
+                .is_ok()
+            {
+                debug!("initialised sampling height");
+            }
 
-    /// Create a new persistent store in a temporary directory.
-    pub async fn new_temp() -> Result<Self> {
-        spawn_blocking(move || {
-            let tmp_path = TempDir::with_prefix("celestia")?.into_path();
-
-            sled::Config::default()
-                .path(tmp_path)
-                .temporary(true)
-                .create_new(true) // make sure we fail if db is already there
-                .open()
-                .and_then(Self::init)
+            Ok::<_, SledError>(Self {
+                inner: Arc::new(Inner {
+                    db,
+                    headers,
+                    height_to_hash,
+                    sampling_metadata,
+                    check_height_notifier: Notify::new(),
+                }),
+            })
         })
         .await?
         .map_err(|e| StoreError::OpenFailed(e.to_string()))
-    }
-
-    /// Create or open a persistent store in a given path.
-    pub async fn new_in_path<P>(path: P) -> Result<Self>
-    where
-        P: AsRef<Path>,
-    {
-        let path = path.as_ref().to_owned();
-        spawn_blocking(move || {
-            let db = sled::open(path)?;
-            Self::init(db)
-        })
-        .await?
-        .map_err(|e| StoreError::OpenFailed(e.to_string()))
-    }
-
-    // `open_tree` might be blocking, make sure to call this from `spawn_blocking` or similar
-    fn init(db: Db) -> sled::Result<Self> {
-        let headers = db.open_tree(HASH_TREE_ID)?;
-        let height_to_hash = db.open_tree(HEIGHT_TO_HASH_TREE_ID)?;
-        let sampling_metadata = db.open_tree(HEIGHT_TO_METADATA_TREE_ID)?;
-
-        if db
-            .compare_and_swap(
-                NEXT_UNSAMPLED_HEIGHT_KEY,
-                None as Option<&[u8]>,
-                Some(&height_to_key(1)),
-            )?
-            .is_ok()
-        {
-            debug!("initialised sampling height");
-        }
-
-        Ok(Self {
-            inner: Arc::new(Inner {
-                db,
-                headers,
-                height_to_hash,
-                sampling_metadata,
-                check_height_notifier: Notify::new(),
-            }),
-        })
     }
 
     async fn head_height(&self) -> Result<u64> {
@@ -488,9 +441,12 @@ fn height_to_key(height: u64) -> [u8; 8] {
 
 #[cfg(test)]
 pub mod tests {
+    use std::path::Path;
+
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::Height;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_contains_height() {
@@ -504,7 +460,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_empty_store() {
-        let s = SledStore::new_temp().await.unwrap();
+        let s = create_store(None).await;
         assert!(matches!(s.head_height().await, Err(StoreError::NotFound)));
         assert!(matches!(s.get_head().await, Err(StoreError::NotFound)));
         assert!(matches!(
@@ -519,7 +475,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_read_write() {
-        let s = SledStore::new_temp().await.unwrap();
+        let s = create_store(None).await;
         let mut gen = ExtendedHeaderGenerator::new();
 
         let header = gen.next();
@@ -628,7 +584,7 @@ pub mod tests {
         let mut gen = ExtendedHeaderGenerator::new_from_height(5);
         let header5 = gen.next();
 
-        let s = SledStore::new_temp().await.unwrap();
+        let s = create_store(None).await;
 
         assert!(matches!(
             s.append_single_unchecked(header5).await,
@@ -638,7 +594,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_store_persistence() {
-        let db_dir = TempDir::with_prefix("celestia.test").unwrap();
+        let db_dir = TempDir::with_prefix("lumina.store.test").unwrap();
         let (original_store, mut gen) = gen_filled_store(0, Some(db_dir.path())).await;
         let mut original_headers = gen.next_many(20);
 
@@ -650,9 +606,7 @@ pub mod tests {
         }
         drop(original_store);
 
-        let reopened_store = SledStore::new_in_path(db_dir.path())
-            .await
-            .expect("failed to reopen store");
+        let reopened_store = create_store(Some(db_dir.path())).await;
 
         assert_eq!(
             original_headers.last().unwrap().height().value(),
@@ -677,9 +631,7 @@ pub mod tests {
 
         original_headers.append(&mut new_headers);
 
-        let reopened_store = SledStore::new_in_path(db_dir.path().to_owned())
-            .await
-            .expect("failed to reopen store");
+        let reopened_store = create_store(Some(db_dir.path())).await;
         assert_eq!(
             original_headers.last().unwrap().height().value(),
             reopened_store.head_height().await.unwrap()
@@ -696,7 +648,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_separate_stores() {
         let (store0, mut gen0) = gen_filled_store(0, None).await;
-        let store1 = SledStore::new_temp().await.unwrap();
+        let store1 = create_store(None).await;
 
         let headers = gen0.next_many(10);
         store0.append(headers.clone()).await.unwrap();
@@ -886,7 +838,9 @@ pub mod tests {
         // Initialise a Store v1 (original design, only the extended headers and heights are
         // stored) and return a path to it.
         async fn init_store(hs: Vec<ExtendedHeader>) -> PathBuf {
-            let tmp_path = TempDir::with_prefix("celestia").unwrap().into_path();
+            let tmp_path = TempDir::with_prefix("lumina.store.test")
+                .unwrap()
+                .into_path();
             let sled_path = tmp_path.clone();
 
             spawn_blocking(move || {
@@ -936,7 +890,7 @@ pub mod tests {
 
             let v1_path = init_store(headers.clone()).await;
 
-            let store = SledStore::new_in_path(v1_path).await.unwrap();
+            let store = create_store(Some(&v1_path)).await;
 
             assert_eq!(store.head_height().await.unwrap(), 20);
 
@@ -963,15 +917,31 @@ pub mod tests {
         }
     }
 
+    pub async fn create_store(path: Option<&Path>) -> SledStore {
+        let is_temp = path.is_none();
+        let path = path.map(ToOwned::to_owned).unwrap_or_else(|| {
+            TempDir::with_prefix("lumina.store.test")
+                .unwrap()
+                .into_path()
+        });
+        let db = spawn_blocking(move || {
+            sled::Config::default()
+                .path(path)
+                .temporary(is_temp)
+                .create_new(is_temp)
+                .open()
+                .unwrap()
+        })
+        .await
+        .unwrap();
+        SledStore::new(db).await.unwrap()
+    }
+
     pub async fn gen_filled_store(
         amount: u64,
         path: Option<&Path>,
     ) -> (SledStore, ExtendedHeaderGenerator) {
-        let s = if let Some(path) = path {
-            SledStore::new_in_path(path).await.unwrap()
-        } else {
-            SledStore::new_temp().await.unwrap()
-        };
+        let s = create_store(path).await;
 
         let mut gen = ExtendedHeaderGenerator::new();
 

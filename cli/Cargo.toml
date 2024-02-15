@@ -32,12 +32,17 @@ lumina-node = { workspace = true }
 anyhow = "1.0.71"
 axum = "0.6.20"
 clap = { version = "4.4.4", features = ["derive"] }
+directories = "5.0.1"
 dotenvy = "0.15.7"
 mime_guess = "2.0"
 rust-embed = { version = "8.0.0", features = ["interpolate-folder-path"] }
 serde = "1.0.189"
 serde_repr = "0.1"
-tokio = { version = "1.29.0", features = ["macros", "rt-multi-thread"] }
+# Upgrading this dependency invalidates existing persistent dbs.
+# Those can be restored by migrating between versions:
+# https://docs.rs/sled/latest/sled/struct.Db.html#examples-1
+sled = "0.34.7"
+tokio = { version = "1.29.0", features = ["fs", "macros", "rt-multi-thread"] }
 tracing = "0.1.37"
 tracing-appender = "0.2.2"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }

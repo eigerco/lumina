@@ -83,7 +83,7 @@ where
     /// Hash of the genesis block.
     pub genesis_hash: Option<Hash>,
     /// Handler for the peer to peer messaging.
-    pub p2p: Arc<P2p<S>>,
+    pub p2p: Arc<P2p>,
     /// Headers storage.
     pub store: Arc<S>,
 }
@@ -169,7 +169,7 @@ where
 {
     cancellation_token: CancellationToken,
     cmd_rx: mpsc::Receiver<SyncerCmd>,
-    p2p: Arc<P2p<S>>,
+    p2p: Arc<P2p>,
     store: Arc<S>,
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     genesis_hash: Option<Hash>,
@@ -349,7 +349,7 @@ where
                 .build();
 
             loop {
-                match try_init(&p2p, &store, genesis_hash).await {
+                match try_init(&p2p, &*store, genesis_hash).await {
                     Ok(network_height) => {
                         tx.maybe_send(network_height);
                         break;
@@ -496,7 +496,7 @@ where
     }
 }
 
-async fn try_init<S>(p2p: &P2p<S>, store: &S, genesis_hash: Option<Hash>) -> Result<u64>
+async fn try_init<S>(p2p: &P2p, store: &S, genesis_hash: Option<Hash>) -> Result<u64>
 where
     S: Store,
 {

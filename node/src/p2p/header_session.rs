@@ -142,7 +142,6 @@ mod tests {
     use super::*;
     use crate::executor::spawn;
     use crate::p2p::P2p;
-    use crate::store::InMemoryStore;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -152,7 +151,7 @@ mod tests {
 
     #[async_test]
     async fn retry_on_missing_range() {
-        let (_p2p, mut p2p_mock) = P2p::<InMemoryStore>::mocked();
+        let (_p2p, mut p2p_mock) = P2p::mocked();
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(64);
 
@@ -181,7 +180,7 @@ mod tests {
 
     #[async_test]
     async fn nine_batches() {
-        let (_p2p, mut p2p_mock) = P2p::<InMemoryStore>::mocked();
+        let (_p2p, mut p2p_mock) = P2p::mocked();
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(520);
 
@@ -217,7 +216,7 @@ mod tests {
 
     #[async_test]
     async fn not_found_is_not_fatal() {
-        let (_p2p, mut p2p_mock) = P2p::<InMemoryStore>::mocked();
+        let (_p2p, mut p2p_mock) = P2p::mocked();
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(64);
 
@@ -248,7 +247,7 @@ mod tests {
 
     #[async_test]
     async fn no_peers_is_fatal() {
-        let (_p2p, mut p2p_mock) = P2p::<InMemoryStore>::mocked();
+        let (_p2p, mut p2p_mock) = P2p::mocked();
 
         let mut session = HeaderSession::new(1, 64, p2p_mock.cmd_tx.clone()).unwrap();
         let (result_tx, result_rx) = oneshot::channel();

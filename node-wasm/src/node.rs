@@ -6,6 +6,7 @@ use celestia_types::{hash::Hash, ExtendedHeader};
 use js_sys::Array;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
+use lumina_node::blockstore::InMemoryBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
 use lumina_node::node::{Node, NodeConfig};
 use lumina_node::store::{IndexedDbStore, Store};
@@ -212,7 +213,7 @@ impl WasmNodeConfig {
         }
     }
 
-    async fn into_node_config(self) -> Result<NodeConfig<IndexedDbStore>> {
+    async fn into_node_config(self) -> Result<NodeConfig<InMemoryBlockstore, IndexedDbStore>> {
         let network_id = network_id(self.network.into());
         let store = IndexedDbStore::new(network_id)
             .await
@@ -233,6 +234,7 @@ impl WasmNodeConfig {
             p2p_bootnodes,
             p2p_local_keypair,
             p2p_listen_on: vec![],
+            blockstore: InMemoryBlockstore::new(),
             store,
         })
     }

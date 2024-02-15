@@ -20,6 +20,7 @@ use celestia_types::{DataAvailabilityHeader, ExtendedDataSquare};
 use rand::RngCore;
 
 use crate::{
+    blockstore::InMemoryBlockstore,
     executor::timeout,
     node::NodeConfig,
     p2p::{P2pCmd, P2pError},
@@ -46,7 +47,7 @@ pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator)
 /// [`NodeConfig`] with default values for the usage in tests.
 ///
 /// Can be used to fill the missing fields with `..test_node_config()` syntax.
-pub fn test_node_config() -> NodeConfig<InMemoryStore> {
+pub fn test_node_config() -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
     let node_keypair = identity::Keypair::generate_ed25519();
     NodeConfig {
         network_id: "private".to_string(),
@@ -54,12 +55,13 @@ pub fn test_node_config() -> NodeConfig<InMemoryStore> {
         p2p_local_keypair: node_keypair,
         p2p_bootnodes: vec![],
         p2p_listen_on: vec![],
+        blockstore: InMemoryBlockstore::new(),
         store: InMemoryStore::new(),
     }
 }
 
 /// [`NodeConfig`] with listen address and default values for the usage in tests.
-pub fn listening_test_node_config() -> NodeConfig<InMemoryStore> {
+pub fn listening_test_node_config() -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
     NodeConfig {
         p2p_listen_on: vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()],
         ..test_node_config()
@@ -67,7 +69,9 @@ pub fn listening_test_node_config() -> NodeConfig<InMemoryStore> {
 }
 
 /// [`NodeConfig`] with given keypair and default values for the usage in tests.
-pub fn test_node_config_with_keypair(keypair: Keypair) -> NodeConfig<InMemoryStore> {
+pub fn test_node_config_with_keypair(
+    keypair: Keypair,
+) -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
     NodeConfig {
         p2p_local_keypair: keypair,
         ..test_node_config()

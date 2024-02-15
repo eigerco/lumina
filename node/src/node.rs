@@ -7,6 +7,7 @@
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
+use blockstore::Blockstore;
 use celestia_types::hash::Hash;
 use celestia_types::namespaced_data::NamespacedData;
 use celestia_types::nmt::Namespace;
@@ -46,9 +47,10 @@ pub enum NodeError {
 }
 
 /// Node conifguration.
-pub struct NodeConfig<S>
+pub struct NodeConfig<B, S>
 where
-    S: Store + 'static,
+    B: Blockstore,
+    S: Store,
 {
     /// An id of the network to connect to.
     pub network_id: String,
@@ -60,6 +62,8 @@ where
     pub p2p_bootnodes: Vec<Multiaddr>,
     /// List of the addresses where [`Node`] will listen for incoming connections.
     pub p2p_listen_on: Vec<Multiaddr>,
+    /// The blockstore for bitswap.
+    pub blockstore: B,
     /// The store for headers.
     pub store: S,
 }
@@ -69,7 +73,7 @@ pub struct Node<S>
 where
     S: Store + 'static,
 {
-    p2p: Arc<P2p<S>>,
+    p2p: Arc<P2p>,
     store: Arc<S>,
     syncer: Arc<Syncer<S>>,
     daser: Arc<Daser>,
@@ -80,7 +84,10 @@ where
     S: Store,
 {
     /// Creates and starts a new celestia node with a given config.
-    pub async fn new(config: NodeConfig<S>) -> Result<Self> {
+    pub async fn new<B>(config: NodeConfig<B, S>) -> Result<Self>
+    where
+        B: Blockstore + 'static,
+    {
         let store = Arc::new(config.store);
 
         let p2p = Arc::new(P2p::start(P2pArgs {
@@ -88,6 +95,7 @@ where
             local_keypair: config.p2p_local_keypair,
             bootnodes: config.p2p_bootnodes,
             listen_on: config.p2p_listen_on,
+            blockstore: config.blockstore,
             store: store.clone(),
         })?);
 

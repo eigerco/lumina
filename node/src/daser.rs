@@ -38,7 +38,7 @@ pub struct DaserArgs<S>
 where
     S: Store + 'static,
 {
-    pub p2p: Arc<P2p<S>>,
+    pub p2p: Arc<P2p>,
     pub store: Arc<S>,
 }
 
@@ -85,7 +85,7 @@ where
 {
     cancellation_token: CancellationToken,
     cmd_rx: mpsc::Receiver<DaserCmd>,
-    p2p: Arc<P2p<S>>,
+    p2p: Arc<P2p>,
     store: Arc<S>,
     max_samples_needed: usize,
 }
