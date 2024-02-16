@@ -6,10 +6,10 @@ use wasm_bindgen::{JsCast, JsValue};
 
 use crate::{convert_cid, Blockstore, BlockstoreError, Result};
 
-/// indexeddb version, needs to be incremented on every schema schange
+/// indexeddb version, needs to be incremented on every schema change
 const DB_VERSION: u32 = 1;
 
-const BLOCKS_STORE: &str = "BLOCKSTORE.BLOCKS";
+const BLOCK_STORE: &str = "BLOCKSTORE.BLOCKS";
 
 /// A [`Blockstore`] implementation backed by an `IndexedDb` database.
 #[derive(Debug)]
@@ -32,7 +32,7 @@ impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
     pub async fn new(name: &str) -> Result<Self> {
         let rexie = Rexie::builder(name)
             .version(DB_VERSION)
-            .add_object_store(ObjectStore::new(BLOCKS_STORE).auto_increment(false))
+            .add_object_store(ObjectStore::new(BLOCK_STORE).auto_increment(false))
             .build()
             .await
             .map_err(|e| BlockstoreError::BackingStoreError(e.to_string()))?;
@@ -48,8 +48,8 @@ impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
 
         let tx = self
             .db
-            .transaction(&[BLOCKS_STORE], TransactionMode::ReadOnly)?;
-        let blocks = tx.store(BLOCKS_STORE)?;
+            .transaction(&[BLOCK_STORE], TransactionMode::ReadOnly)?;
+        let blocks = tx.store(BLOCK_STORE)?;
         let block = blocks.get(&cid).await?;
 
         if block.is_undefined() {
@@ -75,8 +75,8 @@ impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
 
         let tx = self
             .db
-            .transaction(&[BLOCKS_STORE], TransactionMode::ReadWrite)?;
-        let blocks = tx.store(BLOCKS_STORE)?;
+            .transaction(&[BLOCK_STORE], TransactionMode::ReadWrite)?;
+        let blocks = tx.store(BLOCK_STORE)?;
 
         if !has_key(&blocks, &cid).await? {
             blocks.add(&data, Some(&cid)).await?;
@@ -92,8 +92,8 @@ impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
 
         let tx = self
             .db
-            .transaction(&[BLOCKS_STORE], TransactionMode::ReadOnly)?;
-        let blocks = tx.store(BLOCKS_STORE)?;
+            .transaction(&[BLOCK_STORE], TransactionMode::ReadOnly)?;
+        let blocks = tx.store(BLOCK_STORE)?;
 
         has_key(&blocks, &cid).await
     }
