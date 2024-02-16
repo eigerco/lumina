@@ -21,7 +21,7 @@ use crate::{
 };
 
 #[cfg(test)]
-pub(crate) use self::private::{dah_of_eds, generate_fake_eds};
+pub(crate) use self::private::{async_test, dah_of_eds, generate_fake_eds};
 
 /// Generate a store pre-filled with headers.
 pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
@@ -212,6 +212,11 @@ mod private {
     use celestia_types::nmt::{Namespace, NS_SIZE};
     use celestia_types::{DataAvailabilityHeader, ExtendedDataSquare};
     use rand::RngCore;
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) use tokio::test as async_test;
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
     pub(crate) fn generate_fake_eds(square_len: usize) -> ExtendedDataSquare {
         let mut shares = Vec::new();

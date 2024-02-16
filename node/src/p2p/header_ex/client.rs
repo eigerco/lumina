@@ -304,6 +304,7 @@ async fn decode_and_verify_responses(
 mod tests {
     use super::*;
     use crate::p2p::header_ex::utils::ExtendedHeaderExt;
+    use crate::test_utils::async_test;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::consts::HASH_SIZE;
@@ -313,11 +314,6 @@ mod tests {
     use std::collections::VecDeque;
     use std::io;
     use std::sync::atomic::{AtomicU64, Ordering};
-
-    #[cfg(not(target_arch = "wasm32"))]
-    use tokio::test as async_test;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
     #[async_test]
     async fn request_height() {

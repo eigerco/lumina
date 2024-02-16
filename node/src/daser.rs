@@ -185,18 +185,14 @@ fn random_indexes(block_len: usize, max_samples_needed: usize) -> HashSet<usize>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::sleep;
-    use crate::p2p::GET_SAMPLE_TIMEOUT;
     use crate::store::InMemoryStore;
-    use crate::test_utils::{dah_of_eds, generate_fake_eds, MockP2pHandle};
-    use beetswap::multihasher::MultihasherError;
+    use crate::test_utils::{async_test, dah_of_eds, generate_fake_eds, MockP2pHandle};
     use celestia_tendermint_proto::Protobuf;
     use celestia_types::sample::{Sample, SampleId};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::{AxisType, ExtendedDataSquare};
-    use std::time::Duration;
 
-    #[tokio::test]
+    #[async_test]
     async fn received_valid_samples() {
         let (mock, mut handle) = P2p::mocked();
         let store = Arc::new(InMemoryStore::new());
@@ -217,7 +213,7 @@ mod tests {
         gen_and_sample_block(&mut handle, &mut gen, &store, 16, false).await;
     }
 
-    #[tokio::test]
+    #[async_test]
     async fn received_invalid_sample() {
         let (mock, mut handle) = P2p::mocked();
         let store = Arc::new(InMemoryStore::new());
@@ -265,7 +261,7 @@ mod tests {
             let sample_id: SampleId = cid.try_into().unwrap();
             assert_eq!(sample_id.row.block_height, height);
 
-            let sample = gen_sample_of_cid(sample_id, &eds, &store).await;
+            let sample = gen_sample_of_cid(sample_id, &eds, store).await;
             let sample_bytes = sample.encode_vec().unwrap();
 
             respond_to.send(Ok(sample_bytes)).unwrap();

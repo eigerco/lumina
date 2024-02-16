@@ -291,13 +291,9 @@ impl Clone for InMemoryStore {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::test_utils::async_test;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::Height;
-
-    #[cfg(not(target_arch = "wasm32"))]
-    use tokio::test as async_test;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
     #[async_test]
     async fn test_contains_height() {
