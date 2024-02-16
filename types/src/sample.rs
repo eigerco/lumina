@@ -44,7 +44,7 @@ pub struct SampleId {
 }
 
 /// Represents Sample, with proof of its inclusion and location on EDS
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(try_from = "RawSample", into = "RawSample")]
 pub struct Sample {
     /// Location of the sample in the EDS and associated block height

@@ -205,7 +205,7 @@ pub(crate) enum P2pCmd {
     },
     GetShwapCid {
         cid: Cid,
-        respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>,
+        respond_to: OneshotResultSender<Vec<u8>, P2pError>,
     },
 }
 
@@ -509,7 +509,7 @@ where
     cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
     header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
-    bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, beetswap::Error>>,
+    bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, P2pError>>,
 }
 
 impl<B, S> Worker<B, S>
@@ -794,11 +794,7 @@ where
     }
 
     #[instrument(level = "trace", skip_all)]
-    fn on_get_shwap_cid(
-        &mut self,
-        cid: Cid,
-        respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>,
-    ) {
+    fn on_get_shwap_cid(&mut self, cid: Cid, respond_to: OneshotResultSender<Vec<u8>, P2pError>) {
         trace!("Requesting CID {cid} from bitswap");
         let query_id = self.swarm.behaviour_mut().bitswap.get(&cid);
         self.bitswap_queries.insert(query_id, respond_to);
@@ -814,6 +810,7 @@ where
             }
             beetswap::Event::GetQueryError { query_id, error } => {
                 if let Some(respond_to) = self.bitswap_queries.remove(&query_id) {
+                    let error: P2pError = error.into();
                     respond_to.maybe_send_err(error);
                 }
             }
@@ -906,7 +903,7 @@ where
 
 /// Awaits at least one channel from the `bitswap_queries` to close.
 async fn poll_closed(
-    bitswap_queries: &mut HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, beetswap::Error>>,
+    bitswap_queries: &mut HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, P2pError>>,
 ) {
     poll_fn(|cx| {
         for chan in bitswap_queries.values_mut() {

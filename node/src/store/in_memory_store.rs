@@ -94,6 +94,7 @@ impl InMemoryStore {
         height_entry.insert(hash);
 
         self.head_height.store(height, Ordering::Release);
+        self.check_height_notifier.notify_waiters();
 
         Ok(())
     }

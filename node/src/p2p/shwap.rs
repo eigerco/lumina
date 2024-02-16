@@ -152,7 +152,7 @@ mod tests {
     async fn hash() {
         let store = Arc::new(InMemoryStore::new());
 
-        let eds = generate_fake_eds();
+        let eds = generate_fake_eds(4);
         let dah = dah_of_eds(&eds);
 
         let mut gen = ExtendedHeaderGenerator::new();

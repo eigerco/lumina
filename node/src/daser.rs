@@ -181,3 +181,118 @@ fn random_indexes(block_len: usize, max_samples_needed: usize) -> HashSet<usize>
 
     indexes
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::executor::sleep;
+    use crate::p2p::GET_SAMPLE_TIMEOUT;
+    use crate::store::InMemoryStore;
+    use crate::test_utils::{dah_of_eds, generate_fake_eds, MockP2pHandle};
+    use beetswap::multihasher::MultihasherError;
+    use celestia_tendermint_proto::Protobuf;
+    use celestia_types::sample::{Sample, SampleId};
+    use celestia_types::test_utils::ExtendedHeaderGenerator;
+    use celestia_types::{AxisType, ExtendedDataSquare};
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn received_valid_samples() {
+        let (mock, mut handle) = P2p::mocked();
+        let store = Arc::new(InMemoryStore::new());
+
+        let _daser = Daser::start(DaserArgs {
+            p2p: Arc::new(mock),
+            store: store.clone(),
+        })
+        .unwrap();
+
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        handle.expect_no_cmd().await;
+
+        gen_and_sample_block(&mut handle, &mut gen, &store, 2, false).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, 4, false).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, 8, false).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, 16, false).await;
+    }
+
+    #[tokio::test]
+    async fn received_invalid_sample() {
+        let (mock, mut handle) = P2p::mocked();
+        let store = Arc::new(InMemoryStore::new());
+
+        let _daser = Daser::start(DaserArgs {
+            p2p: Arc::new(mock),
+            store: store.clone(),
+        })
+        .unwrap();
+
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        handle.expect_no_cmd().await;
+
+        gen_and_sample_block(&mut handle, &mut gen, &store, 2, false).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, 4, true).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, 8, false).await;
+    }
+
+    async fn gen_and_sample_block(
+        handle: &mut MockP2pHandle,
+        gen: &mut ExtendedHeaderGenerator,
+        store: &InMemoryStore,
+        square_len: usize,
+        simulate_invalid_sampling: bool,
+    ) {
+        let eds = generate_fake_eds(square_len);
+        let dah = dah_of_eds(&eds);
+        let header = gen.next_with_dah(dah);
+        let height = header.height().value();
+
+        store.append_single(header).await.unwrap();
+
+        let mut cids = Vec::new();
+
+        for i in 0..(square_len * square_len).min(DEFAULT_MAX_SAMPLES_NEEDED) {
+            let (cid, respond_to) = handle.expect_get_shwap_cid().await;
+
+            // Simulate invalid sample by triggering BitswapQueryTimeout
+            if simulate_invalid_sampling && i == 2 {
+                respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
+                continue;
+            }
+
+            let sample_id: SampleId = cid.try_into().unwrap();
+            assert_eq!(sample_id.row.block_height, height);
+
+            let sample = gen_sample_of_cid(sample_id, &eds, &store).await;
+            let sample_bytes = sample.encode_vec().unwrap();
+
+            respond_to.send(Ok(sample_bytes)).unwrap();
+            cids.push(cid);
+        }
+
+        handle.expect_no_cmd().await;
+
+        let sampling_metadata = store.get_sampling_metadata(height).await.unwrap().unwrap();
+        assert_eq!(sampling_metadata.accepted, !simulate_invalid_sampling);
+        assert_eq!(sampling_metadata.cids_sampled, cids);
+    }
+
+    async fn gen_sample_of_cid(
+        sample_id: SampleId,
+        eds: &ExtendedDataSquare,
+        store: &InMemoryStore,
+    ) -> Sample {
+        let header = store
+            .get_by_height(sample_id.row.block_height)
+            .await
+            .unwrap();
+
+        let row = sample_id.row.index as usize;
+        let col = sample_id.index as usize;
+        let index = row * header.dah.square_len() + col;
+
+        Sample::new(AxisType::Row, index, eds, header.height().value()).unwrap()
+    }
+}
