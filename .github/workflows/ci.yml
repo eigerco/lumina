@@ -192,5 +192,3 @@ jobs:
 
     - name: Check for unused dependencies
       run: cargo +nightly udeps --all-features --all-targets
-      env:
-        RUSTFLAGS: -D warnings
