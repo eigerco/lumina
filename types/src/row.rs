@@ -217,7 +217,6 @@ impl From<RowId> for CidGeneric<ROW_ID_SIZE> {
 mod tests {
     use super::*;
     use crate::consts::appconsts::SHARE_SIZE;
-    use crate::nmt::{Namespace, NS_SIZE};
 
     #[test]
     fn round_trip_test() {

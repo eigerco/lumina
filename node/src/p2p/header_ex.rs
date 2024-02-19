@@ -535,11 +535,9 @@ mod tests {
     use super::*;
     use crate::test_utils::async_test;
     use bytes::BytesMut;
-    use celestia_proto::p2p::pb::{header_request::Data, HeaderRequest, HeaderResponse};
-    use futures::io::{AsyncRead, AsyncReadExt, Cursor, Error};
-    use futures::task::{Context, Poll};
-    use libp2p::{request_response::Codec, swarm::StreamProtocol};
-    use prost::{encode_length_delimiter, Message};
+    use celestia_proto::p2p::pb::header_request::Data;
+    use futures::io::{Cursor, Error};
+    use prost::encode_length_delimiter;
     use std::io::ErrorKind;
     use std::pin::Pin;
 

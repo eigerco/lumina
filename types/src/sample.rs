@@ -326,7 +326,6 @@ impl From<SampleId> for CidGeneric<SAMPLE_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nmt::Namespace;
 
     #[test]
     fn round_trip() {

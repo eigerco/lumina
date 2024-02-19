@@ -305,7 +305,6 @@ mod tests {
     use super::*;
     use crate::p2p::header_ex::utils::ExtendedHeaderExt;
     use crate::test_utils::async_test;
-    use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::consts::HASH_SIZE;
     use celestia_types::hash::Hash;
