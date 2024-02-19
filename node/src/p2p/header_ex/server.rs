@@ -18,13 +18,11 @@ use crate::store::Store;
 
 const MAX_HEADERS_AMOUNT_RESPONSE: u64 = 512;
 
-pub(super) struct HeaderExServerHandler<S, R = ReqRespBehaviour>
+pub(super) struct HeaderExServerHandler<R = ReqRespBehaviour>
 where
-    S: Store,
     R: ResponseSender,
 {
-    store: Arc<S>,
-
+    store: Arc<dyn Store>,
     rx: mpsc::Receiver<(R::Channel, ResponseType)>,
     tx: mpsc::Sender<(R::Channel, ResponseType)>,
 }
@@ -45,12 +43,11 @@ impl ResponseSender for ReqRespBehaviour {
     }
 }
 
-impl<S, R> HeaderExServerHandler<S, R>
+impl<R> HeaderExServerHandler<R>
 where
-    S: Store + 'static,
     R: ResponseSender,
 {
-    pub(super) fn new(store: Arc<S>) -> Self {
+    pub(super) fn new(store: Arc<dyn Store>) -> Self {
         let (tx, rx) = mpsc::channel(32);
         HeaderExServerHandler { store, rx, tx }
     }
@@ -400,12 +397,9 @@ mod tests {
 
     // helper which waits for result over the test channel, while continously polling the handler
     // needed because `HeaderExServerHandler::poll` never returns `Ready`
-    async fn poll_handler_for_result<S>(
-        handler: &mut HeaderExServerHandler<S, TestResponseSender>,
-    ) -> Vec<HeaderResponse>
-    where
-        S: Store + 'static,
-    {
+    async fn poll_handler_for_result(
+        handler: &mut HeaderExServerHandler<TestResponseSender>,
+    ) -> Vec<HeaderResponse> {
         let (tx, receiver) = oneshot::channel();
         let mut sender = TestResponseSender(Some(tx));
 

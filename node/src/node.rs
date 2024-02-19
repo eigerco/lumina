@@ -4,7 +4,6 @@
 //! [`Store`]: crate::store::Store
 //! [`Syncer`]: crate::syncer::Syncer
 
-use std::ops::RangeBounds;
 use std::sync::Arc;
 
 use blockstore::Blockstore;
@@ -59,14 +58,14 @@ impl Node {
 
     pub fn builder<B>() -> NodeBuilder<B>
     where
-        B: Blockstore,
+        B: Blockstore + 'static,
     {
         NodeBuilder::new()
     }
 
     pub fn from_network<B>(network: Network) -> NodeBuilder<B>
     where
-        B: Blockstore,
+        B: Blockstore + 'static,
     {
         NodeBuilder::from_network(network)
     }
@@ -213,10 +212,11 @@ impl Node {
     ///
     /// If range contains a height of a header that is not found in the store or [`RangeBounds`]
     /// cannot be converted to a valid range.
-    pub async fn get_headers<R>(&self, range: R) -> Result<Vec<ExtendedHeader>>
-    where
-        R: RangeBounds<u64> + Send,
-    {
-        Ok(self.store.get_range(range).await?)
+    pub async fn get_headers<R>(
+        &self,
+        from: Option<u64>,
+        to: Option<u64>,
+    ) -> Result<Vec<ExtendedHeader>> {
+        Ok(self.store.get_range(from, to).await?)
     }
 }

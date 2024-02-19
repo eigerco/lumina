@@ -45,7 +45,7 @@ pub enum NodeBuilderError {
 /// Node conifguration.
 pub struct NodeBuilder<B>
 where
-    B: Blockstore,
+    B: Blockstore + 'static,
 {
     /// An id of the network to connect to.
     network: Option<Network>,
@@ -58,9 +58,26 @@ where
     /// List of the addresses where [`Node`] will listen for incoming connections.
     p2p_listen_on: Vec<Multiaddr>,
     /// The blockstore for bitswap.
-    blockstore: Option<B>,
+    blockstore: BlockstoreChoice<B>,
     /// The store for headers.
     store: Option<Arc<dyn Store>>,
+}
+
+enum BlockstoreChoice<B>
+where
+    B: Blockstore + 'static,
+{
+    Default,
+    Custom(B),
+}
+
+impl<B> BlockstoreChoice<B>
+where
+    B: Blockstore,
+{
+    fn is_default(&self) -> bool {
+        matches!(self, BlockstoreChoice::Default)
+    }
 }
 
 impl<B> Default for NodeBuilder<B>
@@ -74,7 +91,7 @@ where
             p2p_local_keypair: None,
             p2p_bootnodes: vec![],
             p2p_listen_on: vec![],
-            blockstore: None,
+            blockstore: BlockstoreChoice::Default,
             store: None,
         }
     }
@@ -114,11 +131,11 @@ where
     }
 
     pub fn with_blockstore(mut self, blockstore: B) -> Self {
-        self.blockstore = Some(blockstore);
+        self.blockstore = BlockstoreChoice::Custom(blockstore);
         self
     }
 
-    pub fn with_store<S: Store>(mut self, store: S) -> Self {
+    pub fn with_store<S: Store + 'static>(mut self, store: S) -> Self {
         self.store = Some(Arc::new(store));
         self
     }
@@ -128,48 +145,6 @@ where
             .with_network(network)
             .with_genesis(network.genesis())
             .with_bootnodes(network.canonical_bootnodes().collect())
-    }
-
-    pub async fn build(self) -> Result<Node> {
-        let network = self.network.ok_or(NodeBuilderError::NetworkMissing)?;
-        let local_keypair = self
-            .p2p_local_keypair
-            .unwrap_or_else(Keypair::generate_ed25519);
-
-        if self.blockstore.is_none() || self.store.is_none() {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                let db = native::default_sled_db(network).await?;
-                if self.blockstore.is_none() {
-                    let blockstore = crate::blockstore::SledBlockstore::new(db.clone()).await?;
-                    self.blockstore = Some(blockstore);
-                }
-                if self.store.is_none() {
-                    let store = crate::store::SledStore::new(db).await?;
-                    self.store = Some(store);
-                }
-            }
-        }
-
-        let blockstore = self.blockstore.unwrap();
-        let store = self.store.unwrap();
-
-        let p2p = Arc::new(P2p::start(P2pArgs {
-            network,
-            local_keypair,
-            bootnodes: self.p2p_bootnodes,
-            listen_on: self.p2p_listen_on,
-            blockstore,
-            store: store.clone(),
-        })?);
-
-        let syncer = Arc::new(Syncer::start(SyncerArgs {
-            genesis_hash: self.genesis_hash,
-            store: store.clone(),
-            p2p: p2p.clone(),
-        })?);
-
-        Ok(Node::new(p2p, syncer, store))
     }
 }
 
@@ -185,7 +160,65 @@ mod native {
 
     use super::*;
 
-    pub(super) async fn default_sled_db(network: Network) -> Result<sled::Db> {
+    impl NodeBuilder<SledBlockstore> {
+        pub fn with_default_blockstore(mut self) -> Self {
+            self.blockstore = BlockstoreChoice::Default;
+            self
+        }
+    }
+
+    impl<B> NodeBuilder<B>
+    where
+        B: Blockstore + 'static,
+    {
+        pub async fn build(self) -> Result<Node> {
+            let network = self.network.ok_or(NodeBuilderError::NetworkMissing)?;
+            let local_keypair = self
+                .p2p_local_keypair
+                .unwrap_or_else(Keypair::generate_ed25519);
+
+            let default_db = if self.blockstore.is_default() || self.store.is_none() {
+                Some(default_sled_db(network).await?)
+            } else {
+                None
+            };
+            let store = if let Some(store) = self.store {
+                store
+            } else {
+                Arc::new(SledStore::new(default_db.clone().unwrap()).await?)
+            };
+
+            let p2p = if let BlockstoreChoice::Custom(blockstore) = self.blockstore {
+                Arc::new(P2p::start(P2pArgs {
+                    network,
+                    local_keypair,
+                    bootnodes: self.p2p_bootnodes,
+                    listen_on: self.p2p_listen_on,
+                    blockstore,
+                    store: store.clone(),
+                })?)
+            } else {
+                Arc::new(P2p::start(P2pArgs {
+                    network,
+                    local_keypair,
+                    bootnodes: self.p2p_bootnodes,
+                    listen_on: self.p2p_listen_on,
+                    blockstore: SledBlockstore::new(default_db.unwrap()).await?,
+                    store: store.clone(),
+                })?)
+            };
+
+            let syncer = Arc::new(Syncer::start(SyncerArgs {
+                genesis_hash: self.genesis_hash,
+                store: store.clone(),
+                p2p: p2p.clone(),
+            })?);
+
+            Ok(Node::new(p2p, syncer, store))
+        }
+    }
+
+    async fn default_sled_db(network: Network) -> Result<sled::Db> {
         let network_id = network.id();
         let mut data_dir = utils::data_dir()
             .ok_or_else(|| StoreError::OpenFailed("Can't find home of current user".into()))?;

@@ -328,7 +328,7 @@ impl Worker {
                 .build();
 
             loop {
-                match try_init(&p2p, &*store, genesis_hash).await {
+                match try_init(&p2p, &store, genesis_hash).await {
                     Ok(network_height) => {
                         tx.maybe_send(network_height);
                         break;
@@ -475,10 +475,7 @@ impl Worker {
     }
 }
 
-async fn try_init<S>(p2p: &P2p, store: &S, genesis_hash: Option<Hash>) -> Result<u64>
-where
-    S: Store,
-{
+async fn try_init(p2p: &P2p, store: &Arc<dyn Store>, genesis_hash: Option<Hash>) -> Result<u64> {
     p2p.wait_connected_trusted().await?;
 
     // IF store is empty, intialize it with genesis
@@ -807,7 +804,7 @@ mod tests {
     }
 
     async fn assert_syncing(
-        syncer: &Syncer<InMemoryStore>,
+        syncer: &Syncer,
         store: &InMemoryStore,
         expected_local_head: u64,
         expected_subjective_head: u64,
@@ -827,7 +824,7 @@ mod tests {
     async fn initialized_syncer(
         genesis: ExtendedHeader,
         head: ExtendedHeader,
-    ) -> (Syncer<InMemoryStore>, Arc<InMemoryStore>, MockP2pHandle) {
+    ) -> (Syncer, Arc<InMemoryStore>, MockP2pHandle) {
         let (mock, mut handle) = P2p::mocked();
         let store = Arc::new(InMemoryStore::new());
 

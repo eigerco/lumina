@@ -63,9 +63,9 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         Err(_) => info!("Initialised new store"),
     }
 
-    let node = NodeBuilder::from_network_with_defaults(network)
-        .await?
+    let node = Node::from_network(network)
         .with_bootnodes(bootnodes)
+        .with_default_blockstore()
         .build()
         .await
         .context("Failed to start node")?;

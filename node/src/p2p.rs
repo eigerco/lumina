@@ -154,10 +154,9 @@ pub struct P2p {
 }
 
 /// Arguments used to configure the [`P2p`].
-pub struct P2pArgs<B, S>
+pub struct P2pArgs<B>
 where
     B: Blockstore,
-    S: Store,
 {
     /// An id of the network to connect to.
     pub network: Network,
@@ -170,7 +169,7 @@ where
     /// The store for headers.
     pub blockstore: B,
     /// The store for headers.
-    pub store: Arc<S>,
+    pub store: Arc<dyn Store>,
 }
 
 #[derive(Debug)]
@@ -203,10 +202,9 @@ pub(crate) enum P2pCmd {
 
 impl P2p {
     /// Creates and starts a new p2p handler.
-    pub fn start<B, S>(args: P2pArgs<B, S>) -> Result<Self>
+    pub fn start<B>(args: P2pArgs<B>) -> Result<Self>
     where
         B: Blockstore + 'static,
-        S: Store + 'static,
     {
         validate_bootnode_addrs(&args.bootnodes)?;
 
@@ -464,26 +462,24 @@ impl P2p {
 
 /// Our network behaviour.
 #[derive(NetworkBehaviour)]
-struct Behaviour<B, S>
+struct Behaviour<B>
 where
     B: Blockstore + 'static,
-    S: Store + 'static,
 {
     autonat: autonat::Behaviour,
     bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
-    header_ex: HeaderExBehaviour<S>,
+    header_ex: HeaderExBehaviour,
     gossipsub: gossipsub::Behaviour,
     kademlia: kad::Behaviour<kad::store::MemoryStore>,
 }
 
-struct Worker<B, S>
+struct Worker<B>
 where
     B: Blockstore + 'static,
-    S: Store + 'static,
 {
-    swarm: Swarm<Behaviour<B, S>>,
+    swarm: Swarm<Behaviour<B>>,
     header_sub_topic_hash: TopicHash,
     cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
@@ -491,13 +487,12 @@ where
     bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, beetswap::Error>>,
 }
 
-impl<B, S> Worker<B, S>
+impl<B> Worker<B>
 where
     B: Blockstore,
-    S: Store,
 {
     fn new(
-        args: P2pArgs<B, S>,
+        args: P2pArgs<B>,
         cmd_rx: mpsc::Receiver<P2pCmd>,
         header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
         peer_tracker: Arc<PeerTracker>,
@@ -594,7 +589,7 @@ where
         }
     }
 
-    async fn on_swarm_event(&mut self, ev: SwarmEvent<BehaviourEvent<B, S>>) -> Result<()> {
+    async fn on_swarm_event(&mut self, ev: SwarmEvent<BehaviourEvent<B>>) -> Result<()> {
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {
                 BehaviourEvent::Identify(ev) => self.on_identify_event(ev).await?,
@@ -877,13 +872,12 @@ fn validate_bootnode_addrs(addrs: &[Multiaddr]) -> Result<(), P2pError> {
     }
 }
 
-fn init_gossipsub<'a, B, S>(
-    args: &'a P2pArgs<B, S>,
+fn init_gossipsub<'a, B>(
+    args: &'a P2pArgs<B>,
     topics: impl IntoIterator<Item = &'a gossipsub::IdentTopic>,
 ) -> Result<gossipsub::Behaviour>
 where
     B: Blockstore,
-    S: Store,
 {
     // Set the message authenticity - How we expect to publish messages
     // Here we expect the publisher to sign the message with their key.
@@ -907,10 +901,9 @@ where
     Ok(gossipsub)
 }
 
-fn init_kademlia<B, S>(args: &P2pArgs<B, S>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
+fn init_kademlia<B>(args: &P2pArgs<B>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
 where
     B: Blockstore,
-    S: Store,
 {
     let local_peer_id = PeerId::from(args.local_keypair.public());
     let mut config = kad::Config::default();
