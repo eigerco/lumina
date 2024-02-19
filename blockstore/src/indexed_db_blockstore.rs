@@ -1,8 +1,8 @@
 use cid::CidGeneric;
 use js_sys::Uint8Array;
-use rexie::{KeyRange, ObjectStore, Rexie, Store, TransactionMode};
+use rexie::{KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
-use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::JsCast;
 
 use crate::{Blockstore, BlockstoreError, Result};
 
@@ -75,13 +75,9 @@ impl IndexedDbBlockstore {
             .db
             .transaction(&[BLOCK_STORE], TransactionMode::ReadWrite)?;
         let blocks = tx.store(BLOCK_STORE)?;
+        blocks.put(&data, Some(&cid)).await?;
 
-        if !has_key(&blocks, &cid).await? {
-            blocks.add(&data, Some(&cid)).await?;
-            Ok(())
-        } else {
-            Err(BlockstoreError::CidExists)
-        }
+        Ok(())
     }
 
     async fn has<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<bool> {
@@ -92,7 +88,9 @@ impl IndexedDbBlockstore {
             .transaction(&[BLOCK_STORE], TransactionMode::ReadOnly)?;
         let blocks = tx.store(BLOCK_STORE)?;
 
-        has_key(&blocks, &cid).await
+        let key_range = KeyRange::only(&cid)?;
+        let count = blocks.count(Some(&key_range)).await?;
+        Ok(count > 0)
     }
 }
 
@@ -118,12 +116,6 @@ impl From<rexie::Error> for BlockstoreError {
     fn from(value: rexie::Error) -> Self {
         BlockstoreError::BackingStoreError(value.to_string())
     }
-}
-
-async fn has_key(store: &Store, key: &JsValue) -> Result<bool> {
-    let key_range = KeyRange::only(key)?;
-    let count = store.count(Some(&key_range)).await?;
-    Ok(count > 0)
 }
 
 #[cfg(test)]

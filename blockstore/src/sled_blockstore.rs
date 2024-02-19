@@ -60,10 +60,8 @@ impl SledBlockstore {
         let data = data.to_vec();
 
         spawn_blocking(move || {
-            inner
-                .blocks
-                .compare_and_swap(cid, None as Option<&[u8]>, Some(data))?
-                .or(Err(BlockstoreError::CidExists))
+            inner.blocks.insert(cid, data)?;
+            Ok(())
         })
         .await?
     }
