@@ -1,3 +1,5 @@
+//! Utilities and helpers for running the node.
+
 use celestia_types::ExtendedHeader;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::multiaddr::{Multiaddr, Protocol};
@@ -5,6 +7,11 @@ use libp2p::{PeerId, StreamProtocol};
 use tokio::sync::oneshot;
 
 use crate::executor::yield_now;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn data_dir() -> Option<std::path::PathBuf> {
+    directories::ProjectDirs::from("co", "eiger", "lumina").map(|dirs| dirs.cache_dir().to_owned())
+}
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
 

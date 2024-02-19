@@ -25,6 +25,7 @@ mod server;
 pub(crate) mod utils;
 
 use crate::executor::timeout;
+use crate::network::Network;
 use crate::p2p::header_ex::client::HeaderExClientHandler;
 use crate::p2p::header_ex::server::HeaderExServerHandler;
 use crate::p2p::P2pError;
@@ -50,19 +51,16 @@ type ReqRespEvent = request_response::Event<RequestType, ResponseType>;
 type ReqRespMessage = request_response::Message<RequestType, ResponseType>;
 type ReqRespConnectionHandler = <ReqRespBehaviour as NetworkBehaviour>::ConnectionHandler;
 
-pub(crate) struct HeaderExBehaviour<S>
-where
-    S: Store + 'static,
-{
+pub(crate) struct HeaderExBehaviour {
     req_resp: ReqRespBehaviour,
     client_handler: HeaderExClientHandler,
-    server_handler: HeaderExServerHandler<S>,
+    server_handler: HeaderExServerHandler,
 }
 
-pub(crate) struct HeaderExConfig<'a, S> {
-    pub network_id: &'a str,
+pub(crate) struct HeaderExConfig {
+    pub network: Network,
     pub peer_tracker: Arc<PeerTracker>,
-    pub header_store: Arc<S>,
+    pub header_store: Arc<dyn Store + 'static>,
 }
 
 /// Representation of all the errors that can occur when interacting with the header-ex.
@@ -89,15 +87,12 @@ pub enum HeaderExError {
     OutboundFailure(OutboundFailure),
 }
 
-impl<S> HeaderExBehaviour<S>
-where
-    S: Store + 'static,
-{
-    pub(crate) fn new(config: HeaderExConfig<'_, S>) -> Self {
+impl HeaderExBehaviour {
+    pub(crate) fn new(config: HeaderExConfig) -> Self {
         HeaderExBehaviour {
             req_resp: ReqRespBehaviour::new(
                 [(
-                    protocol_id(config.network_id, "/header-ex/v0.0.3"),
+                    protocol_id(config.network.id(), "/header-ex/v0.0.3"),
                     ProtocolSupport::Full,
                 )],
                 request_response::Config::default(),
@@ -186,10 +181,7 @@ where
     }
 }
 
-impl<S> NetworkBehaviour for HeaderExBehaviour<S>
-where
-    S: Store + 'static,
-{
+impl NetworkBehaviour for HeaderExBehaviour {
     type ConnectionHandler = ConnHandler;
     type ToSwarm = ();
 

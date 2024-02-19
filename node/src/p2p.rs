@@ -49,6 +49,7 @@ mod shwap;
 mod swarm;
 
 use crate::executor::{spawn, Interval};
+use crate::network::Network;
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
 use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihasher};
@@ -153,13 +154,12 @@ pub struct P2p {
 }
 
 /// Arguments used to configure the [`P2p`].
-pub struct P2pArgs<B, S>
+pub struct P2pArgs<B>
 where
     B: Blockstore,
-    S: Store,
 {
     /// An id of the network to connect to.
-    pub network_id: String,
+    pub network: Network,
     /// The keypair to be used as the identity.
     pub local_keypair: Keypair,
     /// List of bootstrap nodes to connect to and trust.
@@ -169,7 +169,7 @@ where
     /// The store for headers.
     pub blockstore: B,
     /// The store for headers.
-    pub store: Arc<S>,
+    pub store: Arc<dyn Store>,
 }
 
 #[derive(Debug)]
@@ -202,10 +202,9 @@ pub(crate) enum P2pCmd {
 
 impl P2p {
     /// Creates and starts a new p2p handler.
-    pub fn start<B, S>(args: P2pArgs<B, S>) -> Result<Self>
+    pub fn start<B>(args: P2pArgs<B>) -> Result<Self>
     where
         B: Blockstore + 'static,
-        S: Store + 'static,
     {
         validate_bootnode_addrs(&args.bootnodes)?;
 
@@ -463,26 +462,24 @@ impl P2p {
 
 /// Our network behaviour.
 #[derive(NetworkBehaviour)]
-struct Behaviour<B, S>
+struct Behaviour<B>
 where
     B: Blockstore + 'static,
-    S: Store + 'static,
 {
     autonat: autonat::Behaviour,
     bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
-    header_ex: HeaderExBehaviour<S>,
+    header_ex: HeaderExBehaviour,
     gossipsub: gossipsub::Behaviour,
     kademlia: kad::Behaviour<kad::store::MemoryStore>,
 }
 
-struct Worker<B, S>
+struct Worker<B>
 where
     B: Blockstore + 'static,
-    S: Store + 'static,
 {
-    swarm: Swarm<Behaviour<B, S>>,
+    swarm: Swarm<Behaviour<B>>,
     header_sub_topic_hash: TopicHash,
     cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
@@ -490,13 +487,12 @@ where
     bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, beetswap::Error>>,
 }
 
-impl<B, S> Worker<B, S>
+impl<B> Worker<B>
 where
     B: Blockstore,
-    S: Store,
 {
     fn new(
-        args: P2pArgs<B, S>,
+        args: P2pArgs<B>,
         cmd_rx: mpsc::Receiver<P2pCmd>,
         header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
         peer_tracker: Arc<PeerTracker>,
@@ -511,14 +507,14 @@ where
             args.local_keypair.public(),
         ));
 
-        let header_sub_topic = gossipsub_ident_topic(&args.network_id, "/header-sub/v0.0.1");
+        let header_sub_topic = gossipsub_ident_topic(args.network.id(), "/header-sub/v0.0.1");
         let gossipsub = init_gossipsub(&args, [&header_sub_topic])?;
 
         let kademlia = init_kademlia(&args)?;
-        let bitswap = init_bitswap(args.blockstore, &args.network_id)?;
+        let bitswap = init_bitswap(args.blockstore, args.network)?;
 
         let header_ex = HeaderExBehaviour::new(HeaderExConfig {
-            network_id: &args.network_id,
+            network: args.network,
             peer_tracker: peer_tracker.clone(),
             header_store: args.store.clone(),
         });
@@ -593,7 +589,7 @@ where
         }
     }
 
-    async fn on_swarm_event(&mut self, ev: SwarmEvent<BehaviourEvent<B, S>>) -> Result<()> {
+    async fn on_swarm_event(&mut self, ev: SwarmEvent<BehaviourEvent<B>>) -> Result<()> {
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {
                 BehaviourEvent::Identify(ev) => self.on_identify_event(ev).await?,
@@ -876,13 +872,12 @@ fn validate_bootnode_addrs(addrs: &[Multiaddr]) -> Result<(), P2pError> {
     }
 }
 
-fn init_gossipsub<'a, B, S>(
-    args: &'a P2pArgs<B, S>,
+fn init_gossipsub<'a, B>(
+    args: &'a P2pArgs<B>,
     topics: impl IntoIterator<Item = &'a gossipsub::IdentTopic>,
 ) -> Result<gossipsub::Behaviour>
 where
     B: Blockstore,
-    S: Store,
 {
     // Set the message authenticity - How we expect to publish messages
     // Here we expect the publisher to sign the message with their key.
@@ -906,15 +901,14 @@ where
     Ok(gossipsub)
 }
 
-fn init_kademlia<B, S>(args: &P2pArgs<B, S>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
+fn init_kademlia<B>(args: &P2pArgs<B>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
 where
     B: Blockstore,
-    S: Store,
 {
     let local_peer_id = PeerId::from(args.local_keypair.public());
     let mut config = kad::Config::default();
 
-    let protocol_id = celestia_protocol_id(&args.network_id, "/kad/1.0.0");
+    let protocol_id = celestia_protocol_id(args.network.id(), "/kad/1.0.0");
 
     config.set_protocol_names(vec![protocol_id]);
 
@@ -934,11 +928,11 @@ where
     Ok(kademlia)
 }
 
-fn init_bitswap<B>(blockstore: B, network_id: &str) -> Result<beetswap::Behaviour<MAX_MH_SIZE, B>>
+fn init_bitswap<B>(blockstore: B, network: Network) -> Result<beetswap::Behaviour<MAX_MH_SIZE, B>>
 where
     B: Blockstore,
 {
-    let protocol_prefix = format!("/celestia/{}", network_id);
+    let protocol_prefix = format!("/celestia/{}", network.id());
 
     Ok(beetswap::Behaviour::builder(blockstore)
         .protocol_prefix(&protocol_prefix)?

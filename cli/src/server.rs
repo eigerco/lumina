@@ -10,7 +10,7 @@ use celestia_types::hash::Hash;
 use clap::Args;
 use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
-use lumina_node::network::{canonical_network_bootnodes, network_genesis};
+use lumina_node::network::Network;
 use rust_embed::RustEmbed;
 use serde::Serialize;
 use tracing::info;
@@ -50,10 +50,11 @@ pub(crate) struct Params {
 }
 
 pub(crate) async fn run(args: Params) -> Result<()> {
-    let network = args.network.into();
-    let genesis_hash = network_genesis(network);
+    let network = Network::from(args.network);
+    let genesis_hash = network.genesis();
     let bootnodes = if args.bootnodes.is_empty() {
-        canonical_network_bootnodes(network)
+        network
+            .canonical_bootnodes()
             .filter(|addr| addr.iter().any(|proto| proto == Protocol::WebTransport))
             .collect()
     } else {

@@ -9,7 +9,6 @@
 //! headers announced on the `header-sub` p2p protocol to keep the `subjective_head` as close
 //! to the `network_head` as possible.
 
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -66,26 +65,19 @@ impl From<oneshot::error::RecvError> for SyncerError {
 
 /// Component responsible for synchronizing block headers from the network.
 #[derive(Debug)]
-pub struct Syncer<S>
-where
-    S: Store + 'static,
-{
+pub struct Syncer {
     cmd_tx: mpsc::Sender<SyncerCmd>,
     cancellation_token: CancellationToken,
-    _store: PhantomData<S>,
 }
 
 /// Arguments used to configure the [`Syncer`].
-pub struct SyncerArgs<S>
-where
-    S: Store + 'static,
-{
+pub struct SyncerArgs {
     /// Hash of the genesis block.
     pub genesis_hash: Option<Hash>,
     /// Handler for the peer to peer messaging.
     pub p2p: Arc<P2p>,
     /// Headers storage.
-    pub store: Arc<S>,
+    pub store: Arc<dyn Store>,
 }
 
 #[derive(Debug)]
@@ -104,12 +96,9 @@ pub struct SyncingInfo {
     pub subjective_head: u64,
 }
 
-impl<S> Syncer<S>
-where
-    S: Store,
-{
+impl Syncer {
     /// Create and start the [`Syncer`].
-    pub fn start(args: SyncerArgs<S>) -> Result<Self> {
+    pub fn start(args: SyncerArgs) -> Result<Self> {
         let cancellation_token = CancellationToken::new();
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let mut worker = Worker::new(args, cancellation_token.child_token(), cmd_rx)?;
@@ -121,7 +110,6 @@ where
         Ok(Syncer {
             cancellation_token,
             cmd_tx,
-            _store: PhantomData,
         })
     }
 
@@ -154,23 +142,17 @@ where
     }
 }
 
-impl<S> Drop for Syncer<S>
-where
-    S: Store,
-{
+impl Drop for Syncer {
     fn drop(&mut self) {
         self.cancellation_token.cancel();
     }
 }
 
-struct Worker<S>
-where
-    S: Store + 'static,
-{
+struct Worker {
     cancellation_token: CancellationToken,
     cmd_rx: mpsc::Receiver<SyncerCmd>,
     p2p: Arc<P2p>,
-    store: Arc<S>,
+    store: Arc<dyn Store>,
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     genesis_hash: Option<Hash>,
     subjective_head_height: Option<u64>,
@@ -185,12 +167,9 @@ struct Ongoing {
     cancellation_token: CancellationToken,
 }
 
-impl<S> Worker<S>
-where
-    S: Store,
-{
+impl Worker {
     fn new(
-        args: SyncerArgs<S>,
+        args: SyncerArgs,
         cancellation_token: CancellationToken,
         cmd_rx: mpsc::Receiver<SyncerCmd>,
     ) -> Result<Self> {
@@ -349,7 +328,7 @@ where
                 .build();
 
             loop {
-                match try_init(&p2p, &*store, genesis_hash).await {
+                match try_init(&p2p, &store, genesis_hash).await {
                     Ok(network_height) => {
                         tx.maybe_send(network_height);
                         break;
@@ -496,10 +475,7 @@ where
     }
 }
 
-async fn try_init<S>(p2p: &P2p, store: &S, genesis_hash: Option<Hash>) -> Result<u64>
-where
-    S: Store,
-{
+async fn try_init(p2p: &P2p, store: &Arc<dyn Store>, genesis_hash: Option<Hash>) -> Result<u64> {
     p2p.wait_connected_trusted().await?;
 
     // IF store is empty, intialize it with genesis
@@ -828,7 +804,7 @@ mod tests {
     }
 
     async fn assert_syncing(
-        syncer: &Syncer<InMemoryStore>,
+        syncer: &Syncer,
         store: &InMemoryStore,
         expected_local_head: u64,
         expected_subjective_head: u64,
@@ -848,7 +824,7 @@ mod tests {
     async fn initialized_syncer(
         genesis: ExtendedHeader,
         head: ExtendedHeader,
-    ) -> (Syncer<InMemoryStore>, Arc<InMemoryStore>, MockP2pHandle) {
+    ) -> (Syncer, Arc<InMemoryStore>, MockP2pHandle) {
         let (mock, mut handle) = P2p::mocked();
         let store = Arc::new(InMemoryStore::new());
 

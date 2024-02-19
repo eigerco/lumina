@@ -4,7 +4,6 @@
 //! [`Store`]: crate::store::Store
 //! [`Syncer`]: crate::syncer::Syncer
 
-use std::ops::RangeBounds;
 use std::sync::Arc;
 
 use blockstore::Blockstore;
@@ -15,16 +14,18 @@ use celestia_types::row::Row;
 use celestia_types::sample::Sample;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
-use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
 
-use crate::p2p::{P2p, P2pArgs, P2pError};
+use crate::network::Network;
+use crate::p2p::{P2p, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::{Store, StoreError};
-use crate::syncer::{Syncer, SyncerArgs, SyncerError, SyncingInfo};
+use crate::syncer::{Syncer, SyncerError, SyncingInfo};
 
 type Result<T, E = NodeError> = std::result::Result<T, E>;
+
+pub use crate::node_builder::NodeBuilder;
 
 /// Representation of all the errors that can occur when interacting with the [`Node`].
 #[derive(Debug, thiserror::Error)]
@@ -42,65 +43,31 @@ pub enum NodeError {
     Store(#[from] StoreError),
 }
 
-/// Node conifguration.
-pub struct NodeConfig<B, S>
-where
-    B: Blockstore,
-    S: Store,
-{
-    /// An id of the network to connect to.
-    pub network_id: String,
-    /// The hash of the genesis block in network.
-    pub genesis_hash: Option<Hash>,
-    /// The keypair to be used as [`Node`]s identity.
-    pub p2p_local_keypair: Keypair,
-    /// List of bootstrap nodes to connect to and trust.
-    pub p2p_bootnodes: Vec<Multiaddr>,
-    /// List of the addresses where [`Node`] will listen for incoming connections.
-    pub p2p_listen_on: Vec<Multiaddr>,
-    /// The blockstore for bitswap.
-    pub blockstore: B,
-    /// The store for headers.
-    pub store: S,
-}
-
 /// Celestia node.
-pub struct Node<S>
-where
-    S: Store + 'static,
-{
+pub struct Node {
     p2p: Arc<P2p>,
-    store: Arc<S>,
-    syncer: Arc<Syncer<S>>,
+    syncer: Arc<Syncer>,
+    store: Arc<dyn Store>,
 }
 
-impl<S> Node<S>
-where
-    S: Store,
-{
+impl Node {
     /// Creates and starts a new celestia node with a given config.
-    pub async fn new<B>(config: NodeConfig<B, S>) -> Result<Self>
+    pub(crate) fn new(p2p: Arc<P2p>, syncer: Arc<Syncer>, store: Arc<dyn Store>) -> Self {
+        Node { p2p, store, syncer }
+    }
+
+    pub fn builder<B>() -> NodeBuilder<B>
     where
         B: Blockstore + 'static,
     {
-        let store = Arc::new(config.store);
+        NodeBuilder::new()
+    }
 
-        let p2p = Arc::new(P2p::start(P2pArgs {
-            network_id: config.network_id,
-            local_keypair: config.p2p_local_keypair,
-            bootnodes: config.p2p_bootnodes,
-            listen_on: config.p2p_listen_on,
-            blockstore: config.blockstore,
-            store: store.clone(),
-        })?);
-
-        let syncer = Arc::new(Syncer::start(SyncerArgs {
-            genesis_hash: config.genesis_hash,
-            store: store.clone(),
-            p2p: p2p.clone(),
-        })?);
-
-        Ok(Node { p2p, store, syncer })
+    pub fn from_network<B>(network: Network) -> NodeBuilder<B>
+    where
+        B: Blockstore + 'static,
+    {
+        NodeBuilder::from_network(network)
     }
 
     /// Get node's local peer ID.
@@ -245,10 +212,11 @@ where
     ///
     /// If range contains a height of a header that is not found in the store or [`RangeBounds`]
     /// cannot be converted to a valid range.
-    pub async fn get_headers<R>(&self, range: R) -> Result<Vec<ExtendedHeader>>
-    where
-        R: RangeBounds<u64> + Send,
-    {
-        Ok(self.store.get_range(range).await?)
+    pub async fn get_headers<R>(
+        &self,
+        from: Option<u64>,
+        to: Option<u64>,
+    ) -> Result<Vec<ExtendedHeader>> {
+        Ok(self.store.get_range(from, to).await?)
     }
 }
