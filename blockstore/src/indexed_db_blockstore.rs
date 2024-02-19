@@ -4,7 +4,7 @@ use rexie::{KeyRange, ObjectStore, Rexie, Store, TransactionMode};
 use send_wrapper::SendWrapper;
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::{convert_cid, Blockstore, BlockstoreError, Result};
+use crate::{Blockstore, BlockstoreError, Result};
 
 /// indexeddb version, needs to be incremented on every schema change
 const DB_VERSION: u32 = 1;
@@ -13,11 +13,11 @@ const BLOCK_STORE: &str = "BLOCKSTORE.BLOCKS";
 
 /// A [`Blockstore`] implementation backed by an `IndexedDb` database.
 #[derive(Debug)]
-pub struct IndexedDbBlockstore<const MAX_MULTIHASH_SIZE: usize> {
+pub struct IndexedDbBlockstore {
     db: SendWrapper<Rexie>,
 }
 
-impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
+impl IndexedDbBlockstore {
     /// Create or open a [`IndexedDbBlockstore`] with a given name.
     ///
     /// # Example
@@ -25,7 +25,7 @@ impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// use blockstore::IndexedDbBlockstore;
     ///
-    /// let blockstore = IndexedDbBlockstore::<64>::new("blocks").await?;
+    /// let blockstore = IndexedDbBlockstore::new("blocks").await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -43,7 +43,6 @@ impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
     }
 
     async fn get<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<Option<Vec<u8>>> {
-        let cid = convert_cid::<S, MAX_MULTIHASH_SIZE>(cid)?;
         let cid = Uint8Array::from(cid.to_bytes().as_ref());
 
         let tx = self
@@ -69,7 +68,6 @@ impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
     }
 
     async fn put<const S: usize>(&self, cid: &CidGeneric<S>, data: &[u8]) -> Result<()> {
-        let cid = convert_cid::<S, MAX_MULTIHASH_SIZE>(cid)?;
         let cid = Uint8Array::from(cid.to_bytes().as_ref());
         let data = Uint8Array::from(data);
 
@@ -87,7 +85,6 @@ impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
     }
 
     async fn has<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<bool> {
-        let cid = convert_cid::<S, MAX_MULTIHASH_SIZE>(cid)?;
         let cid = Uint8Array::from(cid.to_bytes().as_ref());
 
         let tx = self
@@ -100,7 +97,7 @@ impl<const MAX_MULTIHASH_SIZE: usize> IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
 }
 
 #[cfg_attr(not(docs_rs), async_trait::async_trait)]
-impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for IndexedDbBlockstore<MAX_MULTIHASH_SIZE> {
+impl Blockstore for IndexedDbBlockstore {
     async fn get<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<Option<Vec<u8>>> {
         let fut = SendWrapper::new(self.get(cid));
         fut.await
@@ -144,7 +141,7 @@ mod tests {
         let store_name = "indexeddb-blockstore-test-persistent";
         Rexie::delete(store_name).await.unwrap();
 
-        let store = IndexedDbBlockstore::<64>::new(store_name).await.unwrap();
+        let store = IndexedDbBlockstore::new(store_name).await.unwrap();
         let cid = cid_v1::<64>(b"1");
         let data = b"data";
 
@@ -152,7 +149,7 @@ mod tests {
 
         store.db.take().close();
 
-        let store = IndexedDbBlockstore::<64>::new(store_name).await.unwrap();
+        let store = IndexedDbBlockstore::new(store_name).await.unwrap();
         let received = store.get(&cid).await.unwrap();
 
         assert_eq!(received, Some(data.to_vec()));

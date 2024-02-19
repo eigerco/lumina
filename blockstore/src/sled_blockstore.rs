@@ -6,13 +6,13 @@ use sled::{Db, Error as SledError, Tree};
 use tokio::task::spawn_blocking;
 use tokio::task::JoinError;
 
-use crate::{convert_cid, Blockstore, BlockstoreError, Result};
+use crate::{Blockstore, BlockstoreError, Result};
 
 const BLOCKS_TREE_ID: &[u8] = b"BLOCKSTORE.BLOCKS";
 
 /// A [`Blockstore`] implementation backed by a [`sled`] database.
 #[derive(Debug)]
-pub struct SledBlockstore<const MAX_MULTIHASH_SIZE: usize> {
+pub struct SledBlockstore {
     inner: Arc<Inner>,
 }
 
@@ -22,7 +22,7 @@ struct Inner {
     blocks: Tree,
 }
 
-impl<const MAX_MULTIHASH_SIZE: usize> SledBlockstore<MAX_MULTIHASH_SIZE> {
+impl SledBlockstore {
     /// Create or open a [`SledBlockstore`] in a given sled [`Db`].
     ///
     /// # Example
@@ -32,7 +32,7 @@ impl<const MAX_MULTIHASH_SIZE: usize> SledBlockstore<MAX_MULTIHASH_SIZE> {
     /// use tokio::task::spawn_blocking;
     ///
     /// let db = spawn_blocking(|| sled::open("path/to/db")).await??;
-    /// let blockstore = SledBlockstore::<64>::new(db).await?;
+    /// let blockstore = SledBlockstore::new(db).await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -48,45 +48,36 @@ impl<const MAX_MULTIHASH_SIZE: usize> SledBlockstore<MAX_MULTIHASH_SIZE> {
     }
 
     async fn get<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<Option<Vec<u8>>> {
-        let cid = convert_cid::<S, MAX_MULTIHASH_SIZE>(cid)?;
         let inner = self.inner.clone();
+        let cid = cid.to_bytes();
 
-        spawn_blocking(move || {
-            let key = cid.to_bytes();
-            Ok(inner.blocks.get(key)?.map(|bytes| bytes.to_vec()))
-        })
-        .await?
+        spawn_blocking(move || Ok(inner.blocks.get(cid)?.map(|bytes| bytes.to_vec()))).await?
     }
 
     async fn put<const S: usize>(&self, cid: &CidGeneric<S>, data: &[u8]) -> Result<()> {
-        let cid = convert_cid::<S, MAX_MULTIHASH_SIZE>(cid)?;
         let inner = self.inner.clone();
+        let cid = cid.to_bytes();
         let data = data.to_vec();
 
         spawn_blocking(move || {
-            let key = cid.to_bytes();
             inner
                 .blocks
-                .compare_and_swap(key, None as Option<&[u8]>, Some(data))?
+                .compare_and_swap(cid, None as Option<&[u8]>, Some(data))?
                 .or(Err(BlockstoreError::CidExists))
         })
         .await?
     }
 
     async fn has<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<bool> {
-        let cid = convert_cid::<S, MAX_MULTIHASH_SIZE>(cid)?;
         let inner = self.inner.clone();
+        let cid = cid.to_bytes();
 
-        spawn_blocking(move || {
-            let key = cid.to_bytes();
-            Ok(inner.blocks.contains_key(key)?)
-        })
-        .await?
+        spawn_blocking(move || Ok(inner.blocks.contains_key(cid)?)).await?
     }
 }
 
 #[cfg_attr(not(docs_rs), async_trait::async_trait)]
-impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for SledBlockstore<MAX_MULTIHASH_SIZE> {
+impl Blockstore for SledBlockstore {
     async fn get<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<Option<Vec<u8>>> {
         self.get(cid).await
     }
@@ -149,7 +140,7 @@ mod tests {
         assert_eq!(received, Some(data.to_vec()));
     }
 
-    async fn new_sled_blockstore(path: impl AsRef<Path>) -> SledBlockstore<64> {
+    async fn new_sled_blockstore(path: impl AsRef<Path>) -> SledBlockstore {
         let path = path.as_ref().to_owned();
         let db = tokio::task::spawn_blocking(move || {
             sled::Config::default()

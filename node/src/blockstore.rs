@@ -8,13 +8,13 @@ use crate::p2p::MAX_MH_SIZE;
 pub type InMemoryBlockstore = blockstore::InMemoryBlockstore<MAX_MH_SIZE>;
 
 #[cfg(not(target_arch = "wasm32"))]
-/// A [`SledBlockstore`] with maximum multihash size used by lumina.
+/// A [`SledBlockstore`].
 ///
 /// [`SledBlockstore`]: blockstore::SledBlockstore
-pub type SledBlockstore = blockstore::SledBlockstore<MAX_MH_SIZE>;
+pub type SledBlockstore = blockstore::SledBlockstore;
 
 #[cfg(target_arch = "wasm32")]
-/// A [`IndexedDbBlockstore`] with maximum multihash size used by lumina.
+/// An [`IndexedDbBlockstore`].
 ///
 /// [`IndexedDbBlockstore`]: blockstore::IndexedDbBlockstore
-pub type IndexedDbBlockstore = blockstore::IndexedDbBlockstore<MAX_MH_SIZE>;
+pub type IndexedDbBlockstore = blockstore::IndexedDbBlockstore;

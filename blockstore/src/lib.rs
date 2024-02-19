@@ -149,8 +149,11 @@ pub(crate) mod tests {
     #[rstest]
     #[case(new_in_memory::<64>())]
     #[cfg_attr(feature = "lru", case(new_lru::<64>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<64>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<64>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled()))]
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "indexeddb"),
+        case(new_indexeddb())
+    )]
     #[self::test]
     async fn test_insert_get<B: Blockstore>(
         #[case]
@@ -174,8 +177,11 @@ pub(crate) mod tests {
     #[rstest]
     #[case(new_in_memory::<64>())]
     #[cfg_attr(feature = "lru", case(new_lru::<64>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<64>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<64>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled()))]
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "indexeddb"),
+        case(new_indexeddb())
+    )]
     #[self::test]
     async fn test_duplicate_insert<B: Blockstore>(
         #[case]
@@ -195,8 +201,11 @@ pub(crate) mod tests {
     #[rstest]
     #[case(new_in_memory::<128>())]
     #[cfg_attr(feature = "lru", case(new_lru::<128>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<128>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<128>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled()))]
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "indexeddb"),
+        case(new_indexeddb())
+    )]
     #[self::test]
     async fn different_cid_size<B: Blockstore>(
         #[case]
@@ -221,8 +230,6 @@ pub(crate) mod tests {
     #[rstest]
     #[case(new_in_memory::<8>())]
     #[cfg_attr(feature = "lru", case(new_lru::<8>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<8>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<8>()))]
     #[self::test]
     async fn too_large_cid<B: Blockstore>(
         #[case]
@@ -248,8 +255,11 @@ pub(crate) mod tests {
     #[rstest]
     #[case(new_in_memory::<8>())]
     #[cfg_attr(feature = "lru", case(new_lru::<8>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<8>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<8>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled()))]
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "indexeddb"),
+        case(new_indexeddb())
+    )]
     #[self::test]
     async fn test_block_insert<B: Blockstore>(
         #[case]
@@ -266,8 +276,11 @@ pub(crate) mod tests {
     #[rstest]
     #[case(new_in_memory::<8>())]
     #[cfg_attr(feature = "lru", case(new_lru::<8>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<8>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<8>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled()))]
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "indexeddb"),
+        case(new_indexeddb())
+    )]
     #[self::test]
     async fn test_multiple_blocks_insert<B: Blockstore>(
         #[case]
@@ -310,8 +323,11 @@ pub(crate) mod tests {
     #[rstest]
     #[case(new_in_memory::<8>())]
     #[cfg_attr(feature = "lru", case(new_lru::<8>()))]
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled::<8>()))]
-    #[cfg_attr(all(target_arch = "wasm32", feature = "indexeddb"), case(new_indexeddb::<8>()))]
+    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "sled"), case(new_sled()))]
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "indexeddb"),
+        case(new_indexeddb())
+    )]
     #[self::test]
     async fn test_multiple_keyed<B: Blockstore>(
         #[case]
@@ -346,7 +362,7 @@ pub(crate) mod tests {
     }
 
     #[cfg(all(not(target_arch = "wasm32"), feature = "sled"))]
-    async fn new_sled<const S: usize>() -> SledBlockstore<S> {
+    async fn new_sled() -> SledBlockstore {
         let path = tempfile::TempDir::with_prefix("sled-blockstore-test")
             .unwrap()
             .into_path();
@@ -366,7 +382,7 @@ pub(crate) mod tests {
     }
 
     #[cfg(all(target_arch = "wasm32", feature = "indexeddb"))]
-    async fn new_indexeddb<const S: usize>() -> IndexedDbBlockstore<S> {
+    async fn new_indexeddb() -> IndexedDbBlockstore {
         use std::sync::atomic::{AtomicU32, Ordering};
 
         static NAME: AtomicU32 = AtomicU32::new(0);
