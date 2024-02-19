@@ -1,4 +1,5 @@
 use std::env;
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -6,18 +7,15 @@ use anyhow::{bail, Context, Result};
 use celestia_rpc::prelude::*;
 use celestia_rpc::Client;
 use clap::Parser;
-use libp2p::{identity, multiaddr::Protocol, Multiaddr};
+use libp2p::{multiaddr::Protocol, Multiaddr};
 use lumina_node::blockstore::SledBlockstore;
 use lumina_node::network::Network;
 use lumina_node::node::Node;
-use lumina_node::node::NodeBuilder;
-use lumina_node::store::{SledStore, Store};
+use lumina_node::store::SledStore;
 use sled::Db;
-use tokio::fs;
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 use tracing::info;
-use tracing::warn;
 
 use crate::common::ArgNetwork;
 
@@ -54,21 +52,25 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         args.bootnodes
     };
 
-    let db = open_db(args.store.unwrap()).await?;
-    let store = SledStore::new(db.clone()).await?;
-    let blockstore = SledBlockstore::new(db).await?;
-
-    match store.head_height().await {
-        Ok(height) => info!("Initialised store with head height: {height}"),
-        Err(_) => info!("Initialised new store"),
-    }
-
-    let node = Node::from_network(network)
-        .with_bootnodes(bootnodes)
-        .with_default_blockstore()
-        .build()
-        .await
-        .context("Failed to start node")?;
+    let node = if let Some(path) = args.store {
+        let db = open_db(path).await?;
+        let store = SledStore::new(db.clone()).await?;
+        let blockstore = SledBlockstore::new(db).await?;
+        Node::from_network(network)
+            .with_bootnodes(bootnodes)
+            .with_store(store)
+            .with_blockstore(blockstore)
+            .build()
+            .await
+            .context("Failed to start node")?
+    } else {
+        Node::from_network(network)
+            .with_bootnodes(bootnodes)
+            .with_default_blockstore()
+            .build()
+            .await
+            .context("Failed to start node")?
+    };
 
     node.wait_connected_trusted().await?;
 
@@ -78,9 +80,10 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     }
 }
 
-async fn open_db(path: PathBuf) -> Result<Db> {
+async fn open_db(path: impl AsRef<Path>) -> Result<Db> {
+    let path = path.as_ref().to_owned();
     let db = spawn_blocking(|| sled::open(path)).await??;
-    return Ok(db);
+    Ok(db)
 }
 
 /// Get the address of the local bridge node
