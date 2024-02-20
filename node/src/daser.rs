@@ -1,8 +1,8 @@
 //! Component responsible for data availability sampling of the already synchronized block
 //! headers announced in the Celestia network.
 //!
-//! When a new header is insert in the [`Store`], [`Daser`] gets informed, then it fetches
-//! random [`Sample`]s of the block via Shwap protocol and verifies them. If all samples
+//! When a new header is inserted into the [`Store`], [`Daser`] gets notified. It then fetches
+//! random [`Sample`]s of the block via Shwap protocol and verifies them. If all the samples
 //! get verified successfuly, then block is marked as accepted.
 //!
 //! [`Sample`]: celestia_types::sample::Sample
