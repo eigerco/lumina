@@ -3,7 +3,7 @@ use std::{num::NonZeroUsize, sync::Mutex};
 use cid::CidGeneric;
 use lru::LruCache;
 
-use crate::{convert_cid, Blockstore, Result};
+use crate::{convert_cid, Blockstore, BlockstoreError, Result};
 
 /// An LRU cached [`Blockstore`].
 pub struct LruBlockstore<const MAX_MULTIHASH_SIZE: usize> {
@@ -30,8 +30,12 @@ impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for LruBlockstore<MAX_MULTIHASH
     async fn put_keyed<const S: usize>(&self, cid: &CidGeneric<S>, data: &[u8]) -> Result<()> {
         let cid = convert_cid(cid)?;
         let mut cache = self.cache.lock().expect("lock failed");
-        cache.put(cid, data.to_vec());
-        Ok(())
+        if !cache.contains(&cid) {
+            cache.put(cid, data.to_vec());
+            Ok(())
+        } else {
+            Err(BlockstoreError::CidExists)
+        }
     }
 
     async fn has<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<bool> {
@@ -43,19 +47,23 @@ impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for LruBlockstore<MAX_MULTIHASH
 
 #[cfg(test)]
 mod tests {
-    use cid::Cid;
-    use multihash::Multihash;
+    #[cfg(not(target_arch = "wasm32"))]
+    use tokio::test as async_test;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as async_test;
+
+    use crate::tests::cid_v1;
 
     use super::*;
 
-    #[tokio::test]
-    async fn insert_get() {
+    #[async_test]
+    async fn insert_get_overflowing_cache_size() {
         // Blockstore that can hold the last 2 items.
         let store = LruBlockstore::<64>::new(NonZeroUsize::new(2).unwrap());
 
-        let cid1 = Cid::new_v1(1, Multihash::wrap(2, &[1]).unwrap());
-        let cid2 = Cid::new_v1(1, Multihash::wrap(2, &[2]).unwrap());
-        let cid3 = Cid::new_v1(1, Multihash::wrap(2, &[3]).unwrap());
+        let cid1 = cid_v1::<64>(b"1");
+        let cid2 = cid_v1::<64>(b"2");
+        let cid3 = cid_v1::<64>(b"3");
 
         store.put_keyed(&cid1, b"1").await.unwrap();
         assert_eq!(store.get(&cid1).await.unwrap().unwrap(), b"1");
