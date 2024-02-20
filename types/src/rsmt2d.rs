@@ -1,4 +1,4 @@
-use std::result::Result as StdResult;
+use std::cmp::Ordering;
 
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -27,7 +27,7 @@ pub enum AxisType {
 impl TryFrom<u8> for AxisType {
     type Error = Error;
 
-    fn try_from(value: u8) -> StdResult<Self, Self::Error> {
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(AxisType::Row),
             1 => Ok(AxisType::Col),
@@ -326,10 +326,10 @@ impl ExtendedDataSquare {
 
                 // Shares in each row of EDS are sorted by namespace, so we
                 // can stop search the row if we reach to a bigger namespace.
-                if ns > namespace {
-                    break;
-                } else if ns == namespace {
-                    shares.push(share.to_owned());
+                match ns.cmp(&namespace) {
+                    Ordering::Less => {}
+                    Ordering::Equal => shares.push(share.to_owned()),
+                    Ordering::Greater => break,
                 }
             }
 
