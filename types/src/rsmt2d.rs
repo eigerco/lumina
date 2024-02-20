@@ -3,10 +3,14 @@ use std::result::Result as StdResult;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::consts::appconsts::SHARE_SIZE;
 use crate::namespaced_data::{NamespacedData, NamespacedDataId};
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NS_SIZE};
 use crate::row::RowId;
-use crate::{DataAvailabilityHeader, Error, Result};
+use crate::{bail_validation, DataAvailabilityHeader, Error, Result};
+
+const MIN_SQUARE_WIDTH: usize = 2;
+const MIN_SHARES: usize = MIN_SQUARE_WIDTH * MIN_SQUARE_WIDTH;
 
 /// Represents either column or row of the [`ExtendedDataSquare`].
 ///
@@ -35,6 +39,7 @@ impl TryFrom<u8> for AxisType {
 /// The data matrix in Celestia blocks extended with parity data.
 ///
 /// It is created by a fixed size chunks of data, called [`Share`]s.
+
 /// Each share is a cell of the [`ExtendedDataSquare`].
 ///
 /// # Structure
@@ -148,16 +153,52 @@ impl ExtendedDataSquare {
     ///
     /// Returns error if number of shares isn't a square number.
     pub fn new(shares: Vec<Vec<u8>>, codec: String) -> Result<Self> {
+        if shares.len() < MIN_SHARES {
+            bail_validation!(
+                "shares len ({}) < MIN_SHARES ({})",
+                shares.len(),
+                MIN_SHARES
+            );
+        }
+
         let square_len = f64::sqrt(shares.len() as f64) as usize;
+
         if square_len * square_len != shares.len() {
             return Err(Error::EdsInvalidDimentions);
         }
 
-        Ok(Self {
+        let eds = ExtendedDataSquare {
             data_square: shares,
             codec,
             square_len,
-        })
+        };
+
+        // Validate that namespaces of each row are sorted
+        for row in 0..eds.square_len() {
+            let mut prev_ns = None;
+
+            for col in 0..eds.square_len() {
+                let share = eds.share(row, col)?;
+
+                if share.len() != SHARE_SIZE {
+                    bail_validation!("share len ({}) != SHARE_SIZE ({})", share.len(), SHARE_SIZE);
+                }
+
+                let ns = if is_ods_square(row, col, eds.square_len()) {
+                    Namespace::from_raw(&share[..NS_SIZE])?
+                } else {
+                    Namespace::PARITY_SHARE
+                };
+
+                if prev_ns.map_or(false, |prev_ns| ns < prev_ns) {
+                    bail_validation!("Shares of row {row} are not sorted by their namespace");
+                }
+
+                prev_ns = Some(ns);
+            }
+        }
+
+        Ok(eds)
     }
 
     /// The raw data of the EDS.
@@ -265,7 +306,7 @@ impl ExtendedDataSquare {
 
         for row in 0..self.square_len {
             let Some(row_root) = dah.row_root(row) else {
-                continue;
+                break;
             };
 
             if !row_root.contains::<NamespacedSha2Hasher>(*namespace) {
@@ -283,7 +324,11 @@ impl ExtendedDataSquare {
                     Namespace::PARITY_SHARE
                 };
 
-                if ns == namespace {
+                // Shares in each row of EDS are sorted by namespace, so we
+                // can stop search the row if we reach to a bigger namespace.
+                if ns > namespace {
+                    break;
+                } else if ns == namespace {
                     shares.push(share.to_owned());
                 }
             }
@@ -328,7 +373,7 @@ impl<'de> Deserialize<'de> for ExtendedDataSquare {
 
 /// Returns true if and only if the provided coordinates belongs to Original Data Square
 /// (i.e. first quadrant of Extended Data Square).
-pub fn is_ods_square(row: usize, column: usize, square_len: usize) -> bool {
+pub(crate) fn is_ods_square(row: usize, column: usize, square_len: usize) -> bool {
     let half_square_len = square_len / 2;
     row < half_square_len && column < half_square_len
 }
@@ -430,48 +475,145 @@ mod tests {
 
     #[test]
     fn get_row_and_col() {
+        let share = |x, y| {
+            [
+                Namespace::new_v0(&[x, y]).unwrap().as_bytes(),
+                &[0u8; SHARE_SIZE - NS_SIZE][..],
+            ]
+            .concat()
+        };
+
         #[rustfmt::skip]
         let shares = vec![
-            vec![0, 0], vec![0, 1], vec![0, 2], vec![0, 3],
-            vec![1, 0], vec![1, 1], vec![1, 2], vec![1, 3],
-            vec![2, 0], vec![2, 1], vec![2, 2], vec![2, 3],
-            vec![3, 0], vec![3, 1], vec![3, 2], vec![3, 3],
+            share(0, 0), share(0, 1), share(0, 2), share(0, 3),
+            share(1, 0), share(1, 1), share(1, 2), share(1, 3),
+            share(2, 0), share(2, 1), share(2, 2), share(2, 3),
+            share(3, 0), share(3, 1), share(3, 2), share(3, 3),
         ];
 
         let eds = ExtendedDataSquare::new(shares, "fake".to_string()).unwrap();
 
         assert_eq!(
             eds.row(0).unwrap(),
-            vec![vec![0, 0], vec![0, 1], vec![0, 2], vec![0, 3]]
+            vec![share(0, 0), share(0, 1), share(0, 2), share(0, 3)]
         );
         assert_eq!(
             eds.row(1).unwrap(),
-            vec![vec![1, 0], vec![1, 1], vec![1, 2], vec![1, 3]]
+            vec![share(1, 0), share(1, 1), share(1, 2), share(1, 3)]
         );
         assert_eq!(
             eds.row(2).unwrap(),
-            vec![vec![2, 0], vec![2, 1], vec![2, 2], vec![2, 3]]
+            vec![share(2, 0), share(2, 1), share(2, 2), share(2, 3)]
         );
         assert_eq!(
             eds.row(3).unwrap(),
-            vec![vec![3, 0], vec![3, 1], vec![3, 2], vec![3, 3]]
+            vec![share(3, 0), share(3, 1), share(3, 2), share(3, 3)]
         );
 
         assert_eq!(
             eds.column(0).unwrap(),
-            vec![vec![0, 0], vec![1, 0], vec![2, 0], vec![3, 0]]
+            vec![share(0, 0), share(1, 0), share(2, 0), share(3, 0)]
         );
         assert_eq!(
             eds.column(1).unwrap(),
-            vec![vec![0, 1], vec![1, 1], vec![2, 1], vec![3, 1]]
+            vec![share(0, 1), share(1, 1), share(2, 1), share(3, 1)]
         );
         assert_eq!(
             eds.column(2).unwrap(),
-            vec![vec![0, 2], vec![1, 2], vec![2, 2], vec![3, 2]]
+            vec![share(0, 2), share(1, 2), share(2, 2), share(3, 2)]
         );
         assert_eq!(
             eds.column(3).unwrap(),
-            vec![vec![0, 3], vec![1, 3], vec![2, 3], vec![3, 3]]
+            vec![share(0, 3), share(1, 3), share(2, 3), share(3, 3)]
         );
+    }
+
+    #[test]
+    fn validation() {
+        ExtendedDataSquare::new(vec![], "fake".to_string()).unwrap_err();
+        ExtendedDataSquare::new(vec![vec![]], "fake".to_string()).unwrap_err();
+        ExtendedDataSquare::new(vec![vec![]; 4], "fake".to_string()).unwrap_err();
+
+        ExtendedDataSquare::new(vec![vec![0u8; SHARE_SIZE]; 4], "fake".to_string()).unwrap();
+        ExtendedDataSquare::new(vec![vec![0u8; SHARE_SIZE]; 6], "fake".to_string()).unwrap_err();
+        ExtendedDataSquare::new(vec![vec![0u8; SHARE_SIZE]; 16], "fake".to_string()).unwrap();
+
+        let share = |n| {
+            [
+                Namespace::new_v0(&[n]).unwrap().as_bytes(),
+                &[0u8; SHARE_SIZE - NS_SIZE][..],
+            ]
+            .concat()
+        };
+
+        // Parity share can be anything
+        let parity_share = vec![0u8; SHARE_SIZE];
+
+        ExtendedDataSquare::new(
+            vec![
+                // row 0
+                share(0), // ODS
+                parity_share.clone(),
+                // row 1
+                parity_share.clone(),
+                parity_share.clone(),
+            ],
+            "fake".to_string(),
+        )
+        .unwrap();
+
+        ExtendedDataSquare::new(
+            vec![
+                // row 0
+                share(1), // ODS
+                share(2), // ODS
+                parity_share.clone(),
+                parity_share.clone(),
+                // row 1
+                share(1), // ODS
+                share(1), // ODS
+                parity_share.clone(),
+                parity_share.clone(),
+                // row 2
+                parity_share.clone(),
+                parity_share.clone(),
+                parity_share.clone(),
+                parity_share.clone(),
+                // row 3
+                parity_share.clone(),
+                parity_share.clone(),
+                parity_share.clone(),
+                parity_share.clone(),
+            ],
+            "fake".to_string(),
+        )
+        .unwrap();
+
+        ExtendedDataSquare::new(
+            vec![
+                // row 0
+                share(1), // ODS
+                share(2), // ODS
+                parity_share.clone(),
+                parity_share.clone(),
+                // row 1
+                share(1), // ODS
+                share(0), // ODS - This procudes the error because it has smaller namespace
+                parity_share.clone(),
+                parity_share.clone(),
+                // row 2
+                parity_share.clone(),
+                parity_share.clone(),
+                parity_share.clone(),
+                parity_share.clone(),
+                // row 3
+                parity_share.clone(),
+                parity_share.clone(),
+                parity_share.clone(),
+                parity_share.clone(),
+            ],
+            "fake".to_string(),
+        )
+        .unwrap_err();
     }
 }
