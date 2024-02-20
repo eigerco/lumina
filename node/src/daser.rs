@@ -24,7 +24,7 @@ use crate::p2p::shwap::convert_cid;
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
 
-const DEFAULT_MAX_SAMPLES_NEEDED: usize = 16;
+const MAX_SAMPLES_NEEDED: usize = 16;
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
 
@@ -107,7 +107,7 @@ where
             cancellation_token,
             p2p: args.p2p,
             store: args.store,
-            max_samples_needed: DEFAULT_MAX_SAMPLES_NEEDED,
+            max_samples_needed: MAX_SAMPLES_NEEDED,
         })
     }
 
@@ -249,7 +249,7 @@ mod tests {
 
         let mut cids = Vec::new();
 
-        for i in 0..(square_len * square_len).min(DEFAULT_MAX_SAMPLES_NEEDED) {
+        for i in 0..(square_len * square_len).min(MAX_SAMPLES_NEEDED) {
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
 
             // Simulate invalid sample by triggering BitswapQueryTimeout
