@@ -38,8 +38,8 @@ struct Inner {
     height_to_hash: Tree,
     /// sub-tree which maps header height to its metadata
     sampling_metadata: Tree,
-    /// Notifier for height
-    check_height_notifier: Notify,
+    /// Notify when a new header is added
+    header_added_notifier: Notify,
 }
 
 impl SledStore {
@@ -67,7 +67,7 @@ impl SledStore {
                     headers,
                     height_to_hash,
                     sampling_metadata,
-                    check_height_notifier: Notify::new(),
+                    header_added_notifier: Notify::new(),
                 }),
             })
         })
@@ -187,7 +187,7 @@ impl SledStore {
         })
         .await??;
 
-        self.inner.check_height_notifier.notify_waiters();
+        self.inner.header_added_notifier.notify_waiters();
 
         debug!("Inserting header {hash} with height {height}");
         Ok(())
@@ -328,7 +328,7 @@ impl Store for SledStore {
     }
 
     async fn wait_height(&self, height: u64) -> Result<()> {
-        let mut notifier = pin!(self.inner.check_height_notifier.notified());
+        let mut notifier = pin!(self.inner.header_added_notifier.notified());
 
         loop {
             if self.contains_height(height).await {
@@ -339,7 +339,7 @@ impl Store for SledStore {
             notifier.as_mut().await;
 
             // Reset notifier
-            notifier.set(self.inner.check_height_notifier.notified());
+            notifier.set(self.inner.header_added_notifier.notified());
         }
     }
 

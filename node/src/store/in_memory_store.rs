@@ -25,8 +25,8 @@ pub struct InMemoryStore {
     head_height: AtomicU64,
     /// Cached height of the lowest header that wasn't sampled yet
     lowest_unsampled_height: AtomicU64,
-    /// Notifier for height
-    check_height_notifier: Notify,
+    /// Notify when a new header is added
+    header_added_notifier: Notify,
 }
 
 impl InMemoryStore {
@@ -38,7 +38,7 @@ impl InMemoryStore {
             height_to_hash: DashMap::new(),
             head_height: AtomicU64::new(0),
             lowest_unsampled_height: AtomicU64::new(1),
-            check_height_notifier: Notify::new(),
+            header_added_notifier: Notify::new(),
         }
     }
 
@@ -94,7 +94,7 @@ impl InMemoryStore {
         height_entry.insert(hash);
 
         self.head_height.store(height, Ordering::Release);
-        self.check_height_notifier.notify_waiters();
+        self.header_added_notifier.notify_waiters();
 
         Ok(())
     }
@@ -218,7 +218,7 @@ impl Store for InMemoryStore {
     }
 
     async fn wait_height(&self, height: u64) -> Result<()> {
-        let mut notifier = pin!(self.check_height_notifier.notified());
+        let mut notifier = pin!(self.header_added_notifier.notified());
 
         loop {
             if self.contains_height(height) {
@@ -229,7 +229,7 @@ impl Store for InMemoryStore {
             notifier.as_mut().await;
 
             // Reset notifier
-            notifier.set(self.check_height_notifier.notified());
+            notifier.set(self.header_added_notifier.notified());
         }
     }
 
@@ -283,7 +283,7 @@ impl Clone for InMemoryStore {
             lowest_unsampled_height: AtomicU64::new(
                 self.lowest_unsampled_height.load(Ordering::Acquire),
             ),
-            check_height_notifier: Notify::new(),
+            header_added_notifier: Notify::new(),
         }
     }
 }
