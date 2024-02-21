@@ -1,5 +1,5 @@
 use cid::CidGeneric;
-use dashmap::DashMap;
+use dashmap::{mapref::entry::Entry, DashMap};
 
 use crate::{convert_cid, Blockstore, Result};
 
@@ -21,7 +21,11 @@ impl<const MAX_MULTIHASH_SIZE: usize> InMemoryBlockstore<MAX_MULTIHASH_SIZE> {
     }
 
     fn insert_cid(&self, cid: CidGeneric<MAX_MULTIHASH_SIZE>, data: &[u8]) -> Result<()> {
-        self.map.insert(cid, data.to_vec());
+        let cid_entry = self.map.entry(cid);
+        if matches!(cid_entry, Entry::Vacant(_)) {
+            cid_entry.insert(data.to_vec());
+        }
+
         Ok(())
     }
 
