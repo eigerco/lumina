@@ -14,10 +14,11 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use instant::Instant;
 use rand::Rng;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::executor::spawn;
 use crate::p2p::shwap::convert_cid;
@@ -139,6 +140,7 @@ where
     }
 
     async fn sample_block(&mut self, header: &ExtendedHeader) -> Result<(Vec<Cid>, bool)> {
+        let now = Instant::now();
         let block_len = header.dah.square_len() * header.dah.square_len();
         let indexes = random_indexes(block_len, self.max_samples_needed);
         let mut futs = FuturesUnordered::new();
@@ -160,6 +162,13 @@ where
                 Err(e) => return Err(e.into()),
             }
         }
+
+        debug!(
+            "Data sampling of {} is {}. Took {:?}",
+            header.height(),
+            accepted.then_some("accepted").unwrap_or("rejected"),
+            now.elapsed()
+        );
 
         Ok((cids, accepted))
     }
