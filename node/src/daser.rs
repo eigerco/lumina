@@ -3,7 +3,8 @@
 //!
 //! When a new header is inserted into the [`Store`], [`Daser`] gets notified. It then fetches
 //! random [`Sample`]s of the block via Shwap protocol and verifies them. If all the samples
-//! get verified successfuly, then block is marked as accepted.
+//! get verified successfuly, then block is marked as accepted. Otherwise, if [`Daser`] doesn't
+//! receive valid samples, block is marked as not accepted and data sampling continues.
 //!
 //! [`Sample`]: celestia_types::sample::Sample
 
