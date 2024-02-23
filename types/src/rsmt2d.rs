@@ -223,45 +223,51 @@ impl ExtendedDataSquare {
 
     /// Returns the shares of a row.
     pub fn row(&self, index: usize) -> Result<Vec<Vec<u8>>> {
-        (0..self.square_len)
-            .map(|y| self.share(index, y).map(ToOwned::to_owned))
-            .collect()
+        self.axis(AxisType::Row, index)
     }
 
     /// Returns the [`Nmt`] of a row.
     pub fn row_nmt(&self, index: usize) -> Result<Nmt> {
-        let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
-
-        for y in 0..self.square_len {
-            let share = self.share(index, y)?;
-
-            let ns = if is_ods_square(index, y, self.square_len) {
-                Namespace::from_raw(&share[..NS_SIZE])?
-            } else {
-                Namespace::PARITY_SHARE
-            };
-
-            tree.push_leaf(share, *ns).map_err(Error::Nmt)?;
-        }
-
-        Ok(tree)
+        self.axis_nmt(AxisType::Row, index)
     }
 
     /// Returns the shares of a column.
     pub fn column(&self, index: usize) -> Result<Vec<Vec<u8>>> {
-        (0..self.square_len)
-            .map(|x| self.share(x, index).map(ToOwned::to_owned))
-            .collect()
+        self.axis(AxisType::Col, index)
     }
 
     /// Returns the [`Nmt`] of a column.
     pub fn column_nmt(&self, index: usize) -> Result<Nmt> {
+        self.axis_nmt(AxisType::Col, index)
+    }
+
+    /// Returns the shares of column or row.
+    pub fn axis(&self, axis: AxisType, index: usize) -> Result<Vec<Vec<u8>>> {
+        (0..self.square_len)
+            .map(|i| {
+                let (row, col) = match axis {
+                    AxisType::Row => (index, i),
+                    AxisType::Col => (i, index),
+                };
+
+                self.share(row, col).map(ToOwned::to_owned)
+            })
+            .collect()
+    }
+
+    /// Returns the [`Nmt`] of column or row.
+    pub fn axis_nmt(&self, axis: AxisType, index: usize) -> Result<Nmt> {
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
 
-        for x in 0..self.square_len {
-            let share = self.share(x, index)?;
+        for i in 0..self.square_len {
+            let (row, col) = match axis {
+                AxisType::Row => (index, i),
+                AxisType::Col => (i, index),
+            };
 
-            let ns = if is_ods_square(x, index, self.square_len) {
+            let share = self.share(row, col)?;
+
+            let ns = if is_ods_square(col, row, self.square_len) {
                 Namespace::from_raw(&share[..NS_SIZE])?
             } else {
                 Namespace::PARITY_SHARE
@@ -271,22 +277,6 @@ impl ExtendedDataSquare {
         }
 
         Ok(tree)
-    }
-
-    /// Returns the shares of column or row.
-    pub fn axis(&self, axis: AxisType, index: usize) -> Result<Vec<Vec<u8>>> {
-        match axis {
-            AxisType::Col => self.column(index),
-            AxisType::Row => self.row(index),
-        }
-    }
-
-    /// Returns the [`Nmt`] of column or row.
-    pub fn axis_nmt(&self, axis: AxisType, index: usize) -> Result<Nmt> {
-        match axis {
-            AxisType::Col => self.column_nmt(index),
-            AxisType::Row => self.row_nmt(index),
-        }
     }
 
     /// Get EDS square length.
@@ -442,10 +432,16 @@ mod tests {
         for (i, root) in dah.row_roots.iter().enumerate() {
             let mut tree = eds.row_nmt(i).unwrap();
             assert_eq!(*root, tree.root());
+
+            let mut tree = eds.axis_nmt(AxisType::Row, i).unwrap();
+            assert_eq!(*root, tree.root());
         }
 
         for (i, root) in dah.column_roots.iter().enumerate() {
             let mut tree = eds.column_nmt(i).unwrap();
+            assert_eq!(*root, tree.root());
+
+            let mut tree = eds.axis_nmt(AxisType::Col, i).unwrap();
             assert_eq!(*root, tree.root());
         }
     }
@@ -511,6 +507,23 @@ mod tests {
         );
 
         assert_eq!(
+            eds.axis(AxisType::Row, 0).unwrap(),
+            vec![share(0, 0), share(0, 1), share(0, 2), share(0, 3)]
+        );
+        assert_eq!(
+            eds.axis(AxisType::Row, 1).unwrap(),
+            vec![share(1, 0), share(1, 1), share(1, 2), share(1, 3)]
+        );
+        assert_eq!(
+            eds.axis(AxisType::Row, 2).unwrap(),
+            vec![share(2, 0), share(2, 1), share(2, 2), share(2, 3)]
+        );
+        assert_eq!(
+            eds.axis(AxisType::Row, 3).unwrap(),
+            vec![share(3, 0), share(3, 1), share(3, 2), share(3, 3)]
+        );
+
+        assert_eq!(
             eds.column(0).unwrap(),
             vec![share(0, 0), share(1, 0), share(2, 0), share(3, 0)]
         );
@@ -524,6 +537,23 @@ mod tests {
         );
         assert_eq!(
             eds.column(3).unwrap(),
+            vec![share(0, 3), share(1, 3), share(2, 3), share(3, 3)]
+        );
+
+        assert_eq!(
+            eds.axis(AxisType::Col, 0).unwrap(),
+            vec![share(0, 0), share(1, 0), share(2, 0), share(3, 0)]
+        );
+        assert_eq!(
+            eds.axis(AxisType::Col, 1).unwrap(),
+            vec![share(0, 1), share(1, 1), share(2, 1), share(3, 1)]
+        );
+        assert_eq!(
+            eds.axis(AxisType::Col, 2).unwrap(),
+            vec![share(0, 2), share(1, 2), share(2, 2), share(3, 2)]
+        );
+        assert_eq!(
+            eds.axis(AxisType::Col, 3).unwrap(),
             vec![share(0, 3), share(1, 3), share(2, 3), share(3, 3)]
         );
     }
