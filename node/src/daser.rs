@@ -182,7 +182,7 @@ where
 
 fn random_indexes(block_len: usize, max_samples_needed: usize) -> HashSet<usize> {
     // If block length is smaller than `max_samples_needed`, we are going
-    // to sample the whole block. Randomation is not needed for this.
+    // to sample the whole block. Randomness is not needed for this.
     if block_len <= max_samples_needed {
         return (0..block_len).collect();
     }
