@@ -172,7 +172,7 @@ where
         debug!(
             "Data sampling of {} is {}. Took {:?}",
             header.height(),
-            accepted.then_some("accepted").unwrap_or("rejected"),
+            if accepted { "accepted" } else { "rejected" },
             now.elapsed()
         );
 
