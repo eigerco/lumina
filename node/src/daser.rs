@@ -159,11 +159,10 @@ where
         while let Some(res) = futs.next().await {
             match res {
                 Ok(sample) => cids.push(convert_cid(&sample.sample_id.into())?),
-                // Validation is done in Bitswap level thought `ShwapMultihasher`.
-                // When a sample is not valid, then is will never be delivered
-                // to us as the data of the CID. Because of that, the only way
-                // to know that data sampling verification failed is when a query
-                // times out.
+                // Validation is done at Bitswap level, though `ShwapMultihasher`.
+                // If the sample is not valid, it will never be delivered to us
+                // as the data of the CID. Because of that, the only signal 
+                // that data sampling verification failed is query timing out.
                 Err(P2pError::BitswapQueryTimeout) => accepted = false,
                 Err(e) => return Err(e.into()),
             }
