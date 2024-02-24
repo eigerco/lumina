@@ -30,7 +30,11 @@ impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for LruBlockstore<MAX_MULTIHASH
     async fn put_keyed<const S: usize>(&self, cid: &CidGeneric<S>, data: &[u8]) -> Result<()> {
         let cid = convert_cid(cid)?;
         let mut cache = self.cache.lock().expect("lock failed");
-        cache.put(cid, data.to_vec());
+        if cache.contains(&cid) {
+            cache.promote(&cid);
+        } else {
+            cache.put(cid, data.to_vec());
+        }
         Ok(())
     }
 
