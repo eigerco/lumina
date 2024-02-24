@@ -16,12 +16,11 @@ use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
-use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 
-use crate::nmt::{Namespace, NamespaceProof, NamespacedSha2Hasher, Nmt, NS_SIZE};
+use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
 use crate::row::RowId;
-use crate::rsmt2d::{AxisType, ExtendedDataSquare};
+use crate::rsmt2d::{is_ods_square, AxisType, ExtendedDataSquare};
 use crate::{DataAvailabilityHeader, Error, Result};
 
 /// The size of the [`SampleId`] hash in `multihash`.
@@ -45,7 +44,7 @@ pub struct SampleId {
 }
 
 /// Represents Sample, with proof of its inclusion and location on EDS
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(try_from = "RawSample", into = "RawSample")]
 pub struct Sample {
     /// Location of the sample in the EDS and associated block height
@@ -111,20 +110,14 @@ impl Sample {
             AxisType::Col => (index % square_len, index / square_len),
         };
 
-        let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+        let (row_index, column_index) = match axis_type {
+            AxisType::Row => (axis_index, sample_index),
+            AxisType::Col => (sample_index, axis_index),
+        };
 
-        let shares = eds.axis(axis_type, axis_index)?;
-        let (data_shares, parity_shares) = shares.split_at(square_len / 2);
+        let share = eds.share(row_index, column_index)?.to_owned();
 
-        for s in data_shares {
-            let ns = Namespace::from_raw(&s[..NS_SIZE])?;
-            tree.push_leaf(s, *ns).map_err(Error::Nmt)?;
-        }
-
-        for s in parity_shares {
-            tree.push_leaf(s, *Namespace::PARITY_SHARE)
-                .map_err(Error::Nmt)?;
-        }
+        let mut tree = eds.axis_nmt(axis_type, axis_index)?;
 
         let proof = NmtNamespaceProof::PresenceProof {
             proof: tree.build_range_proof(sample_index..sample_index + 1),
@@ -136,7 +129,7 @@ impl Sample {
         Ok(Sample {
             sample_id,
             sample_proof_type: axis_type,
-            share: shares[sample_index].clone(),
+            share,
             proof: proof.into(),
         })
     }
@@ -153,7 +146,11 @@ impl Sample {
             .root(self.sample_proof_type, index)
             .ok_or(Error::EdsIndexOutOfRange(index))?;
 
-        let ns = if self.is_ods_sample(dah.square_len()) {
+        let ns = if is_ods_square(
+            self.sample_id.row.index.into(),
+            self.sample_id.index.into(),
+            dah.square_len(),
+        ) {
             Namespace::from_raw(&self.share[..NS_SIZE])?
         } else {
             Namespace::PARITY_SHARE
@@ -162,17 +159,6 @@ impl Sample {
         self.proof
             .verify_range(&root, &[&self.share], *ns)
             .map_err(Error::RangeProofError)
-    }
-
-    /// Returns true if and only if provided sample belongs to Original Data Square, first
-    /// quadrant of Extended Data Square
-    fn is_ods_sample(&self, square_len: usize) -> bool {
-        let row_index = usize::from(self.sample_id.row.index);
-        let column_index = usize::from(self.sample_id.index);
-
-        let half_square_len = square_len / 2;
-
-        row_index < half_square_len && column_index < half_square_len
     }
 }
 
@@ -340,7 +326,6 @@ impl From<SampleId> for CidGeneric<SAMPLE_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nmt::Namespace;
 
     #[test]
     fn round_trip() {

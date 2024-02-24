@@ -1,33 +1,111 @@
-use beetswap::multihasher::Multihasher;
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use beetswap::multihasher::{Multihasher, MultihasherError};
 use blockstore::block::CidError;
-use celestia_proto::share::p2p::shwap::{
-    Data as RawNamespacedData, Row as RawRow, Sample as RawSample,
+use celestia_tendermint_proto::Protobuf;
+use celestia_types::namespaced_data::{
+    NamespacedData, NamespacedDataId, NAMESPACED_DATA_ID_MULTIHASH_CODE,
 };
-use celestia_types::namespaced_data::{NamespacedDataId, NAMESPACED_DATA_ID_MULTIHASH_CODE};
 use celestia_types::nmt::Namespace;
-use celestia_types::row::{RowId, ROW_ID_MULTIHASH_CODE};
-use celestia_types::sample::{SampleId, SAMPLE_ID_MULTIHASH_CODE};
+use celestia_types::row::{Row, RowId, ROW_ID_MULTIHASH_CODE};
+use celestia_types::sample::{Sample, SampleId, SAMPLE_ID_MULTIHASH_CODE};
 use cid::{Cid, CidGeneric};
 use libp2p::multihash::Multihash;
-use prost::Message;
 
-use crate::p2p::Result;
-
-use super::{P2pError, MAX_MH_SIZE};
+use crate::p2p::{P2pError, Result, MAX_MH_SIZE};
+use crate::store::Store;
 
 /// Multihasher for Shwap types.
-pub(super) struct ShwapMultihasher;
+pub(super) struct ShwapMultihasher<S>
+where
+    S: Store + 'static,
+{
+    header_store: Arc<S>,
+}
 
-impl Multihasher<MAX_MH_SIZE> for ShwapMultihasher {
-    fn digest(&self, multihash_code: u64, input: &[u8]) -> Option<Multihash<MAX_MH_SIZE>> {
-        let data = match multihash_code {
-            NAMESPACED_DATA_ID_MULTIHASH_CODE => RawNamespacedData::decode(input).ok()?.data_id,
-            ROW_ID_MULTIHASH_CODE => RawRow::decode(input).ok()?.row_id,
-            SAMPLE_ID_MULTIHASH_CODE => RawSample::decode(input).ok()?.sample_id,
-            _ => return None,
-        };
+impl<S> ShwapMultihasher<S>
+where
+    S: Store + 'static,
+{
+    pub(super) fn new(header_store: Arc<S>) -> Self {
+        ShwapMultihasher { header_store }
+    }
+}
 
-        Multihash::wrap(multihash_code, &data).ok()
+#[async_trait]
+impl<S> Multihasher<MAX_MH_SIZE> for ShwapMultihasher<S>
+where
+    S: Store + 'static,
+{
+    async fn hash(
+        &self,
+        multihash_code: u64,
+        input: &[u8],
+    ) -> Result<Multihash<MAX_MH_SIZE>, MultihasherError> {
+        match multihash_code {
+            NAMESPACED_DATA_ID_MULTIHASH_CODE => {
+                let ns_data =
+                    NamespacedData::decode(input).map_err(MultihasherError::custom_fatal)?;
+
+                let hash = convert_cid(&ns_data.namespaced_data_id.into())
+                    .map_err(MultihasherError::custom_fatal)?
+                    .hash()
+                    .to_owned();
+
+                let header = self
+                    .header_store
+                    .get_by_height(ns_data.namespaced_data_id.row.block_height)
+                    .await
+                    .map_err(MultihasherError::custom_fatal)?;
+
+                ns_data
+                    .verify(&header.dah)
+                    .map_err(MultihasherError::custom_fatal)?;
+
+                Ok(hash)
+            }
+            ROW_ID_MULTIHASH_CODE => {
+                let row = Row::decode(input).map_err(MultihasherError::custom_fatal)?;
+
+                let hash = convert_cid(&row.row_id.into())
+                    .map_err(MultihasherError::custom_fatal)?
+                    .hash()
+                    .to_owned();
+
+                let header = self
+                    .header_store
+                    .get_by_height(row.row_id.block_height)
+                    .await
+                    .map_err(MultihasherError::custom_fatal)?;
+
+                row.verify(&header.dah)
+                    .map_err(MultihasherError::custom_fatal)?;
+
+                Ok(hash)
+            }
+            SAMPLE_ID_MULTIHASH_CODE => {
+                let sample = Sample::decode(input).map_err(MultihasherError::custom_fatal)?;
+
+                let hash = convert_cid(&sample.sample_id.into())
+                    .map_err(MultihasherError::custom_fatal)?
+                    .hash()
+                    .to_owned();
+
+                let header = self
+                    .header_store
+                    .get_by_height(sample.sample_id.row.block_height)
+                    .await
+                    .map_err(MultihasherError::custom_fatal)?;
+
+                sample
+                    .verify(&header.dah)
+                    .map_err(MultihasherError::custom_fatal)?;
+
+                Ok(hash)
+            }
+            _ => Err(MultihasherError::UnknownMultihashCode),
+        }
     }
 }
 
@@ -51,7 +129,7 @@ pub(super) fn namespaced_data_cid(
     convert_cid(&data_id.into())
 }
 
-fn convert_cid<const S: usize>(cid: &CidGeneric<S>) -> Result<Cid> {
+pub(crate) fn convert_cid<const S: usize>(cid: &CidGeneric<S>) -> Result<Cid> {
     beetswap::utils::convert_cid(cid).ok_or(P2pError::Cid(celestia_types::Error::CidError(
         CidError::InvalidMultihashLength(64),
     )))
@@ -60,24 +138,33 @@ fn convert_cid<const S: usize>(cid: &CidGeneric<S>) -> Result<Cid> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::store::InMemoryStore;
+    use crate::test_utils::{async_test, dah_of_eds, generate_fake_eds};
+    use celestia_types::test_utils::ExtendedHeaderGenerator;
+    use celestia_types::AxisType;
 
-    #[test]
-    fn digest() {
-        let hash = ShwapMultihasher
-            .digest(
-                0x7821,
-                &[
-                    10, 39, 6, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 26, 0,
-                ],
-            )
+    #[async_test]
+    async fn hash() {
+        let store = Arc::new(InMemoryStore::new());
+
+        let eds = generate_fake_eds(4);
+        let dah = dah_of_eds(&eds);
+
+        let mut gen = ExtendedHeaderGenerator::new();
+        let header = gen.next_with_dah(dah.clone());
+
+        let sample = Sample::new(AxisType::Row, 0, &eds, header.header.height.value()).unwrap();
+        let sample_bytes = sample.encode_vec().unwrap();
+        let cid = sample_cid(0, eds.square_len(), 1).unwrap();
+
+        sample.verify(&dah).unwrap();
+        store.append_single(header).await.unwrap();
+
+        let hash = ShwapMultihasher::new(store)
+            .hash(SAMPLE_ID_MULTIHASH_CODE, &sample_bytes)
+            .await
             .unwrap();
 
-        let cid = "bagqpaanb6aasobqaaaaaaaaaaacqaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaq"
-            .parse::<Cid>()
-            .unwrap();
-        let expected_hash = cid.hash();
-
-        assert_eq!(hash, *expected_hash);
+        assert_eq!(hash, *cid.hash());
     }
 }

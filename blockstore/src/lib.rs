@@ -1,3 +1,4 @@
+#![cfg_attr(docs_rs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
 use cid::CidGeneric;

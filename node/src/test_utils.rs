@@ -3,7 +3,10 @@
 use std::time::Duration;
 
 use celestia_proto::p2p::pb::{header_request::Data, HeaderRequest};
-use celestia_types::{hash::Hash, test_utils::ExtendedHeaderGenerator, ExtendedHeader};
+use celestia_types::hash::Hash;
+use celestia_types::test_utils::ExtendedHeaderGenerator;
+use celestia_types::ExtendedHeader;
+use cid::Cid;
 use libp2p::identity::{self, Keypair};
 use tokio::sync::{mpsc, watch};
 
@@ -16,6 +19,9 @@ use crate::{
     store::InMemoryStore,
     utils::OneshotResultSender,
 };
+
+#[cfg(test)]
+pub(crate) use self::private::{async_test, dah_of_eds, generate_fake_eds};
 
 /// Generate a store pre-filled with headers.
 pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
@@ -186,5 +192,73 @@ impl MockP2pHandle {
             P2pCmd::InitHeaderSub { head } => *head,
             cmd => panic!("Expecting InitHeaderSub, but received: {cmd:?}"),
         }
+    }
+
+    /// Assert that a CID request was sent to the [`P2p`] worker and obtain a response channel.
+    ///
+    /// [`P2p`]: crate::p2p::P2p
+    pub async fn expect_get_shwap_cid(&mut self) -> (Cid, OneshotResultSender<Vec<u8>, P2pError>) {
+        match self.expect_cmd().await {
+            P2pCmd::GetShwapCid { cid, respond_to } => (cid, respond_to),
+            cmd => panic!("Expecting GetShwapCid, but received: {cmd:?}"),
+        }
+    }
+}
+
+/// Test utils only for this crate
+#[cfg(test)]
+mod private {
+    use celestia_types::consts::appconsts::SHARE_SIZE;
+    use celestia_types::nmt::{Namespace, NS_SIZE};
+    use celestia_types::{DataAvailabilityHeader, ExtendedDataSquare};
+    use rand::RngCore;
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) use tokio::test as async_test;
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) use wasm_bindgen_test::wasm_bindgen_test as async_test;
+
+    pub(crate) fn generate_fake_eds(square_len: usize) -> ExtendedDataSquare {
+        let mut shares = Vec::new();
+        let ns = Namespace::const_v0(rand::random());
+
+        for row in 0..square_len {
+            for col in 0..square_len {
+                let share = if row < square_len / 2 && col < square_len / 2 {
+                    // ODS share
+                    [ns.as_bytes(), &random_bytes(SHARE_SIZE - NS_SIZE)[..]].concat()
+                } else {
+                    // Parity share
+                    random_bytes(SHARE_SIZE)
+                };
+
+                shares.push(share);
+            }
+        }
+
+        ExtendedDataSquare::new(shares, "fake".to_string()).unwrap()
+    }
+
+    pub(crate) fn dah_of_eds(eds: &ExtendedDataSquare) -> DataAvailabilityHeader {
+        let mut dah = DataAvailabilityHeader {
+            row_roots: Vec::new(),
+            column_roots: Vec::new(),
+        };
+
+        for i in 0..eds.square_len() {
+            let row_root = eds.row_nmt(i).unwrap().root();
+            dah.row_roots.push(row_root);
+
+            let column_root = eds.column_nmt(i).unwrap().root();
+            dah.column_roots.push(column_root);
+        }
+
+        dah
+    }
+
+    fn random_bytes(len: usize) -> Vec<u8> {
+        let mut buf = vec![0u8; len];
+        rand::thread_rng().fill_bytes(&mut buf);
+        buf
     }
 }

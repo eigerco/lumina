@@ -217,7 +217,6 @@ impl From<RowId> for CidGeneric<ROW_ID_SIZE> {
 mod tests {
     use super::*;
     use crate::consts::appconsts::SHARE_SIZE;
-    use crate::nmt::{Namespace, NS_SIZE};
 
     #[test]
     fn round_trip_test() {
@@ -241,9 +240,9 @@ mod tests {
         Row::new(1, &eds, height).unwrap();
         Row::new(7, &eds, height).unwrap();
         let row_err = Row::new(8, &eds, height).unwrap_err();
-        assert!(matches!(row_err, Error::EdsIndexOutOfRange(8)));
+        assert!(matches!(row_err, Error::EdsIndexOutOfRange(_)));
         let row_err = Row::new(100, &eds, height).unwrap_err();
-        assert!(matches!(row_err, Error::EdsIndexOutOfRange(100)));
+        assert!(matches!(row_err, Error::EdsIndexOutOfRange(_)));
     }
 
     #[test]

@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 use std::ops::Deref;
+use std::pin::pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -9,8 +10,8 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use sled::transaction::{abort, ConflictableTransactionError, TransactionError};
 use sled::{Db, Error as SledError, Transactional, Tree};
-use tokio::task::spawn_blocking;
-use tokio::task::JoinError;
+use tokio::sync::Notify;
+use tokio::task::{spawn_blocking, JoinError};
 use tracing::{debug, info};
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
@@ -37,6 +38,8 @@ struct Inner {
     height_to_hash: Tree,
     /// sub-tree which maps header height to its metadata
     sampling_metadata: Tree,
+    /// Notify when a new header is added
+    header_added_notifier: Notify,
 }
 
 impl SledStore {
@@ -64,6 +67,7 @@ impl SledStore {
                     headers,
                     height_to_hash,
                     sampling_metadata,
+                    header_added_notifier: Notify::new(),
                 }),
             })
         })
@@ -182,6 +186,8 @@ impl SledStore {
             Ok(())
         })
         .await??;
+
+        self.inner.header_added_notifier.notify_waiters();
 
         debug!("Inserting header {hash} with height {height}");
         Ok(())
@@ -319,6 +325,22 @@ impl Store for SledStore {
 
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         self.get_by_height(height).await
+    }
+
+    async fn wait_height(&self, height: u64) -> Result<()> {
+        let mut notifier = pin!(self.inner.header_added_notifier.notified());
+
+        loop {
+            if self.contains_height(height).await {
+                return Ok(());
+            }
+
+            // Await for a notification
+            notifier.as_mut().await;
+
+            // Reset notifier
+            notifier.set(self.inner.header_added_notifier.notified());
+        }
     }
 
     async fn head_height(&self) -> Result<u64> {

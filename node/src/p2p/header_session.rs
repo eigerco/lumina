@@ -140,14 +140,9 @@ impl HeaderSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::spawn;
     use crate::p2p::P2p;
+    use crate::test_utils::async_test;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-
-    #[cfg(not(target_arch = "wasm32"))]
-    use tokio::test as async_test;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
     #[async_test]
     async fn retry_on_missing_range() {

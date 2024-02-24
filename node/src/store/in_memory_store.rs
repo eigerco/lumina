@@ -1,3 +1,4 @@
+use std::pin::pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
@@ -6,6 +7,7 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
+use tokio::sync::Notify;
 use tracing::{debug, info};
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
@@ -23,6 +25,8 @@ pub struct InMemoryStore {
     head_height: AtomicU64,
     /// Cached height of the lowest header that wasn't sampled yet
     lowest_unsampled_height: AtomicU64,
+    /// Notify when a new header is added
+    header_added_notifier: Notify,
 }
 
 impl InMemoryStore {
@@ -34,6 +38,7 @@ impl InMemoryStore {
             height_to_hash: DashMap::new(),
             head_height: AtomicU64::new(0),
             lowest_unsampled_height: AtomicU64::new(1),
+            header_added_notifier: Notify::new(),
         }
     }
 
@@ -89,6 +94,7 @@ impl InMemoryStore {
         height_entry.insert(hash);
 
         self.head_height.store(height, Ordering::Release);
+        self.header_added_notifier.notify_waiters();
 
         Ok(())
     }
@@ -211,6 +217,22 @@ impl Store for InMemoryStore {
         self.get_by_height(height)
     }
 
+    async fn wait_height(&self, height: u64) -> Result<()> {
+        let mut notifier = pin!(self.header_added_notifier.notified());
+
+        loop {
+            if self.contains_height(height) {
+                return Ok(());
+            }
+
+            // Await for a notification
+            notifier.as_mut().await;
+
+            // Reset notifier
+            notifier.set(self.header_added_notifier.notified());
+        }
+    }
+
     async fn head_height(&self) -> Result<u64> {
         self.get_head_height()
     }
@@ -261,6 +283,7 @@ impl Clone for InMemoryStore {
             lowest_unsampled_height: AtomicU64::new(
                 self.lowest_unsampled_height.load(Ordering::Acquire),
             ),
+            header_added_notifier: Notify::new(),
         }
     }
 }
@@ -268,13 +291,9 @@ impl Clone for InMemoryStore {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::test_utils::async_test;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::Height;
-
-    #[cfg(not(target_arch = "wasm32"))]
-    use tokio::test as async_test;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
     #[async_test]
     async fn test_contains_height() {

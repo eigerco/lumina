@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod blockstore;
+pub mod daser;
 mod executor;
 pub mod network;
 pub mod node;

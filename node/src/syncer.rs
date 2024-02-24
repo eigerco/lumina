@@ -527,18 +527,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        executor::sleep,
-        store::InMemoryStore,
-        test_utils::{gen_filled_store, MockP2pHandle},
-    };
+    use crate::store::InMemoryStore;
+    use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use std::time::Duration;
-
-    #[cfg(not(target_arch = "wasm32"))]
-    use tokio::test as async_test;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
     #[async_test]
     async fn init_without_genesis_hash() {
