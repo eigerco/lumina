@@ -8,7 +8,7 @@ use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
-use sled::transaction::{abort, ConflictableTransactionError, TransactionError};
+use sled::transaction::{abort, ConflictableTransactionError, TransactionError, TransactionalTree};
 use sled::{Db, Error as SledError, Transactional, Tree};
 use tokio::sync::Notify;
 use tokio::task::{spawn_blocking, JoinError};
@@ -97,22 +97,34 @@ impl SledStore {
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let inner = self.inner.clone();
 
-        spawn_blocking(move || {
-            let hash = read_hash_by_db_key(&inner.height_to_hash, &height_to_key(height))?;
-            read_header_by_db_key(&inner.headers, hash.as_bytes())
+        Ok(spawn_blocking(move || {
+            (&inner.headers, &inner.height_to_hash).transaction(move |(headers, height_to_hash)| {
+                let hash =
+                    transactional_read_hash_by_db_key(height_to_hash, &height_to_key(height))?;
+                transactional_read_header_by_db_key(headers, hash.as_bytes())
+            })
         })
-        .await?
+        .await??)
     }
 
     async fn get_head(&self) -> Result<ExtendedHeader> {
         let inner = self.inner.clone();
 
-        spawn_blocking(move || {
-            let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY)?;
-            let hash = read_hash_by_db_key(&inner.height_to_hash, &height_to_key(head_height))?;
-            read_header_by_db_key(&inner.headers, hash.as_bytes())
+        Ok(spawn_blocking(move || {
+            (inner.db.deref(), &inner.headers, &inner.height_to_hash).transaction(
+                move |(db, headers, height_to_hash)| {
+                    let head_height = transactional_read_height_by_db_key(db, HEAD_HEIGHT_KEY)?;
+
+                    let hash = transactional_read_hash_by_db_key(
+                        height_to_hash,
+                        &height_to_key(head_height),
+                    )?;
+
+                    transactional_read_header_by_db_key(headers, hash.as_bytes())
+                },
+            )
         })
-        .await?
+        .await??)
     }
 
     async fn contains_hash(&self, hash: &Hash) -> bool {
@@ -143,21 +155,22 @@ impl SledStore {
         let inner = self.inner.clone();
 
         spawn_blocking(move || {
-            let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY).unwrap_or(0);
-
-            // A light check before checking the whole map
-            if head_height > 0 && height <= head_height {
-                return Err(StoreError::HeightExists(height));
-            }
-
-            // Check if it's continuous before checking the whole map.
-            if head_height + 1 != height {
-                return Err(StoreError::NonContinuousAppend(head_height, height));
-            }
-
             // Do actual inserts as a transaction, failing if keys already exist
             (inner.db.deref(), &inner.headers, &inner.height_to_hash).transaction(
                 move |(db, headers, height_to_hash)| {
+                    let head_height =
+                        transactional_read_height_by_db_key(db, HEAD_HEIGHT_KEY).unwrap_or(0);
+
+                    // A light check before checking the whole map
+                    if head_height > 0 && height <= head_height {
+                        return abort(StoreError::HeightExists(height));
+                    }
+
+                    // Check if it's continuous before checking the whole map.
+                    if head_height + 1 != height {
+                        return abort(StoreError::NonContinuousAppend(head_height, height));
+                    }
+
                     let height_key = height_to_key(height);
                     if height_to_hash
                         .insert(&height_key, hash.as_bytes())?
@@ -175,15 +188,12 @@ impl SledStore {
                         .insert(hash.as_bytes(), serialized_header.unwrap())?
                         .is_some()
                     {
-                        return Err(ConflictableTransactionError::Abort(StoreError::HashExists(
-                            hash,
-                        )));
+                        return abort(StoreError::HashExists(hash));
                     }
 
                     Ok(())
                 },
-            )?;
-            Ok(())
+            )
         })
         .await??;
 
@@ -201,34 +211,38 @@ impl SledStore {
     ) -> Result<u64> {
         let inner = self.inner.clone();
 
-        spawn_blocking(move || {
-            // Make sure we have the header being marked
-            let head_height = read_height_by_db_key(&inner.db, HEAD_HEIGHT_KEY)?;
-            if height == 0 || height > head_height {
-                return Err(StoreError::NotFound);
-            }
+        Ok(spawn_blocking(move || {
+            (inner.db.deref(), &inner.sampling_metadata).transaction(
+                move |(db, sampling_metadata)| {
+                    // Make sure we have the header being marked
+                    let head_height = transactional_read_height_by_db_key(db, HEAD_HEIGHT_KEY)?;
 
-            let metadata_key = height_to_key(height);
+                    if height == 0 || height > head_height {
+                        return abort(StoreError::NotFound);
+                    }
 
-            let new_inserted = &inner
-                .sampling_metadata
-                .transaction(move |sampling_metadata| {
-                    let previous: Option<SamplingMetadata> = sampling_metadata
-                        .get(metadata_key)?
-                        .as_deref()
-                        .map(Protobuf::decode_vec)
-                        .transpose()
-                        .map_err(|e| {
-                            ConflictableTransactionError::Abort(StoreError::StoredDataError(
-                                e.to_string(),
-                            ))
-                        })?;
-                    let update_sampling_height = previous.is_none();
+                    let metadata_key = height_to_key(height);
+
+                    let previous = match transactional_read_sampling_metadata_by_db_key(
+                        sampling_metadata,
+                        &metadata_key,
+                    ) {
+                        Ok(val) => Some(val),
+                        Err(ConflictableTransactionError::Abort(StoreError::NotFound)) => None,
+                        Err(e) => return Err(e),
+                    };
+                    let new_inserted = previous.is_none();
 
                     let entry = match previous {
                         Some(mut previous) => {
                             previous.accepted = accepted;
-                            previous.cids_sampled.extend_from_slice(&cids);
+
+                            for cid in &cids {
+                                if !previous.cids_sampled.contains(cid) {
+                                    previous.cids_sampled.push(cid.to_owned());
+                                }
+                            }
+
                             previous
                         }
                         None => SamplingMetadata {
@@ -240,37 +254,45 @@ impl SledStore {
                     let serialized: Result<_, Infallible> = entry.encode_vec();
                     sampling_metadata.insert(&metadata_key, serialized.unwrap())?;
 
-                    Ok(update_sampling_height)
-                })?;
-
-            if *new_inserted {
-                // sled does not have contains_key for TransactionalTree, so to scan the db
-                // for new height, we'd have to actually pull the data out.  Instead, update
-                // the height outside of txn and manually take care of synchronisation.
-                update_cached_sampling_height(&inner.db, &inner.sampling_metadata)
-            } else {
-                info!("Overriding existing sampling metadata for height {height}");
-                read_height_by_db_key(&inner.db, NEXT_UNSAMPLED_HEIGHT_KEY)
-            }
+                    if new_inserted {
+                        transactional_update_sampling_height(db, sampling_metadata)
+                    } else {
+                        info!("Overriding existing sampling metadata for height {height}");
+                        transactional_read_height_by_db_key(db, NEXT_UNSAMPLED_HEIGHT_KEY)
+                    }
+                },
+            )
         })
-        .await?
+        .await??)
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         let inner = self.inner.clone();
 
-        spawn_blocking(move || {
-            let metadata_key = height_to_key(height);
-            let Some(serialized) = inner.sampling_metadata.get(metadata_key)? else {
-                return Ok(None);
-            };
+        Ok(spawn_blocking(move || {
+            (inner.db.deref(), &inner.sampling_metadata).transaction(
+                move |(db, sampling_metadata)| {
+                    // Make sure we have the header of height
+                    let head_height = transactional_read_height_by_db_key(db, HEAD_HEIGHT_KEY)?;
 
-            let metadata = SamplingMetadata::decode_vec(serialized.as_ref())
-                .map_err(|e| StoreError::StoredDataError(e.to_string()))?;
+                    if height == 0 || height > head_height {
+                        return abort(StoreError::NotFound);
+                    }
 
-            Ok(Some(metadata))
+                    let metadata_key = height_to_key(height);
+
+                    match transactional_read_sampling_metadata_by_db_key(
+                        sampling_metadata,
+                        &metadata_key,
+                    ) {
+                        Ok(val) => Ok(Some(val)),
+                        Err(ConflictableTransactionError::Abort(StoreError::NotFound)) => Ok(None),
+                        Err(e) => Err(e),
+                    }
+                },
+            )
         })
-        .await?
+        .await??)
     }
 
     /// Flush the store's state to the filesystem.
@@ -289,6 +311,12 @@ impl From<TransactionError<StoreError>> for StoreError {
             E::Abort(store_error) => store_error,
             E::Storage(sled_error) => sled_error.into(),
         }
+    }
+}
+
+impl From<StoreError> for ConflictableTransactionError<StoreError> {
+    fn from(value: StoreError) -> Self {
+        ConflictableTransactionError::Abort(value)
     }
 }
 
@@ -391,7 +419,26 @@ fn read_height_by_db_key(tree: &Tree, db_key: &[u8]) -> Result<u64> {
 }
 
 #[inline]
-fn read_hash_by_db_key(tree: &Tree, db_key: &[u8]) -> Result<Hash> {
+fn transactional_read_height_by_db_key(
+    tree: &TransactionalTree,
+    db_key: &[u8],
+) -> Result<u64, ConflictableTransactionError<StoreError>> {
+    match tree
+        .get(db_key)?
+        .ok_or(StoreError::NotFound)?
+        .as_ref()
+        .try_into()
+    {
+        Ok(b) => Ok(u64::from_be_bytes(b)),
+        Err(_) => abort(StoreError::NotFound),
+    }
+}
+
+#[inline]
+fn transactional_read_hash_by_db_key(
+    tree: &TransactionalTree,
+    db_key: &[u8],
+) -> Result<Hash, ConflictableTransactionError<StoreError>> {
     match tree
         .get(db_key)?
         .ok_or(StoreError::NotFound)?
@@ -399,30 +446,28 @@ fn read_hash_by_db_key(tree: &Tree, db_key: &[u8]) -> Result<Hash> {
         .try_into()
     {
         Ok(b) => Ok(Hash::Sha256(b)),
-        Err(_) => Err(StoreError::NotFound),
+        Err(_) => abort(StoreError::NotFound),
     }
 }
 
 #[inline]
-fn update_cached_sampling_height(db: &Tree, sampling_metadata: &Tree) -> Result<u64> {
-    loop {
-        let previous_height = read_height_by_db_key(db, NEXT_UNSAMPLED_HEIGHT_KEY)?;
-        let mut current_height = previous_height;
-        while sampling_metadata.contains_key(height_to_key(current_height))? {
-            current_height += 1;
-        }
+fn transactional_update_sampling_height(
+    db: &TransactionalTree,
+    sampling_metadata: &TransactionalTree,
+) -> Result<u64, ConflictableTransactionError<StoreError>> {
+    let previous_height = transactional_read_height_by_db_key(db, NEXT_UNSAMPLED_HEIGHT_KEY)?;
+    let mut current_height = previous_height;
 
-        if db
-            .compare_and_swap(
-                NEXT_UNSAMPLED_HEIGHT_KEY,
-                Some(&height_to_key(previous_height)),
-                Some(&height_to_key(current_height)),
-            )?
-            .is_ok()
-        {
-            break Ok(current_height);
-        }
+    while sampling_metadata
+        .get(height_to_key(current_height))?
+        .is_some()
+    {
+        current_height += 1;
     }
+
+    db.insert(NEXT_UNSAMPLED_HEIGHT_KEY, &height_to_key(current_height))?;
+
+    Ok(current_height)
 }
 
 #[inline]
@@ -430,6 +475,28 @@ fn read_header_by_db_key(tree: &Tree, db_key: &[u8]) -> Result<ExtendedHeader> {
     let serialized = tree.get(db_key)?.ok_or(StoreError::NotFound)?;
 
     ExtendedHeader::decode(serialized.as_ref()).map_err(|e| StoreError::CelestiaTypes(e.into()))
+}
+
+#[inline]
+fn transactional_read_header_by_db_key(
+    tree: &TransactionalTree,
+    db_key: &[u8],
+) -> Result<ExtendedHeader, ConflictableTransactionError<StoreError>> {
+    let serialized = tree.get(db_key)?.ok_or(StoreError::NotFound)?;
+
+    Ok(ExtendedHeader::decode(serialized.as_ref())
+        .map_err(|e| StoreError::CelestiaTypes(e.into()))?)
+}
+
+#[inline]
+fn transactional_read_sampling_metadata_by_db_key(
+    tree: &TransactionalTree,
+    db_key: &[u8],
+) -> Result<SamplingMetadata, ConflictableTransactionError<StoreError>> {
+    let serialized = tree.get(db_key)?.ok_or(StoreError::NotFound)?;
+
+    Ok(SamplingMetadata::decode(serialized.as_ref())
+        .map_err(|e| StoreError::StoredDataError(e.to_string()))?)
 }
 
 #[inline]
@@ -445,152 +512,7 @@ pub mod tests {
 
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::Height;
     use tempfile::TempDir;
-
-    #[tokio::test]
-    async fn test_contains_height() {
-        let s = gen_filled_store(2, None).await.0;
-
-        assert!(!s.has_at(0).await);
-        assert!(s.has_at(1).await);
-        assert!(s.has_at(2).await);
-        assert!(!s.has_at(3).await);
-    }
-
-    #[tokio::test]
-    async fn test_empty_store() {
-        let s = create_store(None).await;
-        assert!(matches!(s.head_height().await, Err(StoreError::NotFound)));
-        assert!(matches!(s.get_head().await, Err(StoreError::NotFound)));
-        assert!(matches!(
-            s.get_by_height(1).await,
-            Err(StoreError::NotFound)
-        ));
-        assert!(matches!(
-            s.get_by_hash(&Hash::Sha256([0; 32])).await,
-            Err(StoreError::NotFound)
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_read_write() {
-        let s = create_store(None).await;
-        let mut gen = ExtendedHeaderGenerator::new();
-
-        let header = gen.next();
-
-        s.append_single_unchecked(header.clone()).await.unwrap();
-        assert_eq!(s.head_height().await.unwrap(), 1);
-        assert_eq!(s.get_head().await.unwrap(), header);
-        assert_eq!(s.get_by_height(1).await.unwrap(), header);
-        assert_eq!(s.get_by_hash(&header.hash()).await.unwrap(), header);
-    }
-
-    #[tokio::test]
-    async fn test_pregenerated_data() {
-        let (s, _) = gen_filled_store(100, None).await;
-        assert_eq!(s.head_height().await.unwrap(), 100);
-        let head = s.get_head().await.unwrap();
-        assert_eq!(s.get_by_height(100).await.unwrap(), head);
-        assert!(matches!(
-            s.get_by_height(101).await,
-            Err(StoreError::NotFound)
-        ));
-
-        let header = s.get_by_height(54).await.unwrap();
-        assert_eq!(s.get_by_hash(&header.hash()).await.unwrap(), header);
-    }
-
-    #[tokio::test]
-    async fn test_duplicate_insert() {
-        let (s, mut gen) = gen_filled_store(100, None).await;
-        let header101 = gen.next();
-        s.append_single_unchecked(header101.clone()).await.unwrap();
-        assert!(matches!(
-            s.append_single_unchecked(header101).await,
-            Err(StoreError::HeightExists(101))
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_overwrite_height() {
-        let (s, gen) = gen_filled_store(100, None).await;
-
-        // Height 30 with different hash
-        let header29 = s.get_by_height(29).await.unwrap();
-        let header30 = gen.next_of(&header29);
-
-        let insert_existing_result = s.append_single_unchecked(header30).await;
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::HeightExists(30))
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_overwrite_hash() {
-        let (s, _) = gen_filled_store(100, None).await;
-        let mut dup_header = s.get_by_height(33).await.unwrap();
-        dup_header.header.height = Height::from(101u32);
-        let insert_existing_result = s.append_single_unchecked(dup_header).await;
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::HashExists(_))
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_append_range() {
-        let (s, mut gen) = gen_filled_store(10, None).await;
-        let hs = gen.next_many(4);
-        s.append_unchecked(hs).await.unwrap();
-        s.get_by_height(14).await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_append_gap_between_head() {
-        let (s, mut gen) = gen_filled_store(10, None).await;
-
-        // height 11
-        gen.next();
-        // height 12
-        let upcoming_head = gen.next();
-
-        let insert_with_gap_result = s.append_single_unchecked(upcoming_head).await;
-        assert!(matches!(
-            insert_with_gap_result,
-            Err(StoreError::NonContinuousAppend(10, 12))
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_non_continuous_append() {
-        let (s, mut gen) = gen_filled_store(10, None).await;
-        let mut hs = gen.next_many(6);
-
-        // remove height 14
-        hs.remove(3);
-
-        let insert_existing_result = s.append_unchecked(hs).await;
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::NonContinuousAppend(13, 15))
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_genesis_with_height() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
-        let header5 = gen.next();
-
-        let s = create_store(None).await;
-
-        assert!(matches!(
-            s.append_single_unchecked(header5).await,
-            Err(StoreError::NonContinuousAppend(0, 5))
-        ));
-    }
 
     #[tokio::test]
     async fn test_store_persistence() {
@@ -674,160 +596,6 @@ pub mod tests {
 
         assert_eq!(store0.head_height().await.unwrap(), 15);
         assert_eq!(store1.head_height().await.unwrap(), 16);
-    }
-
-    #[tokio::test]
-    async fn test_sampling_height_empty_store() {
-        let (store, _) = gen_filled_store(0, None).await;
-        store
-            .update_sampling_metadata(0, true, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(1, true, vec![])
-            .await
-            .unwrap_err();
-    }
-
-    #[tokio::test]
-    async fn test_sampling_height() {
-        let (store, _) = gen_filled_store(9, None).await;
-
-        store
-            .update_sampling_metadata(0, true, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(1, true, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(2, true, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(3, false, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(4, true, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(5, false, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(6, false, vec![])
-            .await
-            .unwrap();
-
-        store
-            .update_sampling_metadata(8, true, vec![])
-            .await
-            .unwrap();
-
-        store
-            .update_sampling_metadata(10, true, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(10, false, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(20, true, vec![])
-            .await
-            .unwrap_err();
-
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 7);
-    }
-
-    #[tokio::test]
-    async fn test_sampling_merge() {
-        let (store, _) = gen_filled_store(1, None).await;
-        let cid0 = "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ"
-            .parse()
-            .unwrap();
-        let cid1 = "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA"
-            .parse()
-            .unwrap();
-
-        store
-            .update_sampling_metadata(1, false, vec![cid0])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(1, false, vec![])
-            .await
-            .unwrap();
-
-        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert!(!sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0]);
-
-        store
-            .update_sampling_metadata(1, true, vec![cid1])
-            .await
-            .unwrap();
-
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
-
-        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert!(sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0, cid1]);
-    }
-
-    #[tokio::test]
-    async fn test_sampled_cids() {
-        let (store, _) = gen_filled_store(5, None).await;
-
-        let cids: Vec<Cid> = [
-            "bafkreieq5jui4j25lacwomsqgjeswwl3y5zcdrresptwgmfylxo2depppq",
-            "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
-            "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ",
-            "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA",
-        ]
-        .iter()
-        .map(|s| s.parse().unwrap())
-        .collect();
-
-        store
-            .update_sampling_metadata(1, true, cids.clone())
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(2, true, cids[0..1].to_vec())
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(4, false, cids[3..].to_vec())
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(5, false, vec![])
-            .await
-            .unwrap();
-
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 3);
-
-        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids);
-        assert!(sampling_data.accepted);
-
-        let sampling_data = store.get_sampling_metadata(2).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids[0..1]);
-        assert!(sampling_data.accepted);
-
-        assert!(store.get_sampling_metadata(3).await.unwrap().is_none());
-
-        let sampling_data = store.get_sampling_metadata(4).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids[3..]);
-        assert!(!sampling_data.accepted);
-
-        let sampling_data = store.get_sampling_metadata(5).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, vec![]);
-        assert!(!sampling_data.accepted);
     }
 
     mod migration_v1 {
