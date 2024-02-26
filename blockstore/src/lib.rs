@@ -31,10 +31,6 @@ pub use crate::sled_blockstore::SledBlockstore;
 /// Error returned when performing operations on [`Blockstore`]
 #[derive(Debug, Error)]
 pub enum BlockstoreError {
-    /// Provided CID already exists in blockstore when trying to insert it
-    #[error("CID already exists in the store")]
-    CidExists,
-
     /// Provided CID is longer than max length supported by the blockstore
     #[error("CID length longer that max allowed by the store")]
     CidTooLong,
@@ -195,8 +191,7 @@ pub(crate) mod tests {
         store.put_keyed(&cid0, b"1").await.unwrap();
         store.put_keyed(&cid1, b"2").await.unwrap();
 
-        let insert_err = store.put_keyed(&cid1, b"3").await.unwrap_err();
-        assert!(matches!(insert_err, BlockstoreError::CidExists));
+        assert!(store.put_keyed(&cid1, b"3").await.is_ok());
     }
 
     #[rstest]

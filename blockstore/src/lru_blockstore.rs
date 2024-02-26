@@ -3,7 +3,7 @@ use std::{num::NonZeroUsize, sync::Mutex};
 use cid::CidGeneric;
 use lru::LruCache;
 
-use crate::{convert_cid, Blockstore, BlockstoreError, Result};
+use crate::{convert_cid, Blockstore, Result};
 
 /// An LRU cached [`Blockstore`].
 pub struct LruBlockstore<const MAX_MULTIHASH_SIZE: usize> {
@@ -30,12 +30,12 @@ impl<const MAX_MULTIHASH_SIZE: usize> Blockstore for LruBlockstore<MAX_MULTIHASH
     async fn put_keyed<const S: usize>(&self, cid: &CidGeneric<S>, data: &[u8]) -> Result<()> {
         let cid = convert_cid(cid)?;
         let mut cache = self.cache.lock().expect("lock failed");
-        if !cache.contains(&cid) {
-            cache.put(cid, data.to_vec());
-            Ok(())
+        if cache.contains(&cid) {
+            cache.promote(&cid);
         } else {
-            Err(BlockstoreError::CidExists)
+            cache.put(cid, data.to_vec());
         }
+        Ok(())
     }
 
     async fn has<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<bool> {

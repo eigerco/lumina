@@ -78,10 +78,8 @@ impl IndexedDbBlockstore {
 
         if !has_key(&blocks, &cid).await? {
             blocks.add(&data, Some(&cid)).await?;
-            Ok(())
-        } else {
-            Err(BlockstoreError::CidExists)
         }
+        Ok(())
     }
 
     async fn has<const S: usize>(&self, cid: &CidGeneric<S>) -> Result<bool> {
