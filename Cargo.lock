@@ -2848,6 +2848,7 @@ dependencies = [
  "prost",
  "rand",
  "rexie",
+ "rstest",
  "send_wrapper 0.6.0",
  "serde",
  "serde-wasm-bindgen",

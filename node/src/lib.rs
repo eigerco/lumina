@@ -14,3 +14,6 @@ pub mod syncer;
 #[cfg_attr(docs_rs, doc(cfg(feature = "test-utils")))]
 pub mod test_utils;
 mod utils;
+
+#[cfg(all(target_arch = "wasm32", test))]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
