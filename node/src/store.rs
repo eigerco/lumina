@@ -131,10 +131,10 @@ pub trait Store: Send + Sync + Debug {
 
     /// Gets the sampling metadata for the height.
     ///
-    /// `Err(StoreError::NotFound)` indicates that header **and** sampling metadata of
+    /// `Err(StoreError::NotFound)` indicates that both header **and** sampling metadata for the requested
     /// height are not in the store.
     ///
-    /// `Ok(None)` indicates that header is in the store but sampling metadata are not set yet.
+    /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 
     /// Append a range of headers maintaining continuity from the genesis to the head.
