@@ -12,12 +12,15 @@ use celestia_tendermint::{
 use ed25519_consensus::SigningKey;
 use rand::RngCore;
 
-use crate::hash::{Hash, HashExt};
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::{
     block::{CommitExt, GENESIS_HEIGHT},
     nmt::Namespace,
     ExtendedDataSquare,
+};
+use crate::{
+    consts::appconsts::SHARE_INFO_BYTES,
+    hash::{Hash, HashExt},
 };
 use crate::{
     consts::{appconsts::SHARE_SIZE, version},
@@ -323,6 +326,7 @@ pub fn unverify(header: &mut ExtendedHeader) {
     }
 }
 
+/// Generate a properly encoded [`ExtendedDataSquare`] with random data.
 pub fn generate_eds(square_len: usize) -> ExtendedDataSquare {
     let mut shares = Vec::with_capacity(square_len);
     let ns = Namespace::const_v0(rand::random());
@@ -332,7 +336,12 @@ pub fn generate_eds(square_len: usize) -> ExtendedDataSquare {
         for col in 0..square_len {
             let share = if row < ods_width && col < ods_width {
                 // ODS share
-                [ns.as_bytes(), &random_bytes(SHARE_SIZE - NS_SIZE)[..]].concat()
+                [
+                    ns.as_bytes(),
+                    &[0; SHARE_INFO_BYTES][..],
+                    &random_bytes(SHARE_SIZE - NS_SIZE - SHARE_INFO_BYTES)[..],
+                ]
+                .concat()
             } else {
                 // Parity share
                 vec![0; SHARE_SIZE]
