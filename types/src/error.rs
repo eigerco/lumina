@@ -34,6 +34,10 @@ pub enum Error {
     #[error(transparent)]
     CidError(#[from] blockstore::block::CidError),
 
+    /// Error propagated from the [`leopard_codec`].
+    #[error(transparent)]
+    LeopardCodec(#[from] leopard_codec::LeopardError),
+
     /// Missing header.
     #[error("Missing header")]
     MissingHeader,

@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use blockstore::block::{Block, CidError};
 use celestia_proto::share::p2p::shrex::nd::NamespaceRowResponse as RawNamespacedRow;
 use celestia_tendermint_proto::Protobuf;
@@ -111,6 +113,13 @@ impl Share {
         self.as_ref().to_vec()
     }
 
+    /// Converts this [`Share`] into the raw bytes vector.
+    ///
+    /// This will include also the [`InfoByte`] and the `sequence length`.
+    pub fn to_array(&self) -> [u8; appconsts::SHARE_SIZE] {
+        self.data
+    }
+
     /// Return Share's `InfoByte`
     pub fn info_byte(&self) -> InfoByte {
         InfoByte::from_raw_unchecked(self.data[NS_SIZE])
@@ -133,6 +142,20 @@ impl Share {
 impl AsRef<[u8]> for Share {
     fn as_ref(&self) -> &[u8] {
         &self.data
+    }
+}
+
+impl Deref for Share {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl DerefMut for Share {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
     }
 }
 

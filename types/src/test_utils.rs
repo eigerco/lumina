@@ -10,12 +10,22 @@ use celestia_tendermint::{
     Signature, Time,
 };
 use ed25519_consensus::SigningKey;
+use rand::RngCore;
 
-use crate::block::{CommitExt, GENESIS_HEIGHT};
-use crate::consts::version;
 use crate::hash::{Hash, HashExt};
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
+use crate::{
+    block::{CommitExt, GENESIS_HEIGHT},
+    nmt::Namespace,
+    ExtendedDataSquare,
+};
+use crate::{
+    consts::{appconsts::SHARE_SIZE, version},
+    nmt::NS_SIZE,
+};
 use crate::{DataAvailabilityHeader, ExtendedHeader, ValidatorSet};
+
+pub use crate::byzantine::test_utils::corrupt_eds;
 
 /// [`ExtendedHeader`] generator for testing purposes.
 ///
@@ -311,6 +321,49 @@ pub fn unverify(header: &mut ExtendedHeader) {
     } else {
         header.validate().expect("invalid header generated");
     }
+}
+
+pub fn generate_eds(square_len: usize) -> ExtendedDataSquare {
+    let mut shares = Vec::with_capacity(square_len);
+    let ns = Namespace::const_v0(rand::random());
+    let ods_width = square_len / 2;
+
+    for row in 0..square_len {
+        for col in 0..square_len {
+            let share = if row < ods_width && col < ods_width {
+                // ODS share
+                [ns.as_bytes(), &random_bytes(SHARE_SIZE - NS_SIZE)[..]].concat()
+            } else {
+                // Parity share
+                vec![0; SHARE_SIZE]
+            };
+
+            shares.push(share);
+        }
+    }
+
+    // encode parity data
+    // 2nd quadrant
+    for row in shares.chunks_mut(square_len).take(ods_width) {
+        leopard_codec::encode(row, ods_width).unwrap();
+    }
+    // 3rd quadrant
+    for col in 0..ods_width {
+        let mut col: Vec<_> = shares.iter_mut().skip(col).step_by(square_len).collect();
+        leopard_codec::encode(&mut col, ods_width).unwrap();
+    }
+    // 4th quadrant
+    for row in shares.chunks_mut(square_len).skip(ods_width) {
+        leopard_codec::encode(row, ods_width).unwrap();
+    }
+
+    ExtendedDataSquare::new(shares, "leopard".to_string()).unwrap()
+}
+
+pub(crate) fn random_bytes(len: usize) -> Vec<u8> {
+    let mut buf = vec![0u8; len];
+    rand::thread_rng().fill_bytes(&mut buf);
+    buf
 }
 
 fn generate_new(

@@ -200,11 +200,11 @@ fn random_indexes(block_len: usize, max_samples_needed: usize) -> HashSet<usize>
 mod tests {
     use super::*;
     use crate::store::InMemoryStore;
-    use crate::test_utils::{async_test, dah_of_eds, generate_fake_eds, MockP2pHandle};
+    use crate::test_utils::{async_test, MockP2pHandle};
     use celestia_tendermint_proto::Protobuf;
     use celestia_types::sample::{Sample, SampleId};
-    use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::{AxisType, ExtendedDataSquare};
+    use celestia_types::test_utils::{generate_eds, ExtendedHeaderGenerator};
+    use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
 
     #[async_test]
     async fn received_valid_samples() {
@@ -254,8 +254,8 @@ mod tests {
         square_len: usize,
         simulate_invalid_sampling: bool,
     ) {
-        let eds = generate_fake_eds(square_len);
-        let dah = dah_of_eds(&eds);
+        let eds = generate_eds(square_len);
+        let dah = DataAvailabilityHeader::from_eds(&eds);
         let header = gen.next_with_dah(dah);
         let height = header.height().value();
 

@@ -9,11 +9,11 @@ use crate::bail_validation;
 use crate::consts::appconsts;
 use crate::fraud_proof::FraudProof;
 use crate::nmt::{
-    Namespace, NamespaceProof, NamespacedHash, NamespacedHashExt, NMT_CODEC, NMT_ID_SIZE,
-    NMT_MULTIHASH_CODE, NS_SIZE,
+    Namespace, NamespaceProof, NamespacedHash, NamespacedHashExt, Nmt, NmtExt, NMT_CODEC,
+    NMT_ID_SIZE, NMT_MULTIHASH_CODE, NS_SIZE,
 };
 use crate::rsmt2d::AxisType;
-use crate::{Error, ExtendedHeader, Result, Share};
+use crate::{Error, ExtendedHeader, Result};
 
 type Cid = CidGeneric<NMT_ID_SIZE>;
 type Multihash = multihash::Multihash<NMT_ID_SIZE>;
@@ -41,9 +41,9 @@ pub struct BadEncodingFraudProof {
     header_hash: Hash,
     block_height: Height,
     // ShareWithProof contains all shares from row or col.
-    // Shares that did not pass verification in rsmt2d will be nil.
+    // Shares that did not pass verification in rsmt2d will be nil (None).
     // For non-nil shares MerkleProofs are computed.
-    shares: Vec<ShareWithProof>,
+    shares: Vec<Option<ShareWithProof>>,
     // Index represents the row/col index where ErrByzantineRow/ErrByzantineColl occurred.
     index: usize,
     // Axis represents the axis that verification failed on.
@@ -110,25 +110,74 @@ impl FraudProof for BadEncodingFraudProof {
 
         // verify that Merkle proofs correspond to particular shares.
         for share in &self.shares {
+            let Some(share) = share else {
+                continue;
+            };
             share
                 .proof
-                .verify_range(
-                    &root,
-                    &[share.leaf.share.as_ref()],
-                    share.leaf.namespace.into(),
-                )
+                .verify_range(&root, &[&share.leaf.share], share.leaf.namespace.into())
                 .map_err(Error::RangeProofError)?;
         }
 
-        // TODO: Add leopard reed solomon decoding and encoding of shares
-        //       and verify the nmt roots.
+        // rebuild the whole axis
+        let mut rebuilt_shares: Vec<_> = self
+            .shares
+            .iter()
+            .map(|share| {
+                share
+                    .as_ref()
+                    .map(|sh| sh.leaf.share.to_vec())
+                    .unwrap_or_default()
+            })
+            .collect();
+        let data_shares = rebuilt_shares.len() / 2;
+        if leopard_codec::reconstruct(&mut rebuilt_shares, data_shares).is_err() {
+            // we couldn't reconstruct the data even tho we had enough *proven* shares
+            // befp is legit
+            return Ok(());
+        }
+
+        // re-encode the parity data
+        if leopard_codec::encode(&mut rebuilt_shares, data_shares).is_err() {
+            // NOTE: this is unreachable for current implementation of encode, esp since
+            // reconstruct succeeded, however leaving that as a future-proofing
+            //
+            // we couldn't encode parity data after reconstruction from proven shares
+            // befp is legit
+            return Ok(());
+        }
+
+        let mut nmt = Nmt::default();
+
+        for (n, share) in rebuilt_shares.iter().enumerate() {
+            let ns = if n < data_shares {
+                // safety: length must be correct
+                Namespace::from_raw(&share[..NS_SIZE]).unwrap()
+            } else {
+                Namespace::PARITY_SHARE
+            };
+            if nmt.push_leaf(share, *ns).map_err(Error::Nmt).is_err() {
+                // we couldn't rebuild the nmt from reconstructed data
+                // befp is legit
+                return Ok(());
+            }
+        }
+
+        // unwraps are safe because we validated that index is in range
+        let expected_root = match self.axis {
+            AxisType::Row => header.dah.row_root(self.index).unwrap(),
+            AxisType::Col => header.dah.column_root(self.index).unwrap(),
+        };
+        let root = nmt.root();
+
+        if root == expected_root {
+            bail_validation!("recomputed root hash matches the one in header");
+        }
 
         Ok(())
     }
 }
 
-// TODO: this is not a Share but an Nmt Leaf, so it has it's namespace prepended.
-//       It seems intentional in Celestia code, discuss with them what to do with this naming.
 #[derive(Debug, Clone, PartialEq)]
 struct ShareWithProof {
     leaf: NmtLeaf,
@@ -138,24 +187,24 @@ struct ShareWithProof {
 #[derive(Debug, Clone, PartialEq)]
 struct NmtLeaf {
     namespace: Namespace,
-    share: Share,
+    share: Vec<u8>,
 }
 
 impl NmtLeaf {
-    pub fn new(bytes: Vec<u8>) -> Result<Self> {
+    fn new(mut bytes: Vec<u8>) -> Result<Self> {
         if bytes.len() != appconsts::SHARE_SIZE + NS_SIZE {
             return Err(Error::InvalidNmtLeafSize(bytes.len()));
         }
 
-        let (namespace, share) = bytes.split_at(NS_SIZE);
+        let share = bytes.split_off(NS_SIZE);
 
         Ok(Self {
-            namespace: Namespace::from_raw(namespace)?,
-            share: Share::from_raw(share)?,
+            namespace: Namespace::from_raw(&bytes)?,
+            share,
         })
     }
 
-    pub fn to_vec(&self) -> Vec<u8> {
+    fn to_vec(&self) -> Vec<u8> {
         let mut bytes = self.namespace.as_bytes().to_vec();
         bytes.extend_from_slice(self.share.as_ref());
         bytes
@@ -198,14 +247,22 @@ impl TryFrom<RawBadEncodingFraudProof> for BadEncodingFraudProof {
             .map_err(|_| Error::InvalidAxis(value.axis))?
             .try_into()?;
 
+        let shares = value
+            .shares
+            .into_iter()
+            .map(|share| {
+                if share.proof.is_some() {
+                    share.try_into().map(Some)
+                } else {
+                    Ok(None)
+                }
+            })
+            .collect::<Result<_, _>>()?;
+
         Ok(Self {
             header_hash: value.header_hash.try_into()?,
             block_height: value.height.try_into()?,
-            shares: value
-                .shares
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?,
+            shares,
             index: value.index as usize,
             axis,
         })
@@ -214,50 +271,194 @@ impl TryFrom<RawBadEncodingFraudProof> for BadEncodingFraudProof {
 
 impl From<BadEncodingFraudProof> for RawBadEncodingFraudProof {
     fn from(value: BadEncodingFraudProof) -> Self {
+        let shares = value
+            .shares
+            .into_iter()
+            .map(|share| share.map(Into::into).unwrap_or_default())
+            .collect();
         RawBadEncodingFraudProof {
             header_hash: value.header_hash.into(),
             height: value.block_height.into(),
-            shares: value.shares.into_iter().map(Into::into).collect(),
+            shares,
             index: value.index as u32,
             axis: value.axis as i32,
         }
     }
 }
 
+#[cfg(any(test, feature = "test-utils"))]
+pub(crate) mod test_utils {
+    use nmt_rs::NamespaceProof;
+    use rand::seq::index;
+    use rand::Rng;
+
+    use crate::consts::appconsts::{FIRST_SPARSE_SHARE_CONTENT_SIZE, SHARE_SIZE};
+    use crate::nmt::NS_SIZE;
+    use crate::rsmt2d::is_ods_square;
+    use crate::test_utils::{random_bytes, ExtendedHeaderGenerator};
+    use crate::{AxisType, DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader};
+
+    use super::*;
+
+    /// Corrupts the [`ExtendedDataSquare`] making some row or column unrecoverable.
+    /// Returns the [`ExtendedHeader`] with merkle proofs for incorrect data and [`BadEncodingFraudProof`].
+    pub fn corrupt_eds(
+        gen: &mut ExtendedHeaderGenerator,
+        eds: &mut ExtendedDataSquare,
+    ) -> (ExtendedHeader, BadEncodingFraudProof) {
+        let mut rng = rand::thread_rng();
+
+        let square_len = eds.square_len();
+        let axis = rng.gen_range(0..1).try_into().unwrap();
+        let axis_idx = rng.gen_range(0..square_len);
+
+        // invalidate more than a half shares in axis
+        let shares_to_break = square_len / 2 + 1;
+        for share_idx in index::sample(&mut rng, square_len, shares_to_break) {
+            let share = match axis {
+                AxisType::Row => eds.share_mut(axis_idx, share_idx).unwrap(),
+                AxisType::Col => eds.share_mut(share_idx, axis_idx).unwrap(),
+            };
+            // only trash data after the namespace, info byte and seq length so that we don't
+            // need to care whether the share is original or parity
+            let offset = SHARE_SIZE - FIRST_SPARSE_SHARE_CONTENT_SIZE;
+            share[offset..].copy_from_slice(&random_bytes(SHARE_SIZE - offset));
+        }
+
+        // create extended header with proof
+        let dah = DataAvailabilityHeader::from_eds(eds);
+        let eh = gen.next_with_dah(dah);
+
+        let befp = befp_from_header_and_eds(&eh, eds, axis_idx, axis);
+
+        (eh, befp)
+    }
+
+    pub(crate) fn befp_from_header_and_eds(
+        eh: &ExtendedHeader,
+        eds: &ExtendedDataSquare,
+        axis_idx: usize,
+        axis: AxisType,
+    ) -> BadEncodingFraudProof {
+        let square_len = eds.square_len();
+        let mut nmt = eds.axis_nmt(axis, axis_idx).unwrap();
+        let mut shares_with_proof: Vec<_> = Vec::with_capacity(square_len);
+
+        // collect the shares for fraud proof
+        for share_idx in 0..square_len {
+            let (share, proof) = nmt.get_index_with_proof(share_idx);
+
+            // it doesn't matter which is row and which is column as ods is first quadrant
+            let ns = if is_ods_square(axis_idx, share_idx, square_len) {
+                Namespace::from_raw(&share[..NS_SIZE]).unwrap()
+            } else {
+                Namespace::PARITY_SHARE
+            };
+
+            let share_with_proof = ShareWithProof {
+                leaf: NmtLeaf {
+                    namespace: ns,
+                    share,
+                },
+                proof: NamespaceProof::PresenceProof {
+                    proof,
+                    ignore_max_ns: true,
+                }
+                .into(),
+            };
+
+            shares_with_proof.push(Some(share_with_proof));
+        }
+
+        BadEncodingFraudProof {
+            header_hash: eh.hash(),
+            block_height: eh.height(),
+            shares: shares_with_proof,
+            index: axis_idx,
+            axis,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::{
+        test_utils::{corrupt_eds, generate_eds, ExtendedHeaderGenerator},
+        DataAvailabilityHeader,
+    };
+
+    use self::test_utils::befp_from_header_and_eds;
+
     use super::*;
-    use crate::fraud_proof::Proof;
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
-    fn honest_befp() -> (BadEncodingFraudProof, ExtendedHeader) {
-        let befp_json = include_str!("../test_data/fraud/honest_bad_encoding_fraud_proof.json");
-        let eh_json = include_str!("../test_data/fraud/honest_bad_encoding_extended_header.json");
-        let Proof::BadEncoding(proof) = serde_json::from_str(befp_json).unwrap();
-
-        (proof, serde_json::from_str(eh_json).unwrap())
-    }
-
-    #[cfg(not(target_arch = "wasm32"))] // related to ignored validate_fake_befp test, see below
-    fn fake_befp() -> (BadEncodingFraudProof, ExtendedHeader) {
-        let befp_json = include_str!("../test_data/fraud/fake_bad_encoding_fraud_proof.json");
-        let eh_json = include_str!("../test_data/fraud/fake_bad_encoding_extended_header.json");
-        let Proof::BadEncoding(proof) = serde_json::from_str(befp_json).unwrap();
-
-        (proof, serde_json::from_str(eh_json).unwrap())
-    }
-
     #[test]
-    fn validate_honest_befp() {
-        let (proof, eh) = honest_befp();
+    fn validate_honest_befp_with_incorrectly_encoded_full_row() {
+        let mut gen = ExtendedHeaderGenerator::new();
+        let mut eds = generate_eds(8);
+        let (eh, proof) = corrupt_eds(&mut gen, &mut eds);
+
         proof.validate(&eh).unwrap();
     }
 
     #[test]
+    fn validate_honest_befp_with_shares_to_rebuild() {
+        let mut gen = ExtendedHeaderGenerator::new();
+        let mut eds = generate_eds(8);
+        let (eh, mut proof) = corrupt_eds(&mut gen, &mut eds);
+
+        // remove some shares from the proof so they need to be reconstructed
+        for share in proof.shares.iter_mut().step_by(2) {
+            *share = None
+        }
+
+        for ns in proof
+            .shares
+            .iter()
+            .map(|sh| sh.as_ref().map(|sh| sh.leaf.namespace.as_bytes()))
+        {
+            println!("{ns:?}");
+        }
+
+        proof.validate(&eh).unwrap();
+    }
+
+    #[test]
+    fn validate_fake_befp() {
+        let mut gen = ExtendedHeaderGenerator::new();
+        let mut eds = generate_eds(8);
+        let real_dah = DataAvailabilityHeader::from_eds(&eds);
+
+        let prev_eh = gen.next();
+        let (_fake_eh, proof) = corrupt_eds(&mut gen, &mut eds);
+
+        let real_eh = gen.next_of_with_dah(&prev_eh, real_dah);
+
+        proof.validate(&real_eh).unwrap_err();
+    }
+
+    #[test]
+    fn validate_befp_over_correct_data() {
+        let mut gen = ExtendedHeaderGenerator::new();
+        let eds = generate_eds(8);
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+        let eh = gen.next_with_dah(dah);
+
+        let proof = befp_from_header_and_eds(&eh, &eds, 2, AxisType::Row);
+        proof.validate(&eh).unwrap_err();
+
+        let proof = befp_from_header_and_eds(&eh, &eds, 3, AxisType::Col);
+        proof.validate(&eh).unwrap_err();
+    }
+
+    #[test]
     fn validate_befp_wrong_height() {
-        let (proof, mut eh) = honest_befp();
+        let mut gen = ExtendedHeaderGenerator::new();
+        let mut eds = generate_eds(8);
+        let (mut eh, proof) = corrupt_eds(&mut gen, &mut eds);
+
         eh.header.height = 999u32.into();
 
         proof.validate(&eh).unwrap_err();
@@ -265,7 +466,10 @@ mod tests {
 
     #[test]
     fn validate_befp_wrong_roots_square() {
-        let (proof, mut eh) = honest_befp();
+        let mut gen = ExtendedHeaderGenerator::new();
+        let mut eds = generate_eds(8);
+        let (mut eh, proof) = corrupt_eds(&mut gen, &mut eds);
+
         eh.dah.row_roots = vec![];
 
         proof.validate(&eh).unwrap_err();
@@ -273,7 +477,11 @@ mod tests {
 
     #[test]
     fn validate_befp_wrong_index() {
-        let (mut proof, eh) = honest_befp();
+        let mut gen = ExtendedHeaderGenerator::new();
+        let mut eds = generate_eds(8);
+
+        let (eh, mut proof) = corrupt_eds(&mut gen, &mut eds);
+
         proof.index = 999;
 
         proof.validate(&eh).unwrap_err();
@@ -281,17 +489,12 @@ mod tests {
 
     #[test]
     fn validate_befp_wrong_shares() {
-        let (mut proof, eh) = honest_befp();
+        let mut gen = ExtendedHeaderGenerator::new();
+        let mut eds = generate_eds(8);
+        let (eh, mut proof) = corrupt_eds(&mut gen, &mut eds);
+
         proof.shares = vec![];
 
-        proof.validate(&eh).unwrap_err();
-    }
-
-    #[cfg(not(target_arch = "wasm32"))] // wasm_bindgen_test doesn't seem to support #[ignore]
-    #[test]
-    #[ignore = "TODO: we can't catch fake proofs without rebuilding the row using reedsolomon"]
-    fn validate_fake_befp() {
-        let (proof, eh) = fake_befp();
         proof.validate(&eh).unwrap_err();
     }
 }
