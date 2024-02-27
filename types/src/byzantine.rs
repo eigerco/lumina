@@ -293,10 +293,9 @@ pub(crate) mod test_utils {
     use rand::Rng;
 
     use crate::consts::appconsts::{FIRST_SPARSE_SHARE_CONTENT_SIZE, SHARE_SIZE};
-    use crate::nmt::NS_SIZE;
     use crate::rsmt2d::is_ods_square;
     use crate::test_utils::{random_bytes, ExtendedHeaderGenerator};
-    use crate::{AxisType, DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader};
+    use crate::{DataAvailabilityHeader, ExtendedDataSquare};
 
     use super::*;
 
