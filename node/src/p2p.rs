@@ -981,6 +981,7 @@ where
         }
 
         warn!("Received a valid bad encoding fraud proof");
+        // trigger cancellation for all services
         self.network_compromised_token.cancel();
 
         gossipsub::MessageAcceptance::Accept
