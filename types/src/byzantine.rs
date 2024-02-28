@@ -416,14 +416,6 @@ mod tests {
             *share = None
         }
 
-        for ns in proof
-            .shares
-            .iter()
-            .map(|sh| sh.as_ref().map(|sh| sh.leaf.namespace.as_bytes()))
-        {
-            println!("{ns:?}");
-        }
-
         proof.validate(&eh).unwrap();
     }
 
