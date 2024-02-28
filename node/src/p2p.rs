@@ -55,6 +55,7 @@ mod header_session;
 pub(crate) mod shwap;
 mod swarm;
 
+use crate::executor::{self, spawn, Interval};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
 use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihasher};
@@ -63,12 +64,8 @@ use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::Store;
 use crate::utils::{
-    celestia_protocol_id, gossipsub_ident_topic, MultiaddrExt, OneshotResultSender,
-    OneshotResultSenderExt, OneshotSenderExt,
-};
-use crate::{
-    executor::{self, spawn, Interval},
-    utils::fraudsub_ident_topic,
+    celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
+    OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt,
 };
 
 pub use crate::p2p::header_ex::HeaderExError;
