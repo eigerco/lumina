@@ -4,14 +4,13 @@ use std::fmt::Display;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::consts::appconsts::SHARE_SIZE;
-use crate::consts::data_availability_header::MAX_EXTENDED_SQUARE_WIDTH;
+use crate::consts::data_availability_header::{
+    MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
+};
 use crate::namespaced_data::{NamespacedData, NamespacedDataId};
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NmtExt, NS_SIZE};
 use crate::row::RowId;
 use crate::{bail_validation, DataAvailabilityHeader, Error, Result};
-
-const MIN_SQUARE_WIDTH: usize = 2;
-const MIN_SHARES: usize = MIN_SQUARE_WIDTH * MIN_SQUARE_WIDTH;
 
 /// Represents either column or row of the [`ExtendedDataSquare`].
 ///
@@ -153,11 +152,14 @@ impl ExtendedDataSquare {
     /// Returns an error if:
     ///  - shares are of sizes different than [`SHARE_SIZE`]
     ///  - amount of shares doesn't allow for forming a square
-    ///  - amount of shares is lower than [`MIN_SHARES`]
+    ///  - width of the square is smaller than [`MIN_EXTENDED_SQUARE_WIDTH`]
     ///  - width of the square is bigger than [`MAX_EXTENDED_SQUARE_WIDTH`]
     ///  - width of the square isn't a power of 2
     ///  - namespaces of shares aren't in non-decreasing order row and column wise
     pub fn new(shares: Vec<Vec<u8>>, codec: String) -> Result<Self> {
+        const MIN_SHARES: usize = MIN_EXTENDED_SQUARE_WIDTH * MIN_EXTENDED_SQUARE_WIDTH;
+        const MAX_SHARES: usize = MAX_EXTENDED_SQUARE_WIDTH * MAX_EXTENDED_SQUARE_WIDTH;
+
         if shares.len() < MIN_SHARES {
             bail_validation!(
                 "shares len ({}) < MIN_SHARES ({})",
@@ -167,9 +169,9 @@ impl ExtendedDataSquare {
         }
         if shares.len() > MAX_EXTENDED_SQUARE_WIDTH.pow(2) {
             bail_validation!(
-                "shares len ({}) > MAX_EXTENDED_SQUARE_WIDTH.pow(2) ({})",
+                "shares len ({}) > MAX_SHARES ({})",
                 shares.len(),
-                MIN_SHARES
+                MAX_SHARES
             );
         }
 
