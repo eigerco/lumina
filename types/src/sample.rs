@@ -7,11 +7,9 @@
 //! [`Share`]: crate::Share
 //! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 
-use std::mem::size_of;
-
 use blockstore::block::CidError;
 use bytes::{BufMut, BytesMut};
-use celestia_proto::share::p2p::shwap::Sample as RawSample;
+use celestia_proto::share::p2p::shwap::{ProofType as RawProofType, Sample as RawSample};
 use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
@@ -50,7 +48,7 @@ pub struct Sample {
     /// Location of the sample in the EDS and associated block height
     pub sample_id: SampleId,
     /// Indication whether sampling was done row or column-wise
-    pub sample_proof_type: AxisType,
+    pub proof_type: AxisType,
     /// Share that is being sampled
     pub share: Vec<u8>,
     /// Proof of the inclusion of the share
@@ -128,7 +126,7 @@ impl Sample {
 
         Ok(Sample {
             sample_id,
-            sample_proof_type: axis_type,
+            proof_type: axis_type,
             share,
             proof: proof.into(),
         })
@@ -136,14 +134,14 @@ impl Sample {
 
     /// verify sample with root hash from ExtendedHeader
     pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
-        let index = match self.sample_proof_type {
+        let index = match self.proof_type {
             AxisType::Row => self.sample_id.row.index,
             AxisType::Col => self.sample_id.index,
         }
         .into();
 
         let root = dah
-            .root(self.sample_proof_type, index)
+            .root(self.proof_type, index)
             .ok_or(Error::EdsIndexOutOfRange(index))?;
 
         let ns = if is_ods_square(
@@ -173,13 +171,16 @@ impl TryFrom<RawSample> for Sample {
         };
 
         let sample_id = SampleId::decode(&sample.sample_id)?;
-        let sample_proof_type = u8::try_from(sample.sample_type)
-            .map_err(|_| Error::InvalidAxis(sample.sample_type))?
-            .try_into()?;
+
+        let proof_type = match RawProofType::try_from(sample.proof_type) {
+            Ok(RawProofType::RowProofType) => AxisType::Row,
+            Ok(RawProofType::ColProofType) => AxisType::Col,
+            Err(_) => return Err(Error::InvalidShwapProofType(sample.proof_type)),
+        };
 
         Ok(Sample {
             sample_id,
-            sample_proof_type,
+            proof_type,
             share: sample.sample_share,
             proof: proof.try_into()?,
         })
@@ -194,8 +195,11 @@ impl From<Sample> for RawSample {
         RawSample {
             sample_id: sample_id_bytes.to_vec(),
             sample_share: sample.share.to_vec(),
-            sample_type: sample.sample_proof_type as u8 as i32,
             sample_proof: Some(sample.proof.into()),
+            proof_type: match sample.proof_type {
+                AxisType::Row => RawProofType::RowProofType.into(),
+                AxisType::Col => RawProofType::ColProofType.into(),
+            },
         }
     }
 }
@@ -261,12 +265,14 @@ impl SampleId {
 
     /// Number of bytes needed to represent `SampleId`.
     pub const fn size() -> usize {
-        RowId::size() + size_of::<u16>()
+        // Size MUST be 12 by the spec.
+        12
     }
 
     fn encode(&self, bytes: &mut BytesMut) {
+        bytes.reserve(Self::size());
         self.row.encode(bytes);
-        bytes.put_u16_le(self.index);
+        bytes.put_u16(self.index);
     }
 
     fn decode(buffer: &[u8]) -> Result<Self, CidError> {
@@ -278,7 +284,7 @@ impl SampleId {
         // RawSampleId len is defined as RowId::size + u16::size, these are safe
         Ok(Self {
             row: RowId::decode(row_id)?,
-            index: u16::from_le_bytes(index.try_into().unwrap()),
+            index: u16::from_be_bytes(index.try_into().unwrap()),
         })
     }
 }
@@ -353,15 +359,25 @@ mod tests {
     }
 
     #[test]
+    fn sample_id_size() {
+        assert_eq!(SampleId::size(), 12);
+
+        let sample_id = SampleId::new(0, 4, 1).unwrap();
+        let mut bytes = BytesMut::new();
+        sample_id.encode(&mut bytes);
+        assert_eq!(bytes.len(), SampleId::size());
+    }
+
+    #[test]
     fn from_buffer() {
         let bytes = [
             0x01, // CIDv1
             0x80, 0xF0, 0x01, // CID codec = 7800
             0x81, 0xF0, 0x01, // multihash code = 7801
             0x0C, // len = SAMPLE_ID_SIZE = 12
-            64, 0, 0, 0, 0, 0, 0, 0, // block height = 64
-            7, 0, // row index = 7
-            5, 0, // sample index = 5
+            0, 0, 0, 0, 0, 0, 0, 64, // block height = 64
+            0, 7, // row index = 7
+            0, 5, // sample index = 5
         ];
 
         let cid = CidGeneric::<SAMPLE_ID_SIZE>::read_bytes(bytes.as_ref()).unwrap();

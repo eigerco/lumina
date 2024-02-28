@@ -101,6 +101,10 @@ pub enum Error {
     #[error("Invalid axis type: {0}")]
     InvalidAxis(i32),
 
+    /// Invalid Shwap proof type in Protobuf.
+    #[error("Invalid proof type: {0}")]
+    InvalidShwapProofType(i32),
+
     /// Range proof verification error.
     #[error("Range proof verification failed: {0:?}")]
     RangeProofError(nmt_rs::simple_merkle::error::RangeProofError),

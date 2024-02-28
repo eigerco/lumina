@@ -144,17 +144,15 @@ impl RowId {
 
     /// Number of bytes needed to represent [`RowId`]
     pub const fn size() -> usize {
-        // size of:
-        // u16 + u64
-        // 2  + 8
+        // Size MUST be 12 by the spec.
         10
     }
 
     pub(crate) fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(ROW_ID_SIZE);
 
-        bytes.put_u64_le(self.block_height);
-        bytes.put_u16_le(self.index);
+        bytes.put_u64(self.block_height);
+        bytes.put_u16(self.index);
     }
 
     pub(crate) fn decode(buffer: &[u8]) -> Result<Self, CidError> {
@@ -163,8 +161,8 @@ impl RowId {
         }
 
         let mut cursor = Cursor::new(buffer);
-        let block_height = cursor.get_u64_le();
-        let index = cursor.get_u16_le();
+        let block_height = cursor.get_u64();
+        let index = cursor.get_u16();
 
         if block_height == 0 {
             return Err(CidError::InvalidCid("Zero block height".to_string()));
@@ -246,14 +244,24 @@ mod tests {
     }
 
     #[test]
+    fn row_id_size() {
+        assert_eq!(RowId::size(), 10);
+
+        let row_id = RowId::new(0, 1).unwrap();
+        let mut bytes = BytesMut::new();
+        row_id.encode(&mut bytes);
+        assert_eq!(bytes.len(), RowId::size());
+    }
+
+    #[test]
     fn from_buffer() {
         let bytes = [
             0x01, // CIDv1
             0x90, 0xF0, 0x01, // CID codec = 7810
             0x91, 0xF0, 0x01, // multihash code = 7811
             0x0A, // len = ROW_ID_SIZE = 10
-            64, 0, 0, 0, 0, 0, 0, 0, // block height = 64
-            7, 0, // row index = 7
+            0, 0, 0, 0, 0, 0, 0, 64, // block height = 64
+            0, 7, // row index = 7
         ];
 
         let cid = CidGeneric::<ROW_ID_SIZE>::read_bytes(bytes.as_ref()).unwrap();
@@ -274,7 +282,7 @@ mod tests {
             0x91, 0xF0, 0x01, // code = 7811
             0x0A, // len = ROW_ID_SIZE = 10
             0, 0, 0, 0, 0, 0, 0, 0, // invalid block height = 0 !
-            7, 0, // row index = 7
+            0, 7, // row index = 7
         ];
 
         let cid = CidGeneric::<ROW_ID_SIZE>::read_bytes(bytes.as_ref()).unwrap();
