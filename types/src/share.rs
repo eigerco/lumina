@@ -111,13 +111,6 @@ impl Share {
         self.as_ref().to_vec()
     }
 
-    /// Converts this [`Share`] into the raw bytes vector.
-    ///
-    /// This will include also the [`InfoByte`] and the `sequence length`.
-    pub fn to_array(&self) -> [u8; appconsts::SHARE_SIZE] {
-        self.data
-    }
-
     /// Return Share's `InfoByte`
     pub fn info_byte(&self) -> InfoByte {
         InfoByte::from_raw_unchecked(self.data[NS_SIZE])
