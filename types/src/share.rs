@@ -1,5 +1,3 @@
-use std::ops::{Deref, DerefMut};
-
 use blockstore::block::{Block, CidError};
 use celestia_proto::share::p2p::shrex::nd::NamespaceRowResponse as RawNamespacedRow;
 use celestia_tendermint_proto::Protobuf;
@@ -145,16 +143,8 @@ impl AsRef<[u8]> for Share {
     }
 }
 
-impl Deref for Share {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        &self.data
-    }
-}
-
-impl DerefMut for Share {
-    fn deref_mut(&mut self) -> &mut Self::Target {
+impl AsMut<[u8]> for Share {
+    fn as_mut(&mut self) -> &mut [u8] {
         &mut self.data
     }
 }
