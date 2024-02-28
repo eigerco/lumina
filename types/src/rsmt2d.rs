@@ -145,7 +145,18 @@ pub struct ExtendedDataSquare {
 impl ExtendedDataSquare {
     /// Create a new EDS out of the provided shares.
     ///
-    /// Returns error if number of shares isn't a square number.
+    /// Shares should be provided in a row-major order, i.e. first shares of the first row,
+    /// then of the second row and so on.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    ///  - shares are of sizes different than [`SHARE_SIZE`]
+    ///  - amount of shares doesn't allow for forming a square
+    ///  - amount of shares is lower than [`MIN_SHARES`]
+    ///  - width of the square is bigger than [`MAX_EXTENDED_SQUARE_WIDTH`]
+    ///  - width of the square isn't a power of 2
+    ///  - namespaces of shares aren't in non-decreasing order row and column wise
     pub fn new(shares: Vec<Vec<u8>>, codec: String) -> Result<Self> {
         if shares.len() < MIN_SHARES {
             bail_validation!(
@@ -220,6 +231,55 @@ impl ExtendedDataSquare {
         }
 
         Ok(eds)
+    }
+
+    /// Create a new EDS out of the provided original data square shares.
+    ///
+    /// This method is similar to the [`ExtendedDataSquare::new`] but parity data
+    /// will be encoded automatically using the [`leopard_codec`]
+    ///
+    /// Shares should be provided in a row-major order.
+    ///
+    /// # Errors
+    ///
+    /// The same errors as in [`ExtendedDataSquare::new`] applies. The constrain
+    /// will be checked after the parity data is generated.
+    ///
+    /// Additionally, this function will propagate any error from encoding parity data.
+    pub fn from_ods(mut ods_shares: Vec<Vec<u8>>) -> Result<ExtendedDataSquare> {
+        let ods_width = f64::sqrt(ods_shares.len() as f64) as usize;
+        // this couldn't be detected later in `new()`
+        if ods_width * ods_width != ods_shares.len() {
+            return Err(Error::EdsInvalidDimentions);
+        }
+
+        let eds_width = ods_width * 2;
+        let mut eds_shares = Vec::with_capacity(eds_width * eds_width);
+        // take rows of ods and interleave them with parity shares
+        for _ in 0..ods_width {
+            eds_shares.extend(ods_shares.drain(..ods_width));
+            for _ in 0..ods_width {
+                eds_shares.push(vec![0; SHARE_SIZE]);
+            }
+        }
+        // fill bottom half of the square with parity data
+        eds_shares.resize(eds_width * eds_width, vec![0; SHARE_SIZE]);
+
+        // 2nd quadrant - encode parity of rows of 1st quadrant
+        for row in eds_shares.chunks_mut(eds_width).take(ods_width) {
+            leopard_codec::encode(row, ods_width)?;
+        }
+        // 3rd quadrant - encode parity of columns of 1st quadrant
+        for col in 0..ods_width {
+            let mut col: Vec<_> = eds_shares.iter_mut().skip(col).step_by(eds_width).collect();
+            leopard_codec::encode(&mut col, ods_width)?;
+        }
+        // 4th quadrant - encode parity of rows of 3rd quadrant
+        for row in eds_shares.chunks_mut(eds_width).skip(ods_width) {
+            leopard_codec::encode(row, ods_width)?;
+        }
+
+        ExtendedDataSquare::new(eds_shares, "leopard".to_string())
     }
 
     /// The raw data of the EDS.
@@ -608,74 +668,40 @@ mod tests {
             .concat()
         };
 
-        // Parity share can be anything
-        let parity_share = vec![0u8; SHARE_SIZE];
-
-        ExtendedDataSquare::new(
-            vec![
-                // row 0
-                share(0), // ODS
-                parity_share.clone(),
-                // row 1
-                parity_share.clone(),
-                parity_share.clone(),
-            ],
-            "fake".to_string(),
-        )
+        ExtendedDataSquare::from_ods(vec![
+            // row 0
+            share(0), // ODS
+        ])
         .unwrap();
 
-        ExtendedDataSquare::new(
-            vec![
-                // row 0
-                share(1), // ODS
-                share(2), // ODS
-                parity_share.clone(),
-                parity_share.clone(),
-                // row 1
-                share(1), // ODS
-                share(1), // ODS - error: smaller namespace in 2nd column
-                parity_share.clone(),
-                parity_share.clone(),
-                // row 2
-                parity_share.clone(),
-                parity_share.clone(),
-                parity_share.clone(),
-                parity_share.clone(),
-                // row 3
-                parity_share.clone(),
-                parity_share.clone(),
-                parity_share.clone(),
-                parity_share.clone(),
-            ],
-            "fake".to_string(),
-        )
+        ExtendedDataSquare::from_ods(vec![
+            // row 0
+            share(1),
+            share(2),
+            // row 1
+            share(1),
+            share(3),
+        ])
+        .unwrap();
+
+        ExtendedDataSquare::from_ods(vec![
+            // row 0
+            share(1),
+            share(2),
+            // row 1
+            share(1),
+            share(1), // error: smaller namespace in 2nd column
+        ])
         .unwrap_err();
 
-        ExtendedDataSquare::new(
-            vec![
-                // row 0
-                share(1), // ODS
-                share(1), // ODS
-                parity_share.clone(),
-                parity_share.clone(),
-                // row 1
-                share(2), // ODS
-                share(1), // ODS - error: smaller namespace in 2nd row
-                parity_share.clone(),
-                parity_share.clone(),
-                // row 2
-                parity_share.clone(),
-                parity_share.clone(),
-                parity_share.clone(),
-                parity_share.clone(),
-                // row 3
-                parity_share.clone(),
-                parity_share.clone(),
-                parity_share.clone(),
-                parity_share.clone(),
-            ],
-            "fake".to_string(),
-        )
+        ExtendedDataSquare::from_ods(vec![
+            // row 0
+            share(1),
+            share(1),
+            // row 1
+            share(2),
+            share(1), // error: smaller namespace in 2nd row
+        ])
         .unwrap_err();
 
         // not a power of 2

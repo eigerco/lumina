@@ -314,45 +314,21 @@ pub fn unverify(header: &mut ExtendedHeader) {
 
 /// Generate a properly encoded [`ExtendedDataSquare`] with random data.
 pub fn generate_eds(square_len: usize) -> ExtendedDataSquare {
-    let mut shares = Vec::with_capacity(square_len);
     let ns = Namespace::const_v0(rand::random());
     let ods_width = square_len / 2;
 
-    for row in 0..square_len {
-        for col in 0..square_len {
-            let share = if row < ods_width && col < ods_width {
-                // ODS share
-                [
-                    ns.as_bytes(),
-                    &[0; SHARE_INFO_BYTES][..],
-                    &random_bytes(SHARE_SIZE - NS_SIZE - SHARE_INFO_BYTES)[..],
-                ]
-                .concat()
-            } else {
-                // Parity share
-                vec![0; SHARE_SIZE]
-            };
+    let shares: Vec<_> = (0..ods_width * ods_width)
+        .map(|_| {
+            [
+                ns.as_bytes(),
+                &[0; SHARE_INFO_BYTES][..],
+                &random_bytes(SHARE_SIZE - NS_SIZE - SHARE_INFO_BYTES)[..],
+            ]
+            .concat()
+        })
+        .collect();
 
-            shares.push(share);
-        }
-    }
-
-    // encode parity data
-    // 2nd quadrant
-    for row in shares.chunks_mut(square_len).take(ods_width) {
-        leopard_codec::encode(row, ods_width).unwrap();
-    }
-    // 3rd quadrant
-    for col in 0..ods_width {
-        let mut col: Vec<_> = shares.iter_mut().skip(col).step_by(square_len).collect();
-        leopard_codec::encode(&mut col, ods_width).unwrap();
-    }
-    // 4th quadrant
-    for row in shares.chunks_mut(square_len).skip(ods_width) {
-        leopard_codec::encode(row, ods_width).unwrap();
-    }
-
-    ExtendedDataSquare::new(shares, "leopard".to_string()).unwrap()
+    ExtendedDataSquare::from_ods(shares).unwrap()
 }
 
 pub(crate) fn random_bytes(len: usize) -> Vec<u8> {
