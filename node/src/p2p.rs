@@ -10,6 +10,8 @@
 //! - fraud-sub topic on libp2p-gossipsub
 //! - header-ex client
 //! - header-ex server
+//! - bitswap 1.2.0
+//! - shwap - celestia's data availability protocol on top of bitswap
 
 use std::collections::HashMap;
 use std::future::poll_fn;
