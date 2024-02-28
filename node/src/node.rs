@@ -17,8 +17,10 @@ use celestia_types::ExtendedHeader;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
+use tracing::warn;
 
 use crate::daser::{Daser, DaserArgs, DaserError};
+use crate::executor::spawn;
 use crate::p2p::{P2p, P2pArgs, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::{Store, StoreError};
@@ -109,6 +111,21 @@ where
             p2p: p2p.clone(),
             store: store.clone(),
         })?);
+
+        // spawn the task that will stop the services when the fraud is detected
+        let network_compromised_token = p2p.get_network_compromised_token().await?;
+        spawn({
+            let syncer = syncer.clone();
+            let daser = daser.clone();
+            async move {
+                network_compromised_token.cancelled().await;
+                warn!("The network is compromised and should not be trusted.");
+                warn!("The node will stop synchronizing and sampling.");
+                warn!("You can still make some queries to the network.");
+                syncer.stop();
+                daser.stop();
+            }
+        });
 
         Ok(Node {
             p2p,
