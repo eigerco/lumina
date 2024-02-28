@@ -1,32 +1,18 @@
 //! Utilities for writing tests.
 
-use celestia_tendermint::{
-    block::{
-        header::{Header, Version},
-        parts, Commit, CommitSig,
-    },
-    chain,
-    public_key::PublicKey,
-    Signature, Time,
-};
+use celestia_tendermint::block::header::{Header, Version};
+use celestia_tendermint::block::{parts, Commit, CommitSig};
+use celestia_tendermint::public_key::PublicKey;
+use celestia_tendermint::{chain, Signature, Time};
 use ed25519_consensus::SigningKey;
 use rand::RngCore;
 
-use crate::nmt::{NamespacedHash, NamespacedHashExt};
-use crate::{
-    block::{CommitExt, GENESIS_HEIGHT},
-    nmt::Namespace,
-    ExtendedDataSquare,
-};
-use crate::{
-    consts::appconsts::SHARE_INFO_BYTES,
-    hash::{Hash, HashExt},
-};
-use crate::{
-    consts::{appconsts::SHARE_SIZE, version},
-    nmt::NS_SIZE,
-};
-use crate::{DataAvailabilityHeader, ExtendedHeader, ValidatorSet};
+use crate::block::{CommitExt, GENESIS_HEIGHT};
+use crate::consts::appconsts::{SHARE_INFO_BYTES, SHARE_SIZE};
+use crate::consts::version;
+use crate::hash::{Hash, HashExt};
+use crate::nmt::{Namespace, NamespacedHash, NamespacedHashExt, NS_SIZE};
+use crate::{DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, ValidatorSet};
 
 pub use crate::byzantine::test_utils::corrupt_eds;
 
