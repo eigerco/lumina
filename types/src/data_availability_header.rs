@@ -69,10 +69,10 @@ impl DataAvailabilityHeader {
         };
 
         for i in 0..square_len {
-            let row_root = eds.row_nmt(i).unwrap().root();
+            let row_root = eds.row_nmt(i).expect("EDS validated on construction").root();
             dah.row_roots.push(row_root);
 
-            let column_root = eds.column_nmt(i).unwrap().root();
+            let column_root = eds.column_nmt(i).expect("EDS validated on construction").root();
             dah.column_roots.push(column_root);
         }
 
