@@ -167,7 +167,7 @@ impl ExtendedDataSquare {
                 MIN_SHARES
             );
         }
-        if shares.len() > MAX_EXTENDED_SQUARE_WIDTH.pow(2) {
+        if shares.len() > MAX_SHARES {
             bail_validation!(
                 "shares len ({}) > MAX_SHARES ({})",
                 shares.len(),
