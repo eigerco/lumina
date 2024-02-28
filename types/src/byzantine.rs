@@ -109,13 +109,16 @@ impl FraudProof for BadEncodingFraudProof {
         let root = NamespacedHash::try_from(cid.hash().digest())?;
 
         // verify that Merkle proofs correspond to particular shares.
-        for share in &self.shares {
-            let Some(share) = share else {
+        for maybe_share in &self.shares {
+            let Some(share_with_proof) = maybe_share else {
                 continue;
             };
-            share
-                .proof
-                .verify_range(&root, &[&share.leaf.share], share.leaf.namespace.into())
+            let ShareWithProof {
+                leaf: NmtLeaf { namespace, share },
+                proof,
+            } = share_with_proof;
+            proof
+                .verify_range(&root, &[&share], **namespace)
                 .map_err(Error::RangeProofError)?;
         }
 
@@ -123,22 +126,22 @@ impl FraudProof for BadEncodingFraudProof {
         let mut rebuilt_shares: Vec<_> = self
             .shares
             .iter()
-            .map(|share| {
-                share
-                    .as_ref()
-                    .map(|sh| sh.leaf.share.to_vec())
+            .map(|maybe_share| {
+                maybe_share
+                    .clone()
+                    .map(|share_with_proof| share_with_proof.leaf.share)
                     .unwrap_or_default()
             })
             .collect();
-        let data_shares = rebuilt_shares.len() / 2;
-        if leopard_codec::reconstruct(&mut rebuilt_shares, data_shares).is_err() {
+        let ods_width = rebuilt_shares.len() / 2;
+        if leopard_codec::reconstruct(&mut rebuilt_shares, ods_width).is_err() {
             // we couldn't reconstruct the data even tho we had enough *proven* shares
             // befp is legit
             return Ok(());
         }
 
         // re-encode the parity data
-        if leopard_codec::encode(&mut rebuilt_shares, data_shares).is_err() {
+        if leopard_codec::encode(&mut rebuilt_shares, ods_width).is_err() {
             // NOTE: this is unreachable for current implementation of encode, esp. since
             // reconstruct succeeded, however leaving that as a future-proofing
             //
@@ -150,7 +153,7 @@ impl FraudProof for BadEncodingFraudProof {
         let mut nmt = Nmt::default();
 
         for (n, share) in rebuilt_shares.iter().enumerate() {
-            let ns = if n < data_shares {
+            let ns = if n < ods_width {
                 // safety: length must be correct
                 Namespace::from_raw(&share[..NS_SIZE]).unwrap()
             } else {
