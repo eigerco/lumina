@@ -175,7 +175,7 @@ impl TryFrom<RawSample> for Sample {
         let proof_type = match RawProofType::try_from(sample.proof_type) {
             Ok(RawProofType::RowProofType) => AxisType::Row,
             Ok(RawProofType::ColProofType) => AxisType::Col,
-            Err(_) => return Err(Error::InvalidProofType(sample.proof_type)),
+            Err(_) => return Err(Error::InvalidShwapProofType(sample.proof_type)),
         };
 
         Ok(Sample {
