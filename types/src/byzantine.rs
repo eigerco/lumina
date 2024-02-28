@@ -139,7 +139,7 @@ impl FraudProof for BadEncodingFraudProof {
 
         // re-encode the parity data
         if leopard_codec::encode(&mut rebuilt_shares, data_shares).is_err() {
-            // NOTE: this is unreachable for current implementation of encode, esp since
+            // NOTE: this is unreachable for current implementation of encode, esp. since
             // reconstruct succeeded, however leaving that as a future-proofing
             //
             // we couldn't encode parity data after reconstruction from proven shares
