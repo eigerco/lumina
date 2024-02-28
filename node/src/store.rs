@@ -319,7 +319,6 @@ mod tests {
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::Height;
     use rstest::rstest;
-    use std::ops::Bound;
 
     // rstest only supports attributes which last segment is `test`
     // https://docs.rs/rstest/0.18.2/rstest/attr.rstest.html#inject-test-attribute

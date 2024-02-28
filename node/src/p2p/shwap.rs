@@ -139,16 +139,16 @@ pub(crate) fn convert_cid<const S: usize>(cid: &CidGeneric<S>) -> Result<Cid> {
 mod tests {
     use super::*;
     use crate::store::InMemoryStore;
-    use crate::test_utils::{async_test, dah_of_eds, generate_fake_eds};
-    use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::AxisType;
+    use crate::test_utils::async_test;
+    use celestia_types::test_utils::{generate_eds, ExtendedHeaderGenerator};
+    use celestia_types::{AxisType, DataAvailabilityHeader};
 
     #[async_test]
     async fn hash() {
         let store = Arc::new(InMemoryStore::new());
 
-        let eds = generate_fake_eds(4);
-        let dah = dah_of_eds(&eds);
+        let eds = generate_eds(4);
+        let dah = DataAvailabilityHeader::from_eds(&eds);
 
         let mut gen = ExtendedHeaderGenerator::new();
         let header = gen.next_with_dah(dah.clone());

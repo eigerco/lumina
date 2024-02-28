@@ -90,3 +90,24 @@ impl Serialize for Proof {
         raw.serialize(serializer)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_utils::{corrupt_eds, generate_eds, ExtendedHeaderGenerator};
+
+    use super::*;
+
+    #[test]
+    fn befp_serde() {
+        let mut gen = ExtendedHeaderGenerator::new();
+        let mut eds = generate_eds(8);
+        let (_, proof) = corrupt_eds(&mut gen, &mut eds);
+
+        let proof = Proof::BadEncoding(proof);
+
+        let serialized = serde_json::to_string(&proof).unwrap();
+        let deserialized: Proof = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized, proof);
+    }
+}

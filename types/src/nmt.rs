@@ -23,17 +23,18 @@ use celestia_tendermint::hash::SHA256_HASH_SIZE;
 use celestia_tendermint_proto::serializers::cow_str::CowStr;
 use cid::CidGeneric;
 use multihash::Multihash;
-use nmt_rs::simple_merkle::db::MemDb;
-use nmt_rs::simple_merkle::tree::MerkleHash;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 mod namespace_proof;
 mod namespaced_hash;
+mod namespaced_merkle_tree;
 
 pub use self::namespace_proof::{NamespaceProof, EMPTY_LEAVES};
 pub use self::namespaced_hash::{
     NamespacedHashExt, RawNamespacedHash, HASH_SIZE, NAMESPACED_HASH_SIZE,
 };
+pub use self::namespaced_merkle_tree::{MerkleHash, NamespacedSha2Hasher, Nmt, NmtExt};
+
 use crate::{Error, Result};
 
 pub use nmt_rs::NamespaceMerkleHasher;
@@ -66,10 +67,6 @@ pub const NMT_ID_SIZE: usize = 2 * NS_SIZE + SHA256_HASH_SIZE;
 ///
 /// `min_namespace | max_namespace | Sha256(0x01 | left | right)`
 pub type NamespacedHash = nmt_rs::NamespacedHash<NS_SIZE>;
-/// Hasher for generating [`Namespace`] aware hashes.
-pub type NamespacedSha2Hasher = nmt_rs::NamespacedSha2Hasher<NS_SIZE>;
-/// [`Namespace`] aware merkle tree.
-pub type Nmt = nmt_rs::NamespaceMerkleTree<MemDb<NamespacedHash>, NamespacedSha2Hasher, NS_SIZE>;
 /// Proof of some statement about namesapced merkle tree. It can either prove presence
 /// of a set of shares or absence of a particular namespace.
 pub type Proof = nmt_rs::simple_merkle::proof::Proof<NamespacedSha2Hasher>;

@@ -1,21 +1,20 @@
 //! Utilities for writing tests.
 
-use celestia_tendermint::{
-    block::{
-        header::{Header, Version},
-        parts, Commit, CommitSig,
-    },
-    chain,
-    public_key::PublicKey,
-    Signature, Time,
-};
+use celestia_tendermint::block::header::{Header, Version};
+use celestia_tendermint::block::{parts, Commit, CommitSig};
+use celestia_tendermint::public_key::PublicKey;
+use celestia_tendermint::{chain, Signature, Time};
 use ed25519_consensus::SigningKey;
+use rand::RngCore;
 
 use crate::block::{CommitExt, GENESIS_HEIGHT};
+use crate::consts::appconsts::{SHARE_INFO_BYTES, SHARE_SIZE};
 use crate::consts::version;
 use crate::hash::{Hash, HashExt};
-use crate::nmt::{NamespacedHash, NamespacedHashExt};
-use crate::{DataAvailabilityHeader, ExtendedHeader, ValidatorSet};
+use crate::nmt::{Namespace, NamespacedHash, NamespacedHashExt, NS_SIZE};
+use crate::{DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, ValidatorSet};
+
+pub use crate::byzantine::test_utils::corrupt_eds;
 
 /// [`ExtendedHeader`] generator for testing purposes.
 ///
@@ -311,6 +310,31 @@ pub fn unverify(header: &mut ExtendedHeader) {
     } else {
         header.validate().expect("invalid header generated");
     }
+}
+
+/// Generate a properly encoded [`ExtendedDataSquare`] with random data.
+pub fn generate_eds(square_len: usize) -> ExtendedDataSquare {
+    let ns = Namespace::const_v0(rand::random());
+    let ods_width = square_len / 2;
+
+    let shares: Vec<_> = (0..ods_width * ods_width)
+        .map(|_| {
+            [
+                ns.as_bytes(),
+                &[0; SHARE_INFO_BYTES][..],
+                &random_bytes(SHARE_SIZE - NS_SIZE - SHARE_INFO_BYTES)[..],
+            ]
+            .concat()
+        })
+        .collect();
+
+    ExtendedDataSquare::from_ods(shares).unwrap()
+}
+
+pub(crate) fn random_bytes(len: usize) -> Vec<u8> {
+    let mut buf = vec![0u8; len];
+    rand::thread_rng().fill_bytes(&mut buf);
+    buf
 }
 
 fn generate_new(

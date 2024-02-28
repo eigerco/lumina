@@ -10,7 +10,7 @@ use crate::consts::data_availability_header::{
 use crate::hash::Hash;
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::rsmt2d::AxisType;
-use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
+use crate::{bail_validation, Error, ExtendedDataSquare, Result, ValidateBasic, ValidationError};
 
 /// Header with commitments of the data availability.
 ///
@@ -53,16 +53,38 @@ use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 )]
 pub struct DataAvailabilityHeader {
     /// Merkle roots of the [`ExtendedDataSquare`] rows.
-    ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub row_roots: Vec<NamespacedHash>,
     /// Merkle roots of the [`ExtendedDataSquare`] columns.
-    ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub column_roots: Vec<NamespacedHash>,
 }
 
 impl DataAvailabilityHeader {
+    /// Create a DataAvailabilityHeader by computing roots of a given [`ExtendedDataSquare`].
+    pub fn from_eds(eds: &ExtendedDataSquare) -> Self {
+        let square_len = eds.square_len();
+
+        let mut dah = DataAvailabilityHeader {
+            row_roots: Vec::with_capacity(square_len),
+            column_roots: Vec::with_capacity(square_len),
+        };
+
+        for i in 0..square_len {
+            let row_root = eds
+                .row_nmt(i)
+                .expect("EDS validated on construction")
+                .root();
+            dah.row_roots.push(row_root);
+
+            let column_root = eds
+                .column_nmt(i)
+                .expect("EDS validated on construction")
+                .root();
+            dah.column_roots.push(column_root);
+        }
+
+        dah
+    }
+
     /// Get the root from an axis at the given index.
     pub fn root(&self, axis: AxisType, index: usize) -> Option<NamespacedHash> {
         match axis {

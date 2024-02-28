@@ -136,6 +136,12 @@ impl AsRef<[u8]> for Share {
     }
 }
 
+impl AsMut<[u8]> for Share {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.data
+    }
+}
+
 impl Block<NMT_ID_SIZE> for Share {
     fn cid(&self) -> Result<CidGeneric<NMT_ID_SIZE>, CidError> {
         let hasher = NamespacedSha2Hasher::with_ignore_max_ns(true);
