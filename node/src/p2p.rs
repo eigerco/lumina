@@ -497,7 +497,7 @@ impl P2p {
     ///
     /// After this token is cancelled, the network should be treated as insincere
     /// and should not be trusted.
-    pub async fn get_network_compromised_token(&self) -> Result<CancellationToken> {
+    pub(crate) async fn get_network_compromised_token(&self) -> Result<CancellationToken> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::GetNetworkCompromisedToken { respond_to: tx })
