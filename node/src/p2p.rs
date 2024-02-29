@@ -953,14 +953,15 @@ where
         };
 
         let height = befp.height().value();
-        let current_height = if let Some(network_height) = network_head(&self.header_sub_watcher) {
-            network_height.value()
-        } else if let Ok(local_head) = self.store.get_head().await {
-            local_head.height().value()
-        } else {
-            // we aren't tracking the network and have uninitialized store
-            return gossipsub::MessageAcceptance::Ignore;
-        };
+        let current_height =
+            if let Some(network_height) = network_head_height(&self.header_sub_watcher) {
+                network_height.value()
+            } else if let Ok(local_head) = self.store.get_head().await {
+                local_head.height().value()
+            } else {
+                // we aren't tracking the network and have uninitialized store
+                return gossipsub::MessageAcceptance::Ignore;
+            };
 
         if height > current_height + FRAUD_PROOF_HEAD_HEIGHT_THRESHOLD {
             // does this threshold make any sense if we're gonna ignore it anyway
@@ -1098,6 +1099,6 @@ where
         .build())
 }
 
-fn network_head(watcher: &watch::Sender<Option<ExtendedHeader>>) -> Option<Height> {
+fn network_head_height(watcher: &watch::Sender<Option<ExtendedHeader>>) -> Option<Height> {
     watcher.borrow().as_ref().map(|header| header.height())
 }
