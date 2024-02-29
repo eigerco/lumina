@@ -794,18 +794,20 @@ where
                     return;
                 };
 
-                // We may discovered a new peer
-                self.peer_maybe_discovered(peer);
-
                 let acceptance = if message.topic == self.header_sub_topic_hash {
                     self.on_header_sub_message(&message.data[..]).await
                 } else if message.topic == self.bad_encoding_fraud_sub_topic {
-                    self.on_bad_encoding_fraud_sub_message(&message.data[..])
+                    self.on_bad_encoding_fraud_sub_message(&message.data[..], &peer)
                         .await
                 } else {
                     trace!("Unhandled gossipsub message");
                     gossipsub::MessageAcceptance::Ignore
                 };
+
+                if !matches!(acceptance, gossipsub::MessageAcceptance::Reject) {
+                    // We may discovered a new peer
+                    self.peer_maybe_discovered(peer);
+                }
 
                 let _ = self
                     .swarm
@@ -942,10 +944,11 @@ where
     async fn on_bad_encoding_fraud_sub_message(
         &mut self,
         data: &[u8],
+        peer: &PeerId,
     ) -> gossipsub::MessageAcceptance {
         let Ok(befp) = BadEncodingFraudProof::decode(data) else {
-            trace!("Malformed or invalid bad encoding fraud proof from froud-sub");
-            // TODO: celestia blacklists here, should we too?
+            trace!("Malformed or invalid bad encoding fraud proof from {peer}");
+            self.swarm.behaviour_mut().gossipsub.blacklist_peer(peer);
             return gossipsub::MessageAcceptance::Reject;
         };
 
@@ -973,7 +976,8 @@ where
         };
 
         if let Err(e) = befp.validate(&header) {
-            trace!("Received invalid bad encoding fraud proof: {e}");
+            trace!("Received invalid bad encoding fraud proof from {peer}: {e}");
+            self.swarm.behaviour_mut().gossipsub.blacklist_peer(peer);
             return gossipsub::MessageAcceptance::Reject;
         }
 
