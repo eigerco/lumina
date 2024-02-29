@@ -805,7 +805,7 @@ where
                 };
 
                 if !matches!(acceptance, gossipsub::MessageAcceptance::Reject) {
-                    // We may discovered a new peer
+                    // We may have discovered a new peer
                     self.peer_maybe_discovered(peer);
                 }
 
