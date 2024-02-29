@@ -2,14 +2,20 @@
 
 use std::time::Duration;
 
-use celestia_types::{consts::HASH_SIZE, hash::Hash};
-use libp2p::identity;
-use lumina_node::{
-    node::{Node, NodeConfig},
-    test_utils::{gen_filled_store, test_node_config, test_node_config_with_keypair},
+use celestia_tendermint_proto::Protobuf;
+use celestia_types::consts::HASH_SIZE;
+use celestia_types::fraud_proof::BadEncodingFraudProof;
+use celestia_types::hash::Hash;
+use celestia_types::test_utils::{corrupt_eds, generate_eds, ExtendedHeaderGenerator};
+use futures::StreamExt;
+use libp2p::{gossipsub, identity, noise, tcp, yamux, Multiaddr, SwarmBuilder};
+use lumina_node::node::{Node, NodeConfig};
+use lumina_node::store::{InMemoryStore, Store};
+use lumina_node::test_utils::{
+    gen_filled_store, listening_test_node_config, test_node_config, test_node_config_with_keypair,
 };
 use rand::Rng;
-use tokio::time::sleep;
+use tokio::{select, spawn, sync::mpsc, time::sleep};
 
 use crate::utils::{fetch_bridge_info, new_connected_node};
 
@@ -163,4 +169,92 @@ async fn peer_discovery() {
     assert!(connected_peers.iter().any(|peer| peer == node2_peer_id));
     assert!(tracker_info.num_connected_peers >= 3);
     assert_eq!(tracker_info.num_connected_trusted_peers, 1);
+}
+
+#[tokio::test]
+async fn stops_services_when_network_is_compromised() {
+    let mut gen = ExtendedHeaderGenerator::new();
+    let store = InMemoryStore::new();
+
+    // add some initial headers
+    let headers = gen.next_many(64);
+    store.append(headers).await.unwrap();
+
+    // create a corrupted block and insert it
+    let mut eds = generate_eds(8);
+    let (header, befp) = corrupt_eds(&mut gen, &mut eds);
+
+    store.append_single(header).await.unwrap();
+
+    // spawn node
+    let node = Node::new(NodeConfig {
+        store,
+        ..listening_test_node_config()
+    })
+    .await
+    .unwrap();
+
+    // get the address to dial
+    sleep(Duration::from_millis(300)).await;
+    let listener_addr = node.listeners().await.unwrap()[0].clone();
+
+    // spawn a proof broadcaster
+    let befp_announce_tx = spawn_befp_announcer(listener_addr);
+    sleep(Duration::from_millis(300)).await;
+
+    // node services are running
+    // TODO: also check the daser and blob submit
+    assert!(node.syncer_info().await.is_ok());
+
+    // announce befp
+    befp_announce_tx.send(befp).await.unwrap();
+    sleep(Duration::from_millis(300)).await;
+
+    // node services are stopped
+    // TODO: also check the daser and blob submit
+    assert!(node.syncer_info().await.is_err());
+}
+
+fn spawn_befp_announcer(connect_to: Multiaddr) -> mpsc::Sender<BadEncodingFraudProof> {
+    // create a new libp2p node with gossipsub
+    let mut announcer = SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )
+        .unwrap()
+        .with_behaviour(|key| {
+            let config = gossipsub::ConfigBuilder::default().build().unwrap();
+            let message_authenticity = gossipsub::MessageAuthenticity::Signed(key.clone());
+            let behaviour: gossipsub::Behaviour =
+                gossipsub::Behaviour::new(message_authenticity, config).unwrap();
+            Ok(behaviour)
+        })
+        .unwrap()
+        .build();
+
+    announcer.dial(connect_to).unwrap();
+
+    // subscribe to the fraud-sub topic
+    let topic = gossipsub::IdentTopic::new("/badencoding/fraud-sub/private/v0.0.1");
+    announcer.behaviour_mut().subscribe(&topic).unwrap();
+
+    // a channel for proof announcment
+    let (tx, mut rx) = mpsc::channel::<BadEncodingFraudProof>(8);
+
+    spawn(async move {
+        loop {
+            select! {
+                _ = announcer.select_next_some() => (),
+                Some(proof) = rx.recv() => {
+                    let proof = proof.encode_vec().unwrap();
+                    announcer.behaviour_mut().publish(topic.hash(), proof).unwrap();
+                }
+            }
+        }
+    });
+
+    tx
 }

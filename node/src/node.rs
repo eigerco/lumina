@@ -17,8 +17,12 @@ use celestia_types::ExtendedHeader;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
+use tokio::select;
+use tokio_util::sync::CancellationToken;
+use tracing::warn;
 
 use crate::daser::{Daser, DaserArgs, DaserError};
+use crate::executor::spawn;
 use crate::p2p::{P2p, P2pArgs, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::{Store, StoreError};
@@ -77,6 +81,7 @@ where
     store: Arc<S>,
     syncer: Arc<Syncer<S>>,
     _daser: Arc<Daser>,
+    tasks_cancellation_token: CancellationToken,
 }
 
 impl<S> Node<S>
@@ -110,11 +115,33 @@ where
             store: store.clone(),
         })?);
 
+        // spawn the task that will stop the services when the fraud is detected
+        let network_compromised_token = p2p.get_network_compromised_token().await?;
+        let tasks_cancellation_token = CancellationToken::new();
+        spawn({
+            let syncer = syncer.clone();
+            let daser = daser.clone();
+            let tasks_cancellation_token = tasks_cancellation_token.child_token();
+            async move {
+                select! {
+                    _ = tasks_cancellation_token.cancelled() => (),
+                    _ = network_compromised_token.cancelled() => {
+                        warn!("The network is compromised and should not be trusted.");
+                        warn!("The node will stop synchronizing and sampling.");
+                        warn!("You can still make some queries to the network.");
+                        syncer.stop();
+                        daser.stop();
+                    }
+                }
+            }
+        });
+
         Ok(Node {
             p2p,
             store,
             syncer,
             _daser: daser,
+            tasks_cancellation_token,
         })
     }
 
@@ -260,5 +287,15 @@ where
         R: RangeBounds<u64> + Send,
     {
         Ok(self.store.get_range(range).await?)
+    }
+}
+
+impl<S> Drop for Node<S>
+where
+    S: Store,
+{
+    fn drop(&mut self) {
+        // we have to cancel the task to drop the Arc's passed to it
+        self.tasks_cancellation_token.cancel();
     }
 }
