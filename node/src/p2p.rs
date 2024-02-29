@@ -947,7 +947,7 @@ where
         peer: &PeerId,
     ) -> gossipsub::MessageAcceptance {
         let Ok(befp) = BadEncodingFraudProof::decode(data) else {
-            trace!("Malformed or invalid bad encoding fraud proof from {peer}");
+            trace!("Malformed bad encoding fraud proof from {peer}");
             self.swarm.behaviour_mut().gossipsub.blacklist_peer(peer);
             return gossipsub::MessageAcceptance::Reject;
         };
