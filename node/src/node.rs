@@ -81,7 +81,7 @@ where
     store: Arc<S>,
     syncer: Arc<Syncer<S>>,
     _daser: Arc<Daser>,
-    on_network_compromised_task_cancellation_token: CancellationToken,
+    tasks_cancellation_token: CancellationToken,
 }
 
 impl<S> Node<S>
@@ -117,14 +117,14 @@ where
 
         // spawn the task that will stop the services when the fraud is detected
         let network_compromised_token = p2p.get_network_compromised_token().await?;
-        let on_network_compromised_task_cancellation_token = CancellationToken::new();
+        let tasks_cancellation_token = CancellationToken::new();
         spawn({
             let syncer = syncer.clone();
             let daser = daser.clone();
-            let cancellation_token = on_network_compromised_task_cancellation_token.clone();
+            let tasks_cancellation_token = tasks_cancellation_token.child_token();
             async move {
                 select! {
-                    _ = cancellation_token.cancelled() => (),
+                    _ = tasks_cancellation_token.cancelled() => (),
                     _ = network_compromised_token.cancelled() => {
                         warn!("The network is compromised and should not be trusted.");
                         warn!("The node will stop synchronizing and sampling.");
@@ -141,7 +141,7 @@ where
             store,
             syncer,
             _daser: daser,
-            on_network_compromised_task_cancellation_token,
+            tasks_cancellation_token,
         })
     }
 
@@ -296,6 +296,6 @@ where
 {
     fn drop(&mut self) {
         // we have to cancel the task to drop the Arc's passed to it
-        self.on_network_compromised_task_cancellation_token.cancel();
+        self.tasks_cancellation_token.cancel();
     }
 }
