@@ -25,7 +25,7 @@ use crate::daser::{Daser, DaserArgs, DaserError};
 use crate::executor::spawn;
 use crate::p2p::{P2p, P2pArgs, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::store::{Store, StoreError};
+use crate::store::{SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs, SyncerError, SyncingInfo};
 
 type Result<T, E = NodeError> = std::result::Result<T, E>;
@@ -287,6 +287,17 @@ where
         R: RangeBounds<u64> + Send,
     {
         Ok(self.store.get_range(range).await?)
+    }
+
+    /// Get data sampling metadata of an already sampled height.
+    ///
+    /// Returns `Ok(None)` if metadata for the given height does not exists.
+    pub async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+        match self.store.get_sampling_metadata(height).await {
+            Ok(val) => Ok(val),
+            Err(StoreError::NotFound) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 

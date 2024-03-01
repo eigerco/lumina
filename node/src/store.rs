@@ -883,9 +883,18 @@ mod tests {
         assert_eq!(sampling_data.cids_sampled, vec![]);
         assert!(!sampling_data.accepted);
 
-        store.get_sampling_metadata(0).await.unwrap_err();
-        store.get_sampling_metadata(6).await.unwrap_err();
-        store.get_sampling_metadata(100).await.unwrap_err();
+        assert!(matches!(
+            store.get_sampling_metadata(0).await,
+            Err(StoreError::NotFound)
+        ));
+        assert!(matches!(
+            store.get_sampling_metadata(6).await,
+            Err(StoreError::NotFound)
+        ));
+        assert!(matches!(
+            store.get_sampling_metadata(100).await,
+            Err(StoreError::NotFound)
+        ));
     }
 
     /// Fills an empty store

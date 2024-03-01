@@ -10,6 +10,7 @@ use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
 use lumina_node::node::{Node, NodeConfig};
 use lumina_node::store::{IndexedDbStore, Store};
+use serde::Serialize;
 use serde_wasm_bindgen::{from_value, to_value};
 use tracing::info;
 use wasm_bindgen::prelude::*;
@@ -196,6 +197,28 @@ impl WasmNode {
         }?;
 
         Ok(to_value(&headers)?)
+    }
+
+    /// Get data sampling metadata of an already sampled height.
+    pub async fn get_sampling_metadata(&self, height: u64) -> Result<JsValue> {
+        let metadata = self.0.get_sampling_metadata(height).await?;
+
+        #[derive(Serialize)]
+        struct Intermediate {
+            accepted: bool,
+            cids_sampled: Vec<String>,
+        }
+
+        let metadata = metadata.map(|m| Intermediate {
+            accepted: m.accepted,
+            cids_sampled: m
+                .cids_sampled
+                .into_iter()
+                .map(|cid| cid.to_string())
+                .collect(),
+        });
+
+        Ok(to_value(&metadata)?)
     }
 }
 
