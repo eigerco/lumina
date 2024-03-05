@@ -6,8 +6,6 @@
 //! [`Share`]: crate::Share
 //! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 
-use std::io::Cursor;
-
 use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
 use celestia_proto::share::p2p::shwap::Row as RawRow;
@@ -33,12 +31,8 @@ pub const ROW_ID_CODEC: u64 = 0x7810;
 /// Represents particular row in a specific Data Square,
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct RowId {
-    /// A height of the block which contains the data.
-    pub block_height: u64,
-    /// An index of the row in the [`ExtendedDataSquare`].
-    ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
-    pub index: u16,
+    block_height: u64,
+    index: u16,
 }
 
 /// Row together with the data
@@ -46,7 +40,7 @@ pub struct RowId {
 #[serde(try_from = "RawRow", into = "RawRow")]
 pub struct Row {
     /// Location of the row in the EDS and associated block height
-    pub row_id: RowId,
+    pub id: RowId,
     /// Shares contained in the row
     pub shares: Vec<Vec<u8>>,
 }
@@ -54,29 +48,34 @@ pub struct Row {
 impl Row {
     /// Create Row with the given index from EDS
     pub fn new(index: u16, eds: &ExtendedDataSquare, block_height: u64) -> Result<Self> {
-        let row_id = RowId::new(index, block_height)?;
-        let shares = eds.row(index.into())?;
+        let id = RowId::new(index, block_height)?;
+        let shares = eds.row(index)?;
 
-        Ok(Row { row_id, shares })
+        Ok(Row { id, shares })
     }
 
     /// verify the row against roots from DAH
     pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
-        let square_len = self.shares.len();
-        let row = self.row_id.index as usize;
+        let square_width =
+            u16::try_from(self.shares.len()).map_err(|_| Error::EdsInvalidDimentions)?;
+        let row = self.id.index;
 
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
-        for (col, s) in self.shares.iter().enumerate() {
-            let ns = if is_ods_square(row, col, square_len) {
-                Namespace::from_raw(&s[..NS_SIZE])?
+
+        for col in 0..square_width {
+            let share = &self.shares[usize::from(col)];
+
+            let ns = if is_ods_square(row, col, square_width) {
+                Namespace::from_raw(&share[..NS_SIZE])?
             } else {
                 Namespace::PARITY_SHARE
             };
-            tree.push_leaf(s, *ns).map_err(Error::Nmt)?;
+
+            tree.push_leaf(share, *ns).map_err(Error::Nmt)?;
         }
 
         let Some(root) = dah.row_root(row) else {
-            return Err(Error::EdsIndexOutOfRange(row));
+            return Err(Error::EdsIndexOutOfRange(row, 0));
         };
 
         if tree.root().hash() != root.hash() {
@@ -93,7 +92,7 @@ impl TryFrom<RawRow> for Row {
     type Error = Error;
 
     fn try_from(row: RawRow) -> Result<Row, Self::Error> {
-        let row_id = RowId::decode(&row.row_id)?;
+        let id = RowId::decode(&row.row_id)?;
         let mut shares = row.row_half;
         let data_shares = shares.len();
 
@@ -101,19 +100,19 @@ impl TryFrom<RawRow> for Row {
 
         leopard_codec::encode(&mut shares, data_shares)?;
 
-        Ok(Row { row_id, shares })
+        Ok(Row { id, shares })
     }
 }
 
 impl From<Row> for RawRow {
     fn from(row: Row) -> RawRow {
         let mut row_id_bytes = BytesMut::new();
-        row.row_id.encode(&mut row_id_bytes);
+        row.id.encode(&mut row_id_bytes);
 
         // parity shares aren't transmitted over shwap, just data shares
-        let square_len = row.shares.len();
+        let square_width = row.shares.len();
         let mut row_half = row.shares;
-        row_half.truncate(square_len / 2);
+        row_half.truncate(square_width / 2);
 
         RawRow {
             row_id: row_id_bytes.to_vec(),
@@ -141,8 +140,20 @@ impl RowId {
 
     /// Number of bytes needed to represent [`RowId`]
     pub const fn size() -> usize {
-        // Size MUST be 12 by the spec.
+        // Size MUST be 10 by the spec.
         10
+    }
+
+    /// A height of the block which contains the data.
+    pub fn block_height(&self) -> u64 {
+        self.block_height
+    }
+
+    /// An index of the row in the [`ExtendedDataSquare`].
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    pub fn index(&self) -> u16 {
+        self.index
     }
 
     pub(crate) fn encode(&self, bytes: &mut BytesMut) {
@@ -152,14 +163,13 @@ impl RowId {
         bytes.put_u16(self.index);
     }
 
-    pub(crate) fn decode(buffer: &[u8]) -> Result<Self, CidError> {
+    pub(crate) fn decode(mut buffer: &[u8]) -> Result<Self, CidError> {
         if buffer.len() != ROW_ID_SIZE {
             return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
-        let mut cursor = Cursor::new(buffer);
-        let block_height = cursor.get_u64();
-        let index = cursor.get_u16();
+        let block_height = buffer.get_u64();
+        let index = buffer.get_u16();
 
         if block_height == 0 {
             return Err(CidError::InvalidCid("Zero block height".to_string()));
@@ -236,9 +246,9 @@ mod tests {
         Row::new(1, &eds, height).unwrap();
         Row::new(7, &eds, height).unwrap();
         let row_err = Row::new(8, &eds, height).unwrap_err();
-        assert!(matches!(row_err, Error::EdsIndexOutOfRange(_)));
+        assert!(matches!(row_err, Error::EdsIndexOutOfRange(8, 0)));
         let row_err = Row::new(100, &eds, height).unwrap_err();
-        assert!(matches!(row_err, Error::EdsIndexOutOfRange(_)));
+        assert!(matches!(row_err, Error::EdsIndexOutOfRange(100, 0)));
     }
 
     #[test]
@@ -321,14 +331,14 @@ mod tests {
             let eds = generate_eds(2 << (rand::random::<usize>() % 8));
             let dah = DataAvailabilityHeader::from_eds(&eds);
 
-            let index = rand::random::<u16>() % eds.square_len() as u16;
+            let index = rand::random::<u16>() % eds.square_width();
 
             let row = Row {
-                row_id: RowId {
+                id: RowId {
                     block_height: 1,
                     index,
                 },
-                shares: eds.row(index.into()).unwrap(),
+                shares: eds.row(index).unwrap(),
             };
 
             let encoded = row.encode_vec().unwrap();

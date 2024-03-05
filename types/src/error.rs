@@ -165,8 +165,8 @@ pub enum Error {
     UnsupportedFraudProofType(String),
 
     /// Data square index out of range.
-    #[error("Data square index out of range: {0}")]
-    EdsIndexOutOfRange(usize),
+    #[error("Data square index out of range. row: {0}, column: {1}")]
+    EdsIndexOutOfRange(u16, u16),
 
     /// Could not create EDS, provided number of shares doesn't form a pefect square
     #[error("Invalid dimensions of EDS")]

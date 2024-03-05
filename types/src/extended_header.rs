@@ -115,7 +115,8 @@ impl ExtendedHeader {
     /// If validation fails, this function will return an error with a reason of failure.
     ///
     /// ```
-    /// # use celestia_types::ExtendedHeader;
+    /// # use celestia_types::{ExtendedHeader, DataAvailabilityHeader};
+    /// #
     /// # fn get_header(_: usize) -> ExtendedHeader {
     /// #     let s = include_str!("../test_data/chain1/extended_header_block_27.json");
     /// #     serde_json::from_str(s).unwrap()
@@ -125,7 +126,7 @@ impl ExtendedHeader {
     ///
     /// assert!(fetched_header.validate().is_ok());
     ///
-    /// fetched_header.dah.row_roots = vec![];
+    /// fetched_header.dah = DataAvailabilityHeader::new(vec![], vec![]);
     ///
     /// assert!(fetched_header.validate().is_err());
     /// ```

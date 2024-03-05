@@ -8,7 +8,7 @@
 //! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 
 use blockstore::block::CidError;
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use celestia_proto::share::p2p::shwap::{ProofType as RawProofType, Sample as RawSample};
 use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
@@ -28,17 +28,14 @@ pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
 /// The id of codec used for the [`SampleId`] in `Cid`s.
 pub const SAMPLE_ID_CODEC: u64 = 0x7800;
 
-/// Identifies a particular [`Share`] located in the [`row`] of the [`ExtendedDataSquare`].
+/// Identifies a particular [`Share`] located in the [`ExtendedDataSquare`].
 ///
-/// [`row`]: crate::row
 /// [`Share`]: crate::Share
 /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct SampleId {
-    /// Row of the EDS sample is located on
-    pub row: RowId,
-    /// Index in the row of the share being sampled
-    pub index: u16,
+    row_id: RowId,
+    column_index: u16,
 }
 
 /// Represents Sample, with proof of its inclusion and location on EDS
@@ -46,7 +43,7 @@ pub struct SampleId {
 #[serde(try_from = "RawSample", into = "RawSample")]
 pub struct Sample {
     /// Location of the sample in the EDS and associated block height
-    pub sample_id: SampleId,
+    pub id: SampleId,
     /// Indication whether sampling was done row or column-wise
     pub proof_type: AxisType,
     /// Share that is being sampled
@@ -58,16 +55,18 @@ pub struct Sample {
 impl Sample {
     /// Create a new [`Sample`] for the given index of the [`ExtendedDataSquare`] in a block.
     ///
-    /// `index` specifies the [`Share`] position in EDS, for details see [`SampleId::new`].
+    /// `row_index` and `column_index` specifies the [`Share`] position in EDS.
     /// `axis_type` determines whether proof of inclusion of the [`Share`] should be
     /// constructed for its row or column.
     ///
     /// # Errors
+    ///
     /// This function will return an error, if:
-    /// - `index` falls outside the provided [`ExtendedDataSquare`]
+    ///
+    /// - `row_index`/`column_index` falls outside the provided [`ExtendedDataSquare`].
     /// - [`ExtendedDataSquare`] is incorrect (either data shares don't have their namespace
     /// prefixed, or [`Share`]s aren't namespace ordered)
-    /// - block height is zero
+    /// - Block height is zero
     ///
     /// # Example
     ///
@@ -75,20 +74,20 @@ impl Sample {
     /// use celestia_types::AxisType;
     /// use celestia_types::sample::Sample;
     /// # use celestia_types::{ExtendedDataSquare, ExtendedHeader};
-    /// # fn get_extended_data_square(height: usize) -> ExtendedDataSquare {
+    /// #
+    /// # fn get_extended_data_square(height: u64) -> ExtendedDataSquare {
     /// #    unimplemented!()
     /// # }
-    /// # fn get_extended_header(height: usize) -> ExtendedHeader {
+    /// #
+    /// # fn get_extended_header(height: u64) -> ExtendedHeader {
     /// #    unimplemented!()
     /// # }
     ///
     /// let block_height = 15;
     /// let eds = get_extended_data_square(block_height);
-    /// let index = 2 * eds.square_len() + 3; // 3rd row and 4th column as these are 0 indexed
-    ///
     /// let header = get_extended_header(block_height);
     ///
-    /// let sample = Sample::new(AxisType::Row, index, &eds, block_height as u64).unwrap();
+    /// let sample = Sample::new(2, 3, AxisType::Row, &eds, block_height).unwrap();
     ///
     /// sample.verify(&header.dah).unwrap();
     /// ```
@@ -96,37 +95,32 @@ impl Sample {
     /// [`Share`]: crate::Share
     /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
     pub fn new(
-        axis_type: AxisType,
-        index: usize,
+        row_index: u16,
+        column_index: u16,
+        proof_type: AxisType,
         eds: &ExtendedDataSquare,
         block_height: u64,
     ) -> Result<Self> {
-        let square_len = eds.square_len();
-
-        let (axis_index, sample_index) = match axis_type {
-            AxisType::Row => (index / square_len, index % square_len),
-            AxisType::Col => (index % square_len, index / square_len),
-        };
-
-        let (row_index, column_index) = match axis_type {
-            AxisType::Row => (axis_index, sample_index),
-            AxisType::Col => (sample_index, axis_index),
-        };
-
         let share = eds.share(row_index, column_index)?.to_owned();
+        let id = SampleId::new(row_index, column_index, block_height)?;
 
-        let mut tree = eds.axis_nmt(axis_type, axis_index)?;
+        let range_proof = match proof_type {
+            AxisType::Row => eds
+                .row_nmt(row_index)?
+                .build_range_proof(usize::from(column_index)..usize::from(column_index) + 1),
+            AxisType::Col => eds
+                .column_nmt(column_index)?
+                .build_range_proof(usize::from(row_index)..usize::from(row_index) + 1),
+        };
 
         let proof = NmtNamespaceProof::PresenceProof {
-            proof: tree.build_range_proof(sample_index..sample_index + 1),
+            proof: range_proof,
             ignore_max_ns: true,
         };
 
-        let sample_id = SampleId::new(index, square_len, block_height)?;
-
         Ok(Sample {
-            sample_id,
-            proof_type: axis_type,
+            id,
+            proof_type,
             share,
             proof: proof.into(),
         })
@@ -134,20 +128,19 @@ impl Sample {
 
     /// verify sample with root hash from ExtendedHeader
     pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
-        let index = match self.proof_type {
-            AxisType::Row => self.sample_id.row.index,
-            AxisType::Col => self.sample_id.index,
-        }
-        .into();
-
-        let root = dah
-            .root(self.proof_type, index)
-            .ok_or(Error::EdsIndexOutOfRange(index))?;
+        let root = match self.proof_type {
+            AxisType::Row => dah
+                .row_root(self.id.row_index())
+                .ok_or(Error::EdsIndexOutOfRange(self.id.row_index(), 0))?,
+            AxisType::Col => dah
+                .column_root(self.id.column_index())
+                .ok_or(Error::EdsIndexOutOfRange(0, self.id.column_index()))?,
+        };
 
         let ns = if is_ods_square(
-            self.sample_id.row.index.into(),
-            self.sample_id.index.into(),
-            dah.square_len(),
+            self.id.row_index(),
+            self.id.column_index(),
+            dah.square_width(),
         ) {
             Namespace::from_raw(&self.share[..NS_SIZE])?
         } else {
@@ -170,7 +163,7 @@ impl TryFrom<RawSample> for Sample {
             return Err(Error::MissingProof);
         };
 
-        let sample_id = SampleId::decode(&sample.sample_id)?;
+        let id = SampleId::decode(&sample.sample_id)?;
 
         let proof_type = match RawProofType::try_from(sample.proof_type) {
             Ok(RawProofType::RowProofType) => AxisType::Row,
@@ -179,7 +172,7 @@ impl TryFrom<RawSample> for Sample {
         };
 
         Ok(Sample {
-            sample_id,
+            id,
             proof_type,
             share: sample.sample_share,
             proof: proof.try_into()?,
@@ -190,7 +183,7 @@ impl TryFrom<RawSample> for Sample {
 impl From<Sample> for RawSample {
     fn from(sample: Sample) -> RawSample {
         let mut sample_id_bytes = BytesMut::with_capacity(SAMPLE_ID_SIZE);
-        sample.sample_id.encode(&mut sample_id_bytes);
+        sample.id.encode(&mut sample_id_bytes);
 
         RawSample {
             sample_id: sample_id_bytes.to_vec(),
@@ -205,15 +198,12 @@ impl From<Sample> for RawSample {
 }
 
 impl SampleId {
-    /// Create a new [`SampleId`] for the given index of the [`ExtendedDataSquare`] in a block.
-    ///
-    /// When creating the [`SampleId`], [`ExtendedDataSquare`] is indexed in a row-major order,
-    /// meaning that to get [`Share`] at coordinates `(row_id, col_id)`, one would pass
-    /// `index = row_id * square_len + col_id`
+    /// Create a new [`SampleId`] for the given `row_index` and `column_index` of the
+    /// [`ExtendedDataSquare`] in a block.
     ///
     /// # Errors
     ///
-    /// This function will return an error if the block height or sample index is invalid.
+    /// This function will return an error if the block height is zero.
     ///
     /// # Example
     ///
@@ -221,45 +211,21 @@ impl SampleId {
     /// use celestia_types::sample::SampleId;
     ///
     /// // Consider an 64 share EDS with block height of 15
-    /// let square_width = 8;
     /// let header_height = 15;
     ///
-    /// // Create an id of a sample at the 3rd row and 2nd column
-    /// // those are indexed from 0
-    /// let row = 2;
-    /// let col = 1;
-    /// let sample_id = SampleId::new(
-    ///     square_width * row + col,
-    ///     square_width,
-    ///     header_height,
-    /// ).unwrap();
-    ///
-    /// assert_eq!(sample_id.row.index, row as u16);
-    /// assert_eq!(sample_id.index, col as u16);
+    /// SampleId::new(2, 1, header_height).unwrap();
     /// ```
     ///
     /// [`Share`]: crate::Share
     /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
-    pub fn new(index: usize, square_len: usize, block_height: u64) -> Result<Self> {
-        let row_index = index / square_len;
-        let sample_index = index % square_len;
-
-        if row_index >= square_len || sample_index >= square_len {
-            return Err(Error::EdsIndexOutOfRange(index));
+    pub fn new(row_index: u16, column_index: u16, block_height: u64) -> Result<Self> {
+        if block_height == 0 {
+            return Err(Error::ZeroBlockHeight);
         }
 
-        let row_id = RowId::new(
-            row_index
-                .try_into()
-                .map_err(|_| Error::EdsIndexOutOfRange(index))?,
-            block_height,
-        )?;
-
         Ok(SampleId {
-            row: row_id,
-            index: sample_index
-                .try_into()
-                .map_err(|_| Error::EdsIndexOutOfRange(sample_index))?,
+            row_id: RowId::new(row_index, block_height)?,
+            column_index,
         })
     }
 
@@ -269,10 +235,29 @@ impl SampleId {
         12
     }
 
+    /// A height of the block which contains the sample.
+    pub fn block_height(&self) -> u64 {
+        self.row_id.block_height()
+    }
+
+    /// Row index of the [`ExtendedDataSquare`] that sample is located on.
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    pub fn row_index(&self) -> u16 {
+        self.row_id.index()
+    }
+
+    /// Column index of the [`ExtendedDataSquare`] that sample is located on.
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    pub fn column_index(&self) -> u16 {
+        self.column_index
+    }
+
     fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(Self::size());
-        self.row.encode(bytes);
-        bytes.put_u16(self.index);
+        self.row_id.encode(bytes);
+        bytes.put_u16(self.column_index);
     }
 
     fn decode(buffer: &[u8]) -> Result<Self, CidError> {
@@ -280,11 +265,13 @@ impl SampleId {
             return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
-        let (row_id, index) = buffer.split_at(RowId::size());
-        // RawSampleId len is defined as RowId::size + u16::size, these are safe
-        Ok(Self {
-            row: RowId::decode(row_id)?,
-            index: u16::from_be_bytes(index.try_into().unwrap()),
+        let (row_bytes, mut col_bytes) = buffer.split_at(RowId::size());
+        let row_id = RowId::decode(row_bytes)?;
+        let column_index = col_bytes.get_u16();
+
+        Ok(SampleId {
+            row_id,
+            column_index,
         })
     }
 }
@@ -332,6 +319,8 @@ impl From<SampleId> for CidGeneric<SAMPLE_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::nmt::Namespace;
+    use crate::test_utils::generate_eds;
 
     #[test]
     fn round_trip() {
@@ -348,14 +337,17 @@ mod tests {
 
     #[test]
     fn index_calculation() {
-        let square_len = 8;
+        let eds = generate_eds(8);
 
-        SampleId::new(10, square_len, 100).unwrap();
-        SampleId::new(63, square_len, 100).unwrap();
-        let sample_err = SampleId::new(64, square_len, 100).unwrap_err();
-        assert!(matches!(sample_err, Error::EdsIndexOutOfRange(64)));
-        let sample_err = SampleId::new(99, square_len, 100).unwrap_err();
-        assert!(matches!(sample_err, Error::EdsIndexOutOfRange(99)));
+        Sample::new(0, 0, AxisType::Row, &eds, 100).unwrap();
+        Sample::new(7, 6, AxisType::Row, &eds, 100).unwrap();
+        Sample::new(7, 7, AxisType::Row, &eds, 100).unwrap();
+
+        let sample_err = Sample::new(7, 8, AxisType::Row, &eds, 100).unwrap_err();
+        assert!(matches!(sample_err, Error::EdsIndexOutOfRange(7, 8)));
+
+        let sample_err = Sample::new(12, 3, AxisType::Row, &eds, 100).unwrap_err();
+        assert!(matches!(sample_err, Error::EdsIndexOutOfRange(12, 3)));
     }
 
     #[test]
@@ -386,9 +378,9 @@ mod tests {
         assert_eq!(mh.code(), SAMPLE_ID_MULTIHASH_CODE);
         assert_eq!(mh.size(), SAMPLE_ID_SIZE as u8);
         let sample_id = SampleId::try_from(cid).unwrap();
-        assert_eq!(sample_id.row.index, 7);
-        assert_eq!(sample_id.row.block_height, 64);
-        assert_eq!(sample_id.index, 5);
+        assert_eq!(sample_id.block_height(), 64);
+        assert_eq!(sample_id.row_index(), 7);
+        assert_eq!(sample_id.column_index(), 5);
     }
 
     #[test]
@@ -417,9 +409,9 @@ mod tests {
         let bytes = include_bytes!("../test_data/shwap_samples/sample.data");
         let msg = Sample::decode(&bytes[..]).unwrap();
 
-        assert_eq!(msg.sample_id.index, 1);
-        assert_eq!(msg.sample_id.row.index, 0);
-        assert_eq!(msg.sample_id.row.block_height, 1);
+        assert_eq!(msg.id.column_index(), 1);
+        assert_eq!(msg.id.row_index(), 0);
+        assert_eq!(msg.id.block_height(), 1);
 
         let expected_ns =
             Namespace::new_v0(&[11, 13, 177, 159, 193, 156, 129, 121, 234, 136]).unwrap();

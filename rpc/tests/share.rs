@@ -149,7 +149,7 @@ async fn get_eds() {
     let header = client.header_get_by_height(submitted_height).await.unwrap();
     let eds = client.share_get_eds(&header).await.unwrap();
 
-    for i in 0..header.dah.square_len() {
+    for i in 0..header.dah.square_width() {
         let row_root = eds.row_nmt(i).unwrap().root();
         assert_eq!(row_root, header.dah.row_root(i).unwrap());
 

@@ -442,11 +442,11 @@ impl P2p {
     /// failed.
     pub async fn get_sample(
         &self,
-        index: usize,
-        square_len: usize,
+        row_index: u16,
+        column_index: u16,
         block_height: u64,
     ) -> Result<Sample> {
-        let cid = sample_cid(index, square_len, block_height)?;
+        let cid = sample_cid(row_index, column_index, block_height)?;
         let data = self.get_shwap_cid(cid, Some(GET_SAMPLE_TIMEOUT)).await?;
         Ok(Sample::decode(&data[..])?)
     }

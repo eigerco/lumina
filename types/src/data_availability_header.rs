@@ -53,22 +53,32 @@ use crate::{bail_validation, Error, ExtendedDataSquare, Result, ValidateBasic, V
 )]
 pub struct DataAvailabilityHeader {
     /// Merkle roots of the [`ExtendedDataSquare`] rows.
-    pub row_roots: Vec<NamespacedHash>,
+    row_roots: Vec<NamespacedHash>,
     /// Merkle roots of the [`ExtendedDataSquare`] columns.
-    pub column_roots: Vec<NamespacedHash>,
+    column_roots: Vec<NamespacedHash>,
 }
 
 impl DataAvailabilityHeader {
+    /// Create new [`DataAvailabilityHeader`].
+    ///
+    /// [`DataAvailabilityHeader::validate_basic`] should be called after this to check validity.
+    pub fn new(row_roots: Vec<NamespacedHash>, column_roots: Vec<NamespacedHash>) -> Self {
+        DataAvailabilityHeader {
+            row_roots,
+            column_roots,
+        }
+    }
+
     /// Create a DataAvailabilityHeader by computing roots of a given [`ExtendedDataSquare`].
     pub fn from_eds(eds: &ExtendedDataSquare) -> Self {
-        let square_len = eds.square_len();
+        let square_width = eds.square_width();
 
         let mut dah = DataAvailabilityHeader {
-            row_roots: Vec::with_capacity(square_len),
-            column_roots: Vec::with_capacity(square_len),
+            row_roots: Vec::with_capacity(square_width.into()),
+            column_roots: Vec::with_capacity(square_width.into()),
         };
 
-        for i in 0..square_len {
+        for i in 0..square_width {
             let row_root = eds
                 .row_nmt(i)
                 .expect("EDS validated on construction")
@@ -86,20 +96,36 @@ impl DataAvailabilityHeader {
     }
 
     /// Get the root from an axis at the given index.
-    pub fn root(&self, axis: AxisType, index: usize) -> Option<NamespacedHash> {
+    pub fn root(&self, axis: AxisType, index: u16) -> Option<NamespacedHash> {
         match axis {
             AxisType::Col => self.column_root(index),
             AxisType::Row => self.row_root(index),
         }
     }
 
+    /// Merkle roots of the [`ExtendedDataSquare`] rows.
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    pub fn row_roots(&self) -> &[NamespacedHash] {
+        &self.row_roots
+    }
+
+    /// Merkle roots of the [`ExtendedDataSquare`] columns.
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    pub fn column_roots(&self) -> &[NamespacedHash] {
+        &self.column_roots
+    }
+
     /// Get a root of the row with the given index.
-    pub fn row_root(&self, row: usize) -> Option<NamespacedHash> {
+    pub fn row_root(&self, row: u16) -> Option<NamespacedHash> {
+        let row = usize::from(row);
         self.row_roots.get(row).cloned()
     }
 
     /// Get the a root of the column with the given index.
-    pub fn column_root(&self, column: usize) -> Option<NamespacedHash> {
+    pub fn column_root(&self, column: u16) -> Option<NamespacedHash> {
+        let column = usize::from(column);
         self.column_roots.get(column).cloned()
     }
 
@@ -134,9 +160,13 @@ impl DataAvailabilityHeader {
     /// Get the size of the [`ExtendedDataSquare`] for which this header was built.
     ///
     /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
-    pub fn square_len(&self) -> usize {
+    pub fn square_width(&self) -> u16 {
         // `validate_basic` checks that rows num = cols num
-        self.row_roots.len()
+        self.row_roots
+            .len()
+            .try_into()
+            // On validated DAH this never happens
+            .expect("len is bigger than u16::MAX")
     }
 }
 

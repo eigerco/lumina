@@ -32,14 +32,8 @@ pub const NAMESPACED_DATA_ID_CODEC: u64 = 0x7820;
 /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct NamespacedDataId {
-    /// Index of the row in the [`ExtendedDataSquare`].
-    ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
-    pub row: RowId,
-    /// A namespace of the [`Share`]s.
-    ///
-    /// [`Share`]: crate::Share
-    pub namespace: Namespace,
+    row_id: RowId,
+    namespace: Namespace,
 }
 
 /// `NamespacedData` contains up to a row of shares belonging to a particular namespace and a proof of their inclusion.
@@ -50,7 +44,7 @@ pub struct NamespacedDataId {
 #[serde(try_from = "RawNamespacedData", into = "RawNamespacedData")]
 pub struct NamespacedData {
     /// Location of the shares on EDS
-    pub namespaced_data_id: NamespacedDataId,
+    pub id: NamespacedDataId,
     /// Proof of data inclusion
     pub proof: NamespaceProof,
     /// Shares with data
@@ -89,12 +83,9 @@ impl NamespacedData {
             return Err(Error::WrongProofType);
         }
 
-        let namespace = self.namespaced_data_id.namespace;
-
-        let row = self.namespaced_data_id.row.index;
-        let root = dah
-            .row_root(row.into())
-            .ok_or(Error::EdsIndexOutOfRange(row.into()))?;
+        let namespace = self.id.namespace();
+        let row = self.id.row_index();
+        let root = dah.row_root(row).ok_or(Error::EdsIndexOutOfRange(row, 0))?;
 
         self.proof
             .verify_complete_namespace(&root, &self.shares, *namespace)
@@ -112,10 +103,10 @@ impl TryFrom<RawNamespacedData> for NamespacedData {
             return Err(Error::MissingProof);
         };
 
-        let namespaced_data_id = NamespacedDataId::decode(&namespaced_data.data_id)?;
+        let id = NamespacedDataId::decode(&namespaced_data.data_id)?;
 
         Ok(NamespacedData {
-            namespaced_data_id,
+            id,
             shares: namespaced_data.data_shares,
             proof: proof.try_into()?,
         })
@@ -125,9 +116,7 @@ impl TryFrom<RawNamespacedData> for NamespacedData {
 impl From<NamespacedData> for RawNamespacedData {
     fn from(namespaced_data: NamespacedData) -> RawNamespacedData {
         let mut data_id_bytes = BytesMut::new();
-        namespaced_data
-            .namespaced_data_id
-            .encode(&mut data_id_bytes);
+        namespaced_data.id.encode(&mut data_id_bytes);
 
         RawNamespacedData {
             data_id: data_id_bytes.to_vec(),
@@ -150,7 +139,7 @@ impl NamespacedDataId {
         }
 
         Ok(Self {
-            row: RowId::new(row_index, block_height)?,
+            row_id: RowId::new(row_index, block_height)?,
             namespace,
         })
     }
@@ -161,8 +150,28 @@ impl NamespacedDataId {
         39
     }
 
+    /// A height of the block which contains the shares.
+    pub fn block_height(&self) -> u64 {
+        self.row_id.block_height()
+    }
+
+    /// Row index of the [`ExtendedDataSquare`] that shares are located on.
+    ///
+    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    pub fn row_index(&self) -> u16 {
+        self.row_id.index()
+    }
+
+    /// A namespace of the [`Share`]s.
+    ///
+    /// [`Share`]: crate::Share
+    pub fn namespace(&self) -> Namespace {
+        self.namespace
+    }
+
     fn encode(&self, bytes: &mut BytesMut) {
-        self.row.encode(bytes);
+        bytes.reserve(Self::size());
+        self.row_id.encode(bytes);
         bytes.put(self.namespace.as_bytes());
     }
 
@@ -171,13 +180,12 @@ impl NamespacedDataId {
             return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
-        let (row_id, namespace) = buffer.split_at(RowId::size());
+        let (row_bytes, ns_bytes) = buffer.split_at(RowId::size());
+        let row_id = RowId::decode(row_bytes)?;
+        let namespace =
+            Namespace::from_raw(ns_bytes).map_err(|e| CidError::InvalidCid(e.to_string()))?;
 
-        Ok(Self {
-            row: RowId::decode(row_id)?,
-            namespace: Namespace::from_raw(namespace)
-                .map_err(|e| CidError::InvalidCid(e.to_string()))?,
-        })
+        Ok(Self { row_id, namespace })
     }
 }
 
@@ -258,9 +266,9 @@ mod tests {
         assert_eq!(mh.code(), NAMESPACED_DATA_ID_MULTIHASH_CODE);
         assert_eq!(mh.size(), NAMESPACED_DATA_ID_SIZE as u8);
         let data_id = NamespacedDataId::try_from(cid).unwrap();
-        assert_eq!(data_id.namespace, Namespace::new_v0(&[1]).unwrap());
-        assert_eq!(data_id.row.block_height, 64);
-        assert_eq!(data_id.row.index, 7);
+        assert_eq!(data_id.namespace(), Namespace::new_v0(&[1]).unwrap());
+        assert_eq!(data_id.block_height(), 64);
+        assert_eq!(data_id.row_index(), 7);
     }
 
     #[test]
@@ -304,9 +312,9 @@ mod tests {
         let msg = NamespacedData::decode(&bytes[..]).unwrap();
 
         let ns = Namespace::new_v0(&[135, 30, 47, 81, 60, 66, 177, 20, 57, 85]).unwrap();
-        assert_eq!(msg.namespaced_data_id.namespace, ns);
-        assert_eq!(msg.namespaced_data_id.row.index, 0);
-        assert_eq!(msg.namespaced_data_id.row.block_height, 1);
+        assert_eq!(msg.id.namespace(), ns);
+        assert_eq!(msg.id.row_index(), 0);
+        assert_eq!(msg.id.block_height(), 1);
 
         for s in msg.shares {
             let s = Share::from_raw(&s).unwrap();
