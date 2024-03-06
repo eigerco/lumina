@@ -60,9 +60,17 @@ pub struct DataAvailabilityHeader {
 
 impl DataAvailabilityHeader {
     /// Create new [`DataAvailabilityHeader`].
-    ///
-    /// [`DataAvailabilityHeader::validate_basic`] should be called after this to check validity.
-    pub fn new(row_roots: Vec<NamespacedHash>, column_roots: Vec<NamespacedHash>) -> Self {
+    pub fn new(row_roots: Vec<NamespacedHash>, column_roots: Vec<NamespacedHash>) -> Result<Self> {
+        let dah = DataAvailabilityHeader::new_unchecked(row_roots, column_roots);
+        dah.validate_basic()?;
+        Ok(dah)
+    }
+
+    /// Create new [`DataAvailabilityHeader`] but do not validate it.
+    pub fn new_unchecked(
+        row_roots: Vec<NamespacedHash>,
+        column_roots: Vec<NamespacedHash>,
+    ) -> Self {
         DataAvailabilityHeader {
             row_roots,
             column_roots,

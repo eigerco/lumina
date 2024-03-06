@@ -264,7 +264,7 @@ impl Default for ExtendedHeaderGenerator {
 pub fn invalidate(header: &mut ExtendedHeader) {
     // One way of invalidate `ExtendedHeader` but still passes the
     // verification check, is to clear `dah` but keep `data_hash` unchanged.
-    header.dah = DataAvailabilityHeader::new(Vec::new(), Vec::new());
+    header.dah = DataAvailabilityHeader::new_unchecked(Vec::new(), Vec::new());
 
     header.validate().unwrap_err();
 }
@@ -412,7 +412,7 @@ fn generate_new(
             }),
         ),
         dah: dah.unwrap_or_else(|| {
-            DataAvailabilityHeader::new(
+            DataAvailabilityHeader::new_unchecked(
                 vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
                 vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
             )
@@ -486,7 +486,7 @@ fn generate_next(
         },
         validator_set: current.validator_set.clone(),
         dah: dah.unwrap_or_else(|| {
-            DataAvailabilityHeader::new(
+            DataAvailabilityHeader::new_unchecked(
                 vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
                 vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
             )

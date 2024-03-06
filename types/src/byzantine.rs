@@ -464,7 +464,7 @@ mod tests {
         let mut eds = generate_eds(8);
         let (mut eh, proof) = corrupt_eds(&mut gen, &mut eds);
 
-        eh.dah = DataAvailabilityHeader::new(Vec::new(), eh.dah.column_roots().to_vec());
+        eh.dah = DataAvailabilityHeader::new_unchecked(Vec::new(), eh.dah.column_roots().to_vec());
 
         proof.validate(&eh).unwrap_err();
     }

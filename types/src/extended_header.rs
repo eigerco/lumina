@@ -126,7 +126,7 @@ impl ExtendedHeader {
     ///
     /// assert!(fetched_header.validate().is_ok());
     ///
-    /// fetched_header.dah = DataAvailabilityHeader::new(vec![], vec![]);
+    /// fetched_header.dah = DataAvailabilityHeader::new_unchecked(vec![], vec![]);
     ///
     /// assert!(fetched_header.validate().is_err());
     /// ```
