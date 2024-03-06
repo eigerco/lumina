@@ -66,7 +66,9 @@ impl DataAvailabilityHeader {
         Ok(dah)
     }
 
-    /// Create new [`DataAvailabilityHeader`] but do not validate it.
+    /// Create new non-validated [`DataAvailabilityHeader`].
+    ///
+    /// [`DataAvailabilityHeader::validate_basic`] can be used to check valitidy later on.
     pub fn new_unchecked(
         row_roots: Vec<NamespacedHash>,
         column_roots: Vec<NamespacedHash>,
