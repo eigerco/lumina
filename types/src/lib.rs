@@ -18,7 +18,6 @@ pub mod p2p;
 pub mod row;
 mod rsmt2d;
 pub mod sample;
-pub(crate) mod serializers;
 mod share;
 pub mod state;
 mod sync;

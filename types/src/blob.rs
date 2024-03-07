@@ -9,7 +9,6 @@ mod commitment;
 pub use self::commitment::Commitment;
 use crate::consts::appconsts;
 use crate::nmt::Namespace;
-use crate::serializers::none_as_negative_one;
 use crate::{bail_validation, Error, Result, Share};
 
 /// GasPrice represents the amount to be paid per gas unit.
@@ -22,7 +21,7 @@ use crate::{bail_validation, Error, Result, Share};
 /// [`submitting data blobs`]: https://docs.celestia.org/developers/submit-data#fees-and-gas-limits
 #[derive(Debug, Default, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct GasPrice(#[serde(serialize_with = "none_as_negative_one::serialize")] Option<f64>);
+pub struct GasPrice(#[serde(with = "gas_prize_serde")] Option<f64>);
 
 impl From<f64> for GasPrice {
     fn from(value: f64) -> Self {
@@ -183,6 +182,27 @@ impl From<Blob> for RawBlob {
             data: value.data,
             share_version: value.share_version as u32,
         }
+    }
+}
+
+mod gas_prize_serde {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    /// Serialize [`Option<f64>`] with `None` represented as `-1`
+    pub fn serialize<S>(value: &Option<f64>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let x = value.unwrap_or(-1.);
+        serializer.serialize_f64(x)
+    }
+
+    /// Deserialize [`Option<f64>`] with an error when the value is not present.
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        f64::deserialize(deserializer).map(Some)
     }
 }
 
