@@ -179,11 +179,11 @@ where
 }
 
 fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16, u16)> {
-    let block_len = usize::from(square_width).pow(2);
+    let samples_in_block = usize::from(square_width).pow(2);
 
-    // If block length is smaller than `max_samples_needed`, we are going
+    // If block size is smaller than `max_samples_needed`, we are going
     // to sample the whole block. Randomness is not needed for this.
-    if block_len <= max_samples_needed {
+    if samples_in_block <= max_samples_needed {
         return (0..square_width)
             .flat_map(|row| (0..square_width).map(move |col| (row, col)))
             .collect();
