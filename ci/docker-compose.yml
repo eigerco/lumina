@@ -23,8 +23,6 @@ services:
       # each node should have a next natural number starting from 0
       - NODE_ID=0
     ports:
-      - 2122:2121/tcp
-      - 2122:2121/udp
       - 26658:26658
     volumes:
       - credentials:/credentials
@@ -43,8 +41,6 @@ services:
   #     # each node should have a next natural number starting from 0
   #     - NODE_ID=1
   #   ports:
-  #     - 2123:2121/tcp
-  #     - 2123:2121/udp
   #     - 36658:26658
   #   volumes:
   #     - credentials:/credentials
