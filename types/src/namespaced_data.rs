@@ -15,11 +15,11 @@ use multihash::Multihash;
 use serde::{Deserialize, Serialize};
 
 use crate::nmt::{Namespace, NamespaceProof};
-use crate::row::RowId;
+use crate::row::{RowId, ROW_ID_SIZE};
 use crate::{DataAvailabilityHeader, Error, Result};
 
-/// The size of the [`NamespacedDataId`] hash in `multihash`.
-const NAMESPACED_DATA_ID_SIZE: usize = NamespacedDataId::size();
+/// Number of bytes needed to represent [`NamespacedDataId`] in `multihash`.
+const NAMESPACED_DATA_ID_SIZE: usize = 39;
 /// The code of the [`NamespacedDataId`] hashing algorithm in `multihash`.
 pub const NAMESPACED_DATA_ID_MULTIHASH_CODE: u64 = 0x7821;
 /// The id of codec used for the [`NamespacedDataId`] in `Cid`s.
@@ -144,12 +144,6 @@ impl NamespacedDataId {
         })
     }
 
-    /// Number of bytes needed to represent [`NamespacedDataId`].
-    pub const fn size() -> usize {
-        // Size MUST be 39 by the spec.
-        39
-    }
-
     /// A height of the block which contains the shares.
     pub fn block_height(&self) -> u64 {
         self.row_id.block_height()
@@ -170,7 +164,7 @@ impl NamespacedDataId {
     }
 
     fn encode(&self, bytes: &mut BytesMut) {
-        bytes.reserve(Self::size());
+        bytes.reserve(NAMESPACED_DATA_ID_SIZE);
         self.row_id.encode(bytes);
         bytes.put(self.namespace.as_bytes());
     }
@@ -180,7 +174,7 @@ impl NamespacedDataId {
             return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
-        let (row_bytes, ns_bytes) = buffer.split_at(RowId::size());
+        let (row_bytes, ns_bytes) = buffer.split_at(ROW_ID_SIZE);
         let row_id = RowId::decode(row_bytes)?;
         let namespace =
             Namespace::from_raw(ns_bytes).map_err(|e| CidError::InvalidCid(e.to_string()))?;
@@ -273,12 +267,13 @@ mod tests {
 
     #[test]
     fn namespaced_data_id_size() {
-        assert_eq!(NamespacedDataId::size(), 39);
+        // Size MUST be 39 by the spec.
+        assert_eq!(NAMESPACED_DATA_ID_SIZE, 39);
 
         let data_id = NamespacedDataId::new(Namespace::new_v0(&[1]).unwrap(), 0, 1).unwrap();
         let mut bytes = BytesMut::new();
         data_id.encode(&mut bytes);
-        assert_eq!(bytes.len(), NamespacedDataId::size());
+        assert_eq!(bytes.len(), NAMESPACED_DATA_ID_SIZE);
     }
 
     #[test]

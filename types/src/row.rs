@@ -21,8 +21,8 @@ use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
 use crate::rsmt2d::{is_ods_square, ExtendedDataSquare};
 use crate::{DataAvailabilityHeader, Error, Result};
 
-/// The size of the [`RowId`] hash in `multihash`.
-const ROW_ID_SIZE: usize = RowId::size();
+/// Number of bytes needed to represent [`RowId`] in `multihash`.
+pub(crate) const ROW_ID_SIZE: usize = 10;
 /// The code of the [`RowId`] hashing algorithm in `multihash`.
 pub const ROW_ID_MULTIHASH_CODE: u64 = 0x7811;
 /// The id of codec used for the [`RowId`] in `Cid`s.
@@ -138,12 +138,6 @@ impl RowId {
         })
     }
 
-    /// Number of bytes needed to represent [`RowId`]
-    pub const fn size() -> usize {
-        // Size MUST be 10 by the spec.
-        10
-    }
-
     /// A height of the block which contains the data.
     pub fn block_height(&self) -> u64 {
         self.block_height
@@ -158,7 +152,6 @@ impl RowId {
 
     pub(crate) fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(ROW_ID_SIZE);
-
         bytes.put_u64(self.block_height);
         bytes.put_u16(self.index);
     }
@@ -253,12 +246,13 @@ mod tests {
 
     #[test]
     fn row_id_size() {
-        assert_eq!(RowId::size(), 10);
+        // Size MUST be 10 by the spec.
+        assert_eq!(ROW_ID_SIZE, 10);
 
         let row_id = RowId::new(0, 1).unwrap();
         let mut bytes = BytesMut::new();
         row_id.encode(&mut bytes);
-        assert_eq!(bytes.len(), RowId::size());
+        assert_eq!(bytes.len(), ROW_ID_SIZE);
     }
 
     #[test]

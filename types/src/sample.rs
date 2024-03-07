@@ -17,12 +17,12 @@ use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
 use serde::{Deserialize, Serialize};
 
 use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
-use crate::row::RowId;
+use crate::row::{RowId, ROW_ID_SIZE};
 use crate::rsmt2d::{is_ods_square, AxisType, ExtendedDataSquare};
 use crate::{DataAvailabilityHeader, Error, Result};
 
-/// The size of the [`SampleId`] hash in `multihash`.
-const SAMPLE_ID_SIZE: usize = SampleId::size();
+/// Number of bytes needed to represent [`SampleId`] in `multihash`.
+const SAMPLE_ID_SIZE: usize = 12;
 /// The code of the [`SampleId`] hashing algorithm in `multihash`.
 pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
 /// The id of codec used for the [`SampleId`] in `Cid`s.
@@ -229,12 +229,6 @@ impl SampleId {
         })
     }
 
-    /// Number of bytes needed to represent `SampleId`.
-    pub const fn size() -> usize {
-        // Size MUST be 12 by the spec.
-        12
-    }
-
     /// A height of the block which contains the sample.
     pub fn block_height(&self) -> u64 {
         self.row_id.block_height()
@@ -255,7 +249,7 @@ impl SampleId {
     }
 
     fn encode(&self, bytes: &mut BytesMut) {
-        bytes.reserve(Self::size());
+        bytes.reserve(SAMPLE_ID_SIZE);
         self.row_id.encode(bytes);
         bytes.put_u16(self.column_index);
     }
@@ -265,7 +259,7 @@ impl SampleId {
             return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
-        let (row_bytes, mut col_bytes) = buffer.split_at(RowId::size());
+        let (row_bytes, mut col_bytes) = buffer.split_at(ROW_ID_SIZE);
         let row_id = RowId::decode(row_bytes)?;
         let column_index = col_bytes.get_u16();
 
@@ -352,12 +346,13 @@ mod tests {
 
     #[test]
     fn sample_id_size() {
-        assert_eq!(SampleId::size(), 12);
+        // Size MUST be 12 by the spec.
+        assert_eq!(SAMPLE_ID_SIZE, 12);
 
         let sample_id = SampleId::new(0, 4, 1).unwrap();
         let mut bytes = BytesMut::new();
         sample_id.encode(&mut bytes);
-        assert_eq!(bytes.len(), SampleId::size());
+        assert_eq!(bytes.len(), SAMPLE_ID_SIZE);
     }
 
     #[test]
