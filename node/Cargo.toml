@@ -19,7 +19,6 @@ categories = [
 ]
 
 [dependencies]
-blockstore = { workspace = true }
 celestia-proto = { workspace = true }
 celestia-tendermint-proto = { workspace = true }
 celestia-types = { workspace = true }
@@ -34,8 +33,8 @@ libp2p = { workspace = true, features = [
 ] }
 
 async-trait = "0.1.73"
-beetswap = { git = "https://github.com/eigerco/beetswap", rev = "9316bd6" }
-cid = { version = "0.11.0", features = [ "serde-codec" ] }
+beetswap = { git = "https://github.com/eigerco/beetswap", rev = "f69ddd8" }
+cid = { version = "0.11.0", features = ["serde-codec"] }
 dashmap = "5.5.3"
 futures = "0.3.28"
 hex = "0.4.3"
@@ -50,13 +49,12 @@ tokio-util = "0.7.9"
 tracing = "0.1.37"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-directories = "5.0.1"
 backoff = { version = "0.4.0", features = ["tokio"] }
+blockstore = { workspace = true, features = ["sled"] }
 # Upgrading this dependency invalidates existing persistent dbs.
 # Those can be restored by migrating between versions:
 # https://docs.rs/sled/latest/sled/struct.Db.html#examples-1
 sled = "0.34.7"
-tempfile = "3.9.0"
 tokio = { version = "1.32.0", features = ["rt-multi-thread", "time"] }
 libp2p = { workspace = true, features = [
   "noise",
@@ -69,6 +67,7 @@ libp2p = { workspace = true, features = [
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 backoff = { version = "0.4.0", features = ["wasm-bindgen"] }
+blockstore = { workspace = true, features = ["indexeddb"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { version = "0.2.10", features = ["js"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
@@ -95,7 +94,9 @@ dotenvy = "0.15.7"
 # required to have path based dependency here to allow `cargo publish` to work
 # https://github.com/rust-lang/cargo/pull/7333
 lumina-node = { path = ".", features = ["test-utils"] }
+rstest = "0.18.2"
 serde_json = "1.0.107"
+tempfile = "3.9.0"
 
 [features]
 test-utils = ["celestia-types/test-utils"]

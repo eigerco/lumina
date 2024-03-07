@@ -7,20 +7,25 @@
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
+use blockstore::Blockstore;
 use celestia_types::hash::Hash;
 use celestia_types::namespaced_data::NamespacedData;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
 use celestia_types::sample::Sample;
 use celestia_types::ExtendedHeader;
-use cid::Cid;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
+use tokio::select;
+use tokio_util::sync::CancellationToken;
+use tracing::warn;
 
+use crate::daser::{Daser, DaserArgs, DaserError};
+use crate::executor::spawn;
 use crate::p2p::{P2p, P2pArgs, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::store::{Store, StoreError};
+use crate::store::{SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs, SyncerError, SyncingInfo};
 
 type Result<T, E = NodeError> = std::result::Result<T, E>;
@@ -39,12 +44,17 @@ pub enum NodeError {
     /// An error propagated from the [`Store`] module.
     #[error(transparent)]
     Store(#[from] StoreError),
+
+    /// An error propagated from the [`Daser`] module.
+    #[error(transparent)]
+    Daser(#[from] DaserError),
 }
 
 /// Node conifguration.
-pub struct NodeConfig<S>
+pub struct NodeConfig<B, S>
 where
-    S: Store + 'static,
+    B: Blockstore,
+    S: Store,
 {
     /// An id of the network to connect to.
     pub network_id: String,
@@ -56,6 +66,8 @@ where
     pub p2p_bootnodes: Vec<Multiaddr>,
     /// List of the addresses where [`Node`] will listen for incoming connections.
     pub p2p_listen_on: Vec<Multiaddr>,
+    /// The blockstore for bitswap.
+    pub blockstore: B,
     /// The store for headers.
     pub store: S,
 }
@@ -65,9 +77,11 @@ pub struct Node<S>
 where
     S: Store + 'static,
 {
-    p2p: Arc<P2p<S>>,
+    p2p: Arc<P2p>,
     store: Arc<S>,
     syncer: Arc<Syncer<S>>,
+    _daser: Arc<Daser>,
+    tasks_cancellation_token: CancellationToken,
 }
 
 impl<S> Node<S>
@@ -75,7 +89,10 @@ where
     S: Store,
 {
     /// Creates and starts a new celestia node with a given config.
-    pub async fn new(config: NodeConfig<S>) -> Result<Self> {
+    pub async fn new<B>(config: NodeConfig<B, S>) -> Result<Self>
+    where
+        B: Blockstore + 'static,
+    {
         let store = Arc::new(config.store);
 
         let p2p = Arc::new(P2p::start(P2pArgs {
@@ -83,6 +100,7 @@ where
             local_keypair: config.p2p_local_keypair,
             bootnodes: config.p2p_bootnodes,
             listen_on: config.p2p_listen_on,
+            blockstore: config.blockstore,
             store: store.clone(),
         })?);
 
@@ -92,7 +110,39 @@ where
             p2p: p2p.clone(),
         })?);
 
-        Ok(Node { p2p, store, syncer })
+        let daser = Arc::new(Daser::start(DaserArgs {
+            p2p: p2p.clone(),
+            store: store.clone(),
+        })?);
+
+        // spawn the task that will stop the services when the fraud is detected
+        let network_compromised_token = p2p.get_network_compromised_token().await?;
+        let tasks_cancellation_token = CancellationToken::new();
+        spawn({
+            let syncer = syncer.clone();
+            let daser = daser.clone();
+            let tasks_cancellation_token = tasks_cancellation_token.child_token();
+            async move {
+                select! {
+                    _ = tasks_cancellation_token.cancelled() => (),
+                    _ = network_compromised_token.cancelled() => {
+                        warn!("The network is compromised and should not be trusted.");
+                        warn!("The node will stop synchronizing and sampling.");
+                        warn!("You can still make some queries to the network.");
+                        syncer.stop();
+                        daser.stop();
+                    }
+                }
+            }
+        });
+
+        Ok(Node {
+            p2p,
+            store,
+            syncer,
+            _daser: daser,
+            tasks_cancellation_token,
+        })
     }
 
     /// Get node's local peer ID.
@@ -161,11 +211,6 @@ where
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
         Ok(self.p2p.get_verified_headers_range(from, amount).await?)
-    }
-
-    /// Request data of a [`Cid`] from the network.
-    pub async fn request_cid(&self, cid: Cid) -> Result<Vec<u8>> {
-        Ok(self.p2p.get_cid(cid).await?)
     }
 
     /// Request a [`Row`] from the network.
@@ -242,5 +287,26 @@ where
         R: RangeBounds<u64> + Send,
     {
         Ok(self.store.get_range(range).await?)
+    }
+
+    /// Get data sampling metadata of an already sampled height.
+    ///
+    /// Returns `Ok(None)` if metadata for the given height does not exists.
+    pub async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+        match self.store.get_sampling_metadata(height).await {
+            Ok(val) => Ok(val),
+            Err(StoreError::NotFound) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
+impl<S> Drop for Node<S>
+where
+    S: Store,
+{
+    fn drop(&mut self) {
+        // we have to cancel the task to drop the Arc's passed to it
+        self.tasks_cancellation_token.cancel();
     }
 }

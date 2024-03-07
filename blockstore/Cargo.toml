@@ -19,23 +19,36 @@ cid = "0.11.0"
 dashmap = "5.5.3"
 lru = { version = "0.12.2", optional = true }
 multihash = "0.19.1"
+thiserror = "1.0.40"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Upgrading this dependency invalidates existing persistent dbs.
 # Those can be restored by migrating between versions:
 # https://docs.rs/sled/latest/sled/struct.Db.html#examples-1
 sled = { version = "0.34.7", optional = true }
 tokio = { version = "1.29.0", features = ["macros", "rt"], optional = true }
-thiserror = "1.0.40"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { version = "0.3.68", optional = true }
+rexie = { version = "0.5.0", optional = true }
+send_wrapper = { version = "0.6.0", features = ["futures"], optional = true }
+wasm-bindgen = { version = "0.2.91", optional = true }
 
 [dev-dependencies]
+rstest = "0.18.2"
 tokio = { version = "1.29.0", features = ["macros", "rt"] }
 tempfile = "3.10"
 
 # doc-tests
 multihash-codetable = { version = "0.1.1", features = ["digest", "sha2"] }
 
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3.41"
+
 [features]
 lru = ["dep:lru"]
 sled = ["dep:sled", "dep:tokio"]
+indexeddb = ["dep:js-sys", "dep:rexie", "dep:send_wrapper", "dep:wasm-bindgen"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docs_rs"]

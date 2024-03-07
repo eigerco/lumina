@@ -34,6 +34,10 @@ pub enum Error {
     #[error(transparent)]
     CidError(#[from] blockstore::block::CidError),
 
+    /// Error propagated from the [`leopard_codec`].
+    #[error(transparent)]
+    LeopardCodec(#[from] leopard_codec::LeopardError),
+
     /// Missing header.
     #[error("Missing header")]
     MissingHeader,
@@ -100,6 +104,10 @@ pub enum Error {
     /// Invalid axis.
     #[error("Invalid axis type: {0}")]
     InvalidAxis(i32),
+
+    /// Invalid Shwap proof type in Protobuf.
+    #[error("Invalid proof type: {0}")]
+    InvalidShwapProofType(i32),
 
     /// Range proof verification error.
     #[error("Range proof verification failed: {0:?}")]

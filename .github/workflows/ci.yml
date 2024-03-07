@@ -35,6 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
+
+    - name: Install toolchain
+      uses: dtolnay/rust-toolchain@nightly
+
     - name: Install Protoc
       uses: arduino/setup-protoc@v2
       with:
@@ -43,8 +47,8 @@ jobs:
 
     - name: Run rustdoc check
       env:
-        RUSTDOCFLAGS: -D warnings
-      run: cargo doc
+        RUSTDOCFLAGS: --cfg docs_rs -D warnings
+      run: cargo +nightly doc
 
 
   fmt:
@@ -83,7 +87,7 @@ jobs:
       uses: nanasess/setup-chromedriver@v2
 
     - name: Build (wasm32-unknown-unknown)
-      run: cargo build --all --target=wasm32-unknown-unknown --features=wasm-bindgen
+      run: cargo build --all --target=wasm32-unknown-unknown --all-features
 
     - name: Test proto crate
       run: wasm-pack test --node proto
@@ -96,6 +100,9 @@ jobs:
 
     - name: Test node-wasm crate
       run: wasm-pack test --headless --chrome node-wasm
+
+    - name: Test blockstore crate
+      run: wasm-pack test --headless --chrome blockstore --all-features
 
     - name: Build and pack node-wasm
       run: wasm-pack build --release --target web node-wasm && wasm-pack pack node-wasm
@@ -188,9 +195,7 @@ jobs:
     - name: Install cargo-udeps
       uses: taiki-e/cache-cargo-install-action@v1
       with:
-        tool: cargo-udeps@0.1.43
+        tool: cargo-udeps@0.1
 
     - name: Check for unused dependencies
       run: cargo +nightly udeps --all-features --all-targets
-      env:
-        RUSTFLAGS: -D warnings

@@ -3,28 +3,32 @@
 //! It is a high level integration of various p2p protocols used by Celestia nodes.
 //! Currently supporting:
 //! - libp2p-identitfy
-//! - header-sub topic on libp2p-gossipsub
 //! - libp2p-kad
 //! - libp2p-autonat
 //! - libp2p-ping
+//! - header-sub topic on libp2p-gossipsub
+//! - fraud-sub topic on libp2p-gossipsub
 //! - header-ex client
 //! - header-ex server
+//! - bitswap 1.2.0
+//! - shwap - celestia's data availability protocol on top of bitswap
 
 use std::collections::HashMap;
+use std::future::poll_fn;
 use std::io;
-use std::marker::PhantomData;
 use std::sync::Arc;
+use std::task::Poll;
 use std::time::Duration;
 
-use blockstore::InMemoryBlockstore;
+use blockstore::Blockstore;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_tendermint_proto::Protobuf;
-use celestia_types::hash::Hash;
 use celestia_types::namespaced_data::NamespacedData;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
 use celestia_types::sample::Sample;
-use celestia_types::ExtendedHeader;
+use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
+use celestia_types::{ExtendedHeader, FraudProof, Height};
 use cid::Cid;
 use futures::StreamExt;
 use instant::Instant;
@@ -40,16 +44,18 @@ use libp2p::{
     swarm::{ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent},
     Multiaddr, PeerId, TransportError,
 };
+use smallvec::SmallVec;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, instrument, trace, warn};
 
 mod header_ex;
 mod header_session;
-mod shwap;
+pub(crate) mod shwap;
 mod swarm;
 
-use crate::executor::{spawn, Interval};
+use crate::executor::{self, spawn, Interval};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
 use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihasher};
@@ -58,8 +64,8 @@ use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::Store;
 use crate::utils::{
-    celestia_protocol_id, gossipsub_ident_topic, MultiaddrExt, OneshotResultSender,
-    OneshotResultSenderExt, OneshotSenderExt,
+    celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
+    OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt,
 };
 
 pub use crate::p2p::header_ex::HeaderExError;
@@ -78,7 +84,13 @@ const MIN_CONNECTED_PEERS: u64 = 4;
 const KADEMLIA_BOOTSTRAP_PERIOD: Duration = Duration::from_secs(5 * 60);
 
 // Maximum size of a [`Multihash`].
-const MAX_MH_SIZE: usize = 64;
+pub(crate) const MAX_MH_SIZE: usize = 64;
+
+const GET_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
+
+// all fraud proofs for height bigger than head height by this threshold
+// will be ignored
+const FRAUD_PROOF_HEAD_HEIGHT_THRESHOLD: u64 = 20;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
@@ -136,6 +148,10 @@ pub enum P2pError {
     /// An error propagated from [`celestia_types`] that is related to [`Cid`].
     #[error("CID error: {0}")]
     Cid(celestia_types::Error),
+
+    /// Bitswap query timed out.
+    #[error("Bitswap query timed out")]
+    BitswapQueryTimeout,
 }
 
 impl From<oneshot::error::RecvError> for P2pError {
@@ -146,21 +162,18 @@ impl From<oneshot::error::RecvError> for P2pError {
 
 /// Component responsible for the peer to peer networking handling.
 #[derive(Debug)]
-pub struct P2p<S>
-where
-    S: Store + 'static,
-{
+pub struct P2p {
     cmd_tx: mpsc::Sender<P2pCmd>,
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     peer_tracker_info_watcher: watch::Receiver<PeerTrackerInfo>,
     local_peer_id: PeerId,
-    _store: PhantomData<S>,
 }
 
 /// Arguments used to configure the [`P2p`].
-pub struct P2pArgs<S>
+pub struct P2pArgs<B, S>
 where
-    S: Store + 'static,
+    B: Blockstore,
+    S: Store,
 {
     /// An id of the network to connect to.
     pub network_id: String,
@@ -170,6 +183,8 @@ where
     pub bootnodes: Vec<Multiaddr>,
     /// List of the addresses on which to listen for incoming connections.
     pub listen_on: Vec<Multiaddr>,
+    /// The store for headers.
+    pub blockstore: B,
     /// The store for headers.
     pub store: Arc<S>,
 }
@@ -196,18 +211,22 @@ pub(crate) enum P2pCmd {
         peer_id: PeerId,
         is_trusted: bool,
     },
-    GetCid {
+    GetShwapCid {
         cid: Cid,
-        respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>,
+        respond_to: OneshotResultSender<Vec<u8>, P2pError>,
+    },
+    GetNetworkCompromisedToken {
+        respond_to: oneshot::Sender<CancellationToken>,
     },
 }
 
-impl<S> P2p<S>
-where
-    S: Store,
-{
+impl P2p {
     /// Creates and starts a new p2p handler.
-    pub fn start(args: P2pArgs<S>) -> Result<Self> {
+    pub fn start<B, S>(args: P2pArgs<B, S>) -> Result<Self>
+    where
+        B: Blockstore + 'static,
+        S: Store + 'static,
+    {
         validate_bootnode_addrs(&args.bootnodes)?;
 
         let local_peer_id = PeerId::from(args.local_keypair.public());
@@ -229,7 +248,6 @@ where
             header_sub_watcher: header_sub_rx,
             peer_tracker_info_watcher,
             local_peer_id,
-            _store: PhantomData,
         })
     }
 
@@ -245,7 +263,6 @@ where
             header_sub_watcher: header_sub_rx,
             peer_tracker_info_watcher: peer_tracker_rx,
             local_peer_id: PeerId::random(),
-            _store: PhantomData,
         };
 
         let handle = crate::test_utils::MockP2pHandle {
@@ -391,26 +408,38 @@ where
     }
 
     /// Request a [`Cid`] on bitswap protocol.
-    pub async fn get_cid(&self, cid: Cid) -> Result<Vec<u8>> {
+    async fn get_shwap_cid(&self, cid: Cid, timeout: Option<Duration>) -> Result<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
 
-        self.send_command(P2pCmd::GetCid {
+        self.send_command(P2pCmd::GetShwapCid {
             cid,
             respond_to: tx,
         })
         .await?;
 
-        Ok(rx.await??)
+        let data = match timeout {
+            Some(dur) => executor::timeout(dur, rx)
+                .await
+                .map_err(|_| P2pError::BitswapQueryTimeout)???,
+            None => rx.await??,
+        };
+
+        Ok(data)
     }
 
     /// Request a [`Row`] on bitswap protocol.
     pub async fn get_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
         let cid = row_cid(row_index, block_height)?;
-        let data = self.get_cid(cid).await?;
+        // TODO: add timeout
+        let data = self.get_shwap_cid(cid, None).await?;
         Ok(Row::decode(&data[..])?)
     }
 
     /// Request a [`Sample`] on bitswap protocol.
+    ///
+    /// This method awaits for a verified `Sample` until timeout of 10 second
+    /// is reached. On timeout it is safe to assume that sampling of the block
+    /// failed.
     pub async fn get_sample(
         &self,
         index: usize,
@@ -418,7 +447,7 @@ where
         block_height: u64,
     ) -> Result<Sample> {
         let cid = sample_cid(index, square_len, block_height)?;
-        let data = self.get_cid(cid).await?;
+        let data = self.get_shwap_cid(cid, Some(GET_SAMPLE_TIMEOUT)).await?;
         Ok(Sample::decode(&data[..])?)
     }
 
@@ -430,7 +459,8 @@ where
         block_height: u64,
     ) -> Result<NamespacedData> {
         let cid = namespaced_data_cid(namespace, row_index, block_height)?;
-        let data = self.get_cid(cid).await?;
+        // TODO: add timeout
+        let data = self.get_shwap_cid(cid, None).await?;
         Ok(NamespacedData::decode(&data[..])?)
     }
 
@@ -462,16 +492,30 @@ where
         })
         .await
     }
+
+    /// Get the cancellation token which will be cancelled when the network gets compromised.
+    ///
+    /// After this token is cancelled, the network should be treated as insincere
+    /// and should not be trusted.
+    pub(crate) async fn get_network_compromised_token(&self) -> Result<CancellationToken> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(P2pCmd::GetNetworkCompromisedToken { respond_to: tx })
+            .await?;
+
+        Ok(rx.await?)
+    }
 }
 
 /// Our network behaviour.
 #[derive(NetworkBehaviour)]
-struct Behaviour<S>
+struct Behaviour<B, S>
 where
+    B: Blockstore + 'static,
     S: Store + 'static,
 {
     autonat: autonat::Behaviour,
-    bitswap: beetswap::Behaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>,
+    bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     header_ex: HeaderExBehaviour<S>,
@@ -479,24 +523,29 @@ where
     kademlia: kad::Behaviour<kad::store::MemoryStore>,
 }
 
-struct Worker<S>
+struct Worker<B, S>
 where
+    B: Blockstore + 'static,
     S: Store + 'static,
 {
-    swarm: Swarm<Behaviour<S>>,
+    swarm: Swarm<Behaviour<B, S>>,
     header_sub_topic_hash: TopicHash,
+    bad_encoding_fraud_sub_topic: TopicHash,
     cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
     header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
-    bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, beetswap::Error>>,
+    bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, P2pError>>,
+    network_compromised_token: CancellationToken,
+    store: Arc<S>,
 }
 
-impl<S> Worker<S>
+impl<B, S> Worker<B, S>
 where
+    B: Blockstore,
     S: Store,
 {
     fn new(
-        args: P2pArgs<S>,
+        args: P2pArgs<B, S>,
         cmd_rx: mpsc::Receiver<P2pCmd>,
         header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
         peer_tracker: Arc<PeerTracker>,
@@ -504,7 +553,6 @@ where
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
         let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
-        let bitswap = init_bitswap(&args)?;
         let ping = ping::Behaviour::new(ping::Config::default());
 
         let identify = identify::Behaviour::new(identify::Config::new(
@@ -513,9 +561,12 @@ where
         ));
 
         let header_sub_topic = gossipsub_ident_topic(&args.network_id, "/header-sub/v0.0.1");
-        let gossipsub = init_gossipsub(&args, [&header_sub_topic])?;
+        let bad_encoding_fraud_sub_topic =
+            fraudsub_ident_topic(BadEncodingFraudProof::TYPE, &args.network_id);
+        let gossipsub = init_gossipsub(&args, [&header_sub_topic, &bad_encoding_fraud_sub_topic])?;
 
         let kademlia = init_kademlia(&args)?;
+        let bitswap = init_bitswap(args.blockstore, args.store.clone(), &args.network_id)?;
 
         let header_ex = HeaderExBehaviour::new(HeaderExConfig {
             network_id: &args.network_id,
@@ -550,10 +601,13 @@ where
         Ok(Worker {
             cmd_rx,
             swarm,
+            bad_encoding_fraud_sub_topic: bad_encoding_fraud_sub_topic.hash(),
             header_sub_topic_hash: header_sub_topic.hash(),
             peer_tracker,
             header_sub_watcher,
             bitswap_queries: HashMap::new(),
+            network_compromised_token: CancellationToken::new(),
+            store: args.store,
         })
     }
 
@@ -579,6 +633,9 @@ where
                         kademlia_last_bootstrap = Instant::now();
                     }
                 }
+                _ = poll_closed(&mut self.bitswap_queries) => {
+                    self.prune_canceled_bitswap_queries();
+                }
                 ev = self.swarm.select_next_some() => {
                     if let Err(e) = self.on_swarm_event(ev).await {
                         warn!("Failure while handling swarm event: {e}");
@@ -593,7 +650,22 @@ where
         }
     }
 
-    async fn on_swarm_event(&mut self, ev: SwarmEvent<BehaviourEvent<S>>) -> Result<()> {
+    fn prune_canceled_bitswap_queries(&mut self) {
+        let mut cancelled = SmallVec::<[_; 16]>::new();
+
+        for (query_id, chan) in &self.bitswap_queries {
+            if chan.is_closed() {
+                cancelled.push(*query_id);
+            }
+        }
+
+        for query_id in cancelled {
+            self.bitswap_queries.remove(&query_id);
+            self.swarm.behaviour_mut().bitswap.cancel(query_id);
+        }
+    }
+
+    async fn on_swarm_event(&mut self, ev: SwarmEvent<BehaviourEvent<B, S>>) -> Result<()> {
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {
                 BehaviourEvent::Identify(ev) => self.on_identify_event(ev).await?,
@@ -669,8 +741,11 @@ where
                     self.peer_tracker.set_trusted(peer_id, is_trusted);
                 }
             }
-            P2pCmd::GetCid { cid, respond_to } => {
-                self.on_get_cid(cid, respond_to);
+            P2pCmd::GetShwapCid { cid, respond_to } => {
+                self.on_get_shwap_cid(cid, respond_to);
+            }
+            P2pCmd::GetNetworkCompromisedToken { respond_to } => {
+                respond_to.maybe_send(self.network_compromised_token.child_token())
             }
         }
 
@@ -719,15 +794,20 @@ where
                     return;
                 };
 
-                // We may discovered a new peer
-                self.peer_maybe_discovered(peer);
-
                 let acceptance = if message.topic == self.header_sub_topic_hash {
                     self.on_header_sub_message(&message.data[..]).await
+                } else if message.topic == self.bad_encoding_fraud_sub_topic {
+                    self.on_bad_encoding_fraud_sub_message(&message.data[..], &peer)
+                        .await
                 } else {
                     trace!("Unhandled gossipsub message");
                     gossipsub::MessageAcceptance::Ignore
                 };
+
+                if !matches!(acceptance, gossipsub::MessageAcceptance::Reject) {
+                    // We may have discovered a new peer
+                    self.peer_maybe_discovered(peer);
+                }
 
                 let _ = self
                     .swarm
@@ -754,7 +834,7 @@ where
     }
 
     #[instrument(level = "trace", skip_all)]
-    fn on_get_cid(&mut self, cid: Cid, respond_to: OneshotResultSender<Vec<u8>, beetswap::Error>) {
+    fn on_get_shwap_cid(&mut self, cid: Cid, respond_to: OneshotResultSender<Vec<u8>, P2pError>) {
         trace!("Requesting CID {cid} from bitswap");
         let query_id = self.swarm.behaviour_mut().bitswap.get(&cid);
         self.bitswap_queries.insert(query_id, respond_to);
@@ -770,6 +850,7 @@ where
             }
             beetswap::Event::GetQueryError { query_id, error } => {
                 if let Some(respond_to) = self.bitswap_queries.remove(&query_id) {
+                    let error: P2pError = error.into();
                     respond_to.maybe_send_err(error);
                 }
             }
@@ -858,6 +939,72 @@ where
             gossipsub::MessageAcceptance::Ignore
         }
     }
+
+    #[instrument(skip_all)]
+    async fn on_bad_encoding_fraud_sub_message(
+        &mut self,
+        data: &[u8],
+        peer: &PeerId,
+    ) -> gossipsub::MessageAcceptance {
+        let Ok(befp) = BadEncodingFraudProof::decode(data) else {
+            trace!("Malformed bad encoding fraud proof from {peer}");
+            self.swarm.behaviour_mut().gossipsub.blacklist_peer(peer);
+            return gossipsub::MessageAcceptance::Reject;
+        };
+
+        let height = befp.height().value();
+        let current_height =
+            if let Some(network_height) = network_head_height(&self.header_sub_watcher) {
+                network_height.value()
+            } else if let Ok(local_head) = self.store.get_head().await {
+                local_head.height().value()
+            } else {
+                // we aren't tracking the network and have uninitialized store
+                return gossipsub::MessageAcceptance::Ignore;
+            };
+
+        if height > current_height + FRAUD_PROOF_HEAD_HEIGHT_THRESHOLD {
+            // does this threshold make any sense if we're gonna ignore it anyway
+            // since we won't have the header
+            return gossipsub::MessageAcceptance::Ignore;
+        }
+
+        let hash = befp.header_hash();
+        let Ok(header) = self.store.get_by_hash(&hash).await else {
+            // we can't verify the proof without a header
+            // TODO: should we then store it and wait for the height? celestia doesn't
+            return gossipsub::MessageAcceptance::Ignore;
+        };
+
+        if let Err(e) = befp.validate(&header) {
+            trace!("Received invalid bad encoding fraud proof from {peer}: {e}");
+            self.swarm.behaviour_mut().gossipsub.blacklist_peer(peer);
+            return gossipsub::MessageAcceptance::Reject;
+        }
+
+        warn!("Received a valid bad encoding fraud proof");
+        // trigger cancellation for all services
+        self.network_compromised_token.cancel();
+
+        gossipsub::MessageAcceptance::Accept
+    }
+}
+
+/// Awaits at least one channel from the `bitswap_queries` to close.
+async fn poll_closed(
+    bitswap_queries: &mut HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, P2pError>>,
+) {
+    poll_fn(|cx| {
+        for chan in bitswap_queries.values_mut() {
+            match chan.poll_closed(cx) {
+                Poll::Pending => continue,
+                Poll::Ready(_) => return Poll::Ready(()),
+            }
+        }
+
+        Poll::Pending
+    })
+    .await
 }
 
 fn validate_bootnode_addrs(addrs: &[Multiaddr]) -> Result<(), P2pError> {
@@ -876,11 +1023,12 @@ fn validate_bootnode_addrs(addrs: &[Multiaddr]) -> Result<(), P2pError> {
     }
 }
 
-fn init_gossipsub<'a, S>(
-    args: &'a P2pArgs<S>,
+fn init_gossipsub<'a, B, S>(
+    args: &'a P2pArgs<B, S>,
     topics: impl IntoIterator<Item = &'a gossipsub::IdentTopic>,
 ) -> Result<gossipsub::Behaviour>
 where
+    B: Blockstore,
     S: Store,
 {
     // Set the message authenticity - How we expect to publish messages
@@ -905,8 +1053,9 @@ where
     Ok(gossipsub)
 }
 
-fn init_kademlia<S>(args: &P2pArgs<S>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
+fn init_kademlia<B, S>(args: &P2pArgs<B, S>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
 where
+    B: Blockstore,
     S: Store,
 {
     let local_peer_id = PeerId::from(args.local_keypair.public());
@@ -932,17 +1081,24 @@ where
     Ok(kademlia)
 }
 
-fn init_bitswap<S>(
-    args: &P2pArgs<S>,
-) -> Result<beetswap::Behaviour<MAX_MH_SIZE, InMemoryBlockstore<MAX_MH_SIZE>>>
+fn init_bitswap<B, S>(
+    blockstore: B,
+    store: Arc<S>,
+    network_id: &str,
+) -> Result<beetswap::Behaviour<MAX_MH_SIZE, B>>
 where
-    S: Store,
+    B: Blockstore,
+    S: Store + 'static,
 {
-    let protocol_prefix = format!("/celestia/{}", args.network_id);
+    let protocol_prefix = format!("/celestia/{}", network_id);
 
-    Ok(beetswap::Behaviour::builder(InMemoryBlockstore::new())
+    Ok(beetswap::Behaviour::builder(blockstore)
         .protocol_prefix(&protocol_prefix)?
-        .register_multihasher(ShwapMultihasher)
+        .register_multihasher(ShwapMultihasher::new(store))
         .client_set_send_dont_have(false)
         .build())
+}
+
+fn network_head_height(watcher: &watch::Sender<Option<ExtendedHeader>>) -> Option<Height> {
+    watcher.borrow().as_ref().map(|header| header.height())
 }

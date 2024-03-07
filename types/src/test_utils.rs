@@ -1,21 +1,20 @@
 //! Utilities for writing tests.
 
-use celestia_tendermint::{
-    block::{
-        header::{Header, Version},
-        parts, Commit, CommitSig,
-    },
-    chain,
-    public_key::PublicKey,
-    Signature, Time,
-};
+use celestia_tendermint::block::header::{Header, Version};
+use celestia_tendermint::block::{parts, Commit, CommitSig};
+use celestia_tendermint::public_key::PublicKey;
+use celestia_tendermint::{chain, Signature, Time};
 use ed25519_consensus::SigningKey;
+use rand::RngCore;
 
 use crate::block::{CommitExt, GENESIS_HEIGHT};
+use crate::consts::appconsts::{SHARE_INFO_BYTES, SHARE_SIZE};
 use crate::consts::version;
 use crate::hash::{Hash, HashExt};
-use crate::nmt::{NamespacedHash, NamespacedHashExt};
-use crate::{DataAvailabilityHeader, ExtendedHeader, ValidatorSet};
+use crate::nmt::{Namespace, NamespacedHash, NamespacedHashExt, NS_SIZE};
+use crate::{DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, ValidatorSet};
+
+pub use crate::byzantine::test_utils::corrupt_eds;
 
 /// [`ExtendedHeader`] generator for testing purposes.
 ///
@@ -55,18 +54,47 @@ impl ExtendedHeaderGenerator {
         gen.current_header = if prev_height == 0 {
             None
         } else {
-            Some(generate_new(prev_height, &gen.chain_id, &gen.key))
+            Some(generate_new(prev_height, &gen.chain_id, &gen.key, None))
         };
 
         gen
     }
 
     /// Generates the next header.
+    ///
+    /// ```
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    ///
+    /// let mut gen = ExtendedHeaderGenerator::new();
+    /// let header1 = gen.next();
+    /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> ExtendedHeader {
         let header = match self.current_header {
-            Some(ref header) => generate_next(1, header, &self.key),
-            None => generate_new(GENESIS_HEIGHT, &self.chain_id, &self.key),
+            Some(ref header) => generate_next(1, header, &self.key, None),
+            None => generate_new(GENESIS_HEIGHT, &self.chain_id, &self.key, None),
+        };
+
+        self.current_header = Some(header.clone());
+        header
+    }
+
+    /// Generates the next header with the given [`DataAvailabilityHeader`]
+    ///
+    /// ```no_run
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    /// # fn generate_dah() -> celestia_types::DataAvailabilityHeader {
+    /// #    unimplemented!();
+    /// # }
+    ///
+    /// let mut gen = ExtendedHeaderGenerator::new();
+    /// let header1 = gen.next_with_dah(generate_dah());
+    /// ```
+    #[allow(clippy::should_implement_trait)]
+    pub fn next_with_dah(&mut self, dah: DataAvailabilityHeader) -> ExtendedHeader {
+        let header = match self.current_header {
+            Some(ref header) => generate_next(1, header, &self.key, Some(dah)),
+            None => generate_new(GENESIS_HEIGHT, &self.chain_id, &self.key, Some(dah)),
         };
 
         self.current_header = Some(header.clone());
@@ -101,7 +129,34 @@ impl ExtendedHeaderGenerator {
     ///
     /// This method does not change the state of `ExtendedHeaderGenerator`.
     pub fn next_of(&self, header: &ExtendedHeader) -> ExtendedHeader {
-        generate_next(1, header, &self.key)
+        generate_next(1, header, &self.key, None)
+    }
+
+    /// Generates the next header of the provided header with the given [`DataAvailabilityHeader`].
+    ///
+    /// This can be used to create two headers of same height but different hash.
+    ///
+    /// ```no_run
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    /// # fn generate_dah() -> celestia_types::DataAvailabilityHeader {
+    /// #    unimplemented!();
+    /// # }
+    ///
+    /// let mut gen = ExtendedHeaderGenerator::new();
+    /// let header1 = gen.next();
+    /// let header2 = gen.next();
+    /// let another_header2 = gen.next_of_with_dah(&header1, generate_dah());
+    /// ```
+    ///
+    /// # Note
+    ///
+    /// This method does not change the state of `ExtendedHeaderGenerator`.
+    pub fn next_of_with_dah(
+        &self,
+        header: &ExtendedHeader,
+        dah: DataAvailabilityHeader,
+    ) -> ExtendedHeader {
+        generate_next(1, header, &self.key, Some(dah))
     }
 
     /// Generates the next amount of headers of the provided header.
@@ -167,8 +222,8 @@ impl ExtendedHeaderGenerator {
         }
 
         let header = match self.current_header {
-            Some(ref header) => generate_next(amount, header, &self.key),
-            None => generate_new(amount, &self.chain_id, &self.key),
+            Some(ref header) => generate_next(amount, header, &self.key, None),
+            None => generate_new(amount, &self.chain_id, &self.key, None),
         };
 
         self.current_header = Some(header.clone());
@@ -257,7 +312,37 @@ pub fn unverify(header: &mut ExtendedHeader) {
     }
 }
 
-fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> ExtendedHeader {
+/// Generate a properly encoded [`ExtendedDataSquare`] with random data.
+pub fn generate_eds(square_len: usize) -> ExtendedDataSquare {
+    let ns = Namespace::const_v0(rand::random());
+    let ods_width = square_len / 2;
+
+    let shares: Vec<_> = (0..ods_width * ods_width)
+        .map(|_| {
+            [
+                ns.as_bytes(),
+                &[0; SHARE_INFO_BYTES][..],
+                &random_bytes(SHARE_SIZE - NS_SIZE - SHARE_INFO_BYTES)[..],
+            ]
+            .concat()
+        })
+        .collect();
+
+    ExtendedDataSquare::from_ods(shares).unwrap()
+}
+
+pub(crate) fn random_bytes(len: usize) -> Vec<u8> {
+    let mut buf = vec![0u8; len];
+    rand::thread_rng().fill_bytes(&mut buf);
+    buf
+}
+
+fn generate_new(
+    height: u64,
+    chain_id: &chain::Id,
+    signing_key: &SigningKey,
+    dah: Option<DataAvailabilityHeader>,
+) -> ExtendedHeader {
     assert!(height >= GENESIS_HEIGHT);
 
     let pub_key_bytes = signing_key.verification_key().to_bytes();
@@ -328,10 +413,10 @@ fn generate_new(height: u64, chain_id: &chain::Id, signing_key: &SigningKey) -> 
                 proposer_priority: 0_i64.into(),
             }),
         ),
-        dah: DataAvailabilityHeader {
+        dah: dah.unwrap_or_else(|| DataAvailabilityHeader {
             row_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
             column_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-        },
+        }),
     };
 
     hash_and_sign(&mut header, signing_key);
@@ -344,6 +429,7 @@ fn generate_next(
     increment: u64,
     current: &ExtendedHeader,
     signing_key: &SigningKey,
+    dah: Option<DataAvailabilityHeader>,
 ) -> ExtendedHeader {
     assert!(increment > 0);
 
@@ -399,10 +485,10 @@ fn generate_next(
             }],
         },
         validator_set: current.validator_set.clone(),
-        dah: DataAvailabilityHeader {
+        dah: dah.unwrap_or_else(|| DataAvailabilityHeader {
             row_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
             column_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-        },
+        }),
     };
 
     hash_and_sign(&mut header, signing_key);

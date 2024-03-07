@@ -14,7 +14,7 @@ use cid::CidGeneric;
 use multihash::Multihash;
 use serde::{Deserialize, Serialize};
 
-use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
+use crate::nmt::{Namespace, NamespaceProof};
 use crate::row::RowId;
 use crate::{DataAvailabilityHeader, Error, Result};
 
@@ -157,10 +157,8 @@ impl NamespacedDataId {
 
     /// Number of bytes needed to represent [`NamespacedDataId`].
     pub const fn size() -> usize {
-        // size of:
-        // RowId + Namespace
-        //    10 +        29 = 39
-        RowId::size() + NS_SIZE
+        // Size MUST be 39 by the spec.
+        39
     }
 
     fn encode(&self, bytes: &mut BytesMut) {
@@ -248,8 +246,8 @@ mod tests {
             0xA0, 0xF0, 0x01, // CID codec = 7820
             0xA1, 0xF0, 0x01, // multihash code = 7821
             0x27, // len = NAMESPACED_DATA_ID_SIZE = 39
-            64, 0, 0, 0, 0, 0, 0, 0, // block height = 64
-            7, 0, // row = 7
+            0, 0, 0, 0, 0, 0, 0, 64, // block height = 64
+            0, 7, // row = 7
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             1, // NS = 1
         ];
@@ -263,6 +261,16 @@ mod tests {
         assert_eq!(data_id.namespace, Namespace::new_v0(&[1]).unwrap());
         assert_eq!(data_id.row.block_height, 64);
         assert_eq!(data_id.row.index, 7);
+    }
+
+    #[test]
+    fn namespaced_data_id_size() {
+        assert_eq!(NamespacedDataId::size(), 39);
+
+        let data_id = NamespacedDataId::new(Namespace::new_v0(&[1]).unwrap(), 0, 1).unwrap();
+        let mut bytes = BytesMut::new();
+        data_id.encode(&mut bytes);
+        assert_eq!(bytes.len(), NamespacedDataId::size());
     }
 
     #[test]

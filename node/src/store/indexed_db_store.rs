@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::convert::Infallible;
+use std::pin::pin;
 
 use async_trait::async_trait;
 use celestia_tendermint_proto::Protobuf;
@@ -10,6 +11,7 @@ use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
+use tokio::sync::Notify;
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
@@ -42,6 +44,7 @@ pub struct IndexedDbStore {
     head: SendWrapper<RefCell<Option<ExtendedHeader>>>,
     lowest_unsampled_height: SendWrapper<RefCell<u64>>,
     db: SendWrapper<Rexie>,
+    header_added_notifier: Notify,
 }
 
 impl IndexedDbStore {
@@ -75,6 +78,7 @@ impl IndexedDbStore {
             head: SendWrapper::new(RefCell::new(db_head)),
             lowest_unsampled_height: SendWrapper::new(RefCell::new(last_sampled)),
             db: SendWrapper::new(rexie),
+            header_added_notifier: Notify::new(),
         })
     }
 
@@ -198,6 +202,7 @@ impl IndexedDbStore {
 
         // this shouldn't panic, we don't borrow across await points and wasm is single threaded
         self.head.replace(Some(header));
+        self.header_added_notifier.notify_waiters();
 
         Ok(())
     }
@@ -252,7 +257,13 @@ impl IndexedDbStore {
         } else {
             let mut value: SamplingMetadata = from_value(previous_entry)?;
             value.accepted = accepted;
-            value.cids_sampled.extend_from_slice(&cids);
+
+            for cid in &cids {
+                if !value.cids_sampled.contains(cid) {
+                    value.cids_sampled.push(cid.to_owned());
+                }
+            }
+
             value
         };
 
@@ -320,6 +331,22 @@ impl Store for IndexedDbStore {
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let fut = SendWrapper::new(self.get_by_height(height));
         fut.await
+    }
+
+    async fn wait_height(&self, height: u64) -> Result<()> {
+        let mut notifier = pin!(self.header_added_notifier.notified());
+
+        loop {
+            if self.contains_height(height) {
+                return Ok(());
+            }
+
+            // Await for a notification
+            notifier.as_mut().await;
+
+            // Reset notifier
+            notifier.set(self.header_added_notifier.notified());
+        }
     }
 
     async fn head_height(&self) -> Result<u64> {
@@ -437,166 +464,8 @@ async fn get_next_unsampled_height_from_database(
 pub mod tests {
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::Height;
     use function_name::named;
     use wasm_bindgen_test::wasm_bindgen_test;
-
-    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_contains_height() {
-        let s = gen_filled_store(2, function_name!()).await.0;
-
-        assert!(!s.has_at(0).await);
-        assert!(s.has_at(1).await);
-        assert!(s.has_at(2).await);
-        assert!(!s.has_at(3).await);
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_empty_store() {
-        let s = gen_filled_store(0, function_name!()).await.0;
-        assert!(matches!(s.get_head_height(), Err(StoreError::NotFound)));
-        assert!(matches!(s.get_head(), Err(StoreError::NotFound)));
-        assert!(matches!(
-            s.get_by_height(1).await,
-            Err(StoreError::NotFound)
-        ));
-        assert!(matches!(
-            s.get_by_hash(&Hash::Sha256([0; 32])).await,
-            Err(StoreError::NotFound)
-        ));
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_read_write() {
-        let (s, mut gen) = gen_filled_store(0, function_name!()).await;
-
-        let header = gen.next();
-
-        s.append_single_unchecked(header.clone()).await.unwrap();
-        assert_eq!(s.get_head_height().unwrap(), 1);
-        assert_eq!(s.get_head().unwrap(), header);
-        assert_eq!(s.get_by_height(1).await.unwrap(), header);
-        assert_eq!(s.get_by_hash(&header.hash()).await.unwrap(), header);
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_pregenerated_data() {
-        let (s, _) = gen_filled_store(100, function_name!()).await;
-        assert_eq!(s.get_head_height().unwrap(), 100);
-        let head = s.get_head().unwrap();
-        assert_eq!(s.get_by_height(100).await.unwrap(), head);
-        assert!(matches!(
-            s.get_by_height(101).await,
-            Err(StoreError::NotFound)
-        ));
-
-        let header = s.get_by_height(54).await.unwrap();
-        assert_eq!(s.get_by_hash(&header.hash()).await.unwrap(), header);
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_duplicate_insert() {
-        let (s, mut gen) = gen_filled_store(100, function_name!()).await;
-        let header101 = gen.next();
-        s.append_single_unchecked(header101.clone()).await.unwrap();
-
-        assert!(matches!(
-            s.append_single_unchecked(header101).await,
-            Err(StoreError::HeightExists(101))
-        ));
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_overwrite_height() {
-        let (s, gen) = gen_filled_store(100, function_name!()).await;
-
-        // Height 30 with different hash
-        let header29 = s.get_by_height(29).await.unwrap();
-        let header30 = gen.next_of(&header29);
-
-        let insert_existing_result = s.append_single_unchecked(header30).await;
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::HeightExists(30))
-        ));
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_overwrite_hash() {
-        let (s, _) = gen_filled_store(100, function_name!()).await;
-        let mut dup_header = s.get_by_height(33).await.unwrap();
-        dup_header.header.height = Height::from(101u32);
-        let insert_existing_result = s.append_single_unchecked(dup_header).await;
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::HashExists(_))
-        ));
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_append_range() {
-        let (s, mut gen) = gen_filled_store(10, function_name!()).await;
-        let hs = gen.next_many(4);
-        s.append_unchecked(hs).await.unwrap();
-        s.get_by_height(14).await.unwrap();
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_append_gap_between_head() {
-        let (s, mut gen) = gen_filled_store(10, function_name!()).await;
-
-        // height 11
-        gen.next();
-        // height 12
-        let upcoming_head = gen.next();
-
-        let insert_with_gap_result = s.append_single_unchecked(upcoming_head).await;
-        assert!(matches!(
-            insert_with_gap_result,
-            Err(StoreError::NonContinuousAppend(10, 12))
-        ));
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_non_continuous_append() {
-        let (s, mut gen) = gen_filled_store(10, function_name!()).await;
-        let mut hs = gen.next_many(6);
-
-        // remove height 14
-        hs.remove(3);
-
-        let insert_existing_result = s.append_unchecked(hs).await;
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::NonContinuousAppend(13, 15))
-        ));
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_genesis_with_height() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
-        let header5 = gen.next();
-
-        let s = gen_filled_store(0, function_name!()).await.0;
-
-        assert!(matches!(
-            s.append_single_unchecked(header5).await,
-            Err(StoreError::NonContinuousAppend(0, 5))
-        ));
-    }
 
     #[named]
     #[wasm_bindgen_test]
@@ -712,165 +581,6 @@ pub mod tests {
             same_name_store.get_head_height(),
             Err(StoreError::NotFound)
         ));
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_sampling_merge() {
-        let (store, _) = gen_filled_store(1, function_name!()).await;
-        let cid0 = "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ"
-            .parse()
-            .unwrap();
-        let cid1 = "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA"
-            .parse()
-            .unwrap();
-
-        store
-            .update_sampling_metadata(1, false, vec![cid0])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(1, false, vec![])
-            .await
-            .unwrap();
-
-        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert!(!sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0]);
-
-        store
-            .update_sampling_metadata(1, true, vec![cid1])
-            .await
-            .unwrap();
-
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
-
-        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-
-        assert!(sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0, cid1]);
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_sampling_height_empty_store() {
-        let (store, _) = gen_filled_store(0, function_name!()).await;
-        store
-            .update_sampling_metadata(0, true, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(1, true, vec![])
-            .await
-            .unwrap_err();
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_sampling_height() {
-        let (store, _) = gen_filled_store(9, function_name!()).await;
-
-        store
-            .update_sampling_metadata(0, true, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(1, true, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(2, true, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(3, false, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(4, true, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(5, false, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(6, false, vec![])
-            .await
-            .unwrap();
-
-        store
-            .update_sampling_metadata(8, true, vec![])
-            .await
-            .unwrap();
-
-        store
-            .update_sampling_metadata(10, true, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(10, false, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(20, true, vec![])
-            .await
-            .unwrap_err();
-
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 7);
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
-    async fn test_sampled_cids() {
-        let (store, _) = gen_filled_store(5, function_name!()).await;
-
-        let cids: Vec<Cid> = [
-            "bafkreieq5jui4j25lacwomsqgjeswwl3y5zcdrresptwgmfylxo2depppq",
-            "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
-            "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ",
-            "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA",
-        ]
-        .iter()
-        .map(|s| s.parse().unwrap())
-        .collect();
-
-        store
-            .update_sampling_metadata(1, true, cids.clone())
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(2, true, cids[0..1].to_vec())
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(4, false, cids[3..].to_vec())
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(5, false, vec![])
-            .await
-            .unwrap();
-
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 3);
-
-        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids);
-        assert!(sampling_data.accepted);
-
-        let sampling_data = store.get_sampling_metadata(2).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids[0..1]);
-        assert!(sampling_data.accepted);
-
-        assert!(store.get_sampling_metadata(3).await.unwrap().is_none());
-
-        let sampling_data = store.get_sampling_metadata(4).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids[3..]);
-        assert!(!sampling_data.accepted);
-
-        let sampling_data = store.get_sampling_metadata(5).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, vec![]);
-        assert!(!sampling_data.accepted);
     }
 
     mod migration_v1 {

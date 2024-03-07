@@ -205,22 +205,14 @@ fn parse_request(request: HeaderRequest) -> Option<(u64, header_request::Data)> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::p2p::header_ex::utils::HeaderRequestExt;
-    use crate::test_utils::gen_filled_store;
+    use crate::test_utils::{async_test, gen_filled_store};
     use celestia_proto::p2p::pb::header_request::Data;
-    use celestia_proto::p2p::pb::{HeaderRequest, StatusCode};
+    use celestia_proto::p2p::pb::StatusCode;
     use celestia_tendermint_proto::Protobuf;
     use celestia_types::ExtendedHeader;
-    use libp2p::PeerId;
     use std::future::poll_fn;
-    use std::sync::Arc;
     use tokio::select;
     use tokio::sync::oneshot;
-
-    #[cfg(not(target_arch = "wasm32"))]
-    use tokio::test as async_test;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
     #[async_test]
     async fn request_head_test() {

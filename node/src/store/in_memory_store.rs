@@ -1,3 +1,4 @@
+use std::pin::pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
@@ -6,6 +7,7 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
+use tokio::sync::Notify;
 use tracing::{debug, info};
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
@@ -23,6 +25,8 @@ pub struct InMemoryStore {
     head_height: AtomicU64,
     /// Cached height of the lowest header that wasn't sampled yet
     lowest_unsampled_height: AtomicU64,
+    /// Notify when a new header is added
+    header_added_notifier: Notify,
 }
 
 impl InMemoryStore {
@@ -34,6 +38,7 @@ impl InMemoryStore {
             height_to_hash: DashMap::new(),
             head_height: AtomicU64::new(0),
             lowest_unsampled_height: AtomicU64::new(1),
+            header_added_notifier: Notify::new(),
         }
     }
 
@@ -89,6 +94,7 @@ impl InMemoryStore {
         height_entry.insert(hash);
 
         self.head_height.store(height, Ordering::Release);
+        self.header_added_notifier.notify_waiters();
 
         Ok(())
     }
@@ -150,7 +156,13 @@ impl InMemoryStore {
             Entry::Occupied(mut entry) => {
                 let metadata = entry.get_mut();
                 metadata.accepted = accepted;
-                metadata.cids_sampled.extend_from_slice(&cids);
+
+                for cid in &cids {
+                    if !metadata.cids_sampled.contains(cid) {
+                        metadata.cids_sampled.push(cid.to_owned());
+                    }
+                }
+
                 false
             }
         };
@@ -211,6 +223,22 @@ impl Store for InMemoryStore {
         self.get_by_height(height)
     }
 
+    async fn wait_height(&self, height: u64) -> Result<()> {
+        let mut notifier = pin!(self.header_added_notifier.notified());
+
+        loop {
+            if self.contains_height(height) {
+                return Ok(());
+            }
+
+            // Await for a notification
+            notifier.as_mut().await;
+
+            // Reset notifier
+            notifier.set(self.header_added_notifier.notified());
+        }
+    }
+
     async fn head_height(&self) -> Result<u64> {
         self.get_head_height()
     }
@@ -261,268 +289,7 @@ impl Clone for InMemoryStore {
             lowest_unsampled_height: AtomicU64::new(
                 self.lowest_unsampled_height.load(Ordering::Acquire),
             ),
+            header_added_notifier: Notify::new(),
         }
-    }
-}
-
-#[cfg(test)]
-pub mod tests {
-    use super::*;
-    use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::Height;
-
-    #[cfg(not(target_arch = "wasm32"))]
-    use tokio::test as async_test;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_bindgen_test::wasm_bindgen_test as async_test;
-
-    #[async_test]
-    async fn test_contains_height() {
-        let s = gen_filled_store(2).0;
-
-        assert!(!s.has_at(0).await);
-        assert!(s.has_at(1).await);
-        assert!(s.has_at(2).await);
-        assert!(!s.has_at(3).await);
-    }
-
-    #[test]
-    fn test_empty_store() {
-        let s = InMemoryStore::new();
-        assert!(matches!(s.get_head_height(), Err(StoreError::NotFound)));
-        assert!(matches!(s.get_head(), Err(StoreError::NotFound)));
-        assert!(matches!(s.get_by_height(1), Err(StoreError::NotFound)));
-        assert!(matches!(
-            s.get_by_hash(&Hash::Sha256([0; 32])),
-            Err(StoreError::NotFound)
-        ));
-    }
-
-    #[test]
-    fn test_read_write() {
-        let s = InMemoryStore::new();
-        let mut gen = ExtendedHeaderGenerator::new();
-
-        let header = gen.next();
-
-        s.append_single_unchecked(header.clone()).unwrap();
-        assert_eq!(s.get_head_height().unwrap(), 1);
-        assert_eq!(s.get_head().unwrap(), header);
-        assert_eq!(s.get_by_height(1).unwrap(), header);
-        assert_eq!(s.get_by_hash(&header.hash()).unwrap(), header);
-    }
-
-    #[test]
-    fn test_pregenerated_data() {
-        let (s, _) = gen_filled_store(100);
-        assert_eq!(s.get_head_height().unwrap(), 100);
-        let head = s.get_head().unwrap();
-        assert_eq!(s.get_by_height(100).unwrap(), head);
-        assert!(matches!(s.get_by_height(101), Err(StoreError::NotFound)));
-
-        let header = s.get_by_height(54).unwrap();
-        assert_eq!(s.get_by_hash(&header.hash()).unwrap(), header);
-    }
-
-    #[test]
-    fn test_duplicate_insert() {
-        let (s, mut gen) = gen_filled_store(100);
-        let header101 = gen.next();
-        s.append_single_unchecked(header101.clone()).unwrap();
-        assert!(matches!(
-            s.append_single_unchecked(header101.clone()),
-            Err(StoreError::HeightExists(101))
-        ));
-    }
-
-    #[test]
-    fn test_overwrite_height() {
-        let (s, gen) = gen_filled_store(100);
-
-        // Height 30 with different hash
-        let header29 = s.get_by_height(29).unwrap();
-        let header30 = gen.next_of(&header29);
-
-        let insert_existing_result = s.append_single_unchecked(header30);
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::HeightExists(30))
-        ));
-    }
-
-    #[test]
-    fn test_overwrite_hash() {
-        let (s, _) = gen_filled_store(100);
-        let mut dup_header = s.get_by_height(33).unwrap();
-        dup_header.header.height = Height::from(101u32);
-        let insert_existing_result = s.append_single_unchecked(dup_header.clone());
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::HashExists(_))
-        ));
-    }
-
-    #[async_test]
-    async fn test_append_range() {
-        let (s, mut gen) = gen_filled_store(10);
-        let hs = gen.next_many(4);
-        s.append_unchecked(hs).await.unwrap();
-        s.get_by_height(14).unwrap();
-    }
-
-    #[async_test]
-    async fn test_append_gap_between_head() {
-        let (s, mut gen) = gen_filled_store(10);
-
-        // height 11
-        gen.next();
-        // height 12
-        let upcoming_head = gen.next();
-
-        let insert_with_gap_result = s.append_single_unchecked(upcoming_head);
-        assert!(matches!(
-            insert_with_gap_result,
-            Err(StoreError::NonContinuousAppend(10, 12))
-        ));
-    }
-
-    #[async_test]
-    async fn test_non_continuous_append() {
-        let (s, mut gen) = gen_filled_store(10);
-        let mut hs = gen.next_many(6);
-
-        // remove height 14
-        hs.remove(3);
-
-        let insert_existing_result = s.append_unchecked(hs).await;
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::NonContinuousAppend(13, 15))
-        ));
-    }
-
-    #[test]
-    fn test_genesis_with_height() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
-        let header5 = gen.next();
-
-        let s = InMemoryStore::new();
-
-        assert!(matches!(
-            s.append_single_unchecked(header5),
-            Err(StoreError::NonContinuousAppend(0, 5))
-        ));
-    }
-
-    #[async_test]
-    async fn test_sampling_height_empty_store() {
-        let (store, _) = gen_filled_store(0);
-        store.update_sampling_metadata(0, true, vec![]).unwrap_err();
-        store.update_sampling_metadata(1, true, vec![]).unwrap_err();
-    }
-
-    #[async_test]
-    async fn test_sampling_height() {
-        let (store, _) = gen_filled_store(9);
-
-        store.update_sampling_metadata(0, true, vec![]).unwrap_err();
-        store.update_sampling_metadata(1, true, vec![]).unwrap();
-        store.update_sampling_metadata(2, true, vec![]).unwrap();
-        store.update_sampling_metadata(3, false, vec![]).unwrap();
-        store.update_sampling_metadata(4, true, vec![]).unwrap();
-        store.update_sampling_metadata(5, false, vec![]).unwrap();
-        store.update_sampling_metadata(6, false, vec![]).unwrap();
-
-        store.update_sampling_metadata(8, true, vec![]).unwrap();
-
-        assert_eq!(store.get_next_unsampled_height(), 7);
-    }
-
-    #[test]
-    fn test_sampling_merge() {
-        let (store, _) = gen_filled_store(1);
-        let cid0 = "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ"
-            .parse()
-            .unwrap();
-        let cid1 = "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA"
-            .parse()
-            .unwrap();
-
-        store
-            .update_sampling_metadata(1, false, vec![cid0])
-            .unwrap();
-        store.update_sampling_metadata(1, false, vec![]).unwrap();
-
-        let sampling_data = store.get_sampling_metadata(1).unwrap().unwrap();
-        assert!(!sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0]);
-
-        store.update_sampling_metadata(1, true, vec![cid1]).unwrap();
-
-        assert_eq!(store.get_next_unsampled_height(), 2);
-
-        let sampling_data = store.get_sampling_metadata(1).unwrap().unwrap();
-        assert!(sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0, cid1]);
-    }
-
-    #[test]
-    fn test_sampled_cids() {
-        let (store, _) = gen_filled_store(5);
-
-        let cids: Vec<Cid> = [
-            "bafkreieq5jui4j25lacwomsqgjeswwl3y5zcdrresptwgmfylxo2depppq",
-            "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
-            "zdpuAyvkgEDQm9TenwGkd5eNaosSxjgEYd8QatfPetgB1CdEZ",
-            "zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA",
-        ]
-        .iter()
-        .map(|s| s.parse().unwrap())
-        .collect();
-
-        store
-            .update_sampling_metadata(1, true, cids.clone())
-            .unwrap();
-        store
-            .update_sampling_metadata(2, true, cids[0..1].to_vec())
-            .unwrap();
-        store
-            .update_sampling_metadata(4, false, cids[3..].to_vec())
-            .unwrap();
-        store.update_sampling_metadata(5, false, vec![]).unwrap();
-
-        assert_eq!(store.get_next_unsampled_height(), 3);
-
-        let sampling_data = store.get_sampling_metadata(1).unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids);
-        assert!(sampling_data.accepted);
-
-        let sampling_data = store.get_sampling_metadata(2).unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids[0..1]);
-        assert!(sampling_data.accepted);
-
-        assert!(store.get_sampling_metadata(3).unwrap().is_none());
-
-        let sampling_data = store.get_sampling_metadata(4).unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids[3..]);
-        assert!(!sampling_data.accepted);
-
-        let sampling_data = store.get_sampling_metadata(5).unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, vec![]);
-        assert!(!sampling_data.accepted);
-    }
-
-    pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
-        let s = InMemoryStore::new();
-        let mut gen = ExtendedHeaderGenerator::new();
-
-        let headers = gen.next_many(amount);
-
-        for header in headers {
-            s.append_single_unchecked(header)
-                .expect("inserting test data failed");
-        }
-
-        (s, gen)
     }
 }

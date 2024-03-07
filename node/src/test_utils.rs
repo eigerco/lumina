@@ -3,11 +3,15 @@
 use std::time::Duration;
 
 use celestia_proto::p2p::pb::{header_request::Data, HeaderRequest};
-use celestia_types::{hash::Hash, test_utils::ExtendedHeaderGenerator, ExtendedHeader};
+use celestia_types::hash::Hash;
+use celestia_types::test_utils::ExtendedHeaderGenerator;
+use celestia_types::ExtendedHeader;
+use cid::Cid;
 use libp2p::identity::{self, Keypair};
 use tokio::sync::{mpsc, watch};
 
 use crate::{
+    blockstore::InMemoryBlockstore,
     executor::timeout,
     node::NodeConfig,
     p2p::{P2pCmd, P2pError},
@@ -15,6 +19,13 @@ use crate::{
     store::InMemoryStore,
     utils::OneshotResultSender,
 };
+
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use tokio::test as async_test;
+#[cfg(test)]
+#[cfg(target_arch = "wasm32")]
+pub(crate) use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
 /// Generate a store pre-filled with headers.
 pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
@@ -34,7 +45,7 @@ pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator)
 /// [`NodeConfig`] with default values for the usage in tests.
 ///
 /// Can be used to fill the missing fields with `..test_node_config()` syntax.
-pub fn test_node_config() -> NodeConfig<InMemoryStore> {
+pub fn test_node_config() -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
     let node_keypair = identity::Keypair::generate_ed25519();
     NodeConfig {
         network_id: "private".to_string(),
@@ -42,12 +53,13 @@ pub fn test_node_config() -> NodeConfig<InMemoryStore> {
         p2p_local_keypair: node_keypair,
         p2p_bootnodes: vec![],
         p2p_listen_on: vec![],
+        blockstore: InMemoryBlockstore::new(),
         store: InMemoryStore::new(),
     }
 }
 
 /// [`NodeConfig`] with listen address and default values for the usage in tests.
-pub fn listening_test_node_config() -> NodeConfig<InMemoryStore> {
+pub fn listening_test_node_config() -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
     NodeConfig {
         p2p_listen_on: vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()],
         ..test_node_config()
@@ -55,7 +67,9 @@ pub fn listening_test_node_config() -> NodeConfig<InMemoryStore> {
 }
 
 /// [`NodeConfig`] with given keypair and default values for the usage in tests.
-pub fn test_node_config_with_keypair(keypair: Keypair) -> NodeConfig<InMemoryStore> {
+pub fn test_node_config_with_keypair(
+    keypair: Keypair,
+) -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
     NodeConfig {
         p2p_local_keypair: keypair,
         ..test_node_config()
@@ -181,6 +195,16 @@ impl MockP2pHandle {
         match self.expect_cmd().await {
             P2pCmd::InitHeaderSub { head } => *head,
             cmd => panic!("Expecting InitHeaderSub, but received: {cmd:?}"),
+        }
+    }
+
+    /// Assert that a CID request was sent to the [`P2p`] worker and obtain a response channel.
+    ///
+    /// [`P2p`]: crate::p2p::P2p
+    pub async fn expect_get_shwap_cid(&mut self) -> (Cid, OneshotResultSender<Vec<u8>, P2pError>) {
+        match self.expect_cmd().await {
+            P2pCmd::GetShwapCid { cid, respond_to } => (cid, respond_to),
+            cmd => panic!("Expecting GetShwapCid, but received: {cmd:?}"),
         }
     }
 }

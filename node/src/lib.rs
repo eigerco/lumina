@@ -1,6 +1,8 @@
 #![cfg_attr(docs_rs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
+pub mod blockstore;
+pub mod daser;
 mod executor;
 pub mod network;
 pub mod node;
@@ -12,3 +14,6 @@ pub mod syncer;
 #[cfg_attr(docs_rs, doc(cfg(feature = "test-utils")))]
 pub mod test_utils;
 mod utils;
+
+#[cfg(all(target_arch = "wasm32", test))]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);

@@ -17,9 +17,10 @@ use multihash::Multihash;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 
+use crate::consts::appconsts::SHARE_SIZE;
 use crate::nmt::NS_SIZE;
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
-use crate::rsmt2d::ExtendedDataSquare;
+use crate::rsmt2d::{is_ods_square, ExtendedDataSquare};
 use crate::{DataAvailabilityHeader, Error, Result};
 
 /// The size of the [`RowId`] hash in `multihash`.
@@ -62,22 +63,20 @@ impl Row {
     /// verify the row against roots from DAH
     pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
         let square_len = self.shares.len();
-
-        let (data_shares, parity_shares) = self.shares.split_at(square_len / 2);
+        let row = self.row_id.index as usize;
 
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
-        for s in data_shares {
-            let ns = Namespace::from_raw(&s[..NS_SIZE])?;
+        for (col, s) in self.shares.iter().enumerate() {
+            let ns = if is_ods_square(row, col, square_len) {
+                Namespace::from_raw(&s[..NS_SIZE])?
+            } else {
+                Namespace::PARITY_SHARE
+            };
             tree.push_leaf(s, *ns).map_err(Error::Nmt)?;
         }
-        for s in parity_shares {
-            tree.push_leaf(s, *Namespace::PARITY_SHARE)
-                .map_err(Error::Nmt)?;
-        }
 
-        let index = self.row_id.index.into();
-        let Some(root) = dah.row_root(index) else {
-            return Err(Error::EdsIndexOutOfRange(index));
+        let Some(root) = dah.row_root(row) else {
+            return Err(Error::EdsIndexOutOfRange(row));
         };
 
         if tree.root().hash() != root.hash() {
@@ -95,16 +94,14 @@ impl TryFrom<RawRow> for Row {
 
     fn try_from(row: RawRow) -> Result<Row, Self::Error> {
         let row_id = RowId::decode(&row.row_id)?;
-        let shares = row.row_half;
+        let mut shares = row.row_half;
+        let data_shares = shares.len();
 
-        // TODO: only original data shares are sent over the wire, we need leopard codec to
-        // re-compute parity shares
-        //
-        // somehow_generate_parity_shares(&mut shares);
+        shares.resize(shares.len() * 2, vec![0; SHARE_SIZE]);
 
-        let _ = Row { row_id, shares };
+        leopard_codec::encode(&mut shares, data_shares)?;
 
-        unimplemented!()
+        Ok(Row { row_id, shares })
     }
 }
 
@@ -144,17 +141,15 @@ impl RowId {
 
     /// Number of bytes needed to represent [`RowId`]
     pub const fn size() -> usize {
-        // size of:
-        // u16 + u64
-        // 2  + 8
+        // Size MUST be 12 by the spec.
         10
     }
 
     pub(crate) fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(ROW_ID_SIZE);
 
-        bytes.put_u64_le(self.block_height);
-        bytes.put_u16_le(self.index);
+        bytes.put_u64(self.block_height);
+        bytes.put_u16(self.index);
     }
 
     pub(crate) fn decode(buffer: &[u8]) -> Result<Self, CidError> {
@@ -163,8 +158,8 @@ impl RowId {
         }
 
         let mut cursor = Cursor::new(buffer);
-        let block_height = cursor.get_u64_le();
-        let index = cursor.get_u16_le();
+        let block_height = cursor.get_u64();
+        let index = cursor.get_u16();
 
         if block_height == 0 {
             return Err(CidError::InvalidCid("Zero block height".to_string()));
@@ -217,7 +212,7 @@ impl From<RowId> for CidGeneric<ROW_ID_SIZE> {
 mod tests {
     use super::*;
     use crate::consts::appconsts::SHARE_SIZE;
-    use crate::nmt::{Namespace, NS_SIZE};
+    use crate::test_utils::generate_eds;
 
     #[test]
     fn round_trip_test() {
@@ -241,9 +236,19 @@ mod tests {
         Row::new(1, &eds, height).unwrap();
         Row::new(7, &eds, height).unwrap();
         let row_err = Row::new(8, &eds, height).unwrap_err();
-        assert!(matches!(row_err, Error::EdsIndexOutOfRange(8)));
+        assert!(matches!(row_err, Error::EdsIndexOutOfRange(_)));
         let row_err = Row::new(100, &eds, height).unwrap_err();
-        assert!(matches!(row_err, Error::EdsIndexOutOfRange(100)));
+        assert!(matches!(row_err, Error::EdsIndexOutOfRange(_)));
+    }
+
+    #[test]
+    fn row_id_size() {
+        assert_eq!(RowId::size(), 10);
+
+        let row_id = RowId::new(0, 1).unwrap();
+        let mut bytes = BytesMut::new();
+        row_id.encode(&mut bytes);
+        assert_eq!(bytes.len(), RowId::size());
     }
 
     #[test]
@@ -253,8 +258,8 @@ mod tests {
             0x90, 0xF0, 0x01, // CID codec = 7810
             0x91, 0xF0, 0x01, // multihash code = 7811
             0x0A, // len = ROW_ID_SIZE = 10
-            64, 0, 0, 0, 0, 0, 0, 0, // block height = 64
-            7, 0, // row index = 7
+            0, 0, 0, 0, 0, 0, 0, 64, // block height = 64
+            0, 7, // row index = 7
         ];
 
         let cid = CidGeneric::<ROW_ID_SIZE>::read_bytes(bytes.as_ref()).unwrap();
@@ -275,7 +280,7 @@ mod tests {
             0x91, 0xF0, 0x01, // code = 7811
             0x0A, // len = ROW_ID_SIZE = 10
             0, 0, 0, 0, 0, 0, 0, 0, // invalid block height = 0 !
-            7, 0, // row index = 7
+            0, 7, // row index = 7
         ];
 
         let cid = CidGeneric::<ROW_ID_SIZE>::read_bytes(bytes.as_ref()).unwrap();
@@ -311,48 +316,25 @@ mod tests {
     }
 
     #[test]
-    // TODO:
-    // fully testing protobuf deserialisation requires leopard codec, to generate parity shares.
-    // By asserting that we've reached `unimplemented!`, we rely on implementation detail to
-    // check whether protobuf, RowId and Share deserialisations were successful (but can't check
-    // the actual data)
-    // Once we have leopard codec, remove `should_panic` to enable full test functionality
-    #[should_panic(expected = "not implemented")]
-    fn decode_row_bytes() {
-        let bytes = include_bytes!("../test_data/shwap_samples/row.data");
-        let mut row = Row::decode(&bytes[..]).unwrap();
-
-        row.row_id.index = 64;
-        row.row_id.block_height = 255;
-
-        assert_eq!(row.row_id.index, 64);
-        assert_eq!(row.row_id.block_height, 255);
-
-        for (idx, share) in row.shares.iter().enumerate() {
-            let expected_ns = Namespace::new_v0(&[idx as u8]).unwrap();
-            let ns = Namespace::from_raw(&share[..NS_SIZE]).unwrap();
-            assert_eq!(ns, expected_ns);
-            let data = [0; SHARE_SIZE - NS_SIZE];
-            assert_eq!(share[NS_SIZE..], data);
-        }
-    }
-
-    #[test]
     fn test_validate() {
-        let eds_json = include_str!("../test_data/shwap_samples/eds.json");
-        let eds: ExtendedDataSquare = serde_json::from_str(eds_json).unwrap();
-        let dah_json = include_str!("../test_data/shwap_samples/dah.json");
-        let dah: DataAvailabilityHeader = serde_json::from_str(dah_json).unwrap();
+        for _ in 0..10 {
+            let eds = generate_eds(2 << (rand::random::<usize>() % 8));
+            let dah = DataAvailabilityHeader::from_eds(&eds);
 
-        let index = 1;
-        let row = Row {
-            row_id: RowId {
-                block_height: 1,
-                index,
-            },
-            shares: eds.row(index.into()).unwrap(),
-        };
+            let index = rand::random::<u16>() % eds.square_len() as u16;
 
-        row.verify(&dah).unwrap();
+            let row = Row {
+                row_id: RowId {
+                    block_height: 1,
+                    index,
+                },
+                shares: eds.row(index.into()).unwrap(),
+            };
+
+            let encoded = row.encode_vec().unwrap();
+            let decoded = Row::decode(encoded.as_ref()).unwrap();
+
+            decoded.verify(&dah).unwrap();
+        }
     }
 }

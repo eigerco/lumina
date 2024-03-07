@@ -533,19 +533,13 @@ fn parse_header_request(buf: &[u8]) -> Option<HeaderRequest> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::async_test;
     use bytes::BytesMut;
-    use celestia_proto::p2p::pb::{header_request::Data, HeaderRequest, HeaderResponse};
-    use futures::io::{AsyncRead, AsyncReadExt, Cursor, Error};
-    use futures::task::{Context, Poll};
-    use libp2p::{request_response::Codec, swarm::StreamProtocol};
-    use prost::{encode_length_delimiter, Message};
+    use celestia_proto::p2p::pb::header_request::Data;
+    use futures::io::{Cursor, Error};
+    use prost::encode_length_delimiter;
     use std::io::ErrorKind;
     use std::pin::Pin;
-
-    #[cfg(not(target_arch = "wasm32"))]
-    use tokio::test as async_test;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
     #[async_test]
     async fn test_decode_header_request_empty() {
