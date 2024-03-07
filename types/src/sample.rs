@@ -56,7 +56,7 @@ impl Sample {
     /// Create a new [`Sample`] for the given index of the [`ExtendedDataSquare`] in a block.
     ///
     /// `row_index` and `column_index` specifies the [`Share`] position in EDS.
-    /// `axis_type` determines whether proof of inclusion of the [`Share`] should be
+    /// `proof_type` determines whether proof of inclusion of the [`Share`] should be
     /// constructed for its row or column.
     ///
     /// # Errors
