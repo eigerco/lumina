@@ -193,7 +193,7 @@ mod gas_prize_serde {
     where
         S: Serializer,
     {
-        let x = value.unwrap_or(-1.);
+        let x = value.unwrap_or(-1.0);
         serializer.serialize_f64(x)
     }
 
