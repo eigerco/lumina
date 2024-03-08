@@ -283,7 +283,7 @@ impl ExtendedDataSquare {
             leopard_codec::encode(row, ods_width)?;
         }
 
-        ExtendedDataSquare::new(eds_shares, "leopard".to_string())
+        ExtendedDataSquare::new(eds_shares, "Leopard".to_string())
     }
 
     /// The raw data of the EDS.
