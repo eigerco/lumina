@@ -213,28 +213,40 @@ where
         Ok(self.p2p.get_verified_headers_range(from, amount).await?)
     }
 
-    /// Request a [`Row`] from the network.
+    /// Request a verified [`Row`] from the network.
     ///
-    /// The result was not verified and [`Row::verify`] must be called.
+    /// # Errors
+    ///
+    /// On failure to receive a verified [`Row`] within a certain time, the
+    /// `NodeError::P2p(P2pError::BitswapQueryTimeout)` error will be returned.
     pub async fn request_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
         Ok(self.p2p.get_row(row_index, block_height).await?)
     }
 
-    /// Request a [`Sample`] from the network.
+    /// Request a verified [`Sample`] from the network.
     ///
-    /// The result was not verified and [`Sample::verify`] must be called.
+    /// # Errors
+    ///
+    /// On failure to receive a verified [`Sample`] within a certain time, the
+    /// `NodeError::P2p(P2pError::BitswapQueryTimeout)` error will be returned.
     pub async fn request_sample(
         &self,
-        index: usize,
-        square_len: usize,
+        row_index: u16,
+        column_index: u16,
         block_height: u64,
     ) -> Result<Sample> {
-        Ok(self.p2p.get_sample(index, square_len, block_height).await?)
+        Ok(self
+            .p2p
+            .get_sample(row_index, column_index, block_height)
+            .await?)
     }
 
-    /// Request a [`NamespacedData`] from the network.
+    /// Request a verified [`NamespacedData`] from the network.
     ///
-    /// The result was not verified and [`NamespacedData::verify`] must be called.
+    /// # Errors
+    ///
+    /// On failure to receive a verified [`NamespacedData`] within a certain time, the
+    /// `NodeError::P2p(P2pError::BitswapQueryTimeout)` error will be returned.
     pub async fn request_namespaced_data(
         &self,
         namespace: Namespace,

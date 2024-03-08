@@ -142,14 +142,13 @@ where
 
     async fn sample_block(&mut self, header: &ExtendedHeader) -> Result<(Vec<Cid>, bool)> {
         let now = Instant::now();
-        let block_len = header.dah.square_len() * header.dah.square_len();
-        let indexes = random_indexes(block_len, self.max_samples_needed);
+        let indexes = random_indexes(header.dah.square_width(), self.max_samples_needed);
         let mut futs = FuturesUnordered::new();
 
-        for index in indexes {
+        for (row_index, column_index) in indexes {
             let fut = self
                 .p2p
-                .get_sample(index, header.dah.square_len(), header.height().value());
+                .get_sample(row_index, column_index, header.height().value());
             futs.push(fut);
         }
 
@@ -158,7 +157,7 @@ where
 
         while let Some(res) = futs.next().await {
             match res {
-                Ok(sample) => cids.push(convert_cid(&sample.sample_id.into())?),
+                Ok(sample) => cids.push(convert_cid(&sample.id.into())?),
                 // Validation is done at Bitswap level, through `ShwapMultihasher`.
                 // If the sample is not valid, it will never be delivered to us
                 // as the data of the CID. Because of that, the only signal
@@ -179,18 +178,24 @@ where
     }
 }
 
-fn random_indexes(block_len: usize, max_samples_needed: usize) -> HashSet<usize> {
-    // If block length is smaller than `max_samples_needed`, we are going
+fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16, u16)> {
+    let samples_in_block = usize::from(square_width).pow(2);
+
+    // If block size is smaller than `max_samples_needed`, we are going
     // to sample the whole block. Randomness is not needed for this.
-    if block_len <= max_samples_needed {
-        return (0..block_len).collect();
+    if samples_in_block <= max_samples_needed {
+        return (0..square_width)
+            .flat_map(|row| (0..square_width).map(move |col| (row, col)))
+            .collect();
     }
 
     let mut indexes = HashSet::with_capacity(max_samples_needed);
     let mut rng = rand::thread_rng();
 
     while indexes.len() < max_samples_needed {
-        indexes.insert(rng.gen::<usize>() % block_len);
+        let row = rng.gen::<u16>() % square_width;
+        let col = rng.gen::<u16>() % square_width;
+        indexes.insert((row, col));
     }
 
     indexes
@@ -251,10 +256,10 @@ mod tests {
         handle: &mut MockP2pHandle,
         gen: &mut ExtendedHeaderGenerator,
         store: &InMemoryStore,
-        square_len: usize,
+        square_width: usize,
         simulate_invalid_sampling: bool,
     ) {
-        let eds = generate_eds(square_len);
+        let eds = generate_eds(square_width);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         let header = gen.next_with_dah(dah);
         let height = header.height().value();
@@ -263,7 +268,7 @@ mod tests {
 
         let mut cids = Vec::new();
 
-        for i in 0..(square_len * square_len).min(MAX_SAMPLES_NEEDED) {
+        for i in 0..(square_width * square_width).min(MAX_SAMPLES_NEEDED) {
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
 
             // Simulate invalid sample by triggering BitswapQueryTimeout
@@ -273,7 +278,7 @@ mod tests {
             }
 
             let sample_id: SampleId = cid.try_into().unwrap();
-            assert_eq!(sample_id.row.block_height, height);
+            assert_eq!(sample_id.block_height(), height);
 
             let sample = gen_sample_of_cid(sample_id, &eds, store).await;
             let sample_bytes = sample.encode_vec().unwrap();
@@ -294,15 +299,15 @@ mod tests {
         eds: &ExtendedDataSquare,
         store: &InMemoryStore,
     ) -> Sample {
-        let header = store
-            .get_by_height(sample_id.row.block_height)
-            .await
-            .unwrap();
+        let header = store.get_by_height(sample_id.block_height()).await.unwrap();
 
-        let row = sample_id.row.index as usize;
-        let col = sample_id.index as usize;
-        let index = row * header.dah.square_len() + col;
-
-        Sample::new(AxisType::Row, index, eds, header.height().value()).unwrap()
+        Sample::new(
+            sample_id.row_index(),
+            sample_id.column_index(),
+            AxisType::Row,
+            eds,
+            header.height().value(),
+        )
+        .unwrap()
     }
 }

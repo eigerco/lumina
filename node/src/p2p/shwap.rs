@@ -48,14 +48,14 @@ where
                 let ns_data =
                     NamespacedData::decode(input).map_err(MultihasherError::custom_fatal)?;
 
-                let hash = convert_cid(&ns_data.namespaced_data_id.into())
+                let hash = convert_cid(&ns_data.id.into())
                     .map_err(MultihasherError::custom_fatal)?
                     .hash()
                     .to_owned();
 
                 let header = self
                     .header_store
-                    .get_by_height(ns_data.namespaced_data_id.row.block_height)
+                    .get_by_height(ns_data.id.block_height())
                     .await
                     .map_err(MultihasherError::custom_fatal)?;
 
@@ -68,14 +68,14 @@ where
             ROW_ID_MULTIHASH_CODE => {
                 let row = Row::decode(input).map_err(MultihasherError::custom_fatal)?;
 
-                let hash = convert_cid(&row.row_id.into())
+                let hash = convert_cid(&row.id.into())
                     .map_err(MultihasherError::custom_fatal)?
                     .hash()
                     .to_owned();
 
                 let header = self
                     .header_store
-                    .get_by_height(row.row_id.block_height)
+                    .get_by_height(row.id.block_height())
                     .await
                     .map_err(MultihasherError::custom_fatal)?;
 
@@ -87,14 +87,14 @@ where
             SAMPLE_ID_MULTIHASH_CODE => {
                 let sample = Sample::decode(input).map_err(MultihasherError::custom_fatal)?;
 
-                let hash = convert_cid(&sample.sample_id.into())
+                let hash = convert_cid(&sample.id.into())
                     .map_err(MultihasherError::custom_fatal)?
                     .hash()
                     .to_owned();
 
                 let header = self
                     .header_store
-                    .get_by_height(sample.sample_id.row.block_height)
+                    .get_by_height(sample.id.block_height())
                     .await
                     .map_err(MultihasherError::custom_fatal)?;
 
@@ -114,8 +114,8 @@ pub(super) fn row_cid(row_index: u16, block_height: u64) -> Result<Cid> {
     convert_cid(&row_id.into())
 }
 
-pub(super) fn sample_cid(index: usize, square_len: usize, block_height: u64) -> Result<Cid> {
-    let sample_id = SampleId::new(index, square_len, block_height).map_err(P2pError::Cid)?;
+pub(super) fn sample_cid(row_index: u16, column_index: u16, block_height: u64) -> Result<Cid> {
+    let sample_id = SampleId::new(row_index, column_index, block_height).map_err(P2pError::Cid)?;
     convert_cid(&sample_id.into())
 }
 
@@ -153,9 +153,9 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let header = gen.next_with_dah(dah.clone());
 
-        let sample = Sample::new(AxisType::Row, 0, &eds, header.header.height.value()).unwrap();
+        let sample = Sample::new(0, 0, AxisType::Row, &eds, header.header.height.value()).unwrap();
         let sample_bytes = sample.encode_vec().unwrap();
-        let cid = sample_cid(0, eds.square_len(), 1).unwrap();
+        let cid = sample_cid(0, 0, 1).unwrap();
 
         sample.verify(&dah).unwrap();
         store.append_single(header).await.unwrap();

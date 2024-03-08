@@ -8,13 +8,12 @@ use ed25519_consensus::SigningKey;
 use rand::RngCore;
 
 use crate::block::{CommitExt, GENESIS_HEIGHT};
+pub use crate::byzantine::test_utils::corrupt_eds;
 use crate::consts::appconsts::{SHARE_INFO_BYTES, SHARE_SIZE};
 use crate::consts::version;
 use crate::hash::{Hash, HashExt};
 use crate::nmt::{Namespace, NamespacedHash, NamespacedHashExt, NS_SIZE};
 use crate::{DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, ValidatorSet};
-
-pub use crate::byzantine::test_utils::corrupt_eds;
 
 /// [`ExtendedHeader`] generator for testing purposes.
 ///
@@ -265,8 +264,7 @@ impl Default for ExtendedHeaderGenerator {
 pub fn invalidate(header: &mut ExtendedHeader) {
     // One way of invalidate `ExtendedHeader` but still passes the
     // verification check, is to clear `dah` but keep `data_hash` unchanged.
-    header.dah.row_roots.clear();
-    header.dah.column_roots.clear();
+    header.dah = DataAvailabilityHeader::new_unchecked(Vec::new(), Vec::new());
 
     header.validate().unwrap_err();
 }
@@ -313,9 +311,9 @@ pub fn unverify(header: &mut ExtendedHeader) {
 }
 
 /// Generate a properly encoded [`ExtendedDataSquare`] with random data.
-pub fn generate_eds(square_len: usize) -> ExtendedDataSquare {
+pub fn generate_eds(square_width: usize) -> ExtendedDataSquare {
     let ns = Namespace::const_v0(rand::random());
-    let ods_width = square_len / 2;
+    let ods_width = square_width / 2;
 
     let shares: Vec<_> = (0..ods_width * ods_width)
         .map(|_| {
@@ -413,9 +411,11 @@ fn generate_new(
                 proposer_priority: 0_i64.into(),
             }),
         ),
-        dah: dah.unwrap_or_else(|| DataAvailabilityHeader {
-            row_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-            column_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
+        dah: dah.unwrap_or_else(|| {
+            DataAvailabilityHeader::new_unchecked(
+                vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
+                vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
+            )
         }),
     };
 
@@ -485,9 +485,11 @@ fn generate_next(
             }],
         },
         validator_set: current.validator_set.clone(),
-        dah: dah.unwrap_or_else(|| DataAvailabilityHeader {
-            row_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-            column_roots: vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
+        dah: dah.unwrap_or_else(|| {
+            DataAvailabilityHeader::new_unchecked(
+                vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
+                vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
+            )
         }),
     };
 

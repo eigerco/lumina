@@ -9,7 +9,6 @@ use crate::consts::data_availability_header::{
 };
 use crate::namespaced_data::{NamespacedData, NamespacedDataId};
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NmtExt, NS_SIZE};
-use crate::row::RowId;
 use crate::{bail_validation, DataAvailabilityHeader, Error, Result};
 
 /// Represents either column or row of the [`ExtendedDataSquare`].
@@ -116,10 +115,10 @@ impl Display for AxisType {
 /// let block_height = 15;
 /// let header = get_header(block_height);
 /// let eds = get_eds(block_height);
-/// let width = header.dah.square_len();
+/// let width = header.dah.square_width();
 ///
 /// // for each row of the data square, build an nmt
-/// for row in 0..eds.square_len() {
+/// for row in 0..eds.square_width() {
 ///     // check if the root corresponds to the one from the dah
 ///     let root = eds.row_nmt(row).unwrap().root();
 ///     assert_eq!(root, header.dah.row_root(row).unwrap());
@@ -138,7 +137,7 @@ pub struct ExtendedDataSquare {
     codec: String,
     /// pre-calculated square length
     #[serde(skip)]
-    square_len: usize,
+    square_width: u16,
 }
 
 impl ExtendedDataSquare {
@@ -175,20 +174,23 @@ impl ExtendedDataSquare {
             );
         }
 
-        let square_len = f64::sqrt(shares.len() as f64) as usize;
+        let square_width = f64::sqrt(shares.len() as f64) as usize;
 
-        if square_len * square_len != shares.len() {
+        if square_width * square_width != shares.len() {
             return Err(Error::EdsInvalidDimentions);
         }
+
+        let square_width = u16::try_from(square_width).map_err(|_| Error::EdsInvalidDimentions)?;
+
         // must be a power of 2
-        if square_len.count_ones() != 1 {
+        if square_width.count_ones() != 1 {
             return Err(Error::EdsInvalidDimentions);
         }
 
         let eds = ExtendedDataSquare {
             data_square: shares,
             codec,
-            square_len,
+            square_width,
         };
 
         let check_share = |row, col, prev_ns: Option<Namespace>, axis| -> Result<Namespace> {
@@ -198,7 +200,7 @@ impl ExtendedDataSquare {
                 bail_validation!("share len ({}) != SHARE_SIZE ({})", share.len(), SHARE_SIZE);
             }
 
-            let ns = if is_ods_square(row, col, eds.square_len()) {
+            let ns = if is_ods_square(row, col, eds.square_width()) {
                 Namespace::from_raw(&share[..NS_SIZE])?
             } else {
                 Namespace::PARITY_SHARE
@@ -216,18 +218,18 @@ impl ExtendedDataSquare {
         };
 
         // Validate that namespaces of each row are sorted
-        for row in 0..eds.square_len() {
+        for row in 0..eds.square_width() {
             let mut prev_ns = None;
 
-            for col in 0..eds.square_len() {
+            for col in 0..eds.square_width() {
                 prev_ns = Some(check_share(row, col, prev_ns, AxisType::Row)?);
             }
         }
         // Validate that namespaces of each column are sorted
-        for col in 0..eds.square_len() {
+        for col in 0..eds.square_width() {
             let mut prev_ns = None;
 
-            for row in 0..eds.square_len() {
+            for row in 0..eds.square_width() {
                 prev_ns = Some(check_share(row, col, prev_ns, AxisType::Col)?);
             }
         }
@@ -295,49 +297,49 @@ impl ExtendedDataSquare {
     }
 
     /// Returns the share of the provided coordinates.
-    pub fn share(&self, row: usize, column: usize) -> Result<&[u8]> {
-        let index = row * self.square_len + column;
+    pub fn share(&self, row: u16, column: u16) -> Result<&[u8]> {
+        let index = usize::from(row) * usize::from(self.square_width) + usize::from(column);
 
         self.data_square
             .get(index)
             .map(Vec::as_slice)
-            .ok_or(Error::EdsIndexOutOfRange(index))
+            .ok_or(Error::EdsIndexOutOfRange(row, column))
     }
 
     /// Returns the mutable share of the provided coordinates.
     #[cfg(any(test, feature = "test-utils"))]
-    pub(crate) fn share_mut(&mut self, row: usize, column: usize) -> Result<&mut [u8]> {
-        let index = row * self.square_len + column;
+    pub(crate) fn share_mut(&mut self, row: u16, column: u16) -> Result<&mut [u8]> {
+        let index = usize::from(row) * usize::from(self.square_width) + usize::from(column);
 
         self.data_square
             .get_mut(index)
             .map(Vec::as_mut_slice)
-            .ok_or(Error::EdsIndexOutOfRange(index))
+            .ok_or(Error::EdsIndexOutOfRange(row, column))
     }
 
     /// Returns the shares of a row.
-    pub fn row(&self, index: usize) -> Result<Vec<Vec<u8>>> {
+    pub fn row(&self, index: u16) -> Result<Vec<Vec<u8>>> {
         self.axis(AxisType::Row, index)
     }
 
     /// Returns the [`Nmt`] of a row.
-    pub fn row_nmt(&self, index: usize) -> Result<Nmt> {
+    pub fn row_nmt(&self, index: u16) -> Result<Nmt> {
         self.axis_nmt(AxisType::Row, index)
     }
 
     /// Returns the shares of a column.
-    pub fn column(&self, index: usize) -> Result<Vec<Vec<u8>>> {
+    pub fn column(&self, index: u16) -> Result<Vec<Vec<u8>>> {
         self.axis(AxisType::Col, index)
     }
 
     /// Returns the [`Nmt`] of a column.
-    pub fn column_nmt(&self, index: usize) -> Result<Nmt> {
+    pub fn column_nmt(&self, index: u16) -> Result<Nmt> {
         self.axis_nmt(AxisType::Col, index)
     }
 
     /// Returns the shares of column or row.
-    pub fn axis(&self, axis: AxisType, index: usize) -> Result<Vec<Vec<u8>>> {
-        (0..self.square_len)
+    pub fn axis(&self, axis: AxisType, index: u16) -> Result<Vec<Vec<u8>>> {
+        (0..self.square_width)
             .map(|i| {
                 let (row, col) = match axis {
                     AxisType::Row => (index, i),
@@ -350,10 +352,10 @@ impl ExtendedDataSquare {
     }
 
     /// Returns the [`Nmt`] of column or row.
-    pub fn axis_nmt(&self, axis: AxisType, index: usize) -> Result<Nmt> {
+    pub fn axis_nmt(&self, axis: AxisType, index: u16) -> Result<Nmt> {
         let mut tree = Nmt::default();
 
-        for i in 0..self.square_len {
+        for i in 0..self.square_width {
             let (row, col) = match axis {
                 AxisType::Row => (index, i),
                 AxisType::Col => (i, index),
@@ -361,7 +363,7 @@ impl ExtendedDataSquare {
 
             let share = self.share(row, col)?;
 
-            let ns = if is_ods_square(col, row, self.square_len) {
+            let ns = if is_ods_square(col, row, self.square_width) {
                 Namespace::from_raw(&share[..NS_SIZE])?
             } else {
                 Namespace::PARITY_SHARE
@@ -374,8 +376,8 @@ impl ExtendedDataSquare {
     }
 
     /// Get EDS square length.
-    pub fn square_len(&self) -> usize {
-        self.square_len
+    pub fn square_width(&self) -> u16 {
+        self.square_width
     }
 
     /// Return all the shares that belong to the provided namespace in the EDS.
@@ -388,7 +390,7 @@ impl ExtendedDataSquare {
     ) -> Result<Vec<NamespacedData>> {
         let mut data = Vec::new();
 
-        for row in 0..self.square_len {
+        for row in 0..self.square_width {
             let Some(row_root) = dah.row_root(row) else {
                 break;
             };
@@ -397,12 +399,12 @@ impl ExtendedDataSquare {
                 continue;
             }
 
-            let mut shares = Vec::with_capacity(self.square_len);
+            let mut shares = Vec::with_capacity(self.square_width.into());
 
-            for col in 0..self.square_len {
+            for col in 0..self.square_width {
                 let share = self.share(row, col)?;
 
-                let ns = if is_ods_square(row, col, self.square_len) {
+                let ns = if is_ods_square(row, col, self.square_width) {
                     Namespace::from_raw(&share[..NS_SIZE])?
                 } else {
                     Namespace::PARITY_SHARE
@@ -418,11 +420,10 @@ impl ExtendedDataSquare {
             }
 
             let proof = self.row_nmt(row)?.get_namespace_proof(*namespace);
-            let row = RowId::new(row as u16, height)?;
-            let namespaced_data_id = NamespacedDataId { row, namespace };
+            let id = NamespacedDataId::new(namespace, row, height)?;
 
             data.push(NamespacedData {
-                namespaced_data_id,
+                id,
                 proof: proof.into(),
                 shares,
             })
@@ -457,9 +458,9 @@ impl<'de> Deserialize<'de> for ExtendedDataSquare {
 
 /// Returns true if and only if the provided coordinates belongs to Original Data Square
 /// (i.e. first quadrant of Extended Data Square).
-pub(crate) fn is_ods_square(row: usize, column: usize, square_len: usize) -> bool {
-    let half_square_len = square_len / 2;
-    row < half_square_len && column < half_square_len
+pub(crate) fn is_ods_square(row: u16, column: u16, square_width: u16) -> bool {
+    let ods_width = square_width / 2;
+    row < ods_width && column < ods_width
 }
 
 #[cfg(test)]
@@ -520,22 +521,22 @@ mod tests {
         let dah_json = include_str!("../test_data/shwap_samples/dah.json");
         let dah: DataAvailabilityHeader = serde_json::from_str(dah_json).unwrap();
 
-        assert_eq!(dah.row_roots.len(), eds.square_len());
-        assert_eq!(dah.column_roots.len(), eds.square_len());
+        assert_eq!(dah.row_roots().len(), usize::from(eds.square_width()));
+        assert_eq!(dah.column_roots().len(), usize::from(eds.square_width()));
 
-        for (i, root) in dah.row_roots.iter().enumerate() {
-            let mut tree = eds.row_nmt(i).unwrap();
+        for (i, root) in dah.row_roots().iter().enumerate() {
+            let mut tree = eds.row_nmt(i as u16).unwrap();
             assert_eq!(*root, tree.root());
 
-            let mut tree = eds.axis_nmt(AxisType::Row, i).unwrap();
+            let mut tree = eds.axis_nmt(AxisType::Row, i as u16).unwrap();
             assert_eq!(*root, tree.root());
         }
 
-        for (i, root) in dah.column_roots.iter().enumerate() {
-            let mut tree = eds.column_nmt(i).unwrap();
+        for (i, root) in dah.column_roots().iter().enumerate() {
+            let mut tree = eds.column_nmt(i as u16).unwrap();
             assert_eq!(*root, tree.root());
 
-            let mut tree = eds.axis_nmt(AxisType::Col, i).unwrap();
+            let mut tree = eds.axis_nmt(AxisType::Col, i as u16).unwrap();
             assert_eq!(*root, tree.root());
         }
     }
