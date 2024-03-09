@@ -28,6 +28,7 @@ pub struct Blob {
     pub data: Vec<u8>,
     pub share_version: u8,
     pub commitment: Commitment,
+    pub index: u64,
 }
 
 impl Blob {
@@ -40,6 +41,7 @@ impl Blob {
             data,
             share_version: appconsts::SHARE_VERSION_ZERO,
             commitment,
+            index: -1
         })
     }
 
@@ -74,6 +76,7 @@ impl TryFrom<RawBlob> for Blob {
             namespace,
             data: value.data,
             share_version: value.share_version as u8,
+            index: -1
         })
     }
 }
