@@ -28,7 +28,12 @@ pub struct Blob {
     pub data: Vec<u8>,
     pub share_version: u8,
     pub commitment: Commitment,
-    pub index: u64,
+    #[serde(default = "default_blob_index")]
+    pub index: i64,
+}
+
+fn default_blob_index() -> i64 {
+    -1
 }
 
 impl Blob {
