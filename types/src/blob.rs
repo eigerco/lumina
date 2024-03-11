@@ -52,6 +52,12 @@ pub struct Blob {
     pub share_version: u8,
     /// A [`Commitment`] computed from the [`Blob`]s data.
     pub commitment: Commitment,
+    #[serde(default = "default_blob_index")]
+    pub index: i64,
+}
+
+fn default_blob_index() -> i64 {
+    -1
 }
 
 impl Blob {
@@ -89,6 +95,7 @@ impl Blob {
             data,
             share_version: appconsts::SHARE_VERSION_ZERO,
             commitment,
+            index: -1
         })
     }
 
@@ -170,6 +177,7 @@ impl TryFrom<RawBlob> for Blob {
             namespace,
             data: value.data,
             share_version: value.share_version as u8,
+            index: -1
         })
     }
 }
