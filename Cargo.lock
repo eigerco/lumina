@@ -821,7 +821,6 @@ dependencies = [
  "multiaddr",
  "multihash",
  "nmt-rs",
- "proptest",
  "rand",
  "ruint",
  "serde",

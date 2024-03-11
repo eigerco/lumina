@@ -67,6 +67,7 @@ main() {
   # Start the bridge node
   echo "Configuration finished. Running a bridge node..."
   celestia bridge start \
+    --rpc.addr 0.0.0.0 \
     --core.ip validator \
     --keyring.accname "$NODE_NAME" \
     --p2p.network "$P2P_NETWORK"
