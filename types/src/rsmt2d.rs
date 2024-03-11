@@ -9,7 +9,7 @@ use crate::consts::data_availability_header::{
 };
 use crate::namespaced_data::{NamespacedData, NamespacedDataId};
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NmtExt, NS_SIZE};
-use crate::{bail_validation, DataAvailabilityHeader, Error, Result};
+use crate::{bail_validation, DataAvailabilityHeader, Error, InfoByte, Result};
 
 /// Represents either column or row of the [`ExtendedDataSquare`].
 ///
@@ -235,6 +235,19 @@ impl ExtendedDataSquare {
         }
 
         Ok(eds)
+    }
+
+    /// Crate a new EDS that represents an empty block
+    pub fn empty() -> ExtendedDataSquare {
+        // ODS in this case it is just one tail padded share.
+        let ods = vec![[
+            Namespace::TAIL_PADDING.as_bytes(),
+            &[InfoByte::new(0, true).unwrap().as_u8()],
+            &[0; SHARE_SIZE - NS_SIZE - 1],
+        ]
+        .concat()];
+
+        ExtendedDataSquare::from_ods(ods).expect("invalid EDS")
     }
 
     /// Create a new EDS out of the provided original data square shares.
@@ -466,6 +479,7 @@ pub(crate) fn is_ods_square(row: u16, column: u16, square_width: u16) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ExtendedHeader;
 
     #[test]
     fn axis_type_serialization() {
@@ -715,5 +729,15 @@ mod tests {
         let square_width = MAX_EXTENDED_SQUARE_WIDTH * 2;
         ExtendedDataSquare::new(vec![share(1); square_width.pow(2)], "fake".to_string())
             .unwrap_err();
+    }
+
+    #[test]
+    fn empty_block_eds() {
+        let s = include_str!("../test_data/chain1/extended_header_block_1.json");
+        let genesis: ExtendedHeader = serde_json::from_str(s).unwrap();
+
+        let eds = ExtendedDataSquare::empty();
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+        assert_eq!(dah, genesis.dah);
     }
 }

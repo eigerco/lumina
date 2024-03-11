@@ -12,7 +12,7 @@ pub use crate::byzantine::test_utils::corrupt_eds;
 use crate::consts::appconsts::{SHARE_INFO_BYTES, SHARE_SIZE};
 use crate::consts::version;
 use crate::hash::{Hash, HashExt};
-use crate::nmt::{Namespace, NamespacedHash, NamespacedHashExt, NS_SIZE};
+use crate::nmt::{Namespace, NS_SIZE};
 use crate::{DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, ValidatorSet};
 
 /// [`ExtendedHeader`] generator for testing purposes.
@@ -411,12 +411,7 @@ fn generate_new(
                 proposer_priority: 0_i64.into(),
             }),
         ),
-        dah: dah.unwrap_or_else(|| {
-            DataAvailabilityHeader::new_unchecked(
-                vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-                vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-            )
-        }),
+        dah: dah.unwrap_or_else(|| DataAvailabilityHeader::from_eds(&ExtendedDataSquare::empty())),
     };
 
     hash_and_sign(&mut header, signing_key);
@@ -485,12 +480,7 @@ fn generate_next(
             }],
         },
         validator_set: current.validator_set.clone(),
-        dah: dah.unwrap_or_else(|| {
-            DataAvailabilityHeader::new_unchecked(
-                vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-                vec![NamespacedHash::empty_root(), NamespacedHash::empty_root()],
-            )
-        }),
+        dah: dah.unwrap_or_else(|| DataAvailabilityHeader::from_eds(&ExtendedDataSquare::empty())),
     };
 
     hash_and_sign(&mut header, signing_key);
