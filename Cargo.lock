@@ -546,7 +546,7 @@ source = "git+https://github.com/eigerco/beetswap?rev=f69ddd8#f69ddd8e429a4913aa
 dependencies = [
  "async-trait",
  "asynchronous-codec 0.7.0",
- "blockstore",
+ "blockstore 0.1.1",
  "bytes",
  "cid",
  "fnv",
@@ -653,6 +653,19 @@ dependencies = [
 [[package]]
 name = "blockstore"
 version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5bff157a9c999bf0a39ca45e0b62076aa27135012cfbf9cc54ad1cf971876f0"
+dependencies = [
+ "async-trait",
+ "cid",
+ "dashmap",
+ "multihash",
+ "thiserror",
+]
+
+[[package]]
+name = "blockstore"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "cid",
@@ -719,7 +732,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "celestia-tendermint-proto",
@@ -733,7 +746,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-rpc"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -801,11 +814,11 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "base64 0.21.7",
  "bech32",
- "blockstore",
+ "blockstore 0.2.0",
  "bytes",
  "celestia-proto",
  "celestia-tendermint",
@@ -2807,7 +2820,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -2832,12 +2845,12 @@ dependencies = [
 
 [[package]]
 name = "lumina-node"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "backoff",
  "beetswap",
- "blockstore",
+ "blockstore 0.2.0",
  "bytes",
  "celestia-proto",
  "celestia-rpc",
@@ -2877,7 +2890,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-wasm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "celestia-types",
