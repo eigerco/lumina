@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.1.1...celestia-types-v0.2.0) - 2024-03-11
+
+### Added
+- *(types)* Add constructor for creating EDS of an empty block ([#241](https://github.com/eigerco/lumina/pull/241))
+- [**breaking**] Refactor RowId/SampleId/NamespacedDataId related API ([#236](https://github.com/eigerco/lumina/pull/236))
+- *(types)* add encoding check when verifying befp ([#231](https://github.com/eigerco/lumina/pull/231))
+- feat!(types): Align with Shwap spec ([#232](https://github.com/eigerco/lumina/pull/232))
+- feat!(node): Implement DASer ([#223](https://github.com/eigerco/lumina/pull/223))
+
+### Fixed
+- row verification logic ([#235](https://github.com/eigerco/lumina/pull/235))
+- *(celestia-types)* switch codec and multihash codes in byzantine [#200](https://github.com/eigerco/lumina/pull/200)
+
+### Other
+- chore!(types): Shwap API changes for consistency  ([#212](https://github.com/eigerco/lumina/pull/212))
+
 ## [0.1.1](https://github.com/eigerco/lumina/compare/celestia-types-v0.1.0...celestia-types-v0.1.1) - 2024-01-15
 
 ### Other

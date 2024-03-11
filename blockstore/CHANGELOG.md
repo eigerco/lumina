@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/eigerco/lumina/compare/blockstore-v0.1.1...blockstore-v0.2.0) - 2024-03-11
+
+### Added
+- feat!(node): Implement DASer ([#223](https://github.com/eigerco/lumina/pull/223))
+- *(blockstore)* add IndexedDb blockstore ([#221](https://github.com/eigerco/lumina/pull/221))
+- feat!(blockstore): add sled blockstore ([#217](https://github.com/eigerco/lumina/pull/217))
+- *(blockstore)* Implement LruBlockstore ([#207](https://github.com/eigerco/lumina/pull/207))
+
+### Fixed
+- fix!(blockstore): remove an error if cid already exists ([#224](https://github.com/eigerco/lumina/pull/224))
+
 ## [0.1.1](https://github.com/eigerco/lumina/compare/blockstore-v0.1.0...blockstore-v0.1.1) - 2024-01-15
 
 ### Other
