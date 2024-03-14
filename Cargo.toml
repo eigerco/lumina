@@ -9,7 +9,7 @@ celestia-proto = { version = "0.1.0", path = "proto" }
 celestia-rpc = { version = "0.1.0", path = "rpc", default-features = false }
 celestia-types = { version = "0.1.0", path = "types", default-features = false }
 libp2p = "0.53.1"
-nmt-rs = "0.1.0"
+nmt-rs = {path = '../nmt-rs'}
 tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "bbe7de8", default-features = false }
 tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "bbe7de8" }
 blockstore = { version = "0.1.0", path = "blockstore" }
@@ -21,4 +21,4 @@ blockstore = { version = "0.1.0", path = "blockstore" }
 
 [patch.'https://github.com/eigerco/nmt-rs.git']
 # Uncomment to apply local changes
-#nmt-rs = { path = "../nmt-rs" }
+nmt-rs = { path = "../nmt-rs" }

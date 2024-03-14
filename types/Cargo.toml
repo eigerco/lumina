@@ -7,7 +7,7 @@ license = "Apache-2.0"
 [dependencies]
 blockstore = { workspace = true }
 celestia-proto = { workspace = true }
-nmt-rs = { workspace = true }
+nmt-rs = { workspace = true, features = ["serde"] }
 tendermint = { workspace = true, features = ["std", "rust-crypto"] }
 tendermint-proto = { workspace = true }
 

@@ -9,7 +9,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tendermint::hash::SHA256_HASH_SIZE;
 use tendermint_proto::serializers::cow_str::CowStr;
 
-mod namespace_proof;
+pub mod namespace_proof;
 mod namespaced_hash;
 
 pub use self::namespace_proof::NamespaceProof;
@@ -45,6 +45,10 @@ impl Namespace {
     pub const MIN_SECONDARY_RESERVED: Namespace = Namespace::const_v255(0);
     pub const TAIL_PADDING: Namespace = Namespace::const_v255(0xfe);
     pub const PARITY_SHARE: Namespace = Namespace::const_v255(0xff);
+
+    pub fn into_inner(&self) -> nmt_rs::NamespaceId<NS_SIZE> {
+        self.0
+    }
 
     pub fn from_raw(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != NS_SIZE {

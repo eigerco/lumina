@@ -664,7 +664,7 @@ dependencies = [
  "http",
  "jsonrpsee",
  "libp2p",
- "nmt-rs",
+ "nmt-rs 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.5",
  "serde",
  "thiserror",
@@ -689,14 +689,14 @@ dependencies = [
  "libp2p-identity",
  "multiaddr",
  "multihash",
- "nmt-rs",
+ "nmt-rs 0.1.0",
  "proptest",
  "rand 0.8.5",
  "ruint",
  "serde",
  "serde_json",
  "serde_repr",
- "sha2 0.10.8",
+ "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "tendermint",
  "tendermint-proto",
  "thiserror",
@@ -1166,7 +1166,7 @@ dependencies = [
  "ed25519",
  "rand_core 0.6.4",
  "serde",
- "sha2 0.10.8",
+ "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "zeroize",
 ]
 
@@ -2245,7 +2245,7 @@ dependencies = [
  "quick-protobuf-codec",
  "rand 0.8.5",
  "regex",
- "sha2 0.10.8",
+ "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "smallvec",
  "tracing",
  "unsigned-varint 0.7.2",
@@ -2288,7 +2288,7 @@ dependencies = [
  "multihash",
  "quick-protobuf",
  "rand 0.8.5",
- "sha2 0.10.8",
+ "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
  "zeroize",
 ]
@@ -2313,7 +2313,7 @@ dependencies = [
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
- "sha2 0.10.8",
+ "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "smallvec",
  "thiserror",
  "tracing",
@@ -2379,7 +2379,7 @@ dependencies = [
  "once_cell",
  "quick-protobuf",
  "rand 0.8.5",
- "sha2 0.10.8",
+ "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "snow",
  "static_assertions",
  "thiserror",
@@ -2928,11 +2928,19 @@ dependencies = [
 [[package]]
 name = "nmt-rs"
 version = "0.1.0"
+dependencies = [
+ "bytes",
+ "sha2 0.10.8 (git+https://github.com/sp1-patches/RustCrypto-hashes.git)",
+]
+
+[[package]]
+name = "nmt-rs"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e787133eafbd0f386dc4e26828a50f7595d6d7213ea0e8244c1ca6b9a9648c30"
 dependencies = [
  "bytes",
- "sha2 0.10.8",
+ "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3834,7 +3842,7 @@ version = "8.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "873feff8cb7bf86fdf0a71bb21c95159f4e4a37dd7a4bd1855a940909b583ada"
 dependencies = [
- "sha2 0.10.8",
+ "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "walkdir",
 ]
 
@@ -4200,6 +4208,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha2"
+version = "0.10.8"
+source = "git+https://github.com/sp1-patches/RustCrypto-hashes.git#3d692aa90b91513886d757d01f8fc2d51c0ec0d7"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "digest 0.10.7",
+]
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4267,7 +4285,7 @@ dependencies = [
  "rand_core 0.6.4",
  "ring 0.16.20",
  "rustc_version 0.4.0",
- "sha2 0.10.8",
+ "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "subtle",
 ]
 
@@ -4471,7 +4489,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "serde_repr",
- "sha2 0.10.8",
+ "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "signature",
  "subtle",
  "subtle-encoding",
