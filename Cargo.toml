@@ -9,7 +9,7 @@ celestia-proto = { version = "0.1.0", path = "proto" }
 celestia-rpc = { version = "0.1.0", path = "rpc", default-features = false }
 celestia-types = { version = "0.1.0", path = "types", default-features = false }
 libp2p = "0.53.1"
-nmt-rs = {path = '../nmt-rs'}
+nmt-rs = { git = "https://github.com/S1nus/nmt-rs.git" }
 tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "bbe7de8", default-features = false }
 tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs.git", rev = "bbe7de8" }
 blockstore = { version = "0.1.0", path = "blockstore" }
