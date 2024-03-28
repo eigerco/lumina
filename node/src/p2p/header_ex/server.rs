@@ -191,15 +191,7 @@ fn parse_request(request: HeaderRequest) -> Option<(u64, header_request::Data)> 
         return None;
     }
 
-    let HeaderRequest {
-        amount,
-        data: Some(data),
-    } = request
-    else {
-        return None;
-    };
-
-    Some((amount, data))
+    request.data.map(|data| (request.amount, data))
 }
 
 #[cfg(test)]
