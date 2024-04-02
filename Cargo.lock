@@ -2931,7 +2931,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "serde",
- "sha2 0.10.8 (git+https://github.com/sp1-patches/RustCrypto-hashes.git)",
+ "sha2 0.10.8 (git+https://github.com/risc0/RustCrypto-hashes.git)",
  "thiserror",
 ]
 
@@ -4212,7 +4212,7 @@ dependencies = [
 [[package]]
 name = "sha2"
 version = "0.10.8"
-source = "git+https://github.com/sp1-patches/RustCrypto-hashes.git#3d692aa90b91513886d757d01f8fc2d51c0ec0d7"
+source = "git+https://github.com/risc0/RustCrypto-hashes.git#244dc3b08788f7a4ccce14c66896ae3b4f24c166"
 dependencies = [
  "cfg-if",
  "cpufeatures",
