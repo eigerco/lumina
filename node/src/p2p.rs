@@ -1087,7 +1087,7 @@ fn init_bitswap<B, S>(
     network_id: &str,
 ) -> Result<beetswap::Behaviour<MAX_MH_SIZE, B>>
 where
-    B: Blockstore,
+    B: Blockstore + 'static,
     S: Store + 'static,
 {
     let protocol_prefix = format!("/celestia/{}", network_id);
