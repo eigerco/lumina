@@ -542,7 +542,7 @@ dependencies = [
 [[package]]
 name = "beetswap"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/beetswap?rev=f69ddd8#f69ddd8e429a4913aa3fb29b41b4a0913c221a63"
+source = "git+https://github.com/eigerco/beetswap?rev=13f1a08#13f1a08138ec33e2a63869d5dcef536ad6e10e92"
 dependencies = [
  "async-trait",
  "asynchronous-codec 0.7.0",
@@ -652,24 +652,20 @@ dependencies = [
 
 [[package]]
 name = "blockstore"
-version = "0.1.1"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "359816e624b0ab1d2ecaef2a07d3820d7078a16ad55f1f1c381422971c418acf"
 dependencies = [
- "async-trait",
  "cid",
  "dashmap",
  "js-sys",
- "lru",
  "multihash",
- "multihash-codetable",
  "rexie",
- "rstest",
  "send_wrapper 0.6.0",
  "sled",
- "tempfile",
  "thiserror",
  "tokio",
  "wasm-bindgen",
- "wasm-bindgen-test",
 ]
 
 [[package]]
