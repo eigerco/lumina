@@ -689,7 +689,7 @@ dependencies = [
  "libp2p-identity",
  "multiaddr",
  "multihash",
- "nmt-rs 0.1.0",
+ "nmt-rs 0.1.0 (git+https://github.com/S1nus/nmt-rs.git?branch=rz)",
  "proptest",
  "rand 0.8.5",
  "ruint",
@@ -2928,21 +2928,22 @@ dependencies = [
 [[package]]
 name = "nmt-rs"
 version = "0.1.0"
-dependencies = [
- "bytes",
- "serde",
- "sha2 0.10.8 (git+https://github.com/risc0/RustCrypto-hashes.git)",
- "thiserror",
-]
-
-[[package]]
-name = "nmt-rs"
-version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e787133eafbd0f386dc4e26828a50f7595d6d7213ea0e8244c1ca6b9a9648c30"
 dependencies = [
  "bytes",
  "sha2 0.10.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "nmt-rs"
+version = "0.1.0"
+source = "git+https://github.com/S1nus/nmt-rs.git?branch=rz#e81fa89f8a7ee2b18982e8fea2784c26da93589f"
+dependencies = [
+ "bytes",
+ "serde",
+ "sha2 0.10.8 (git+https://github.com/risc0/RustCrypto-hashes.git)",
+ "thiserror",
 ]
 
 [[package]]
