@@ -1,36 +1,12 @@
 use std::future::Future;
-use std::pin::Pin;
 
-use libp2p::swarm;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
 #[allow(unused_imports)]
-pub(crate) use self::imp::{sleep, spawn, timeout, yield_now, Elapsed, Interval};
-
-pub(crate) struct Executor;
-
-impl swarm::Executor for Executor {
-    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        spawn(future)
-    }
-}
-
-/// Spawn a cancellable task.
-///
-/// This will cancel the task in the highest layer and should not be used
-/// if cancellation must happen in a point.
-pub(crate) fn spawn_cancellable<F>(cancelation_token: CancellationToken, future: F)
-where
-    F: Future<Output = ()> + Send + 'static,
-{
-    spawn(async move {
-        select! {
-            _ = cancelation_token.cancelled() => {}
-            _ = future => {}
-        }
-    });
-}
+pub(crate) use self::imp::{
+    sleep, spawn, spawn_cancellable, timeout, yield_now, Elapsed, Interval,
+};
 
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
@@ -45,6 +21,22 @@ mod imp {
         F: Future<Output = ()> + Send + 'static,
     {
         tokio::spawn(future);
+    }
+
+    /// Spawn a cancellable task.
+    ///
+    /// This will cancel the task in the highest layer and should not be used
+    /// if cancellation must happen in a point.
+    pub(crate) fn spawn_cancellable<F>(cancelation_token: CancellationToken, future: F)
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        tokio::spawn(async move {
+            select! {
+                _ = cancelation_token.cancelled() => {}
+                _ = future => {}
+            }
+        });
     }
 
     pub(crate) struct Interval(tokio::time::Interval);
@@ -83,9 +75,25 @@ mod imp {
 
     pub(crate) fn spawn<F>(future: F)
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: Future<Output = ()> + 'static,
     {
         wasm_bindgen_futures::spawn_local(future);
+    }
+
+    /// Spawn a cancellable task.
+    ///
+    /// This will cancel the task in the highest layer and should not be used
+    /// if cancellation must happen in a point.
+    pub(crate) fn spawn_cancellable<F>(cancelation_token: CancellationToken, future: F)
+    where
+        F: Future<Output = ()> + 'static,
+    {
+        wasm_bindgen_futures::spawn_local(async move {
+            select! {
+                _ = cancelation_token.cancelled() => {}
+                _ = future => {}
+            }
+        });
     }
 
     pub(crate) struct Interval(SendWrapper<IntervalStream>);
@@ -135,6 +143,7 @@ mod imp {
         #[pin]
         delay: SendWrapper<TimeoutFuture>,
     }
+
     impl<T> Future for Timeout<T>
     where
         T: Future,
