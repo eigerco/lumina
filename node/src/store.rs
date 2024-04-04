@@ -13,12 +13,14 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub use fifo_store::FifoStore;
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
 pub use indexed_db_store::IndexedDbStore;
 #[cfg(not(target_arch = "wasm32"))]
 pub use sled_store::SledStore;
 
+mod fifo_store;
 mod in_memory_store;
 #[cfg(target_arch = "wasm32")]
 mod indexed_db_store;
