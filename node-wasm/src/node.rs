@@ -10,16 +10,20 @@ use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
 use lumina_node::node::{Node, NodeConfig};
 use lumina_node::store::{IndexedDbStore, Store};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tracing::info;
 use wasm_bindgen::prelude::*;
 
 use crate::utils::js_value_from_display;
+use crate::utils::BChannel;
 use crate::utils::JsContext;
 use crate::utils::Network;
+use crate::worker::{NodeCommand, NodeResponse};
 use crate::wrapper::libp2p::NetworkInfo;
 use crate::Result;
+
+use web_sys::{SharedWorker, WorkerOptions, WorkerType};
 
 /// Lumina wasm node.
 #[wasm_bindgen(js_name = Node)]
@@ -27,6 +31,7 @@ struct WasmNode(Node<IndexedDbStore>);
 
 /// Config for the lumina wasm node.
 #[wasm_bindgen(js_name = NodeConfig)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct WasmNodeConfig {
     /// A network to connect to.
     pub network: Network,
@@ -36,6 +41,106 @@ pub struct WasmNodeConfig {
     /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
+}
+
+// TODO: add on_error handler
+#[wasm_bindgen]
+struct NodeDriver {
+    _worker: SharedWorker,
+    channel: BChannel<NodeCommand, NodeResponse>,
+}
+
+#[wasm_bindgen]
+impl NodeDriver {
+    #[wasm_bindgen(constructor)]
+    pub async fn new() -> NodeDriver {
+        let mut opts = WorkerOptions::new();
+        opts.type_(WorkerType::Module);
+        opts.name("lumina");
+        let worker = SharedWorker::new_with_worker_options("/js/worker.js", &opts)
+            .expect("could not worker");
+
+        let channel = BChannel::new(worker.port());
+
+        Self {
+            _worker: worker,
+            channel,
+        }
+    }
+
+    pub async fn is_running(&mut self) -> bool {
+        self.channel.send(NodeCommand::IsRunning);
+        let Some(NodeResponse::Running(running)) = self.channel.recv().await else {
+            panic!("wrong reponse");
+        };
+        running
+    }
+
+    pub async fn start(&mut self, config: WasmNodeConfig) {
+        let command = NodeCommand::Start(config);
+        self.channel.send(command);
+        let Some(NodeResponse::Started(uptime)) = self.channel.recv().await else {
+            panic!("wrong reponse");
+        };
+        info!("started = {uptime:?}");
+    }
+
+    pub async fn local_peer_id(&mut self) -> String {
+        self.channel.send(NodeCommand::GetLocalPeerId);
+        let Some(NodeResponse::LocalPeerId(id)) = self.channel.recv().await else {
+            panic!("wrong reponse");
+        };
+        info!("peer id = {id:?}");
+        id
+    }
+
+    pub async fn syncer_info(&mut self) -> Result<JsValue> {
+        self.channel.send(NodeCommand::GetSyncerInfo);
+        let response = self.channel.recv().await;
+        let Some(NodeResponse::SyncerInfo(info)) = response else {
+            panic!("wrong response");
+        };
+        //info!("syncer info = {info:?}");
+        Ok(info)
+    }
+
+    pub async fn peer_tracker_info(&mut self) -> Result<JsValue> {
+        self.channel.send(NodeCommand::GetPeerTrackerInfo);
+        let Some(NodeResponse::PeerTrackerInfo(info)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        //info!("peer tracker info = {info:?}");
+        Ok(info)
+    }
+
+    pub async fn connected_peers(&mut self) -> Result<Array> {
+        self.channel.send(NodeCommand::GetConnectedPeers);
+        let Some(NodeResponse::ConnectedPeers(peers)) = self.channel.recv().await else {
+            panic!("wrong");
+        };
+        //info!("peers = {peers:?}");
+        Ok(peers)
+    }
+
+    pub async fn get_network_head_header(&mut self) -> Result<JsValue> {
+        self.channel.send(NodeCommand::GetNetworkHeadHeader);
+        let Some(NodeResponse::NetworkHeadHeader(header)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        //info!("network head header = {header:?}");
+        Ok(header)
+    }
+
+    /*
+    pub async fn network_info(&self) -> Result<NetworkInfo> {
+        self.channel.send(NodeCommand::GetNetworkInfo);
+        let Some(NodeResponse::NetworkInfo(info)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        info!("network info = {info:?}");
+        Ok(info)
+    }
+    */
 }
 
 #[wasm_bindgen(js_class = Node)]
@@ -152,8 +257,8 @@ impl WasmNode {
 
     /// Get the latest header announced in the network.
     pub fn get_network_head_header(&self) -> Result<JsValue> {
-        let maybe_head_hedaer = self.0.get_network_head_header();
-        Ok(to_value(&maybe_head_hedaer)?)
+        let maybe_head_header = self.0.get_network_head_header();
+        Ok(to_value(&maybe_head_header)?)
     }
 
     /// Get the latest locally synced header.
@@ -236,7 +341,9 @@ impl WasmNodeConfig {
         }
     }
 
-    async fn into_node_config(self) -> Result<NodeConfig<IndexedDbBlockstore, IndexedDbStore>> {
+    pub(crate) async fn into_node_config(
+        self,
+    ) -> Result<NodeConfig<IndexedDbBlockstore, IndexedDbStore>> {
         let network_id = network_id(self.network.into());
         let store = IndexedDbStore::new(network_id)
             .await

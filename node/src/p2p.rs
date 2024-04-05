@@ -506,7 +506,6 @@ impl P2p {
         Ok(rx.await?)
     }
 }
-
 /// Our network behaviour.
 #[derive(NetworkBehaviour)]
 struct Behaviour<B, S>

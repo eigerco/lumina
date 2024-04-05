@@ -5,6 +5,7 @@ use wasm_bindgen::JsError;
 
 pub mod node;
 pub mod utils;
+mod worker;
 mod wrapper;
 
 /// Alias for a `Result` with the error type [`JsError`].

@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import init, { Node, NodeConfig } from "/wasm/lumina_node_wasm.js";
+import init, { Node, NodeConfig, NodeDriver } from "/wasm/lumina_node_wasm.js";
 
 async function fetch_config() {
   const response = await fetch('/cfg.json');
@@ -20,7 +20,7 @@ async function fetch_config() {
 }
 
 async function show_stats(node) {
-  if (!node) {
+  if (!node || !await node.is_running()) {
     return;
   }
   const info = await node.syncer_info();
@@ -36,11 +36,12 @@ async function show_stats(node) {
 
   document.getElementById("peers").replaceChildren(peers_ul);
 
-  const network_head = node.get_network_head_header();
+  const network_head = await node.get_network_head_header();
   if (network_head == null) {
     return
   }
 
+  //console.log(network_head);
   const square_rows = network_head.dah.row_roots.length;
   const square_cols = network_head.dah.column_roots.length;
 
@@ -93,24 +94,39 @@ function bind_config(data) {
   });
 }
 
+/*
 async function start_node(config) {
-  window.node = await new Node(config);
+  //window.node = await new Node(config);
 
   document.getElementById("peer-id").innerText = await window.node.local_peer_id();
   document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
 }
+*/
 
 async function main(document, window) {
   await init();
 
+  //window.worker = new SharedWorker('/js/worker.js', {name: 'lumina', type: 'module'});
+
+  window.driver = await new NodeDriver();
+
   bind_config(await fetch_config());
+
+  if (await window.driver.is_running() === true) {
+    document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
+    document.getElementById("peer-id").innerText = await window.driver.local_peer_id();
+    document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
+  }
 
   document.getElementById("start").addEventListener("click", async () => {
     document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
-    start_node(window.config);
+    //start_node(window.config);
+    await window.driver.start(window.config)
+    document.getElementById("peer-id").innerText = await window.driver.local_peer_id();
+    document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
   });
 
-  setInterval(async () => await show_stats(window.node), 1000)
+  setInterval(async () => await show_stats(window.driver), 1000)
 }
 
 await main(document, window);
