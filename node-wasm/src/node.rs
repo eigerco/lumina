@@ -2,7 +2,8 @@
 
 use std::result::Result as StdResult;
 
-use celestia_types::{hash::Hash, ExtendedHeader};
+use celestia_types::hash::Hash;
+use celestia_types::ExtendedHeader;
 use js_sys::Array;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
@@ -19,8 +20,8 @@ use crate::utils::js_value_from_display;
 use crate::utils::BChannel;
 use crate::utils::JsContext;
 use crate::utils::Network;
-use crate::worker::{NodeCommand, NodeResponse};
-use crate::wrapper::libp2p::NetworkInfo;
+use crate::worker::{HeaderQuery, NodeCommand, NodeResponse};
+use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::Result;
 
 use web_sys::{SharedWorker, WorkerOptions, WorkerType};
@@ -94,16 +95,6 @@ impl NodeDriver {
         id
     }
 
-    pub async fn syncer_info(&mut self) -> Result<JsValue> {
-        self.channel.send(NodeCommand::GetSyncerInfo);
-        let response = self.channel.recv().await;
-        let Some(NodeResponse::SyncerInfo(info)) = response else {
-            panic!("wrong response");
-        };
-        //info!("syncer info = {info:?}");
-        Ok(info)
-    }
-
     pub async fn peer_tracker_info(&mut self) -> Result<JsValue> {
         self.channel.send(NodeCommand::GetPeerTrackerInfo);
         let Some(NodeResponse::PeerTrackerInfo(info)) = self.channel.recv().await else {
@@ -111,6 +102,32 @@ impl NodeDriver {
         };
         //info!("peer tracker info = {info:?}");
         Ok(info)
+    }
+
+    pub async fn wait_connected(&mut self) {
+        self.channel.send(NodeCommand::WaitConnected(false));
+        let Some(NodeResponse::Connected(_)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+    }
+    pub async fn wait_connected_trusted(&mut self) {
+        self.channel.send(NodeCommand::WaitConnected(true));
+        let Some(NodeResponse::Connected(_)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+    }
+
+    pub async fn network_info(&mut self) -> Result<NetworkInfoSnapshot> {
+        self.channel.send(NodeCommand::GetNetworkInfo);
+        let Some(NodeResponse::NetworkInfo(info)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        info!("network info = {info:?}");
+        Ok(info)
+    }
+
+    pub async fn listeners(&mut self) -> Result<Array> {
+        todo!()
     }
 
     pub async fn connected_peers(&mut self) -> Result<Array> {
@@ -122,25 +139,121 @@ impl NodeDriver {
         Ok(peers)
     }
 
+    pub async fn set_peer_trust(&mut self, peer_id: &str, is_trusted: bool) -> Result<()> {
+        self.channel.send(NodeCommand::SetPeerTrust {
+            peer_id: peer_id.to_string(),
+            is_trusted,
+        });
+        let Some(NodeResponse::PeerTrust {
+            peer_id,
+            is_trusted,
+        }) = self.channel.recv().await
+        else {
+            panic!("wrong");
+        };
+        Ok(()) // todo: api v2
+    }
+
+    pub async fn request_head_header(&mut self) -> Result<JsValue> {
+        self.channel.send(NodeCommand::RequestHeadHeader);
+        let Some(NodeResponse::Header(head_header)) = self.channel.recv().await else {
+            panic!("wrong");
+        };
+        Ok(head_header)
+    }
+    pub async fn request_header_by_hash(&mut self, hash: &str) -> Result<JsValue> {
+        self.channel
+            .send(NodeCommand::RequestHeader(HeaderQuery::ByHash(
+                hash.parse()?,
+            )));
+        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        Ok(header)
+    }
+    pub async fn request_header_by_height(&mut self, height: u64) -> Result<JsValue> {
+        self.channel
+            .send(NodeCommand::RequestHeader(HeaderQuery::ByHeight(height)));
+        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        Ok(header)
+    }
+    pub async fn request_verified_headers(&mut self, from: JsValue, amount: u64) -> Result<Array> {
+        self.channel
+            .send(NodeCommand::RequestHeader(HeaderQuery::GetVerified {
+                from,
+                amount,
+            }));
+        let Some(NodeResponse::VerifiedHeaders(header)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        Ok(header)
+    }
+    pub async fn syncer_info(&mut self) -> Result<JsValue> {
+        self.channel.send(NodeCommand::GetSyncerInfo);
+        let Some(NodeResponse::SyncerInfo(info)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        //info!("syncer info = {info:?}");
+        Ok(info)
+    }
+
     pub async fn get_network_head_header(&mut self) -> Result<JsValue> {
         self.channel.send(NodeCommand::GetNetworkHeadHeader);
-        let Some(NodeResponse::NetworkHeadHeader(header)) = self.channel.recv().await else {
+        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        //info!("network head header = {header:?}");
+        Ok(header)
+    }
+    pub async fn get_local_head_header(&mut self) -> Result<JsValue> {
+        self.channel.send(NodeCommand::GetLocalHeadHeader);
+        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
             panic!("wrong response");
         };
         //info!("network head header = {header:?}");
         Ok(header)
     }
 
-    /*
-    pub async fn network_info(&self) -> Result<NetworkInfo> {
-        self.channel.send(NodeCommand::GetNetworkInfo);
-        let Some(NodeResponse::NetworkInfo(info)) = self.channel.recv().await else {
+    pub async fn get_header_by_hash(&mut self, hash: &str) -> Result<JsValue> {
+        self.channel
+            .send(NodeCommand::GetHeader(HeaderQuery::ByHash(hash.parse()?)));
+        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
             panic!("wrong response");
         };
-        info!("network info = {info:?}");
-        Ok(info)
+        Ok(header)
     }
-    */
+    pub async fn get_header_by_height(&mut self, height: u64) -> Result<JsValue> {
+        self.channel
+            .send(NodeCommand::GetHeader(HeaderQuery::ByHeight(height)));
+        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        Ok(header)
+    }
+    pub async fn get_headers(
+        &mut self,
+        start_height: Option<u64>,
+        end_height: Option<u64>,
+    ) -> Result<Array> {
+        self.channel
+            .send(NodeCommand::GetHeader(HeaderQuery::Range {
+                start_height,
+                end_height,
+            }));
+        let Some(NodeResponse::HeaderArray(headers)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        Ok(headers)
+    }
+    pub async fn get_sampling_metadata(&mut self, height: u64) -> Result<JsValue> {
+        self.channel.send(NodeCommand::GetSamplingMetadata(height));
+        let Some(NodeResponse::SamplingMetadata(metadata)) = self.channel.recv().await else {
+            panic!("wrong response");
+        };
+        Ok(metadata)
+    }
 }
 
 #[wasm_bindgen(js_class = Node)]
@@ -185,7 +298,7 @@ impl WasmNode {
     }
 
     /// Get current network info.
-    pub async fn network_info(&self) -> Result<NetworkInfo> {
+    pub async fn network_info(&self) -> Result<NetworkInfoSnapshot> {
         Ok(self.0.network_info().await?.into())
     }
 

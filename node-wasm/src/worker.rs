@@ -1,14 +1,9 @@
-use crate::node::WasmNodeConfig;
-use crate::utils::BChannel;
-use lumina_node::node::Node;
-use lumina_node::store::{IndexedDbStore, Store};
 use serde::{Deserialize, Serialize};
 use tracing::{info, trace, warn};
 use wasm_bindgen::prelude::*;
 
-use crate::utils::js_value_from_display;
-use crate::utils::WorkerSelf;
-use crate::Result;
+use celestia_types::hash::Hash;
+use celestia_types::ExtendedHeader;
 use instant::Instant;
 use js_sys::Array;
 use serde_wasm_bindgen::{from_value, to_value};
@@ -18,6 +13,16 @@ use web_sys::MessageEvent;
 use web_sys::MessagePort;
 use web_sys::SharedWorker;
 
+use lumina_node::node::Node;
+use lumina_node::store::{IndexedDbStore, Store};
+
+use crate::node::WasmNodeConfig;
+use crate::utils::js_value_from_display;
+use crate::utils::BChannel;
+use crate::utils::WorkerSelf;
+use crate::wrapper::libp2p::NetworkInfoSnapshot;
+use crate::Result;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub enum NodeCommand {
     IsRunning,
@@ -25,10 +30,32 @@ pub enum NodeCommand {
     GetLocalPeerId,
     GetSyncerInfo,
     GetPeerTrackerInfo,
-    //GetNetworkInfo,
+    GetNetworkInfo,
     GetConnectedPeers,
     GetNetworkHeadHeader,
     GetLocalHeadHeader,
+    SetPeerTrust { peer_id: String, is_trusted: bool },
+    RequestHeadHeader,
+    WaitConnected(bool),
+    GetListeners,
+    RequestHeader(HeaderQuery),
+    GetHeader(HeaderQuery),
+    GetSamplingMetadata(u64),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum HeaderQuery {
+    ByHash(Hash),
+    ByHeight(u64),
+    GetVerified {
+        #[serde(with = "serde_wasm_bindgen::preserve")]
+        from: JsValue,
+        amount: u64,
+    },
+    Range {
+        start_height: Option<u64>,
+        end_height: Option<u64>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -36,18 +63,26 @@ pub enum NodeResponse {
     Running(bool),
     Started(u64),
     LocalPeerId(String),
+    Connected(bool),
     #[serde(with = "serde_wasm_bindgen::preserve")]
     SyncerInfo(JsValue),
     #[serde(with = "serde_wasm_bindgen::preserve")]
     PeerTrackerInfo(JsValue),
-    //#[serde(with = "serde_wasm_bindgen::preserve")]
-    //NetworkInfo(NetworkInfo),
+    NetworkInfo(NetworkInfoSnapshot),
     #[serde(with = "serde_wasm_bindgen::preserve")]
     ConnectedPeers(Array),
+    PeerTrust {
+        peer_id: String,
+        is_trusted: bool,
+    },
     #[serde(with = "serde_wasm_bindgen::preserve")]
-    NetworkHeadHeader(JsValue),
+    Header(JsValue),
     #[serde(with = "serde_wasm_bindgen::preserve")]
-    LocalHeadHeader(JsValue),
+    HeaderArray(Array),
+    #[serde(with = "serde_wasm_bindgen::preserve")]
+    VerifiedHeaders(Array),
+    #[serde(with = "serde_wasm_bindgen::preserve")]
+    SamplingMetadata(JsValue),
 }
 
 struct NodeWorker {
@@ -85,11 +120,57 @@ impl NodeWorker {
         Ok(to_value(&self.node.syncer_info().await?)?)
     }
 
-    /*
-    async fn network_info(&self) -> Result<NetworkInfo> {
+    async fn network_info(&self) -> Result<NetworkInfoSnapshot> {
         Ok(self.node.network_info().await?.into())
     }
-    */
+
+    async fn request_header_by_hash(&self, hash: Hash) -> Result<JsValue> {
+        Ok(to_value(&self.node.request_header_by_hash(&hash).await?)?)
+    }
+
+    async fn request_header_by_height(&self, height: u64) -> Result<JsValue> {
+        Ok(to_value(
+            &self.node.request_header_by_height(height).await?,
+        )?)
+    }
+
+    async fn get_header_by_hash(&self, hash: Hash) -> Result<JsValue> {
+        Ok(to_value(&self.node.get_header_by_hash(&hash).await?)?)
+    }
+
+    async fn get_header_by_height(&self, height: u64) -> Result<JsValue> {
+        Ok(to_value(&self.node.get_header_by_height(height).await?)?)
+    }
+
+    async fn get_headers(
+        &self,
+        start_height: Option<u64>,
+        end_height: Option<u64>,
+    ) -> Result<Array> {
+        let headers = match (start_height, end_height) {
+            (None, None) => self.node.get_headers(..).await,
+            (Some(start), None) => self.node.get_headers(start..).await,
+            (None, Some(end)) => self.node.get_headers(..=end).await,
+            (Some(start), Some(end)) => self.node.get_headers(start..=end).await,
+        }?;
+
+        Ok(to_value(&headers)?.into())
+    }
+
+    async fn request_verified_headers(&self, from: ExtendedHeader, amount: u64) -> Result<Array> {
+        Ok(to_value(&self.node.request_verified_headers(&from, amount).await?)?.into())
+    }
+
+    async fn get_sampling_metadata(&self, height: u64) -> Result<JsValue> {
+        Ok(to_value(&self.node.get_sampling_metadata(height).await?)?)
+    }
+
+    async fn set_peer_trust(&self, peer_id: String, is_trusted: bool) -> Result<()> {
+        Ok(self
+            .node
+            .set_peer_trust(peer_id.parse()?, is_trusted)
+            .await?)
+    }
 
     async fn connected_peers(&self) -> Result<Array> {
         Ok(self
@@ -105,12 +186,24 @@ impl NodeWorker {
         Ok(to_value(&self.node.get_network_head_header())?)
     }
 
+    async fn wait_connected(&self, trusted: bool) {
+        if trusted {
+            self.node.wait_connected().await;
+        } else {
+            self.node.wait_connected_trusted().await;
+        }
+    }
+
     async fn local_head_header(&self) -> Result<JsValue> {
         Ok(to_value(&self.node.get_local_head_header().await?)?)
     }
 
+    async fn request_head_header(&self) -> Result<JsValue> {
+        Ok(to_value(&self.node.request_head_header().await?)?)
+    }
     async fn process_command(&mut self, command: NodeCommand) -> NodeResponse {
         match command {
+            // TODO: order
             NodeCommand::IsRunning => NodeResponse::Running(true),
             NodeCommand::Start(_config) => NodeResponse::Started(
                 Instant::now()
@@ -124,19 +217,79 @@ impl NodeWorker {
             }
             NodeCommand::GetPeerTrackerInfo => {
                 NodeResponse::PeerTrackerInfo(self.peer_tracker_info().ok().unwrap())
-            } /*
-            NodeCommand::GetNetworkInfo => {
-            NodeResponse::NetworkInfo(self.network_info().await.ok().unwrap())
             }
-             */
+            NodeCommand::GetNetworkInfo => {
+                NodeResponse::NetworkInfo(self.network_info().await.ok().unwrap())
+            }
             NodeCommand::GetConnectedPeers => {
                 NodeResponse::ConnectedPeers(self.connected_peers().await.ok().unwrap())
             }
             NodeCommand::GetNetworkHeadHeader => {
-                NodeResponse::NetworkHeadHeader(self.network_head_header().await.ok().unwrap())
+                NodeResponse::Header(self.network_head_header().await.ok().unwrap())
             }
             NodeCommand::GetLocalHeadHeader => {
-                NodeResponse::LocalHeadHeader(self.local_head_header().await.ok().unwrap())
+                NodeResponse::Header(self.local_head_header().await.ok().unwrap())
+            }
+            NodeCommand::SetPeerTrust {
+                peer_id,
+                is_trusted,
+            } => {
+                //XXX
+                self.set_peer_trust(peer_id.clone(), is_trusted)
+                    .await
+                    .ok()
+                    .unwrap();
+                NodeResponse::PeerTrust {
+                    peer_id,
+                    is_trusted,
+                }
+            }
+            NodeCommand::RequestHeadHeader => {
+                NodeResponse::Header(self.request_head_header().await.ok().unwrap())
+            }
+            NodeCommand::WaitConnected(trusted) => {
+                todo!()
+            }
+            NodeCommand::GetListeners => {
+                todo!()
+            }
+            NodeCommand::RequestHeader(HeaderQuery::ByHash(hash)) => {
+                NodeResponse::Header(self.request_header_by_hash(hash).await.ok().unwrap())
+            }
+            NodeCommand::RequestHeader(HeaderQuery::ByHeight(height)) => {
+                NodeResponse::Header(self.request_header_by_height(height).await.ok().unwrap())
+            }
+            NodeCommand::GetHeader(HeaderQuery::ByHash(hash)) => {
+                NodeResponse::Header(self.get_header_by_hash(hash).await.ok().unwrap())
+            }
+            NodeCommand::GetHeader(HeaderQuery::ByHeight(height)) => {
+                NodeResponse::Header(self.get_header_by_height(height).await.ok().unwrap())
+            }
+            NodeCommand::GetSamplingMetadata(height) => NodeResponse::SamplingMetadata(
+                self.get_sampling_metadata(height).await.ok().unwrap(),
+            ),
+            NodeCommand::RequestHeader(HeaderQuery::GetVerified { from, amount }) => {
+                NodeResponse::VerifiedHeaders(
+                    self.request_verified_headers(from_value(from).ok().unwrap(), amount)
+                        .await
+                        .ok()
+                        .unwrap(),
+                )
+            }
+            NodeCommand::GetHeader(HeaderQuery::GetVerified { .. }) => unimplemented!(),
+            NodeCommand::RequestHeader(HeaderQuery::Range { .. }) => unimplemented!(),
+            NodeCommand::GetHeader(HeaderQuery::Range {
+                start_height,
+                end_height,
+            }) => NodeResponse::HeaderArray(
+                self.get_headers(start_height, end_height)
+                    .await
+                    .ok()
+                    .unwrap(),
+            ),
+            NodeCommand::WaitConnected(trusted) => {
+                self.wait_connected(trusted).await; // TODO: nonblocking ( Promise? )
+                NodeResponse::Connected(trusted)
             }
         }
     }
