@@ -40,6 +40,7 @@ struct Inner {
 }
 
 impl RedbStore {
+    /// Open a persistent [`redb`] store.
     pub async fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_owned();
 
@@ -50,6 +51,7 @@ impl RedbStore {
         RedbStore::new(Arc::new(db)).await
     }
 
+    /// Open an in memory [`redb`] store.
     pub async fn in_memory() -> Result<Self> {
         let db = Database::builder()
             .create_with_backend(redb::backends::InMemoryBackend::new())
@@ -58,7 +60,7 @@ impl RedbStore {
         RedbStore::new(Arc::new(db)).await
     }
 
-    /// Create or open a persistent store.
+    /// Create new `RedbStore` with an already opened [`redb::Database`].
     pub async fn new(db: Arc<Database>) -> Result<Self> {
         let store = RedbStore {
             inner: Arc::new(Inner {
@@ -85,6 +87,14 @@ impl RedbStore {
             .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
 
         Ok(store)
+    }
+
+    /// Returns the raw [`redb::Database`].
+    ///
+    /// This is useful if you want to pass the database handle to any other
+    /// stores (e.g. [`blockstore`]).
+    pub fn raw_db(&self) -> Arc<Database> {
+        self.inner.db.clone()
     }
 
     /// Execute a read transaction.
