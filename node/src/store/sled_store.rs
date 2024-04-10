@@ -11,7 +11,7 @@ use cid::Cid;
 use sled::transaction::{abort, ConflictableTransactionError, TransactionError, TransactionalTree};
 use sled::{Db, Error as SledError, Transactional, Tree};
 use tokio::sync::Notify;
-use tokio::task::{spawn_blocking, JoinError};
+use tokio::task::spawn_blocking;
 use tracing::{debug, info};
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
@@ -327,17 +327,10 @@ impl From<SledError> for StoreError {
             e @ SledError::CollectionNotFound(_) | e @ SledError::Corruption { .. } => {
                 StoreError::StoredDataError(e.to_string())
             }
-            e @ SledError::Unsupported(_) | e @ SledError::ReportableBug(_) => {
-                StoreError::BackingStoreError(e.to_string())
-            }
-            SledError::Io(e) => e.into(),
+            e @ SledError::Unsupported(_)
+            | e @ SledError::ReportableBug(_)
+            | e @ SledError::Io(_) => StoreError::FatalDatabaseError(e.to_string()),
         }
-    }
-}
-
-impl From<JoinError> for StoreError {
-    fn from(error: JoinError) -> StoreError {
-        StoreError::ExecutorError(error.to_string())
     }
 }
 

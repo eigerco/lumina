@@ -1,7 +1,7 @@
 //! Primitives related to the [`ExtendedHeader`] storage.
 
 use std::fmt::Debug;
-use std::io::{self, Cursor};
+use std::io::Cursor;
 use std::ops::{Bound, RangeBounds, RangeInclusive};
 
 use async_trait::async_trait;
@@ -17,11 +17,15 @@ pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
 pub use indexed_db_store::IndexedDbStore;
 #[cfg(not(target_arch = "wasm32"))]
+pub use redb_store::RedbStore;
+#[cfg(not(target_arch = "wasm32"))]
 pub use sled_store::SledStore;
 
 mod in_memory_store;
 #[cfg(target_arch = "wasm32")]
 mod indexed_db_store;
+#[cfg(not(target_arch = "wasm32"))]
+mod redb_store;
 #[cfg(not(target_arch = "wasm32"))]
 mod sled_store;
 
@@ -222,17 +226,13 @@ pub enum StoreError {
     #[error("Stored data in inconsistent state, try reseting the store: {0}")]
     StoredDataError(String),
 
-    /// Unrecoverable error reported by the backing store.
-    #[error("Persistent storage reported unrecoverable error: {0}")]
-    BackingStoreError(String),
+    /// Unrecoverable error reported by the database.
+    #[error("Database reported unrecoverable error: {0}")]
+    FatalDatabaseError(String),
 
     /// An error propagated from the async executor.
     #[error("Received error from executor: {0}")]
     ExecutorError(String),
-
-    /// An error propagated from the IO operation.
-    #[error("Received io error from persistent storage: {0}")]
-    IoError(#[from] io::Error),
 
     /// Failed to open the store.
     #[error("Error opening store: {0}")]
@@ -241,6 +241,13 @@ pub enum StoreError {
     /// Invalid range of headers provided.
     #[error("Invalid headers range")]
     InvalidHeadersRange,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<tokio::task::JoinError> for StoreError {
+    fn from(error: tokio::task::JoinError) -> StoreError {
+        StoreError::ExecutorError(error.to_string())
+    }
 }
 
 #[derive(Message)]
@@ -429,6 +436,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_contains_height<S: Store>(
@@ -448,6 +456,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_empty_store<S: Store>(
@@ -470,6 +479,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_read_write<S: Store>(
@@ -491,6 +501,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_pregenerated_data<S: Store>(
@@ -516,6 +527,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_duplicate_insert<S: Store>(
@@ -537,6 +549,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_overwrite_height<S: Store>(
@@ -561,6 +574,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_overwrite_hash<S: Store>(
@@ -583,6 +597,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_append_range<S: Store>(
@@ -601,6 +616,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_append_gap_between_head<S: Store>(
@@ -626,6 +642,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_non_continuous_append<S: Store>(
@@ -650,6 +667,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_genesis_with_height<S: Store>(
@@ -669,6 +687,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_sampling_height_empty_store<S: Store>(
@@ -689,6 +708,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_sampling_height<S: Store>(
@@ -766,6 +786,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_sampling_merge<S: Store>(
@@ -826,6 +847,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
     async fn test_sampled_cids<S: Store>(
@@ -936,6 +958,11 @@ mod tests {
         .unwrap();
 
         SledStore::new(db).await.unwrap()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn new_redb_store() -> RedbStore {
+        RedbStore::in_memory().await.unwrap()
     }
 
     #[cfg(target_arch = "wasm32")]
