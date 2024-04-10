@@ -18,7 +18,7 @@ use backoff::ExponentialBackoffBuilder;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use futures::FutureExt;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
@@ -96,7 +96,7 @@ enum SyncerCmd {
 }
 
 /// Status of the synchronization.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SyncingInfo {
     /// The height the [`Syncer`] is currently synchronized to.
     pub local_head: u64,

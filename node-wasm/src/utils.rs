@@ -1,6 +1,7 @@
 //! Various utilities for interacting with node from wasm.
 
 use std::fmt;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use lumina_node::network;
@@ -12,17 +13,50 @@ use tracing_subscriber::prelude::*;
 use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
 
-use crate::node::WasmNodeConfig;
+use crate::worker::NodeCommand;
+use crate::worker::NodeResponse;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::from_value;
 use serde_wasm_bindgen::to_value;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::MessageEvent;
 use web_sys::MessagePort;
 use web_sys::SharedWorker;
 use web_sys::SharedWorkerGlobalScope;
+
+pub type CommandResponseChannel<T: NodeCommandType> = oneshot::Sender<T::Output>;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NodeCommandResponse<T>(T::Output)
+where
+    T: NodeCommandType,
+    T::Output: Debug + Serialize;
+//{ output: T::Output, }
+
+//command: PhantomDataT,
+//tx: oneshot::Sender<T::Output>,
+
+/*
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NodeCommandSender<T: NodeCommandType> {
+    parameters: T::Input,
+}
+
+impl<T: NodeCommandType> NodeCommandSender<T> {
+    pub fn new(parameters: T::Input) -> Self {
+        Self { parameters }
+    }
+}
+*/
+
+pub trait NodeCommandType: Debug + Into<NodeCommand> {
+    type Output;
+
+    //fn response(&self, output: Self::Output) -> NodeResponse;
+}
 
 pub struct BChannel<IN, OUT> {
     _onmessage: Closure<dyn Fn(MessageEvent)>,
@@ -63,7 +97,14 @@ where
         }
     }
 
-    pub fn send(&self, msg: IN) {
+    pub fn send<T: NodeCommandType>(&self, command: T) -> oneshot::Receiver<T::Output> {
+        let message: NodeCommand = command.into();
+        self.send_enum(message);
+
+        todo!()
+    }
+
+    fn send_enum(&self, msg: NodeCommand) {
         let v = to_value(&msg).unwrap();
         self.channel.post_message(&v).expect("err post");
     }
@@ -75,71 +116,6 @@ where
 
 // TODO: cleanup JS objects on drop
 // impl Drop
-
-/*
-#[derive(Serialize, Deserialize)]
-enum BroadcastMessage {
-    Foo
-}
-
-fn create_channel() {
-
-    let broadcast_channel = BChannel::new("lumina");
-
-    broadcast_channel.send(BroadcastMessage::Foo);
-}
-*/
-
-/*
-#[derive(Serialize, Deserialize, Debug)]
-pub enum NodeCommand {
-    //ConnectDriver(u64),
-    Start(WasmNodeConfig),
-    GetLocalPeerId,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum NodeResponse {
-    LocalPeerId(String),
-}
-*/
-
-/*
-#[wasm_bindgen]
-struct BSharedWorker {
-    worker: SharedWorker,
-    channel: BChannel<NodeCommand, NodeResponse>,
-}
-
-#[wasm_bindgen]
-impl BSharedWorker {
-    pub fn new() -> Self {
-        let mut opts = WorkerOptions::new();
-        opts.type_(WorkerType::Module);
-        let worker = SharedWorker::new_with_worker_options("/js/worker.js", &opts)
-            .expect("could not worker");
-
-        let channel = BChannel::new(worker.port());
-
-        Self { worker, channel }
-    }
-}
-*/
-
-/*
-#[wasm_bindgen]
-pub fn launch_worker() -> BSharedWorker {
-    info!("doing the worker");
-    let mut opts = WorkerOptions::new();
-    opts.type_(WorkerType::Module);
-    let worker =
-        SharedWorker::new_with_worker_options("/js/worker.js", &opts).expect("could not worker");
-
-    let port = worker.port();
-
-    info!("did the worker");
-}
-*/
 
 pub(crate) trait WorkerSelf {
     type GlobalScope;

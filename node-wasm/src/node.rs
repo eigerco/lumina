@@ -20,9 +20,17 @@ use crate::utils::js_value_from_display;
 use crate::utils::BChannel;
 use crate::utils::JsContext;
 use crate::utils::Network;
-use crate::worker::{HeaderQuery, NodeCommand, NodeResponse};
+use crate::utils::NodeCommandType;
+use crate::worker::{MultipleHeaderQuery, NodeCommand, NodeResponse, SingleHeaderQuery};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::Result;
+
+use crate::worker::RequestMultipleHeaders;
+use crate::worker::{
+    GetConnectedPeers, GetHeader, GetListeners, GetLocalPeerId, GetMultipleHeaders, GetNetworkInfo,
+    GetPeerTrackerInfo, GetSamplingMetadata, GetSyncerInfo, IsRunning, RequestHeader, SetPeerTrust,
+    StartNode, WaitConnected,
+};
 
 use web_sys::{SharedWorker, WorkerOptions, WorkerType};
 
@@ -70,189 +78,153 @@ impl NodeDriver {
     }
 
     pub async fn is_running(&mut self) -> bool {
-        self.channel.send(NodeCommand::IsRunning);
-        let Some(NodeResponse::Running(running)) = self.channel.recv().await else {
-            panic!("wrong reponse");
-        };
-        running
+        let response = self.channel.send(IsRunning);
+
+        response.await.unwrap()
     }
 
     pub async fn start(&mut self, config: WasmNodeConfig) {
-        let command = NodeCommand::Start(config);
-        self.channel.send(command);
-        let Some(NodeResponse::Started(uptime)) = self.channel.recv().await else {
-            panic!("wrong reponse");
-        };
-        info!("started = {uptime:?}");
+        let command = StartNode(config);
+        let response = self.channel.send(command);
+
+        response.await.unwrap(); // XXX return type
     }
 
     pub async fn local_peer_id(&mut self) -> String {
-        self.channel.send(NodeCommand::GetLocalPeerId);
-        let Some(NodeResponse::LocalPeerId(id)) = self.channel.recv().await else {
-            panic!("wrong reponse");
-        };
-        info!("peer id = {id:?}");
-        id
+        let response = self.channel.send(GetLocalPeerId);
+
+        response.await.unwrap()
     }
 
     pub async fn peer_tracker_info(&mut self) -> Result<JsValue> {
-        self.channel.send(NodeCommand::GetPeerTrackerInfo);
-        let Some(NodeResponse::PeerTrackerInfo(info)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        //info!("peer tracker info = {info:?}");
-        Ok(info)
+        let response = self.channel.send(GetPeerTrackerInfo);
+
+        Ok(to_value(&response.await.unwrap())?)
     }
 
     pub async fn wait_connected(&mut self) {
-        self.channel.send(NodeCommand::WaitConnected(false));
-        let Some(NodeResponse::Connected(_)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
+        let command = WaitConnected { trusted: false };
+        let response = self.channel.send(command);
+
+        response.await.unwrap()
     }
     pub async fn wait_connected_trusted(&mut self) {
-        self.channel.send(NodeCommand::WaitConnected(true));
-        let Some(NodeResponse::Connected(_)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
+        let command = WaitConnected { trusted: false };
+        let response = self.channel.send(command);
+
+        response.await.unwrap()
     }
 
     pub async fn network_info(&mut self) -> Result<NetworkInfoSnapshot> {
-        self.channel.send(NodeCommand::GetNetworkInfo);
-        let Some(NodeResponse::NetworkInfo(info)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        info!("network info = {info:?}");
-        Ok(info)
+        let response = self.channel.send(GetNetworkInfo);
+
+        Ok(response.await.unwrap())
     }
 
     pub async fn listeners(&mut self) -> Result<Array> {
-        todo!()
+        let response = self.channel.send(GetListeners);
+        let response = response
+            .await
+            .unwrap()
+            .iter()
+            .map(js_value_from_display)
+            .collect();
+
+        Ok(response)
     }
 
     pub async fn connected_peers(&mut self) -> Result<Array> {
-        self.channel.send(NodeCommand::GetConnectedPeers);
-        let Some(NodeResponse::ConnectedPeers(peers)) = self.channel.recv().await else {
-            panic!("wrong");
-        };
-        //info!("peers = {peers:?}");
-        Ok(peers)
+        let response = self.channel.send(GetConnectedPeers);
+        let response = response.await?.iter().map(js_value_from_display).collect();
+
+        Ok(response)
     }
 
     pub async fn set_peer_trust(&mut self, peer_id: &str, is_trusted: bool) -> Result<()> {
-        self.channel.send(NodeCommand::SetPeerTrust {
+        let command = SetPeerTrust {
             peer_id: peer_id.to_string(),
             is_trusted,
-        });
-        let Some(NodeResponse::PeerTrust {
-            peer_id,
-            is_trusted,
-        }) = self.channel.recv().await
-        else {
-            panic!("wrong");
         };
-        Ok(()) // todo: api v2
+        let response = self.channel.send(command);
+
+        Ok(response.await.unwrap())
     }
 
     pub async fn request_head_header(&mut self) -> Result<JsValue> {
-        self.channel.send(NodeCommand::RequestHeadHeader);
-        let Some(NodeResponse::Header(head_header)) = self.channel.recv().await else {
-            panic!("wrong");
-        };
-        Ok(head_header)
+        let command = RequestHeader(SingleHeaderQuery::Head);
+        let response = self.channel.send(command);
+
+        Ok(to_value(&response.await.unwrap())?)
     }
     pub async fn request_header_by_hash(&mut self, hash: &str) -> Result<JsValue> {
-        self.channel
-            .send(NodeCommand::RequestHeader(HeaderQuery::ByHash(
-                hash.parse()?,
-            )));
-        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        Ok(header)
+        let command = RequestHeader(SingleHeaderQuery::ByHash(hash.parse()?));
+        let response = self.channel.send(command);
+
+        Ok(to_value(&response.await.unwrap())?)
     }
     pub async fn request_header_by_height(&mut self, height: u64) -> Result<JsValue> {
-        self.channel
-            .send(NodeCommand::RequestHeader(HeaderQuery::ByHeight(height)));
-        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        Ok(header)
+        let command = RequestHeader(SingleHeaderQuery::ByHeight(height));
+        let response = self.channel.send(command);
+
+        Ok(to_value(&response.await.unwrap())?)
     }
     pub async fn request_verified_headers(&mut self, from: JsValue, amount: u64) -> Result<Array> {
-        self.channel
-            .send(NodeCommand::RequestHeader(HeaderQuery::GetVerified {
-                from,
-                amount,
-            }));
-        let Some(NodeResponse::VerifiedHeaders(header)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        Ok(header)
+        let command = RequestMultipleHeaders(MultipleHeaderQuery::GetVerified { from, amount });
+        let response = self.channel.send(command);
+
+        Ok(response.await.unwrap())
     }
     pub async fn syncer_info(&mut self) -> Result<JsValue> {
-        self.channel.send(NodeCommand::GetSyncerInfo);
-        let Some(NodeResponse::SyncerInfo(info)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        //info!("syncer info = {info:?}");
-        Ok(info)
+        let response = self.channel.send(GetSyncerInfo);
+
+        let response = response.await.unwrap();
+
+        Ok(to_value(&response)?)
     }
 
     pub async fn get_network_head_header(&mut self) -> Result<JsValue> {
-        self.channel.send(NodeCommand::GetNetworkHeadHeader);
-        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        //info!("network head header = {header:?}");
-        Ok(header)
+        let command = RequestHeader(SingleHeaderQuery::Head); // XXX ???
+        let response = self.channel.send(command);
+
+        Ok(to_value(&response.await.unwrap())?)
     }
     pub async fn get_local_head_header(&mut self) -> Result<JsValue> {
-        self.channel.send(NodeCommand::GetLocalHeadHeader);
-        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        //info!("network head header = {header:?}");
-        Ok(header)
+        let command = GetHeader(SingleHeaderQuery::Head); // XXX ???
+        let response = self.channel.send(command);
+
+        Ok(to_value(&response.await.unwrap())?)
     }
 
     pub async fn get_header_by_hash(&mut self, hash: &str) -> Result<JsValue> {
-        self.channel
-            .send(NodeCommand::GetHeader(HeaderQuery::ByHash(hash.parse()?)));
-        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        Ok(header)
+        let command = GetHeader(SingleHeaderQuery::ByHash(hash.parse()?));
+        let response = self.channel.send(command);
+
+        Ok(to_value(&response.await.unwrap())?)
     }
     pub async fn get_header_by_height(&mut self, height: u64) -> Result<JsValue> {
-        self.channel
-            .send(NodeCommand::GetHeader(HeaderQuery::ByHeight(height)));
-        let Some(NodeResponse::Header(header)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        Ok(header)
+        let command = GetHeader(SingleHeaderQuery::ByHeight(height));
+        let response = self.channel.send(command);
+
+        Ok(to_value(&response.await.unwrap())?)
     }
     pub async fn get_headers(
         &mut self,
         start_height: Option<u64>,
         end_height: Option<u64>,
     ) -> Result<Array> {
-        self.channel
-            .send(NodeCommand::GetHeader(HeaderQuery::Range {
-                start_height,
-                end_height,
-            }));
-        let Some(NodeResponse::HeaderArray(headers)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        Ok(headers)
+        let command = GetMultipleHeaders(MultipleHeaderQuery::Range {
+            start_height,
+            end_height,
+        });
+        let response = self.channel.send(command);
+
+        Ok(response.await.unwrap())
     }
     pub async fn get_sampling_metadata(&mut self, height: u64) -> Result<JsValue> {
-        self.channel.send(NodeCommand::GetSamplingMetadata(height));
-        let Some(NodeResponse::SamplingMetadata(metadata)) = self.channel.recv().await else {
-            panic!("wrong response");
-        };
-        Ok(metadata)
+        let command = GetSamplingMetadata { height };
+        let response = self.channel.send(command);
+
+        Ok(to_value(&response.await.unwrap())?)
     }
 }
 
