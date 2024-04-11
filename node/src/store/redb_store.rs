@@ -17,7 +17,7 @@ use tracing::{debug, info};
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
-const SCEMA_VERSION: u64 = 1;
+const SCHEMA_VERSION: u64 = 1;
 
 const HEAD_HEIGHT_KEY: &[u8] = b"KEY.HEAD_HEIGHT";
 const NEXT_UNSAMPLED_HEIGHT_KEY: &[u8] = b"KEY.UNSAMPLED_HEIGHT";
@@ -27,7 +27,7 @@ const HEADERS_TABLE: TableDefinition<'static, u64, &[u8]> = TableDefinition::new
 const SAMPLING_METADATA_TABLE: TableDefinition<'static, u64, &[u8]> =
     TableDefinition::new("STORE.SAMPLING_METADATA");
 const SCHEMA_VERSION_TABLE: TableDefinition<'static, (), u64> =
-    TableDefinition::new("STORE.SCEMA_VERSION");
+    TableDefinition::new("STORE.SCHEMA_VERSION");
 
 /// A [`Store`] implementation based on a [`redb`] database.
 #[derive(Debug)]
@@ -81,13 +81,13 @@ impl RedbStore {
                 match schema_version {
                     Some(schema_version) => {
                         // TODO: When we schema we should migrate from older versions to newer ones.
-                        if schema_version != SCEMA_VERSION {
-                            let e = format!("Incompatible database schema; found {schema_version}, expected {SCEMA_VERSION}.");
+                        if schema_version != SCHEMA_VERSION {
+                            let e = format!("Incompatible database schema; found {schema_version}, expected {SCHEMA_VERSION}.");
                             return Err(StoreError::OpenFailed(e));
                         }
                     }
                     None => {
-                        schema_version_table.insert((), SCEMA_VERSION)?;
+                        schema_version_table.insert((), SCHEMA_VERSION)?;
                     }
                 }
 
