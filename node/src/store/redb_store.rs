@@ -17,6 +17,8 @@ use tracing::{debug, info};
 
 use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
+const SCEMA_VERSION: u64 = 1;
+
 const HEAD_HEIGHT_KEY: &[u8] = b"KEY.HEAD_HEIGHT";
 const NEXT_UNSAMPLED_HEIGHT_KEY: &[u8] = b"KEY.UNSAMPLED_HEIGHT";
 
@@ -24,6 +26,8 @@ const HEIGHTS_TABLE: TableDefinition<'static, &[u8], u64> = TableDefinition::new
 const HEADERS_TABLE: TableDefinition<'static, u64, &[u8]> = TableDefinition::new("STORE.HEADERS");
 const SAMPLING_METADATA_TABLE: TableDefinition<'static, u64, &[u8]> =
     TableDefinition::new("STORE.SAMPLING_METADATA");
+const SCHEMA_VERSION_TABLE: TableDefinition<'static, (), u64> =
+    TableDefinition::new("STORE.SCEMA_VERSION");
 
 /// A [`Store`] implementation based on a [`redb`] database.
 #[derive(Debug)]
@@ -71,20 +75,40 @@ impl RedbStore {
 
         store
             .write_tx(|tx| {
-                let mut table = tx.open_table(HEIGHTS_TABLE)?;
+                let mut schema_version_table = tx.open_table(SCHEMA_VERSION_TABLE)?;
+                let schema_version = schema_version_table.get(())?.map(|guard| guard.value());
 
-                if table.get(HEAD_HEIGHT_KEY)?.is_none() {
-                    table.insert(HEAD_HEIGHT_KEY, 0)?;
+                match schema_version {
+                    Some(schema_version) => {
+                        // TODO: When we schema we should provide migrate from older versions to
+                        // newer ones.
+                        if schema_version != SCEMA_VERSION {
+                            let e = format!("Incompatible database schema; found {schema_version}, expected {SCEMA_VERSION}.");
+                            return Err(StoreError::OpenFailed(e));
+                        }
+                    }
+                    None => {
+                        schema_version_table.insert((), SCEMA_VERSION)?;
+                    }
                 }
 
-                if table.get(NEXT_UNSAMPLED_HEIGHT_KEY)?.is_none() {
-                    table.insert(NEXT_UNSAMPLED_HEIGHT_KEY, 1)?;
+                let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
+
+                if heights_table.get(HEAD_HEIGHT_KEY)?.is_none() {
+                    heights_table.insert(HEAD_HEIGHT_KEY, 0)?;
+                }
+
+                if heights_table.get(NEXT_UNSAMPLED_HEIGHT_KEY)?.is_none() {
+                    heights_table.insert(NEXT_UNSAMPLED_HEIGHT_KEY, 1)?;
                 }
 
                 Ok(())
             })
             .await
-            .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
+            .map_err(|e| match e {
+                e @ StoreError::OpenFailed(_) => e,
+                e => StoreError::OpenFailed(e.to_string()),
+            })?;
 
         Ok(store)
     }
