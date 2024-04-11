@@ -80,8 +80,7 @@ impl RedbStore {
 
                 match schema_version {
                     Some(schema_version) => {
-                        // TODO: When we schema we should provide migrate from older versions to
-                        // newer ones.
+                        // TODO: When we schema we should migrate from older versions to newer ones.
                         if schema_version != SCEMA_VERSION {
                             let e = format!("Incompatible database schema; found {schema_version}, expected {SCEMA_VERSION}.");
                             return Err(StoreError::OpenFailed(e));
