@@ -20,7 +20,6 @@ use crate::utils::js_value_from_display;
 use crate::utils::BChannel;
 use crate::utils::JsContext;
 use crate::utils::Network;
-use crate::utils::NodeCommandType;
 use crate::worker::{MultipleHeaderQuery, NodeCommand, NodeResponse, SingleHeaderQuery};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::Result;
@@ -172,7 +171,14 @@ impl NodeDriver {
         let command = RequestMultipleHeaders(MultipleHeaderQuery::GetVerified { from, amount });
         let response = self.channel.send(command);
 
-        Ok(response.await.unwrap())
+        let result = response
+            .await
+            .unwrap()
+            .iter()
+            .map(|h| to_value(&h).unwrap()) // XXX
+            .collect();
+
+        Ok(result)
     }
     pub async fn syncer_info(&mut self) -> Result<JsValue> {
         let response = self.channel.send(GetSyncerInfo);
@@ -217,8 +223,14 @@ impl NodeDriver {
             end_height,
         });
         let response = self.channel.send(command);
+        let result = response
+            .await
+            .unwrap()
+            .iter()
+            .map(|h| to_value(&h).unwrap())
+            .collect();
 
-        Ok(response.await.unwrap())
+        Ok(result)
     }
     pub async fn get_sampling_metadata(&mut self, height: u64) -> Result<JsValue> {
         let command = GetSamplingMetadata { height };

@@ -14,7 +14,6 @@ use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
 
 use crate::worker::NodeCommand;
-use crate::worker::NodeResponse;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::from_value;
@@ -27,10 +26,9 @@ use web_sys::MessagePort;
 use web_sys::SharedWorker;
 use web_sys::SharedWorkerGlobalScope;
 
-pub type CommandResponseChannel<T: NodeCommandType> = oneshot::Sender<T::Output>;
-
+pub type CommandResponseChannel<T> = oneshot::Sender<<T as NodeCommandType>::Output>;
 #[derive(Serialize, Deserialize, Debug)]
-pub struct NodeCommandResponse<T>(T::Output)
+pub struct NodeCommandResponse<T>(pub T::Output)
 where
     T: NodeCommandType,
     T::Output: Debug + Serialize;
@@ -54,8 +52,6 @@ impl<T: NodeCommandType> NodeCommandSender<T> {
 
 pub trait NodeCommandType: Debug + Into<NodeCommand> {
     type Output;
-
-    //fn response(&self, output: Self::Output) -> NodeResponse;
 }
 
 pub struct BChannel<IN, OUT> {

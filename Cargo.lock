@@ -2882,6 +2882,7 @@ dependencies = [
  "anyhow",
  "celestia-types",
  "console_error_panic_hook",
+ "futures",
  "gloo-timers 0.3.0",
  "instant",
  "js-sys",
