@@ -22,8 +22,8 @@ const NEXT_UNSAMPLED_HEIGHT_KEY: &[u8] = b"KEY.UNSAMPLED_HEIGHT";
 
 const HEIGHTS_TABLE: TableDefinition<'static, &[u8], u64> = TableDefinition::new("STORE.HEIGHTS");
 const HEADERS_TABLE: TableDefinition<'static, u64, &[u8]> = TableDefinition::new("STORE.HEADERS");
-const SAMPING_METADATA_TABLE: TableDefinition<'static, u64, &[u8]> =
-    TableDefinition::new("STORE.SAMPING_METADATA");
+const SAMPLING_METADATA_TABLE: TableDefinition<'static, u64, &[u8]> =
+    TableDefinition::new("STORE.SAMPLING_METADATA");
 
 /// A [`Store`] implementation based on a [`redb`] database.
 #[derive(Debug)]
@@ -268,7 +268,7 @@ impl RedbStore {
     ) -> Result<u64> {
         self.write_tx(move |tx| {
             let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
-            let mut sampling_metadata_table = tx.open_table(SAMPING_METADATA_TABLE)?;
+            let mut sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
 
             // Make sure we have the header being marked
             let head_height = get_height(&heights_table, HEAD_HEIGHT_KEY)?;
@@ -317,7 +317,7 @@ impl RedbStore {
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         self.read_tx(move |tx| {
             let heights_table = tx.open_table(HEIGHTS_TABLE)?;
-            let sampling_metadata_table = tx.open_table(SAMPING_METADATA_TABLE)?;
+            let sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
 
             // Make sure we have the header of height
             let head_height = get_height(&heights_table, HEAD_HEIGHT_KEY)?;
