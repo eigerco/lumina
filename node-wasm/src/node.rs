@@ -1,27 +1,27 @@
 //! A browser compatible wrappers for the [`lumina-node`].
-
 use std::result::Result as StdResult;
 
 use js_sys::Array;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
-use lumina_node::blockstore::IndexedDbBlockstore;
-use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
-use lumina_node::node::{Node, NodeConfig};
-use lumina_node::store::IndexedDbStore;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
-use tracing::info;
+use tracing::error;
 use wasm_bindgen::prelude::*;
-use web_sys::{SharedWorker, WorkerOptions, WorkerType};
+use web_sys::{MessageEvent, SharedWorker, WorkerOptions, WorkerType};
+
+use lumina_node::blockstore::IndexedDbBlockstore;
+use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
+use lumina_node::node::NodeConfig;
+use lumina_node::store::IndexedDbStore;
 
 use crate::utils::{js_value_from_display, JsContext, Network};
-use crate::worker::BChannel;
+use crate::worker::SharedWorkerChannel;
 use crate::worker::{
     GetConnectedPeers, GetHeader, GetListeners, GetLocalPeerId, GetMultipleHeaders, GetNetworkInfo,
-    GetPeerTrackerInfo, GetSamplingMetadata, GetSyncerInfo, IsRunning, MultipleHeaderQuery,
-    NodeCommand, NodeResponse, RequestHeader, RequestMultipleHeaders, SetPeerTrust,
-    SingleHeaderQuery, StartNode, WaitConnected,
+    GetPeerTrackerInfo, GetSamplingMetadata, GetSyncerInfo, IsRunning, LastSeenNetworkHead,
+    MultipleHeaderQuery, NodeCommand, NodeResponse, RequestHeader, RequestMultipleHeaders,
+    SetPeerTrust, SingleHeaderQuery, StartNode, WaitConnected,
 };
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::Result;
@@ -44,7 +44,8 @@ pub struct WasmNodeConfig {
 #[wasm_bindgen]
 struct NodeDriver {
     _worker: SharedWorker,
-    channel: BChannel<NodeCommand, NodeResponse>,
+    _onerror_callback: Closure<dyn Fn(MessageEvent)>,
+    channel: SharedWorkerChannel<NodeCommand, NodeResponse>,
 }
 
 #[wasm_bindgen]
@@ -57,10 +58,16 @@ impl NodeDriver {
         let worker = SharedWorker::new_with_worker_options("/js/worker.js", &opts)
             .expect("could not worker");
 
-        let channel = BChannel::new(worker.port());
+        let onerror_callback: Closure<dyn Fn(MessageEvent)> = Closure::new(|ev: MessageEvent| {
+            error!("received error from shared worker: {ev:?}");
+        });
+        worker.set_onerror(Some(onerror_callback.as_ref().unchecked_ref()));
+
+        let channel = SharedWorkerChannel::new(worker.port());
 
         Self {
             _worker: worker,
+            _onerror_callback: onerror_callback,
             channel,
         }
     }
@@ -188,13 +195,10 @@ impl NodeDriver {
     }
 
     pub async fn get_network_head_header(&self) -> Result<JsValue> {
-        todo!()
-        /*
-                let command = todo!();
-                let response = self.channel.send(command);
+        let command = LastSeenNetworkHead;
+        let response = self.channel.send(command);
 
-                Ok(to_value(&response.await.unwrap())?)
-        */
+        Ok(to_value(&response.await.unwrap())?)
     }
 
     pub async fn get_local_head_header(&self) -> Result<JsValue> {

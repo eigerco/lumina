@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt::{self, Debug, Display};
 use std::marker::PhantomData;
 
-use futures::future::{BoxFuture, FutureExt, TryFutureExt};
+use futures::future::{BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use libp2p::Multiaddr;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -24,6 +24,12 @@ use crate::node::WasmNodeConfig;
 use crate::utils::WorkerSelf;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
+#[derive(Debug, Serialize, Deserialize)]
+pub enum WorkerError2 {
+    SharedWorkerChannelResponseChannelDropped,
+    SharedWorkerChannelInvalidType,
+}
+
 type Result<T, E = WorkerError> = std::result::Result<T, E>;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,6 +49,7 @@ impl From<NodeError> for WorkerError {
 }
 
 pub type CommandResponseChannel<T> = oneshot::Sender<<T as NodeCommandType>::Output>;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NodeCommandResponse<T>(pub T::Output)
 where
@@ -53,7 +60,7 @@ pub trait NodeCommandType: Debug + Into<NodeCommand> {
     type Output;
 }
 
-pub struct BChannel<IN, OUT> {
+pub struct SharedWorkerChannel<IN, OUT> {
     _onmessage: Closure<dyn Fn(MessageEvent)>,
     _forwarding_task: (),
     channel: MessagePort,
@@ -61,17 +68,17 @@ pub struct BChannel<IN, OUT> {
     send_type: PhantomData<IN>,
 }
 
-impl<IN, OUT> BChannel<IN, OUT>
+impl<IN, OUT> SharedWorkerChannel<IN, OUT>
 where
     IN: Serialize,
     // XXX: send sync shouldn't be needed
     OUT: DeserializeOwned + 'static + Send + Sync,
 {
     pub fn new(channel: MessagePort) -> Self {
-        let (tx, mut message_rx) = mpsc::channel(64);
+        let (message_tx, mut message_rx) = mpsc::channel(64);
 
-        let near_tx = tx.clone();
-        let f = move |ev: MessageEvent| {
+        let near_tx = message_tx.clone();
+        let onmessage_callback = move |ev: MessageEvent| {
             let local_tx = near_tx.clone();
             spawn_local(async move {
                 let message_data = ev.data();
@@ -87,15 +94,15 @@ where
             loop {
                 let message = message_rx.recv().await.unwrap();
                 let response_channel: oneshot::Sender<OUT> = response_rx.recv().await.unwrap();
-                response_channel
-                    .send(message)
-                    .ok()
-                    .expect("forwarding broke");
+                if response_channel.send(message).is_err() {
+                    warn!(
+                        "response channel closed before response could be sent, dropping message"
+                    );
+                }
             }
         });
 
-        let onmessage = Closure::new(f);
-
+        let onmessage = Closure::new(onmessage_callback);
         channel.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
         channel.start();
         Self {
@@ -110,7 +117,8 @@ where
     pub fn send<T: NodeCommandType>(
         &self,
         command: T,
-    ) -> BoxFuture<'static, Result<T::Output, tokio::sync::oneshot::error::RecvError>>
+    ) -> impl Future<Output = Result<T::Output, WorkerError2>>
+    //BoxFuture<'static, Result<T::Output, tokio::sync::oneshot::error::RecvError>>
     where
         T::Output: Debug + Serialize,
         NodeCommandResponse<T>: TryFrom<OUT>,
@@ -123,14 +131,24 @@ where
 
         self.response_channels.try_send(tx).expect("busy");
 
-        // unwrap "handles" invalid type
-        rx.map_ok(|r| {
-            tracing::info!("type = , expected = {}", std::any::type_name::<T>());
-            NodeCommandResponse::<T>::try_from(r)
-                .expect("invalid type")
-                .0
-        })
-        .boxed()
+        rx.map_ok_or_else(
+            |_e| Err(WorkerError2::SharedWorkerChannelResponseChannelDropped),
+            |r| match NodeCommandResponse::<T>::try_from(r) {
+                Ok(v) => Ok(v.0),
+                Err(_) => Err(WorkerError2::SharedWorkerChannelInvalidType),
+            },
+        )
+
+        /*
+                // unwrap "handles" invalid type
+                rx.map_ok(|r| {
+                    //tracing::info!("type = , expected = {}", std::any::type_name::<T>());
+                    NodeCommandResponse::<T>::try_from(r)
+                        .expect("invalid type")
+                        .0
+                })
+                .boxed()
+        */
     }
 
     fn send_enum(&self, msg: NodeCommand) {
@@ -465,42 +483,50 @@ enum WorkerMessage {
 struct ClientId(usize);
 
 struct WorkerConnector {
-    // make sure the callback doesn't get dropped
+    // same onconnect callback is used throughtout entire Worker lifetime.
+    // Keep a reference to make sure it doesn't get dropped.
     _onconnect_callback: Closure<dyn Fn(MessageEvent)>,
-    callbacks: Vec<Closure<dyn Fn(MessageEvent)>>,
-    ports: Vec<MessagePort>,
 
+    // keep a MessagePort for each client to send messages over, as well as callback responsible
+    // for forwarding messages back
+    clients: Vec<(MessagePort, Closure<dyn Fn(MessageEvent)>)>,
+
+    //callbacks: Vec<Closure<dyn Fn(MessageEvent)>>,
+    //ports: Vec<MessagePort>,
     command_channel: mpsc::Sender<WorkerMessage>,
 }
 
 impl WorkerConnector {
     fn new(command_channel: mpsc::Sender<WorkerMessage>) -> Self {
         let worker_scope = SharedWorker::worker_self();
+
         let near_tx = command_channel.clone();
         let onconnect_callback: Closure<dyn Fn(MessageEvent)> =
             Closure::new(move |ev: MessageEvent| {
                 let local_tx = near_tx.clone();
                 spawn_local(async move {
-                    let port: MessagePort = ev.ports().at(0).dyn_into().expect("invalid type");
-                    local_tx
-                        .send(WorkerMessage::NewConnection(port))
-                        .await
-                        .expect("send2 error");
+                    let Ok(port) = ev.ports().at(0).dyn_into() else {
+                        error!("received connection event without MessagePort, should not happen");
+                        return;
+                    };
+
+                    if let Err(e) = local_tx.send(WorkerMessage::NewConnection(port)).await {
+                        error!("command channel inside worker closed, should not happen: {e}");
+                    }
                 })
             });
+
         worker_scope.set_onconnect(Some(onconnect_callback.as_ref().unchecked_ref()));
 
         Self {
             _onconnect_callback: onconnect_callback,
-            callbacks: Vec::new(),
-            ports: Vec::new(),
+            clients: Vec::with_capacity(1), // we usually expect to have exactly one client
             command_channel,
         }
     }
 
     fn add(&mut self, port: MessagePort) {
-        debug_assert_eq!(self.callbacks.len(), self.ports.len());
-        let client_id = self.callbacks.len();
+        let client_id = self.clients.len();
 
         let near_tx = self.command_channel.clone();
         let client_message_callback: Closure<dyn Fn(MessageEvent)> =
@@ -515,10 +541,12 @@ impl WorkerConnector {
                     let (command_with_channel, response_channel) =
                         node_command.add_response_channel();
 
-                    local_tx
+                    if let Err(e) = local_tx
                         .send(WorkerMessage::Command(command_with_channel))
                         .await
-                        .expect("send3 err");
+                    {
+                        error!("command channel inside worker closed, should not happen: {e}");
+                    }
 
                     // TODO: something cleaner?
                     local_tx
@@ -532,16 +560,25 @@ impl WorkerConnector {
             });
         port.set_onmessage(Some(client_message_callback.as_ref().unchecked_ref()));
 
-        self.callbacks.push(client_message_callback);
-        self.ports.push(port);
+        self.clients.push((port, client_message_callback));
 
-        info!("New connection: {client_id}");
+        info!("SharedWorker ready to receive commands from client {client_id}");
     }
 
-    fn respond_to(&self, client: ClientId, msg: NodeResponse) {
-        let off = client.0;
-        let v = to_value(&msg).expect("could not to_value");
-        self.ports[off].post_message(&v).expect("err posttt");
+    fn respond_to(&self, client: ClientId, msg: Option<NodeResponse>) {
+        let offset = client.0;
+        let message = match to_value(&msg) {
+            Ok(jsvalue) => jsvalue,
+            Err(e) => {
+                warn!("provided response could not be coverted to JsValue: {e}, sending undefined instead");
+                JsValue::UNDEFINED // we need to send something, client is waiting for a response
+            }
+        };
+
+        // XXX defensive programming with array checking?
+        if let Err(e) = self.clients[offset].0.post_message(&message) {
+            error!("could not post response message to client {client:?}: {e:?}");
+        }
     }
 }
 
@@ -579,8 +616,9 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
                 worker.process_command(command_with_channel).await;
             }
             WorkerMessage::ResponseChannel((client_id, channel)) => {
-                // XXX: properly
-                let response = channel.await.expect("forwardding channel error");
+                // oneshot channel has one failure condition - Sender getting dropped
+                // we also _need_ to send some response, otherwise driver gets stuck waiting
+                let response = channel.await.ok();
                 connector.respond_to(client_id, response);
             }
         }
