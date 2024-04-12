@@ -15,7 +15,8 @@ use tracing::info;
 use wasm_bindgen::prelude::*;
 use web_sys::{SharedWorker, WorkerOptions, WorkerType};
 
-use crate::utils::{js_value_from_display, BChannel, JsContext, Network};
+use crate::utils::{js_value_from_display, JsContext, Network};
+use crate::worker::BChannel;
 use crate::worker::{
     GetConnectedPeers, GetHeader, GetListeners, GetLocalPeerId, GetMultipleHeaders, GetNetworkInfo,
     GetPeerTrackerInfo, GetSamplingMetadata, GetSyncerInfo, IsRunning, MultipleHeaderQuery,
@@ -64,7 +65,7 @@ impl NodeDriver {
         }
     }
 
-    pub async fn is_running(&self) -> bool {
+    pub async fn is_running(&mut self) -> bool {
         let response = self.channel.send(IsRunning);
 
         response.await.unwrap()

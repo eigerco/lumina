@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import init, { Node, NodeConfig, NodeDriver } from "/wasm/lumina_node_wasm.js";
+import init, { NodeConfig, NodeDriver } from "/wasm/lumina_node_wasm.js";
 
 async function fetch_config() {
   const response = await fetch('/cfg.json');
