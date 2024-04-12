@@ -1,7 +1,7 @@
-use std::fmt::Debug;
+use std::error::Error;
+use std::fmt::{self, Debug, Display};
 
 use futures::future::{BoxFuture, FutureExt, TryFutureExt};
-use instant::Instant;
 use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
@@ -13,7 +13,7 @@ use web_sys::{MessageEvent, MessagePort, SharedWorker};
 
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
-use lumina_node::node::Node;
+use lumina_node::node::{Node, NodeError};
 use lumina_node::peer_tracker::PeerTrackerInfo;
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 use lumina_node::syncer::SyncingInfo;
@@ -22,241 +22,155 @@ use crate::node::WasmNodeConfig;
 use crate::utils::{CommandResponseChannel, NodeCommandResponse, NodeCommandType, WorkerSelf};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
+type Result<T, E = WorkerError> = std::result::Result<T, E>;
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct IsRunning;
-impl NodeCommandType for IsRunning {
-    type Output = bool;
-}
-impl From<IsRunning> for NodeCommand {
-    fn from(command: IsRunning) -> NodeCommand {
-        NodeCommand::IsRunning(command)
+pub struct WorkerError(String);
+
+impl Error for WorkerError {}
+impl Display for WorkerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "WorkerError({})", self.0)
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum NodeState {
-    NodeStopped,
-    NodeStarted,
-    AlreadyRunning(u64),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StartNode(pub WasmNodeConfig);
-impl NodeCommandType for StartNode {
-    type Output = NodeState;
-}
-impl From<StartNode> for NodeCommand {
-    fn from(command: StartNode) -> NodeCommand {
-        NodeCommand::StartNode(command)
+impl From<NodeError> for WorkerError {
+    fn from(error: NodeError) -> WorkerError {
+        WorkerError(error.to_string())
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GetLocalPeerId;
-impl NodeCommandType for GetLocalPeerId {
-    type Output = String;
-}
-impl From<GetLocalPeerId> for NodeCommand {
-    fn from(command: GetLocalPeerId) -> NodeCommand {
-        NodeCommand::GetLocalPeerId(command)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GetSyncerInfo;
-impl NodeCommandType for GetSyncerInfo {
-    type Output = SyncingInfo;
-}
-impl From<GetSyncerInfo> for NodeCommand {
-    fn from(command: GetSyncerInfo) -> NodeCommand {
-        NodeCommand::GetSyncerInfo(command)
-    }
+macro_rules! define_command_from_impl {
+    ($common_name:ident, $command_name:ident) => {
+        impl From<$command_name> for $common_name {
+            fn from(command: $command_name) -> Self {
+                $common_name::$command_name(command)
+            }
+        }
+    };
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GetPeerTrackerInfo;
-impl NodeCommandType for GetPeerTrackerInfo {
-    type Output = PeerTrackerInfo;
-}
-impl From<GetPeerTrackerInfo> for NodeCommand {
-    fn from(command: GetPeerTrackerInfo) -> NodeCommand {
-        NodeCommand::GetPeerTrackerInfo(command)
-    }
+macro_rules! define_command_type_impl {
+    ($common_type:ident, $command_name:ident, $output:ty) => {
+        impl $common_type for $command_name {
+            type Output = $output;
+        }
+    };
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GetNetworkInfo;
-impl NodeCommandType for GetNetworkInfo {
-    type Output = NetworkInfoSnapshot;
-}
-impl From<GetNetworkInfo> for NodeCommand {
-    fn from(command: GetNetworkInfo) -> NodeCommand {
-        NodeCommand::GetNetworkInfo(command)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GetConnectedPeers;
-impl NodeCommandType for GetConnectedPeers {
-    type Output = Vec<String>;
-}
-impl From<GetConnectedPeers> for NodeCommand {
-    fn from(command: GetConnectedPeers) -> NodeCommand {
-        NodeCommand::GetConnectedPeers(command)
-    }
+macro_rules! define_response_try_from_impl {
+    ($common_type:ident, $helper_type:ident, $command_name:ident) => {
+        impl TryFrom<$common_type> for $helper_type<$command_name> {
+            type Error = ();
+            fn try_from(response: $common_type) -> Result<Self, Self::Error> {
+                if let $common_type::$command_name(cmd) = response {
+                    Ok(cmd)
+                } else {
+                    Err(())
+                }
+            }
+        }
+    };
 }
 
-/*
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GetNetworkHeadHeader;
-impl NodeCommandType for GetNetworkHeadHeader {
-    type Output = JsValue;
-}
-impl From<GetNetworkHeadHeader> for NodeCommand {
-    fn from(command: GetNetworkHeadHeader) -> NodeCommand {
-        NodeCommand::GetNetworkHeadHeader(command)
-    }
-}
-*/
-
-/*
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GetLocalHeadHeader;
-impl NodeCommandType for GetLocalHeadHeader {
-    type Output = JsValue;
-}
-impl From<GetLocalHeadHeader> for NodeCommand {
-    fn from(command: GetLocalHeadHeader) -> NodeCommand {
-        NodeCommand::GetLocalHeadHeader(command)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RequestHeadHeader;
-impl NodeCommandType for RequestHeadHeader {
-    type Output = JsValue;
-}
-impl From<RequestHeadHeader> for NodeCommand {
-    fn from(command: RequestHeadHeader) -> NodeCommand {
-        NodeCommand::RequestHeadHeader(command)
-    }
-}
-*/
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SetPeerTrust {
-    pub peer_id: String,
-    pub is_trusted: bool,
-}
-impl NodeCommandType for SetPeerTrust {
-    type Output = ();
-}
-impl From<SetPeerTrust> for NodeCommand {
-    fn from(command: SetPeerTrust) -> NodeCommand {
-        NodeCommand::SetPeerTrust(command)
-    }
+macro_rules! define_command {
+    ($command_name:ident -> $output:ty) => {
+        #[derive(Debug, Serialize, Deserialize)]
+        pub struct $command_name;
+        define_command_type_impl!(NodeCommandType, $command_name, $output);
+        define_command_from_impl!(NodeCommand, $command_name);
+        define_response_try_from_impl!(NodeResponse, NodeCommandResponse, $command_name);
+    };
+    ($command_name:ident ($($param:ty),+) -> $output:ty) => {
+        #[derive(Debug, Serialize, Deserialize)]
+        pub struct $command_name($(pub $param,)+);
+        define_command_type_impl!(NodeCommandType, $command_name, $output);
+        define_command_from_impl!(NodeCommand, $command_name);
+        define_response_try_from_impl!(NodeResponse, NodeCommandResponse, $command_name);
+    };
+    ($command_name:ident {$($param_name:ident : $param_type:ty),+} -> $output:ty) => {
+        #[derive(Debug, Serialize, Deserialize)]
+        pub struct $command_name { $(pub $param_name: $param_type,)+}
+        define_command_type_impl!(NodeCommandType, $command_name, $output);
+        define_command_from_impl!(NodeCommand, $command_name);
+        define_response_try_from_impl!(NodeResponse, NodeCommandResponse, $command_name);
+    };
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WaitConnected {
-    pub trusted: bool,
-}
-impl NodeCommandType for WaitConnected {
-    type Output = ();
-}
-impl From<WaitConnected> for NodeCommand {
-    fn from(command: WaitConnected) -> NodeCommand {
-        NodeCommand::WaitConnected(command)
-    }
+macro_rules! define_common_types {
+    ($($command_name:ident),+ $(,)?) => {
+        #[derive(Serialize, Deserialize, Debug)]
+        pub enum NodeCommand {
+            $($command_name($command_name),)+
+        }
+
+        #[derive(Debug)]
+        pub enum NodeCommandWithChannel {
+            $($command_name(($command_name, CommandResponseChannel<$command_name>)),)+
+        }
+
+        #[derive(Serialize, Deserialize, Debug)]
+        pub enum NodeResponse {
+            $($command_name(NodeCommandResponse<$command_name>),)+
+        }
+
+        impl NodeCommand {
+            fn add_response_channel(self) -> (NodeCommandWithChannel,
+        BoxFuture<'static, Result<NodeResponse, tokio::sync::oneshot::error::RecvError>>, // XXX
+            ) {
+                match self {
+                    $(
+                        NodeCommand::$command_name(cmd) => {
+                            let (tx, rx) = oneshot::channel();
+                            (
+                                NodeCommandWithChannel::$command_name((cmd, tx)),
+                                rx.map_ok(|r| NodeResponse::$command_name(
+                                    NodeCommandResponse::<$command_name>(r)
+                                )).boxed()
+                            )
+                        }
+                    )+
+                }
+            }
+        }
+    };
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GetListeners;
-impl NodeCommandType for GetListeners {
-    type Output = Vec<Multiaddr>;
-}
-impl From<GetListeners> for NodeCommand {
-    fn from(command: GetListeners) -> NodeCommand {
-        NodeCommand::GetListeners(command)
-    }
-}
+define_common_types!(
+    IsRunning,
+    StartNode,
+    GetLocalPeerId,
+    GetSyncerInfo,
+    GetPeerTrackerInfo,
+    GetNetworkInfo,
+    GetConnectedPeers,
+    SetPeerTrust,
+    WaitConnected,
+    GetListeners,
+    RequestHeader,
+    RequestMultipleHeaders,
+    GetHeader,
+    GetMultipleHeaders,
+    LastSeenNetworkHead,
+    GetSamplingMetadata,
+);
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RequestHeader(pub SingleHeaderQuery);
-impl NodeCommandType for RequestHeader {
-    type Output = ExtendedHeader;
-}
-impl From<RequestHeader> for NodeCommand {
-    fn from(command: RequestHeader) -> NodeCommand {
-        NodeCommand::RequestHeader(command)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RequestMultipleHeaders(pub MultipleHeaderQuery);
-impl NodeCommandType for RequestMultipleHeaders {
-    type Output = Vec<ExtendedHeader>;
-}
-impl From<RequestMultipleHeaders> for NodeCommand {
-    fn from(command: RequestMultipleHeaders) -> NodeCommand {
-        NodeCommand::RequestMultipleHeaders(command)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GetHeader(pub SingleHeaderQuery);
-impl NodeCommandType for GetHeader {
-    type Output = ExtendedHeader;
-}
-impl From<GetHeader> for NodeCommand {
-    fn from(command: GetHeader) -> NodeCommand {
-        NodeCommand::GetHeader(command)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GetMultipleHeaders(pub MultipleHeaderQuery);
-impl NodeCommandType for GetMultipleHeaders {
-    type Output = Vec<ExtendedHeader>;
-}
-impl From<GetMultipleHeaders> for NodeCommand {
-    fn from(command: GetMultipleHeaders) -> NodeCommand {
-        NodeCommand::GetMultipleHeaders(command)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GetSamplingMetadata {
-    pub height: u64,
-}
-impl NodeCommandType for GetSamplingMetadata {
-    type Output = SamplingMetadata;
-}
-impl From<GetSamplingMetadata> for NodeCommand {
-    fn from(command: GetSamplingMetadata) -> NodeCommand {
-        NodeCommand::GetSamplingMetadata(command)
-    }
-}
-
-// type being transmitted over the JS channel
-#[derive(Serialize, Deserialize, Debug)]
-pub enum NodeCommand {
-    IsRunning(IsRunning),
-    StartNode(StartNode),
-    GetLocalPeerId(GetLocalPeerId),
-    GetSyncerInfo(GetSyncerInfo),
-    GetPeerTrackerInfo(GetPeerTrackerInfo),
-    GetNetworkInfo(GetNetworkInfo),
-    GetConnectedPeers(GetConnectedPeers),
-    SetPeerTrust(SetPeerTrust),
-    WaitConnected(WaitConnected),
-    GetListeners(GetListeners),
-    RequestHeader(RequestHeader),
-    RequestMultipleHeaders(RequestMultipleHeaders),
-    GetHeader(GetHeader),
-    GetMultipleHeaders(GetMultipleHeaders),
-    GetSamplingMetadata(GetSamplingMetadata),
-}
+define_command!(IsRunning -> bool);
+define_command!(StartNode(WasmNodeConfig) -> Result<()>);
+define_command!(GetLocalPeerId -> String);
+define_command!(GetSyncerInfo -> SyncingInfo);
+define_command!(GetPeerTrackerInfo -> PeerTrackerInfo);
+define_command!(GetNetworkInfo -> NetworkInfoSnapshot);
+define_command!(GetConnectedPeers -> Vec<String>);
+define_command!(SetPeerTrust { peer_id: String, is_trusted: bool } -> ());
+define_command!(WaitConnected { trusted: bool } -> ());
+define_command!(GetListeners -> Vec<Multiaddr>);
+define_command!(RequestHeader(SingleHeaderQuery) -> Result<ExtendedHeader>);
+define_command!(RequestMultipleHeaders(MultipleHeaderQuery) -> Vec<ExtendedHeader>);
+define_command!(GetHeader(SingleHeaderQuery) -> ExtendedHeader);
+define_command!(GetMultipleHeaders(MultipleHeaderQuery) -> Vec<ExtendedHeader>);
+define_command!(LastSeenNetworkHead -> Option<ExtendedHeader>);
+define_command!(GetSamplingMetadata { height: u64 } -> SamplingMetadata);
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum SingleHeaderQuery {
@@ -268,8 +182,7 @@ pub enum SingleHeaderQuery {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum MultipleHeaderQuery {
     GetVerified {
-        #[serde(with = "serde_wasm_bindgen::preserve")]
-        from: JsValue,
+        from: ExtendedHeader,
         amount: u64,
     },
     Range {
@@ -278,232 +191,8 @@ pub enum MultipleHeaderQuery {
     },
 }
 
-impl NodeCommand {
-    fn add_response_channel(
-        self,
-    ) -> (
-        NodeCommandWithChannel,
-        BoxFuture<'static, Result<NodeResponse, tokio::sync::oneshot::error::RecvError>>, // XXX
-                                                                                          // type cleanup
-    ) {
-        match self {
-            NodeCommand::IsRunning(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::IsRunning((cmd, tx)),
-                    rx.map_ok(|r| NodeResponse::IsRunning(NodeCommandResponse::<IsRunning>(r)))
-                        .boxed(),
-                )
-            }
-            NodeCommand::StartNode(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::StartNode((cmd, tx)),
-                    rx.map_ok(|r| NodeResponse::StartNode(NodeCommandResponse::<StartNode>(r)))
-                        .boxed(),
-                )
-            }
-            NodeCommand::GetLocalPeerId(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::GetLocalPeerId((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::GetLocalPeerId(NodeCommandResponse::<GetLocalPeerId>(r))
-                    })
-                    .boxed(),
-                )
-            }
-            NodeCommand::GetSyncerInfo(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::GetSyncerInfo((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::GetSyncerInfo(NodeCommandResponse::<GetSyncerInfo>(r))
-                    })
-                    .boxed(),
-                )
-            }
-            NodeCommand::GetPeerTrackerInfo(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::GetPeerTrackerInfo((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::GetPeerTrackerInfo(NodeCommandResponse::<GetPeerTrackerInfo>(
-                            r,
-                        ))
-                    })
-                    .boxed(),
-                )
-            }
-            NodeCommand::GetNetworkInfo(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::GetNetworkInfo((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::GetNetworkInfo(NodeCommandResponse::<GetNetworkInfo>(r))
-                    })
-                    .boxed(),
-                )
-            }
-            NodeCommand::GetConnectedPeers(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::GetConnectedPeers((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::GetConnectedPeers(NodeCommandResponse::<GetConnectedPeers>(r))
-                    })
-                    .boxed(),
-                )
-            }
-            NodeCommand::SetPeerTrust(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::SetPeerTrust((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::SetPeerTrust(NodeCommandResponse::<SetPeerTrust>(r))
-                    })
-                    .boxed(),
-                )
-            }
-            NodeCommand::WaitConnected(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::WaitConnected((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::WaitConnected(NodeCommandResponse::<WaitConnected>(r))
-                    })
-                    .boxed(),
-                )
-            }
-            NodeCommand::GetListeners(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::GetListeners((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::GetListeners(NodeCommandResponse::<GetListeners>(r))
-                    })
-                    .boxed(),
-                )
-            }
-            NodeCommand::RequestHeader(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::RequestHeader((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::RequestHeader(NodeCommandResponse::<RequestHeader>(r))
-                    })
-                    .boxed(),
-                )
-            }
-            NodeCommand::RequestMultipleHeaders(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::RequestMultipleHeaders((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::RequestMultipleHeaders(NodeCommandResponse::<
-                            RequestMultipleHeaders,
-                        >(r))
-                    })
-                    .boxed(),
-                )
-            }
-            NodeCommand::GetHeader(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::GetHeader((cmd, tx)),
-                    rx.map_ok(|r| NodeResponse::GetHeader(NodeCommandResponse::<GetHeader>(r)))
-                        .boxed(),
-                )
-            }
-            NodeCommand::GetMultipleHeaders(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::GetMultipleHeaders((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::GetMultipleHeaders(NodeCommandResponse::<GetMultipleHeaders>(
-                            r,
-                        ))
-                    })
-                    .boxed(),
-                )
-            }
-            NodeCommand::GetSamplingMetadata(cmd) => {
-                let (tx, rx) = oneshot::channel();
-                (
-                    NodeCommandWithChannel::GetSamplingMetadata((cmd, tx)),
-                    rx.map_ok(|r| {
-                        NodeResponse::GetSamplingMetadata(
-                            NodeCommandResponse::<GetSamplingMetadata>(r),
-                        )
-                    })
-                    .boxed(),
-                )
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum NodeCommandWithChannel {
-    IsRunning((IsRunning, CommandResponseChannel<IsRunning>)),
-    StartNode((StartNode, CommandResponseChannel<StartNode>)),
-    GetLocalPeerId((GetLocalPeerId, CommandResponseChannel<GetLocalPeerId>)),
-    GetSyncerInfo((GetSyncerInfo, CommandResponseChannel<GetSyncerInfo>)),
-    GetPeerTrackerInfo(
-        (
-            GetPeerTrackerInfo,
-            CommandResponseChannel<GetPeerTrackerInfo>,
-        ),
-    ),
-    GetNetworkInfo((GetNetworkInfo, CommandResponseChannel<GetNetworkInfo>)),
-    GetConnectedPeers((GetConnectedPeers, CommandResponseChannel<GetConnectedPeers>)),
-    SetPeerTrust((SetPeerTrust, CommandResponseChannel<SetPeerTrust>)),
-    WaitConnected((WaitConnected, CommandResponseChannel<WaitConnected>)),
-    GetListeners((GetListeners, CommandResponseChannel<GetListeners>)),
-    RequestHeader((RequestHeader, CommandResponseChannel<RequestHeader>)),
-    RequestMultipleHeaders(
-        (
-            RequestMultipleHeaders,
-            CommandResponseChannel<RequestMultipleHeaders>,
-        ),
-    ),
-    GetHeader((GetHeader, CommandResponseChannel<GetHeader>)),
-    GetMultipleHeaders(
-        (
-            GetMultipleHeaders,
-            CommandResponseChannel<GetMultipleHeaders>,
-        ),
-    ),
-    GetSamplingMetadata(
-        (
-            GetSamplingMetadata,
-            CommandResponseChannel<GetSamplingMetadata>,
-        ),
-    ),
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum NodeResponse {
-    IsRunning(NodeCommandResponse<IsRunning>),
-    StartNode(NodeCommandResponse<StartNode>),
-    GetLocalPeerId(NodeCommandResponse<GetLocalPeerId>),
-    GetSyncerInfo(NodeCommandResponse<GetSyncerInfo>),
-    GetPeerTrackerInfo(NodeCommandResponse<GetPeerTrackerInfo>),
-    GetNetworkInfo(NodeCommandResponse<GetNetworkInfo>),
-    GetConnectedPeers(NodeCommandResponse<GetConnectedPeers>),
-    SetPeerTrust(NodeCommandResponse<SetPeerTrust>),
-    WaitConnected(NodeCommandResponse<WaitConnected>),
-    GetListeners(NodeCommandResponse<GetListeners>),
-    RequestHeader(NodeCommandResponse<RequestHeader>),
-    RequestMultipleHeaders(NodeCommandResponse<RequestMultipleHeaders>),
-    GetHeader(NodeCommandResponse<GetHeader>),
-    GetMultipleHeaders(NodeCommandResponse<GetMultipleHeaders>),
-    GetSamplingMetadata(NodeCommandResponse<GetSamplingMetadata>),
-}
-
 struct NodeWorker {
     node: Node<IndexedDbStore>,
-    start_timestamp: Instant,
 }
 
 impl NodeWorker {
@@ -518,10 +207,7 @@ impl NodeWorker {
 
         let node = Node::new(config).await.ok().unwrap();
 
-        Self {
-            node,
-            start_timestamp: Instant::now(),
-        }
+        Self { node }
     }
 
     async fn process_command(&mut self, command: NodeCommandWithChannel) {
@@ -532,12 +218,7 @@ impl NodeWorker {
             }
             NodeCommandWithChannel::StartNode((_, response)) => {
                 response
-                    .send(NodeState::AlreadyRunning(
-                        Instant::now()
-                            .checked_duration_since(self.start_timestamp)
-                            .map(|duration| duration.as_secs())
-                            .unwrap_or(0),
-                    ))
+                    .send(Err(WorkerError("already running".to_string())))
                     .expect("channel_dropped");
             }
             NodeCommandWithChannel::GetLocalPeerId((_, response)) => {
@@ -563,20 +244,6 @@ impl NodeWorker {
                     .send(connected_peers.iter().map(|id| id.to_string()).collect())
                     .expect("channel_dropped");
             }
-            /*
-                        NodeCommandWithChannel::GetNetworkHeadHeader(command) => {
-                            let _ = to_value(&self.node.get_network_head_header())
-                                .ok()
-                                .expect("TODO");
-                            NodeResponse::Header(self.network_head_header().await.ok().unwrap())
-                        }
-                        NodeCommandWithChannel::GetLocalHeadHeader(command) => {
-                            let _ = to_value(&self.node.get_local_head_header().await.unwrap())
-                                .ok()
-                                .unwrap();
-                            NodeResponse::Header(self.local_head_header().await.ok().unwrap())
-                        }
-            */
             NodeCommandWithChannel::SetPeerTrust((
                 SetPeerTrust {
                     peer_id,
@@ -600,41 +267,39 @@ impl NodeWorker {
                 }
                 response.send(()).expect("channel_dropped")
             }
-            NodeCommandWithChannel::GetListeners((_command, _response)) => {
-                todo!()
-            }
+            NodeCommandWithChannel::GetListeners((_, response)) => response
+                .send(self.node.listeners().await.unwrap())
+                .expect("channel_dropped"),
             NodeCommandWithChannel::RequestHeader((command, response)) => {
                 let header = match command.0 {
-                    SingleHeaderQuery::Head => todo!(),
+                    SingleHeaderQuery::Head => self.node.request_head_header().await,
                     SingleHeaderQuery::ByHash(hash) => {
-                        self.node.request_header_by_hash(&hash).await.ok().unwrap()
+                        self.node.request_header_by_hash(&hash).await
                     }
-                    SingleHeaderQuery::ByHeight(height) => self
-                        .node
-                        .request_header_by_height(height)
-                        .await
-                        .ok()
-                        .unwrap(),
+                    SingleHeaderQuery::ByHeight(height) => {
+                        self.node.request_header_by_height(height).await
+                    }
                 };
-                response.send(header).expect("channel_dropped");
+                response
+                    .send(header.map_err(|e| e.into()))
+                    .expect("channel_dropped");
             }
             NodeCommandWithChannel::RequestMultipleHeaders((command, response)) => {
                 let headers = match command.0 {
-                    MultipleHeaderQuery::GetVerified { from, amount } => {
-                        let from_header = from_value(from).ok().unwrap();
-                        self.node
-                            .request_verified_headers(&from_header, amount)
-                            .await
-                            .unwrap()
-                    }
-                    MultipleHeaderQuery::Range { .. } => unreachable!(),
+                    MultipleHeaderQuery::GetVerified { from, amount } => self
+                        .node
+                        .request_verified_headers(&from, amount)
+                        .await
+                        .unwrap(),
+                    MultipleHeaderQuery::Range { .. } => unreachable!("invalid command"),
                 };
 
                 response.send(headers).expect("channel_dropped");
             }
             NodeCommandWithChannel::GetHeader((command, response)) => {
                 let header = match command.0 {
-                    SingleHeaderQuery::Head => todo!(),
+                    SingleHeaderQuery::Head => self.node.get_local_head_header().await.unwrap(),
+                    //SingleHeaderQuery::NetworkHead => self.node.get_network_head_header().unwrap(),
                     SingleHeaderQuery::ByHash(hash) => {
                         self.node.get_header_by_hash(&hash).await.ok().unwrap()
                     }
@@ -646,13 +311,11 @@ impl NodeWorker {
             }
             NodeCommandWithChannel::GetMultipleHeaders((command, response)) => {
                 let headers = match command.0 {
-                    MultipleHeaderQuery::GetVerified { from, amount } => {
-                        let from_header = from_value(from).ok().unwrap();
-                        self.node
-                            .request_verified_headers(&from_header, amount)
-                            .await
-                            .unwrap()
-                    }
+                    MultipleHeaderQuery::GetVerified { from, amount } => self
+                        .node
+                        .request_verified_headers(&from, amount)
+                        .await
+                        .unwrap(),
                     MultipleHeaderQuery::Range {
                         start_height,
                         end_height,
@@ -667,6 +330,10 @@ impl NodeWorker {
                 };
 
                 response.send(headers).expect("channel_dropped");
+            }
+            NodeCommandWithChannel::LastSeenNetworkHead((_, response)) => {
+                let header = self.node.get_network_head_header();
+                response.send(header).expect("channel_dropped");
             }
             NodeCommandWithChannel::GetSamplingMetadata((command, response)) => {
                 let metadata = self
@@ -800,9 +467,7 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
                         }
                         NodeCommandWithChannel::StartNode((command, response)) => {
                             worker = Some(NodeWorker::new(command.0).await);
-                            response
-                                .send(NodeState::NodeStarted)
-                                .expect("channel_dropped");
+                            response.send(Ok(())).expect("channel_dropped");
                         }
                         _ => warn!("Worker not running"),
                     }

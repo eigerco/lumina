@@ -2,40 +2,28 @@
 
 use std::result::Result as StdResult;
 
-use celestia_types::hash::Hash;
-use celestia_types::ExtendedHeader;
 use js_sys::Array;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
 use lumina_node::node::{Node, NodeConfig};
-use lumina_node::store::{IndexedDbStore, Store};
+use lumina_node::store::IndexedDbStore;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tracing::info;
 use wasm_bindgen::prelude::*;
-
-use crate::utils::js_value_from_display;
-use crate::utils::BChannel;
-use crate::utils::JsContext;
-use crate::utils::Network;
-use crate::worker::{MultipleHeaderQuery, NodeCommand, NodeResponse, SingleHeaderQuery};
-use crate::wrapper::libp2p::NetworkInfoSnapshot;
-use crate::Result;
-
-use crate::worker::RequestMultipleHeaders;
-use crate::worker::{
-    GetConnectedPeers, GetHeader, GetListeners, GetLocalPeerId, GetMultipleHeaders, GetNetworkInfo,
-    GetPeerTrackerInfo, GetSamplingMetadata, GetSyncerInfo, IsRunning, RequestHeader, SetPeerTrust,
-    StartNode, WaitConnected,
-};
-
 use web_sys::{SharedWorker, WorkerOptions, WorkerType};
 
-/// Lumina wasm node.
-#[wasm_bindgen(js_name = Node)]
-struct WasmNode(Node<IndexedDbStore>);
+use crate::utils::{js_value_from_display, BChannel, JsContext, Network};
+use crate::worker::{
+    GetConnectedPeers, GetHeader, GetListeners, GetLocalPeerId, GetMultipleHeaders, GetNetworkInfo,
+    GetPeerTrackerInfo, GetSamplingMetadata, GetSyncerInfo, IsRunning, MultipleHeaderQuery,
+    NodeCommand, NodeResponse, RequestHeader, RequestMultipleHeaders, SetPeerTrust,
+    SingleHeaderQuery, StartNode, WaitConnected,
+};
+use crate::wrapper::libp2p::NetworkInfoSnapshot;
+use crate::Result;
 
 /// Config for the lumina wasm node.
 #[wasm_bindgen(js_name = NodeConfig)]
@@ -76,51 +64,51 @@ impl NodeDriver {
         }
     }
 
-    pub async fn is_running(&mut self) -> bool {
+    pub async fn is_running(&self) -> bool {
         let response = self.channel.send(IsRunning);
 
         response.await.unwrap()
     }
 
-    pub async fn start(&mut self, config: WasmNodeConfig) {
+    pub async fn start(&self, config: WasmNodeConfig) -> Result<()> {
         let command = StartNode(config);
         let response = self.channel.send(command);
 
-        response.await.unwrap(); // XXX return type
+        Ok(response.await.unwrap()?)
     }
 
-    pub async fn local_peer_id(&mut self) -> String {
+    pub async fn local_peer_id(&self) -> String {
         let response = self.channel.send(GetLocalPeerId);
 
         response.await.unwrap()
     }
 
-    pub async fn peer_tracker_info(&mut self) -> Result<JsValue> {
+    pub async fn peer_tracker_info(&self) -> Result<JsValue> {
         let response = self.channel.send(GetPeerTrackerInfo);
 
         Ok(to_value(&response.await.unwrap())?)
     }
 
-    pub async fn wait_connected(&mut self) {
+    pub async fn wait_connected(&self) {
         let command = WaitConnected { trusted: false };
         let response = self.channel.send(command);
 
         response.await.unwrap()
     }
-    pub async fn wait_connected_trusted(&mut self) {
+    pub async fn wait_connected_trusted(&self) {
         let command = WaitConnected { trusted: false };
         let response = self.channel.send(command);
 
         response.await.unwrap()
     }
 
-    pub async fn network_info(&mut self) -> Result<NetworkInfoSnapshot> {
+    pub async fn network_info(&self) -> Result<NetworkInfoSnapshot> {
         let response = self.channel.send(GetNetworkInfo);
 
         Ok(response.await.unwrap())
     }
 
-    pub async fn listeners(&mut self) -> Result<Array> {
+    pub async fn listeners(&self) -> Result<Array> {
         let response = self.channel.send(GetListeners);
         let response = response
             .await
@@ -132,14 +120,19 @@ impl NodeDriver {
         Ok(response)
     }
 
-    pub async fn connected_peers(&mut self) -> Result<Array> {
+    pub async fn connected_peers(&self) -> Result<Array> {
         let response = self.channel.send(GetConnectedPeers);
-        let response = response.await?.iter().map(js_value_from_display).collect();
+        let response = response
+            .await
+            .unwrap()
+            .iter()
+            .map(js_value_from_display)
+            .collect();
 
         Ok(response)
     }
 
-    pub async fn set_peer_trust(&mut self, peer_id: &str, is_trusted: bool) -> Result<()> {
+    pub async fn set_peer_trust(&self, peer_id: &str, is_trusted: bool) -> Result<()> {
         let command = SetPeerTrust {
             peer_id: peer_id.to_string(),
             is_trusted,
@@ -149,72 +142,81 @@ impl NodeDriver {
         Ok(response.await.unwrap())
     }
 
-    pub async fn request_head_header(&mut self) -> Result<JsValue> {
+    pub async fn request_head_header(&self) -> Result<JsValue> {
         let command = RequestHeader(SingleHeaderQuery::Head);
         let response = self.channel.send(command);
-
-        Ok(to_value(&response.await.unwrap())?)
+        Ok(to_value(&response.await.unwrap()?)?)
     }
-    pub async fn request_header_by_hash(&mut self, hash: &str) -> Result<JsValue> {
+
+    pub async fn request_header_by_hash(&self, hash: &str) -> Result<JsValue> {
         let command = RequestHeader(SingleHeaderQuery::ByHash(hash.parse()?));
         let response = self.channel.send(command);
 
-        Ok(to_value(&response.await.unwrap())?)
+        Ok(to_value(&response.await.unwrap()?)?)
     }
-    pub async fn request_header_by_height(&mut self, height: u64) -> Result<JsValue> {
+
+    pub async fn request_header_by_height(&self, height: u64) -> Result<JsValue> {
         let command = RequestHeader(SingleHeaderQuery::ByHeight(height));
         let response = self.channel.send(command);
 
-        Ok(to_value(&response.await.unwrap())?)
+        Ok(to_value(&response.await.unwrap()?)?)
     }
-    pub async fn request_verified_headers(&mut self, from: JsValue, amount: u64) -> Result<Array> {
+
+    pub async fn request_verified_headers(
+        &self,
+        from_header: JsValue,
+        amount: u64,
+    ) -> Result<Array> {
+        let from = from_value(from_header)?;
         let command = RequestMultipleHeaders(MultipleHeaderQuery::GetVerified { from, amount });
         let response = self.channel.send(command);
 
         let result = response
             .await
-            .unwrap()
             .iter()
             .map(|h| to_value(&h).unwrap()) // XXX
             .collect();
 
         Ok(result)
     }
-    pub async fn syncer_info(&mut self) -> Result<JsValue> {
+
+    pub async fn syncer_info(&self) -> Result<JsValue> {
         let response = self.channel.send(GetSyncerInfo);
 
-        let response = response.await.unwrap();
-
-        Ok(to_value(&response)?)
+        Ok(to_value(&response.await.unwrap())?)
     }
 
-    pub async fn get_network_head_header(&mut self) -> Result<JsValue> {
-        let command = RequestHeader(SingleHeaderQuery::Head); // XXX ???
+    pub async fn get_network_head_header(&self) -> Result<JsValue> {
+        todo!()
+        /*
+                let command = todo!();
+                let response = self.channel.send(command);
+
+                Ok(to_value(&response.await.unwrap())?)
+        */
+    }
+
+    pub async fn get_local_head_header(&self) -> Result<JsValue> {
+        let command = GetHeader(SingleHeaderQuery::Head);
         let response = self.channel.send(command);
 
         Ok(to_value(&response.await.unwrap())?)
     }
-    pub async fn get_local_head_header(&mut self) -> Result<JsValue> {
-        let command = GetHeader(SingleHeaderQuery::Head); // XXX ???
-        let response = self.channel.send(command);
 
-        Ok(to_value(&response.await.unwrap())?)
-    }
-
-    pub async fn get_header_by_hash(&mut self, hash: &str) -> Result<JsValue> {
+    pub async fn get_header_by_hash(&self, hash: &str) -> Result<JsValue> {
         let command = GetHeader(SingleHeaderQuery::ByHash(hash.parse()?));
         let response = self.channel.send(command);
 
         Ok(to_value(&response.await.unwrap())?)
     }
-    pub async fn get_header_by_height(&mut self, height: u64) -> Result<JsValue> {
+    pub async fn get_header_by_height(&self, height: u64) -> Result<JsValue> {
         let command = GetHeader(SingleHeaderQuery::ByHeight(height));
         let response = self.channel.send(command);
 
         Ok(to_value(&response.await.unwrap())?)
     }
     pub async fn get_headers(
-        &mut self,
+        &self,
         start_height: Option<u64>,
         end_height: Option<u64>,
     ) -> Result<Array> {
@@ -225,14 +227,13 @@ impl NodeDriver {
         let response = self.channel.send(command);
         let result = response
             .await
-            .unwrap()
             .iter()
             .map(|h| to_value(&h).unwrap())
             .collect();
 
         Ok(result)
     }
-    pub async fn get_sampling_metadata(&mut self, height: u64) -> Result<JsValue> {
+    pub async fn get_sampling_metadata(&self, height: u64) -> Result<JsValue> {
         let command = GetSamplingMetadata { height };
         let response = self.channel.send(command);
 
@@ -240,6 +241,7 @@ impl NodeDriver {
     }
 }
 
+/*
 #[wasm_bindgen(js_class = Node)]
 impl WasmNode {
     /// Create a new Lumina node.
@@ -423,6 +425,7 @@ impl WasmNode {
         Ok(to_value(&metadata)?)
     }
 }
+*/
 
 #[wasm_bindgen(js_class = NodeConfig)]
 impl WasmNodeConfig {

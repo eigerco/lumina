@@ -1,3 +1,5 @@
+Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
+
 // The worker has its own scope and no direct access to functions/objects of the
 // global scope. We import the generated JS file to make `wasm_bindgen`
 // available which we need to initialize our Wasm code.
