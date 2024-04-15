@@ -542,16 +542,18 @@ dependencies = [
 [[package]]
 name = "beetswap"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/beetswap?rev=13f1a08#13f1a08138ec33e2a63869d5dcef536ad6e10e92"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6a8073515d03debec5e4b3dc4b9255ef631787ee5ad941a1ee77f5725b4b6d1"
 dependencies = [
- "async-trait",
  "asynchronous-codec 0.7.0",
  "blockstore",
  "bytes",
  "cid",
  "fnv",
- "futures",
+ "futures-core",
  "futures-timer",
+ "futures-util",
+ "instant",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
@@ -652,16 +654,15 @@ dependencies = [
 
 [[package]]
 name = "blockstore"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "359816e624b0ab1d2ecaef2a07d3820d7078a16ad55f1f1c381422971c418acf"
+checksum = "358358b19add120a5afc3dd1c8e9161d6d06c44dfec2ef8da58b7fe5c369c90d"
 dependencies = [
  "cid",
  "dashmap",
  "js-sys",
  "multihash",
  "rexie",
- "send_wrapper 0.6.0",
  "sled",
  "thiserror",
  "tokio",

@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use beetswap::multihasher::{Multihasher, MultihasherError};
 use blockstore::block::CidError;
 use celestia_tendermint_proto::Protobuf;
@@ -33,7 +32,6 @@ where
     }
 }
 
-#[async_trait]
 impl<S> Multihasher<MAX_MH_SIZE> for ShwapMultihasher<S>
 where
     S: Store + 'static,
