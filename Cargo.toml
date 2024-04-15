@@ -3,7 +3,6 @@ resolver = "2"
 members = ["cli", "node", "node-wasm", "proto", "rpc", "types"]
 
 [workspace.dependencies]
-beetswap = "0.1"
 blockstore = "0.5"
 lumina-node = { version = "0.1.0", path = "node" }
 lumina-node-wasm = { version = "0.1.0", path = "node-wasm" }
@@ -17,7 +16,6 @@ celestia-tendermint-proto = "0.32.1"
 
 [patch.crates-io]
 # Uncomment to apply local changes
-#beetswap = { path = "../beetswap" }
 #blockstore = { path = "../blockstore" }
 #celestia-tendermint = { path = "../celestia-tendermint-rs/tendermint" }
 #celestia-tendermint-proto = { path = "../celestia-tendermint-rs/proto" }

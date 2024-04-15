@@ -33,7 +33,7 @@ libp2p = { workspace = true, features = [
 ] }
 
 async-trait = "0.1.73"
-beetswap = { workspace = true }
+beetswap = "0.1"
 cid = { version = "0.11.0", features = ["serde-codec"] }
 dashmap = "5.5.3"
 futures = "0.3.28"
@@ -67,7 +67,7 @@ libp2p = { workspace = true, features = [
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 backoff = { version = "0.4.0", features = ["wasm-bindgen"] }
-beetswap = { workspace = true, features = ["wasm-bindgen"] }
+beetswap = { version = "0.1", features = ["wasm-bindgen"] }
 blockstore = { workspace = true, features = ["indexeddb"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { version = "0.2.10", features = ["js"] }
