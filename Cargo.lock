@@ -542,16 +542,18 @@ dependencies = [
 [[package]]
 name = "beetswap"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/beetswap?rev=13f1a08#13f1a08138ec33e2a63869d5dcef536ad6e10e92"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6a8073515d03debec5e4b3dc4b9255ef631787ee5ad941a1ee77f5725b4b6d1"
 dependencies = [
- "async-trait",
  "asynchronous-codec 0.7.0",
  "blockstore",
  "bytes",
  "cid",
  "fnv",
- "futures",
+ "futures-core",
  "futures-timer",
+ "futures-util",
+ "instant",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
@@ -652,16 +654,15 @@ dependencies = [
 
 [[package]]
 name = "blockstore"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "359816e624b0ab1d2ecaef2a07d3820d7078a16ad55f1f1c381422971c418acf"
+checksum = "358358b19add120a5afc3dd1c8e9161d6d06c44dfec2ef8da58b7fe5c369c90d"
 dependencies = [
  "cid",
  "dashmap",
  "js-sys",
  "multihash",
  "rexie",
- "send_wrapper 0.6.0",
  "sled",
  "thiserror",
  "tokio",
@@ -2244,7 +2245,8 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 [[package]]
 name = "leopard-codec"
 version = "0.1.0"
-source = "git+https://github.com/eigerco/leopard-codec?rev=1e538fe#1e538fea1977973e7d0c296534b71da95b1b82d5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee58dbc414bd23885d7da915e0457618b36d1fc950a6169ef2cb29829d1b1a1d"
 dependencies = [
  "bytes",
  "lazy_static",

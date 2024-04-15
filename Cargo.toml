@@ -3,7 +3,7 @@ resolver = "2"
 members = ["cli", "node", "node-wasm", "proto", "rpc", "types"]
 
 [workspace.dependencies]
-blockstore = "0.3"
+blockstore = "0.5"
 lumina-node = { version = "0.1.0", path = "node" }
 lumina-node-wasm = { version = "0.1.0", path = "node-wasm" }
 celestia-proto = { version = "0.1.0", path = "proto" }
@@ -15,11 +15,8 @@ celestia-tendermint = { version = "0.32.1", default-features = false }
 celestia-tendermint-proto = "0.32.1"
 
 [patch.crates-io]
-# This is a workaround.
-# `lumina-node` depends on `beetswap`, which depends on `blockstore`.
-# Because `beetswap` is outside of this workspace, cargo thinks that
-# it depends on a different `blockstore` crate.
 # Uncomment to apply local changes
+#blockstore = { path = "../blockstore" }
 #celestia-tendermint = { path = "../celestia-tendermint-rs/tendermint" }
 #celestia-tendermint-proto = { path = "../celestia-tendermint-rs/proto" }
 #nmt-rs = { path = "../nmt-rs" }
