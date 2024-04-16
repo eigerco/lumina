@@ -18,16 +18,12 @@ pub use in_memory_store::InMemoryStore;
 pub use indexed_db_store::IndexedDbStore;
 #[cfg(not(target_arch = "wasm32"))]
 pub use redb_store::RedbStore;
-#[cfg(not(target_arch = "wasm32"))]
-pub use sled_store::SledStore;
 
 mod in_memory_store;
 #[cfg(target_arch = "wasm32")]
 mod indexed_db_store;
 #[cfg(not(target_arch = "wasm32"))]
 mod redb_store;
-#[cfg(not(target_arch = "wasm32"))]
-mod sled_store;
 
 use crate::utils::validate_headers;
 
@@ -435,7 +431,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -455,7 +450,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -478,7 +472,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -500,7 +493,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -526,7 +518,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -548,7 +539,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -573,7 +563,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -596,7 +585,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -615,7 +603,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -641,7 +628,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -666,7 +652,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -686,7 +671,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -707,7 +691,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -785,7 +768,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -846,7 +828,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -938,26 +919,6 @@ mod tests {
 
     async fn new_in_memory_store() -> InMemoryStore {
         InMemoryStore::new()
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    async fn new_sled_store() -> SledStore {
-        let db = tokio::task::spawn_blocking(move || {
-            let path = tempfile::TempDir::with_prefix("lumina.store.test")
-                .unwrap()
-                .into_path();
-
-            sled::Config::default()
-                .path(path)
-                .temporary(true)
-                .create_new(true)
-                .open()
-                .unwrap()
-        })
-        .await
-        .unwrap();
-
-        SledStore::new(db).await.unwrap()
     }
 
     #[cfg(not(target_arch = "wasm32"))]

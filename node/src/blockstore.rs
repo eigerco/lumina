@@ -8,12 +8,6 @@ use crate::p2p::MAX_MH_SIZE;
 pub type InMemoryBlockstore = blockstore::InMemoryBlockstore<MAX_MH_SIZE>;
 
 #[cfg(not(target_arch = "wasm32"))]
-/// A [`SledBlockstore`].
-///
-/// [`SledBlockstore`]: blockstore::SledBlockstore
-pub type SledBlockstore = blockstore::SledBlockstore;
-
-#[cfg(not(target_arch = "wasm32"))]
 /// A [`RedbBlockstore`].
 ///
 /// [`RedbBlockstore`]: blockstore::RedbBlockstore
