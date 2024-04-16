@@ -393,7 +393,7 @@ impl From<rexie::Error> for StoreError {
         use rexie::Error as E;
         match error {
             e @ E::AsyncChannelError => StoreError::ExecutorError(e.to_string()),
-            other => StoreError::BackingStoreError(other.to_string()),
+            other => StoreError::FatalDatabaseError(other.to_string()),
         }
     }
 }
