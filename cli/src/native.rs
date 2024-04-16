@@ -1,5 +1,6 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -8,12 +9,10 @@ use celestia_rpc::Client;
 use clap::Parser;
 use directories::ProjectDirs;
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
-use lumina_node::blockstore::SledBlockstore;
+use lumina_node::blockstore::RedbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
 use lumina_node::node::{Node, NodeConfig};
-use lumina_node::store::{SledStore, Store};
-use sled::Db;
-use tokio::fs;
+use lumina_node::store::{RedbStore, Store};
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 use tracing::info;
@@ -60,8 +59,8 @@ pub(crate) async fn run(args: Params) -> Result<()> {
 
     info!("Initializing store");
     let db = open_db(args.store, &network_id).await?;
-    let store = SledStore::new(db.clone()).await?;
-    let blockstore = SledBlockstore::new(db).await?;
+    let store = RedbStore::new(db.clone()).await?;
+    let blockstore = RedbBlockstore::new(db);
 
     match store.head_height().await {
         Ok(height) => info!("Initialised store with head height: {height}"),
@@ -88,35 +87,53 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     }
 }
 
-async fn open_db(path: Option<PathBuf>, network_id: &str) -> Result<Db> {
-    if let Some(path) = path {
-        let db = spawn_blocking(|| sled::open(path)).await??;
-        return Ok(db);
-    }
+async fn open_db(path: Option<PathBuf>, network_id: &str) -> Result<Arc<redb::Database>> {
+    let network_id = network_id.to_owned();
 
-    let cache_dir =
-        ProjectDirs::from("co", "eiger", "lumina").context("Couldn't find lumina's cache dir")?;
-    let mut cache_dir = cache_dir.cache_dir().to_owned();
+    spawn_blocking(move || {
+        use std::fs;
 
-    // TODO: remove it in 2 months or after a few releases
-    // If we find an old ('celestia') cache dir, move it to the new one.
-    if let Some(old_cache_dir) = ProjectDirs::from("co", "eiger", "celestia") {
-        let old_cache_dir = old_cache_dir.cache_dir();
-        if old_cache_dir.exists() && !cache_dir.exists() {
-            warn!(
-                "Migrating old cache dir to a new location: {} -> {}",
-                old_cache_dir.display(),
-                cache_dir.display()
-            );
-            fs::rename(old_cache_dir, &cache_dir).await?;
+        if let Some(path) = path {
+            let db = redb::Database::create(path)?;
+            return Ok(Arc::new(db));
         }
-    }
 
-    cache_dir.push(network_id);
-    // TODO: should we create there also a subdirectory for the 'db'
-    // in case we want to put there some other stuff too?
-    let db = spawn_blocking(|| sled::open(cache_dir)).await??;
-    Ok(db)
+        let cache_dir = ProjectDirs::from("co", "eiger", "lumina")
+            .context("failed to construct project path")?
+            .cache_dir()
+            .join(&network_id)
+            .to_owned();
+
+        let old_cache_dir = ProjectDirs::from("co", "eiger", "celestia")
+            .context("failed to construct project path")?
+            .cache_dir()
+            .join(&network_id)
+            .to_owned();
+
+        if is_sled_db(&old_cache_dir) {
+            warn!("Removing deprecated store {}", old_cache_dir.display());
+            fs::remove_dir_all(&old_cache_dir)?;
+        }
+
+        if is_sled_db(&cache_dir) {
+            warn!("Removing deprecated store {}", cache_dir.display());
+            fs::remove_dir_all(&cache_dir)?;
+        }
+
+        // Directories need to pre-exist
+        fs::create_dir_all(&cache_dir)?;
+
+        let path = cache_dir.join("db");
+        let db = redb::Database::create(path)?;
+
+        Ok(Arc::new(db))
+    })
+    .await?
+}
+
+fn is_sled_db(path: impl AsRef<Path>) -> bool {
+    let path = path.as_ref();
+    path.join("blobs").is_dir() && path.join("conf").is_file() && path.join("db").is_file()
 }
 
 /// Get the address of the local bridge node
