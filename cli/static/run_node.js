@@ -120,7 +120,7 @@ async function main(document, window) {
 
   document.getElementById("start").addEventListener("click", async () => {
     document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
-    //start_node(window.config);
+
     await window.driver.start(window.config)
     document.getElementById("peer-id").innerText = await window.driver.local_peer_id();
     document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
