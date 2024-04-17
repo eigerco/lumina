@@ -2890,6 +2890,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_repr",
+ "thiserror",
  "time",
  "tokio",
  "tracing",

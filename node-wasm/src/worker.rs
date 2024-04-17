@@ -1,53 +1,49 @@
-use std::error::Error;
-use std::fmt::{self, Debug, Display};
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use futures::future::{BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
-use libp2p::Multiaddr;
+use futures::future::{BoxFuture, Future, TryFutureExt};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
+use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info, trace, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{MessageEvent, MessagePort, SharedWorker};
 
-use celestia_types::hash::Hash;
-use celestia_types::ExtendedHeader;
 use lumina_node::node::{Node, NodeError};
-use lumina_node::peer_tracker::PeerTrackerInfo;
-use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
-use lumina_node::syncer::SyncingInfo;
+use lumina_node::store::{IndexedDbStore, Store};
 
 use crate::node::WasmNodeConfig;
 use crate::utils::WorkerSelf;
-use crate::wrapper::libp2p::NetworkInfoSnapshot;
+use crate::worker::commands::*;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum WorkerError2 {
+pub(crate) mod commands;
+
+#[derive(Debug, Serialize, Deserialize, Error)]
+pub enum WorkerError {
+    #[error("Command response channel has been dropped before response could be sent, should not happen")]
     SharedWorkerChannelResponseChannelDropped,
+    #[error("Command channel to lumina worker closed, should not happen")]
+    SharedWorkerCommandChannelClosed,
+    #[error("Channel expected different response type, should not happen")]
     SharedWorkerChannelInvalidType,
-}
-
-type Result<T, E = WorkerError> = std::result::Result<T, E>;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WorkerError(String);
-
-impl Error for WorkerError {}
-impl Display for WorkerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "WorkerError({})", self.0)
-    }
+    #[error("Lumina is already running, ignoring StartNode command")]
+    SharedWorkerAlreadyRunning,
+    #[error("node error: {0}")]
+    NodeError(String),
+    #[error("Worker is still handling previous command")]
+    WorkerBusy,
 }
 
 impl From<NodeError> for WorkerError {
-    fn from(error: NodeError) -> WorkerError {
-        WorkerError(error.to_string())
+    fn from(error: NodeError) -> Self {
+        WorkerError::NodeError(error.to_string())
     }
 }
 
+type Result<T, E = WorkerError> = std::result::Result<T, E>;
 pub type CommandResponseChannel<T> = oneshot::Sender<<T as NodeCommandType>::Output>;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -62,7 +58,6 @@ pub trait NodeCommandType: Debug + Into<NodeCommand> {
 
 pub struct SharedWorkerChannel<IN, OUT> {
     _onmessage: Closure<dyn Fn(MessageEvent)>,
-    _forwarding_task: (),
     channel: MessagePort,
     response_channels: mpsc::Sender<oneshot::Sender<OUT>>,
     send_type: PhantomData<IN>,
@@ -71,8 +66,7 @@ pub struct SharedWorkerChannel<IN, OUT> {
 impl<IN, OUT> SharedWorkerChannel<IN, OUT>
 where
     IN: Serialize,
-    // XXX: send sync shouldn't be needed
-    OUT: DeserializeOwned + 'static + Send + Sync,
+    OUT: DeserializeOwned + 'static,
 {
     pub fn new(channel: MessagePort) -> Self {
         let (message_tx, mut message_rx) = mpsc::channel(64);
@@ -89,8 +83,14 @@ where
             })
         };
 
+        // TODO: one of the ways to make sure we're synchronised with lumina in worker is forcing
+        // request-response interface over the channel (waiting for previous command to be handled
+        // before sending next one). Is it better for lumina to maintain this inside the worker?
         let (response_tx, mut response_rx) = mpsc::channel(1);
-        let forwarding_task = spawn_local(async move {
+
+        // small task running concurently, which converts js's callback style into
+        // rust's awaiting on a channel message passing style
+        spawn_local(async move {
             loop {
                 let message = message_rx.recv().await.unwrap();
                 let response_channel: oneshot::Sender<OUT> = response_rx.recv().await.unwrap();
@@ -108,47 +108,36 @@ where
         Self {
             response_channels: response_tx,
             _onmessage: onmessage,
-            _forwarding_task: forwarding_task,
             channel,
             send_type: PhantomData,
         }
     }
 
-    pub fn send<T: NodeCommandType>(
+    pub async fn send<T: NodeCommandType>(
         &self,
         command: T,
-    ) -> impl Future<Output = Result<T::Output, WorkerError2>>
-    //BoxFuture<'static, Result<T::Output, tokio::sync::oneshot::error::RecvError>>
+    ) -> Result<impl Future<Output = Result<T::Output>>>
     where
         T::Output: Debug + Serialize,
         NodeCommandResponse<T>: TryFrom<OUT>,
         <NodeCommandResponse<T> as TryFrom<OUT>>::Error: Debug,
     {
-        let message: NodeCommand = command.into();
-        self.send_enum(message);
+        self.send_enum(command.into());
 
         let (tx, rx) = oneshot::channel();
 
-        self.response_channels.try_send(tx).expect("busy");
+        self.response_channels
+            .send(tx)
+            .await
+            .map_err(|_| WorkerError::SharedWorkerCommandChannelClosed)?;
 
-        rx.map_ok_or_else(
-            |_e| Err(WorkerError2::SharedWorkerChannelResponseChannelDropped),
+        Ok(rx.map_ok_or_else(
+            |_e| Err(WorkerError::SharedWorkerChannelResponseChannelDropped),
             |r| match NodeCommandResponse::<T>::try_from(r) {
                 Ok(v) => Ok(v.0),
-                Err(_) => Err(WorkerError2::SharedWorkerChannelInvalidType),
+                Err(_) => Err(WorkerError::SharedWorkerChannelInvalidType),
             },
-        )
-
-        /*
-                // unwrap "handles" invalid type
-                rx.map_ok(|r| {
-                    //tracing::info!("type = , expected = {}", std::any::type_name::<T>());
-                    NodeCommandResponse::<T>::try_from(r)
-                        .expect("invalid type")
-                        .0
-                })
-                .boxed()
-        */
+        ))
     }
 
     fn send_enum(&self, msg: NodeCommand) {
@@ -159,157 +148,6 @@ where
 
 // TODO: cleanup JS objects on drop
 // impl Drop
-
-macro_rules! define_command_from_impl {
-    ($common_name:ident, $command_name:ident) => {
-        impl From<$command_name> for $common_name {
-            fn from(command: $command_name) -> Self {
-                $common_name::$command_name(command)
-            }
-        }
-    };
-}
-
-macro_rules! define_command_type_impl {
-    ($common_type:ident, $command_name:ident, $output:ty) => {
-        impl $common_type for $command_name {
-            type Output = $output;
-        }
-    };
-}
-
-macro_rules! define_response_try_from_impl {
-    ($common_type:ident, $helper_type:ident, $command_name:ident) => {
-        impl TryFrom<$common_type> for $helper_type<$command_name> {
-            type Error = ();
-            fn try_from(response: $common_type) -> Result<Self, Self::Error> {
-                if let $common_type::$command_name(cmd) = response {
-                    Ok(cmd)
-                } else {
-                    Err(())
-                }
-            }
-        }
-    };
-}
-
-macro_rules! define_command {
-    ($command_name:ident -> $output:ty) => {
-        #[derive(Debug, Serialize, Deserialize)]
-        pub struct $command_name;
-        define_command_type_impl!(NodeCommandType, $command_name, $output);
-        define_command_from_impl!(NodeCommand, $command_name);
-        define_response_try_from_impl!(NodeResponse, NodeCommandResponse, $command_name);
-    };
-    ($command_name:ident ($($param:ty),+) -> $output:ty) => {
-        #[derive(Debug, Serialize, Deserialize)]
-        pub struct $command_name($(pub $param,)+);
-        define_command_type_impl!(NodeCommandType, $command_name, $output);
-        define_command_from_impl!(NodeCommand, $command_name);
-        define_response_try_from_impl!(NodeResponse, NodeCommandResponse, $command_name);
-    };
-    ($command_name:ident {$($param_name:ident : $param_type:ty),+} -> $output:ty) => {
-        #[derive(Debug, Serialize, Deserialize)]
-        pub struct $command_name { $(pub $param_name: $param_type,)+}
-        define_command_type_impl!(NodeCommandType, $command_name, $output);
-        define_command_from_impl!(NodeCommand, $command_name);
-        define_response_try_from_impl!(NodeResponse, NodeCommandResponse, $command_name);
-    };
-}
-
-macro_rules! define_common_types {
-    ($($command_name:ident),+ $(,)?) => {
-        #[derive(Serialize, Deserialize, Debug)]
-        pub enum NodeCommand {
-            $($command_name($command_name),)+
-        }
-
-        #[derive(Debug)]
-        pub enum NodeCommandWithChannel {
-            $($command_name(($command_name, CommandResponseChannel<$command_name>)),)+
-        }
-
-        #[derive(Serialize, Deserialize, Debug)]
-        pub enum NodeResponse {
-            $($command_name(NodeCommandResponse<$command_name>),)+
-        }
-
-        impl NodeCommand {
-            fn add_response_channel(self) -> (NodeCommandWithChannel,
-        BoxFuture<'static, Result<NodeResponse, tokio::sync::oneshot::error::RecvError>>, // XXX
-            ) {
-                match self {
-                    $(
-                        NodeCommand::$command_name(cmd) => {
-                            let (tx, rx) = oneshot::channel();
-                            (
-                                NodeCommandWithChannel::$command_name((cmd, tx)),
-                                rx.map_ok(|r| NodeResponse::$command_name(
-                                    NodeCommandResponse::<$command_name>(r)
-                                )).boxed()
-                            )
-                        }
-                    )+
-                }
-            }
-        }
-    };
-}
-
-define_common_types!(
-    IsRunning,
-    StartNode,
-    GetLocalPeerId,
-    GetSyncerInfo,
-    GetPeerTrackerInfo,
-    GetNetworkInfo,
-    GetConnectedPeers,
-    SetPeerTrust,
-    WaitConnected,
-    GetListeners,
-    RequestHeader,
-    RequestMultipleHeaders,
-    GetHeader,
-    GetMultipleHeaders,
-    LastSeenNetworkHead,
-    GetSamplingMetadata,
-);
-
-define_command!(IsRunning -> bool);
-define_command!(StartNode(WasmNodeConfig) -> Result<()>);
-define_command!(GetLocalPeerId -> String);
-define_command!(GetSyncerInfo -> SyncingInfo);
-define_command!(GetPeerTrackerInfo -> PeerTrackerInfo);
-define_command!(GetNetworkInfo -> NetworkInfoSnapshot);
-define_command!(GetConnectedPeers -> Vec<String>);
-define_command!(SetPeerTrust { peer_id: String, is_trusted: bool } -> ());
-define_command!(WaitConnected { trusted: bool } -> ());
-define_command!(GetListeners -> Vec<Multiaddr>);
-define_command!(RequestHeader(SingleHeaderQuery) -> Result<ExtendedHeader>);
-define_command!(RequestMultipleHeaders(MultipleHeaderQuery) -> Vec<ExtendedHeader>);
-define_command!(GetHeader(SingleHeaderQuery) -> ExtendedHeader);
-define_command!(GetMultipleHeaders(MultipleHeaderQuery) -> Vec<ExtendedHeader>);
-define_command!(LastSeenNetworkHead -> Option<ExtendedHeader>);
-define_command!(GetSamplingMetadata { height: u64 } -> SamplingMetadata);
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum SingleHeaderQuery {
-    Head,
-    ByHash(Hash),
-    ByHeight(u64),
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum MultipleHeaderQuery {
-    GetVerified {
-        from: ExtendedHeader,
-        amount: u64,
-    },
-    Range {
-        start_height: Option<u64>,
-        end_height: Option<u64>,
-    },
-}
 
 struct NodeWorker {
     node: Node<IndexedDbStore>,
@@ -332,13 +170,12 @@ impl NodeWorker {
 
     async fn process_command(&mut self, command: NodeCommandWithChannel) {
         match command {
-            // TODO: order
             NodeCommandWithChannel::IsRunning((_, response)) => {
                 response.send(true).expect("channel_dropped")
             }
             NodeCommandWithChannel::StartNode((_, response)) => {
                 response
-                    .send(Err(WorkerError("already running".to_string())))
+                    .send(Err(WorkerError::SharedWorkerAlreadyRunning))
                     .expect("channel_dropped");
             }
             NodeCommandWithChannel::GetLocalPeerId((_, response)) => {
@@ -491,8 +328,7 @@ struct WorkerConnector {
     // for forwarding messages back
     clients: Vec<(MessagePort, Closure<dyn Fn(MessageEvent)>)>,
 
-    //callbacks: Vec<Closure<dyn Fn(MessageEvent)>>,
-    //ports: Vec<MessagePort>,
+    // sends events back to the main loop for processing
     command_channel: mpsc::Sender<WorkerMessage>,
 }
 
