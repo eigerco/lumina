@@ -17,10 +17,10 @@ use lumina_node::store::IndexedDbStore;
 
 use crate::utils::{js_value_from_display, JsContext, Network};
 use crate::worker::commands::{
-    GetConnectedPeers, GetHeader, GetListeners, GetLocalPeerId, GetMultipleHeaders, GetNetworkInfo,
-    GetPeerTrackerInfo, GetSamplingMetadata, GetSyncerInfo, IsRunning, LastSeenNetworkHead,
-    MultipleHeaderQuery, NodeCommand, NodeResponse, RequestHeader, RequestMultipleHeaders,
-    SetPeerTrust, SingleHeaderQuery, StartNode, WaitConnected,
+    GetConnectedPeers, GetHeader, GetHeadersRange, GetListeners, GetLocalPeerId, GetNetworkInfo,
+    GetPeerTrackerInfo, GetSamplingMetadata, GetSyncerInfo, GetVerifiedHeaders, IsRunning,
+    LastSeenNetworkHead, NodeCommand, NodeResponse, RequestHeader, SetPeerTrust, SingleHeaderQuery,
+    StartNode, WaitConnected,
 };
 use crate::worker::SharedWorkerChannel;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -187,7 +187,7 @@ impl NodeDriver {
         amount: u64,
     ) -> Result<Array> {
         let from = from_value(from_header)?;
-        let command = RequestMultipleHeaders(MultipleHeaderQuery::GetVerified { from, amount });
+        let command = GetVerifiedHeaders { from, amount };
         let response = self.channel.send(command).await?;
 
         let result = response
@@ -252,10 +252,10 @@ impl NodeDriver {
         start_height: Option<u64>,
         end_height: Option<u64>,
     ) -> Result<Array> {
-        let command = GetMultipleHeaders(MultipleHeaderQuery::Range {
+        let command = GetHeadersRange {
             start_height,
             end_height,
-        });
+        };
         let response = self.channel.send(command).await?;
         let result = response
             .await

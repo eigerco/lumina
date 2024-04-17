@@ -75,6 +75,7 @@ macro_rules! define_command {
 
 macro_rules! define_common_types {
     ($($command_name:ident),+ $(,)?) => {
+        #[allow(clippy::large_enum_variant)]
         #[derive(Serialize, Deserialize, Debug)]
         pub(crate) enum NodeCommand {
             $($command_name($command_name),)+
@@ -124,9 +125,9 @@ define_common_types!(
     WaitConnected,
     GetListeners,
     RequestHeader,
-    RequestMultipleHeaders,
     GetHeader,
-    GetMultipleHeaders,
+    GetHeadersRange,
+    GetVerifiedHeaders,
     LastSeenNetworkHead,
     GetSamplingMetadata,
 );
@@ -142,9 +143,9 @@ define_command!(SetPeerTrust { peer_id: String, is_trusted: bool } -> ());
 define_command!(WaitConnected { trusted: bool } -> ());
 define_command!(GetListeners -> Vec<Multiaddr>);
 define_command!(RequestHeader(SingleHeaderQuery) -> Result<ExtendedHeader>);
-define_command!(RequestMultipleHeaders(MultipleHeaderQuery) -> Vec<ExtendedHeader>);
+define_command!(GetVerifiedHeaders { from: ExtendedHeader, amount: u64 } -> Vec<ExtendedHeader>);
+define_command!(GetHeadersRange { start_height: Option<u64>, end_height: Option<u64> } -> Vec<ExtendedHeader>);
 define_command!(GetHeader(SingleHeaderQuery) -> ExtendedHeader);
-define_command!(GetMultipleHeaders(MultipleHeaderQuery) -> Vec<ExtendedHeader>);
 define_command!(LastSeenNetworkHead -> Option<ExtendedHeader>);
 define_command!(GetSamplingMetadata { height: u64 } -> SamplingMetadata);
 
@@ -153,16 +154,4 @@ pub(crate) enum SingleHeaderQuery {
     Head,
     ByHash(Hash),
     ByHeight(u64),
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) enum MultipleHeaderQuery {
-    GetVerified {
-        from: ExtendedHeader,
-        amount: u64,
-    },
-    Range {
-        start_height: Option<u64>,
-        end_height: Option<u64>,
-    },
 }

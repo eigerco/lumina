@@ -45,6 +45,7 @@ impl From<NodeError> for WorkerError {
 
 type Result<T, E = WorkerError> = std::result::Result<T, E>;
 pub type CommandResponseChannel<T> = oneshot::Sender<<T as NodeCommandType>::Output>;
+type WorkerClientConnection = (MessagePort, Closure<dyn Fn(MessageEvent)>);
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NodeCommandResponse<T>(pub T::Output)
@@ -208,8 +209,7 @@ impl NodeWorker {
                 },
                 response,
             )) => {
-                let _ = self
-                    .node
+                self.node
                     .set_peer_trust(peer_id.parse().unwrap(), is_trusted)
                     .await
                     .unwrap();
@@ -241,18 +241,6 @@ impl NodeWorker {
                     .send(header.map_err(|e| e.into()))
                     .expect("channel_dropped");
             }
-            NodeCommandWithChannel::RequestMultipleHeaders((command, response)) => {
-                let headers = match command.0 {
-                    MultipleHeaderQuery::GetVerified { from, amount } => self
-                        .node
-                        .request_verified_headers(&from, amount)
-                        .await
-                        .unwrap(),
-                    MultipleHeaderQuery::Range { .. } => unreachable!("invalid command"),
-                };
-
-                response.send(headers).expect("channel_dropped");
-            }
             NodeCommandWithChannel::GetHeader((command, response)) => {
                 let header = match command.0 {
                     SingleHeaderQuery::Head => self.node.get_local_head_header().await.unwrap(),
@@ -265,26 +253,28 @@ impl NodeWorker {
                 };
                 response.send(header).expect("channel_dropped");
             }
-            NodeCommandWithChannel::GetMultipleHeaders((command, response)) => {
-                let headers = match command.0 {
-                    MultipleHeaderQuery::GetVerified { from, amount } => self
-                        .node
-                        .request_verified_headers(&from, amount)
-                        .await
-                        .unwrap(),
-                    MultipleHeaderQuery::Range {
-                        start_height,
-                        end_height,
-                    } => match (start_height, end_height) {
-                        (None, None) => self.node.get_headers(..).await,
-                        (Some(start), None) => self.node.get_headers(start..).await,
-                        (None, Some(end)) => self.node.get_headers(..=end).await,
-                        (Some(start), Some(end)) => self.node.get_headers(start..=end).await,
-                    }
-                    .ok()
-                    .unwrap(),
-                };
-
+            NodeCommandWithChannel::GetVerifiedHeaders((command, response)) => {
+                let GetVerifiedHeaders { from, amount } = command;
+                let headers = self
+                    .node
+                    .request_verified_headers(&from, amount)
+                    .await
+                    .unwrap();
+                response.send(headers).expect("channel_dropped");
+            }
+            NodeCommandWithChannel::GetHeadersRange((command, response)) => {
+                let GetHeadersRange {
+                    start_height,
+                    end_height,
+                } = command;
+                let headers = match (start_height, end_height) {
+                    (None, None) => self.node.get_headers(..).await,
+                    (Some(start), None) => self.node.get_headers(start..).await,
+                    (None, Some(end)) => self.node.get_headers(..=end).await,
+                    (Some(start), Some(end)) => self.node.get_headers(start..=end).await,
+                }
+                .ok()
+                .unwrap();
                 response.send(headers).expect("channel_dropped");
             }
             NodeCommandWithChannel::LastSeenNetworkHead((_, response)) => {
@@ -326,7 +316,7 @@ struct WorkerConnector {
 
     // keep a MessagePort for each client to send messages over, as well as callback responsible
     // for forwarding messages back
-    clients: Vec<(MessagePort, Closure<dyn Fn(MessageEvent)>)>,
+    clients: Vec<WorkerClientConnection>,
 
     // sends events back to the main loop for processing
     command_channel: mpsc::Sender<WorkerMessage>,
