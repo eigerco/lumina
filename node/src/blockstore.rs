@@ -13,6 +13,12 @@ pub type InMemoryBlockstore = blockstore::InMemoryBlockstore<MAX_MH_SIZE>;
 /// [`RedbBlockstore`]: blockstore::RedbBlockstore
 pub type RedbBlockstore = blockstore::RedbBlockstore;
 
+#[cfg(not(target_arch = "wasm32"))]
+/// A [`RedbBlockstore`].
+///
+/// [`RedbBlockstore`]: blockstore::RedbBlockstore
+pub type RedbBlockstore = blockstore::RedbBlockstore;
+
 #[cfg(target_arch = "wasm32")]
 /// An [`IndexedDbBlockstore`].
 ///
