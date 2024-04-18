@@ -6,6 +6,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.1.1...lumina-node-v0.2.0) - 2024-04-18
+
+### Added
+- *(cli)* [**breaking**] Replace sled stores with redb stores ([#267](https://github.com/eigerco/lumina/pull/267))
+- *(node)* Implement `RedbStore` ([#266](https://github.com/eigerco/lumina/pull/266))
+- *(node/p2p)* Relax internal `Send` bounds ([#260](https://github.com/eigerco/lumina/pull/260))
+- [**breaking**] Refactor RowId/SampleId/NamespacedDataId related API ([#236](https://github.com/eigerco/lumina/pull/236))
+- Expose get_sampling_metadata in node and node-wasm ([#234](https://github.com/eigerco/lumina/pull/234))
+- *(node)* implement fraud-sub and services stopping on valid befp ([#233](https://github.com/eigerco/lumina/pull/233))
+- *(types)* add encoding check when verifying befp ([#231](https://github.com/eigerco/lumina/pull/231))
+- feat!(node): Implement DASer ([#223](https://github.com/eigerco/lumina/pull/223))
+- *(blockstore)* add IndexedDb blockstore ([#221](https://github.com/eigerco/lumina/pull/221))
+- feat!(node): use generic blockstore in node ([#218](https://github.com/eigerco/lumina/pull/218))
+- *(node)* Extend header Store for use with DAS-er ([#209](https://github.com/eigerco/lumina/pull/209))
+- *(node)* Integrate bitswap protocol for shwap ([#202](https://github.com/eigerco/lumina/pull/202))
+- *(lumina-node)* update the bootstrap peers for testnets ([#184](https://github.com/eigerco/lumina/pull/184))
+
+### Fixed
+- fix!(node/sled_store): Use `transaction` when more than one value get read ([#230](https://github.com/eigerco/lumina/pull/230))
+
+### Other
+- *(node)* [**breaking**] Remove sled store implementation ([#268](https://github.com/eigerco/lumina/pull/268))
+- *(node)* Upgrade blockstore, beetswap, and leopard-codec ([#264](https://github.com/eigerco/lumina/pull/264))
+- *(node)* Upgrade blockstore and beetswap ([#259](https://github.com/eigerco/lumina/pull/259))
+- *(node)* minor cleanup of `parse_request` ([#258](https://github.com/eigerco/lumina/pull/258))
+- *(node)* fix unused warnings on HeaderRequestExt ([#220](https://github.com/eigerco/lumina/pull/220))
+- *(node)* Replace unmaintained tempdir and outdated quinn ([#214](https://github.com/eigerco/lumina/pull/214))
+- chore!(types): Shwap API changes for consistency  ([#212](https://github.com/eigerco/lumina/pull/212))
+- *(node)* Move p2p related files in p2p directory ([#208](https://github.com/eigerco/lumina/pull/208))
+- Update libp2p to 0.53.2 ([#203](https://github.com/eigerco/lumina/pull/203))
+
 ## [0.1.1](https://github.com/eigerco/lumina/compare/lumina-node-v0.1.0...lumina-node-v0.1.1) - 2024-01-15
 
 ### Other
