@@ -8,6 +8,8 @@ async function fetch_config() {
 
   console.log("Received config:", json);
 
+  window.nconfig = NodeConfig;
+
   let config = NodeConfig.default(json.network);
   if (json.bootnodes.length !== 0) {
     config.bootnodes = json.bootnodes;
@@ -41,7 +43,7 @@ async function show_stats(node) {
     return
   }
 
-  //console.log(network_head);
+  console.log(network_head);
   const square_rows = network_head.dah.row_roots.length;
   const square_cols = network_head.dah.column_roots.length;
 
@@ -111,6 +113,7 @@ async function main(document, window) {
   window.driver = await new NodeDriver();
 
   bind_config(await fetch_config());
+  //return;
 
   if (await window.driver.is_running() === true) {
     document.querySelectorAll('.config').forEach(elem => elem.disabled = true);

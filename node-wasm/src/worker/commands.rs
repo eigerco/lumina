@@ -1,9 +1,11 @@
 use std::fmt::Debug;
 
-use futures::future::{BoxFuture, FutureExt, TryFutureExt};
+use enum_as_inner::EnumAsInner;
+//use futures::future::{BoxFuture, FutureExt, TryFutureExt};
 use libp2p::Multiaddr;
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
-use tokio::sync::oneshot;
+use tracing::error;
 
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
@@ -13,9 +15,95 @@ use lumina_node::syncer::SyncingInfo;
 
 use crate::node::WasmNodeConfig;
 use crate::worker::Result;
-use crate::worker::{CommandResponseChannel, NodeCommandResponse, NodeCommandType};
+use crate::worker::WorkerError;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) enum NodeCommand {
+    IsRunning,
+    StartNode(WasmNodeConfig),
+    GetLocalPeerId,
+    GetSyncerInfo,
+    GetPeerTrackerInfo,
+    GetNetworkInfo,
+    GetConnectedPeers,
+    SetPeerTrust {
+        peer_id: PeerId,
+        is_trusted: bool,
+    },
+    WaitConnected {
+        trusted: bool,
+    },
+    GetListeners,
+    RequestHeader(SingleHeaderQuery),
+    GetVerifiedHeaders {
+        from: ExtendedHeader,
+        amount: u64,
+    },
+    GetHeadersRange {
+        start_height: Option<u64>,
+        end_height: Option<u64>,
+    },
+    GetHeader(SingleHeaderQuery),
+    LastSeenNetworkHead,
+    GetSamplingMetadata {
+        height: u64,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) enum SingleHeaderQuery {
+    Head,
+    ByHash(Hash),
+    ByHeight(u64),
+}
+
+#[derive(Serialize, Deserialize, Debug, EnumAsInner)]
+pub(crate) enum WorkerResponse {
+    IsRunning(bool),
+    NodeStarted(Result<()>),
+    LocalPeerId(String),
+    SyncerInfo(Result<SyncingInfo>),
+    PeerTrackerInfo(PeerTrackerInfo),
+    NetworkInfo(Result<NetworkInfoSnapshot>),
+    ConnectedPeers(Result<Vec<String>>),
+    SetPeerTrust(Result<()>),
+    Connected(Result<()>),
+    Listeners(Result<Vec<Multiaddr>>),
+    Header(Result<ExtendedHeader>),
+    Headers(Result<Vec<ExtendedHeader>>),
+    LastSeenNetworkHead(Option<ExtendedHeader>),
+    SamplingMetadata(Result<Option<SamplingMetadata>>),
+}
+
+pub(crate) trait CheckableResponse {
+    type Output;
+    fn check_variant(self) -> Result<Self::Output, WorkerError>;
+}
+
+impl<T> CheckableResponse for Result<T, WorkerResponse> {
+    type Output = T;
+
+    fn check_variant(self) -> Result<Self::Output, WorkerError> {
+        self.map_err(|response| {
+            error!("invalid response, received: {response:?}");
+            WorkerError::InvalidResponseType
+        })
+    }
+}
+
+/*
+#[derive(Debug, Serialize, Deserialize)]
+enum WorkerErrorNg {
+    NodeNotRunning,
+    //NodeAlreadyRunning,
+}
+*/
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) enum NodeStartError {}
+
+/*
 macro_rules! define_command_from_impl {
     ($common_name:ident, $command_name:ident) => {
         impl From<$command_name> for $common_name {
@@ -149,9 +237,4 @@ define_command!(GetHeader(SingleHeaderQuery) -> ExtendedHeader);
 define_command!(LastSeenNetworkHead -> Option<ExtendedHeader>);
 define_command!(GetSamplingMetadata { height: u64 } -> SamplingMetadata);
 
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) enum SingleHeaderQuery {
-    Head,
-    ByHash(Hash),
-    ByHeight(u64),
-}
+*/
