@@ -1,35 +1,36 @@
 use std::fmt::Debug;
 
-use libp2p::Multiaddr;
-use libp2p::PeerId;
-use lumina_node::store::SamplingMetadata;
+use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::{from_value, to_value};
 use thiserror::Error;
 use tokio::sync::mpsc;
-use tokio::sync::Mutex;
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, warn};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::spawn_local;
-use web_sys::{MessageEvent, MessagePort, SharedWorker};
+use web_sys::MessagePort;
 
 use celestia_types::ExtendedHeader;
 use lumina_node::node::{Node, NodeError};
-use lumina_node::store::{IndexedDbStore, Store};
+use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 use lumina_node::syncer::SyncingInfo;
 
 use crate::node::WasmNodeConfig;
-use crate::utils::WorkerSelf;
-use crate::worker::commands::*; // TODO
+use crate::worker::channel::{WorkerMessage, WorkerMessageServer};
+use crate::worker::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
+mod channel;
 pub(crate) mod commands;
 
+pub(crate) use channel::WorkerClient;
+
+const WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH: usize = 64;
+
 /// actual type that's sent over a js message port
-pub(crate) type WireMessage = Option<Result<WorkerResponse, WorkerError>>;
+type Result<T, E = WorkerError> = std::result::Result<T, E>;
 
 #[derive(Debug, Serialize, Deserialize, Error)]
 pub enum WorkerError {
+    /*
     #[error("Command response channel has been dropped before response could be sent, should not happen")]
     SharedWorkerChannelResponseChannelDropped,
     #[error("Command channel to lumina worker closed, should not happen")]
@@ -40,7 +41,7 @@ pub enum WorkerError {
     SharedWorkerAlreadyRunning,
     #[error("Worker is still handling previous command")]
     WorkerBusy,
-
+    */
     #[error("Node hasn't been started yet")]
     NodeNotRunning,
     #[error("Node has already been started")]
@@ -73,101 +74,6 @@ impl From<NodeError> for WorkerError {
     }
 }
 
-type Result<T, E = WorkerError> = std::result::Result<T, E>;
-type WorkerClientConnection = (MessagePort, Closure<dyn Fn(MessageEvent)>);
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct NodeCommandResponse<T>(pub T::Output)
-where
-    T: NodeCommandType,
-    T::Output: Debug + Serialize;
-
-pub trait NodeCommandType: Debug + Into<NodeCommand> {
-    type Output;
-}
-
-pub struct SharedWorkerChannel {
-    _onmessage: Closure<dyn Fn(MessageEvent)>,
-    channel: MessagePort,
-    response_channel: Mutex<mpsc::Receiver<WireMessage>>,
-}
-
-impl SharedWorkerChannel {
-    pub fn new(channel: MessagePort) -> Self {
-        let (response_tx, response_rx) = mpsc::channel(64);
-
-        let near_tx = response_tx.clone();
-        let onmessage_callback = move |ev: MessageEvent| {
-            let local_tx = near_tx.clone();
-            spawn_local(async move {
-                let message_data = ev.data();
-
-                let data = from_value(message_data)
-                    .map_err(|e| {
-                        error!("could not convert from JsValue: {e}");
-                    })
-                    .ok();
-
-                if let Err(e) = local_tx.send(data).await {
-                    error!("message forwarding channel closed, should not happen: {e}");
-                }
-            })
-        };
-
-        // TODO: one of the ways to make sure we're synchronised with lumina in worker is forcing
-        // request-response interface over the channel (waiting for previous command to be handled
-        // before sending next one). Is it better for lumina to maintain this inside the worker?
-        //let (response_tx, mut response_rx) = mpsc::channel(1);
-
-        /*
-                // small task running concurently, which converts js's callback style into
-                // rust's awaiting on a channel message passing style
-                spawn_local(async move {
-                    loop {
-                        let message = message_rx.recv().await.unwrap();
-                        let response_channel: oneshot::Sender<OUT> = response_rx.recv().await.unwrap();
-                        if response_channel.send(message).is_err() {
-                            warn!(
-                                "response channel closed before response could be sent, dropping message"
-                            );
-                        }
-                    }
-                });
-        */
-
-        let onmessage = Closure::new(onmessage_callback);
-        channel.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
-        channel.start();
-        Self {
-            response_channel: Mutex::new(response_rx),
-            _onmessage: onmessage,
-            channel,
-        }
-    }
-
-    fn send(&self, command: NodeCommand) -> Result<(), WorkerError> {
-        let v =
-            to_value(&command).map_err(|e| WorkerError::CouldNotSerialiseCommand(e.to_string()))?;
-        self.channel.post_message(&v).map_err(|e| {
-            WorkerError::CouldNotSendCommand(e.as_string().unwrap_or("UNDEFINED".to_string()))
-        })
-    }
-
-    pub async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse, WorkerError> {
-        let mut channel = self.response_channel.lock().await;
-        self.send(command)?;
-
-        let message: WireMessage = channel
-            .recv()
-            .await
-            .ok_or(WorkerError::ResponseChannelDropped)?;
-        message.ok_or(WorkerError::EmptyWorkerResponse)?
-    }
-}
-
-// TODO: cleanup JS objects on drop
-// impl Drop
-
 struct NodeWorker {
     node: Node<IndexedDbStore>,
 }
@@ -179,7 +85,7 @@ impl NodeWorker {
         if let Ok(store_height) = config.store.head_height().await {
             info!("Initialised store with head height: {store_height}");
         } else {
-            info!("Initialized new empty store");
+            info!("Initialised new empty store");
         }
 
         let node = Node::new(config).await.ok().unwrap();
@@ -312,152 +218,46 @@ impl NodeWorker {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
-enum WorkerMessage {
-    NewConnection(MessagePort),
-    Command((NodeCommand, ClientId)),
-}
-
-#[derive(Debug)]
-struct ClientId(usize);
-
-struct WorkerConnector {
-    // same onconnect callback is used throughtout entire Worker lifetime.
-    // Keep a reference to make sure it doesn't get dropped.
-    _onconnect_callback: Closure<dyn Fn(MessageEvent)>,
-
-    // keep a MessagePort for each client to send messages over, as well as callback responsible
-    // for forwarding messages back
-    clients: Vec<WorkerClientConnection>,
-
-    // sends events back to the main loop for processing
-    command_channel: mpsc::Sender<WorkerMessage>,
-}
-
-impl WorkerConnector {
-    fn new(command_channel: mpsc::Sender<WorkerMessage>) -> Self {
-        let worker_scope = SharedWorker::worker_self();
-
-        let near_tx = command_channel.clone();
-        let onconnect_callback: Closure<dyn Fn(MessageEvent)> =
-            Closure::new(move |ev: MessageEvent| {
-                let local_tx = near_tx.clone();
-                spawn_local(async move {
-                    let Ok(port) = ev.ports().at(0).dyn_into() else {
-                        error!("received connection event without MessagePort, should not happen");
-                        return;
-                    };
-
-                    if let Err(e) = local_tx.send(WorkerMessage::NewConnection(port)).await {
-                        error!("command channel inside worker closed, should not happen: {e}");
-                    }
-                })
-            });
-
-        worker_scope.set_onconnect(Some(onconnect_callback.as_ref().unchecked_ref()));
-
-        Self {
-            _onconnect_callback: onconnect_callback,
-            clients: Vec::with_capacity(1), // we usually expect to have exactly one client
-            command_channel,
-        }
-    }
-
-    fn add(&mut self, port: MessagePort) {
-        let client_id = self.clients.len();
-
-        let near_tx = self.command_channel.clone();
-        let client_message_callback: Closure<dyn Fn(MessageEvent)> =
-            Closure::new(move |ev: MessageEvent| {
-                let local_tx = near_tx.clone();
-                spawn_local(async move {
-                    let message_data = ev.data();
-                    let Ok(command) = from_value::<NodeCommand>(message_data) else {
-                        warn!("could not deserialize message from client {client_id}");
-                        return;
-                    };
-
-                    if let Err(e) = local_tx
-                        .send(WorkerMessage::Command((command, ClientId(client_id))))
-                        .await
-                    {
-                        error!("command channel inside worker closed, should not happen: {e}");
-                    }
-                })
-            });
-        port.set_onmessage(Some(client_message_callback.as_ref().unchecked_ref()));
-
-        self.clients.push((port, client_message_callback));
-
-        info!("SharedWorker ready to receive commands from client {client_id}");
-    }
-
-    fn respond_to(&self, client: ClientId, msg: WorkerResponse) {
-        self.send_response(client, Ok(msg))
-    }
-
-    fn respond_err_to(&self, client: ClientId, error: WorkerError) {
-        self.send_response(client, Err(error))
-    }
-
-    fn send_response(&self, client: ClientId, msg: Result<WorkerResponse, WorkerError>) {
-        let offset = client.0;
-
-        let wire_message: WireMessage = Some(msg);
-
-        let message = match to_value(&wire_message) {
-            Ok(jsvalue) => jsvalue,
-            Err(e) => {
-                warn!("provided response could not be coverted to JsValue: {e}, sending undefined instead");
-                JsValue::UNDEFINED // we need to send something, client is waiting for a response
-            }
-        };
-
-        // XXX defensive programming with array checking?
-        if let Err(e) = self.clients[offset].0.post_message(&message) {
-            error!("could not post response message to client {client:?}: {e:?}");
-        }
-    }
-}
-
 #[wasm_bindgen]
 pub async fn run_worker(queued_connections: Vec<MessagePort>) {
-    let (tx, mut rx) = mpsc::channel(64);
-    let mut connector = WorkerConnector::new(tx.clone());
+    let (tx, mut rx) = mpsc::channel(WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH);
+    let mut message_server = WorkerMessageServer::new(tx.clone());
 
     for connection in queued_connections {
-        connector.add(connection);
+        message_server.add(connection);
     }
 
     let mut worker = None;
     while let Some(message) = rx.recv().await {
         match message {
             WorkerMessage::NewConnection(connection) => {
-                connector.add(connection);
+                message_server.add(connection);
             }
             WorkerMessage::Command((command, client_id)) => {
+                info!("received from {client_id:?}: {command:?}");
                 let Some(worker) = &mut worker else {
                     match command {
                         NodeCommand::IsRunning => {
-                            connector.respond_to(client_id, WorkerResponse::IsRunning(false));
+                            message_server.respond_to(client_id, WorkerResponse::IsRunning(false));
                         }
                         NodeCommand::StartNode(config) => {
                             worker = Some(NodeWorker::new(config).await);
-                            connector.respond_to(client_id, WorkerResponse::NodeStarted(Ok(())));
+                            message_server
+                                .respond_to(client_id, WorkerResponse::NodeStarted(Ok(())));
                         }
                         _ => {
                             warn!("Worker not running");
-                            connector.respond_err_to(client_id, WorkerError::NodeNotRunning);
+                            message_server.respond_err_to(client_id, WorkerError::NodeNotRunning);
                         }
                     }
                     continue;
                 };
 
-                trace!("received from {client_id:?}: {command:?}");
-                worker.process_command(command).await;
+                let response = worker.process_command(command).await;
+                message_server.respond_to(client_id, response);
             }
         }
     }
 
-    error!("Worker exited, should not happen");
+    error!("Channel to WorkerMessageServer closed, should not happen");
 }

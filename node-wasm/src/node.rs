@@ -16,8 +16,8 @@ use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 
 use crate::utils::{js_value_from_display, JsContext, Network};
-use crate::worker::commands::{CheckableResponse, NodeCommand, SingleHeaderQuery};
-use crate::worker::SharedWorkerChannel;
+use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
+use crate::worker::WorkerClient;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::Result;
 
@@ -41,7 +41,7 @@ pub struct WasmNodeConfig {
 struct NodeDriver {
     _worker: SharedWorker,
     _onerror_callback: Closure<dyn Fn(MessageEvent)>,
-    channel: SharedWorkerChannel,
+    channel: WorkerClient,
 }
 
 #[wasm_bindgen]
@@ -50,29 +50,29 @@ impl NodeDriver {
     /// Note that single Shared Worker can be accessed from multiple tabs, so Lumina may already
     /// be running be running, before `NodeDriver::start` call.
     #[wasm_bindgen(constructor)]
-    pub async fn new() -> NodeDriver {
+    pub async fn new() -> Result<NodeDriver> {
         let mut opts = WorkerOptions::new();
         opts.type_(WorkerType::Module);
         opts.name(LUMINA_SHARED_WORKER_NAME);
         let worker = SharedWorker::new_with_worker_options("/js/worker.js", &opts)
-            .expect("could not worker");
+            .map_err(|e| JsError::new(&format!("could not create SharedWorker: {e:?}")))?;
 
         let onerror_callback: Closure<dyn Fn(MessageEvent)> = Closure::new(|ev: MessageEvent| {
-            error!("received error from shared worker: {ev:?}");
+            error!("received error from SharedWorker: {ev:?}");
         });
         worker.set_onerror(Some(onerror_callback.as_ref().unchecked_ref()));
 
-        let channel = SharedWorkerChannel::new(worker.port());
+        let channel = WorkerClient::new(worker.port());
 
-        Self {
+        Ok(Self {
             _worker: worker,
             _onerror_callback: onerror_callback,
             channel,
-        }
+        })
     }
 
     /// Check whether Lumina is currently running
-    pub async fn is_running(&mut self) -> Result<bool> {
+    pub async fn is_running(&self) -> Result<bool> {
         let command = NodeCommand::IsRunning;
         let response = self.channel.exec(command).await?;
         let running = response.into_is_running().check_variant()?;
@@ -210,10 +210,10 @@ impl NodeDriver {
 
         let result = headers?
             .iter()
-            .map(|h| to_value(&h).unwrap()) // XXX
-            .collect();
+            .map(|h| to_value(&h))
+            .collect::<Result<Array, _>>();
 
-        Ok(result)
+        Ok(result?)
     }
 
     /// Get current header syncing info.
