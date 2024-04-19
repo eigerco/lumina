@@ -6,14 +6,14 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 #[derive(Debug, Serialize, Deserialize)]
-pub struct NetworkInfoSnapshot {
+pub(crate) struct NetworkInfoSnapshot {
     pub num_peers: usize,
     connection_counters: ConnectionCountersSnapshot,
 }
 
 #[wasm_bindgen]
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ConnectionCountersSnapshot {
+pub(crate) struct ConnectionCountersSnapshot {
     pub num_connections: u32,
     pub num_pending: u32,
     pub num_pending_incoming: u32,

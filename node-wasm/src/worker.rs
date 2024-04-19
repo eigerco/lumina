@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::marker::PhantomData;
 
 use libp2p::Multiaddr;
 use libp2p::PeerId;
@@ -8,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use thiserror::Error;
 use tokio::sync::mpsc;
+use tokio::sync::Mutex;
 use tracing::{error, info, trace, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -21,6 +21,7 @@ use lumina_node::syncer::SyncingInfo;
 use crate::node::WasmNodeConfig;
 use crate::utils::WorkerSelf;
 use crate::worker::commands::*; // TODO
+use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 pub(crate) mod commands;
 
@@ -55,9 +56,9 @@ pub enum WorkerError {
     InvalidResponseType,
 
     #[error("response message could not be serialised, should not happen: {0}")]
-    CouldNotSerialiseResponse(String),
+    CouldNotSerialiseCommand(String),
     #[error("response message could not be sent: {0}")]
-    CouldNotSendResponse(String),
+    CouldNotSendCommand(String),
 
     #[error("Received empty worker response, should not happen")]
     EmptyWorkerResponse,
@@ -85,19 +86,15 @@ pub trait NodeCommandType: Debug + Into<NodeCommand> {
     type Output;
 }
 
-pub struct SharedWorkerChannel<IN> {
+pub struct SharedWorkerChannel {
     _onmessage: Closure<dyn Fn(MessageEvent)>,
     channel: MessagePort,
-    response_channel: mpsc::Receiver<WireMessage>,
-    send_type: PhantomData<IN>,
+    response_channel: Mutex<mpsc::Receiver<WireMessage>>,
 }
 
-impl<IN> SharedWorkerChannel<IN>
-where
-    IN: Serialize,
-{
+impl SharedWorkerChannel {
     pub fn new(channel: MessagePort) -> Self {
-        let (response_tx, mut response_rx) = mpsc::channel(64);
+        let (response_tx, response_rx) = mpsc::channel(64);
 
         let near_tx = response_tx.clone();
         let onmessage_callback = move |ev: MessageEvent| {
@@ -112,7 +109,7 @@ where
                     .ok();
 
                 if let Err(e) = local_tx.send(data).await {
-                    error!("message forwarding channel closed, should not happen");
+                    error!("message forwarding channel closed, should not happen: {e}");
                 }
             })
         };
@@ -142,47 +139,25 @@ where
         channel.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
         channel.start();
         Self {
-            response_channel: response_rx,
+            response_channel: Mutex::new(response_rx),
             _onmessage: onmessage,
             channel,
-            send_type: PhantomData,
         }
     }
 
-    pub async fn send(&self, command: IN) -> Result<(), WorkerError> {
-        let v = to_value(&command)
-            .map_err(|e| WorkerError::CouldNotSerialiseResponse(e.to_string()))?;
+    fn send(&self, command: NodeCommand) -> Result<(), WorkerError> {
+        let v =
+            to_value(&command).map_err(|e| WorkerError::CouldNotSerialiseCommand(e.to_string()))?;
         self.channel.post_message(&v).map_err(|e| {
-            WorkerError::CouldNotSendResponse(e.as_string().unwrap_or("UNDEFINED".to_string()))
+            WorkerError::CouldNotSendCommand(e.as_string().unwrap_or("UNDEFINED".to_string()))
         })
-
-        /*
-        self.send_enum(command.into());
-                let (tx, rx) = oneshot::channel();
-
-                self.response_channels
-                    .send(tx)
-                    .await
-                    .map_err(|_| WorkerError::SharedWorkerCommandChannelClosed)?;
-
-                Ok(rx.map_ok_or_else(
-                    |_e| Err(WorkerError::SharedWorkerChannelResponseChannelDropped),
-                    |r| match NodeCommandResponse::<T>::try_from(r) {
-                        Ok(v) => Ok(v.0),
-                        Err(_) => Err(WorkerError::SharedWorkerChannelInvalidType),
-                    },
-                ))
-            }
-
-            fn send_enum(&self, msg: NodeCommand) {
-                let v = to_value(&msg).unwrap();
-                self.channel.post_message(&v).expect("err post");
-        */
     }
 
-    pub async fn recv(&self) -> Result<WorkerResponse, WorkerError> {
-        let message: WireMessage = self
-            .response_channel
+    pub async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse, WorkerError> {
+        let mut channel = self.response_channel.lock().await;
+        self.send(command)?;
+
+        let message: WireMessage = channel
             .recv()
             .await
             .ok_or(WorkerError::ResponseChannelDropped)?;
@@ -214,6 +189,10 @@ impl NodeWorker {
 
     async fn get_syncer_info(&mut self) -> Result<SyncingInfo> {
         Ok(self.node.syncer_info().await?)
+    }
+
+    async fn get_network_info(&mut self) -> Result<NetworkInfoSnapshot> {
+        Ok(self.node.network_info().await?.into())
     }
 
     async fn set_peer_trust(&mut self, peer_id: PeerId, is_trusted: bool) -> Result<()> {
@@ -264,7 +243,7 @@ impl NodeWorker {
         from: &ExtendedHeader,
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
-        Ok(self.node.request_verified_headers(&from, amount).await?)
+        Ok(self.node.request_verified_headers(from, amount).await?)
     }
 
     async fn get_headers_range(
@@ -299,9 +278,7 @@ impl NodeWorker {
                 WorkerResponse::PeerTrackerInfo(peer_tracker_info)
             }
             NodeCommand::GetNetworkInfo => {
-                let network_info = self.node.network_info().await;
-                //WorkerResponse::NetworkInfo(network_info)
-                todo!()
+                WorkerResponse::NetworkInfo(self.get_network_info().await)
             }
             NodeCommand::GetConnectedPeers => {
                 WorkerResponse::ConnectedPeers(self.get_connected_peers().await)
@@ -335,6 +312,7 @@ impl NodeWorker {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum WorkerMessage {
     NewConnection(MessagePort),
     Command((NodeCommand, ClientId)),

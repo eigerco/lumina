@@ -8,8 +8,6 @@ async function fetch_config() {
 
   console.log("Received config:", json);
 
-  window.nconfig = NodeConfig;
-
   let config = NodeConfig.default(json.network);
   if (json.bootnodes.length !== 0) {
     config.bootnodes = json.bootnodes;
@@ -108,12 +106,9 @@ async function start_node(config) {
 async function main(document, window) {
   await init();
 
-  //window.worker = new SharedWorker('/js/worker.js', {name: 'lumina', type: 'module'});
-
   window.driver = await new NodeDriver();
 
   bind_config(await fetch_config());
-  //return;
 
   if (await window.driver.is_running() === true) {
     document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
@@ -129,7 +124,7 @@ async function main(document, window) {
     document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
   });
 
-  setInterval(async () => await show_stats(window.driver), 1000)
+  //setInterval(async () => await show_stats(window.driver), 1000)
 }
 
 await main(document, window);
