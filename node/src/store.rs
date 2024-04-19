@@ -57,6 +57,9 @@ pub trait Store: Send + Sync + Debug {
     /// Returns the header of a specific height.
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
 
+    /// Returns when new head is available in the `Store`.
+    async fn wait_new_head(&self) -> u64;
+
     /// Returns when `height` is available in the `Store`.
     async fn wait_height(&self, height: u64) -> Result<()>;
 
@@ -113,30 +116,6 @@ pub trait Store: Send + Sync + Debug {
     /// This method does not validate or verify that `header` is indeed correct.
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()>;
 
-    /// Returns height of the lowest header that wasn't sampled yet
-    async fn next_unsampled_height(&self) -> Result<u64>;
-
-    /// Sets or updates sampling result for the header.
-    ///
-    /// In case of update, provided CID list is appended onto the existing one, as not to lose
-    /// references to previously sampled blocks.
-    ///
-    /// Returns next unsampled header or error, if occured
-    async fn update_sampling_metadata(
-        &self,
-        height: u64,
-        accepted: bool,
-        cids: Vec<Cid>,
-    ) -> Result<u64>;
-
-    /// Gets the sampling metadata for the height.
-    ///
-    /// `Err(StoreError::NotFound)` indicates that both header **and** sampling metadata for the requested
-    /// height are not in the store.
-    ///
-    /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
-    async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
-
     /// Append a range of headers maintaining continuity from the genesis to the head.
     ///
     /// # Note
@@ -181,6 +160,28 @@ pub trait Store: Send + Sync + Debug {
 
         self.append_unchecked(headers).await
     }
+
+    /// Sets or updates sampling result for the header.
+    ///
+    /// In case of update, provided CID list is appended onto the existing one, as not to lose
+    /// references to previously sampled blocks.
+    async fn update_sampling_metadata(
+        &self,
+        height: u64,
+        accepted: bool,
+        cids: Vec<Cid>,
+    ) -> Result<()>;
+
+    /// Returns true if sampling metadata exists in the store for the specified height.
+    async fn has_sampling_metadata(&self, height: u64) -> bool;
+
+    /// Gets the sampling metadata for the height.
+    ///
+    /// `Err(StoreError::NotFound)` indicates that both header **and** sampling metadata for the requested
+    /// height are not in the store.
+    ///
+    /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
+    async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].
@@ -736,21 +737,15 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 7);
-
         store
             .update_sampling_metadata(7, true, vec![])
             .await
             .unwrap();
 
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 9);
-
         store
             .update_sampling_metadata(9, true, vec![])
             .await
             .unwrap();
-
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 10);
 
         store
             .update_sampling_metadata(10, true, vec![])
@@ -793,13 +788,11 @@ mod tests {
             .update_sampling_metadata(1, false, vec![cid0])
             .await
             .unwrap();
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
 
         store
             .update_sampling_metadata(1, false, vec![])
             .await
             .unwrap();
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
         assert!(!sampling_data.accepted);
@@ -809,7 +802,6 @@ mod tests {
             .update_sampling_metadata(1, true, vec![cid1])
             .await
             .unwrap();
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
         assert!(sampling_data.accepted);
@@ -819,7 +811,6 @@ mod tests {
             .update_sampling_metadata(1, true, vec![cid0, cid2])
             .await
             .unwrap();
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
         assert!(sampling_data.accepted);
@@ -865,8 +856,6 @@ mod tests {
             .update_sampling_metadata(5, false, vec![])
             .await
             .unwrap();
-
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 3);
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids_sampled, cids);

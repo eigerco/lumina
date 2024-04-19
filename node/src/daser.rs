@@ -8,14 +8,17 @@
 //!
 //! [`Sample`]: celestia_types::sample::Sample
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
+use std::pin::pin;
 use std::sync::Arc;
 
+use celestia_tendermint::Time;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use futures::future::{Fuse, FusedFuture};
 use futures::stream::FuturesUnordered;
-use futures::StreamExt;
-use instant::Instant;
+use futures::{FutureExt, StreamExt};
+use instant::{Duration, Instant};
 use rand::Rng;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
@@ -27,6 +30,7 @@ use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
 
 const MAX_SAMPLES_NEEDED: usize = 16;
+const SAMPLING_WINDOW: Duration = Duration::from_secs(14678036);
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
 
@@ -68,9 +72,7 @@ impl Daser {
         let mut worker = Worker::new(args, cancellation_token.child_token())?;
 
         spawn(async move {
-            if let Err(e) = worker.run().await {
-                error!("Fatal DASer error: {e}");
-            }
+            worker.run().await;
         });
 
         Ok(Daser { cancellation_token })
@@ -98,6 +100,15 @@ where
     p2p: Arc<P2p>,
     store: Arc<S>,
     max_samples_needed: usize,
+    queue: VecDeque<SamplingArgs>,
+    prev_head: Option<u64>,
+}
+
+#[derive(Debug)]
+struct SamplingArgs {
+    height: u64,
+    square_width: u16,
+    time: Time,
 }
 
 impl<S> Worker<S>
@@ -110,72 +121,187 @@ where
             p2p: args.p2p,
             store: args.store,
             max_samples_needed: MAX_SAMPLES_NEEDED,
+            queue: VecDeque::new(),
+            prev_head: None,
         })
     }
 
-    async fn run(&mut self) -> Result<()> {
-        let cancellation_token = self.cancellation_token.clone();
+    async fn run(&mut self) {
+        let mut sampling_fut = pin!(Fuse::terminated());
+
+        self.populate_queue().await;
 
         loop {
+            if sampling_fut.is_terminated() {
+                if let Some(args) = self.queue.pop_front() {
+                    if !in_sampling_window(args.time) {
+                        // Queue is sorted, so as soon as we reach a block
+                        // that is not in the sampling window, it means the
+                        // rest wouldn't be either.
+                        self.queue.clear();
+                        continue;
+                    }
+
+                    sampling_fut.set(
+                        sample_block(
+                            self.p2p.clone(),
+                            args.height,
+                            args.square_width,
+                            self.max_samples_needed,
+                        )
+                        .fuse(),
+                    );
+                }
+            }
+
             select! {
-                _ = cancellation_token.cancelled() => break,
-                res = self.sample_next_block() => res?,
+                _ = self.cancellation_token.cancelled() => break,
+                res = &mut sampling_fut => match res {
+                    Ok((height, accepted, sampled_cids)) => {
+                        self.store
+                            .update_sampling_metadata(height, accepted, sampled_cids)
+                            .await
+                            .unwrap();
+                    }
+                    Err(_) => todo!(),
+                },
+                _ = self.store.wait_new_head() => {
+                    self.populate_queue().await;
+                }
+            }
+        }
+    }
+
+    async fn populate_queue(&mut self) {
+        let Ok(new_head) = self.store.head_height().await else {
+            return;
+        };
+
+        match self.prev_head {
+            Some(prev_head) => {
+                for height in prev_head + 1..=new_head {
+                    if self.store.has_sampling_metadata(height).await {
+                        continue;
+                    }
+
+                    let Ok(header) = self.store.get_by_height(height).await else {
+                        // Maybe header was pruned, continue to the next one.
+                        continue;
+                    };
+
+                    if !in_sampling_window(header.time()) {
+                        // Block is older than the sampling window, continue to the next one.
+                        continue;
+                    }
+
+                    queue_sampling(&mut self.queue, &header);
+                }
+            }
+            None => {
+                // Reverse iterate heights
+                for height in (1..=new_head).rev() {
+                    if self.store.has_sampling_metadata(height).await {
+                        continue;
+                    }
+
+                    let Ok(header) = self.store.get_by_height(height).await else {
+                        // We reached the tail of the known heights
+                        break;
+                    };
+
+                    if !in_sampling_window(header.time()) {
+                        // We reached the tail of the sampling window
+                        break;
+                    }
+
+                    queue_sampling(&mut self.queue, &header);
+                }
             }
         }
 
-        Ok(())
+        self.prev_head = Some(new_head);
+    }
+}
+
+/// Queue sampling in descending order
+fn queue_sampling(queue: &mut VecDeque<SamplingArgs>, header: &ExtendedHeader) {
+    let args = SamplingArgs {
+        height: header.height().value(),
+        time: header.time(),
+        square_width: header.dah.square_width(),
+    };
+
+    if queue.is_empty() || args.height >= queue.front().unwrap().height {
+        queue.push_front(args);
+        return;
     }
 
-    async fn sample_next_block(&mut self) -> Result<()> {
-        let height = self.store.next_unsampled_height().await?;
-        self.store.wait_height(height).await?;
-
-        let header = self.store.get_by_height(height).await?;
-        let (sampled_cids, accepted) = self.sample_block(&header).await?;
-
-        self.store
-            .update_sampling_metadata(height, accepted, sampled_cids)
-            .await?;
-
-        Ok(())
+    if args.height <= queue.back().unwrap().height {
+        queue.push_back(args);
+        return;
     }
 
-    async fn sample_block(&mut self, header: &ExtendedHeader) -> Result<(Vec<Cid>, bool)> {
-        let now = Instant::now();
-        let indexes = random_indexes(header.dah.square_width(), self.max_samples_needed);
-        let mut futs = FuturesUnordered::new();
+    let pos = match queue.binary_search_by(|x| args.height.cmp(&x.height)) {
+        Ok(pos) => pos,
+        Err(pos) => pos,
+    };
 
-        for (row_index, column_index) in indexes {
-            let fut = self
-                .p2p
-                .get_sample(row_index, column_index, header.height().value());
-            futs.push(fut);
+    queue.insert(pos, args);
+}
+
+async fn sample_block(
+    p2p: Arc<P2p>,
+    height: u64,
+    square_width: u16,
+    max_samples_needed: usize,
+) -> Result<(u64, bool, Vec<Cid>)> {
+    let now = Instant::now();
+    let indexes = random_indexes(square_width, max_samples_needed);
+    let mut futs = FuturesUnordered::new();
+
+    for (row_index, column_index) in indexes {
+        let fut = p2p.get_sample(row_index, column_index, height);
+        futs.push(fut);
+    }
+
+    let mut cids: Vec<Cid> = Vec::new();
+    let mut accepted = true;
+
+    while let Some(res) = futs.next().await {
+        match res {
+            Ok(sample) => cids.push(convert_cid(&sample.id.into())?),
+            // Validation is done at Bitswap level, through `ShwapMultihasher`.
+            // If the sample is not valid, it will never be delivered to us
+            // as the data of the CID. Because of that, the only signal
+            // that data sampling verification failed is query timing out.
+            Err(P2pError::BitswapQueryTimeout) => accepted = false,
+            Err(e) => return Err(e.into()),
         }
-
-        let mut cids: Vec<Cid> = Vec::new();
-        let mut accepted = true;
-
-        while let Some(res) = futs.next().await {
-            match res {
-                Ok(sample) => cids.push(convert_cid(&sample.id.into())?),
-                // Validation is done at Bitswap level, through `ShwapMultihasher`.
-                // If the sample is not valid, it will never be delivered to us
-                // as the data of the CID. Because of that, the only signal
-                // that data sampling verification failed is query timing out.
-                Err(P2pError::BitswapQueryTimeout) => accepted = false,
-                Err(e) => return Err(e.into()),
-            }
-        }
-
-        debug!(
-            "Data sampling of {} is {}. Took {:?}",
-            header.height(),
-            if accepted { "accepted" } else { "rejected" },
-            now.elapsed()
-        );
-
-        Ok((cids, accepted))
     }
+
+    debug!(
+        "Data sampling of {} is {}. Took {:?}",
+        height,
+        if accepted { "accepted" } else { "rejected" },
+        now.elapsed()
+    );
+
+    Ok((height, accepted, cids))
+}
+
+fn in_sampling_window(time: Time) -> bool {
+    let now = Time::now();
+
+    // Header is from the future! Thus, within sampling window.
+    if now < time {
+        return true;
+    }
+
+    let Ok(age) = now.duration_since(time) else {
+        return false;
+    };
+
+    age <= SAMPLING_WINDOW
 }
 
 fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16, u16)> {
