@@ -15,9 +15,9 @@ use lumina_node::network::{canonical_network_bootnodes, network_genesis, network
 use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 
-use crate::utils::{js_value_from_display, JsContext, Network};
+use crate::utils::{js_value_from_display, Network};
 use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
-use crate::worker::WorkerClient;
+use crate::worker::{WorkerClient, WorkerError};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::Result;
 
@@ -51,6 +51,7 @@ impl NodeDriver {
     /// be running be running, before `NodeDriver::start` call.
     #[wasm_bindgen(constructor)]
     pub async fn new() -> Result<NodeDriver> {
+        //let worker = spawn_worker(LUMINA_SHARED_WORKER_NAME, "/wasm/lumina_node_wasm.js")?;
         let mut opts = WorkerOptions::new();
         opts.type_(WorkerType::Module);
         opts.name(LUMINA_SHARED_WORKER_NAME);
@@ -58,7 +59,7 @@ impl NodeDriver {
             .map_err(|e| JsError::new(&format!("could not create SharedWorker: {e:?}")))?;
 
         let onerror_callback: Closure<dyn Fn(MessageEvent)> = Closure::new(|ev: MessageEvent| {
-            error!("received error from SharedWorker: {ev:?}");
+            error!("received error from SharedWorker: {:?}", ev.to_string());
         });
         worker.set_onerror(Some(onerror_callback.as_ref().unchecked_ref()));
 
@@ -313,14 +314,10 @@ impl WasmNodeConfig {
 
     pub(crate) async fn into_node_config(
         self,
-    ) -> Result<NodeConfig<IndexedDbBlockstore, IndexedDbStore>> {
+    ) -> Result<NodeConfig<IndexedDbBlockstore, IndexedDbStore>, WorkerError> {
         let network_id = network_id(self.network.into());
-        let store = IndexedDbStore::new(network_id)
-            .await
-            .js_context("Failed to open the store")?;
-        let blockstore = IndexedDbBlockstore::new(&format!("{network_id}-blockstore"))
-            .await
-            .js_context("Failed to open the blockstore")?;
+        let store = IndexedDbStore::new(network_id).await?;
+        let blockstore = IndexedDbBlockstore::new(&format!("{network_id}-blockstore")).await?;
 
         let p2p_local_keypair = Keypair::generate_ed25519();
 

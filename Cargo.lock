@@ -2883,6 +2883,8 @@ name = "lumina-node-wasm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "blockstore",
+ "celestia-tendermint",
  "celestia-types",
  "console_error_panic_hook",
  "enum-as-inner",

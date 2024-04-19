@@ -12,20 +12,6 @@ use web_sys::{SharedWorker, SharedWorkerGlobalScope};
 
 use lumina_node::network;
 
-pub(crate) trait WorkerSelf {
-    type GlobalScope;
-
-    fn worker_self() -> Self::GlobalScope;
-}
-
-impl WorkerSelf for SharedWorker {
-    type GlobalScope = SharedWorkerGlobalScope;
-
-    fn worker_self() -> Self::GlobalScope {
-        JsValue::from(js_sys::global()).into()
-    }
-}
-
 /// Supported Celestia networks.
 #[wasm_bindgen]
 #[derive(PartialEq, Eq, Clone, Copy, Serialize_repr, Deserialize_repr, Debug)]
@@ -116,5 +102,19 @@ where
             let context = context_fn();
             JsError::new(&format!("{context}: {e}"))
         })
+    }
+}
+
+pub(crate) trait WorkerSelf {
+    type GlobalScope;
+
+    fn worker_self() -> Self::GlobalScope;
+}
+
+impl WorkerSelf for SharedWorker {
+    type GlobalScope = SharedWorkerGlobalScope;
+
+    fn worker_self() -> Self::GlobalScope {
+        JsValue::from(js_sys::global()).into()
     }
 }

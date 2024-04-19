@@ -8,9 +8,11 @@ use tracing::{error, info, warn};
 use wasm_bindgen::prelude::*;
 use web_sys::MessagePort;
 
+use celestia_tendermint::error::Error as TendermintError;
 use celestia_types::ExtendedHeader;
+use libp2p::multiaddr::Error as MultiaddrError;
 use lumina_node::node::{Node, NodeError};
-use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
+use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store, StoreError};
 use lumina_node::syncer::SyncingInfo;
 
 use crate::node::WasmNodeConfig;
@@ -30,40 +32,28 @@ type Result<T, E = WorkerError> = std::result::Result<T, E>;
 
 #[derive(Debug, Serialize, Deserialize, Error)]
 pub enum WorkerError {
-    /*
-    #[error("Command response channel has been dropped before response could be sent, should not happen")]
-    SharedWorkerChannelResponseChannelDropped,
-    #[error("Command channel to lumina worker closed, should not happen")]
-    SharedWorkerCommandChannelClosed,
-    #[error("Channel expected different response type, should not happen")]
-    SharedWorkerChannelInvalidType,
-    #[error("Lumina is already running, ignoring StartNode command")]
-    SharedWorkerAlreadyRunning,
-    #[error("Worker is still handling previous command")]
-    WorkerBusy,
-    */
-    #[error("Node hasn't been started yet")]
+    #[error("node hasn't been started yet")]
     NodeNotRunning,
-    #[error("Node has already been started")]
+    #[error("node has already been started")]
     NodeAlreadyRunning,
-
+    #[error("could not create blockstore: {0}")]
+    BlockstoreCrationFailed(String),
+    #[error("could not create header store: {0}")]
+    StoreCrationFailed(String),
+    #[error("could not parse genesis hash: {0}")]
+    GenesisHashInvalid(String),
+    #[error("could not parse bootstrap node multiaddr: {0}")]
+    BootstrapNodeMultiaddrInvalid(String),
     #[error("node error: {0}")]
     NodeError(String),
-
-    #[error("could not send command to the worker: {0}")]
-    CommandSendingFailed(String),
-
-    #[error("respose to command did not match expected type")]
+    #[error("respose to command did not match expected type, should not happen")]
     InvalidResponseType,
-
     #[error("response message could not be serialised, should not happen: {0}")]
     CouldNotSerialiseCommand(String),
     #[error("response message could not be sent: {0}")]
     CouldNotSendCommand(String),
-
     #[error("Received empty worker response, should not happen")]
     EmptyWorkerResponse,
-
     #[error("Response channel to worker closed, should not happen")]
     ResponseChannelDropped,
 }
@@ -74,13 +64,36 @@ impl From<NodeError> for WorkerError {
     }
 }
 
+impl From<blockstore::Error> for WorkerError {
+    fn from(error: blockstore::Error) -> Self {
+        WorkerError::BlockstoreCrationFailed(error.to_string())
+    }
+}
+
+impl From<StoreError> for WorkerError {
+    fn from(error: StoreError) -> Self {
+        WorkerError::StoreCrationFailed(error.to_string())
+    }
+}
+
+impl From<TendermintError> for WorkerError {
+    fn from(error: TendermintError) -> Self {
+        WorkerError::GenesisHashInvalid(error.to_string())
+    }
+}
+
+impl From<MultiaddrError> for WorkerError {
+    fn from(error: MultiaddrError) -> Self {
+        WorkerError::BootstrapNodeMultiaddrInvalid(error.to_string())
+    }
+}
 struct NodeWorker {
     node: Node<IndexedDbStore>,
 }
 
 impl NodeWorker {
-    async fn new(config: WasmNodeConfig) -> Self {
-        let config = config.into_node_config().await.ok().unwrap();
+    async fn new(config: WasmNodeConfig) -> Result<Self, WorkerError> {
+        let config = config.into_node_config().await?;
 
         if let Ok(store_height) = config.store.head_height().await {
             info!("Initialised store with head height: {store_height}");
@@ -88,9 +101,9 @@ impl NodeWorker {
             info!("Initialised new empty store");
         }
 
-        let node = Node::new(config).await.ok().unwrap();
+        let node = Node::new(config).await?;
 
-        Self { node }
+        Ok(Self { node })
     }
 
     async fn get_syncer_info(&mut self) -> Result<SyncingInfo> {
@@ -241,9 +254,17 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
                             message_server.respond_to(client_id, WorkerResponse::IsRunning(false));
                         }
                         NodeCommand::StartNode(config) => {
-                            worker = Some(NodeWorker::new(config).await);
-                            message_server
-                                .respond_to(client_id, WorkerResponse::NodeStarted(Ok(())));
+                            match NodeWorker::new(config).await {
+                                Ok(node) => {
+                                    worker = Some(node);
+                                    message_server
+                                        .respond_to(client_id, WorkerResponse::NodeStarted(Ok(())));
+                                }
+                                Err(e) => {
+                                    message_server
+                                        .respond_to(client_id, WorkerResponse::NodeStarted(Err(e)));
+                                }
+                            };
                         }
                         _ => {
                             warn!("Worker not running");
@@ -261,3 +282,52 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
 
     error!("Channel to WorkerMessageServer closed, should not happen");
 }
+
+/*
+/// SharedWorker can only be spawned from an [`URL`]. To eliminate a need to host a js shim
+/// which calls into our Rust wasm code under specific path, we encode its entire contents
+/// as a [`Blob`] which is then passed as an URL.
+///
+/// [`URL`]: https://developer.mozilla.org/en-US/docs/Web/API/URL
+/// ['Blob']: https://developer.mozilla.org/en-US/docs/Web/API/Blob
+
+pub(crate) fn spawn_worker(name: &str, wasm_url: &str) -> Result<SharedWorker, JsError> {
+    let script = format!(
+        r#"
+Error.stackTraceLimit = 99;
+import init, {{ run_worker }} from "/wasm/lumina_node_wasm.js";
+
+let queued = [];
+onconnect = (event) => {{
+  console.log("Queued connection", event);
+  queued.push(event.ports[0]);
+}}
+
+await init();
+await run_worker(queued);
+"#
+    );
+
+    info!("js shim: {script}");
+
+    let array = Array::new();
+    array.push(&script.into());
+    let blob = Blob::new_with_str_sequence_and_options(
+        &array,
+        BlobPropertyBag::new().type_("application/javascript"),
+    )
+    .map_err(|e| JsError::new(&format!("could not create SharedWorker Blob: {e:?}")))?;
+
+    let url = Url::create_object_url_with_blob(&blob)
+        .map_err(|e| JsError::new(&format!("could not create SharedWorker Url: {e:?}")))?;
+
+    let mut opts = WorkerOptions::new();
+    opts.type_(WorkerType::Module);
+    opts.name(name);
+
+    let worker = SharedWorker::new_with_worker_options(&url, &opts)
+        .map_err(|e| JsError::new(&format!("could not create SharedWorker Url: {e:?}")))?;
+
+    Ok(worker)
+}
+*/

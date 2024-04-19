@@ -26,6 +26,8 @@ crate-type = ["cdylib", "rlib"]
 celestia-types = { workspace = true }
 libp2p = { workspace = true, features = ["serde"] }
 lumina-node = { workspace = true }
+blockstore = { workspace = true }
+celestia-tendermint = { workspace = true }
 
 anyhow = "1.0.71"
 console_error_panic_hook = "0.1.7"
@@ -44,5 +46,5 @@ tracing-subscriber = { version = "0.3.18", features = ["time"] }
 tracing-web = "0.1.2"
 wasm-bindgen = "0.2.88"
 wasm-bindgen-futures = "0.4.37"
-web-sys = { version = "0.3.69", features = ["BroadcastChannel", "MessageEvent", "Worker", "WorkerOptions", "WorkerType", "SharedWorker", "MessagePort", "SharedWorkerGlobalScope"]}
+web-sys = { version = "0.3.69", features = ["BroadcastChannel", "MessageEvent", "Worker", "WorkerOptions", "WorkerType", "SharedWorker", "MessagePort", "SharedWorkerGlobalScope", "Blob", "BlobPropertyBag", "Url"]}
 enum-as-inner = "0.6"
