@@ -15,7 +15,7 @@ use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::debug;
 
-use crate::store::{Result, SamplingMetadata, Store, StoreError};
+use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 const SCHEMA_VERSION: u64 = 1;
 
@@ -273,7 +273,7 @@ impl RedbStore {
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()> {
         self.write_tx(move |tx| {
@@ -291,20 +291,17 @@ impl RedbStore {
 
             let entry = match previous {
                 Some(mut previous) => {
-                    previous.accepted = accepted;
+                    previous.status = status;
 
-                    for cid in &cids {
-                        if !previous.cids_sampled.contains(cid) {
-                            previous.cids_sampled.push(cid.to_owned());
+                    for cid in cids {
+                        if !previous.cids.contains(&cid) {
+                            previous.cids.push(cid);
                         }
                     }
 
                     previous
                 }
-                None => SamplingMetadata {
-                    accepted,
-                    cids_sampled: cids.clone(),
-                },
+                None => SamplingMetadata { status, cids },
             };
 
             // make sure Result is Infallible and unwrap it later
@@ -316,15 +313,6 @@ impl RedbStore {
             Ok(())
         })
         .await
-    }
-
-    async fn contains_sampling_metadata(&self, height: u64) -> bool {
-        self.read_tx(move |tx| {
-            let sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
-            Ok(sampling_metadata_table.get(height)?.is_some())
-        })
-        .await
-        .unwrap_or(false)
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -413,14 +401,10 @@ impl Store for RedbStore {
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()> {
-        self.update_sampling_metadata(height, accepted, cids).await
-    }
-
-    async fn has_sampling_metadata(&self, height: u64) -> bool {
-        self.contains_sampling_metadata(height).await
+        self.update_sampling_metadata(height, status, cids).await
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {

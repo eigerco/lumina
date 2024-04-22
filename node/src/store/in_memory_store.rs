@@ -10,7 +10,7 @@ use dashmap::DashMap;
 use tokio::sync::Notify;
 use tracing::debug;
 
-use crate::store::{Result, SamplingMetadata, Store, StoreError};
+use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -132,35 +132,33 @@ impl InMemoryStore {
             .ok_or(StoreError::LostHash(hash))
     }
 
-    fn update_sampling_metadata(&self, height: u64, accepted: bool, cids: Vec<Cid>) -> Result<()> {
+    fn update_sampling_metadata(
+        &self,
+        height: u64,
+        status: SamplingStatus,
+        cids: Vec<Cid>,
+    ) -> Result<()> {
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
         }
 
         match self.sampling_data.entry(height) {
             Entry::Vacant(entry) => {
-                entry.insert(SamplingMetadata {
-                    accepted,
-                    cids_sampled: cids,
-                });
+                entry.insert(SamplingMetadata { status, cids });
             }
             Entry::Occupied(mut entry) => {
                 let metadata = entry.get_mut();
-                metadata.accepted = accepted;
+                metadata.status = status;
 
-                for cid in &cids {
-                    if !metadata.cids_sampled.contains(cid) {
-                        metadata.cids_sampled.push(cid.to_owned());
+                for cid in cids {
+                    if !metadata.cids.contains(&cid) {
+                        metadata.cids.push(cid);
                     }
                 }
             }
         }
 
         Ok(())
-    }
-
-    fn contains_sampling_metadata(&self, height: u64) -> bool {
-        self.sampling_data.contains_key(&height)
     }
 
     fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -244,14 +242,10 @@ impl Store for InMemoryStore {
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()> {
-        self.update_sampling_metadata(height, accepted, cids)
-    }
-
-    async fn has_sampling_metadata(&self, height: u64) -> bool {
-        self.contains_sampling_metadata(height)
+        self.update_sampling_metadata(height, status, cids)
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {

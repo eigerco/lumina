@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
-use crate::store::{Result, SamplingMetadata, Store, StoreError};
+use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// indexeddb version, needs to be incremented on every schema schange
 const DB_VERSION: u32 = 2;
@@ -225,7 +225,7 @@ impl IndexedDbStore {
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()> {
         // quick check with contains_height, which uses cached head
@@ -241,18 +241,17 @@ impl IndexedDbStore {
         let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
 
         let previous_entry = sampling_store.get(&height_key).await?;
+
         let new_entry = if previous_entry.is_falsy() {
-            SamplingMetadata {
-                accepted,
-                cids_sampled: cids,
-            }
+            SamplingMetadata { status, cids }
         } else {
             let mut value: SamplingMetadata = from_value(previous_entry)?;
-            value.accepted = accepted;
 
-            for cid in &cids {
-                if !value.cids_sampled.contains(cid) {
-                    value.cids_sampled.push(cid.to_owned());
+            value.status = status;
+
+            for cid in cids {
+                if !value.cids.contains(&cid) {
+                    value.cids.push(cid);
                 }
             }
 
@@ -268,18 +267,6 @@ impl IndexedDbStore {
         tx.commit().await?;
 
         Ok(())
-    }
-
-    async fn has_sampling_metadata(&self, height: u64) -> Result<bool> {
-        let tx = self
-            .db
-            .transaction(&[SAMPLING_STORE_NAME], TransactionMode::ReadOnly)?;
-        let store = tx.store(SAMPLING_STORE_NAME)?;
-
-        let height_key = to_value(&height)?;
-        let sampling_entry = store.get(&height_key).await?;
-
-        Ok(sampling_entry.is_truthy())
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -375,16 +362,11 @@ impl Store for IndexedDbStore {
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()> {
-        let fut = SendWrapper::new(self.update_sampling_metadata(height, accepted, cids));
+        let fut = SendWrapper::new(self.update_sampling_metadata(height, status, cids));
         fut.await
-    }
-
-    async fn has_sampling_metadata(&self, height: u64) -> bool {
-        let fut = SendWrapper::new(self.has_sampling_metadata(height));
-        fut.await.unwrap_or(false)
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {

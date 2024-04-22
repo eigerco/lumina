@@ -9,15 +9,13 @@
 //! [`Sample`]: celestia_types::sample::Sample
 
 use std::collections::{HashSet, VecDeque};
-use std::pin::pin;
 use std::sync::Arc;
 
 use celestia_tendermint::Time;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
-use futures::future::{Fuse, FusedFuture};
 use futures::stream::FuturesUnordered;
-use futures::{FutureExt, StreamExt};
+use futures::StreamExt;
 use instant::{Duration, Instant};
 use rand::Rng;
 use tokio::select;
@@ -25,9 +23,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error};
 
 use crate::executor::spawn;
-use crate::p2p::shwap::convert_cid;
-use crate::p2p::{P2p, P2pError};
-use crate::store::{Store, StoreError};
+use crate::p2p::shwap::sample_cid;
+use crate::p2p::{P2p, P2pError, GET_SAMPLE_TIMEOUT};
+use crate::store::{SamplingStatus, Store, StoreError};
+use crate::utils::FusedReusableBoxFuture;
 
 const MAX_SAMPLES_NEEDED: usize = 16;
 const SAMPLING_WINDOW: Duration = Duration::from_secs(14678036);
@@ -72,7 +71,9 @@ impl Daser {
         let mut worker = Worker::new(args, cancellation_token.child_token())?;
 
         spawn(async move {
-            worker.run().await;
+            if let Err(e) = worker.run().await {
+                error!("Fatal DASer error: {e}");
+            }
         });
 
         Ok(Daser { cancellation_token })
@@ -100,6 +101,7 @@ where
     p2p: Arc<P2p>,
     store: Arc<S>,
     max_samples_needed: usize,
+    sampling_fut: FusedReusableBoxFuture<Result<(u64, bool)>>,
     queue: VecDeque<SamplingArgs>,
     prev_head: Option<u64>,
 }
@@ -121,55 +123,80 @@ where
             p2p: args.p2p,
             store: args.store,
             max_samples_needed: MAX_SAMPLES_NEEDED,
+            sampling_fut: FusedReusableBoxFuture::terminated(),
             queue: VecDeque::new(),
             prev_head: None,
         })
     }
 
-    async fn run(&mut self) {
-        let mut sampling_fut = pin!(Fuse::terminated());
-
+    async fn run(&mut self) -> Result<()> {
         self.populate_queue().await;
 
         loop {
-            if sampling_fut.is_terminated() {
-                if let Some(args) = self.queue.pop_front() {
-                    if !in_sampling_window(args.time) {
-                        // Queue is sorted, so as soon as we reach a block
-                        // that is not in the sampling window, it means the
-                        // rest wouldn't be either.
-                        self.queue.clear();
-                        continue;
-                    }
+            // TODO: wait connected
 
-                    sampling_fut.set(
-                        sample_block(
-                            self.p2p.clone(),
-                            args.height,
-                            args.square_width,
-                            self.max_samples_needed,
-                        )
-                        .fuse(),
-                    );
-                }
+            if self.sampling_fut.is_terminated() {
+                self.schedule_next_sample_block().await?;
             }
 
             select! {
                 _ = self.cancellation_token.cancelled() => break,
-                res = &mut sampling_fut => match res {
-                    Ok((height, accepted, sampled_cids)) => {
+                res = &mut self.sampling_fut => match res {
+                    Ok((height, accepted)) => {
+                        let status = if accepted {
+                            SamplingStatus::Accepted
+                        } else {
+                            SamplingStatus::Rejected
+                        };
+
                         self.store
-                            .update_sampling_metadata(height, accepted, sampled_cids)
-                            .await
-                            .unwrap();
+                            .update_sampling_metadata(height, status, Vec::new())
+                            .await?;
                     }
-                    Err(_) => todo!(),
+                    Err(_) => {
+                        // rollback store to the highest accepted sampling
+                        // and clean related CIDs from blockstore
+                        todo!();
+                    },
                 },
                 _ = self.store.wait_new_head() => {
                     self.populate_queue().await;
                 }
             }
         }
+
+        Ok(())
+    }
+
+    async fn schedule_next_sample_block(&mut self) -> Result<()> {
+        assert!(self.sampling_fut.is_terminated());
+
+        let Some(args) = self.queue.pop_front() else {
+            return Ok(());
+        };
+
+        // Make sure that block is still in the sampling window.
+        if !in_sampling_window(args.time) {
+            // Queue is sorted, so as soon as we reach a block
+            // that is not in the sampling window, it means the
+            // rest wouldn't be either.
+            self.queue.clear();
+            return Ok(());
+        }
+
+        let cids = random_cids(args.height, args.square_width, self.max_samples_needed)?;
+
+        // Update CID list before we start the sampling procedure, otherwise there are
+        // some edge cases that can leak the CIDs and never cleaned from blockstore.
+        self.store
+            .update_sampling_metadata(args.height, SamplingStatus::Unknown, cids.clone())
+            .await?;
+
+        // Generate sampling future. This will run later on in the `select!` loop.
+        let fut = sample_block(self.p2p.clone(), args.height, cids);
+        self.sampling_fut.set(fut);
+
+        Ok(())
     }
 
     async fn populate_queue(&mut self) {
@@ -180,7 +207,7 @@ where
         match self.prev_head {
             Some(prev_head) => {
                 for height in prev_head + 1..=new_head {
-                    if self.store.has_sampling_metadata(height).await {
+                    if is_sampled(&*self.store, height).await {
                         continue;
                     }
 
@@ -200,7 +227,7 @@ where
             None => {
                 // Reverse iterate heights
                 for height in (1..=new_head).rev() {
-                    if self.store.has_sampling_metadata(height).await {
+                    if is_sampled(&*self.store, height).await {
                         continue;
                     }
 
@@ -249,27 +276,46 @@ fn queue_sampling(queue: &mut VecDeque<SamplingArgs>, header: &ExtendedHeader) {
     queue.insert(pos, args);
 }
 
-async fn sample_block(
-    p2p: Arc<P2p>,
-    height: u64,
-    square_width: u16,
-    max_samples_needed: usize,
-) -> Result<(u64, bool, Vec<Cid>)> {
+/// Returns true if `time` is within the sampling window.
+fn in_sampling_window(time: Time) -> bool {
+    let now = Time::now();
+
+    // Header is from the future! Thus, within sampling window.
+    if now < time {
+        return true;
+    }
+
+    let Ok(age) = now.duration_since(time) else {
+        return false;
+    };
+
+    age <= SAMPLING_WINDOW
+}
+
+/// Returns true is block is sampled (i.e. it was accepted or rejected).
+async fn is_sampled(store: &impl Store, height: u64) -> bool {
+    let Ok(Some(metadata)) = store.get_sampling_metadata(height).await else {
+        return false;
+    };
+
+    metadata.status != SamplingStatus::Unknown
+}
+
+/// Sample a block based on the CIDs.
+async fn sample_block(p2p: Arc<P2p>, height: u64, cids: Vec<Cid>) -> Result<(u64, bool)> {
     let now = Instant::now();
-    let indexes = random_indexes(square_width, max_samples_needed);
     let mut futs = FuturesUnordered::new();
 
-    for (row_index, column_index) in indexes {
-        let fut = p2p.get_sample(row_index, column_index, height);
+    for cid in cids {
+        let fut = p2p.get_shwap_cid(cid, Some(GET_SAMPLE_TIMEOUT));
         futs.push(fut);
     }
 
-    let mut cids: Vec<Cid> = Vec::new();
     let mut accepted = true;
 
     while let Some(res) = futs.next().await {
         match res {
-            Ok(sample) => cids.push(convert_cid(&sample.id.into())?),
+            Ok(_) => {}
             // Validation is done at Bitswap level, through `ShwapMultihasher`.
             // If the sample is not valid, it will never be delivered to us
             // as the data of the CID. Because of that, the only signal
@@ -286,24 +332,10 @@ async fn sample_block(
         now.elapsed()
     );
 
-    Ok((height, accepted, cids))
+    Ok((height, accepted))
 }
 
-fn in_sampling_window(time: Time) -> bool {
-    let now = Time::now();
-
-    // Header is from the future! Thus, within sampling window.
-    if now < time {
-        return true;
-    }
-
-    let Ok(age) = now.duration_since(time) else {
-        return false;
-    };
-
-    age <= SAMPLING_WINDOW
-}
-
+/// Returns unique and random indexes that will be used for the sampling.
 fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16, u16)> {
     let samples_in_block = usize::from(square_width).pow(2);
 
@@ -325,6 +357,14 @@ fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16,
     }
 
     indexes
+}
+
+/// Returns unique and random CIDs that will be used for the sampling.
+fn random_cids(height: u64, square_width: u16, max_samples_needed: usize) -> Result<Vec<Cid>> {
+    random_indexes(square_width, max_samples_needed)
+        .into_iter()
+        .map(|(row, col)| sample_cid(row, col, height).map_err(DaserError::P2p))
+        .collect()
 }
 
 #[cfg(test)]

@@ -1,8 +1,13 @@
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use celestia_types::ExtendedHeader;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::{PeerId, StreamProtocol};
 use tokio::sync::oneshot;
+use tokio_util::sync::ReusableBoxFuture;
 
 use crate::executor::yield_now;
 
@@ -100,4 +105,52 @@ pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_typ
     }
 
     Ok(())
+}
+
+pub(crate) struct FusedReusableBoxFuture<T> {
+    fut: ReusableBoxFuture<'static, T>,
+    terminated: bool,
+}
+
+impl<T: 'static> FusedReusableBoxFuture<T> {
+    pub(crate) fn terminated() -> Self {
+        FusedReusableBoxFuture {
+            fut: ReusableBoxFuture::new(std::future::pending()),
+            terminated: true,
+        }
+    }
+
+    pub(crate) fn is_terminated(&self) -> bool {
+        self.terminated
+    }
+
+    pub(crate) fn set<F>(&mut self, future: F)
+    where
+        F: Future<Output = T> + Send + 'static,
+    {
+        self.fut.set(future);
+        self.terminated = false;
+    }
+
+    pub(crate) fn poll(&mut self, cx: &mut Context) -> Poll<T> {
+        if self.terminated {
+            return Poll::Pending;
+        }
+
+        match self.fut.poll(cx) {
+            Poll::Ready(val) => {
+                self.terminated = true;
+                Poll::Ready(val)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl<T: 'static> Future for FusedReusableBoxFuture<T> {
+    type Output = T;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<T> {
+        self.get_mut().poll(cx)
+    }
 }

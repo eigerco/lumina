@@ -30,14 +30,22 @@ use crate::utils::validate_headers;
 /// Sampling status for a header.
 ///
 /// This struct persists DAS-ing information in a header store for future reference.
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct SamplingMetadata {
     /// Indicates whether this node was able to successfuly sample the block
-    pub accepted: bool,
+    pub status: SamplingStatus,
 
     /// List of CIDs used, when decision to accept or reject the header was taken. Can be used
     /// to remove associated data from Blockstore, when cleaning up the old ExtendedHeaders
-    pub cids_sampled: Vec<Cid>,
+    pub cids: Vec<Cid>,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SamplingStatus {
+    #[default]
+    Unknown,
+    Accepted,
+    Rejected,
 }
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
@@ -168,12 +176,9 @@ pub trait Store: Send + Sync + Debug {
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()>;
-
-    /// Returns true if sampling metadata exists in the store for the specified height.
-    async fn has_sampling_metadata(&self, height: u64) -> bool;
 
     /// Gets the sampling metadata for the height.
     ///
@@ -253,7 +258,10 @@ struct RawSamplingMetadata {
     accepted: bool,
 
     #[prost(message, repeated, tag = "2")]
-    cids_sampled: Vec<Vec<u8>>,
+    cids: Vec<Vec<u8>>,
+
+    #[prost(bool, tag = "3")]
+    unknown: bool,
 }
 
 impl Protobuf<RawSamplingMetadata> for SamplingMetadata {}
@@ -262,8 +270,16 @@ impl TryFrom<RawSamplingMetadata> for SamplingMetadata {
     type Error = cid::Error;
 
     fn try_from(item: RawSamplingMetadata) -> Result<Self, Self::Error> {
-        let cids_sampled = item
-            .cids_sampled
+        let status = if item.unknown {
+            SamplingStatus::Unknown
+        } else if item.accepted {
+            SamplingStatus::Accepted
+        } else {
+            SamplingStatus::Rejected
+        };
+
+        let cids = item
+            .cids
             .iter()
             .map(|cid| {
                 let buffer = Cursor::new(cid);
@@ -271,20 +287,24 @@ impl TryFrom<RawSamplingMetadata> for SamplingMetadata {
             })
             .collect::<Result<_, _>>()?;
 
-        Ok(SamplingMetadata {
-            accepted: item.accepted,
-            cids_sampled,
-        })
+        Ok(SamplingMetadata { status, cids })
     }
 }
 
 impl From<SamplingMetadata> for RawSamplingMetadata {
     fn from(item: SamplingMetadata) -> Self {
-        let cids_sampled = item.cids_sampled.iter().map(|cid| cid.to_bytes()).collect();
+        let cids = item.cids.iter().map(|cid| cid.to_bytes()).collect();
+
+        let (accepted, unknown) = match item.status {
+            SamplingStatus::Unknown => (false, true),
+            SamplingStatus::Accepted => (true, false),
+            SamplingStatus::Rejected => (false, false),
+        };
 
         RawSamplingMetadata {
-            accepted: item.accepted,
-            cids_sampled,
+            accepted,
+            unknown,
+            cids,
         }
     }
 }
