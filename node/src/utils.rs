@@ -124,6 +124,13 @@ impl<T: 'static> FusedReusableBoxFuture<T> {
         self.terminated
     }
 
+    pub(crate) fn terminate(&mut self) {
+        if !self.terminated {
+            self.fut.set(std::future::pending());
+            self.terminated = true;
+        }
+    }
+
     pub(crate) fn set<F>(&mut self, future: F)
     where
         F: Future<Output = T> + Send + 'static,

@@ -19,7 +19,7 @@ use instant::{Duration, Instant};
 use rand::Rng;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use crate::executor::spawn;
 use crate::p2p::shwap::sample_cid;
@@ -71,7 +71,7 @@ impl Daser {
 
         spawn(async move {
             if let Err(e) = worker.run().await {
-                error!("Fatal DASer error: {e}");
+                error!("Daser stopped because of fatal error: {e}");
             }
         });
 
@@ -129,39 +129,101 @@ where
     }
 
     async fn run(&mut self) -> Result<()> {
+        loop {
+            if self.cancellation_token.is_cancelled() {
+                break;
+            }
+
+            self.connecting_event_loop().await;
+
+            if self.cancellation_token.is_cancelled() {
+                break;
+            }
+
+            self.connected_event_loop().await?;
+        }
+
+        debug!("Daser stopped");
+        Ok(())
+    }
+
+    async fn connecting_event_loop(&mut self) {
+        debug!("Entering connecting_event_loop");
+
+        let mut peer_tracker_info_watcher = self.p2p.peer_tracker_info_watcher();
+
+        // Check if connection status changed before creating the watcher
+        if peer_tracker_info_watcher.borrow().num_connected_peers > 0 {
+            return;
+        }
+
+        loop {
+            select! {
+                _ = self.cancellation_token.cancelled() => {
+                    break;
+                }
+                _ = peer_tracker_info_watcher.changed() => {
+                    if peer_tracker_info_watcher.borrow().num_connected_peers > 0 {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    async fn connected_event_loop(&mut self) -> Result<()> {
+        debug!("Entering connected_event_loop");
+
+        let mut peer_tracker_info_watcher = self.p2p.peer_tracker_info_watcher();
+
+        // Check if connection status changed before creating the watcher
+        if peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
+            warn!("All peers disconnected");
+            return Ok(());
+        }
+
+        self.rollback().await;
         self.populate_queue().await;
 
         loop {
-            // TODO: on disconnect rollback and wait for connections
-
             if self.sampling_fut.is_terminated() {
                 self.schedule_next_sample_block().await?;
             }
 
             select! {
-                _ = self.cancellation_token.cancelled() => break,
-                res = &mut self.sampling_fut => match res {
-                    Ok((height, accepted)) => {
-                        let status = if accepted {
-                            SamplingStatus::Accepted
-                        } else {
-                            SamplingStatus::Rejected
-                        };
-
-                        self.store
-                            .update_sampling_metadata(height, status, Vec::new())
-                            .await?;
+                _ = self.cancellation_token.cancelled() => {
+                    break;
+                }
+                _ = peer_tracker_info_watcher.changed() => {
+                    if peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
+                        warn!("All peers disconnected");
+                        break;
                     }
-                    Err(_) => {
-                        // TODO: rollback store to the highest accepted sampling
-                        // and clean related CIDs from blockstore
-                    },
+                }
+                res = &mut self.sampling_fut => {
+                    // Beetswap returns only fatal errors that are not related
+                    // to P2P nor networking.
+                    let (height, accepted) = res?;
+
+                    let status = if accepted {
+                        SamplingStatus::Accepted
+                    } else {
+                        SamplingStatus::Rejected
+                    };
+
+                    self.store
+                        .update_sampling_metadata(height, status, Vec::new())
+                        .await?;
                 },
                 _ = self.store.wait_new_head() => {
                     self.populate_queue().await;
                 }
             }
         }
+
+        self.sampling_fut.terminate();
+        self.queue.clear();
+        self.prev_head = None;
 
         Ok(())
     }
@@ -233,6 +295,16 @@ where
         });
 
         Ok(())
+    }
+
+    /// Rollback to the highest accepted block.
+    ///
+    /// Rollback is needed because of how Shwap works: The only way to know
+    /// if sampling has failed is via a timeout on bitswap requests and this
+    /// can be generated from network issues too. We rollback just to recheck
+    /// the previous failed samplings.
+    async fn rollback(&mut self) {
+        // TODO
     }
 
     async fn populate_queue(&mut self) {
