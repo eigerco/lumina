@@ -437,12 +437,14 @@ fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::executor::sleep;
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, MockP2pHandle};
     use celestia_tendermint_proto::Protobuf;
     use celestia_types::sample::{Sample, SampleId};
     use celestia_types::test_utils::{generate_eds, ExtendedHeaderGenerator};
     use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
+    use std::time::Duration;
 
     #[async_test]
     async fn received_valid_samples() {
@@ -457,6 +459,8 @@ mod tests {
 
         let mut gen = ExtendedHeaderGenerator::new();
 
+        handle.expect_no_cmd().await;
+        handle.announce_peer_connected();
         handle.expect_no_cmd().await;
 
         gen_and_sample_block(&mut handle, &mut gen, &store, 2, false).await;
@@ -479,10 +483,80 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
 
         handle.expect_no_cmd().await;
+        handle.announce_peer_connected();
+        handle.expect_no_cmd().await;
 
         gen_and_sample_block(&mut handle, &mut gen, &store, 2, false).await;
         gen_and_sample_block(&mut handle, &mut gen, &store, 4, true).await;
         gen_and_sample_block(&mut handle, &mut gen, &store, 8, false).await;
+    }
+
+    #[async_test]
+    async fn backward_dasing() {
+        let (mock, mut handle) = P2p::mocked();
+        let store = Arc::new(InMemoryStore::new());
+
+        let _daser = Daser::start(DaserArgs {
+            p2p: Arc::new(mock),
+            store: store.clone(),
+        })
+        .unwrap();
+
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        handle.expect_no_cmd().await;
+        handle.announce_peer_connected();
+        handle.expect_no_cmd().await;
+
+        let mut edses = Vec::new();
+        let mut headers = Vec::new();
+
+        for _ in 0..20 {
+            let eds = generate_eds(2);
+            let dah = DataAvailabilityHeader::from_eds(&eds);
+            let header = gen.next_with_dah(dah);
+
+            edses.push(eds);
+            headers.push(header);
+        }
+
+        store.append(headers[0..10].to_vec()).await.unwrap();
+        // Wait a bit for sampling of block 10 start
+        sleep(Duration::from_millis(10)).await;
+        store.append(headers[10..].to_vec()).await.unwrap();
+        // Wait a bit for the queue to be populated with higher blocks
+        sleep(Duration::from_millis(10)).await;
+
+        // Sample block 10
+        handle_get_shwap_cid(&mut handle, &store, 10, &edses[9]).await;
+
+        // Sample block 20
+        handle_get_shwap_cid(&mut handle, &store, 20, &edses[19]).await;
+
+        // Sample block 19 until 11
+        for height in (11..=19).rev() {
+            let idx = height as usize - 1;
+            handle_get_shwap_cid(&mut handle, &store, height, &edses[idx]).await;
+        }
+
+        // Sample block 9 until 1
+        for height in (1..=9).rev() {
+            let idx = height as usize - 1;
+            handle_get_shwap_cid(&mut handle, &store, height, &edses[idx]).await;
+        }
+
+        handle.expect_no_cmd().await;
+
+        // Push block 21 in the store
+        let eds = generate_eds(2);
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+        let header = gen.next_with_dah(dah);
+        store.append_single(header).await.unwrap();
+
+        // Sample block 21
+        handle_get_shwap_cid(&mut handle, &store, 21, &eds).await;
+
+        handle.expect_no_cmd().await;
     }
 
     async fn gen_and_sample_block(
@@ -551,5 +625,26 @@ mod tests {
             header.height().value(),
         )
         .unwrap()
+    }
+
+    async fn handle_get_shwap_cid(
+        handle: &mut MockP2pHandle,
+        store: &InMemoryStore,
+        height: u64,
+        eds: &ExtendedDataSquare,
+    ) {
+        let square_width = eds.square_width() as usize;
+
+        for _ in 0..(square_width * square_width).min(MAX_SAMPLES_NEEDED) {
+            let (cid, respond_to) = handle.expect_get_shwap_cid().await;
+
+            let sample_id: SampleId = cid.try_into().unwrap();
+            assert_eq!(sample_id.block_height(), height);
+
+            let sample = gen_sample_of_cid(sample_id, eds, store).await;
+            let sample_bytes = sample.encode_vec().unwrap();
+
+            respond_to.send(Ok(sample_bytes)).unwrap();
+        }
     }
 }
