@@ -175,7 +175,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.to_result()?)
+        Ok(header.into_result()?)
     }
 
     /// Request a header for the block with a given hash from the network.
@@ -184,7 +184,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.to_result()?)
+        Ok(header.into_result()?)
     }
 
     /// Request a header for the block with a given height from the network.
@@ -193,7 +193,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.to_result()?)
+        Ok(header.into_result()?)
     }
 
     /// Request headers in range (from, from + amount] from the network.
@@ -211,7 +211,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let headers = response.into_headers().check_variant()?;
 
-        Ok(headers.to_result()?)
+        Ok(headers.into_result()?)
     }
 
     /// Get current header syncing info.
@@ -238,7 +238,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.to_result()?)
+        Ok(header.into_result()?)
     }
 
     /// Get a synced header for the block with a given hash.
@@ -247,7 +247,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.to_result()?)
+        Ok(header.into_result()?)
     }
 
     /// Get a synced header for the block with a given height.
@@ -256,7 +256,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.to_result()?)
+        Ok(header.into_result()?)
     }
 
     /// Get synced headers from the given heights range.
@@ -280,7 +280,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let headers = response.into_headers().check_variant()?;
 
-        Ok(headers.to_result()?)
+        Ok(headers.into_result()?)
     }
 
     /// Get data sampling metadata of an already sampled height.

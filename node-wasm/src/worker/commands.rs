@@ -19,7 +19,6 @@ use crate::worker::Result;
 use crate::worker::WorkerError;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NodeCommand {
     IsRunning,

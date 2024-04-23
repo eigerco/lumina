@@ -133,17 +133,17 @@ where
 }
 
 // once try_trait_v2 is stabilised, this can go
-impl<'de, T, E> JsResult<T, E>
+impl<T, E> JsResult<T, E>
 where
     T: JsCast,
     E: Serialize + DeserializeOwned,
 {
-    pub fn to_result(self) -> Result<T, E> {
+    pub fn into_result(self) -> Result<T, E> {
         self.into()
     }
 }
 
-impl<'de, T, E> From<Result<T, E>> for JsResult<T, E>
+impl<T, E> From<Result<T, E>> for JsResult<T, E>
 where
     T: JsCast,
     E: Serialize + DeserializeOwned,

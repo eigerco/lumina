@@ -162,8 +162,7 @@ impl NodeWorker {
             SingleHeaderQuery::ByHash(hash) => self.node.request_header_by_hash(&hash).await,
             SingleHeaderQuery::ByHeight(height) => self.node.request_header_by_height(height).await,
         }?;
-        Ok(to_value(&header)
-            .map_err(|e| WorkerError::CouldNotSerialiseResponseValue(e.to_string()))?)
+        to_value(&header).map_err(|e| WorkerError::CouldNotSerialiseResponseValue(e.to_string()))
     }
 
     async fn get_header(&mut self, query: SingleHeaderQuery) -> Result<JsValue> {
@@ -172,8 +171,7 @@ impl NodeWorker {
             SingleHeaderQuery::ByHash(hash) => self.node.get_header_by_hash(&hash).await,
             SingleHeaderQuery::ByHeight(height) => self.node.get_header_by_height(height).await,
         }?;
-        Ok(to_value(&header)
-            .map_err(|e| WorkerError::CouldNotSerialiseResponseValue(e.to_string()))?)
+        to_value(&header).map_err(|e| WorkerError::CouldNotSerialiseResponseValue(e.to_string()))
     }
 
     async fn get_verified_headers(&mut self, from: JsValue, amount: u64) -> Result<Array> {

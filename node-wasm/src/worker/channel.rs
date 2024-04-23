@@ -83,7 +83,6 @@ impl fmt::Display for ClientId {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
 pub(super) enum WorkerMessage {
     NewConnection(MessagePort),
     Command((NodeCommand, ClientId)),
