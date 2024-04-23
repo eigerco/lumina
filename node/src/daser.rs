@@ -433,6 +433,10 @@ mod tests {
         for i in 0..(square_width * square_width).min(MAX_SAMPLES_NEEDED) {
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
 
+            // Daser keeps track all the CIDs it requested, even if sampling
+            // is ongoing or rejected.
+            cids.push(cid);
+
             // Simulate invalid sample by triggering BitswapQueryTimeout
             if simulate_invalid_sampling && i == 2 {
                 respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
@@ -446,14 +450,19 @@ mod tests {
             let sample_bytes = sample.encode_vec().unwrap();
 
             respond_to.send(Ok(sample_bytes)).unwrap();
-            cids.push(cid);
         }
 
         handle.expect_no_cmd().await;
 
         let sampling_metadata = store.get_sampling_metadata(height).await.unwrap().unwrap();
-        assert_eq!(sampling_metadata.accepted, !simulate_invalid_sampling);
-        assert_eq!(sampling_metadata.cids_sampled, cids);
+
+        if simulate_invalid_sampling {
+            assert_eq!(sampling_metadata.status, SamplingStatus::Rejected);
+        } else {
+            assert_eq!(sampling_metadata.status, SamplingStatus::Accepted);
+        }
+
+        assert_eq!(sampling_metadata.cids, cids);
     }
 
     async fn gen_sample_of_cid(

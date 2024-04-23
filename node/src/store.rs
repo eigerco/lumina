@@ -705,11 +705,11 @@ mod tests {
         store: S,
     ) {
         store
-            .update_sampling_metadata(0, true, vec![])
+            .update_sampling_metadata(0, SamplingStatus::Accepted, vec![])
             .await
             .unwrap_err();
         store
-            .update_sampling_metadata(1, true, vec![])
+            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![])
             .await
             .unwrap_err();
     }
@@ -728,59 +728,59 @@ mod tests {
         fill_store(&mut store, 9).await;
 
         store
-            .update_sampling_metadata(0, true, vec![])
+            .update_sampling_metadata(0, SamplingStatus::Accepted, vec![])
             .await
             .unwrap_err();
         store
-            .update_sampling_metadata(1, true, vec![])
+            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![])
             .await
             .unwrap();
         store
-            .update_sampling_metadata(2, true, vec![])
+            .update_sampling_metadata(2, SamplingStatus::Accepted, vec![])
             .await
             .unwrap();
         store
-            .update_sampling_metadata(3, false, vec![])
+            .update_sampling_metadata(3, SamplingStatus::Rejected, vec![])
             .await
             .unwrap();
         store
-            .update_sampling_metadata(4, true, vec![])
+            .update_sampling_metadata(4, SamplingStatus::Accepted, vec![])
             .await
             .unwrap();
         store
-            .update_sampling_metadata(5, false, vec![])
+            .update_sampling_metadata(5, SamplingStatus::Rejected, vec![])
             .await
             .unwrap();
         store
-            .update_sampling_metadata(6, false, vec![])
-            .await
-            .unwrap();
-
-        store
-            .update_sampling_metadata(8, true, vec![])
+            .update_sampling_metadata(6, SamplingStatus::Rejected, vec![])
             .await
             .unwrap();
 
         store
-            .update_sampling_metadata(7, true, vec![])
+            .update_sampling_metadata(8, SamplingStatus::Accepted, vec![])
             .await
             .unwrap();
 
         store
-            .update_sampling_metadata(9, true, vec![])
+            .update_sampling_metadata(7, SamplingStatus::Accepted, vec![])
             .await
             .unwrap();
 
         store
-            .update_sampling_metadata(10, true, vec![])
+            .update_sampling_metadata(9, SamplingStatus::Accepted, vec![])
+            .await
+            .unwrap();
+
+        store
+            .update_sampling_metadata(10, SamplingStatus::Accepted, vec![])
             .await
             .unwrap_err();
         store
-            .update_sampling_metadata(10, false, vec![])
+            .update_sampling_metadata(10, SamplingStatus::Rejected, vec![])
             .await
             .unwrap_err();
         store
-            .update_sampling_metadata(20, true, vec![])
+            .update_sampling_metadata(20, SamplingStatus::Accepted, vec![])
             .await
             .unwrap_err();
     }
@@ -809,36 +809,36 @@ mod tests {
             .unwrap();
 
         store
-            .update_sampling_metadata(1, false, vec![cid0])
+            .update_sampling_metadata(1, SamplingStatus::Rejected, vec![cid0])
             .await
             .unwrap();
 
         store
-            .update_sampling_metadata(1, false, vec![])
+            .update_sampling_metadata(1, SamplingStatus::Rejected, vec![])
             .await
             .unwrap();
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert!(!sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0]);
+        assert_eq!(sampling_data.status, SamplingStatus::Rejected);
+        assert_eq!(sampling_data.cids, vec![cid0]);
 
         store
-            .update_sampling_metadata(1, true, vec![cid1])
+            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![cid1])
             .await
             .unwrap();
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert!(sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0, cid1]);
+        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
+        assert_eq!(sampling_data.cids, vec![cid0, cid1]);
 
         store
-            .update_sampling_metadata(1, true, vec![cid0, cid2])
+            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![cid0, cid2])
             .await
             .unwrap();
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert!(sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0, cid1, cid2]);
+        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
+        assert_eq!(sampling_data.cids, vec![cid0, cid1, cid2]);
     }
 
     #[rstest]
@@ -865,39 +865,39 @@ mod tests {
         .collect();
 
         store
-            .update_sampling_metadata(1, true, cids.clone())
+            .update_sampling_metadata(1, SamplingStatus::Accepted, cids.clone())
             .await
             .unwrap();
         store
-            .update_sampling_metadata(2, true, cids[0..1].to_vec())
+            .update_sampling_metadata(2, SamplingStatus::Accepted, cids[0..1].to_vec())
             .await
             .unwrap();
         store
-            .update_sampling_metadata(4, false, cids[3..].to_vec())
+            .update_sampling_metadata(4, SamplingStatus::Rejected, cids[3..].to_vec())
             .await
             .unwrap();
         store
-            .update_sampling_metadata(5, false, vec![])
+            .update_sampling_metadata(5, SamplingStatus::Rejected, vec![])
             .await
             .unwrap();
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids);
-        assert!(sampling_data.accepted);
+        assert_eq!(sampling_data.cids, cids);
+        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
 
         let sampling_data = store.get_sampling_metadata(2).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids[0..1]);
-        assert!(sampling_data.accepted);
+        assert_eq!(sampling_data.cids, cids[0..1]);
+        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
 
         assert!(store.get_sampling_metadata(3).await.unwrap().is_none());
 
         let sampling_data = store.get_sampling_metadata(4).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids[3..]);
-        assert!(!sampling_data.accepted);
+        assert_eq!(sampling_data.cids, cids[3..]);
+        assert_eq!(sampling_data.status, SamplingStatus::Rejected);
 
         let sampling_data = store.get_sampling_metadata(5).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, vec![]);
-        assert!(!sampling_data.accepted);
+        assert_eq!(sampling_data.cids, vec![]);
+        assert_eq!(sampling_data.status, SamplingStatus::Rejected);
 
         assert!(matches!(
             store.get_sampling_metadata(0).await,
