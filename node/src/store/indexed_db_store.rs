@@ -432,7 +432,7 @@ pub mod tests {
             s.append_single_unchecked(gen.next())
                 .await
                 .expect("inserting test data failed");
-            s.update_sampling_metadata(h, true, vec![])
+            s.update_sampling_metadata(h, SamplingStatus::Accepted, vec![])
                 .await
                 .expect("marking sampled failed");
         }
@@ -594,11 +594,11 @@ pub mod tests {
             }
 
             store
-                .update_sampling_metadata(1, true, vec![])
+                .update_sampling_metadata(1, SamplingStatus::Accepted, vec![])
                 .await
                 .unwrap();
             let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-            assert!(sampling_data.accepted);
+            assert_eq!(sampling_data.status, SamplingStatus::Accepted);
         }
     }
 
