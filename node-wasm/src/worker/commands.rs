@@ -1,19 +1,20 @@
 use std::fmt::Debug;
 
 use enum_as_inner::EnumAsInner;
-//use futures::future::{BoxFuture, FutureExt, TryFutureExt};
+use js_sys::Array;
 use libp2p::Multiaddr;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use tracing::error;
+use wasm_bindgen::JsValue;
 
 use celestia_types::hash::Hash;
-use celestia_types::ExtendedHeader;
 use lumina_node::peer_tracker::PeerTrackerInfo;
 use lumina_node::store::SamplingMetadata;
 use lumina_node::syncer::SyncingInfo;
 
 use crate::node::WasmNodeConfig;
+use crate::utils::JsResult;
 use crate::worker::Result;
 use crate::worker::WorkerError;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -38,7 +39,8 @@ pub(crate) enum NodeCommand {
     GetListeners,
     RequestHeader(SingleHeaderQuery),
     GetVerifiedHeaders {
-        from: ExtendedHeader,
+        #[serde(with = "serde_wasm_bindgen::preserve")]
+        from: JsValue,
         amount: u64,
     },
     GetHeadersRange {
@@ -71,9 +73,10 @@ pub(crate) enum WorkerResponse {
     SetPeerTrust(Result<()>),
     Connected(Result<()>),
     Listeners(Result<Vec<Multiaddr>>),
-    Header(Result<ExtendedHeader>),
-    Headers(Result<Vec<ExtendedHeader>>),
-    LastSeenNetworkHead(Option<ExtendedHeader>),
+    Header(JsResult<JsValue, WorkerError>),
+    Headers(JsResult<Array, WorkerError>),
+    #[serde(with = "serde_wasm_bindgen::preserve")]
+    LastSeenNetworkHead(JsValue),
     SamplingMetadata(Result<Option<SamplingMetadata>>),
 }
 

@@ -5,10 +5,10 @@ use js_sys::Array;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::{from_value, to_value};
+use serde_wasm_bindgen::to_value;
 use tracing::error;
 use wasm_bindgen::prelude::*;
-use web_sys::{MessageEvent, SharedWorker, WorkerOptions, WorkerType};
+use web_sys::{MessageEvent, SharedWorker};
 
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
@@ -17,7 +17,7 @@ use lumina_node::store::IndexedDbStore;
 
 use crate::utils::{js_value_from_display, Network};
 use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
-use crate::worker::{WorkerClient, WorkerError};
+use crate::worker::{spawn_worker, WorkerClient, WorkerError};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::Result;
 
@@ -51,12 +51,14 @@ impl NodeDriver {
     /// be running be running, before `NodeDriver::start` call.
     #[wasm_bindgen(constructor)]
     pub async fn new() -> Result<NodeDriver> {
-        //let worker = spawn_worker(LUMINA_SHARED_WORKER_NAME, "/wasm/lumina_node_wasm.js")?;
-        let mut opts = WorkerOptions::new();
-        opts.type_(WorkerType::Module);
-        opts.name(LUMINA_SHARED_WORKER_NAME);
-        let worker = SharedWorker::new_with_worker_options("/js/worker.js", &opts)
-            .map_err(|e| JsError::new(&format!("could not create SharedWorker: {e:?}")))?;
+        let worker = spawn_worker(LUMINA_SHARED_WORKER_NAME, "/wasm/lumina_node_wasm.js")?;
+        /*
+                let mut opts = WorkerOptions::new();
+                opts.type_(WorkerType::Module);
+                opts.name(LUMINA_SHARED_WORKER_NAME);
+                let worker = SharedWorker::new_with_worker_options("/js/worker.js", &opts)
+                    .map_err(|e| JsError::new(&format!("could not create SharedWorker: {e:?}")))?;
+        */
 
         let onerror_callback: Closure<dyn Fn(MessageEvent)> = Closure::new(|ev: MessageEvent| {
             error!("received error from SharedWorker: {:?}", ev.to_string());
@@ -173,7 +175,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(to_value(&header?)?)
+        Ok(header.to_result()?)
     }
 
     /// Request a header for the block with a given hash from the network.
@@ -182,7 +184,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(to_value(&header?)?)
+        Ok(header.to_result()?)
     }
 
     /// Request a header for the block with a given height from the network.
@@ -191,7 +193,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(to_value(&header?)?)
+        Ok(header.to_result()?)
     }
 
     /// Request headers in range (from, from + amount] from the network.
@@ -203,18 +205,13 @@ impl NodeDriver {
         amount: u64,
     ) -> Result<Array> {
         let command = NodeCommand::GetVerifiedHeaders {
-            from: from_value(from_header)?,
+            from: from_header,
             amount,
         };
         let response = self.channel.exec(command).await?;
         let headers = response.into_headers().check_variant()?;
 
-        let result = headers?
-            .iter()
-            .map(|h| to_value(&h))
-            .collect::<Result<Array, _>>();
-
-        Ok(result?)
+        Ok(headers.to_result()?)
     }
 
     /// Get current header syncing info.
@@ -232,7 +229,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_last_seen_network_head().check_variant()?;
 
-        Ok(to_value(&header)?)
+        Ok(header)
     }
 
     /// Get the latest locally synced header.
@@ -241,7 +238,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(to_value(&header?)?)
+        Ok(header.to_result()?)
     }
 
     /// Get a synced header for the block with a given hash.
@@ -250,7 +247,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(to_value(&header?)?)
+        Ok(header.to_result()?)
     }
 
     /// Get a synced header for the block with a given height.
@@ -259,7 +256,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(to_value(&header?)?)
+        Ok(header.to_result()?)
     }
 
     /// Get synced headers from the given heights range.
@@ -283,9 +280,7 @@ impl NodeDriver {
         let response = self.channel.exec(command).await?;
         let headers = response.into_headers().check_variant()?;
 
-        let result = headers?.iter().map(|h| to_value(&h).unwrap()).collect();
-
-        Ok(result)
+        Ok(headers.to_result()?)
     }
 
     /// Get data sampling metadata of an already sampled height.

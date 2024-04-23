@@ -94,15 +94,6 @@ function bind_config(data) {
   });
 }
 
-/*
-async function start_node(config) {
-  //window.node = await new Node(config);
-
-  document.getElementById("peer-id").innerText = await window.node.local_peer_id();
-  document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
-}
-*/
-
 async function main(document, window) {
   await init();
 
@@ -124,7 +115,7 @@ async function main(document, window) {
     document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
   });
 
-  //setInterval(async () => await show_stats(window.driver), 1000)
+  setInterval(async () => await show_stats(window.driver), 1000)
 }
 
 await main(document, window);

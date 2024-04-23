@@ -1,15 +1,16 @@
 use std::fmt::Debug;
 
+use js_sys::Array;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
+use serde_wasm_bindgen::{from_value, to_value};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 use wasm_bindgen::prelude::*;
-use web_sys::MessagePort;
+use web_sys::{Blob, BlobPropertyBag, MessagePort, SharedWorker, Url, WorkerOptions, WorkerType};
 
 use celestia_tendermint::error::Error as TendermintError;
-use celestia_types::ExtendedHeader;
 use libp2p::multiaddr::Error as MultiaddrError;
 use lumina_node::node::{Node, NodeError};
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store, StoreError};
@@ -48,8 +49,12 @@ pub enum WorkerError {
     NodeError(String),
     #[error("respose to command did not match expected type, should not happen")]
     InvalidResponseType,
-    #[error("response message could not be serialised, should not happen: {0}")]
+    #[error("Value could not be serialized, should not happen: {0}")]
+    SerdeError(String),
+    #[error("command message could not be serialised, should not happen: {0}")]
     CouldNotSerialiseCommand(String),
+    #[error("command response could not be serialised, should not happen: {0}")]
+    CouldNotSerialiseResponseValue(String),
     #[error("response message could not be sent: {0}")]
     CouldNotSendCommand(String),
     #[error("Received empty worker response, should not happen")]
@@ -87,8 +92,18 @@ impl From<MultiaddrError> for WorkerError {
         WorkerError::BootstrapNodeMultiaddrInvalid(error.to_string())
     }
 }
+
+impl From<serde_wasm_bindgen::Error> for WorkerError {
+    fn from(error: serde_wasm_bindgen::Error) -> Self {
+        WorkerError::SerdeError(error.to_string())
+    }
+}
 struct NodeWorker {
     node: Node<IndexedDbStore>,
+}
+
+fn to_jsvalue_or_undefined<T: Serialize>(value: &T) -> JsValue {
+    to_value(value).unwrap()
 }
 
 impl NodeWorker {
@@ -141,41 +156,61 @@ impl NodeWorker {
         Ok(())
     }
 
-    async fn request_header(&mut self, query: SingleHeaderQuery) -> Result<ExtendedHeader> {
-        Ok(match query {
+    async fn request_header(&mut self, query: SingleHeaderQuery) -> Result<JsValue> {
+        let header = match query {
             SingleHeaderQuery::Head => self.node.request_head_header().await,
             SingleHeaderQuery::ByHash(hash) => self.node.request_header_by_hash(&hash).await,
             SingleHeaderQuery::ByHeight(height) => self.node.request_header_by_height(height).await,
-        }?)
+        }?;
+        Ok(to_value(&header)
+            .map_err(|e| WorkerError::CouldNotSerialiseResponseValue(e.to_string()))?)
     }
 
-    async fn get_header(&mut self, query: SingleHeaderQuery) -> Result<ExtendedHeader> {
-        Ok(match query {
+    async fn get_header(&mut self, query: SingleHeaderQuery) -> Result<JsValue> {
+        let header = match query {
             SingleHeaderQuery::Head => self.node.get_local_head_header().await,
             SingleHeaderQuery::ByHash(hash) => self.node.get_header_by_hash(&hash).await,
             SingleHeaderQuery::ByHeight(height) => self.node.get_header_by_height(height).await,
-        }?)
+        }?;
+        Ok(to_value(&header)
+            .map_err(|e| WorkerError::CouldNotSerialiseResponseValue(e.to_string()))?)
     }
 
-    async fn get_verified_headers(
-        &mut self,
-        from: &ExtendedHeader,
-        amount: u64,
-    ) -> Result<Vec<ExtendedHeader>> {
-        Ok(self.node.request_verified_headers(from, amount).await?)
+    async fn get_verified_headers(&mut self, from: JsValue, amount: u64) -> Result<Array> {
+        let verified_headers = self
+            .node
+            .request_verified_headers(&from_value(from)?, amount)
+            .await?;
+        Ok(verified_headers
+            .iter()
+            .map(|h| to_value(&h))
+            .collect::<Result<Array, _>>()?)
     }
 
     async fn get_headers_range(
         &mut self,
         start_height: Option<u64>,
         end_height: Option<u64>,
-    ) -> Result<Vec<ExtendedHeader>> {
-        Ok(match (start_height, end_height) {
+    ) -> Result<Array> {
+        let headers = match (start_height, end_height) {
             (None, None) => self.node.get_headers(..).await,
             (Some(start), None) => self.node.get_headers(start..).await,
             (None, Some(end)) => self.node.get_headers(..=end).await,
             (Some(start), Some(end)) => self.node.get_headers(start..=end).await,
-        }?)
+        }?;
+
+        Ok(headers
+            .iter()
+            .map(|h| to_value(&h))
+            .collect::<Result<Array, _>>()?)
+    }
+
+    async fn get_last_seen_network_head(&mut self) -> JsValue {
+        self.node
+            .get_network_head_header()
+            .as_ref()
+            .map(to_jsvalue_or_undefined)
+            .unwrap_or(JsValue::UNDEFINED)
     }
 
     async fn get_sampling_metadata(&mut self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -211,18 +246,24 @@ impl NodeWorker {
             }
             NodeCommand::GetListeners => WorkerResponse::Listeners(self.get_listeners().await),
             NodeCommand::RequestHeader(query) => {
-                WorkerResponse::Header(self.request_header(query).await)
+                WorkerResponse::Header(self.request_header(query).await.into())
             }
-            NodeCommand::GetHeader(query) => WorkerResponse::Header(self.get_header(query).await),
+            NodeCommand::GetHeader(query) => {
+                WorkerResponse::Header(self.get_header(query).await.into())
+            }
             NodeCommand::GetVerifiedHeaders { from, amount } => {
-                WorkerResponse::Headers(self.get_verified_headers(&from, amount).await)
+                WorkerResponse::Headers(self.get_verified_headers(from, amount).await.into())
             }
             NodeCommand::GetHeadersRange {
                 start_height,
                 end_height,
-            } => WorkerResponse::Headers(self.get_headers_range(start_height, end_height).await),
+            } => WorkerResponse::Headers(
+                self.get_headers_range(start_height, end_height)
+                    .await
+                    .into(),
+            ),
             NodeCommand::LastSeenNetworkHead => {
-                WorkerResponse::LastSeenNetworkHead(self.node.get_network_head_header())
+                WorkerResponse::LastSeenNetworkHead(self.get_last_seen_network_head().await)
             }
             NodeCommand::GetSamplingMetadata { height } => {
                 WorkerResponse::SamplingMetadata(self.get_sampling_metadata(height).await)
@@ -233,6 +274,7 @@ impl NodeWorker {
 
 #[wasm_bindgen]
 pub async fn run_worker(queued_connections: Vec<MessagePort>) {
+    info!("Entered run_worker");
     let (tx, mut rx) = mpsc::channel(WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH);
     let mut message_server = WorkerMessageServer::new(tx.clone());
 
@@ -240,6 +282,7 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
         message_server.add(connection);
     }
 
+    info!("Entering SharedWorker message loop");
     let mut worker = None;
     while let Some(message) = rx.recv().await {
         match message {
@@ -283,7 +326,6 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
     error!("Channel to WorkerMessageServer closed, should not happen");
 }
 
-/*
 /// SharedWorker can only be spawned from an [`URL`]. To eliminate a need to host a js shim
 /// which calls into our Rust wasm code under specific path, we encode its entire contents
 /// as a [`Blob`] which is then passed as an URL.
@@ -295,7 +337,6 @@ pub(crate) fn spawn_worker(name: &str, wasm_url: &str) -> Result<SharedWorker, J
     let script = format!(
         r#"
 Error.stackTraceLimit = 99;
-import init, {{ run_worker }} from "/wasm/lumina_node_wasm.js";
 
 let queued = [];
 onconnect = (event) => {{
@@ -303,8 +344,9 @@ onconnect = (event) => {{
   queued.push(event.ports[0]);
 }}
 
-await init();
-await run_worker(queued);
+self.lumina = await import(self.location.origin + '{wasm_url}');
+await self.lumina.default();
+await self.lumina.run_worker(queued);
 "#
     );
 
@@ -330,4 +372,3 @@ await run_worker(queued);
 
     Ok(worker)
 }
-*/

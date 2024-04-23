@@ -1,6 +1,8 @@
 //! Various utilities for interacting with node from wasm.
 use std::fmt::{self, Debug};
 
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::format::Pretty;
@@ -116,5 +118,67 @@ impl WorkerSelf for SharedWorker {
 
     fn worker_self() -> Self::GlobalScope {
         JsValue::from(js_sys::global()).into()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) enum JsResult<T, E>
+where
+    T: JsCast,
+    //E: Serialize + DeserializeOwned,
+{
+    #[serde(with = "serde_wasm_bindgen::preserve")]
+    Ok(T),
+    Err(E),
+}
+
+// once try_trait_v2 is stabilised, this can go
+impl<'de, T, E> JsResult<T, E>
+where
+    T: JsCast,
+    E: Serialize + DeserializeOwned,
+{
+    pub fn to_result(self) -> Result<T, E> {
+        self.into()
+    }
+}
+
+impl<'de, T, E> From<Result<T, E>> for JsResult<T, E>
+where
+    T: JsCast,
+    E: Serialize + DeserializeOwned,
+{
+    fn from(result: Result<T, E>) -> Self {
+        match result {
+            Ok(v) => JsResult::Ok(v),
+            Err(e) => JsResult::Err(e),
+        }
+    }
+}
+
+impl<T, E> From<JsResult<T, E>> for Result<T, E>
+where
+    T: JsCast,
+    E: Serialize + DeserializeOwned,
+{
+    fn from(result: JsResult<T, E>) -> Self {
+        match result {
+            JsResult::Ok(v) => Ok(v),
+            JsResult::Err(e) => Err(e),
+        }
+    }
+}
+
+impl<T, E> Debug for JsResult<T, E>
+where
+    T: JsCast,
+    E: Serialize + DeserializeOwned,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            JsResult::Ok(_) => f.debug_tuple("JsResult::Ok"),
+            JsResult::Err(_) => f.debug_tuple("JsResult::Err"),
+        }
+        .finish()
     }
 }
