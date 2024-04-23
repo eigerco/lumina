@@ -210,7 +210,7 @@ impl WasmNode {
         }
 
         let metadata = metadata.map(|m| Intermediate {
-            accepted: m.status,
+            status: m.status,
             cids: m.cids.into_iter().map(|cid| cid.to_string()).collect(),
         });
 
