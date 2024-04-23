@@ -153,9 +153,8 @@ where
                             .await?;
                     }
                     Err(_) => {
-                        // rollback store to the highest accepted sampling
+                        // TODO: rollback store to the highest accepted sampling
                         // and clean related CIDs from blockstore
-                        todo!();
                     },
                 },
                 _ = self.store.wait_new_head() => {

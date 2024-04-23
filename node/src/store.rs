@@ -128,6 +128,25 @@ pub trait Store: Send + Sync + Debug {
     /// This method does not validate or verify that `header` is indeed correct.
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()>;
 
+    /// Sets or updates sampling result for the header.
+    ///
+    /// In case of update, provided CID list is appended onto the existing one, as not to lose
+    /// references to previously sampled blocks.
+    async fn update_sampling_metadata(
+        &self,
+        height: u64,
+        status: SamplingStatus,
+        cids: Vec<Cid>,
+    ) -> Result<()>;
+
+    /// Gets the sampling metadata for the height.
+    ///
+    /// `Err(StoreError::NotFound)` indicates that both header **and** sampling metadata for the requested
+    /// height are not in the store.
+    ///
+    /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
+    async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
+
     /// Append a range of headers maintaining continuity from the genesis to the head.
     ///
     /// # Note
@@ -172,25 +191,6 @@ pub trait Store: Send + Sync + Debug {
 
         self.append_unchecked(headers).await
     }
-
-    /// Sets or updates sampling result for the header.
-    ///
-    /// In case of update, provided CID list is appended onto the existing one, as not to lose
-    /// references to previously sampled blocks.
-    async fn update_sampling_metadata(
-        &self,
-        height: u64,
-        status: SamplingStatus,
-        cids: Vec<Cid>,
-    ) -> Result<()>;
-
-    /// Gets the sampling metadata for the height.
-    ///
-    /// `Err(StoreError::NotFound)` indicates that both header **and** sampling metadata for the requested
-    /// height are not in the store.
-    ///
-    /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
-    async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].
