@@ -13,7 +13,6 @@ use std::sync::Arc;
 
 use celestia_tendermint::Time;
 use celestia_types::ExtendedHeader;
-use cid::Cid;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use instant::{Duration, Instant};
@@ -133,7 +132,7 @@ where
         self.populate_queue().await;
 
         loop {
-            // TODO: wait connected
+            // TODO: on disconnect rollback and wait for connections
 
             if self.sampling_fut.is_terminated() {
                 self.schedule_next_sample_block().await?;
@@ -184,7 +183,13 @@ where
             return Ok(());
         }
 
-        let cids = random_cids(args.height, args.square_width, self.max_samples_needed)?;
+        let mut cids = Vec::new();
+
+        // Select random shares to be sampled and generate their CID.
+        for (row, col) in random_indexes(args.square_width, self.max_samples_needed) {
+            let cid = sample_cid(row, col, args.height)?;
+            cids.push(cid);
+        }
 
         // Update CID list before we start the sampling procedure, otherwise there are
         // some edge cases that can leak the CIDs and never cleaned from blockstore.
@@ -192,14 +197,48 @@ where
             .update_sampling_metadata(args.height, SamplingStatus::Unknown, cids.clone())
             .await?;
 
-        // Generate sampling future. This will run later on in the `select!` loop.
-        let fut = sample_block(self.p2p.clone(), args.height, cids);
-        self.sampling_fut.set(fut);
+        let p2p = self.p2p.clone();
+
+        // Schedule retrival of the CIDs. This will run later on in the `select!` loop.
+        self.sampling_fut.set(async move {
+            let now = Instant::now();
+            let mut futs = FuturesUnordered::new();
+
+            for cid in cids {
+                let fut = p2p.get_shwap_cid(cid, Some(GET_SAMPLE_TIMEOUT));
+                futs.push(fut);
+            }
+
+            let mut accepted = true;
+
+            while let Some(res) = futs.next().await {
+                match res {
+                    Ok(_) => {}
+                    // Validation is done at Bitswap level, through `ShwapMultihasher`.
+                    // If the sample is not valid, it will never be delivered to us
+                    // as the data of the CID. Because of that, the only signal
+                    // that data sampling verification failed is query timing out.
+                    Err(P2pError::BitswapQueryTimeout) => accepted = false,
+                    Err(e) => return Err(e.into()),
+                }
+            }
+
+            debug!(
+                "Data sampling of {} is {}. Took {:?}",
+                args.height,
+                if accepted { "accepted" } else { "rejected" },
+                now.elapsed()
+            );
+
+            Ok((args.height, accepted))
+        });
 
         Ok(())
     }
 
     async fn populate_queue(&mut self) {
+        // TODO: Adjust algorithm for backward syncing.
+
         let Ok(new_head) = self.store.head_height().await else {
             return;
         };
@@ -301,40 +340,6 @@ async fn is_sampled(store: &impl Store, height: u64) -> bool {
     metadata.status != SamplingStatus::Unknown
 }
 
-/// Sample a block based on the CIDs.
-async fn sample_block(p2p: Arc<P2p>, height: u64, cids: Vec<Cid>) -> Result<(u64, bool)> {
-    let now = Instant::now();
-    let mut futs = FuturesUnordered::new();
-
-    for cid in cids {
-        let fut = p2p.get_shwap_cid(cid, Some(GET_SAMPLE_TIMEOUT));
-        futs.push(fut);
-    }
-
-    let mut accepted = true;
-
-    while let Some(res) = futs.next().await {
-        match res {
-            Ok(_) => {}
-            // Validation is done at Bitswap level, through `ShwapMultihasher`.
-            // If the sample is not valid, it will never be delivered to us
-            // as the data of the CID. Because of that, the only signal
-            // that data sampling verification failed is query timing out.
-            Err(P2pError::BitswapQueryTimeout) => accepted = false,
-            Err(e) => return Err(e.into()),
-        }
-    }
-
-    debug!(
-        "Data sampling of {} is {}. Took {:?}",
-        height,
-        if accepted { "accepted" } else { "rejected" },
-        now.elapsed()
-    );
-
-    Ok((height, accepted))
-}
-
 /// Returns unique and random indexes that will be used for the sampling.
 fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16, u16)> {
     let samples_in_block = usize::from(square_width).pow(2);
@@ -357,14 +362,6 @@ fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16,
     }
 
     indexes
-}
-
-/// Returns unique and random CIDs that will be used for the sampling.
-fn random_cids(height: u64, square_width: u16, max_samples_needed: usize) -> Result<Vec<Cid>> {
-    random_indexes(square_width, max_samples_needed)
-        .into_iter()
-        .map(|(row, col)| sample_cid(row, col, height).map_err(DaserError::P2p))
-        .collect()
 }
 
 #[cfg(test)]

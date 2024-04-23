@@ -27,7 +27,7 @@ mod redb_store;
 
 use crate::utils::validate_headers;
 
-/// Sampling status for a header.
+/// Sampling metadata for a block.
 ///
 /// This struct persists DAS-ing information in a header store for future reference.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -35,16 +35,20 @@ pub struct SamplingMetadata {
     /// Indicates whether this node was able to successfuly sample the block
     pub status: SamplingStatus,
 
-    /// List of CIDs used, when decision to accept or reject the header was taken. Can be used
-    /// to remove associated data from Blockstore, when cleaning up the old ExtendedHeaders
+    /// List of CIDs used while sampling. Can be used to remove associated data
+    /// from Blockstore, when cleaning up the old ExtendedHeaders
     pub cids: Vec<Cid>,
 }
 
+/// Sampling status for a block.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SamplingStatus {
+    /// Sampling is not done.
     #[default]
     Unknown,
+    /// Sampling is done and block is accepted.
     Accepted,
+    /// Sampling is done and block is rejected.
     Rejected,
 }
 
