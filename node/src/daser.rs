@@ -333,11 +333,10 @@ fn in_sampling_window(time: Time) -> bool {
 
 /// Returns true is block is sampled (i.e. it was accepted or rejected).
 async fn is_sampled(store: &impl Store, height: u64) -> bool {
-    let Ok(Some(metadata)) = store.get_sampling_metadata(height).await else {
-        return false;
-    };
-
-    metadata.status != SamplingStatus::Unknown
+    match store.get_sampling_metadata(height).await {
+        Ok(Some(metadata)) => metadata.status != SamplingStatus::Unknown,
+        _ => false,
+    }
 }
 
 /// Returns unique and random indexes that will be used for the sampling.
