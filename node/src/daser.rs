@@ -28,7 +28,9 @@ use crate::store::{SamplingStatus, Store, StoreError};
 use crate::utils::FusedReusableBoxFuture;
 
 const MAX_SAMPLES_NEEDED: usize = 16;
-const SAMPLING_WINDOW: Duration = Duration::from_secs(14678036);
+
+// Sampling window is 30 days
+const SAMPLING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
 
