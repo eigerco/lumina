@@ -74,7 +74,7 @@ impl Daser {
 
         spawn(async move {
             if let Err(e) = worker.run().await {
-                error!("Daser stopped because of fatal error: {e}");
+                error!("Daser stopped because of a fatal error: {e}");
             }
         });
 
