@@ -405,7 +405,7 @@ fn in_sampling_window(time: Time) -> bool {
     age <= SAMPLING_WINDOW
 }
 
-/// Returns true is block is sampled (i.e. it was accepted or rejected).
+/// Returns true if block has been sampled (i.e. it was accepted or rejected).
 async fn is_sampled(store: &impl Store, height: u64) -> bool {
     match store.get_sampling_metadata(height).await {
         Ok(Some(metadata)) => metadata.status != SamplingStatus::Unknown,
