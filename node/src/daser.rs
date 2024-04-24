@@ -203,7 +203,7 @@ where
                     }
                 }
                 res = &mut self.sampling_fut => {
-                    // Beetswap returns only fatal errors that are not related
+                    // Beetswap only returns fatal errors that are not related
                     // to P2P nor networking.
                     let (height, accepted) = res?;
 
