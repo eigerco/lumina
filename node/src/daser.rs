@@ -408,7 +408,7 @@ async fn is_block_accepted(store: &impl Store, height: u64) -> bool {
     }
 }
 
-/// Returns unique and random indexes that will be used for the sampling.
+/// Returns unique and random indexes that will be used for sampling.
 fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16, u16)> {
     let samples_in_block = usize::from(square_width).pow(2);
 
