@@ -185,7 +185,6 @@ where
             return Ok(());
         }
 
-        self.rollback().await;
         self.populate_queue().await;
 
         loop {
@@ -300,16 +299,12 @@ where
         Ok(())
     }
 
-    /// Rollback to the highest accepted block.
+    /// Add to the queue the blocks that need to be sampled.
     ///
-    /// Rollback is needed because of how Shwap works: The only way to know
-    /// if sampling has failed is via a timeout on bitswap requests and this
-    /// can be generated from network issues too. We rollback just to recheck
-    /// the previous failed samplings.
-    async fn rollback(&mut self) {
-        // TODO
-    }
-
+    /// NOTE: We resampled rejected blocks, because rejection can happen
+    /// because of edge-cases, such us network issues. This is a limitation
+    /// because of how Shwap works: The only way to know if sampling has failed
+    /// is via a timeout.
     async fn populate_queue(&mut self) {
         // TODO: Adjust algorithm for backward syncing.
 
@@ -320,7 +315,7 @@ where
         match self.prev_head {
             Some(prev_head) => {
                 for height in prev_head + 1..=new_head {
-                    if is_sampled(&*self.store, height).await {
+                    if is_block_accepted(&*self.store, height).await {
                         continue;
                     }
 
@@ -340,7 +335,7 @@ where
             None => {
                 // Reverse iterate heights
                 for height in (1..=new_head).rev() {
-                    if is_sampled(&*self.store, height).await {
+                    if is_block_accepted(&*self.store, height).await {
                         continue;
                     }
 
@@ -405,10 +400,10 @@ fn in_sampling_window(time: Time) -> bool {
     age <= SAMPLING_WINDOW
 }
 
-/// Returns true if block has been sampled (i.e. it was accepted or rejected).
-async fn is_sampled(store: &impl Store, height: u64) -> bool {
+/// Returns true if block has been sampled and accepted.
+async fn is_block_accepted(store: &impl Store, height: u64) -> bool {
     match store.get_sampling_metadata(height).await {
-        Ok(Some(metadata)) => metadata.status != SamplingStatus::Unknown,
+        Ok(Some(metadata)) => metadata.status == SamplingStatus::Accepted,
         _ => false,
     }
 }
@@ -447,6 +442,7 @@ mod tests {
     use celestia_types::sample::{Sample, SampleId};
     use celestia_types::test_utils::{generate_eds, ExtendedHeaderGenerator};
     use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
+    use cid::Cid;
     use std::time::Duration;
 
     #[async_test]
@@ -531,21 +527,32 @@ mod tests {
         sleep(Duration::from_millis(10)).await;
 
         // Sample block 10
-        handle_get_shwap_cid(&mut handle, &store, 10, &edses[9]).await;
+        handle_get_shwap_cid(&mut handle, &store, 10, &edses[9], false).await;
 
         // Sample block 20
-        handle_get_shwap_cid(&mut handle, &store, 20, &edses[19]).await;
+        handle_get_shwap_cid(&mut handle, &store, 20, &edses[19], false).await;
 
-        // Sample block 19 until 11
-        for height in (11..=19).rev() {
+        // Sample and reject block 19
+        handle_get_shwap_cid(&mut handle, &store, 19, &edses[18], true).await;
+
+        // Simulate disconnection
+        handle.announce_all_peers_disconnected();
+        handle.expect_no_cmd().await;
+        handle.announce_peer_connected();
+
+        // Because of disconnection, daser will resample block 19
+        handle_get_shwap_cid(&mut handle, &store, 19, &edses[18], false).await;
+
+        // Sample block 18 until 11
+        for height in (11..=18).rev() {
             let idx = height as usize - 1;
-            handle_get_shwap_cid(&mut handle, &store, height, &edses[idx]).await;
+            handle_get_shwap_cid(&mut handle, &store, height, &edses[idx], false).await;
         }
 
         // Sample block 9 until 1
         for height in (1..=9).rev() {
             let idx = height as usize - 1;
-            handle_get_shwap_cid(&mut handle, &store, height, &edses[idx]).await;
+            handle_get_shwap_cid(&mut handle, &store, height, &edses[idx], false).await;
         }
 
         handle.expect_no_cmd().await;
@@ -557,7 +564,7 @@ mod tests {
         store.append_single(header).await.unwrap();
 
         // Sample block 21
-        handle_get_shwap_cid(&mut handle, &store, 21, &eds).await;
+        handle_get_shwap_cid(&mut handle, &store, 21, &eds, false).await;
 
         handle.expect_no_cmd().await;
     }
@@ -576,30 +583,8 @@ mod tests {
 
         store.append_single(header).await.unwrap();
 
-        let mut cids = Vec::new();
-
-        for i in 0..(square_width * square_width).min(MAX_SAMPLES_NEEDED) {
-            let (cid, respond_to) = handle.expect_get_shwap_cid().await;
-
-            // Daser keeps track all the CIDs it requested, even if sampling
-            // is ongoing or rejected.
-            cids.push(cid);
-
-            // Simulate invalid sample by triggering BitswapQueryTimeout
-            if simulate_invalid_sampling && i == 2 {
-                respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
-                continue;
-            }
-
-            let sample_id: SampleId = cid.try_into().unwrap();
-            assert_eq!(sample_id.block_height(), height);
-
-            let sample = gen_sample_of_cid(sample_id, &eds, store).await;
-            let sample_bytes = sample.encode_vec().unwrap();
-
-            respond_to.send(Ok(sample_bytes)).unwrap();
-        }
-
+        let cids =
+            handle_get_shwap_cid(handle, store, height, &eds, simulate_invalid_sampling).await;
         handle.expect_no_cmd().await;
 
         let sampling_metadata = store.get_sampling_metadata(height).await.unwrap().unwrap();
@@ -611,6 +596,41 @@ mod tests {
         }
 
         assert_eq!(sampling_metadata.cids, cids);
+    }
+
+    /// Responds to get_shwap_cid and returns all CIDs that were requested
+    async fn handle_get_shwap_cid(
+        handle: &mut MockP2pHandle,
+        store: &InMemoryStore,
+        height: u64,
+        eds: &ExtendedDataSquare,
+        simulate_invalid_sampling: bool,
+    ) -> Vec<Cid> {
+        let square_width = eds.square_width() as usize;
+        let needed_samples = (square_width * square_width).min(MAX_SAMPLES_NEEDED);
+
+        let mut cids = Vec::with_capacity(needed_samples);
+
+        for i in 0..needed_samples {
+            let (cid, respond_to) = handle.expect_get_shwap_cid().await;
+            cids.push(cid);
+
+            // Simulate invalid sample by triggering BitswapQueryTimeout
+            if simulate_invalid_sampling && i == 2 {
+                respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
+                continue;
+            }
+
+            let sample_id: SampleId = cid.try_into().unwrap();
+            assert_eq!(sample_id.block_height(), height);
+
+            let sample = gen_sample_of_cid(sample_id, eds, store).await;
+            let sample_bytes = sample.encode_vec().unwrap();
+
+            respond_to.send(Ok(sample_bytes)).unwrap();
+        }
+
+        cids
     }
 
     async fn gen_sample_of_cid(
@@ -628,26 +648,5 @@ mod tests {
             header.height().value(),
         )
         .unwrap()
-    }
-
-    async fn handle_get_shwap_cid(
-        handle: &mut MockP2pHandle,
-        store: &InMemoryStore,
-        height: u64,
-        eds: &ExtendedDataSquare,
-    ) {
-        let square_width = eds.square_width() as usize;
-
-        for _ in 0..(square_width * square_width).min(MAX_SAMPLES_NEEDED) {
-            let (cid, respond_to) = handle.expect_get_shwap_cid().await;
-
-            let sample_id: SampleId = cid.try_into().unwrap();
-            assert_eq!(sample_id.block_height(), height);
-
-            let sample = gen_sample_of_cid(sample_id, eds, store).await;
-            let sample_bytes = sample.encode_vec().unwrap();
-
-            respond_to.send(Ok(sample_bytes)).unwrap();
-        }
     }
 }
