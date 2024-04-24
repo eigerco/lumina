@@ -29,8 +29,9 @@ use crate::utils::FusedReusableBoxFuture;
 
 const MAX_SAMPLES_NEEDED: usize = 16;
 
-// Sampling window is 30 days
-const SAMPLING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+const HOUR: u64 = 60 * 60;
+const DAY: u64 = 24 * HOUR;
+const SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
 
@@ -239,9 +240,9 @@ where
 
         // Make sure that block is still in the sampling window.
         if !in_sampling_window(args.time) {
-            // Queue is sorted, so as soon as we reach a block
-            // that is not in the sampling window, it means the
-            // rest wouldn't be either.
+            // Queue is sorted by block height in descending order,
+            // so as soon as we reach a block that is not in the sampling
+            // window, it means the rest wouldn't be either.
             self.queue.clear();
             return Ok(());
         }
