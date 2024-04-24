@@ -255,8 +255,8 @@ where
             cids.push(cid);
         }
 
-        // Update CID list before we start the sampling procedure, otherwise there are
-        // some edge cases that can leak the CIDs and never cleaned from blockstore.
+        // Update the CID list before we start sampling, otherwise it's possible for us
+        // to leak CIDs causing associated blocks to never get cleaned from blockstore.
         self.store
             .update_sampling_metadata(args.height, SamplingStatus::Unknown, cids.clone())
             .await?;
