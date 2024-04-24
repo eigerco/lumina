@@ -350,7 +350,7 @@ where
                     };
 
                     if !in_sampling_window(header.time()) {
-                        // We reached the tail of the sampling window
+                        // We've reached the tail of the sampling window
                         break;
                     }
 
