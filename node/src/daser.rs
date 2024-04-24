@@ -301,10 +301,10 @@ where
 
     /// Add to the queue the blocks that need to be sampled.
     ///
-    /// NOTE: We resampled rejected blocks, because rejection can happen
-    /// because of edge-cases, such us network issues. This is a limitation
-    /// because of how Shwap works: The only way to know if sampling has failed
-    /// is via a timeout.
+    /// NOTE: We resample rejected blocks, because rejection can happen
+    /// in some unrelated edge-cases, such us network issues. This is a Shwap 
+    /// limitation that's coming from bitswap: only way for us to know if sampling
+    /// failed is via timeout.
     async fn populate_queue(&mut self) {
         // TODO: Adjust algorithm for backward syncing.
 
