@@ -155,7 +155,7 @@ where
 
         let mut peer_tracker_info_watcher = self.p2p.peer_tracker_info_watcher();
 
-        // Check if connection status changed before creating the watcher
+        // Check if connection status changed before watcher was created
         if peer_tracker_info_watcher.borrow().num_connected_peers > 0 {
             return;
         }
