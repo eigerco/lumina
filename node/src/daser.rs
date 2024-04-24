@@ -302,7 +302,7 @@ where
     /// Add to the queue the blocks that need to be sampled.
     ///
     /// NOTE: We resample rejected blocks, because rejection can happen
-    /// in some unrelated edge-cases, such us network issues. This is a Shwap 
+    /// in some unrelated edge-cases, such us network issues. This is a Shwap
     /// limitation that's coming from bitswap: only way for us to know if sampling
     /// failed is via timeout.
     async fn populate_queue(&mut self) {
