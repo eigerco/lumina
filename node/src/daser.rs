@@ -263,7 +263,7 @@ where
 
         let p2p = self.p2p.clone();
 
-        // Schedule retrival of the CIDs. This will run later on in the `select!` loop.
+        // Schedule retrival of the CIDs. This will be run later on in the `select!` loop.
         self.sampling_fut.set(async move {
             let now = Instant::now();
             let mut futs = FuturesUnordered::new();
