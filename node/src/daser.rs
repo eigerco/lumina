@@ -249,7 +249,7 @@ where
 
         let mut cids = Vec::new();
 
-        // Select random shares to be sampled and generate their CID.
+        // Select random shares to be sampled and generate their CIDs.
         for (row, col) in random_indexes(args.square_width, self.max_samples_needed) {
             let cid = sample_cid(row, col, args.height)?;
             cids.push(cid);
