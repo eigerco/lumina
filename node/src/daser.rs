@@ -237,7 +237,7 @@ where
             return Ok(());
         };
 
-        // Make sure that block is still in the sampling window.
+        // Make sure that the block is still in the sampling window.
         if !in_sampling_window(args.time) {
             // Queue is sorted by block height in descending order,
             // so as soon as we reach a block that is not in the sampling
