@@ -5,7 +5,7 @@
 //!
 //! 1. Daser waits for at least one peer to connect.
 //! 2. Daser gets the local head height from the [`Store`] and iterates in reverse order
-//!    all the stored blocks.
+//!    over all the stored blocks.
 //!    - If a block is not sampled or if it was rejected, Daser queue it for sampling.
 //!      The rejected blocks are resampled because their rejection could be due unrelated
 //!      edge-cases than sampling, such us network issues.
