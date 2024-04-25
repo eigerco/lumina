@@ -7,8 +7,8 @@
 //! 2. Daser gets the local head height from the [`Store`] and iterates in reverse order
 //!    over all the stored blocks.
 //!    - If a block has not been sampled or it was rejected, Daser will queue it for sampling.
-//!      The rejected blocks are resampled because their rejection could be due unrelated
-//!      edge-cases than sampling, such us network issues.
+//!      Rejected blocks are resampled because their rejection could be caused by
+//!      edge-cases unrelated to data availability, such as network issues.
 //!    - If a block is not within sampling window, it is not queued.
 //!    - Queue is always sorted in descending order to give priority to latest blocks.
 //! 3. When new headers are available in the [`Store`], Daser adds them to the queue if
