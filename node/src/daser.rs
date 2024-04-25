@@ -9,7 +9,7 @@
 //!    - If a block has not been sampled or it was rejected, Daser will queue it for sampling.
 //!      Rejected blocks are resampled because their rejection could be caused by
 //!      edge-cases unrelated to data availability, such as network issues.
-//!    - If a block is not within sampling window, it is not queued.
+//!    - If a block is not within the sampling window, it is not queued.
 //!    - Queue is always sorted in descending order to give priority to latest blocks.
 //! 3. When new headers are available in the [`Store`], Daser adds them to the queue if
 //!    they are within the sampling window.
