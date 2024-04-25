@@ -1,4 +1,4 @@
-//! Component responsible for synchronizing block headers announced in the Celestia network.
+//! Component respnsible for synchronizing block headers announced in the Celestia network.
 //!
 //! It starts by asking the trusted peers for their current head headers and picks
 //! the latest header returned by at least two of them as the initial synchronization target
@@ -9,7 +9,9 @@
 //! headers announced on the `header-sub` p2p protocol to keep the `subjective_head` as close
 //! to the `network_head` as possible.
 
+use std::iter;
 use std::marker::PhantomData;
+use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -18,7 +20,9 @@ use backoff::ExponentialBackoffBuilder;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use futures::FutureExt;
+use itertools::Itertools;
 use serde::Serialize;
+use smallvec::SmallVec;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
@@ -26,7 +30,7 @@ use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::{Store, StoreError};
+use crate::store::{HeaderRanges, Store, StoreError};
 use crate::utils::OneshotSenderExt;
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
@@ -180,8 +184,7 @@ where
 }
 
 struct Ongoing {
-    start: u64,
-    end: u64,
+    fetch_ranges: HeaderRanges,
     cancellation_token: CancellationToken,
 }
 
@@ -305,10 +308,7 @@ where
         }
 
         if let Some(ongoing) = self.ongoing_batch.take() {
-            warn!(
-                "Cancelling fetching of [{}, {}]",
-                ongoing.start, ongoing.end
-            );
+            warn!("Cancelling fetching of [{:?}]", ongoing.fetch_ranges,);
             ongoing.cancellation_token.cancel();
         }
     }
@@ -330,7 +330,7 @@ where
         let ongoing_batch = self
             .ongoing_batch
             .as_ref()
-            .map(|ongoing| format!("[{}, {}]", ongoing.start, ongoing.end))
+            .map(|ongoing| format!("[{:?}]", ongoing.fetch_ranges))
             .unwrap_or_else(|| "None".to_string());
 
         info!("syncing: {local_head}/{subjective_head}, ongoing batch: {ongoing_batch}",);
@@ -430,19 +430,27 @@ where
             return;
         };
 
+        /*
         let Ok(local_head) = self.store.get_head().await else {
             // Nothing to schedule
             return;
         };
+        */
+        let store_ranges = self.store.get_stored_header_ranges().await.unwrap();
 
-        let amount = subjective_head_height
-            .saturating_sub(local_head.height().value())
-            .min(MAX_HEADERS_IN_BATCH);
+        let fetch_ranges =
+            calc_fetch_ranges(subjective_head_height, &store_ranges, MAX_HEADERS_IN_BATCH);
 
-        if amount == 0 {
-            // Nothing to schedule
-            return;
-        }
+        /*
+                let amount = subjective_head_height
+                    .saturating_sub(local_head.height().value())
+                    .min(MAX_HEADERS_IN_BATCH);
+
+                if amount == 0 {
+                    // Nothing to schedule
+                    return;
+                }
+        */
 
         if self.p2p.peer_tracker_info().num_connected_peers == 0 {
             // No connected peers. We can't do the request.
@@ -450,23 +458,32 @@ where
             return;
         }
 
-        let start = local_head.height().value() + 1;
-        let end = start + amount - 1;
+        //let start = local_head.height().value() + 1;
+        //let end = start + amount - 1;
         let cancellation_token = self.cancellation_token.child_token();
 
+        info!("Fetching batch with ranges {fetch_ranges:?}");
         self.ongoing_batch = Some(Ongoing {
-            start,
-            end,
+            fetch_ranges: fetch_ranges.clone(),
             cancellation_token: cancellation_token.clone(),
         });
-        info!("Fetching batch {start} until {end}");
 
         let tx = self.headers_tx.clone();
         let p2p = self.p2p.clone();
 
         spawn_cancellable(cancellation_token, async move {
-            let res = p2p.get_verified_headers_range(&local_head, amount).await;
-            let _ = tx.send(res).await;
+            let result = p2p.get_multiple_header_ranges(fetch_ranges).await;
+            // TODO: cleanup
+            match result {
+                Ok(headers) => {
+                    for header_span in headers {
+                        let _ = tx.send(Ok(header_span)).await;
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(Err(e)).await;
+                }
+            }
         });
     }
 
@@ -477,13 +494,13 @@ where
             return;
         };
 
-        let start = ongoing.start;
-        let end = ongoing.end;
-
         let headers = match res {
             Ok(headers) => headers,
             Err(e) => {
-                warn!("Failed to receive batch {start} until {end}: {e}");
+                warn!(
+                    "Failed to receive batch for ranges {:?}: {e}",
+                    ongoing.fetch_ranges
+                );
                 return;
             }
         };
@@ -491,9 +508,57 @@ where
         // Headers are already verified by `get_verified_headers_range`,
         // so `append_unchecked` is used for optimization.
         if let Err(e) = self.store.append_unchecked(headers).await {
-            warn!("Failed to store batch {start} until {end}: {e}");
+            warn!("Failed to store batch {:?}: {e}", ongoing.fetch_ranges);
         }
     }
+}
+
+fn calc_fetch_ranges(
+    head_height: u64,
+    store_headers: &[RangeInclusive<u64>],
+    limit: u64,
+) -> HeaderRanges {
+    let range_edges = iter::once(head_height + 1)
+        .chain(
+            store_headers
+                .iter()
+                .flat_map(|r| [*r.start(), *r.end()])
+                .rev(),
+        )
+        .chain(iter::once(0));
+
+    let mut left = limit;
+    let missing_ranges = range_edges
+        .inspect(|v| println!("> {v}"))
+        .chunks(2)
+        .into_iter()
+        .map_while(|mut range| {
+            if left == 0 {
+                return None;
+            }
+            // ranges_edges is even and we divide into 2 element chunks, this is safe
+            let upper_bound = range.next().unwrap() - 1;
+            let lower_bound = range.next().unwrap();
+            let range_len = upper_bound.checked_sub(lower_bound)?;
+
+            if range_len == 0 {
+                return Some(RangeInclusive::new(1, 0));
+            }
+
+            if left > range_len {
+                println!("{left} -= {range_len}");
+                left -= range_len;
+                Some(RangeInclusive::new(lower_bound + 1, upper_bound))
+            } else {
+                let truncated_lower_bound = upper_bound - left;
+                println!("{upper_bound} - {left} = {truncated_lower_bound}");
+                left = 0;
+                Some(RangeInclusive::new(truncated_lower_bound + 1, upper_bound))
+            }
+        })
+        .filter(|v| !v.is_empty())
+        .collect();
+    HeaderRanges(missing_ranges)
 }
 
 async fn try_init<S>(p2p: &P2p, store: &S, genesis_hash: Option<Hash>) -> Result<u64>
@@ -904,5 +969,45 @@ mod tests {
 
         // Remove already sent batch
         remaining_headers.drain(..sum_amount as usize);
+    }
+
+    #[test]
+    fn test_calc_missing_ranges() {
+        let head_height = 50;
+        let ranges = [
+            RangeInclusive::new(1, 5),
+            RangeInclusive::new(15, 20),
+            RangeInclusive::new(23, 28),
+            RangeInclusive::new(30, 40),
+        ];
+        let expected_missing_ranges = [
+            RangeInclusive::new(41, 50),
+            RangeInclusive::new(29, 29),
+            RangeInclusive::new(21, 22),
+            RangeInclusive::new(6, 14),
+        ];
+
+        let missing_ranges = calc_fetch_ranges(head_height, &ranges, 512);
+        assert_eq!(missing_ranges, expected_missing_ranges);
+    }
+
+    #[test]
+    fn test_calc_missing_ranges_partial() {
+        let head_height = 10;
+        let ranges = [RangeInclusive::new(6, 7)];
+        let expected_missing_ranges = [RangeInclusive::new(8, 10), RangeInclusive::new(4, 5)];
+
+        let missing_ranges = calc_fetch_ranges(head_height, &ranges, 5);
+        assert_eq!(missing_ranges, expected_missing_ranges);
+    }
+
+    #[test]
+    fn test_calc_missing_ranges_contiguous() {
+        let head_height = 10;
+        let ranges = [RangeInclusive::new(5, 6), RangeInclusive::new(7, 9)];
+        let expected_missing_ranges = [RangeInclusive::new(10, 10), RangeInclusive::new(1, 4)];
+
+        let missing_ranges = calc_fetch_ranges(head_height, &ranges, 5);
+        assert_eq!(missing_ranges, expected_missing_ranges);
     }
 }

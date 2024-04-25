@@ -10,7 +10,7 @@ use dashmap::DashMap;
 use tokio::sync::Notify;
 use tracing::{debug, info};
 
-use crate::store::{Result, SamplingMetadata, Store, StoreError};
+use crate::store::{HeaderRange, Result, SamplingMetadata, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -23,6 +23,8 @@ pub struct InMemoryStore {
     height_to_hash: DashMap<u64, Hash>,
     /// Cached height of the highest header in store
     head_height: AtomicU64,
+    /// Height of the lowest header in the store
+    tail_height: AtomicU64,
     /// Cached height of the lowest header that wasn't sampled yet
     lowest_unsampled_height: AtomicU64,
     /// Notify when a new header is added
@@ -36,15 +38,33 @@ impl InMemoryStore {
             headers: DashMap::new(),
             sampling_data: DashMap::new(),
             height_to_hash: DashMap::new(),
+            //height_range: (AtomicU64::new(0)..AtomicU64::new(0)),
             head_height: AtomicU64::new(0),
+            tail_height: AtomicU64::new(0),
             lowest_unsampled_height: AtomicU64::new(1),
             header_added_notifier: Notify::new(),
         }
     }
 
+    fn is_empty(&self) -> bool {
+        self.head_height.load(Ordering::Acquire) == 0
+            && self.tail_height.load(Ordering::Acquire) == 0
+    }
+
     #[inline]
     fn get_head_height(&self) -> Result<u64> {
         let height = self.head_height.load(Ordering::Acquire);
+
+        if height == 0 {
+            Err(StoreError::NotFound)
+        } else {
+            Ok(height)
+        }
+    }
+
+    #[inline]
+    fn get_tail_height(&self) -> Result<u64> {
+        let height = self.tail_height.load(Ordering::Acquire);
 
         if height == 0 {
             Err(StoreError::NotFound)
@@ -63,14 +83,16 @@ impl InMemoryStore {
         let height = header.height().value();
         let head_height = self.get_head_height().unwrap_or(0);
 
-        // A light check before checking the whole map
-        if head_height > 0 && height <= head_height {
-            return Err(StoreError::HeightExists(height));
-        }
+        if !self.is_empty() {
+            // A light check before checking the whole map
+            if head_height > 0 && height <= head_height {
+                return Err(StoreError::HeightExists(height));
+            }
 
-        // Check if it's continuous before checking the whole map.
-        if head_height + 1 != height {
-            return Err(StoreError::NonContinuousAppend(head_height, height));
+            // Check if it's continuous before checking the whole map.
+            if head_height + 1 != height {
+                return Err(StoreError::NonContinuousAppend(head_height, height));
+            }
         }
 
         // lock both maps to ensure consistency
@@ -94,6 +116,13 @@ impl InMemoryStore {
         height_entry.insert(hash);
 
         self.head_height.store(height, Ordering::Release);
+        if self
+            .tail_height
+            .compare_exchange(0, height, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+        {
+            info!("Inserting first header at {height}");
+        }
         self.header_added_notifier.notify_waiters();
 
         Ok(())
@@ -207,6 +236,68 @@ impl InMemoryStore {
 
         Ok(Some(metadata.clone()))
     }
+
+    fn prepend(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        // assert headers are verified internally
+        for header in headers.into_iter().rev() {
+            println!("insert {:?}", header.height());
+            self.prepend_single_unchecked(header)?;
+        }
+
+        Ok(())
+    }
+
+    fn prepend_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
+        let hash = header.hash();
+        let height = header.height().value();
+        let tail_height = self.get_tail_height().unwrap_or(0);
+
+        if !self.is_empty() {
+            if height > tail_height {
+                return Err(StoreError::HeightExists(height));
+            }
+
+            println!("{height}, {tail_height}");
+            if height != tail_height - 1 {
+                return Err(StoreError::NonContinuousAppend(tail_height, height));
+            }
+        }
+
+        let hash_entry = self.headers.entry(hash);
+        let height_entry = self.height_to_hash.entry(height);
+
+        if matches!(hash_entry, Entry::Occupied(_)) {
+            return Err(StoreError::HashExists(hash));
+        }
+
+        if matches!(height_entry, Entry::Occupied(_)) {
+            // Reaching this point means another thread won the race and
+            // there is a new tail already.
+            return Err(StoreError::HeightExists(height));
+        }
+
+        println!("Inserting header {hash} with height {height}");
+        hash_entry.insert(header);
+        height_entry.insert(hash);
+
+        self.tail_height.store(height, Ordering::Release);
+        if self
+            .head_height
+            .compare_exchange(0, height, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+        {
+            info!("Inserting first header at {height}");
+        }
+
+        self.header_added_notifier.notify_waiters();
+        println!(
+            "head: {:?}, tail: {:?}",
+            self.get_head_height(),
+            self.get_tail_height()
+        );
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -271,6 +362,13 @@ impl Store for InMemoryStore {
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         self.get_sampling_metadata(height)
     }
+    async fn prepend(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        self.prepend(headers)
+    }
+
+    async fn get_stored_header_ranges(&self) -> Result<Vec<HeaderRange>> {
+        todo!()
+    }
 }
 
 impl Default for InMemoryStore {
@@ -286,10 +384,27 @@ impl Clone for InMemoryStore {
             sampling_data: self.sampling_data.clone(),
             height_to_hash: self.height_to_hash.clone(),
             head_height: AtomicU64::new(self.head_height.load(Ordering::Acquire)),
+            tail_height: AtomicU64::new(self.tail_height.load(Ordering::Acquire)),
             lowest_unsampled_height: AtomicU64::new(
                 self.lowest_unsampled_height.load(Ordering::Acquire),
             ),
             header_added_notifier: Notify::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use celestia_types::test_utils::ExtendedHeaderGenerator;
+
+    #[test]
+    fn prepend() {
+        let store = InMemoryStore::new();
+        let mut gen = ExtendedHeaderGenerator::new();
+        let _ = gen.next_many(10);
+        let hs = gen.next_many(40);
+
+        store.prepend(hs).unwrap();
     }
 }

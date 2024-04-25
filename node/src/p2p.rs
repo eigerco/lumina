@@ -62,7 +62,7 @@ use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihash
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::store::Store;
+use crate::store::{HeaderRanges, Store};
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
     OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt,
@@ -398,13 +398,25 @@ impl P2p {
 
         let height = from.height().value() + 1;
 
-        let mut session = HeaderSession::new(height, amount, self.cmd_tx.clone())?;
+        let range = height..=height + amount;
+
+        let mut session = HeaderSession::new(range.into(), self.cmd_tx.clone())?;
         let headers = session.run().await?;
 
         from.verify_adjacent_range(&headers)
             .map_err(|_| HeaderExError::InvalidResponse)?;
 
         Ok(headers)
+    }
+
+    pub async fn get_multiple_header_ranges(
+        &self,
+        ranges: HeaderRanges,
+    ) -> Result<Vec<Vec<ExtendedHeader>>> {
+        let mut session = HeaderSession::new(ranges, self.cmd_tx.clone())?;
+        let header_ranges = session.run().await?;
+        info!("{header_ranges:?}");
+        Ok(vec![])
     }
 
     /// Request a [`Cid`] on bitswap protocol.

@@ -1,3 +1,4 @@
+use std::ops::RangeInclusive;
 use std::pin::pin;
 use std::sync::Arc;
 use std::{convert::Infallible, path::Path};
@@ -19,9 +20,13 @@ use crate::store::{Result, SamplingMetadata, Store, StoreError};
 
 const SCHEMA_VERSION: u64 = 1;
 
-const HEAD_HEIGHT_KEY: &[u8] = b"KEY.HEAD_HEIGHT";
+//const HEAD_HEIGHT_KEY: &[u8] = b"KEY.HEAD_HEIGHT";
 const NEXT_UNSAMPLED_HEIGHT_KEY: &[u8] = b"KEY.UNSAMPLED_HEIGHT";
 
+const HEADER_HEIGHT_RANGES: TableDefinition<'static, u64, (u64, u64)> =
+    TableDefinition::new("STORE.HEIGHT_RANGES");
+const SAMPLED_HEIGHT_RANGES: TableDefinition<'static, u64, (u64, u64)> =
+    TableDefinition::new("STORE.SAMPLED_RANGES");
 const HEIGHTS_TABLE: TableDefinition<'static, &[u8], u64> = TableDefinition::new("STORE.HEIGHTS");
 const HEADERS_TABLE: TableDefinition<'static, u64, &[u8]> = TableDefinition::new("STORE.HEADERS");
 const SAMPLING_METADATA_TABLE: TableDefinition<'static, u64, &[u8]> =
@@ -80,7 +85,7 @@ impl RedbStore {
 
                 match schema_version {
                     Some(schema_version) => {
-                        // TODO: When we schema we should migrate from older versions to newer ones.
+                        // TODO: When we update the schema we need to perform manual migration
                         if schema_version != SCHEMA_VERSION {
                             let e = format!("Incompatible database schema; found {schema_version}, expected {SCHEMA_VERSION}.");
                             return Err(StoreError::OpenFailed(e));
@@ -93,13 +98,15 @@ impl RedbStore {
 
                 let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
 
+                /*
                 if heights_table.get(HEAD_HEIGHT_KEY)?.is_none() {
                     heights_table.insert(HEAD_HEIGHT_KEY, 0)?;
                 }
-
+*/
                 if heights_table.get(NEXT_UNSAMPLED_HEIGHT_KEY)?.is_none() {
                     heights_table.insert(NEXT_UNSAMPLED_HEIGHT_KEY, 1)?;
                 }
+
 
                 Ok(())
             })
@@ -162,13 +169,15 @@ impl RedbStore {
 
     async fn head_height(&self) -> Result<u64> {
         self.read_tx(|tx| {
-            let table = tx.open_table(HEIGHTS_TABLE)?;
-            let head_height = get_height(&table, HEAD_HEIGHT_KEY)?;
+            let table = tx.open_table(HEADER_HEIGHT_RANGES)?;
+            let highest_range = get_current_range(&table)?;
 
-            if head_height == 0 {
+            println!("r: {highest_range:?}");
+
+            if highest_range.is_empty() {
                 Err(StoreError::NotFound)
             } else {
-                Ok(head_height)
+                Ok(*highest_range.end())
             }
         })
         .await
@@ -205,11 +214,11 @@ impl RedbStore {
 
     async fn get_head(&self) -> Result<ExtendedHeader> {
         self.read_tx(|tx| {
-            let heights_table = tx.open_table(HEIGHTS_TABLE)?;
+            let height_ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
             let headers_table = tx.open_table(HEADERS_TABLE)?;
 
-            let head_height = get_height(&heights_table, HEAD_HEIGHT_KEY)?;
-            get_header(&headers_table, head_height)
+            let head_range = get_current_range(&height_ranges_table)?;
+            get_header(&headers_table, *head_range.end())
         })
         .await
     }
@@ -231,7 +240,7 @@ impl RedbStore {
     async fn contains_height(&self, height: u64) -> bool {
         self.read_tx(move |tx| {
             let headers_table = tx.open_table(HEADERS_TABLE)?;
-            Ok(headers_table.get(height)?.is_some())
+            Ok(dbg!(headers_table.get(height)?.is_some()))
         })
         .await
         .unwrap_or(false)
@@ -241,20 +250,10 @@ impl RedbStore {
         self.write_tx(move |tx| {
             let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let mut headers_table = tx.open_table(HEADERS_TABLE)?;
+            let mut height_ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
 
-            let hash = header.hash();
             let height = header.height().value();
-            let head_height = get_height(&heights_table, HEAD_HEIGHT_KEY)?;
-
-            // A light check before checking the whole map
-            if head_height > 0 && height <= head_height {
-                return Err(StoreError::HeightExists(height));
-            }
-
-            // Check if it's continuous before checking the whole map.
-            if head_height + 1 != height {
-                return Err(StoreError::NonContinuousAppend(head_height, height));
-            }
+            try_insert_to_range(&mut height_ranges_table, height)?;
 
             // make sure Result is Infallible and unwrap it later
             let serialized_header: Result<_, Infallible> = header.encode_vec();
@@ -267,11 +266,10 @@ impl RedbStore {
                 return Err(StoreError::HeightExists(height));
             }
 
+            let hash = header.hash();
             if heights_table.insert(hash.as_bytes(), height)?.is_some() {
                 return Err(StoreError::HashExists(hash));
             }
-
-            heights_table.insert(HEAD_HEIGHT_KEY, height)?;
 
             debug!("Inserted header {hash} with height {height}");
             Ok(())
@@ -289,20 +287,21 @@ impl RedbStore {
         accepted: bool,
         cids: Vec<Cid>,
     ) -> Result<u64> {
+        println!("height: {height}");
+        if dbg!(!self.contains_height(height).await) {
+            return Err(StoreError::NotFound);
+        }
+
+        println!("pre writetx");
         self.write_tx(move |tx| {
-            let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
+            let heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let mut sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
-
-            // Make sure we have the header being marked
-            let head_height = get_height(&heights_table, HEAD_HEIGHT_KEY)?;
-
-            if height == 0 || height > head_height {
-                return Err(StoreError::NotFound);
-            }
+            let mut sampled_ranges_table = tx.open_table(SAMPLED_HEIGHT_RANGES)?;
 
             let previous = get_sampling_metadata(&sampling_metadata_table, height)?;
             let new_inserted = previous.is_none();
 
+            println!("pre entry");
             let entry = match previous {
                 Some(mut previous) => {
                     previous.accepted = accepted;
@@ -321,14 +320,18 @@ impl RedbStore {
                 },
             };
 
+            println!("pre serialize");
             // make sure Result is Infallible and unwrap it later
             let serialized: Result<_, Infallible> = entry.encode_vec();
             let serialized = serialized.unwrap();
 
             sampling_metadata_table.insert(height, &serialized[..])?;
 
+            println!("pre update");
             if new_inserted {
-                update_sampling_height(&mut heights_table, &mut sampling_metadata_table)
+                try_insert_to_range(&mut sampled_ranges_table, height)?;
+                //update_sampling_height(&mut heights_table, &mut sampling_metadata_table)
+                todo!()
             } else {
                 info!("Overriding existing sampling metadata for height {height}");
                 get_height(&heights_table, NEXT_UNSAMPLED_HEIGHT_KEY)
@@ -338,18 +341,23 @@ impl RedbStore {
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+        println!("height: {height}");
+        if dbg!(!self.contains_height(height).await) {
+            return Err(StoreError::NotFound);
+        }
+
         self.read_tx(move |tx| {
-            let heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
 
-            // Make sure we have the header of height
-            let head_height = get_height(&heights_table, HEAD_HEIGHT_KEY)?;
-
-            if height == 0 || height > head_height {
-                return Err(StoreError::NotFound);
-            }
-
             get_sampling_metadata(&sampling_metadata_table, height)
+        })
+        .await
+    }
+
+    async fn get_stored_header_ranges(&self) -> Result<Vec<RangeInclusive<u64>>> {
+        self.read_tx(|tx| {
+            let table = tx.open_table(HEADER_HEIGHT_RANGES)?;
+            get_all_ranges(&table)
         })
         .await
     }
@@ -417,6 +425,95 @@ impl Store for RedbStore {
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         self.get_sampling_metadata(height).await
     }
+    async fn prepend(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        todo!()
+    }
+
+    async fn get_stored_header_ranges(&self) -> Result<Vec<RangeInclusive<u64>>> {
+        self.get_stored_header_ranges().await
+    }
+}
+
+// TODO: ranges consolidation
+fn try_find_range_for_height<R>(ranges_table: &R, height: u64) -> Result<(u64, RangeInclusive<u64>)>
+where
+    R: ReadableTable<u64, (u64, u64)>,
+{
+    let range_iter = ranges_table.iter()?.rev();
+
+    let mut head_range = true;
+    for range in range_iter {
+        let (key, bounds) = range?;
+        let bounds = bounds.value();
+
+        let range = RangeInclusive::new(bounds.0, bounds.1);
+
+        if range.end() + 1 == height {
+            return Ok((key.value(), RangeInclusive::new(*range.start(), height)));
+        }
+        if range.start() - 1 == height {
+            return Ok((key.value(), RangeInclusive::new(height, *range.end())));
+        }
+
+        if range.end() < &height {
+            // allow creation of a new range in front of the head range
+            if head_range {
+                return Ok((key.value() + 1, RangeInclusive::new(height, height)));
+            } else {
+                // TODO: this now points to highest height previous to proposed, is it misleading?
+                return Err(StoreError::NonContinuousAppend(*range.end(), height));
+            }
+        }
+
+        if range.contains(&height) {
+            return Err(StoreError::HeightExists(height));
+        }
+
+        // only first header range iteration is special
+        head_range = false;
+    }
+
+    if head_range {
+        Ok((0, RangeInclusive::new(height, height)))
+    } else {
+        Err(StoreError::NonContinuousAppend(0, height))
+    }
+}
+
+fn try_insert_to_range(ranges_table: &mut Table<u64, (u64, u64)>, height: u64) -> Result<()> {
+    let (range_key, range) = try_find_range_for_height(ranges_table, height)?;
+
+    println!("allocated range {range_key}: {range:?}");
+
+    ranges_table.insert(range_key, (*range.start(), *range.end()))?;
+
+    Ok(())
+}
+
+fn get_current_range<R>(ranges_table: &R) -> Result<RangeInclusive<u64>>
+where
+    R: ReadableTable<u64, (u64, u64)>,
+{
+    ranges_table
+        .last()?
+        .map(|(_key_guard, value_guard)| {
+            let range = value_guard.value();
+            RangeInclusive::new(range.0, range.1)
+        })
+        .ok_or(StoreError::NotFound)
+}
+
+fn get_all_ranges<R>(ranges_table: &R) -> Result<Vec<RangeInclusive<u64>>>
+where
+    R: ReadableTable<u64, (u64, u64)>,
+{
+    ranges_table
+        .iter()?
+        .map(|range_guard| {
+            let range = range_guard?.1.value();
+            Ok(RangeInclusive::new(range.0, range.1))
+        })
+        .collect::<Result<Vec<_>, _>>()
 }
 
 #[inline]
@@ -461,10 +558,12 @@ fn update_sampling_height(
     heights_table: &mut Table<&'static [u8], u64>,
     sampling_metadata_table: &mut Table<u64, &'static [u8]>,
 ) -> Result<u64> {
+    println!("update_sampling_height");
     let previous_height = get_height(heights_table, NEXT_UNSAMPLED_HEIGHT_KEY)?;
     let mut new_height = previous_height;
 
     while sampling_metadata_table.get(new_height)?.is_some() {
+        println!("h: {new_height:?}");
         new_height += 1;
     }
 
@@ -496,6 +595,23 @@ impl From<TableError> for StoreError {
         }
     }
 }
+
+/*
+trait HeaderRange {
+    fn start_height(&self) -> u64;
+    fn end_height(&self) -> u64;
+}
+
+impl HeaderRange for Range<u64> {
+    fn start_height(&self) -> u64 {
+        self.start
+    }
+    fn end_height(&self) -> u64 {
+        // Range contains start <= x < end, last height present is end - 1
+        self.end - 1
+    }
+}
+*/
 
 impl From<StorageError> for StoreError {
     fn from(e: StorageError) -> Self {

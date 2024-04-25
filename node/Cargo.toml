@@ -39,6 +39,8 @@ dashmap = "5.5.3"
 futures = "0.3.28"
 hex = "0.4.3"
 instant = "0.1.12"
+itertools = "0.12"
+num = "0.4"
 prost = "0.12.0"
 rand = "0.8.5"
 serde = { version = "1.0.164", features = ["derive"] }

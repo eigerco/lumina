@@ -6,6 +6,7 @@ use tracing::debug;
 use crate::executor::spawn;
 use crate::p2p::header_ex::utils::HeaderRequestExt;
 use crate::p2p::{HeaderExError, P2pCmd, P2pError};
+use crate::store::{HeaderRanges, HeaderRangesIterator, RangeLengthExt};
 
 const MAX_AMOUNT_PER_REQ: u64 = 64;
 const MAX_CONCURRENT_REQS: usize = 8;
@@ -13,8 +14,7 @@ const MAX_CONCURRENT_REQS: usize = 8;
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
 pub(crate) struct HeaderSession {
-    next_height: u64,
-    remaining_amount: u64,
+    ranges_iter: HeaderRangesIterator,
     cmd_tx: mpsc::Sender<P2pCmd>,
     response_tx: mpsc::Sender<(u64, u64, Result<Vec<ExtendedHeader>>)>,
     response_rx: mpsc::Receiver<(u64, u64, Result<Vec<ExtendedHeader>>)>,
@@ -22,16 +22,20 @@ pub(crate) struct HeaderSession {
 }
 
 impl HeaderSession {
-    pub(crate) fn new(from_height: u64, amount: u64, cmd_tx: mpsc::Sender<P2pCmd>) -> Result<Self> {
-        if from_height < 1 || amount < 1 {
-            return Err(P2pError::HeaderEx(HeaderExError::InvalidRequest));
-        }
+    pub(crate) fn new(ranges: HeaderRanges, cmd_tx: mpsc::Sender<P2pCmd>) -> Result<Self> {
+        // TODO:
+        //ranges.validate()?;
+
+        /*
+                if from_height < 1 || amount < 1 {
+                    return Err(P2pError::HeaderEx(HeaderExError::InvalidRequest));
+                }
+        */
 
         let (response_tx, response_rx) = mpsc::channel(MAX_CONCURRENT_REQS);
 
         Ok(HeaderSession {
-            next_height: from_height,
-            remaining_amount: amount,
+            ranges_iter: ranges.into_iter(),
             cmd_tx,
             response_tx,
             response_rx,
@@ -43,10 +47,6 @@ impl HeaderSession {
         let mut responses = Vec::new();
 
         for _ in 0..MAX_CONCURRENT_REQS {
-            if self.remaining_amount == 0 {
-                break;
-            }
-
             self.send_next_request().await?;
         }
 
@@ -94,15 +94,11 @@ impl HeaderSession {
     }
 
     pub(crate) async fn send_next_request(&mut self) -> Result<()> {
-        if self.remaining_amount == 0 {
+        let Some(range) = self.ranges_iter.next_batch(MAX_AMOUNT_PER_REQ) else {
             return Ok(());
-        }
+        };
 
-        let amount = self.remaining_amount.min(MAX_AMOUNT_PER_REQ);
-        self.send_request(self.next_height, amount).await?;
-
-        self.next_height += amount;
-        self.remaining_amount -= amount;
+        self.send_request(*range.start(), range.len()).await?;
 
         Ok(())
     }
@@ -150,7 +146,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(64);
 
-        let mut session = HeaderSession::new(1, 64, p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new((1..=64).into(), p2p_mock.cmd_tx.clone()).unwrap();
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -179,7 +175,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(520);
 
-        let mut session = HeaderSession::new(1, 520, p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new((1..=520).into(), p2p_mock.cmd_tx.clone()).unwrap();
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -215,7 +211,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(64);
 
-        let mut session = HeaderSession::new(1, 64, p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new((1..=64).into(), p2p_mock.cmd_tx.clone()).unwrap();
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -244,7 +240,7 @@ mod tests {
     async fn no_peers_is_fatal() {
         let (_p2p, mut p2p_mock) = P2p::mocked();
 
-        let mut session = HeaderSession::new(1, 64, p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new((1..=64).into(), p2p_mock.cmd_tx.clone()).unwrap();
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;

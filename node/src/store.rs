@@ -11,6 +11,7 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use prost::Message;
 use serde::{Deserialize, Serialize};
+use smallvec::{smallvec, IntoIter, SmallVec};
 use thiserror::Error;
 
 pub use in_memory_store::InMemoryStore;
@@ -41,6 +42,81 @@ pub struct SamplingMetadata {
 }
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
+
+pub type HeaderRange = RangeInclusive<u64>;
+
+pub trait RangeLengthExt {
+    fn len(&self) -> u64;
+}
+
+impl RangeLengthExt for RangeInclusive<u64> {
+    fn len(&self) -> u64 {
+        (self.end() - self.start() + 1)
+            .try_into()
+            .expect("out of range")
+    }
+}
+
+// TODO: less pub?
+#[derive(Debug, Clone)] // TODO: manual implementation probably
+pub struct HeaderRanges(pub SmallVec<[RangeInclusive<u64>; 2]>);
+
+impl HeaderRanges {
+    pub fn validate(&self) -> Result<()> {
+        // TODO
+        Ok(())
+    }
+}
+
+impl From<RangeInclusive<u64>> for HeaderRanges {
+    fn from(value: RangeInclusive<u64>) -> Self {
+        Self(smallvec![value])
+    }
+}
+
+impl IntoIterator for HeaderRanges {
+    type Item = u64;
+    type IntoIter = HeaderRangesIterator;
+    fn into_iter(self) -> Self::IntoIter {
+        let mut outer_iter = self.0.into_iter();
+        HeaderRangesIterator {
+            inner_iter: outer_iter.next(),
+            outer_iter,
+        }
+    }
+}
+
+pub struct HeaderRangesIterator {
+    inner_iter: Option<RangeInclusive<u64>>,
+    outer_iter: IntoIter<[RangeInclusive<u64>; 2]>,
+}
+
+impl HeaderRangesIterator {
+    pub fn next_batch(&mut self, limit: u64) -> Option<RangeInclusive<u64>> {
+        let current_range = self.inner_iter.take()?;
+        let len = current_range.end() - current_range.start() + 1;
+
+        if current_range.len() <= limit {
+            self.inner_iter = self.outer_iter.next();
+            Some(current_range)
+        } else {
+            let returned_range = *current_range.start()..=*current_range.start() + limit - 1;
+            self.inner_iter = Some(*current_range.start() + limit..=*current_range.end());
+            Some(returned_range)
+        }
+    }
+}
+
+impl Iterator for HeaderRangesIterator {
+    type Item = u64;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(v) = self.inner_iter.as_mut()?.next() {
+            return Some(v);
+        }
+        self.inner_iter = self.outer_iter.next();
+        self.next()
+    }
+}
 
 /// An asynchronous [`ExtendedHeader`] storage.
 ///
@@ -166,6 +242,8 @@ pub trait Store: Send + Sync + Debug {
         self.append_single_unchecked(header).await
     }
 
+    async fn prepend(&self, headers: Vec<ExtendedHeader>) -> Result<()>;
+
     /// Append a range of headers maintaining continuity from the genesis to the head.
     async fn append(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
         validate_headers(&headers).await?;
@@ -181,6 +259,8 @@ pub trait Store: Send + Sync + Debug {
 
         self.append_unchecked(headers).await
     }
+
+    async fn get_stored_header_ranges(&self) -> Result<Vec<HeaderRange>>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].
@@ -606,7 +686,7 @@ mod tests {
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
-    async fn test_append_gap_between_head<S: Store>(
+    async fn test_fill_range_gap<S: Store>(
         #[case]
         #[future(awt)]
         s: S,
@@ -615,15 +695,37 @@ mod tests {
         let mut gen = fill_store(&mut s, 10).await;
 
         // height 11
-        gen.next();
+        let skipped = gen.next();
         // height 12
         let upcoming_head = gen.next();
 
-        let insert_with_gap_result = s.append_single_unchecked(upcoming_head).await;
-        assert!(matches!(
-            insert_with_gap_result,
-            Err(StoreError::NonContinuousAppend(10, 12))
-        ));
+        s.append_single_unchecked(upcoming_head).await.unwrap();
+        s.append_single_unchecked(skipped).await.unwrap();
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn test_fill_range_gap_with_invalid_header<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let mut s = s;
+        let mut gen = fill_store(&mut s, 10).await;
+
+        let mut gen_prime = gen.fork();
+        // height 11
+        let _skipped = gen.next();
+        let another_chain = gen_prime.next();
+        // height 12
+        let upcoming_head = gen.next();
+
+        s.append_single(upcoming_head).await.unwrap();
+        s.append_single(another_chain).await.unwrap_err(); // TODO: match?
     }
 
     #[rstest]
@@ -641,13 +743,10 @@ mod tests {
         let mut hs = gen.next_many(6);
 
         // remove height 14
-        hs.remove(3);
+        let removed = hs.remove(3);
 
-        let insert_existing_result = s.append_unchecked(hs).await;
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::NonContinuousAppend(13, 15))
-        ));
+        s.append_unchecked(hs).await.unwrap();
+        s.append_single_unchecked(removed).await.unwrap();
     }
 
     #[rstest]
@@ -655,18 +754,21 @@ mod tests {
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
-    async fn test_genesis_with_height<S: Store>(
+    async fn test_appends_with_gaps<S: Store>(
         #[case]
         #[future(awt)]
         s: S,
     ) {
         let mut gen = ExtendedHeaderGenerator::new_from_height(5);
         let header5 = gen.next();
+        gen.next_many(4);
+        let header10 = gen.next();
+        gen.next_many(4);
+        let header15 = gen.next();
 
-        assert!(matches!(
-            s.append_single_unchecked(header5).await,
-            Err(StoreError::NonContinuousAppend(0, 5))
-        ));
+        s.append_single_unchecked(header5).await.unwrap();
+        s.append_single_unchecked(header15).await.unwrap();
+        s.append_single_unchecked(header10).await.unwrap_err();
     }
 
     #[rstest]
@@ -940,5 +1042,40 @@ mod tests {
         IndexedDbStore::new(&db_name)
             .await
             .expect("creating test store failed")
+    }
+
+    #[test]
+    async fn test_iter() {
+        let ranges = HeaderRanges(smallvec![1..=5, 7..=10]);
+        assert_eq!(
+            ranges.into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 7, 8, 9, 10]
+        );
+
+        let ranges = HeaderRanges(smallvec![1..=1, 2..=4, 8..=8]);
+        assert_eq!(ranges.into_iter().collect::<Vec<_>>(), vec![1, 2, 3, 4, 8]);
+
+        let mut iter = HeaderRanges(smallvec![1..=1]).into_iter();
+        assert_eq!(iter.next(), Some(1));
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    async fn test_iter_batches() {
+        let mut ranges = HeaderRanges(smallvec![1..=100]).into_iter();
+        assert_eq!(ranges.next_batch(10), Some(1..=10));
+        assert_eq!(ranges.next_batch(10), Some(11..=20));
+        assert_eq!(ranges.next_batch(100), Some(21..=100));
+
+        let mut ranges = HeaderRanges(smallvec![1..=10, 21..=30, 41..=50]).into_iter();
+        assert_eq!(ranges.next_batch(20), Some(1..=10));
+        assert_eq!(ranges.next_batch(1), Some(21..=21));
+        assert_eq!(ranges.next_batch(2), Some(22..=23));
+        assert_eq!(ranges.next_batch(3), Some(24..=26));
+        assert_eq!(ranges.next_batch(4), Some(27..=30));
+        assert_eq!(ranges.next_batch(5), Some(41..=45));
+        assert_eq!(ranges.next_batch(100), Some(46..=50));
     }
 }
