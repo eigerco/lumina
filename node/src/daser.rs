@@ -1,7 +1,7 @@
 //! Component responsible for data availability sampling of the already synchronized block
 //! headers announced on the Celestia network.
 //!
-//! Steps of how data sampling works:
+//! Sampling procedure comprises the following steps:
 //!
 //! 1. Daser waits for at least one peer to connect.
 //! 2. Daser gets the local head height from the [`Store`] and iterates in reverse order
