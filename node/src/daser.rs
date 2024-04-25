@@ -11,22 +11,23 @@
 //!      edge-cases unrelated to data availability, such as network issues.
 //!    - If a block is not within the sampling window, it is not queued.
 //!    - Queue is always sorted in descending order to give priority to latest blocks.
-//! 3a. As new headers become available in the [`Store`], Daser adds them to the queue if
+//! 3. As new headers become available in the [`Store`], Daser adds them to the queue if
 //!    they are within the sampling window.
-//! 3b. If there isn't any ongoing sampling, Daser pops from the queue the next block to sample
-//!     and initiates the following procedure:
-//!    1. It makes sure that the block is still within the sampling window.
-//!    2. It selects which random shares are going to be sampled and generates their Shwap CIDs.
-//!    3. It updates [`Store`] with the CIDs that are going to be sampled. Tracking of the the CIDs
+//! 4. If there isn't any ongoing sampling, Daser pops from the queue the next block to sample
+//!    and initiates the following procedure:
+//!    - It makes sure that the block is still within the sampling window.
+//!    - It selects which random shares are going to be sampled and generates their Shwap CIDs.
+//!    - It updates [`Store`] with the CIDs that are going to be sampled. Tracking of the the CIDs
 //!      is needed for pruning them later on. This is done before retrival of CIDs is started because otherwise
-//!      user could stop the node after Bitswap stores the block in the blockstore, but before we can 
+//!      user could stop the node after Bitswap stores the block in the blockstore, but before we can
 //!      record that in the [`Store`], causing a leak.
-//!    4. Initiates Bitswap retrival requests for the specified CIDs.
-//!    5. If all CIDs are received, then the block is considered sampled and accepted.
-//!    6. If we reach a timeout of 10 seconds and at least one of the CIDs is not received, then
+//!    - Initiates Bitswap retrival requests for the specified CIDs.
+//!    - If all CIDs are received, then the block is considered sampled and accepted.
+//!    - If we reach a timeout of 10 seconds and at least one of the CIDs is not received, then
 //!      block is considered sampled and rejected.
-//!    7. [`Store`] is updated with the sampling result.
-//! 4. Steps 3a and 3b are repeated concurently, unless we detect that all peers have disconnected. At that point daser cleans the queue and moves back to step 1.
+//!    - [`Store`] is updated with the sampling result.
+//! 5. Steps 3 and 4 are repeated concurently, unless we detect that all peers have disconnected.
+//!    At that point Daser cleans the queue and moves back to step 1.
 
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
