@@ -1,12 +1,33 @@
 //! Component responsible for data availability sampling of the already synchronized block
 //! headers announced on the Celestia network.
 //!
-//! When a new header is inserted into the [`Store`], [`Daser`] gets notified. It then fetches
-//! random [`Sample`]s of the block via Shwap protocol and verifies them. If all the samples
-//! get verified successfuly, then block is marked as accepted. Otherwise, if [`Daser`] doesn't
-//! receive valid samples, block is marked as not accepted and data sampling continues.
+//! Steps of how data sampling works:
 //!
-//! [`Sample`]: celestia_types::sample::Sample
+//! 1. Daser waits for at least one peer to connect.
+//! 2. Daser gets the local head height from the [`Store`] and iterates in reverse order
+//!    all the stored blocks.
+//!    - If a block is not sampled or if it was rejected, Daser queue it for sampling.
+//!      The rejected blocks are resampled because their rejection could be due unrelated
+//!      edge-cases than sampling, such us network issues.
+//!    - If a block is not within sampling window, it is not queued.
+//!    - Queue is always sorted in descending order to give priority to latest blocks.
+//! 3. When new headers are available in the [`Store`], Daser adds them to the queue if
+//!    they are within the sampling window.
+//! 4. If there isn't any active sampling, then Daser pops from the queue the next block
+//!    that needs sampling and initiates the following procedure:
+//!    - It makes sure that blocks is still within the sampling window.
+//!    - It selects which random shares are going to be sampled and generates their Shwap CID.
+//!    - It updates [`Store`] with the CIDs that are going to be sampled. Tracking of the the CIDs
+//!      is needed for pruning them later on. This is done before retrival of CIDs is started because
+//!      a user can stop an ongoing sampling (e.g. with ctrl+c) but Bitswap already retrieved some of
+//!      the CIDs, and we don't want to lose this information.
+//!    - Initiates Bitswap retrival requests for the specified CIDs.
+//!    - If all CIDs are received, then block is considered sampled and accepted.
+//!    - If we reach a timeout of 10 seconds and at least one of the CIDs is not received, then
+//!      block is considered sampled and rejected.
+//!    - [`Store`] is updated with the sampling result.
+//! 5. Steps 3 and 4 run concurrently in a loop.
+//! 6. If all peers disconnect, Daser cleans the queue and moves to back to step 1.
 
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
