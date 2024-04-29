@@ -9,7 +9,7 @@ use libp2p::multiaddr::Protocol;
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
 use lumina_node::node::{Node, NodeConfig};
-use lumina_node::store::{IndexedDbStore, Store};
+use lumina_node::store::{IndexedDbStore, SamplingStatus, Store};
 use serde::Serialize;
 use serde_wasm_bindgen::{from_value, to_value};
 use tracing::info;
@@ -205,17 +205,13 @@ impl WasmNode {
 
         #[derive(Serialize)]
         struct Intermediate {
-            accepted: bool,
-            cids_sampled: Vec<String>,
+            status: SamplingStatus,
+            cids: Vec<String>,
         }
 
         let metadata = metadata.map(|m| Intermediate {
-            accepted: m.accepted,
-            cids_sampled: m
-                .cids_sampled
-                .into_iter()
-                .map(|cid| cid.to_string())
-                .collect(),
+            status: m.status,
+            cids: m.cids.into_iter().map(|cid| cid.to_string()).collect(),
         });
 
         Ok(to_value(&metadata)?)

@@ -2802,6 +2802,7 @@ dependencies = [
  "bytes",
  "celestia-proto",
  "celestia-rpc",
+ "celestia-tendermint",
  "celestia-tendermint-proto",
  "celestia-types",
  "cid",

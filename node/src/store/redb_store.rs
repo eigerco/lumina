@@ -8,19 +8,18 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
 use redb::{
-    CommitError, Database, ReadTransaction, ReadableTable, StorageError, Table, TableDefinition,
+    CommitError, Database, ReadTransaction, ReadableTable, StorageError, TableDefinition,
     TableError, TransactionError, WriteTransaction,
 };
 use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
-use tracing::{debug, info};
+use tracing::debug;
 
-use crate::store::{Result, SamplingMetadata, Store, StoreError};
+use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 const SCHEMA_VERSION: u64 = 1;
 
 const HEAD_HEIGHT_KEY: &[u8] = b"KEY.HEAD_HEIGHT";
-const NEXT_UNSAMPLED_HEIGHT_KEY: &[u8] = b"KEY.UNSAMPLED_HEIGHT";
 
 const HEIGHTS_TABLE: TableDefinition<'static, &[u8], u64> = TableDefinition::new("STORE.HEIGHTS");
 const HEADERS_TABLE: TableDefinition<'static, u64, &[u8]> = TableDefinition::new("STORE.HEADERS");
@@ -97,10 +96,6 @@ impl RedbStore {
                     heights_table.insert(HEAD_HEIGHT_KEY, 0)?;
                 }
 
-                if heights_table.get(NEXT_UNSAMPLED_HEIGHT_KEY)?.is_none() {
-                    heights_table.insert(NEXT_UNSAMPLED_HEIGHT_KEY, 1)?;
-                }
-
                 Ok(())
             })
             .await
@@ -170,14 +165,6 @@ impl RedbStore {
             } else {
                 Ok(head_height)
             }
-        })
-        .await
-    }
-
-    async fn get_next_unsampled_height(&self) -> Result<u64> {
-        self.read_tx(|tx| {
-            let table = tx.open_table(HEIGHTS_TABLE)?;
-            get_height(&table, NEXT_UNSAMPLED_HEIGHT_KEY)
         })
         .await
     }
@@ -286,11 +273,11 @@ impl RedbStore {
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
-    ) -> Result<u64> {
+    ) -> Result<()> {
         self.write_tx(move |tx| {
-            let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
+            let heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let mut sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
 
             // Make sure we have the header being marked
@@ -301,24 +288,20 @@ impl RedbStore {
             }
 
             let previous = get_sampling_metadata(&sampling_metadata_table, height)?;
-            let new_inserted = previous.is_none();
 
             let entry = match previous {
                 Some(mut previous) => {
-                    previous.accepted = accepted;
+                    previous.status = status;
 
-                    for cid in &cids {
-                        if !previous.cids_sampled.contains(cid) {
-                            previous.cids_sampled.push(cid.to_owned());
+                    for cid in cids {
+                        if !previous.cids.contains(&cid) {
+                            previous.cids.push(cid);
                         }
                     }
 
                     previous
                 }
-                None => SamplingMetadata {
-                    accepted,
-                    cids_sampled: cids.clone(),
-                },
+                None => SamplingMetadata { status, cids },
             };
 
             // make sure Result is Infallible and unwrap it later
@@ -327,12 +310,7 @@ impl RedbStore {
 
             sampling_metadata_table.insert(height, &serialized[..])?;
 
-            if new_inserted {
-                update_sampling_height(&mut heights_table, &mut sampling_metadata_table)
-            } else {
-                info!("Overriding existing sampling metadata for height {height}");
-                get_height(&heights_table, NEXT_UNSAMPLED_HEIGHT_KEY)
-            }
+            Ok(())
         })
         .await
     }
@@ -369,6 +347,25 @@ impl Store for RedbStore {
         self.get_by_height(height).await
     }
 
+    async fn wait_new_head(&self) -> u64 {
+        let head = self.head_height().await.unwrap_or(0);
+        let mut notifier = pin!(self.inner.header_added_notifier.notified());
+
+        loop {
+            let new_head = self.head_height().await.unwrap_or(0);
+
+            if head != new_head {
+                return new_head;
+            }
+
+            // Await for a notification
+            notifier.as_mut().await;
+
+            // Reset notifier
+            notifier.set(self.inner.header_added_notifier.notified());
+        }
+    }
+
     async fn wait_height(&self, height: u64) -> Result<()> {
         let mut notifier = pin!(self.inner.header_added_notifier.notified());
 
@@ -401,17 +398,13 @@ impl Store for RedbStore {
         self.append_single_unchecked(header).await
     }
 
-    async fn next_unsampled_height(&self) -> Result<u64> {
-        self.get_next_unsampled_height().await
-    }
-
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
-    ) -> Result<u64> {
-        self.update_sampling_metadata(height, accepted, cids).await
+    ) -> Result<()> {
+        self.update_sampling_metadata(height, status, cids).await
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -454,23 +447,6 @@ where
                 .map_err(|e| StoreError::StoredDataError(e.to_string()))
         })
         .transpose()
-}
-
-#[inline]
-fn update_sampling_height(
-    heights_table: &mut Table<&'static [u8], u64>,
-    sampling_metadata_table: &mut Table<u64, &'static [u8]>,
-) -> Result<u64> {
-    let previous_height = get_height(heights_table, NEXT_UNSAMPLED_HEIGHT_KEY)?;
-    let mut new_height = previous_height;
-
-    while sampling_metadata_table.get(new_height)?.is_some() {
-        new_height += 1;
-    }
-
-    heights_table.insert(NEXT_UNSAMPLED_HEIGHT_KEY, new_height)?;
-
-    Ok(new_height)
 }
 
 impl From<TransactionError> for StoreError {
