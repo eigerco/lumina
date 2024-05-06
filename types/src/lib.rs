@@ -1,4 +1,4 @@
-#![cfg_attr(docs_rs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
 pub mod blob;
@@ -13,7 +13,7 @@ pub mod hash;
 pub mod namespaced_data;
 pub mod nmt;
 #[cfg(feature = "p2p")]
-#[cfg_attr(docs_rs, doc(cfg(feature = "p2p")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "p2p")))]
 pub mod p2p;
 pub mod row;
 mod rsmt2d;
@@ -22,7 +22,7 @@ mod share;
 pub mod state;
 mod sync;
 #[cfg(any(test, feature = "test-utils"))]
-#[cfg_attr(docs_rs, doc(cfg(feature = "test-utils")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-utils")))]
 pub mod test_utils;
 pub mod trust_level;
 mod validate;

@@ -58,7 +58,7 @@ wasm-bindgen = ["celestia-tendermint/wasm-bindgen"]
 
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]
-rustdoc-args = ["--cfg", "docs_rs"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-udeps.ignore]
 development = ["indoc"]
