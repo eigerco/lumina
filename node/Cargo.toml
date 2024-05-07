@@ -102,4 +102,4 @@ test-utils = ["celestia-types/test-utils"]
 
 [package.metadata.docs.rs]
 features = ["test-utils"]
-rustdoc-args = ["--cfg", "docs_rs"]
+rustdoc-args = ["--cfg", "docsrs"]
