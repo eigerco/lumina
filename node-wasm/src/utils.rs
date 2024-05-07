@@ -74,11 +74,6 @@ pub(crate) trait JsContext<T> {
     fn js_context<C>(self, context: C) -> Result<T, JsError>
     where
         C: fmt::Display + Send + Sync + 'static;
-
-    fn with_js_context<F, C>(self, context_fn: F) -> Result<T, JsError>
-    where
-        C: fmt::Display + Send + Sync + 'static,
-        F: FnOnce() -> C;
 }
 
 impl<T, E> JsContext<T> for std::result::Result<T, E>
@@ -90,16 +85,5 @@ where
         C: fmt::Display + Send + Sync + 'static,
     {
         self.map_err(|e| JsError::new(&format!("{context}: {e}")))
-    }
-
-    fn with_js_context<F, C>(self, context_fn: F) -> Result<T, JsError>
-    where
-        C: fmt::Display + Send + Sync + 'static,
-        F: FnOnce() -> C,
-    {
-        self.map_err(|e| {
-            let context = context_fn();
-            JsError::new(&format!("{context}: {e}"))
-        })
     }
 }
