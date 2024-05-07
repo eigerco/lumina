@@ -57,6 +57,7 @@ test-utils = ["dep:ed25519-consensus", "dep:rand"]
 wasm-bindgen = ["celestia-tendermint/wasm-bindgen"]
 
 [package.metadata.docs.rs]
+features = ["p2p", "test-utils"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-udeps.ignore]
