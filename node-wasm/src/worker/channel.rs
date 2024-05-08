@@ -28,9 +28,8 @@ impl WorkerClient {
     pub fn new(channel: MessagePort) -> Self {
         let (response_tx, response_rx) = mpsc::channel(WORKER_CHANNEL_SIZE);
 
-        let near_tx = response_tx.clone();
         let onmessage_callback = move |ev: MessageEvent| {
-            let local_tx = near_tx.clone();
+            let response_tx = response_tx.clone();
             spawn_local(async move {
                 let message_data = ev.data();
 
@@ -40,7 +39,7 @@ impl WorkerClient {
                     })
                     .ok();
 
-                if let Err(e) = local_tx.send(data).await {
+                if let Err(e) = response_tx.send(data).await {
                     error!("message forwarding channel closed, should not happen: {e}");
                 }
             })
@@ -105,27 +104,29 @@ pub(super) struct WorkerMessageServer {
 
 impl WorkerMessageServer {
     pub fn new(command_channel: mpsc::Sender<WorkerMessage>) -> Self {
-        let near_tx = command_channel.clone();
-        let onconnect_callback: Closure<dyn Fn(MessageEvent)> =
-            Closure::new(move |ev: MessageEvent| {
-                let local_tx = near_tx.clone();
-                spawn_local(async move {
-                    let Ok(port) = ev.ports().at(0).dyn_into() else {
-                        error!("received connection event without MessagePort, should not happen");
-                        return;
-                    };
+        let closure_command_channel = command_channel.clone();
+        let onconnect: Closure<dyn Fn(MessageEvent)> = Closure::new(move |ev: MessageEvent| {
+            let command_channel = closure_command_channel.clone();
+            spawn_local(async move {
+                let Ok(port) = ev.ports().at(0).dyn_into() else {
+                    error!("received onconnect event without MessagePort, should not happen");
+                    return;
+                };
 
-                    if let Err(e) = local_tx.send(WorkerMessage::NewConnection(port)).await {
-                        error!("command channel inside worker closed, should not happen: {e}");
-                    }
-                })
-            });
+                if let Err(e) = command_channel
+                    .send(WorkerMessage::NewConnection(port))
+                    .await
+                {
+                    error!("command channel inside worker closed, should not happen: {e}");
+                }
+            })
+        });
 
         let worker_scope = SharedWorker::worker_self();
-        worker_scope.set_onconnect(Some(onconnect_callback.as_ref().unchecked_ref()));
+        worker_scope.set_onconnect(Some(onconnect.as_ref().unchecked_ref()));
 
         Self {
-            _onconnect_callback: onconnect_callback,
+            _onconnect_callback: onconnect,
             clients: Vec::with_capacity(1), // we usually expect to have exactly one client
             command_channel,
         }
