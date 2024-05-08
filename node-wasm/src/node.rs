@@ -52,13 +52,6 @@ impl NodeDriver {
     #[wasm_bindgen(constructor)]
     pub async fn new() -> Result<NodeDriver> {
         let worker = spawn_worker(LUMINA_SHARED_WORKER_NAME, "/wasm/lumina_node_wasm.js")?;
-        /*
-                let mut opts = WorkerOptions::new();
-                opts.type_(WorkerType::Module);
-                opts.name(LUMINA_SHARED_WORKER_NAME);
-                let worker = SharedWorker::new_with_worker_options("/js/worker.js", &opts)
-                    .map_err(|e| JsError::new(&format!("could not create SharedWorker: {e:?}")))?;
-        */
 
         let onerror_callback: Closure<dyn Fn(MessageEvent)> = Closure::new(|ev: MessageEvent| {
             error!("received error from SharedWorker: {:?}", ev.to_string());
