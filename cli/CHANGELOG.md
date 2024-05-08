@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/eigerco/lumina/compare/lumina-cli-v0.1.0...lumina-cli-v0.2.0) - 2024-04-18
+
+### Added
+- *(cli)* [**breaking**] Replace sled stores with redb stores ([#267](https://github.com/eigerco/lumina/pull/267))
+- feat!(node): use generic blockstore in node ([#218](https://github.com/eigerco/lumina/pull/218))
+
+### Other
+- Add note about WebTransport requiring Secure Context ([#211](https://github.com/eigerco/lumina/pull/211))
+
 ## [0.1.0](https://github.com/eigerco/lumina/releases/tag/lumina-cli-v0.1.0) - 2024-01-12
 
 ### Other

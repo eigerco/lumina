@@ -1,6 +1,6 @@
 [package]
 name = "lumina-node"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Celestia data availability node implementation in Rust"
@@ -20,6 +20,7 @@ categories = [
 
 [dependencies]
 celestia-proto = { workspace = true }
+celestia-tendermint = { workspace = true }
 celestia-tendermint-proto = { workspace = true }
 celestia-types = { workspace = true }
 libp2p = { workspace = true, features = [
@@ -50,11 +51,7 @@ tracing = "0.1.37"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 backoff = { version = "0.4.0", features = ["tokio"] }
-blockstore = { workspace = true, features = ["sled"] }
-# Upgrading this dependency invalidates existing persistent dbs.
-# Those can be restored by migrating between versions:
-# https://docs.rs/sled/latest/sled/struct.Db.html#examples-1
-sled = "0.34.7"
+blockstore = { workspace = true, features = ["redb"] }
 tokio = { version = "1.32.0", features = ["rt-multi-thread", "time"] }
 libp2p = { workspace = true, features = [
   "noise",
@@ -105,4 +102,4 @@ test-utils = ["celestia-types/test-utils"]
 
 [package.metadata.docs.rs]
 features = ["test-utils"]
-rustdoc-args = ["--cfg", "docs_rs"]
+rustdoc-args = ["--cfg", "docsrs"]

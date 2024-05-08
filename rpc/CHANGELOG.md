@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.1.1...celestia-rpc-v0.2.0) - 2024-04-18
+
+### Added
+- [**breaking**] Refactor RowId/SampleId/NamespacedDataId related API ([#236](https://github.com/eigerco/lumina/pull/236))
+- feat!(node): Implement DASer ([#223](https://github.com/eigerco/lumina/pull/223))
+
+### Other
+- chore!(types,rpc): compatibility with celestia-node 0.13.1 ([#239](https://github.com/eigerco/lumina/pull/239))
+
 ## [0.1.1](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.1.0...celestia-rpc-v0.1.1) - 2024-01-15
 
 ### Other

@@ -107,17 +107,17 @@ where
     }
 }
 
-pub(super) fn row_cid(row_index: u16, block_height: u64) -> Result<Cid> {
+pub(crate) fn row_cid(row_index: u16, block_height: u64) -> Result<Cid> {
     let row_id = RowId::new(row_index, block_height).map_err(P2pError::Cid)?;
     convert_cid(&row_id.into())
 }
 
-pub(super) fn sample_cid(row_index: u16, column_index: u16, block_height: u64) -> Result<Cid> {
+pub(crate) fn sample_cid(row_index: u16, column_index: u16, block_height: u64) -> Result<Cid> {
     let sample_id = SampleId::new(row_index, column_index, block_height).map_err(P2pError::Cid)?;
     convert_cid(&sample_id.into())
 }
 
-pub(super) fn namespaced_data_cid(
+pub(crate) fn namespaced_data_cid(
     namespace: Namespace,
     row_index: u16,
     block_height: u64,

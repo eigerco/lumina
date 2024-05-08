@@ -1,6 +1,6 @@
 [package]
 name = "celestia-types"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Core types, traits and constants for working with the Celestia ecosystem"
@@ -58,7 +58,7 @@ wasm-bindgen = ["celestia-tendermint/wasm-bindgen"]
 
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]
-rustdoc-args = ["--cfg", "docs_rs"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-udeps.ignore]
 development = ["indoc"]

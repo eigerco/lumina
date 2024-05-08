@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.1.1...celestia-proto-v0.2.0) - 2024-04-18
+
+### Added
+- feat!(types): Align with Shwap spec ([#232](https://github.com/eigerco/lumina/pull/232))
+- feat!(node): Implement DASer ([#223](https://github.com/eigerco/lumina/pull/223))
+
 ## [0.1.1](https://github.com/eigerco/lumina/compare/celestia-proto-v0.1.0...celestia-proto-v0.1.1) - 2024-01-15
 
 ### Other

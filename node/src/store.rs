@@ -18,30 +18,38 @@ pub use in_memory_store::InMemoryStore;
 pub use indexed_db_store::IndexedDbStore;
 #[cfg(not(target_arch = "wasm32"))]
 pub use redb_store::RedbStore;
-#[cfg(not(target_arch = "wasm32"))]
-pub use sled_store::SledStore;
 
 mod in_memory_store;
 #[cfg(target_arch = "wasm32")]
 mod indexed_db_store;
 #[cfg(not(target_arch = "wasm32"))]
 mod redb_store;
-#[cfg(not(target_arch = "wasm32"))]
-mod sled_store;
 
 use crate::utils::validate_headers;
 
-/// Sampling status for a header.
+/// Sampling metadata for a block.
 ///
 /// This struct persists DAS-ing information in a header store for future reference.
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct SamplingMetadata {
     /// Indicates whether this node was able to successfuly sample the block
-    pub accepted: bool,
+    pub status: SamplingStatus,
 
-    /// List of CIDs used, when decision to accept or reject the header was taken. Can be used
-    /// to remove associated data from Blockstore, when cleaning up the old ExtendedHeaders
-    pub cids_sampled: Vec<Cid>,
+    /// List of CIDs used while sampling. Can be used to remove associated data
+    /// from Blockstore, when cleaning up the old ExtendedHeaders
+    pub cids: Vec<Cid>,
+}
+
+/// Sampling status for a block.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SamplingStatus {
+    /// Sampling is not done.
+    #[default]
+    Unknown,
+    /// Sampling is done and block is accepted.
+    Accepted,
+    /// Sampling is done and block is rejected.
+    Rejected,
 }
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
@@ -60,6 +68,9 @@ pub trait Store: Send + Sync + Debug {
 
     /// Returns the header of a specific height.
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader>;
+
+    /// Returns when new head is available in the `Store`.
+    async fn wait_new_head(&self) -> u64;
 
     /// Returns when `height` is available in the `Store`.
     async fn wait_height(&self, height: u64) -> Result<()>;
@@ -117,21 +128,16 @@ pub trait Store: Send + Sync + Debug {
     /// This method does not validate or verify that `header` is indeed correct.
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()>;
 
-    /// Returns height of the lowest header that wasn't sampled yet
-    async fn next_unsampled_height(&self) -> Result<u64>;
-
     /// Sets or updates sampling result for the header.
     ///
     /// In case of update, provided CID list is appended onto the existing one, as not to lose
     /// references to previously sampled blocks.
-    ///
-    /// Returns next unsampled header or error, if occured
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
-    ) -> Result<u64>;
+    ) -> Result<()>;
 
     /// Gets the sampling metadata for the height.
     ///
@@ -256,7 +262,10 @@ struct RawSamplingMetadata {
     accepted: bool,
 
     #[prost(message, repeated, tag = "2")]
-    cids_sampled: Vec<Vec<u8>>,
+    cids: Vec<Vec<u8>>,
+
+    #[prost(bool, tag = "3")]
+    unknown: bool,
 }
 
 impl Protobuf<RawSamplingMetadata> for SamplingMetadata {}
@@ -265,8 +274,16 @@ impl TryFrom<RawSamplingMetadata> for SamplingMetadata {
     type Error = cid::Error;
 
     fn try_from(item: RawSamplingMetadata) -> Result<Self, Self::Error> {
-        let cids_sampled = item
-            .cids_sampled
+        let status = if item.unknown {
+            SamplingStatus::Unknown
+        } else if item.accepted {
+            SamplingStatus::Accepted
+        } else {
+            SamplingStatus::Rejected
+        };
+
+        let cids = item
+            .cids
             .iter()
             .map(|cid| {
                 let buffer = Cursor::new(cid);
@@ -274,20 +291,24 @@ impl TryFrom<RawSamplingMetadata> for SamplingMetadata {
             })
             .collect::<Result<_, _>>()?;
 
-        Ok(SamplingMetadata {
-            accepted: item.accepted,
-            cids_sampled,
-        })
+        Ok(SamplingMetadata { status, cids })
     }
 }
 
 impl From<SamplingMetadata> for RawSamplingMetadata {
     fn from(item: SamplingMetadata) -> Self {
-        let cids_sampled = item.cids_sampled.iter().map(|cid| cid.to_bytes()).collect();
+        let cids = item.cids.iter().map(|cid| cid.to_bytes()).collect();
+
+        let (accepted, unknown) = match item.status {
+            SamplingStatus::Unknown => (false, true),
+            SamplingStatus::Accepted => (true, false),
+            SamplingStatus::Rejected => (false, false),
+        };
 
         RawSamplingMetadata {
-            accepted: item.accepted,
-            cids_sampled,
+            accepted,
+            unknown,
+            cids,
         }
     }
 }
@@ -435,7 +456,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -455,7 +475,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -478,7 +497,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -500,7 +518,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -526,7 +543,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -548,7 +564,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -573,7 +588,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -596,7 +610,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -615,7 +628,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -641,7 +653,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -666,7 +677,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -686,7 +696,6 @@ mod tests {
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -696,18 +705,17 @@ mod tests {
         store: S,
     ) {
         store
-            .update_sampling_metadata(0, true, vec![])
+            .update_sampling_metadata(0, SamplingStatus::Accepted, vec![])
             .await
             .unwrap_err();
         store
-            .update_sampling_metadata(1, true, vec![])
+            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![])
             .await
             .unwrap_err();
     }
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -720,72 +728,65 @@ mod tests {
         fill_store(&mut store, 9).await;
 
         store
-            .update_sampling_metadata(0, true, vec![])
+            .update_sampling_metadata(0, SamplingStatus::Accepted, vec![])
             .await
             .unwrap_err();
         store
-            .update_sampling_metadata(1, true, vec![])
+            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![])
             .await
             .unwrap();
         store
-            .update_sampling_metadata(2, true, vec![])
+            .update_sampling_metadata(2, SamplingStatus::Accepted, vec![])
             .await
             .unwrap();
         store
-            .update_sampling_metadata(3, false, vec![])
+            .update_sampling_metadata(3, SamplingStatus::Rejected, vec![])
             .await
             .unwrap();
         store
-            .update_sampling_metadata(4, true, vec![])
+            .update_sampling_metadata(4, SamplingStatus::Accepted, vec![])
             .await
             .unwrap();
         store
-            .update_sampling_metadata(5, false, vec![])
+            .update_sampling_metadata(5, SamplingStatus::Rejected, vec![])
             .await
             .unwrap();
         store
-            .update_sampling_metadata(6, false, vec![])
+            .update_sampling_metadata(6, SamplingStatus::Rejected, vec![])
+            .await
+            .unwrap();
+
+        store
+            .update_sampling_metadata(8, SamplingStatus::Accepted, vec![])
             .await
             .unwrap();
 
         store
-            .update_sampling_metadata(8, true, vec![])
+            .update_sampling_metadata(7, SamplingStatus::Accepted, vec![])
             .await
             .unwrap();
 
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 7);
-
         store
-            .update_sampling_metadata(7, true, vec![])
+            .update_sampling_metadata(9, SamplingStatus::Accepted, vec![])
             .await
             .unwrap();
 
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 9);
-
         store
-            .update_sampling_metadata(9, true, vec![])
-            .await
-            .unwrap();
-
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 10);
-
-        store
-            .update_sampling_metadata(10, true, vec![])
+            .update_sampling_metadata(10, SamplingStatus::Accepted, vec![])
             .await
             .unwrap_err();
         store
-            .update_sampling_metadata(10, false, vec![])
+            .update_sampling_metadata(10, SamplingStatus::Rejected, vec![])
             .await
             .unwrap_err();
         store
-            .update_sampling_metadata(20, true, vec![])
+            .update_sampling_metadata(20, SamplingStatus::Accepted, vec![])
             .await
             .unwrap_err();
     }
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -808,45 +809,40 @@ mod tests {
             .unwrap();
 
         store
-            .update_sampling_metadata(1, false, vec![cid0])
+            .update_sampling_metadata(1, SamplingStatus::Rejected, vec![cid0])
             .await
             .unwrap();
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
 
         store
-            .update_sampling_metadata(1, false, vec![])
+            .update_sampling_metadata(1, SamplingStatus::Rejected, vec![])
             .await
             .unwrap();
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert!(!sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0]);
+        assert_eq!(sampling_data.status, SamplingStatus::Rejected);
+        assert_eq!(sampling_data.cids, vec![cid0]);
 
         store
-            .update_sampling_metadata(1, true, vec![cid1])
+            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![cid1])
             .await
             .unwrap();
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert!(sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0, cid1]);
+        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
+        assert_eq!(sampling_data.cids, vec![cid0, cid1]);
 
         store
-            .update_sampling_metadata(1, true, vec![cid0, cid2])
+            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![cid0, cid2])
             .await
             .unwrap();
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 2);
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert!(sampling_data.accepted);
-        assert_eq!(sampling_data.cids_sampled, vec![cid0, cid1, cid2]);
+        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
+        assert_eq!(sampling_data.cids, vec![cid0, cid1, cid2]);
     }
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -869,41 +865,39 @@ mod tests {
         .collect();
 
         store
-            .update_sampling_metadata(1, true, cids.clone())
+            .update_sampling_metadata(1, SamplingStatus::Accepted, cids.clone())
             .await
             .unwrap();
         store
-            .update_sampling_metadata(2, true, cids[0..1].to_vec())
+            .update_sampling_metadata(2, SamplingStatus::Accepted, cids[0..1].to_vec())
             .await
             .unwrap();
         store
-            .update_sampling_metadata(4, false, cids[3..].to_vec())
+            .update_sampling_metadata(4, SamplingStatus::Rejected, cids[3..].to_vec())
             .await
             .unwrap();
         store
-            .update_sampling_metadata(5, false, vec![])
+            .update_sampling_metadata(5, SamplingStatus::Rejected, vec![])
             .await
             .unwrap();
-
-        assert_eq!(store.next_unsampled_height().await.unwrap(), 3);
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids);
-        assert!(sampling_data.accepted);
+        assert_eq!(sampling_data.cids, cids);
+        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
 
         let sampling_data = store.get_sampling_metadata(2).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids[0..1]);
-        assert!(sampling_data.accepted);
+        assert_eq!(sampling_data.cids, cids[0..1]);
+        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
 
         assert!(store.get_sampling_metadata(3).await.unwrap().is_none());
 
         let sampling_data = store.get_sampling_metadata(4).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, cids[3..]);
-        assert!(!sampling_data.accepted);
+        assert_eq!(sampling_data.cids, cids[3..]);
+        assert_eq!(sampling_data.status, SamplingStatus::Rejected);
 
         let sampling_data = store.get_sampling_metadata(5).await.unwrap().unwrap();
-        assert_eq!(sampling_data.cids_sampled, vec![]);
-        assert!(!sampling_data.accepted);
+        assert_eq!(sampling_data.cids, vec![]);
+        assert_eq!(sampling_data.status, SamplingStatus::Rejected);
 
         assert!(matches!(
             store.get_sampling_metadata(0).await,
@@ -938,26 +932,6 @@ mod tests {
 
     async fn new_in_memory_store() -> InMemoryStore {
         InMemoryStore::new()
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    async fn new_sled_store() -> SledStore {
-        let db = tokio::task::spawn_blocking(move || {
-            let path = tempfile::TempDir::with_prefix("lumina.store.test")
-                .unwrap()
-                .into_path();
-
-            sled::Config::default()
-                .path(path)
-                .temporary(true)
-                .create_new(true)
-                .open()
-                .unwrap()
-        })
-        .await
-        .unwrap();
-
-        SledStore::new(db).await.unwrap()
     }
 
     #[cfg(not(target_arch = "wasm32"))]
