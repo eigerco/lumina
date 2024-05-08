@@ -239,7 +239,6 @@ mod index_serde {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,7 +252,7 @@ mod tests {
               "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAADCBNOWAP3dM=",
               "data": "8fIMqAB+kQo7+LLmHaDya8oH73hxem6lQWX1",
               "share_version": 0,
-              "commitment": "D6YGsPWdxR8ju2OcOspnkgPG2abD30pSHxsFdiPqnVk="
+              "commitment": "D6YGsPWdxR8ju2OcOspnkgPG2abD30pSHxsFdiPqnVk=",
               "index": -1
             }"#,
         )
@@ -280,5 +279,18 @@ mod tests {
         blob.commitment.0.fill(7);
 
         blob.validate().unwrap_err();
+    }
+
+    #[test]
+    fn deserialize_blob_with_missing_index() {
+        serde_json::from_str::<Blob>(
+            r#"{
+              "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAADCBNOWAP3dM=",
+              "data": "8fIMqAB+kQo7+LLmHaDya8oH73hxem6lQWX1",
+              "share_version": 0,
+              "commitment": "D6YGsPWdxR8ju2OcOspnkgPG2abD30pSHxsFdiPqnVk="
+            }"#,
+        )
+        .unwrap();
     }
 }
