@@ -6,7 +6,7 @@ use libp2p::Multiaddr;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use tracing::error;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsError, JsValue};
 
 use celestia_types::hash::Hash;
 use lumina_node::peer_tracker::PeerTrackerInfo;
@@ -81,16 +81,16 @@ pub(crate) enum WorkerResponse {
 
 pub(crate) trait CheckableResponseExt {
     type Output;
-    fn check_variant(self) -> Result<Self::Output, WorkerError>;
+    fn check_variant(self) -> Result<Self::Output, JsError>;
 }
 
 impl<T> CheckableResponseExt for Result<T, WorkerResponse> {
     type Output = T;
 
-    fn check_variant(self) -> Result<Self::Output, WorkerError> {
+    fn check_variant(self) -> Result<Self::Output, JsError> {
         self.map_err(|response| {
             error!("invalid response, received: {response:?}");
-            WorkerError::InvalidResponseType
+            JsError::new("invalid response received for the command sent")
         })
     }
 }

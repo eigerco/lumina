@@ -1,6 +1,7 @@
 //! Various utilities for interacting with node from wasm.
 use std::fmt::{self, Debug};
 
+use js_sys::JsString;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -74,13 +75,17 @@ pub(crate) fn js_value_from_display<D: fmt::Display>(value: D) -> JsValue {
     JsValue::from(value.to_string())
 }
 
-pub(crate) trait JsContext<T> {
+pub(crate) fn to_jsvalue_or_undefined<T: Serialize>(value: &T) -> JsValue {
+    to_value(value).unwrap_or(JsValue::UNDEFINED)
+}
+
+pub(crate) trait JsContext<T, E> {
     fn js_context<C>(self, context: C) -> Result<T, JsError>
     where
         C: fmt::Display + Send + Sync + 'static;
 }
 
-impl<T, E> JsContext<T> for std::result::Result<T, E>
+impl<T, E> JsContext<T, E> for std::result::Result<T, E>
 where
     E: std::error::Error,
 {
@@ -92,8 +97,25 @@ where
     }
 }
 
-pub(crate) fn to_jsvalue_or_undefined<T: Serialize>(value: &T) -> JsValue {
-    to_value(value).unwrap_or(JsValue::UNDEFINED)
+pub(crate) trait JsValueToJsError<T> {
+    fn to_error<C>(self, context_fn: C) -> Result<T, JsError>
+    where
+        C: fmt::Display + Send + Sync + 'static;
+}
+
+impl<T> JsValueToJsError<T> for std::result::Result<T, JsValue> {
+    fn to_error<C>(self, context: C) -> Result<T, JsError>
+    where
+        C: fmt::Display + Send + Sync + 'static,
+    {
+        self.map_err(|e| {
+            let error_str = match e.dyn_ref::<JsString>() {
+                Some(s) => format!("{context}: {s}"),
+                None => format!("{context}"),
+            };
+            JsError::new(&error_str)
+        })
+    }
 }
 
 pub(crate) trait WorkerSelf {

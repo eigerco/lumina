@@ -41,7 +41,6 @@ async function show_stats(node) {
     return
   }
 
-  console.log(network_head);
   const square_rows = network_head.dah.row_roots.length;
   const square_cols = network_head.dah.column_roots.length;
 

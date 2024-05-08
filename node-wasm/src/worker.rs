@@ -1,25 +1,25 @@
-//!
+//!  
 //!
 use std::fmt::Debug;
 
 use js_sys::Array;
+use libp2p::multiaddr::Error as MultiaddrError;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use thiserror::Error;
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use wasm_bindgen::prelude::*;
 use web_sys::{Blob, BlobPropertyBag, MessagePort, SharedWorker, Url, WorkerOptions, WorkerType};
 
 use celestia_tendermint::error::Error as TendermintError;
-use libp2p::multiaddr::Error as MultiaddrError;
 use lumina_node::node::{Node, NodeError};
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store, StoreError};
 use lumina_node::syncer::SyncingInfo;
 
 use crate::node::WasmNodeConfig;
-use crate::utils::to_jsvalue_or_undefined;
+use crate::utils::{to_jsvalue_or_undefined, JsValueToJsError};
 use crate::worker::channel::{WorkerMessage, WorkerMessageServer};
 use crate::worker::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -31,7 +31,7 @@ pub(crate) use channel::WorkerClient;
 
 const WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH: usize = 64;
 
-/// actual type that's sent over a js message port
+/// actual type that's sent over javascript MessagePort
 type Result<T, E = WorkerError> = std::result::Result<T, E>;
 
 #[derive(Debug, Serialize, Deserialize, Error)]
@@ -41,62 +41,54 @@ pub enum WorkerError {
     #[error("node has already been started")]
     NodeAlreadyRunning,
     #[error("could not create blockstore: {0}")]
-    BlockstoreCrationFailed(String),
+    BlockstoreCreationFailed(String),
     #[error("could not create header store: {0}")]
-    StoreCrationFailed(String),
+    StoreCreationFailed(String),
     #[error("could not parse genesis hash: {0}")]
     GenesisHashInvalid(String),
     #[error("could not parse bootstrap node multiaddr: {0}")]
     BootstrapNodeMultiaddrInvalid(String),
     #[error("node error: {0}")]
     NodeError(String),
-    #[error("respose to command did not match expected type, should not happen")]
-    InvalidResponseType,
-    #[error("Value could not be serialized, should not happen: {0}")]
+    #[error("value could not be serialized: {0}")]
     SerdeError(String),
     #[error("command message could not be serialised, should not happen: {0}")]
     CouldNotSerialiseCommand(String),
     #[error("command message could not be deserialised, should not happen: {0}")]
     CouldNotDeserialiseCommand(String),
     #[error("command response could not be serialised, should not happen: {0}")]
-    CouldNotSerialiseResponseValue(String),
+    CouldNotSerialiseResponse(String),
     #[error("command response could not be deserialised, should not happen: {0}")]
-    CouldNotDeserialiseResponseValue(String),
+    CouldNotDeserialiseResponse(String),
     #[error("response message could not be sent: {0}")]
     CouldNotSendCommand(String),
-    #[error("Received empty worker response, should not happen")]
-    EmptyWorkerResponse,
-    #[error("Response channel to worker closed, should not happen")]
+    #[error("response channel from worker closed, should not happen")]
     ResponseChannelDropped,
-
-    #[error("Invalid command received")]
-    InvalidCommand,
-
-    #[error("Invalid worker response")]
-    InvalidWorkerResponse,
-}
-
-impl From<NodeError> for WorkerError {
-    fn from(error: NodeError) -> Self {
-        WorkerError::NodeError(error.to_string())
-    }
+    #[error("invalid command received")]
+    InvalidCommandReceived,
 }
 
 impl From<blockstore::Error> for WorkerError {
     fn from(error: blockstore::Error) -> Self {
-        WorkerError::BlockstoreCrationFailed(error.to_string())
+        WorkerError::BlockstoreCreationFailed(error.to_string())
     }
 }
 
 impl From<StoreError> for WorkerError {
     fn from(error: StoreError) -> Self {
-        WorkerError::StoreCrationFailed(error.to_string())
+        WorkerError::StoreCreationFailed(error.to_string())
     }
 }
 
 impl From<TendermintError> for WorkerError {
     fn from(error: TendermintError) -> Self {
         WorkerError::GenesisHashInvalid(error.to_string())
+    }
+}
+
+impl From<NodeError> for WorkerError {
+    fn from(error: NodeError) -> Self {
+        WorkerError::NodeError(error.to_string())
     }
 }
 
@@ -172,7 +164,7 @@ impl NodeWorker {
             SingleHeaderQuery::ByHash(hash) => self.node.request_header_by_hash(&hash).await,
             SingleHeaderQuery::ByHeight(height) => self.node.request_header_by_height(height).await,
         }?;
-        to_value(&header).map_err(|e| WorkerError::CouldNotSerialiseResponseValue(e.to_string()))
+        to_value(&header).map_err(|e| WorkerError::CouldNotSerialiseResponse(e.to_string()))
     }
 
     async fn get_header(&mut self, query: SingleHeaderQuery) -> Result<JsValue> {
@@ -181,7 +173,7 @@ impl NodeWorker {
             SingleHeaderQuery::ByHash(hash) => self.node.get_header_by_hash(&hash).await,
             SingleHeaderQuery::ByHeight(height) => self.node.get_header_by_height(height).await,
         }?;
-        to_value(&header).map_err(|e| WorkerError::CouldNotSerialiseResponseValue(e.to_string()))
+        to_value(&header).map_err(|e| WorkerError::CouldNotSerialiseResponse(e.to_string()))
     }
 
     async fn get_verified_headers(&mut self, from: JsValue, amount: u64) -> Result<Array> {
@@ -294,10 +286,10 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
                 message_server.add(connection);
             }
             WorkerMessage::InvalidCommandReceived(client_id) => {
-                message_server.respond_err_to(client_id, WorkerError::InvalidCommand);
+                message_server.respond_err_to(client_id, WorkerError::InvalidCommandReceived);
             }
             WorkerMessage::Command((command, client_id)) => {
-                info!("received from {client_id:?}: {command:?}");
+                debug!("received from {client_id:?}: {command:?}");
                 let Some(worker) = &mut worker else {
                     match command {
                         NodeCommand::IsRunning => {
@@ -356,25 +348,23 @@ await self.lumina.run_worker(queued);
 "#
     );
 
-    info!("js shim: {script}");
-
     let array = Array::new();
     array.push(&script.into());
     let blob = Blob::new_with_str_sequence_and_options(
         &array,
         BlobPropertyBag::new().type_("application/javascript"),
     )
-    .map_err(|e| JsError::new(&format!("could not create SharedWorker Blob: {e:?}")))?;
+    .to_error("could not create js shim Blob")?;
 
-    let url = Url::create_object_url_with_blob(&blob)
-        .map_err(|e| JsError::new(&format!("could not create SharedWorker Url: {e:?}")))?;
+    let url =
+        Url::create_object_url_with_blob(&blob).to_error("could not create js shim Blob Url")?;
 
     let mut opts = WorkerOptions::new();
     opts.type_(WorkerType::Module);
     opts.name(name);
 
     let worker = SharedWorker::new_with_worker_options(&url, &opts)
-        .map_err(|e| JsError::new(&format!("could not create SharedWorker Url: {e:?}")))?;
+        .to_error("could not create SharedWorker")?;
 
     Ok(worker)
 }

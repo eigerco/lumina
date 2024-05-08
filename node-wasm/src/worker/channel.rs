@@ -1,5 +1,6 @@
 use std::fmt::{self, Debug};
 
+use js_sys::JsString;
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::{mpsc, Mutex};
 use tracing::{debug, error, info, warn};
@@ -17,7 +18,7 @@ type WorkerClientConnection = (MessagePort, Closure<dyn Fn(MessageEvent)>);
 const WORKER_CHANNEL_SIZE: usize = 1;
 
 // TODO: cleanup JS objects on drop
-// impl Drop
+
 /// `WorkerClient` is responsible for sending messages to and receiving responses from [`WorkerMessageServer`].
 /// It covers JS details like callbacks, having to synchronise requests and responses and exposes
 /// simple RPC-like function call interface.
@@ -43,7 +44,7 @@ impl WorkerClient {
                     Ok(jsvalue) => jsvalue,
                     Err(e) => {
                         error!("WorkerClient could not convert from JsValue: {e}");
-                        Err(WorkerError::CouldNotDeserialiseResponseValue(e.to_string()))
+                        Err(WorkerError::CouldNotDeserialiseResponse(e.to_string()))
                     }
                 };
 
@@ -77,16 +78,15 @@ impl WorkerClient {
             .recv()
             .await
             .ok_or(WorkerError::ResponseChannelDropped)?;
-        //message.ok_or(WorkerError::EmptyWorkerResponse)?
         message
     }
 
     fn send(&self, command: NodeCommand) -> Result<(), WorkerError> {
         let command_value =
             to_value(&command).map_err(|e| WorkerError::CouldNotSerialiseCommand(e.to_string()))?;
-        self.message_port.post_message(&command_value).map_err(|e| {
-            WorkerError::CouldNotSendCommand(e.as_string().unwrap_or("UNDEFINED".to_string()))
-        })
+        self.message_port
+            .post_message(&command_value)
+            .map_err(|e| WorkerError::CouldNotSendCommand(format!("{:?}", e.dyn_ref::<JsString>())))
     }
 }
 
@@ -197,8 +197,8 @@ impl WorkerMessageServer {
             Ok(jsvalue) => jsvalue,
             Err(e) => {
                 warn!("provided response could not be coverted to JsValue: {e}");
-                to_value(&WorkerError::CouldNotSerialiseResponseValue(e.to_string()))
-                    .expect("couldn't serialise serialisation error")
+                to_value(&WorkerError::CouldNotSerialiseResponse(e.to_string()))
+                    .expect("something's wrong, couldn't serialise serialisation error")
             }
         };
 
