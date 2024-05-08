@@ -104,7 +104,7 @@ struct NodeWorker {
 }
 
 fn to_jsvalue_or_undefined<T: Serialize>(value: &T) -> JsValue {
-    to_value(value).unwrap()
+    to_value(value).unwrap_or(JsValue::UNDEFINED)
 }
 
 impl NodeWorker {

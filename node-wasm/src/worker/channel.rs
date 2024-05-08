@@ -14,6 +14,8 @@ use crate::worker::WorkerError;
 type WireMessage = Option<Result<WorkerResponse, WorkerError>>;
 type WorkerClientConnection = (MessagePort, Closure<dyn Fn(MessageEvent)>);
 
+const WORKER_CHANNEL_SIZE: usize = 1;
+
 // TODO: cleanup JS objects on drop
 // impl Drop
 pub(crate) struct WorkerClient {
@@ -24,7 +26,7 @@ pub(crate) struct WorkerClient {
 
 impl WorkerClient {
     pub fn new(channel: MessagePort) -> Self {
-        let (response_tx, response_rx) = mpsc::channel(64);
+        let (response_tx, response_rx) = mpsc::channel(WORKER_CHANNEL_SIZE);
 
         let near_tx = response_tx.clone();
         let onmessage_callback = move |ev: MessageEvent| {
