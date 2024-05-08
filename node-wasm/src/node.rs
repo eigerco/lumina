@@ -46,9 +46,9 @@ struct NodeDriver {
 
 #[wasm_bindgen]
 impl NodeDriver {
-    /// Create a new connection to a Lumina node in a Shared Worker.
-    /// Note that single Shared Worker can be accessed from multiple tabs, so Lumina may already
-    /// be running be running, before `NodeDriver::start` call.
+    /// Create a new connection to a Lumina node running in a Shared Worker.
+    /// Note that single Shared Worker can be accessed from multiple tabs, so Lumina may
+    /// already have been started. Otherwise it needs to be started with [`NodeDriver::start`].
     #[wasm_bindgen(constructor)]
     pub async fn new() -> Result<NodeDriver> {
         let worker = spawn_worker(LUMINA_SHARED_WORKER_NAME, "/wasm/lumina_node_wasm.js")?;

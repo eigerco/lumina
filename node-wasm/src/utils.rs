@@ -4,6 +4,7 @@ use std::fmt::{self, Debug};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde_wasm_bindgen::to_value;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::format::Pretty;
 use tracing_subscriber::fmt::time::UtcTime;
@@ -107,6 +108,10 @@ where
     }
 }
 
+pub(crate) fn to_jsvalue_or_undefined<T: Serialize>(value: &T) -> JsValue {
+    to_value(value).unwrap_or(JsValue::UNDEFINED)
+}
+
 pub(crate) trait WorkerSelf {
     type GlobalScope;
 
@@ -121,10 +126,11 @@ impl WorkerSelf for SharedWorker {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) enum JsResult<T, E>
 where
-    T: JsCast,
+    T: JsCast + Debug,
+    E: Debug,
 {
     #[serde(with = "serde_wasm_bindgen::preserve")]
     Ok(T),
@@ -134,8 +140,8 @@ where
 // once try_trait_v2 is stabilised, this can go
 impl<T, E> JsResult<T, E>
 where
-    T: JsCast,
-    E: Serialize + DeserializeOwned,
+    T: JsCast + Debug,
+    E: Serialize + DeserializeOwned + Debug,
 {
     pub fn into_result(self) -> Result<T, E> {
         self.into()
@@ -144,8 +150,8 @@ where
 
 impl<T, E> From<Result<T, E>> for JsResult<T, E>
 where
-    T: JsCast,
-    E: Serialize + DeserializeOwned,
+    T: JsCast + Debug,
+    E: Serialize + DeserializeOwned + Debug,
 {
     fn from(result: Result<T, E>) -> Self {
         match result {
@@ -157,27 +163,13 @@ where
 
 impl<T, E> From<JsResult<T, E>> for Result<T, E>
 where
-    T: JsCast,
-    E: Serialize + DeserializeOwned,
+    T: JsCast + Debug,
+    E: Serialize + DeserializeOwned + Debug,
 {
     fn from(result: JsResult<T, E>) -> Self {
         match result {
             JsResult::Ok(v) => Ok(v),
             JsResult::Err(e) => Err(e),
         }
-    }
-}
-
-impl<T, E> Debug for JsResult<T, E>
-where
-    T: JsCast,
-    E: Serialize + DeserializeOwned,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            JsResult::Ok(_) => f.debug_tuple("JsResult::Ok"),
-            JsResult::Err(_) => f.debug_tuple("JsResult::Err"),
-        }
-        .finish()
     }
 }

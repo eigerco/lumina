@@ -11,33 +11,41 @@ use crate::utils::WorkerSelf;
 use crate::worker::commands::{NodeCommand, WorkerResponse};
 use crate::worker::WorkerError;
 
-type WireMessage = Option<Result<WorkerResponse, WorkerError>>;
+type WireMessage = Result<WorkerResponse, WorkerError>;
 type WorkerClientConnection = (MessagePort, Closure<dyn Fn(MessageEvent)>);
 
 const WORKER_CHANNEL_SIZE: usize = 1;
 
 // TODO: cleanup JS objects on drop
 // impl Drop
+/// `WorkerClient` is responsible for sending messages to and receiving responses from [`WorkerMessageServer`].
+/// It covers JS details like callbacks, having to synchronise requests and responses and exposes
+/// simple RPC-like function call interface.
 pub(crate) struct WorkerClient {
     _onmessage: Closure<dyn Fn(MessageEvent)>,
-    channel: MessagePort,
+    message_port: MessagePort,
     response_channel: Mutex<mpsc::Receiver<WireMessage>>,
 }
 
 impl WorkerClient {
-    pub fn new(channel: MessagePort) -> Self {
+    /// Create a new `WorkerClient` out of a [`MessagePort`] that should be connected
+    /// to a [`SharedWorker`] running lumina.
+    ///
+    /// [`SharedWorker`]: https://developer.mozilla.org/en-US/docs/Web/API/SharedWorker
+    /// [`MessagePort`]: https://developer.mozilla.org/en-US/docs/Web/API/MessagePort
+    pub fn new(message_port: MessagePort) -> Self {
         let (response_tx, response_rx) = mpsc::channel(WORKER_CHANNEL_SIZE);
 
         let onmessage_callback = move |ev: MessageEvent| {
             let response_tx = response_tx.clone();
             spawn_local(async move {
-                let message_data = ev.data();
-
-                let data = from_value(message_data)
-                    .map_err(|e| {
-                        error!("could not convert from JsValue: {e}");
-                    })
-                    .ok();
+                let data: WireMessage = match from_value(ev.data()) {
+                    Ok(jsvalue) => jsvalue,
+                    Err(e) => {
+                        error!("WorkerClient could not convert from JsValue: {e}");
+                        Err(WorkerError::CouldNotDeserialiseResponseValue(e.to_string()))
+                    }
+                };
 
                 if let Err(e) = response_tx.send(data).await {
                     error!("message forwarding channel closed, should not happen: {e}");
@@ -46,30 +54,37 @@ impl WorkerClient {
         };
 
         let onmessage = Closure::new(onmessage_callback);
-        channel.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
-        channel.start();
+        message_port.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
+        message_port.start();
         Self {
             response_channel: Mutex::new(response_rx),
             _onmessage: onmessage,
-            channel,
+            message_port,
         }
     }
 
+    /// Send command to lumina and wait for a response.
+    ///
+    /// Response enum variant can be converted into appropriate type at runtime with a provided
+    /// [`CheckableResponseExt`] helper.
+    ///
+    /// [`CheckableResponseExt`]: crate::utils::CheckableResponseExt
     pub async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse, WorkerError> {
-        let mut channel = self.response_channel.lock().await;
+        let mut response_channel = self.response_channel.lock().await;
         self.send(command)?;
 
-        let message: WireMessage = channel
+        let message: WireMessage = response_channel
             .recv()
             .await
             .ok_or(WorkerError::ResponseChannelDropped)?;
-        message.ok_or(WorkerError::EmptyWorkerResponse)?
+        //message.ok_or(WorkerError::EmptyWorkerResponse)?
+        message
     }
 
     fn send(&self, command: NodeCommand) -> Result<(), WorkerError> {
         let command_value =
             to_value(&command).map_err(|e| WorkerError::CouldNotSerialiseCommand(e.to_string()))?;
-        self.channel.post_message(&command_value).map_err(|e| {
+        self.message_port.post_message(&command_value).map_err(|e| {
             WorkerError::CouldNotSendCommand(e.as_string().unwrap_or("UNDEFINED".to_string()))
         })
     }
@@ -86,9 +101,11 @@ impl fmt::Display for ClientId {
 
 pub(super) enum WorkerMessage {
     NewConnection(MessagePort),
+    InvalidCommandReceived(ClientId),
     Command((NodeCommand, ClientId)),
 }
 
+///
 pub(super) struct WorkerMessageServer {
     // same onconnect callback is used throughtout entire Worker lifetime.
     // Keep a reference to make sure it doesn't get dropped.
@@ -149,36 +166,39 @@ impl WorkerMessageServer {
                 let local_tx = near_tx.clone();
                 spawn_local(async move {
                     let client_id = ClientId(client_id);
-                    let message_data = ev.data();
-                    let Ok(command) = from_value::<NodeCommand>(message_data) else {
-                        warn!("could not deserialize message from client {client_id}");
-                        return;
+
+                    let message = match from_value(ev.data()) {
+                        Ok(command) => {
+                            debug!("received command from client {client_id}: {command:#?}");
+                            WorkerMessage::Command((command, client_id))
+                        }
+                        Err(e) => {
+                            warn!("could not deserialize message from client {client_id}: {e}");
+                            WorkerMessage::InvalidCommandReceived(client_id)
+                        }
                     };
 
-                    debug!("received command from client {client_id}: {command:#?}");
-                    if let Err(e) = local_tx
-                        .send(WorkerMessage::Command((command, client_id)))
-                        .await
-                    {
+                    if let Err(e) = local_tx.send(message).await {
                         error!("command channel inside worker closed, should not happen: {e}");
                     }
                 })
             });
-        port.set_onmessage(Some(client_message_callback.as_ref().unchecked_ref()));
 
         self.clients.push((port, client_message_callback));
+
+        let (port, callback) = self.clients.last().unwrap();
+        port.set_onmessage(Some(callback.as_ref().unchecked_ref()));
 
         info!("SharedWorker ready to receive commands from client {client_id}");
     }
 
-    fn send_response(&self, client: ClientId, msg: Result<WorkerResponse, WorkerError>) {
-        let wire_message: WireMessage = Some(msg);
-
-        let message = match to_value(&wire_message) {
+    fn send_response(&self, client: ClientId, message: WireMessage) {
+        let message = match to_value(&message) {
             Ok(jsvalue) => jsvalue,
             Err(e) => {
-                warn!("provided response could not be coverted to JsValue: {e}, sending undefined instead");
-                JsValue::UNDEFINED // we need to send something, client is waiting for a response
+                warn!("provided response could not be coverted to JsValue: {e}");
+                to_value(&WorkerError::CouldNotSerialiseResponseValue(e.to_string()))
+                    .expect("couldn't serialise serialisation error")
             }
         };
 

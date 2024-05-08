@@ -1,3 +1,5 @@
+//!
+//!
 use std::fmt::Debug;
 
 use js_sys::Array;
@@ -17,6 +19,7 @@ use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store, StoreError};
 use lumina_node::syncer::SyncingInfo;
 
 use crate::node::WasmNodeConfig;
+use crate::utils::to_jsvalue_or_undefined;
 use crate::worker::channel::{WorkerMessage, WorkerMessageServer};
 use crate::worker::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -53,14 +56,24 @@ pub enum WorkerError {
     SerdeError(String),
     #[error("command message could not be serialised, should not happen: {0}")]
     CouldNotSerialiseCommand(String),
+    #[error("command message could not be deserialised, should not happen: {0}")]
+    CouldNotDeserialiseCommand(String),
     #[error("command response could not be serialised, should not happen: {0}")]
     CouldNotSerialiseResponseValue(String),
+    #[error("command response could not be deserialised, should not happen: {0}")]
+    CouldNotDeserialiseResponseValue(String),
     #[error("response message could not be sent: {0}")]
     CouldNotSendCommand(String),
     #[error("Received empty worker response, should not happen")]
     EmptyWorkerResponse,
     #[error("Response channel to worker closed, should not happen")]
     ResponseChannelDropped,
+
+    #[error("Invalid command received")]
+    InvalidCommand,
+
+    #[error("Invalid worker response")]
+    InvalidWorkerResponse,
 }
 
 impl From<NodeError> for WorkerError {
@@ -101,10 +114,6 @@ impl From<serde_wasm_bindgen::Error> for WorkerError {
 
 struct NodeWorker {
     node: Node<IndexedDbStore>,
-}
-
-fn to_jsvalue_or_undefined<T: Serialize>(value: &T) -> JsValue {
-    to_value(value).unwrap_or(JsValue::UNDEFINED)
 }
 
 impl NodeWorker {
@@ -205,11 +214,7 @@ impl NodeWorker {
     }
 
     async fn get_last_seen_network_head(&mut self) -> JsValue {
-        self.node
-            .get_network_head_header()
-            .as_ref()
-            .map(to_jsvalue_or_undefined)
-            .unwrap_or(JsValue::UNDEFINED)
+        to_jsvalue_or_undefined(&self.node.get_network_head_header())
     }
 
     async fn get_sampling_metadata(&mut self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -287,6 +292,9 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
         match message {
             WorkerMessage::NewConnection(connection) => {
                 message_server.add(connection);
+            }
+            WorkerMessage::InvalidCommandReceived(client_id) => {
+                message_server.respond_err_to(client_id, WorkerError::InvalidCommand);
             }
             WorkerMessage::Command((command, client_id)) => {
                 info!("received from {client_id:?}: {command:?}");
