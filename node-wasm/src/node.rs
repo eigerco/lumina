@@ -114,7 +114,7 @@ impl NodeDriver {
 
     /// Wait until the node is connected to at least 1 trusted peer.
     pub async fn wait_connected_trusted(&self) -> Result<()> {
-        let command = NodeCommand::WaitConnected { trusted: false };
+        let command = NodeCommand::WaitConnected { trusted: true };
         let response = self.channel.exec(command).await?;
         let result = response.into_connected().check_variant()?;
 
