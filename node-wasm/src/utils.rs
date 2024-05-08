@@ -79,24 +79,6 @@ pub(crate) fn to_jsvalue_or_undefined<T: Serialize>(value: &T) -> JsValue {
     to_value(value).unwrap_or(JsValue::UNDEFINED)
 }
 
-pub(crate) trait JsContext<T, E> {
-    fn js_context<C>(self, context: C) -> Result<T, JsError>
-    where
-        C: fmt::Display + Send + Sync + 'static;
-}
-
-impl<T, E> JsContext<T, E> for std::result::Result<T, E>
-where
-    E: std::error::Error,
-{
-    fn js_context<C>(self, context: C) -> Result<T, JsError>
-    where
-        C: fmt::Display + Send + Sync + 'static,
-    {
-        self.map_err(|e| JsError::new(&format!("{context}: {e}")))
-    }
-}
-
 pub(crate) trait JsValueToJsError<T> {
     fn to_error<C>(self, context_fn: C) -> Result<T, JsError>
     where

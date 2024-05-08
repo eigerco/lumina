@@ -1,5 +1,3 @@
-//!  
-//!
 use std::fmt::Debug;
 
 use js_sys::Array;

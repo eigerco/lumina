@@ -105,7 +105,6 @@ pub(super) enum WorkerMessage {
     Command((NodeCommand, ClientId)),
 }
 
-///
 pub(super) struct WorkerMessageServer {
     // same onconnect callback is used throughtout entire Worker lifetime.
     // Keep a reference to make sure it doesn't get dropped.
