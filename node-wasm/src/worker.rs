@@ -98,6 +98,7 @@ impl From<serde_wasm_bindgen::Error> for WorkerError {
         WorkerError::SerdeError(error.to_string())
     }
 }
+
 struct NodeWorker {
     node: Node<IndexedDbStore>,
 }
@@ -149,9 +150,9 @@ impl NodeWorker {
 
     async fn wait_connected(&mut self, trusted: bool) -> Result<()> {
         if trusted {
-            self.node.wait_connected().await?;
-        } else {
             self.node.wait_connected_trusted().await?;
+        } else {
+            self.node.wait_connected().await?;
         }
         Ok(())
     }
@@ -330,7 +331,6 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
 ///
 /// [`URL`]: https://developer.mozilla.org/en-US/docs/Web/API/URL
 /// ['Blob']: https://developer.mozilla.org/en-US/docs/Web/API/Blob
-
 pub(crate) fn spawn_worker(name: &str, wasm_url: &str) -> Result<SharedWorker, JsError> {
     let script = format!(
         r#"

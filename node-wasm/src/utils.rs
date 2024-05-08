@@ -125,7 +125,6 @@ impl WorkerSelf for SharedWorker {
 pub(crate) enum JsResult<T, E>
 where
     T: JsCast,
-    //E: Serialize + DeserializeOwned,
 {
     #[serde(with = "serde_wasm_bindgen::preserve")]
     Ok(T),
