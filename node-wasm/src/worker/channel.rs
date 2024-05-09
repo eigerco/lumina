@@ -17,8 +17,6 @@ type WorkerClientConnection = (MessagePort, Closure<dyn Fn(MessageEvent)>);
 
 const WORKER_CHANNEL_SIZE: usize = 1;
 
-// TODO: cleanup JS objects on drop
-
 /// `WorkerClient` is responsible for sending messages to and receiving responses from [`WorkerMessageServer`].
 /// It covers JS details like callbacks, having to synchronise requests and responses and exposes
 /// simple RPC-like function call interface.

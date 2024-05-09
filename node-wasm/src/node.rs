@@ -37,14 +37,14 @@ pub struct WasmNodeConfig {
     pub bootnodes: Vec<String>,
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_name = NodeClient)]
 struct NodeDriver {
     _worker: SharedWorker,
     _onerror_callback: Closure<dyn Fn(MessageEvent)>,
     channel: WorkerClient,
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_class = NodeClient)]
 impl NodeDriver {
     /// Create a new connection to a Lumina node running in a Shared Worker.
     /// Note that single Shared Worker can be accessed from multiple tabs, so Lumina may
@@ -284,6 +284,20 @@ impl NodeDriver {
 
         Ok(to_value(&metadata?)?)
     }
+
+    /// Requests SharedWorker running lumina to close. Any events received afterwards wont
+    /// be processed and new NodeClient needs to be created to restart a node.
+    pub async fn close(&self) -> Result<()> {
+        let command = NodeCommand::CloseWorker;
+        let response = self.channel.exec(command).await?;
+        if response.is_worker_closed() {
+            Ok(())
+        } else {
+            Err(JsError::new(
+                "invalid response received for the command sent",
+            ))
+        }
+    }
 }
 
 #[wasm_bindgen(js_class = NodeConfig)]
@@ -309,12 +323,19 @@ impl WasmNodeConfig {
 
         let p2p_local_keypair = Keypair::generate_ed25519();
 
-        let genesis_hash = self.genesis_hash.map(|h| h.parse()).transpose()?;
+        let genesis_hash = self
+            .genesis_hash
+            .map(|h| h.parse())
+            .transpose()
+            .map_err(|e| WorkerError::NodeSetupFailed(format!("genesis hash invalid: {e}")))?;
         let p2p_bootnodes = self
             .bootnodes
             .iter()
             .map(|addr| addr.parse())
-            .collect::<StdResult<_, _>>()?;
+            .collect::<StdResult<_, _>>()
+            .map_err(|e| {
+                WorkerError::NodeSetupFailed(format!("bootstrap multiaddr invalid: {e}"))
+            })?;
 
         Ok(NodeConfig {
             network_id: network_id.to_string(),

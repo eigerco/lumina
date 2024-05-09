@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 
 use js_sys::Array;
-use libp2p::multiaddr::Error as MultiaddrError;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
@@ -11,13 +10,12 @@ use tracing::{debug, error, info, warn};
 use wasm_bindgen::prelude::*;
 use web_sys::{Blob, BlobPropertyBag, MessagePort, SharedWorker, Url, WorkerOptions, WorkerType};
 
-use celestia_tendermint::error::Error as TendermintError;
 use lumina_node::node::{Node, NodeError};
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store, StoreError};
 use lumina_node::syncer::SyncingInfo;
 
 use crate::node::WasmNodeConfig;
-use crate::utils::{to_jsvalue_or_undefined, JsValueToJsError};
+use crate::utils::{to_jsvalue_or_undefined, JsValueToJsError, WorkerSelf};
 use crate::worker::channel::{WorkerMessage, WorkerMessageServer};
 use crate::worker::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -38,14 +36,8 @@ pub enum WorkerError {
     NodeNotRunning,
     #[error("node has already been started")]
     NodeAlreadyRunning,
-    #[error("could not create blockstore: {0}")]
-    BlockstoreCreationFailed(String),
-    #[error("could not create header store: {0}")]
-    StoreCreationFailed(String),
-    #[error("could not parse genesis hash: {0}")]
-    GenesisHashInvalid(String),
-    #[error("could not parse bootstrap node multiaddr: {0}")]
-    BootstrapNodeMultiaddrInvalid(String),
+    #[error("setting up node failed: {0}")]
+    NodeSetupFailed(String),
     #[error("node error: {0}")]
     NodeError(String),
     #[error("value could not be serialized: {0}")]
@@ -68,31 +60,19 @@ pub enum WorkerError {
 
 impl From<blockstore::Error> for WorkerError {
     fn from(error: blockstore::Error) -> Self {
-        WorkerError::BlockstoreCreationFailed(error.to_string())
+        WorkerError::NodeSetupFailed(format!("could not create blockstore: {error}"))
     }
 }
 
 impl From<StoreError> for WorkerError {
     fn from(error: StoreError) -> Self {
-        WorkerError::StoreCreationFailed(error.to_string())
-    }
-}
-
-impl From<TendermintError> for WorkerError {
-    fn from(error: TendermintError) -> Self {
-        WorkerError::GenesisHashInvalid(error.to_string())
+        WorkerError::NodeSetupFailed(format!("could not create header store: {error}"))
     }
 }
 
 impl From<NodeError> for WorkerError {
     fn from(error: NodeError) -> Self {
         WorkerError::NodeError(error.to_string())
-    }
-}
-
-impl From<MultiaddrError> for WorkerError {
-    fn from(error: MultiaddrError) -> Self {
-        WorkerError::BootstrapNodeMultiaddrInvalid(error.to_string())
     }
 }
 
@@ -262,6 +242,10 @@ impl NodeWorker {
             NodeCommand::GetSamplingMetadata { height } => {
                 WorkerResponse::SamplingMetadata(self.get_sampling_metadata(height).await)
             }
+            NodeCommand::CloseWorker => {
+                SharedWorker::worker_self().close();
+                WorkerResponse::WorkerClosed
+            }
         }
     }
 }
@@ -320,7 +304,7 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
         }
     }
 
-    error!("Channel to WorkerMessageServer closed, should not happen");
+    info!("Channel to WorkerMessageServer closed, exiting the SharedWorker");
 }
 
 /// SharedWorker can only be spawned from an [`URL`]. To eliminate a need to host a js shim

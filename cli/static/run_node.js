@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import init, { NodeConfig, NodeDriver } from "/wasm/lumina_node_wasm.js";
+import init, { NodeConfig, NodeClient } from "/wasm/lumina_node_wasm.js";
 
 async function fetch_config() {
   const response = await fetch('/cfg.json');
@@ -96,25 +96,25 @@ function bind_config(data) {
 async function main(document, window) {
   await init();
 
-  window.driver = await new NodeDriver();
+  window.node = await new NodeClient();
 
   bind_config(await fetch_config());
 
-  if (await window.driver.is_running() === true) {
+  if (await window.node.is_running() === true) {
     document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
-    document.getElementById("peer-id").innerText = await window.driver.local_peer_id();
+    document.getElementById("peer-id").innerText = await window.node.local_peer_id();
     document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
   }
 
   document.getElementById("start").addEventListener("click", async () => {
     document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
 
-    await window.driver.start(window.config);
-    document.getElementById("peer-id").innerText = await window.driver.local_peer_id();
+    await window.node.start(window.config);
+    document.getElementById("peer-id").innerText = await window.node.local_peer_id();
     document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
   });
 
-  setInterval(async () => await show_stats(window.driver), 1000)
+  setInterval(async () => await show_stats(window.node), 1000)
 }
 
 await main(document, window);

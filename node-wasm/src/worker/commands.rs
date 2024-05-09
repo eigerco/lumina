@@ -51,6 +51,7 @@ pub(crate) enum NodeCommand {
     GetSamplingMetadata {
         height: u64,
     },
+    CloseWorker,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -77,6 +78,7 @@ pub(crate) enum WorkerResponse {
     #[serde(with = "serde_wasm_bindgen::preserve")]
     LastSeenNetworkHead(JsValue),
     SamplingMetadata(Result<Option<SamplingMetadata>>),
+    WorkerClosed,
 }
 
 pub(crate) trait CheckableResponseExt {
