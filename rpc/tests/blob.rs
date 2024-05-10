@@ -32,7 +32,7 @@ async fn blob_submit_and_get() {
         .unwrap();
 
     received_blob.validate().unwrap();
-    assert_eq!(received_blob, blob);
+    assert_blob_equal_to_sent(&received_blob, &blob);
 
     let proofs = client
         .blob_get_proof(submitted_height, namespace, blob.commitment)
@@ -71,7 +71,7 @@ async fn blob_submit_and_get_all() {
         let namespace = namespaces[idx];
 
         received_blob.validate().unwrap();
-        assert_eq!(received_blob, blob);
+        assert_blob_equal_to_sent(received_blob, blob);
 
         let proofs = client
             .blob_get_proof(submitted_height, namespace, blob.commitment)
@@ -101,7 +101,7 @@ async fn blob_submit_and_get_large() {
         .unwrap();
 
     blob.validate().unwrap();
-    assert_eq!(received_blob, blob);
+    assert_blob_equal_to_sent(&received_blob, &blob);
 
     let proofs = client
         .blob_get_proof(submitted_height, namespace, blob.commitment)
@@ -162,4 +162,13 @@ async fn blob_get_get_proof_wrong_commitment() {
         .blob_get_proof(submitted_height, namespace, commitment)
         .await
         .unwrap_err();
+}
+
+/// Blobs received from chain have index field set, so to
+/// compare if they are equal to the ones we sent, we need
+/// to overwrite the index field with received one.
+fn assert_blob_equal_to_sent(received: &Blob, sent: &Blob) {
+    let mut sent = sent.clone();
+    sent.index = received.index;
+    assert_eq!(&sent, received);
 }
