@@ -30,6 +30,7 @@ blockstore = { workspace = true }
 celestia-tendermint = { workspace = true }
 
 anyhow = "1.0.71"
+enum-as-inner = "0.6"
 console_error_panic_hook = "0.1.7"
 futures = "0.3"
 gloo-timers = "0.3"
@@ -40,11 +41,22 @@ serde-wasm-bindgen = "0.6.0"
 serde_repr = "0.1"
 thiserror = "1.0"
 time = { version = "0.3", features = ["wasm-bindgen"] }
-tokio =  { version = "*", features = ["sync"]}
+tokio = { version = "*", features = ["sync"] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.18", features = ["time"] }
 tracing-web = "0.1.2"
 wasm-bindgen = "0.2.88"
 wasm-bindgen-futures = "0.4.37"
-web-sys = { version = "0.3.69", features = ["BroadcastChannel", "MessageEvent", "Worker", "WorkerOptions", "WorkerType", "SharedWorker", "MessagePort", "SharedWorkerGlobalScope", "Blob", "BlobPropertyBag", "Url"]}
-enum-as-inner = "0.6"
+web-sys = { version = "0.3.69", features = [
+  "Blob",
+  "BlobPropertyBag",
+  "BroadcastChannel",
+  "MessageEvent",
+  "MessagePort",
+  "SharedWorker",
+  "SharedWorkerGlobalScope",
+  "Url",
+  "Worker",
+  "WorkerOptions",
+  "WorkerType",
+] }

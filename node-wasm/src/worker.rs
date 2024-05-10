@@ -8,7 +8,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use wasm_bindgen::prelude::*;
-use web_sys::{Blob, BlobPropertyBag, MessagePort, SharedWorker, Url, WorkerOptions, WorkerType};
+use web_sys::{MessagePort, SharedWorker, WorkerOptions, WorkerType};
 
 use lumina_node::node::{Node, NodeError};
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store, StoreError};
@@ -307,39 +307,9 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
     info!("Channel to WorkerMessageServer closed, exiting the SharedWorker");
 }
 
-/// SharedWorker can only be spawned from an [`URL`]. To eliminate a need to host a js shim
-/// which calls into our Rust wasm code under specific path, we encode its entire contents
-/// as a [`Blob`] which is then passed as an URL.
-///
-/// [`URL`]: https://developer.mozilla.org/en-US/docs/Web/API/URL
-/// ['Blob']: https://developer.mozilla.org/en-US/docs/Web/API/Blob
-pub(crate) fn spawn_worker(name: &str, wasm_url: &str) -> Result<SharedWorker, JsError> {
-    let script = format!(
-        r#"
-Error.stackTraceLimit = 99;
-
-let queued = [];
-onconnect = (event) => {{
-  console.log("Queued connection", event);
-  queued.push(event.ports[0]);
-}}
-
-self.lumina = await import(self.location.origin + '{wasm_url}');
-await self.lumina.default();
-await self.lumina.run_worker(queued);
-"#
-    );
-
-    let array = Array::new();
-    array.push(&script.into());
-    let blob = Blob::new_with_str_sequence_and_options(
-        &array,
-        BlobPropertyBag::new().type_("application/javascript"),
-    )
-    .to_error("could not create js shim Blob")?;
-
-    let url =
-        Url::create_object_url_with_blob(&blob).to_error("could not create js shim Blob Url")?;
+/// Spawn a new SharedWorker.
+pub(crate) fn spawn_worker(name: &str) -> Result<SharedWorker, JsError> {
+    let url = worker_script_url();
 
     let mut opts = WorkerOptions::new();
     opts.type_(WorkerType::Module);
@@ -349,4 +319,10 @@ await self.lumina.run_worker(queued);
         .to_error("could not create SharedWorker")?;
 
     Ok(worker)
+}
+
+#[wasm_bindgen(module = "/js/worker.js")]
+extern "C" {
+    // must be called in order to include this script in generated package
+    fn worker_script_url() -> String;
 }

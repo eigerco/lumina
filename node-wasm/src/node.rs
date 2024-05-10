@@ -51,7 +51,7 @@ impl NodeDriver {
     /// already have been started. Otherwise it needs to be started with [`NodeDriver::start`].
     #[wasm_bindgen(constructor)]
     pub async fn new() -> Result<NodeDriver> {
-        let worker = spawn_worker(LUMINA_SHARED_WORKER_NAME, "/wasm/lumina_node_wasm.js")?;
+        let worker = spawn_worker(LUMINA_SHARED_WORKER_NAME)?;
 
         let onerror_callback: Closure<dyn Fn(MessageEvent)> = Closure::new(|ev: MessageEvent| {
             error!("received error from SharedWorker: {:?}", ev.to_string());
