@@ -102,7 +102,7 @@ impl Namespace {
     ///
     /// [`Share`]: crate::share::Share
     /// [`MsgPayForBlobs`]: celestia_proto::celestia::blob::v1::MsgPayForBlobs
-    pub const PAY_FOR_BLOB: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+    pub const PAY_FOR_BLOB: Namespace = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 4]);
 
     /// Primary reserved [`Namespace`] for the [`Share`]s used for padding.
     ///
