@@ -79,7 +79,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     .context("Failed to start node")?;
 
     node.wait_connected_trusted().await?;
-    let mut events = node.event_receiver();
+    let mut events = node.event_subscriber();
 
     // We have nothing else to do, but we want to keep main alive
     while let Ok(ev) = events.recv().await {
