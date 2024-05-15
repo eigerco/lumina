@@ -58,7 +58,7 @@ impl RangeLengthExt for RangeInclusive<u64> {
 }
 
 // TODO: less pub?
-#[derive(Debug, Clone)] // TODO: manual implementation probably
+#[derive(Debug, Clone, PartialEq)] // TODO: manual Display implementation probably
 pub struct HeaderRanges(pub SmallVec<[RangeInclusive<u64>; 2]>);
 
 impl HeaderRanges {
@@ -94,7 +94,6 @@ pub struct HeaderRangesIterator {
 impl HeaderRangesIterator {
     pub fn next_batch(&mut self, limit: u64) -> Option<RangeInclusive<u64>> {
         let current_range = self.inner_iter.take()?;
-        let len = current_range.end() - current_range.start() + 1;
 
         if current_range.len() <= limit {
             self.inner_iter = self.outer_iter.next();
@@ -116,6 +115,20 @@ impl Iterator for HeaderRangesIterator {
         self.inner_iter = self.outer_iter.next();
         self.next()
     }
+}
+
+pub enum InsertMode {
+    ///
+    Untrusted,
+    /// header has already been verified against the next one
+    NextTrusted,
+    /// header has already been verified against the previous one
+    PreviousTrusted,
+    /// header has already been verified against both previous and next oe
+    BothTrusted,
+    // TODO: remove?
+    /// header is to be inserted at the front, verifying against previous one if it exists
+    InsertHead,
 }
 
 /// An asynchronous [`ExtendedHeader`] storage.
@@ -182,12 +195,17 @@ pub trait Store: Send + Sync + Debug {
     /// Returns true if height exists in the store.
     async fn has_at(&self, height: u64) -> bool;
 
-    /// Append single header maintaining continuity from the genesis to the head.
+    /// TODO
+    /// Insert single header
     ///
     /// # Note
     ///
     /// This method does not validate or verify that `header` is indeed correct.
-    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()>;
+    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
+        self.insert_single(header, InsertMode::BothTrusted).await
+    }
+
+    async fn insert_single(&self, header: ExtendedHeader, mode: InsertMode) -> Result<()>;
 
     /// Returns height of the lowest header that wasn't sampled yet
     async fn next_unsampled_height(&self) -> Result<u64>;
@@ -218,18 +236,39 @@ pub trait Store: Send + Sync + Debug {
     /// # Note
     ///
     /// This method does not validate or verify that `headers` are indeed correct.
-    async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+    /*
+    async fn insert_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
         for header in headers.into_iter() {
-            self.append_single_unchecked(header).await?;
+            self.insert_single_unchecked(header).await?;
         }
 
         Ok(())
     }
+    */
+
+    /*
+    async fn insert_reversed(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        let it = headers.into_iter().rev().peekable();
+        if let Some(h) = it.next() {
+            self.insert_single(h, InsertMode::PreviousTrusted).await?;
+        }
+        while let Some(h) = it.next() {
+            if it.peek().is_some() {
+                self.insert_single(h, InsertMode::BothTrusted).await?;
+            } else {
+                self.insert_single(h, InsertMode::NextTrusted).await?;
+            }
+        }
+
+        Ok(())
+    }
+    */
 
     /// Append single header maintaining continuity from the genesis to the head.
     async fn append_single(&self, header: ExtendedHeader) -> Result<()> {
         header.validate()?;
 
+        /*
         match self.get_head().await {
             Ok(head) => {
                 head.verify(&header)?;
@@ -238,29 +277,49 @@ pub trait Store: Send + Sync + Debug {
             Err(StoreError::NotFound) => {}
             Err(e) => return Err(e),
         }
+        */
 
-        self.append_single_unchecked(header).await
+        self.insert_single(header, InsertMode::Untrusted).await
     }
-
-    async fn prepend(&self, headers: Vec<ExtendedHeader>) -> Result<()>;
 
     /// Append a range of headers maintaining continuity from the genesis to the head.
     async fn append(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        let Some(front) = headers.first() else {
+            return Ok(());
+        };
+        let Some(back) = headers.last() else {
+            return Ok(());
+        };
+
         validate_headers(&headers).await?;
 
-        match self.get_head().await {
-            Ok(head) => {
-                head.verify_adjacent_range(&headers)?;
+        match self.get_by_height(front.height().value()).await {
+            Ok(predecessor) => {
+                predecessor.verify_adjacent_range(&headers)?;
             }
             // Empty store, we can not verify
-            Err(StoreError::NotFound) => {}
+            Err(StoreError::NotFound) => {} // TODO: ?????
+            Err(e) => return Err(e),
+        }
+
+        match self.get_by_height(back.height().value()).await {
+            Ok(successor) => back.verify(&successor)?,
+            // Empty store, we can not verify
+            Err(StoreError::NotFound) => {} // TODO: ?????
             Err(e) => return Err(e),
         }
 
         self.append_unchecked(headers).await
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<Vec<HeaderRange>>;
+    async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        for header in headers.into_iter() {
+            self.append_single_unchecked(header).await?;
+        }
+        Ok(())
+    }
+
+    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].
@@ -278,6 +337,8 @@ pub enum StoreError {
     #[error("Failed to append header at height {1}, current head {0}")]
     NonContinuousAppend(u64, u64),
 
+    //#[error("Failed to find range to add header with height {0} to: {1}")]
+    //RangeFinderError(u64, HeaderRange),
     /// Header validation has failed.
     #[error("Failed to validate header at height {0}")]
     HeaderChecksError(u64),
@@ -564,7 +625,7 @@ mod tests {
 
         let header = gen.next();
 
-        s.append_single_unchecked(header.clone()).await.unwrap();
+        s.insert_single_unchecked(header.clone()).await.unwrap();
         assert_eq!(s.head_height().await.unwrap(), 1);
         assert_eq!(s.get_head().await.unwrap(), header);
         assert_eq!(s.get_by_height(1).await.unwrap(), header);
@@ -610,9 +671,9 @@ mod tests {
         let mut gen = fill_store(&mut s, 100).await;
 
         let header101 = gen.next();
-        s.append_single_unchecked(header101.clone()).await.unwrap();
+        s.insert_single_unchecked(header101.clone()).await.unwrap();
         assert!(matches!(
-            s.append_single_unchecked(header101).await,
+            s.insert_single_unchecked(header101).await,
             Err(StoreError::HeightExists(101))
         ));
     }
@@ -634,7 +695,7 @@ mod tests {
         let header29 = s.get_by_height(29).await.unwrap();
         let header30 = gen.next_of(&header29);
 
-        let insert_existing_result = s.append_single_unchecked(header30).await;
+        let insert_existing_result = s.insert_single_unchecked(header30).await;
         assert!(matches!(
             insert_existing_result,
             Err(StoreError::HeightExists(30))
@@ -656,7 +717,7 @@ mod tests {
 
         let mut dup_header = s.get_by_height(33).await.unwrap();
         dup_header.header.height = Height::from(101u32);
-        let insert_existing_result = s.append_single_unchecked(dup_header).await;
+        let insert_existing_result = s.insert_single_unchecked(dup_header).await;
         assert!(matches!(
             insert_existing_result,
             Err(StoreError::HashExists(_))
@@ -699,13 +760,12 @@ mod tests {
         // height 12
         let upcoming_head = gen.next();
 
-        s.append_single_unchecked(upcoming_head).await.unwrap();
-        s.append_single_unchecked(skipped).await.unwrap();
+        s.insert_single_unchecked(upcoming_head).await.unwrap();
+        s.insert_single_unchecked(skipped).await.unwrap();
     }
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::sled(new_sled_store()))]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -746,7 +806,7 @@ mod tests {
         let removed = hs.remove(3);
 
         s.append_unchecked(hs).await.unwrap();
-        s.append_single_unchecked(removed).await.unwrap();
+        s.insert_single_unchecked(removed).await.unwrap();
     }
 
     #[rstest]
@@ -766,9 +826,9 @@ mod tests {
         gen.next_many(4);
         let header15 = gen.next();
 
-        s.append_single_unchecked(header5).await.unwrap();
-        s.append_single_unchecked(header15).await.unwrap();
-        s.append_single_unchecked(header10).await.unwrap_err();
+        s.insert_single_unchecked(header5).await.unwrap();
+        s.insert_single_unchecked(header15).await.unwrap();
+        s.insert_single_unchecked(header10).await.unwrap_err();
     }
 
     #[rstest]
@@ -1011,7 +1071,7 @@ mod tests {
 
         for header in headers {
             store
-                .append_single_unchecked(header)
+                .insert_single_unchecked(header)
                 .await
                 .expect("inserting test data failed");
         }

@@ -22,7 +22,6 @@ use celestia_types::ExtendedHeader;
 use futures::FutureExt;
 use itertools::Itertools;
 use serde::Serialize;
-use smallvec::SmallVec;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
@@ -30,12 +29,12 @@ use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::{HeaderRanges, Store, StoreError};
+use crate::store::{HeaderRanges, InsertMode, Store, StoreError};
 use crate::utils::OneshotSenderExt;
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
-const MAX_HEADERS_IN_BATCH: u64 = 512;
+const MAX_HEADERS_IN_BATCH: u64 = 8; //512;
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Representation of all the errors that can occur when interacting with the [`Syncer`].
@@ -178,8 +177,8 @@ where
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     genesis_hash: Option<Hash>,
     subjective_head_height: Option<u64>,
-    headers_tx: mpsc::Sender<Result<Vec<ExtendedHeader>, P2pError>>,
-    headers_rx: mpsc::Receiver<Result<Vec<ExtendedHeader>, P2pError>>,
+    headers_tx: mpsc::Sender<Result<Vec<Vec<ExtendedHeader>>, P2pError>>,
+    headers_rx: mpsc::Receiver<Result<Vec<Vec<ExtendedHeader>>, P2pError>>,
     ongoing_batch: Option<Ongoing>,
 }
 
@@ -404,7 +403,12 @@ where
                 // If our new header is adjacent to the HEAD of the store
                 if store_head_height + 1 == new_head_height {
                     // Header is already verified by HeaderSub
-                    if self.store.append_single_unchecked(new_head).await.is_ok() {
+                    if self
+                        .store
+                        .insert_single(new_head, InsertMode::PreviousTrusted)
+                        .await
+                        .is_ok()
+                    {
                         info!("Added header {new_head_height} from HeaderSub");
                     }
                 }
@@ -430,27 +434,13 @@ where
             return;
         };
 
-        /*
-        let Ok(local_head) = self.store.get_head().await else {
-            // Nothing to schedule
-            return;
-        };
-        */
         let store_ranges = self.store.get_stored_header_ranges().await.unwrap();
 
-        let fetch_ranges =
-            calc_fetch_ranges(subjective_head_height, &store_ranges, MAX_HEADERS_IN_BATCH);
-
-        /*
-                let amount = subjective_head_height
-                    .saturating_sub(local_head.height().value())
-                    .min(MAX_HEADERS_IN_BATCH);
-
-                if amount == 0 {
-                    // Nothing to schedule
-                    return;
-                }
-        */
+        let fetch_ranges = calculate_ranges_to_fetch(
+            subjective_head_height,
+            &store_ranges.0,
+            MAX_HEADERS_IN_BATCH,
+        );
 
         if self.p2p.peer_tracker_info().num_connected_peers == 0 {
             // No connected peers. We can't do the request.
@@ -458,8 +448,6 @@ where
             return;
         }
 
-        //let start = local_head.height().value() + 1;
-        //let end = start + amount - 1;
         let cancellation_token = self.cancellation_token.child_token();
 
         info!("Fetching batch with ranges {fetch_ranges:?}");
@@ -476,9 +464,7 @@ where
             // TODO: cleanup
             match result {
                 Ok(headers) => {
-                    for header_span in headers {
-                        let _ = tx.send(Ok(header_span)).await;
-                    }
+                    let _ = tx.send(Ok(headers)).await;
                 }
                 Err(e) => {
                     let _ = tx.send(Err(e)).await;
@@ -488,13 +474,16 @@ where
     }
 
     #[instrument(skip_all)]
-    async fn on_fetch_next_batch_result(&mut self, res: Result<Vec<ExtendedHeader>, P2pError>) {
+    async fn on_fetch_next_batch_result(
+        &mut self,
+        res: Result<Vec<Vec<ExtendedHeader>>, P2pError>,
+    ) {
         let Some(ongoing) = self.ongoing_batch.take() else {
             warn!("No batch was scheduled, however result was received. Discarding it.");
             return;
         };
 
-        let headers = match res {
+        let headers_spans = match res {
             Ok(headers) => headers,
             Err(e) => {
                 warn!(
@@ -505,15 +494,30 @@ where
             }
         };
 
-        // Headers are already verified by `get_verified_headers_range`,
-        // so `append_unchecked` is used for optimization.
-        if let Err(e) = self.store.append_unchecked(headers).await {
-            warn!("Failed to store batch {:?}: {e}", ongoing.fetch_ranges);
+        for headers in headers_spans {
+            let first_header = headers.first().unwrap();
+            let last_header = headers.last().unwrap();
+
+            info!(
+                "on_fetch_next_batch_result received headers range: {}..={}",
+                first_header.height().value(),
+                last_header.height().value()
+            );
+
+            // Headers ranges are verified internally, but we need to validate the edges against
+            // headers possibly stored in store already
+            if let Err(e) = self.store.append(headers).await {
+                warn!("Failed to store batch {:?}: {e}", ongoing.fetch_ranges);
+            } else {
+                info!("stored successfully");
+            }
         }
     }
 }
 
-fn calc_fetch_ranges(
+/// based on the stored headers and current network head height, calculate range of headers that
+/// should be fetched from the network, starting from the front up to a `limit` of headers
+fn calculate_ranges_to_fetch(
     head_height: u64,
     store_headers: &[RangeInclusive<u64>],
     limit: u64,
@@ -529,7 +533,6 @@ fn calc_fetch_ranges(
 
     let mut left = limit;
     let missing_ranges = range_edges
-        .inspect(|v| println!("> {v}"))
         .chunks(2)
         .into_iter()
         .map_while(|mut range| {
@@ -546,12 +549,10 @@ fn calc_fetch_ranges(
             }
 
             if left > range_len {
-                println!("{left} -= {range_len}");
                 left -= range_len;
                 Some(RangeInclusive::new(lower_bound + 1, upper_bound))
             } else {
                 let truncated_lower_bound = upper_bound - left;
-                println!("{upper_bound} - {left} = {truncated_lower_bound}");
                 left = 0;
                 Some(RangeInclusive::new(truncated_lower_bound + 1, upper_bound))
             }
@@ -561,25 +562,27 @@ fn calc_fetch_ranges(
     HeaderRanges(missing_ranges)
 }
 
-async fn try_init<S>(p2p: &P2p, store: &S, genesis_hash: Option<Hash>) -> Result<u64>
+async fn try_init<S>(p2p: &P2p, _store: &S, _genesis_hash: Option<Hash>) -> Result<u64>
 where
     S: Store,
 {
     p2p.wait_connected_trusted().await?;
 
-    // IF store is empty, intialize it with genesis
-    if store.head_height().await.is_err() {
-        let genesis = match genesis_hash {
-            Some(hash) => p2p.get_header(hash).await?,
-            None => {
-                warn!("Genesis hash is not set, requesting height 1.");
-                p2p.get_header_by_height(1).await?
-            }
-        };
+    /*
+        // IF store is empty, intialize it with genesis
+        if store.head_height().await.is_err() {
+            let genesis = match genesis_hash {
+                Some(hash) => p2p.get_header(hash).await?,
+                None => {
+                    warn!("Genesis hash is not set, requesting height 1.");
+                    p2p.get_header_by_height(1).await?
+                }
+            };
 
-        // Store genesis
-        store.append_single_unchecked(genesis).await?;
-    }
+            // Store genesis
+            store.insert_single_unchecked(genesis).await?;
+        }
+    */
 
     let network_head = p2p.get_head_header().await?;
     let network_head_height = network_head.height().value();
@@ -595,6 +598,7 @@ mod tests {
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
+    use smallvec::smallvec;
 
     #[async_test]
     async fn init_without_genesis_hash() {
@@ -980,14 +984,9 @@ mod tests {
             RangeInclusive::new(23, 28),
             RangeInclusive::new(30, 40),
         ];
-        let expected_missing_ranges = [
-            RangeInclusive::new(41, 50),
-            RangeInclusive::new(29, 29),
-            RangeInclusive::new(21, 22),
-            RangeInclusive::new(6, 14),
-        ];
+        let expected_missing_ranges = HeaderRanges(smallvec![41..=50, 29..=29, 21..=22, 6..=14,]);
 
-        let missing_ranges = calc_fetch_ranges(head_height, &ranges, 512);
+        let missing_ranges = calculate_ranges_to_fetch(head_height, &ranges, 512);
         assert_eq!(missing_ranges, expected_missing_ranges);
     }
 
@@ -995,9 +994,9 @@ mod tests {
     fn test_calc_missing_ranges_partial() {
         let head_height = 10;
         let ranges = [RangeInclusive::new(6, 7)];
-        let expected_missing_ranges = [RangeInclusive::new(8, 10), RangeInclusive::new(4, 5)];
+        let expected_missing_ranges = HeaderRanges(smallvec![8..=10, 4..=5]);
 
-        let missing_ranges = calc_fetch_ranges(head_height, &ranges, 5);
+        let missing_ranges = calculate_ranges_to_fetch(head_height, &ranges, 5);
         assert_eq!(missing_ranges, expected_missing_ranges);
     }
 
@@ -1005,9 +1004,9 @@ mod tests {
     fn test_calc_missing_ranges_contiguous() {
         let head_height = 10;
         let ranges = [RangeInclusive::new(5, 6), RangeInclusive::new(7, 9)];
-        let expected_missing_ranges = [RangeInclusive::new(10, 10), RangeInclusive::new(1, 4)];
+        let expected_missing_ranges = HeaderRanges(smallvec![10..=10, 1..=4]);
 
-        let missing_ranges = calc_fetch_ranges(head_height, &ranges, 5);
+        let missing_ranges = calculate_ranges_to_fetch(head_height, &ranges, 5);
         assert_eq!(missing_ranges, expected_missing_ranges);
     }
 }

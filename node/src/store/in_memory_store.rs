@@ -1,5 +1,5 @@
 use std::pin::pin;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{fence, AtomicU64, Ordering};
 
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
@@ -7,10 +7,13 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
+use smallvec::smallvec;
 use tokio::sync::Notify;
 use tracing::{debug, info};
 
-use crate::store::{HeaderRange, Result, SamplingMetadata, Store, StoreError};
+use crate::store::{
+    HeaderRange, HeaderRanges, InsertMode, Result, SamplingMetadata, Store, StoreError,
+};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -21,9 +24,9 @@ pub struct InMemoryStore {
     sampling_data: DashMap<u64, SamplingMetadata>,
     /// Maps header height to its hash, in case we need to do lookup by height
     height_to_hash: DashMap<u64, Hash>,
-    /// Cached height of the highest header in store
+    /// Cached height of the highest header in the store
     head_height: AtomicU64,
-    /// Height of the lowest header in the store
+    /// Cached height of the lowest header in the store
     tail_height: AtomicU64,
     /// Cached height of the lowest header that wasn't sampled yet
     lowest_unsampled_height: AtomicU64,
@@ -38,7 +41,6 @@ impl InMemoryStore {
             headers: DashMap::new(),
             sampling_data: DashMap::new(),
             height_to_hash: DashMap::new(),
-            //height_range: (AtomicU64::new(0)..AtomicU64::new(0)),
             head_height: AtomicU64::new(0),
             tail_height: AtomicU64::new(0),
             lowest_unsampled_height: AtomicU64::new(1),
@@ -46,14 +48,9 @@ impl InMemoryStore {
         }
     }
 
-    fn is_empty(&self) -> bool {
-        self.head_height.load(Ordering::Acquire) == 0
-            && self.tail_height.load(Ordering::Acquire) == 0
-    }
-
     #[inline]
     fn get_head_height(&self) -> Result<u64> {
-        let height = self.head_height.load(Ordering::Acquire);
+        let height = *self.get_stored_range().end();
 
         if height == 0 {
             Err(StoreError::NotFound)
@@ -62,9 +59,10 @@ impl InMemoryStore {
         }
     }
 
+    /*
     #[inline]
     fn get_tail_height(&self) -> Result<u64> {
-        let height = self.tail_height.load(Ordering::Acquire);
+        let height = *self.get_stored_range().start();
 
         if height == 0 {
             Err(StoreError::NotFound)
@@ -72,27 +70,41 @@ impl InMemoryStore {
             Ok(height)
         }
     }
+    */
 
     #[inline]
     fn get_next_unsampled_height(&self) -> u64 {
         self.lowest_unsampled_height.load(Ordering::Acquire)
     }
 
-    pub(crate) fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
+    pub(crate) fn insert_single(&self, header: ExtendedHeader, mode: InsertMode) -> Result<()> {
         let hash = header.hash();
         let height = header.height().value();
-        let head_height = self.get_head_height().unwrap_or(0);
+        let stored_range = self.get_stored_range();
 
-        if !self.is_empty() {
-            // A light check before checking the whole map
-            if head_height > 0 && height <= head_height {
-                return Err(StoreError::HeightExists(height));
-            }
+        // A light check before checking the whole map
+        if stored_range.contains(&height) {
+            return Err(StoreError::HeightExists(height));
+        }
 
-            // Check if it's continuous before checking the whole map.
-            if head_height + 1 != height {
-                return Err(StoreError::NonContinuousAppend(head_height, height));
-            }
+        // Only allow appending and prepending to existing range
+        let append = stored_range.end() + 1 == height;
+        if !append && stored_range.start() - 1 != height {
+            return Err(StoreError::NonContinuousAppend(0, height));
+        }
+
+        match mode {
+            InsertMode::NextTrusted => match self.get_by_height(height - 1) {
+                Ok(prev) => prev.verify(&header)?,
+                Err(StoreError::NotFound) => (),
+                Err(e) => return Err(e),
+            },
+            InsertMode::PreviousTrusted => match self.get_by_height(height + 1) {
+                Ok(next) => header.verify(&next)?,
+                Err(StoreError::NotFound) => (),
+                Err(e) => return Err(e),
+            },
+            InsertMode::BothTrusted | InsertMode::InsertHead => (),
         }
 
         // lock both maps to ensure consistency
@@ -115,14 +127,12 @@ impl InMemoryStore {
         hash_entry.insert(header);
         height_entry.insert(hash);
 
-        self.head_height.store(height, Ordering::Release);
-        if self
-            .tail_height
-            .compare_exchange(0, height, Ordering::Acquire, Ordering::Relaxed)
-            .is_ok()
-        {
-            info!("Inserting first header at {height}");
+        if append {
+            self.head_height.store(height, Ordering::Relaxed);
+        } else {
+            self.tail_height.store(height, Ordering::Relaxed)
         }
+        fence(Ordering::Release);
         self.header_added_notifier.notify_waiters();
 
         Ok(())
@@ -237,6 +247,7 @@ impl InMemoryStore {
         Ok(Some(metadata.clone()))
     }
 
+    /*
     fn prepend(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
         // assert headers are verified internally
         for header in headers.into_iter().rev() {
@@ -298,6 +309,14 @@ impl InMemoryStore {
 
         Ok(())
     }
+    */
+
+    fn get_stored_range(&self) -> HeaderRange {
+        let head_height = self.head_height.load(Ordering::Relaxed);
+        let tail_height = self.tail_height.load(Ordering::Relaxed);
+        fence(Ordering::Acquire);
+        head_height..=tail_height
+    }
 }
 
 #[async_trait]
@@ -342,8 +361,8 @@ impl Store for InMemoryStore {
         self.contains_height(height)
     }
 
-    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
-        self.append_single_unchecked(header)
+    async fn insert_single(&self, header: ExtendedHeader, mode: InsertMode) -> Result<()> {
+        self.insert_single(header, mode)
     }
 
     async fn next_unsampled_height(&self) -> Result<u64> {
@@ -362,12 +381,9 @@ impl Store for InMemoryStore {
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         self.get_sampling_metadata(height)
     }
-    async fn prepend(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        self.prepend(headers)
-    }
 
-    async fn get_stored_header_ranges(&self) -> Result<Vec<HeaderRange>> {
-        todo!()
+    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+        Ok(HeaderRanges(smallvec![self.get_stored_range()]))
     }
 }
 
@@ -393,6 +409,7 @@ impl Clone for InMemoryStore {
     }
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -408,3 +425,4 @@ mod tests {
         store.prepend(hs).unwrap();
     }
 }
+*/

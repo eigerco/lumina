@@ -147,7 +147,7 @@ impl IndexedDbStore {
             .map_err(|e| StoreError::CelestiaTypes(e.into()))
     }
 
-    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
+    async fn insert_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
         let height = header.height().value();
         let hash = header.hash();
 
@@ -362,8 +362,8 @@ impl Store for IndexedDbStore {
         self.contains_height(height)
     }
 
-    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
-        let fut = SendWrapper::new(self.append_single_unchecked(header));
+    async fn insert_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
+        let fut = SendWrapper::new(self.insert_single_unchecked(header));
         fut.await
     }
 
@@ -480,7 +480,7 @@ pub mod tests {
         let expected_height = 1_000;
 
         for h in 1..=expected_height {
-            s.append_single_unchecked(gen.next())
+            s.insert_single_unchecked(gen.next())
                 .await
                 .expect("inserting test data failed");
             s.update_sampling_metadata(h, true, vec![])
@@ -515,7 +515,7 @@ pub mod tests {
 
         for h in &original_headers {
             original_store
-                .append_single_unchecked(h.clone())
+                .insert_single_unchecked(h.clone())
                 .await
                 .expect("inserting test data failed");
         }
@@ -540,7 +540,7 @@ pub mod tests {
         let mut new_headers = gen.next_many(10);
         for h in &new_headers {
             reopened_store
-                .append_single_unchecked(h.clone())
+                .insert_single_unchecked(h.clone())
                 .await
                 .expect("failed to insert data");
         }
@@ -675,7 +675,7 @@ pub mod tests {
         let headers = gen.next_many(amount);
 
         for header in headers {
-            s.append_single_unchecked(header)
+            s.insert_single_unchecked(header)
                 .await
                 .expect("inserting test data failed");
         }
