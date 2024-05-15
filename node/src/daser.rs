@@ -51,9 +51,9 @@ use crate::utils::FusedReusableBoxFuture;
 
 const MAX_SAMPLES_NEEDED: usize = 16;
 
-const HOUR: u64 = 60 * 60;
-const DAY: u64 = 24 * HOUR;
-const SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
+const HOUR: Duration = Duration::from_secs(60 * 60);
+const DAY: Duration = Duration::from_secs(24 * HOUR.as_secs());
+const SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY.as_secs());
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
 
@@ -83,6 +83,7 @@ where
     pub p2p: Arc<P2p>,
     /// Headers storage.
     pub store: Arc<S>,
+    /// Event broadcaster.
     pub event_sender: EventSender,
 }
 
@@ -262,11 +263,6 @@ where
 
     async fn schedule_next_sample_block(&mut self) -> Result<()> {
         assert!(self.sampling_fut.is_terminated());
-
-        // Worker runs concurently with unit tests and there is no simple
-        // way to synchronize them. We instead slowing down a bit the worker.
-        #[cfg(test)]
-        crate::executor::sleep(Duration::from_millis(10)).await;
 
         let Some(args) = self.queue.pop_front() else {
             return Ok(());
@@ -494,7 +490,7 @@ fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16,
 mod tests {
     use super::*;
     use crate::events::{EventReceiver, EventSubscription};
-    use crate::executor::sleep;
+    use crate::executor::{sleep, timeout};
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, MockP2pHandle};
     use celestia_tendermint_proto::Protobuf;
@@ -605,7 +601,18 @@ mod tests {
 
         // Simulate disconnection
         handle.announce_all_peers_disconnected();
+
+        // Daser may scheduled Block 18 already, so we need to discard the 4 sample requests.
+        for _ in 0..4 {
+            handle.try_recv_cmd().await;
+        }
+        // Discard also the SamplingStarted event
+        try_recv_event(&mut events).await;
+
+        // We shouldn't have any other requests from daser because it's in connecting state.
         handle.expect_no_cmd().await;
+
+        // Simulate that a peer connected
         handle.announce_peer_connected();
 
         // Because of disconnection, daser will resample block 19
@@ -689,7 +696,7 @@ mod tests {
         let needed_samples = (square_width * square_width).min(MAX_SAMPLES_NEEDED);
 
         // Check if we get the correct event
-        let mut remaining_shares = match events.recv().await.unwrap().event {
+        let mut remaining_shares = match expect_event(events).await {
             NodeEvent::SamplingStarted {
                 height: ev_height,
                 square_width: ev_square_width,
@@ -723,7 +730,7 @@ mod tests {
                 respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
 
                 // Check if we get the correct event
-                match events.recv().await.unwrap().event {
+                match expect_event(events).await {
                     NodeEvent::ShareSamplingResult {
                         height: ev_height,
                         square_width: ev_square_width,
@@ -749,7 +756,7 @@ mod tests {
             respond_to.send(Ok(sample_bytes)).unwrap();
 
             // Check if we get the correct event
-            match events.recv().await.unwrap().event {
+            match expect_event(events).await {
                 NodeEvent::ShareSamplingResult {
                     height: ev_height,
                     square_width: ev_square_width,
@@ -768,7 +775,7 @@ mod tests {
         }
 
         // Check if we get the correct event
-        match events.recv().await.unwrap().event {
+        match expect_event(events).await {
             NodeEvent::SamplingFinished {
                 height: ev_height,
                 accepted,
@@ -799,5 +806,19 @@ mod tests {
             header.height().value(),
         )
         .unwrap()
+    }
+
+    async fn try_recv_event(events: &mut EventReceiver) -> Option<NodeEvent> {
+        timeout(Duration::from_millis(300), async move {
+            events.recv().await.unwrap().event
+        })
+        .await
+        .ok()
+    }
+
+    async fn expect_event(events: &mut EventReceiver) -> NodeEvent {
+        try_recv_event(events)
+            .await
+            .expect("Expecting NodeEvent, but timed-out")
     }
 }
