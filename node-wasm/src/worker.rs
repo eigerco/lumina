@@ -8,15 +8,17 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use wasm_bindgen::prelude::*;
-use web_sys::{MessagePort, SharedWorker, WorkerOptions, WorkerType};
+use web_sys::{MessageEvent, SharedWorker};
 
 use lumina_node::node::{Node, NodeError};
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store, StoreError};
 use lumina_node::syncer::SyncingInfo;
 
 use crate::node::WasmNodeConfig;
-use crate::utils::{to_jsvalue_or_undefined, JsValueToJsError, WorkerSelf};
-use crate::worker::channel::{WorkerMessage, WorkerMessageServer};
+use crate::utils::{to_jsvalue_or_undefined, WorkerSelf};
+use crate::worker::channel::{
+    DedicatedWorkerMessageServer, MessageServer, SharedWorkerMessageServer, WorkerMessage,
+};
 use crate::worker::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
@@ -251,16 +253,17 @@ impl NodeWorker {
 }
 
 #[wasm_bindgen]
-pub async fn run_worker(queued_connections: Vec<MessagePort>) {
+pub async fn run_worker(queued_events: Vec<MessageEvent>) {
     info!("Entered run_worker");
     let (tx, mut rx) = mpsc::channel(WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH);
-    let mut message_server = WorkerMessageServer::new(tx.clone());
 
-    for connection in queued_connections {
-        message_server.add(connection);
-    }
+    let mut message_server: Box<dyn MessageServer> = if SharedWorker::is_worker_type() {
+        Box::new(SharedWorkerMessageServer::new(tx.clone(), queued_events))
+    } else {
+        Box::new(DedicatedWorkerMessageServer::new(tx.clone(), queued_events).await)
+    };
 
-    info!("Entering SharedWorker message loop");
+    info!("Entering worker message loop");
     let mut worker = None;
     while let Some(message) = rx.recv().await {
         match message {
@@ -307,22 +310,8 @@ pub async fn run_worker(queued_connections: Vec<MessagePort>) {
     info!("Channel to WorkerMessageServer closed, exiting the SharedWorker");
 }
 
-/// Spawn a new SharedWorker.
-pub(crate) fn spawn_worker(name: &str) -> Result<SharedWorker, JsError> {
-    let url = worker_script_url();
-
-    let mut opts = WorkerOptions::new();
-    opts.type_(WorkerType::Module);
-    opts.name(name);
-
-    let worker = SharedWorker::new_with_worker_options(&url, &opts)
-        .to_error("could not create SharedWorker")?;
-
-    Ok(worker)
-}
-
 #[wasm_bindgen(module = "/js/worker.js")]
 extern "C" {
     // must be called in order to include this script in generated package
-    fn worker_script_url() -> String;
+    pub(crate) fn worker_script_url() -> String;
 }

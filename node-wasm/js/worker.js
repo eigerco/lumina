@@ -7,18 +7,23 @@ export function worker_script_url() {
 }
 
 // if we are in a worker
-if (
-  typeof WorkerGlobalScope !== 'undefined'
-  && self instanceof WorkerGlobalScope
-) {
+if (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope) {
   Error.stackTraceLimit = 99;
 
+  // for SharedWorker we queue incoming connections
+  // for dedicated Workerwe queue incoming messages (coming from the single client)
   let queued = [];
-  onconnect = (event) => {
-    console.log("Queued connection", event);
-    queued.push(event.ports[0]);
+  if (typeof SharedWorkerGlobalScope !== 'undefined' && self instanceof SharedWorkerGlobalScope) {
+    onconnect = (event) => {
+      queued.push(event)
+    }
+  } else {
+    onmessage = (event) => {
+      queued.push(event);
+    }
   }
 
   await init();
+  console.log("starting worker, queued messages: ", queued.length);
   await run_worker(queued);
 }

@@ -12,7 +12,10 @@ use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::prelude::*;
 use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
-use web_sys::{SharedWorker, SharedWorkerGlobalScope};
+use web_sys::{
+    window, DedicatedWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker,
+    WorkerGlobalScope,
+};
 
 use lumina_node::network;
 
@@ -104,6 +107,7 @@ pub(crate) trait WorkerSelf {
     type GlobalScope;
 
     fn worker_self() -> Self::GlobalScope;
+    fn is_worker_type() -> bool;
 }
 
 impl WorkerSelf for SharedWorker {
@@ -111,6 +115,22 @@ impl WorkerSelf for SharedWorker {
 
     fn worker_self() -> Self::GlobalScope {
         JsValue::from(js_sys::global()).into()
+    }
+
+    fn is_worker_type() -> bool {
+        js_sys::global().has_type::<Self::GlobalScope>()
+    }
+}
+
+impl WorkerSelf for Worker {
+    type GlobalScope = DedicatedWorkerGlobalScope;
+
+    fn worker_self() -> Self::GlobalScope {
+        JsValue::from(js_sys::global()).into()
+    }
+
+    fn is_worker_type() -> bool {
+        js_sys::global().has_type::<Self::GlobalScope>()
     }
 }
 
@@ -159,5 +179,29 @@ where
             JsResult::Ok(v) => Ok(v),
             JsResult::Err(e) => Err(e),
         }
+    }
+}
+
+const CHROME_USER_AGENT_DETECTION: &str = "Chrome/";
+
+// currently there's issue with SharedWorkers on Chrome, where restarting lumina's worker
+// causes all network connections to fail. Until that's resolved detect chrome and apply
+// a workaround.
+pub(crate) fn is_chrome() -> bool {
+    let mut user_agent = None;
+    if let Some(window) = window() {
+        user_agent = Some(window.navigator().user_agent());
+    };
+    if let Some(worker_scope) = JsValue::from(js_sys::global()).dyn_ref::<WorkerGlobalScope>() {
+        user_agent = Some(worker_scope.navigator().user_agent());
+    }
+
+    if let Some(user_agent) = user_agent {
+        user_agent
+            .as_deref()
+            .unwrap_or("")
+            .contains(CHROME_USER_AGENT_DETECTION)
+    } else {
+        false
     }
 }

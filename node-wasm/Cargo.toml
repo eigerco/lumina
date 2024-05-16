@@ -51,12 +51,16 @@ web-sys = { version = "0.3.69", features = [
   "Blob",
   "BlobPropertyBag",
   "BroadcastChannel",
+  "DedicatedWorkerGlobalScope",
   "MessageEvent",
   "MessagePort",
+  "Navigator",
   "SharedWorker",
   "SharedWorkerGlobalScope",
   "Url",
   "Worker",
+  "WorkerGlobalScope",
+  "WorkerNavigator",
   "WorkerOptions",
-  "WorkerType",
+  "WorkerType"
 ] }
