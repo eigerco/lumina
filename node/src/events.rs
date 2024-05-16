@@ -240,7 +240,10 @@ impl fmt::Display for NodeEvent {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn serialize_system_time<S>(value: &SystemTime, serializer: S) -> Result<S::Ok, S::Error> {
+fn serialize_system_time<S>(value: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::ser::Serializer,
+{
     // Javascript express time as f64 and in milliseconds.
     let js_time = value
         .duration_since(SystemTime::UNIX_EPOCH)
