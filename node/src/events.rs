@@ -152,6 +152,8 @@ pub struct NodeEventInfo {
 }
 
 /// The events that [`Node`] can generate.
+///
+/// [`Node`]: crate::node::Node
 #[derive(Debug, Clone, Serialize)]
 #[non_exhaustive]
 #[serde(tag = "type")]
