@@ -36,11 +36,11 @@ use celestia_tendermint::Time;
 use celestia_types::ExtendedHeader;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use instant::{Duration, Instant};
 use rand::Rng;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
+use web_time::{Duration, Instant};
 
 use crate::executor::spawn;
 use crate::p2p::shwap::sample_cid;

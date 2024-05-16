@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use instant::{Duration, Instant};
 use libp2p::{
     core::Endpoint,
     request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport},
@@ -19,6 +18,7 @@ use libp2p::{
 };
 use prost::Message;
 use tracing::{debug, instrument, warn};
+use web_time::{Duration, Instant};
 
 mod client;
 mod server;
