@@ -11,7 +11,7 @@ if (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScop
   Error.stackTraceLimit = 99;
 
   // for SharedWorker we queue incoming connections
-  // for dedicated Workerwe queue incoming messages (coming from the single client)
+  // for dedicated Worker we queue incoming messages (coming from the single client)
   let queued = [];
   if (typeof SharedWorkerGlobalScope !== 'undefined' && self instanceof SharedWorkerGlobalScope) {
     onconnect = (event) => {
