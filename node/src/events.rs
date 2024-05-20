@@ -116,7 +116,7 @@ impl EventSubscriber {
 
     /// Attempts to receive an already queued event from [`Node`] without awaiting.
     ///
-    /// If no events queued, `Err(TryRecvError::Empty)` is returned.
+    /// If no events are queued, `Err(TryRecvError::Empty)` is returned.
     ///
     /// [`Node`]: crate::node::Node
     pub fn try_recv(&mut self) -> Result<NodeEventInfo, TryRecvError> {
