@@ -31,7 +31,6 @@ use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
 use celestia_types::{ExtendedHeader, FraudProof, Height};
 use cid::Cid;
 use futures::StreamExt;
-use instant::Instant;
 use libp2p::{
     autonat,
     core::{ConnectedPoint, Endpoint},
@@ -49,6 +48,7 @@ use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, instrument, trace, warn};
+use web_time::Instant;
 
 mod header_ex;
 mod header_session;
