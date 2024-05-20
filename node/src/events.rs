@@ -8,6 +8,8 @@ use instant::SystemTime;
 use serde::Serialize;
 use tokio::sync::broadcast;
 
+const EVENT_CHANNEL_CAPACITY: usize = 1024;
+
 /// An error returned from the `EventReceiver::recv`.
 #[derive(Debug, thiserror::Error)]
 pub enum RecvError {
@@ -50,9 +52,9 @@ pub struct EventSubscriber {
 }
 
 impl EventChannel {
-    /// Create a new `EventSubscription`.
+    /// Create a new `EventChannel`.
     pub fn new() -> EventChannel {
-        let (tx, _) = broadcast::channel(32);
+        let (tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         EventChannel { tx }
     }
 
