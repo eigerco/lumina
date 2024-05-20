@@ -119,23 +119,27 @@ impl MockP2pHandle {
     /// Assert that a command was sent to the [`P2p`] worker.
     ///
     /// [`P2p`]: crate::p2p::P2p
-    async fn expect_cmd(&mut self) -> P2pCmd {
-        timeout(Duration::from_millis(300), async move {
-            self.cmd_rx.recv().await.expect("P2p dropped")
-        })
-        .await
-        .expect("Expecting P2pCmd, but timed-out")
+    pub(crate) async fn expect_cmd(&mut self) -> P2pCmd {
+        self.try_recv_cmd()
+            .await
+            .expect("Expecting P2pCmd, but timed-out")
     }
 
     /// Assert that no command was sent to the [`P2p`] worker.
     ///
     /// [`P2p`]: crate::p2p::P2p
     pub async fn expect_no_cmd(&mut self) {
+        if let Some(cmd) = self.try_recv_cmd().await {
+            panic!("Expecting no P2pCmd, but received: {cmd:?}");
+        }
+    }
+
+    pub(crate) async fn try_recv_cmd(&mut self) -> Option<P2pCmd> {
         timeout(Duration::from_millis(300), async move {
             self.cmd_rx.recv().await.expect("P2p dropped")
         })
         .await
-        .expect_err("Expecting no P2pCmd, but received");
+        .ok()
     }
 
     /// Assert that a header request was sent to the [`P2p`] worker and obtain a response channel.

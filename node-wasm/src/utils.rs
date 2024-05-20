@@ -10,6 +10,7 @@ use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::prelude::*;
 use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
+use web_sys::Crypto;
 
 /// Supported Celestia networks.
 #[wasm_bindgen]
@@ -86,4 +87,11 @@ where
     {
         self.map_err(|e| JsError::new(&format!("{context}: {e}")))
     }
+}
+
+pub(crate) fn get_crypto() -> Result<Crypto, JsError> {
+    js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("crypto"))
+        .map_err(|_| JsError::new("failed to get `crypto` from global object"))?
+        .dyn_into::<web_sys::Crypto>()
+        .map_err(|_| JsError::new("`crypto` is not `Crypto` type"))
 }

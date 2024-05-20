@@ -22,6 +22,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::daser::{Daser, DaserArgs, DaserError};
+use crate::events::{EventChannel, EventSubscriber};
 use crate::executor::spawn;
 use crate::p2p::{P2p, P2pArgs, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
@@ -77,6 +78,7 @@ pub struct Node<S>
 where
     S: Store + 'static,
 {
+    event_channel: EventChannel,
     p2p: Arc<P2p>,
     store: Arc<S>,
     syncer: Arc<Syncer<S>>,
@@ -93,6 +95,7 @@ where
     where
         B: Blockstore + 'static,
     {
+        let event_channel = EventChannel::new();
         let store = Arc::new(config.store);
 
         let p2p = Arc::new(P2p::start(P2pArgs {
@@ -113,6 +116,7 @@ where
         let daser = Arc::new(Daser::start(DaserArgs {
             p2p: p2p.clone(),
             store: store.clone(),
+            event_pub: event_channel.publisher(),
         })?);
 
         // spawn the task that will stop the services when the fraud is detected
@@ -137,12 +141,18 @@ where
         });
 
         Ok(Node {
+            event_channel,
             p2p,
             store,
             syncer,
             _daser: daser,
             tasks_cancellation_token,
         })
+    }
+
+    /// Returns a new `EventSubscriber`.
+    pub fn event_subscriber(&self) -> EventSubscriber {
+        self.event_channel.subscribe()
     }
 
     /// Get node's local peer ID.
