@@ -246,7 +246,7 @@ fn serialize_system_time<S>(value: &SystemTime, serializer: S) -> Result<S::Ok, 
 where
     S: serde::ser::Serializer,
 {
-    // Javascript express time as f64 and in milliseconds.
+    // Javascript expresses time as f64 and in milliseconds.
     let js_time = value
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("SystemTime is before 1970")
