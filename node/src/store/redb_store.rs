@@ -14,10 +14,10 @@ use redb::{
 };
 use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
-use tracing::{trace, debug, info};
+use tracing::{debug, info, trace};
 
+use crate::store::utils::{RangeScanResult, check_range_insert};
 use crate::store::{HeaderRange, HeaderRanges, Result, SamplingMetadata, Store, StoreError};
-use crate::store::utils::ranges_intersection;
 use crate::utils::validate_headers;
 
 const SCHEMA_VERSION: u64 = 1;
@@ -268,8 +268,11 @@ impl RedbStore {
                 for h in &headers {
                     let current_height = h.height().value();
                     if let Some(prev_height) = prev {
-                        if prev_height +1 != current_height {
-                            return Err(StoreError::InsertRangeWithGap(prev_height, current_height));
+                        if prev_height + 1 != current_height {
+                            return Err(StoreError::InsertRangeWithGap(
+                                prev_height,
+                                current_height,
+                            ));
                         }
                     }
                     prev = Some(current_height);
@@ -298,7 +301,10 @@ impl RedbStore {
 
                 trace!("Inserted header {hash} with height {height}");
             }
-            debug!("Inserted header range {:?}", head.height().value()..=tail.height().value());
+            debug!(
+                "Inserted header range {:?}",
+                head.height().value()..=tail.height().value()
+            );
             Ok(())
         })
         .await?;
@@ -453,6 +459,7 @@ impl Store for RedbStore {
     }
 }
 
+/*
 struct RangeScanInformation {
     /// index of the range that header is being inserted into
     range_index: u64,
@@ -482,8 +489,6 @@ where
     for range in range_iter {
         let (key, bounds) = range?;
         let (start, end) = bounds.value();
-
-        println!("considering {start}..={end}");
 
         // appending to the found range
         if end + 1 == *new_range.start() {
@@ -517,10 +522,13 @@ where
             });
         }
 
-        // XXX: ught clone
-        if let Some(intersection) = ranges_intersection(new_range.clone(), start..=end) {
-            return Err(StoreError::HeaderRangeOverlap(*intersection.start(), *intersection.end()));
+        if let Some(intersection) = ranges_intersection(&new_range, &(start..=end)) {
+            return Err(StoreError::HeaderRangeOverlap(
+                *intersection.start(),
+                *intersection.end(),
+            ));
         }
+
         // if new range is in front of or overlaping considered range
         if *new_range.end() > end && found_range.is_none() {
             // allow creation of a new range in front of the head range
@@ -556,9 +564,13 @@ where
         })
     } else {
         // TODO: errors again
-        Err(StoreError::InsertPlacementDisallowed(*new_range.start(), *new_range.end()))
+        Err(StoreError::InsertPlacementDisallowed(
+            *new_range.start(),
+            *new_range.end(),
+        ))
     }
 }
+*/
 
 fn try_insert_to_range(
     ranges_table: &mut Table<u64, (u64, u64)>,
@@ -567,12 +579,18 @@ fn try_insert_to_range(
     //height: u64,
     //verify_neighbours: bool,
 ) -> Result<(bool, bool)> {
-    let RangeScanInformation {
+    let stored_ranges = ranges_table.iter()?.map(|range_guard| {
+        let range = range_guard?.1.value();
+        Ok(range.0..=range.1)
+    })
+    .collect::<Result<_>>()?;
+
+    let RangeScanResult {
         range_index,
         range,
         range_to_remove,
-        neighbours_exist,
-    } = try_find_range_for_height(ranges_table, new_range)?;
+        //neighbours_exist,
+    } = check_range_insert(HeaderRanges(stored_ranges), new_range.clone())?; // XXX: cloneeeeee
 
     if let Some(to_remove) = range_to_remove {
         let (start, end) = ranges_table
@@ -582,13 +600,15 @@ fn try_insert_to_range(
 
         info!("consolidating range, new range: {range:?}, removed {start}..={end}");
     };
+    let prev_exists = new_range.start() != range.start();
+    let next_exists = new_range.end() != range.end();
 
     ranges_table.insert(range_index, (*range.start(), *range.end()))?;
 
-    Ok(neighbours_exist)
+    Ok((prev_exists, next_exists))
 }
 
-// TODO: this should do full range verify 
+// TODO: this should do full range verify
 fn verify_against_neighbours<R>(
     headers_table: &R,
     lowest_header: &ExtendedHeader,
@@ -634,7 +654,7 @@ where
         .last()?
         .map(|(_key_guard, value_guard)| {
             let range = value_guard.value();
-            RangeInclusive::new(range.0, range.1)
+            range.0..=range.1
         })
         .ok_or(StoreError::NotFound)
 }
@@ -647,7 +667,6 @@ where
         .iter()?
         .map(|range_guard| {
             let range = range_guard?.1.value();
-            info!("got range");
             Ok(range.0..=range.1)
         })
         .collect::<Result<Vec<_>, _>>()

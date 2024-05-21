@@ -308,7 +308,6 @@ pub enum StoreError {
     #[error("Failed to insert header span into the store, following range overlaps with already existing ones in store: {0}..={1}")]
     HeaderRangeOverlap(u64, u64),
 
-
     /// TODO: this is super unhelpful on its own
     #[error("Trying to insert new header range at disallowed position: {0}..={1}")]
     InsertPlacementDisallowed(u64, u64),
@@ -440,7 +439,6 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 mod tests {
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::Height;
     use rstest::rstest;
 
     // rstest only supports attributes which last segment is `test`
@@ -1062,7 +1060,10 @@ mod tests {
     ) {
         let store = s;
 
-        assert_eq!(store.get_stored_header_ranges().await.unwrap(), HeaderRanges(smallvec![]));
+        assert_eq!(
+            store.get_stored_header_ranges().await.unwrap(),
+            HeaderRanges(smallvec![])
+        );
     }
 
     #[rstest]
@@ -1096,6 +1097,7 @@ mod tests {
     // no in-memory store for tests below. It doesn't expect to be resumed from disk,
     // so it doesn't support multiple ranges.
     #[rstest]
+    #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
@@ -1133,6 +1135,28 @@ mod tests {
 
         let final_ranges = store.get_stored_header_ranges().await.unwrap();
         assert_eq!(final_ranges, HeaderRanges(smallvec![10..=42]))
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn test_neighbour_validation<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        store.append(gen.next_many(5)).await.unwrap();
+        let mut fork = gen.fork();
+        let _gap = gen.next();
+        store.append(gen.next_many(4)).await.unwrap();
+
+        store.append_single(fork.next()).await.unwrap_err();
+
     }
 
     #[test]
@@ -1177,7 +1201,10 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         //let headers = gen.next_many(amount);
 
-        store.append_unchecked(gen.next_many(amount)).await.expect("inserting test data failed");
+        store
+            .append_unchecked(gen.next_many(amount))
+            .await
+            .expect("inserting test data failed");
         /*
         for header in headers {
             store

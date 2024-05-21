@@ -316,7 +316,7 @@ impl InMemoryStore {
         if head_height == 0 {
             None
         } else {
-        Some(head_height..=tail_height)
+            Some(head_height..=tail_height)
         }
     }
 }
