@@ -9,11 +9,9 @@ use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use smallvec::smallvec;
 use tokio::sync::Notify;
-use tracing::{debug, info};
+use tracing::info;
 
-use crate::store::{
-    HeaderRange, HeaderRanges, InsertMode, Result, SamplingMetadata, Store, StoreError,
-};
+use crate::store::{HeaderRange, HeaderRanges, Result, SamplingMetadata, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -50,13 +48,7 @@ impl InMemoryStore {
 
     #[inline]
     fn get_head_height(&self) -> Result<u64> {
-        let height = *self.get_stored_range().end();
-
-        if height == 0 {
-            Err(StoreError::NotFound)
-        } else {
-            Ok(height)
-        }
+        Ok(*self.get_stored_range().ok_or(StoreError::NotFound)?.end())
     }
 
     /*
@@ -77,7 +69,13 @@ impl InMemoryStore {
         self.lowest_unsampled_height.load(Ordering::Acquire)
     }
 
-    pub(crate) fn insert_single(&self, header: ExtendedHeader, mode: InsertMode) -> Result<()> {
+    pub(crate) fn insert(
+        &self,
+        _headers: Vec<ExtendedHeader>,
+        _verify_neighbours: bool,
+    ) -> Result<()> {
+        todo!();
+        /*
         let hash = header.hash();
         let height = header.height().value();
         let stored_range = self.get_stored_range();
@@ -93,18 +91,17 @@ impl InMemoryStore {
             return Err(StoreError::NonContinuousAppend(0, height));
         }
 
-        match mode {
-            InsertMode::NextTrusted => match self.get_by_height(height - 1) {
+        if verify_neighbours {
+            match self.get_by_height(height - 1) {
                 Ok(prev) => prev.verify(&header)?,
                 Err(StoreError::NotFound) => (),
                 Err(e) => return Err(e),
-            },
-            InsertMode::PreviousTrusted => match self.get_by_height(height + 1) {
+            };
+            match self.get_by_height(height + 1) {
                 Ok(next) => header.verify(&next)?,
                 Err(StoreError::NotFound) => (),
                 Err(e) => return Err(e),
-            },
-            InsertMode::BothTrusted | InsertMode::InsertHead => (),
+            };
         }
 
         // lock both maps to ensure consistency
@@ -136,6 +133,7 @@ impl InMemoryStore {
         self.header_added_notifier.notify_waiters();
 
         Ok(())
+        */
     }
 
     fn get_head(&self) -> Result<ExtendedHeader> {
@@ -311,11 +309,15 @@ impl InMemoryStore {
     }
     */
 
-    fn get_stored_range(&self) -> HeaderRange {
+    fn get_stored_range(&self) -> Option<HeaderRange> {
         let head_height = self.head_height.load(Ordering::Relaxed);
         let tail_height = self.tail_height.load(Ordering::Relaxed);
         fence(Ordering::Acquire);
-        head_height..=tail_height
+        if head_height == 0 {
+            None
+        } else {
+        Some(head_height..=tail_height)
+        }
     }
 }
 
@@ -361,8 +363,8 @@ impl Store for InMemoryStore {
         self.contains_height(height)
     }
 
-    async fn insert_single(&self, header: ExtendedHeader, mode: InsertMode) -> Result<()> {
-        self.insert_single(header, mode)
+    async fn insert(&self, header: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
+        self.insert(header, verify_neighbours)
     }
 
     async fn next_unsampled_height(&self) -> Result<u64> {
@@ -383,7 +385,12 @@ impl Store for InMemoryStore {
     }
 
     async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
-        Ok(HeaderRanges(smallvec![self.get_stored_range()]))
+        let range = if let Some(range) = self.get_stored_range() {
+            smallvec![range]
+        } else {
+            smallvec![]
+        };
+        Ok(HeaderRanges(range))
     }
 }
 

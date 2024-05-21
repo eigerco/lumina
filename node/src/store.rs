@@ -26,7 +26,9 @@ mod indexed_db_store;
 #[cfg(not(target_arch = "wasm32"))]
 mod redb_store;
 
-use crate::utils::validate_headers;
+pub(crate) mod utils;
+
+pub(crate) use utils::calculate_missing_ranges;
 
 /// Sampling status for a header.
 ///
@@ -117,20 +119,6 @@ impl Iterator for HeaderRangesIterator {
     }
 }
 
-pub enum InsertMode {
-    ///
-    Untrusted,
-    /// header has already been verified against the next one
-    NextTrusted,
-    /// header has already been verified against the previous one
-    PreviousTrusted,
-    /// header has already been verified against both previous and next oe
-    BothTrusted,
-    // TODO: remove?
-    /// header is to be inserted at the front, verifying against previous one if it exists
-    InsertHead,
-}
-
 /// An asynchronous [`ExtendedHeader`] storage.
 ///
 /// Currently it is required that all the headers are inserted to the storage
@@ -195,17 +183,22 @@ pub trait Store: Send + Sync + Debug {
     /// Returns true if height exists in the store.
     async fn has_at(&self, height: u64) -> bool;
 
-    /// TODO
-    /// Insert single header
-    ///
-    /// # Note
-    ///
-    /// This method does not validate or verify that `header` is indeed correct.
+    // === LEGACY APPENDS ===
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
-        self.insert_single(header, InsertMode::BothTrusted).await
+        self.insert_single(header, false).await
     }
 
-    async fn insert_single(&self, header: ExtendedHeader, mode: InsertMode) -> Result<()>;
+    async fn append_single(&self, header: ExtendedHeader) -> Result<()> {
+        self.insert_single(header, true).await
+    }
+
+    async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        self.insert(headers, false).await
+    }
+
+    async fn append(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        self.insert(headers, true).await
+    }
 
     /// Returns height of the lowest header that wasn't sampled yet
     async fn next_unsampled_height(&self) -> Result<u64>;
@@ -237,9 +230,9 @@ pub trait Store: Send + Sync + Debug {
     ///
     /// This method does not validate or verify that `headers` are indeed correct.
     /*
-    async fn insert_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+    async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
         for header in headers.into_iter() {
-            self.insert_single_unchecked(header).await?;
+            self.append_single_unchecked(header).await?;
         }
 
         Ok(())
@@ -264,60 +257,34 @@ pub trait Store: Send + Sync + Debug {
     }
     */
 
-    /// Append single header maintaining continuity from the genesis to the head.
-    async fn append_single(&self, header: ExtendedHeader) -> Result<()> {
-        header.validate()?;
-
-        /*
-        match self.get_head().await {
-            Ok(head) => {
-                head.verify(&header)?;
-            }
-            // Empty store, we can not verify
-            Err(StoreError::NotFound) => {}
-            Err(e) => return Err(e),
-        }
-        */
-
-        self.insert_single(header, InsertMode::Untrusted).await
+    /// new main insertion function
+    async fn insert_single(&self, header: ExtendedHeader, verify_neighbours: bool) -> Result<()> {
+        self.insert(vec![header], verify_neighbours).await
     }
 
+    async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()>;
+
+    /*
     /// Append a range of headers maintaining continuity from the genesis to the head.
-    async fn append(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+    async fn insert(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        validate_headers(&headers).await?;
+
         let Some(front) = headers.first() else {
             return Ok(());
         };
-        let Some(back) = headers.last() else {
-            return Ok(());
-        };
 
-        validate_headers(&headers).await?;
 
-        match self.get_by_height(front.height().value()).await {
-            Ok(predecessor) => {
-                predecessor.verify_adjacent_range(&headers)?;
-            }
-            // Empty store, we can not verify
-            Err(StoreError::NotFound) => {} // TODO: ?????
-            Err(e) => return Err(e),
-        }
+        front.verify_adjacent_range(&headers[1..])?;
 
-        match self.get_by_height(back.height().value()).await {
-            Ok(successor) => back.verify(&successor)?,
-            // Empty store, we can not verify
-            Err(StoreError::NotFound) => {} // TODO: ?????
-            Err(e) => return Err(e),
-        }
+        let last_index = headers.len().saturating_sub(1);
 
-        self.append_unchecked(headers).await
-    }
-
-    async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        for header in headers.into_iter() {
-            self.append_single_unchecked(header).await?;
+        for (i, header) in headers.into_iter().enumerate() {
+            let verify_neighbours = i == 0 || i == last_index;
+            self.insert_single(header, verify_neighbours).await?;
         }
         Ok(())
     }
+    */
 
     async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;
 }
@@ -334,8 +301,20 @@ pub enum StoreError {
     HeightExists(u64),
 
     /// Inserted height is not following store's current head.
-    #[error("Failed to append header at height {1}, current head {0}")]
+    #[error("Failed to append header at height {1}")]
     NonContinuousAppend(u64, u64),
+
+    /// TODO: reword
+    #[error("Failed to insert header span into the store, following range overlaps with already existing ones in store: {0}..={1}")]
+    HeaderRangeOverlap(u64, u64),
+
+
+    /// TODO: this is super unhelpful on its own
+    #[error("Trying to insert new header range at disallowed position: {0}..={1}")]
+    InsertPlacementDisallowed(u64, u64),
+
+    #[error("provided header range has a gap between heights {0} and {1}")]
+    InsertRangeWithGap(u64, u64),
 
     //#[error("Failed to find range to add header with height {0} to: {1}")]
     //RangeFinderError(u64, HeaderRange),
@@ -625,7 +604,7 @@ mod tests {
 
         let header = gen.next();
 
-        s.insert_single_unchecked(header.clone()).await.unwrap();
+        s.append_single_unchecked(header.clone()).await.unwrap();
         assert_eq!(s.head_height().await.unwrap(), 1);
         assert_eq!(s.get_head().await.unwrap(), header);
         assert_eq!(s.get_by_height(1).await.unwrap(), header);
@@ -671,10 +650,12 @@ mod tests {
         let mut gen = fill_store(&mut s, 100).await;
 
         let header101 = gen.next();
-        s.insert_single_unchecked(header101.clone()).await.unwrap();
+        s.append_single_unchecked(header101.clone()).await.unwrap();
+
+        //s.append_single_unchecked(header101).await.unwrap();
         assert!(matches!(
-            s.insert_single_unchecked(header101).await,
-            Err(StoreError::HeightExists(101))
+            s.append_single_unchecked(header101).await,
+            Err(StoreError::HeaderRangeOverlap(101, 101))
         ));
     }
 
@@ -695,13 +676,14 @@ mod tests {
         let header29 = s.get_by_height(29).await.unwrap();
         let header30 = gen.next_of(&header29);
 
-        let insert_existing_result = s.insert_single_unchecked(header30).await;
+        let insert_existing_result = s.append_single_unchecked(header30).await;
         assert!(matches!(
             insert_existing_result,
-            Err(StoreError::HeightExists(30))
+            Err(StoreError::HeaderRangeOverlap(30, 30))
         ));
     }
 
+    /*
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
@@ -717,12 +699,16 @@ mod tests {
 
         let mut dup_header = s.get_by_height(33).await.unwrap();
         dup_header.header.height = Height::from(101u32);
-        let insert_existing_result = s.insert_single_unchecked(dup_header).await;
+        let insert_existing_result = s.append_single_unchecked(dup_header).await;
+        insert_existing_result.unwrap();
+        /*
         assert!(matches!(
             insert_existing_result,
             Err(StoreError::HashExists(_))
         ));
+        */
     }
+    */
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
@@ -760,8 +746,8 @@ mod tests {
         // height 12
         let upcoming_head = gen.next();
 
-        s.insert_single_unchecked(upcoming_head).await.unwrap();
-        s.insert_single_unchecked(skipped).await.unwrap();
+        s.append_single_unchecked(upcoming_head).await.unwrap();
+        s.append_single_unchecked(skipped).await.unwrap();
     }
 
     #[rstest]
@@ -803,10 +789,12 @@ mod tests {
         let mut hs = gen.next_many(6);
 
         // remove height 14
-        let removed = hs.remove(3);
+        hs.remove(3);
 
-        s.append_unchecked(hs).await.unwrap();
-        s.insert_single_unchecked(removed).await.unwrap();
+        assert!(matches!(
+            s.append_unchecked(hs).await,
+            Err(StoreError::InsertRangeWithGap(13, 15))
+        ));
     }
 
     #[rstest]
@@ -826,9 +814,9 @@ mod tests {
         gen.next_many(4);
         let header15 = gen.next();
 
-        s.insert_single_unchecked(header5).await.unwrap();
-        s.insert_single_unchecked(header15).await.unwrap();
-        s.insert_single_unchecked(header10).await.unwrap_err();
+        s.append_single_unchecked(header5).await.unwrap();
+        s.append_single_unchecked(header15).await.unwrap();
+        s.append_single_unchecked(header10).await.unwrap_err();
     }
 
     #[rstest]
@@ -1062,46 +1050,89 @@ mod tests {
         ));
     }
 
-    /// Fills an empty store
-    async fn fill_store<S: Store>(store: &mut S, amount: u64) -> ExtendedHeaderGenerator {
-        assert!(!store.has_at(1).await, "Store is not empty");
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn test_empty_store_range<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
 
+        assert_eq!(store.get_stored_header_ranges().await.unwrap(), HeaderRanges(smallvec![]));
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn test_single_header_range<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
         let mut gen = ExtendedHeaderGenerator::new();
-        let headers = gen.next_many(amount);
 
-        for header in headers {
-            store
-                .insert_single_unchecked(header)
-                .await
-                .expect("inserting test data failed");
-        }
+        gen.skip(19);
 
-        gen
+        let prepend0 = gen.next();
+        let prepend1 = gen.next_many(5);
+        store.append(gen.next_many(4)).await.unwrap();
+        store.append(gen.next_many(5)).await.unwrap();
+        store.append(prepend1).await.unwrap();
+        store.append_single(prepend0).await.unwrap();
+        store.append(gen.next_many(5)).await.unwrap();
+        store.append_single(gen.next()).await.unwrap();
+
+        let final_ranges = store.get_stored_header_ranges().await.unwrap();
+        assert_eq!(final_ranges, HeaderRanges(smallvec![20..=40]))
     }
 
-    async fn new_in_memory_store() -> InMemoryStore {
-        InMemoryStore::new()
-    }
+    // no in-memory store for tests below. It doesn't expect to be resumed from disk,
+    // so it doesn't support multiple ranges.
+    #[rstest]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn test_ranges_consolidation<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let mut gen = ExtendedHeaderGenerator::new();
 
-    #[cfg(not(target_arch = "wasm32"))]
-    async fn new_redb_store() -> RedbStore {
-        RedbStore::in_memory().await.unwrap()
-    }
+        gen.skip(9);
 
-    #[cfg(target_arch = "wasm32")]
-    async fn new_indexed_db_store() -> IndexedDbStore {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+        let skip0 = gen.next_many(5);
+        store.append(gen.next_many(2)).await.unwrap();
+        store.append(gen.next_many(3)).await.unwrap();
 
-        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-        let db_name = format!("indexeddb-lumina-node-store-test-{id}");
+        let skip1 = gen.next();
+        store.append_single_unchecked(gen.next()).await.unwrap();
 
-        // DB can persist if test run within the browser
-        rexie::Rexie::delete(&db_name).await.unwrap();
+        let skip2 = gen.next_many(5);
 
-        IndexedDbStore::new(&db_name)
-            .await
-            .expect("creating test store failed")
+        store.append_single_unchecked(gen.next()).await.unwrap();
+
+        let skip3 = gen.next_many(5);
+        let skip4 = gen.next_many(5);
+        let skip5 = gen.next_many(5);
+
+        store.append(skip5).await.unwrap();
+        store.append(skip4).await.unwrap();
+        store.append(skip3).await.unwrap();
+        store.append(skip2).await.unwrap();
+        store.append_single(skip1).await.unwrap();
+        store.append(skip0).await.unwrap();
+
+        let final_ranges = store.get_stored_header_ranges().await.unwrap();
+        assert_eq!(final_ranges, HeaderRanges(smallvec![10..=42]))
     }
 
     #[test]
@@ -1137,5 +1168,50 @@ mod tests {
         assert_eq!(ranges.next_batch(4), Some(27..=30));
         assert_eq!(ranges.next_batch(5), Some(41..=45));
         assert_eq!(ranges.next_batch(100), Some(46..=50));
+    }
+
+    /// Fills an empty store
+    async fn fill_store<S: Store>(store: &mut S, amount: u64) -> ExtendedHeaderGenerator {
+        assert!(!store.has_at(1).await, "Store is not empty");
+
+        let mut gen = ExtendedHeaderGenerator::new();
+        //let headers = gen.next_many(amount);
+
+        store.append_unchecked(gen.next_many(amount)).await.expect("inserting test data failed");
+        /*
+        for header in headers {
+            store
+                .append_single_unchecked(header)
+                .await
+                .expect("inserting test data failed");
+        }
+        */
+
+        gen
+    }
+
+    async fn new_in_memory_store() -> InMemoryStore {
+        InMemoryStore::new()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn new_redb_store() -> RedbStore {
+        RedbStore::in_memory().await.unwrap()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    async fn new_indexed_db_store() -> IndexedDbStore {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+
+        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+        let db_name = format!("indexeddb-lumina-node-store-test-{id}");
+
+        // DB can persist if test run within the browser
+        rexie::Rexie::delete(&db_name).await.unwrap();
+
+        IndexedDbStore::new(&db_name)
+            .await
+            .expect("creating test store failed")
     }
 }

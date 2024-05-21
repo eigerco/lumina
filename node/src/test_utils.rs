@@ -34,10 +34,8 @@ pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator)
 
     let headers = gen.next_many(amount);
 
-    for header in headers {
-        s.insert_single_unchecked(header)
-            .expect("inserting test data failed");
-    }
+    s.insert(headers, false)
+        .expect("inserting test data failed");
 
     (s, gen)
 }

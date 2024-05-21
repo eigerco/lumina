@@ -11,7 +11,6 @@
 
 use std::iter;
 use std::marker::PhantomData;
-use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -20,7 +19,6 @@ use backoff::ExponentialBackoffBuilder;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use futures::FutureExt;
-use itertools::Itertools;
 use serde::Serialize;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
@@ -29,7 +27,7 @@ use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::{HeaderRanges, InsertMode, Store, StoreError};
+use crate::store::{HeaderRanges, Store, StoreError, calculate_missing_ranges};
 use crate::utils::OneshotSenderExt;
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
@@ -403,12 +401,7 @@ where
                 // If our new header is adjacent to the HEAD of the store
                 if store_head_height + 1 == new_head_height {
                     // Header is already verified by HeaderSub
-                    if self
-                        .store
-                        .insert_single(new_head, InsertMode::PreviousTrusted)
-                        .await
-                        .is_ok()
-                    {
+                    if self.store.insert_single(new_head, false).await.is_ok() {
                         info!("Added header {new_head_height} from HeaderSub");
                     }
                 }
@@ -436,7 +429,7 @@ where
 
         let store_ranges = self.store.get_stored_header_ranges().await.unwrap();
 
-        let fetch_ranges = calculate_ranges_to_fetch(
+        let fetch_ranges = calculate_missing_ranges(
             subjective_head_height,
             &store_ranges.0,
             MAX_HEADERS_IN_BATCH,
@@ -460,8 +453,7 @@ where
         let p2p = self.p2p.clone();
 
         spawn_cancellable(cancellation_token, async move {
-            let result = p2p.get_multiple_header_ranges(fetch_ranges).await;
-            // TODO: cleanup
+            let result = p2p.get_unverified_header_ranges(fetch_ranges).await;
             match result {
                 Ok(headers) => {
                     let _ = tx.send(Ok(headers)).await;
@@ -506,7 +498,7 @@ where
 
             // Headers ranges are verified internally, but we need to validate the edges against
             // headers possibly stored in store already
-            if let Err(e) = self.store.append(headers).await {
+            if let Err(e) = self.store.insert(headers, true).await {
                 warn!("Failed to store batch {:?}: {e}", ongoing.fetch_ranges);
             } else {
                 info!("stored successfully");
@@ -515,77 +507,19 @@ where
     }
 }
 
-/// based on the stored headers and current network head height, calculate range of headers that
-/// should be fetched from the network, starting from the front up to a `limit` of headers
-fn calculate_ranges_to_fetch(
-    head_height: u64,
-    store_headers: &[RangeInclusive<u64>],
-    limit: u64,
-) -> HeaderRanges {
-    let range_edges = iter::once(head_height + 1)
-        .chain(
-            store_headers
-                .iter()
-                .flat_map(|r| [*r.start(), *r.end()])
-                .rev(),
-        )
-        .chain(iter::once(0));
-
-    let mut left = limit;
-    let missing_ranges = range_edges
-        .chunks(2)
-        .into_iter()
-        .map_while(|mut range| {
-            if left == 0 {
-                return None;
-            }
-            // ranges_edges is even and we divide into 2 element chunks, this is safe
-            let upper_bound = range.next().unwrap() - 1;
-            let lower_bound = range.next().unwrap();
-            let range_len = upper_bound.checked_sub(lower_bound)?;
-
-            if range_len == 0 {
-                return Some(RangeInclusive::new(1, 0));
-            }
-
-            if left > range_len {
-                left -= range_len;
-                Some(RangeInclusive::new(lower_bound + 1, upper_bound))
-            } else {
-                let truncated_lower_bound = upper_bound - left;
-                left = 0;
-                Some(RangeInclusive::new(truncated_lower_bound + 1, upper_bound))
-            }
-        })
-        .filter(|v| !v.is_empty())
-        .collect();
-    HeaderRanges(missing_ranges)
-}
-
-async fn try_init<S>(p2p: &P2p, _store: &S, _genesis_hash: Option<Hash>) -> Result<u64>
+async fn try_init<S>(p2p: &P2p, store: &S, _genesis_hash: Option<Hash>) -> Result<u64>
 where
     S: Store,
 {
     p2p.wait_connected_trusted().await?;
 
-    /*
-        // IF store is empty, intialize it with genesis
-        if store.head_height().await.is_err() {
-            let genesis = match genesis_hash {
-                Some(hash) => p2p.get_header(hash).await?,
-                None => {
-                    warn!("Genesis hash is not set, requesting height 1.");
-                    p2p.get_header_by_height(1).await?
-                }
-            };
-
-            // Store genesis
-            store.insert_single_unchecked(genesis).await?;
-        }
-    */
-
     let network_head = p2p.get_head_header().await?;
     let network_head_height = network_head.height().value();
+
+    // If store is empty, intialize it with network head
+    if store.head_height().await.is_err() {
+        store.append_single_unchecked(network_head.clone()).await?;
+    }
 
     p2p.init_header_sub(network_head).await?;
 
@@ -598,7 +532,6 @@ mod tests {
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use smallvec::smallvec;
 
     #[async_test]
     async fn init_without_genesis_hash() {
@@ -619,24 +552,21 @@ mod tests {
         handle.expect_no_cmd().await;
         handle.announce_trusted_peer_connected();
 
-        // After connection is established Syncer asks for genesis header
-        let (height, amount, respond_to) = handle.expect_header_request_for_height_cmd().await;
-        assert_eq!(height, 1);
-        assert_eq!(amount, 1);
-        respond_to.send(Ok(vec![genesis.clone()])).unwrap();
-
-        // After genesis header it asks for the current HEAD
+        // We're syncing from the front, so ask for head first
         let (height, amount, respond_to) = handle.expect_header_request_for_height_cmd().await;
         assert_eq!(height, 0);
         assert_eq!(amount, 1);
         respond_to.send(Ok(vec![genesis.clone()])).unwrap();
 
+        println!("fooooo");
         // Now Syncer initializes HeaderSub with the latest HEAD
         let head_from_syncer = handle.expect_init_header_sub().await;
         assert_eq!(head_from_syncer, genesis);
+        println!("fooooo");
 
         // Genesis == HEAD, so nothing else is produced.
         handle.expect_no_cmd().await;
+        println!("fooooo");
     }
 
     #[async_test]
@@ -826,9 +756,11 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let genesis = gen.next();
 
+        println!("foo");
         let (syncer, _store, mut p2p_mock) =
             initialized_syncer(genesis.clone(), genesis.clone()).await;
 
+        println!("foo");
         // Genesis == HEAD, so nothing else is produced.
         p2p_mock.expect_no_cmd().await;
 
@@ -925,12 +857,7 @@ mod tests {
         handle.expect_no_cmd().await;
         handle.announce_trusted_peer_connected();
 
-        // After connection is established Syncer asks for genesis header
-        let (hash, respond_to) = handle.expect_header_request_for_hash_cmd().await;
-        assert_eq!(hash, genesis.hash());
-        respond_to.send(Ok(vec![genesis])).unwrap();
-
-        // After genesis header it asks for the current HEAD
+        // After connection is established Syncer asks current network HEAD
         let (height, amount, respond_to) = handle.expect_header_request_for_height_cmd().await;
         assert_eq!(height, 0);
         assert_eq!(amount, 1);
@@ -973,40 +900,5 @@ mod tests {
 
         // Remove already sent batch
         remaining_headers.drain(..sum_amount as usize);
-    }
-
-    #[test]
-    fn test_calc_missing_ranges() {
-        let head_height = 50;
-        let ranges = [
-            RangeInclusive::new(1, 5),
-            RangeInclusive::new(15, 20),
-            RangeInclusive::new(23, 28),
-            RangeInclusive::new(30, 40),
-        ];
-        let expected_missing_ranges = HeaderRanges(smallvec![41..=50, 29..=29, 21..=22, 6..=14,]);
-
-        let missing_ranges = calculate_ranges_to_fetch(head_height, &ranges, 512);
-        assert_eq!(missing_ranges, expected_missing_ranges);
-    }
-
-    #[test]
-    fn test_calc_missing_ranges_partial() {
-        let head_height = 10;
-        let ranges = [RangeInclusive::new(6, 7)];
-        let expected_missing_ranges = HeaderRanges(smallvec![8..=10, 4..=5]);
-
-        let missing_ranges = calculate_ranges_to_fetch(head_height, &ranges, 5);
-        assert_eq!(missing_ranges, expected_missing_ranges);
-    }
-
-    #[test]
-    fn test_calc_missing_ranges_contiguous() {
-        let head_height = 10;
-        let ranges = [RangeInclusive::new(5, 6), RangeInclusive::new(7, 9)];
-        let expected_missing_ranges = HeaderRanges(smallvec![10..=10, 1..=4]);
-
-        let missing_ranges = calculate_ranges_to_fetch(head_height, &ranges, 5);
-        assert_eq!(missing_ranges, expected_missing_ranges);
     }
 }
