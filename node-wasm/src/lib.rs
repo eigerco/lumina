@@ -8,4 +8,4 @@ pub mod utils;
 mod wrapper;
 
 /// Alias for a `Result` with the error type [`JsError`].
-pub type Result<T> = std::result::Result<T, JsError>;
+pub type Result<T, E = JsError> = std::result::Result<T, E>;

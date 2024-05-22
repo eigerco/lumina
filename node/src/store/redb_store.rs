@@ -253,11 +253,11 @@ impl RedbStore {
             let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
                 return Ok(());
             };
-            let headers_range = head.height().value()..=tail.height().value();
             let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let mut headers_table = tx.open_table(HEADERS_TABLE)?;
             let mut height_ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
 
+            let headers_range = head.height().value()..=tail.height().value();
             let neighbours_exist = try_insert_to_range(&mut height_ranges_table, headers_range)?;
 
             if verify_neighbours {

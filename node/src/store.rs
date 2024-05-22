@@ -47,7 +47,7 @@ type Result<T, E = StoreError> = std::result::Result<T, E>;
 
 pub type HeaderRange = RangeInclusive<u64>;
 
-pub trait RangeLengthExt {
+pub(crate) trait RangeLengthExt {
     fn len(&self) -> u64;
 }
 
@@ -233,24 +233,6 @@ pub trait Store: Send + Sync + Debug {
     async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
         for header in headers.into_iter() {
             self.append_single_unchecked(header).await?;
-        }
-
-        Ok(())
-    }
-    */
-
-    /*
-    async fn insert_reversed(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        let it = headers.into_iter().rev().peekable();
-        if let Some(h) = it.next() {
-            self.insert_single(h, InsertMode::PreviousTrusted).await?;
-        }
-        while let Some(h) = it.next() {
-            if it.peek().is_some() {
-                self.insert_single(h, InsertMode::BothTrusted).await?;
-            } else {
-                self.insert_single(h, InsertMode::NextTrusted).await?;
-            }
         }
 
         Ok(())

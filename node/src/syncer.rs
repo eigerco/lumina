@@ -9,10 +9,10 @@
 //! headers announced on the `header-sub` p2p protocol to keep the `subjective_head` as close
 //! to the `network_head` as possible.
 
-use std::iter;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
+use std::ops::RangeInclusive;
 
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoffBuilder;
@@ -99,8 +99,8 @@ enum SyncerCmd {
 /// Status of the synchronization.
 #[derive(Debug, Serialize)]
 pub struct SyncingInfo {
-    /// The height the [`Syncer`] is currently synchronized to.
-    pub local_head: u64,
+    /// Ranges of headers that are already synchronised
+    pub stored_headers: Vec<RangeInclusive<u64>>,
     /// Syncing target. The latest height seen in the network that was successfully verified.
     pub subjective_head: u64,
 }
@@ -312,7 +312,7 @@ where
 
     async fn syncing_info(&self) -> SyncingInfo {
         SyncingInfo {
-            local_head: self.store.head_height().await.unwrap_or(0),
+            stored_headers: self.store.get_stored_header_ranges().await.map(|r| r.0.to_vec()).unwrap_or_default(),
             subjective_head: self.subjective_head_height.unwrap_or(0),
         }
     }
@@ -320,7 +320,7 @@ where
     #[instrument(skip_all)]
     async fn report(&mut self) {
         let SyncingInfo {
-            local_head,
+            stored_headers,
             subjective_head,
         } = self.syncing_info().await;
 
@@ -330,7 +330,7 @@ where
             .map(|ongoing| format!("[{:?}]", ongoing.fetch_ranges))
             .unwrap_or_else(|| "None".to_string());
 
-        info!("syncing: {local_head}/{subjective_head}, ongoing batch: {ongoing_batch}",);
+        info!("syncing: {stored_headers:?}/{subjective_head}, ongoing batch: {ongoing_batch}",);
     }
 
     fn spawn_try_init(&self) -> oneshot::Receiver<u64> {

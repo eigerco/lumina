@@ -13,14 +13,16 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
-use crate::store::{Result, SamplingMetadata, Store, StoreError};
+use crate::store::{Result, SamplingMetadata, Store, StoreError, HeaderRanges, HeaderRange};
+use crate::store::utils::{check_range_insert, RangeScanResult};
 
 /// indexeddb version, needs to be incremented on every schema schange
-const DB_VERSION: u32 = 2;
+const DB_VERSION: u32 = 3;
 
 // Data stores (SQL table analogue) used in IndexedDb
 const HEADER_STORE_NAME: &str = "headers";
 const SAMPLING_STORE_NAME: &str = "sampling";
+const RANGES_STORE_NAME: &str = "ranges";
 
 // Additional indexes set on HEADER_STORE, for querying by height and hash
 const HASH_INDEX_NAME: &str = "hash";
@@ -61,6 +63,7 @@ impl IndexedDbStore {
                     .add_index(Index::new(HEIGHT_INDEX_NAME, "height").unique(true)),
             )
             .add_object_store(ObjectStore::new(SAMPLING_STORE_NAME))
+            .add_object_store(ObjectStore::new(RANGES_STORE_NAME))
             .build()
             .await
             .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
@@ -104,11 +107,6 @@ impl IndexedDbStore {
     }
 
     async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
-        // quick check with contains_height, which uses cached head
-        if !self.contains_height(height) {
-            return Err(StoreError::NotFound);
-        }
-
         let tx = self
             .db
             .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
@@ -120,7 +118,7 @@ impl IndexedDbStore {
 
         // querying unset key returns empty value
         if header_entry.is_falsy() {
-            return Err(StoreError::LostHeight(height));
+            return Err(StoreError::NotFound);
         }
 
         let serialized_header = from_value::<ExtendedHeaderEntry>(header_entry)?.header;
@@ -147,27 +145,34 @@ impl IndexedDbStore {
             .map_err(|e| StoreError::CelestiaTypes(e.into()))
     }
 
-    async fn insert_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
-        let height = header.height().value();
-        let hash = header.hash();
+    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+        let tx = self.db.transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)?;
+        let store = tx.store(RANGES_STORE_NAME)?;
 
-        let head_height = self.get_head_height().unwrap_or(0);
+        let ranges = store
+            .get_all(None, None, None, Some(Direction::Next))
+            .await?
+            .into_iter()
+            .map(|(_k, v)| {
+                from_value::<(u64, u64)>(v).map(|(begin, end)| begin..=end)
+            })
+            .collect::<Result<_, _>>()?;
 
-        // A light check before checking the whole map
-        if head_height > 0 && height <= head_height {
-            return Err(StoreError::HeightExists(height));
-        }
+        Ok(HeaderRanges(ranges))
+    }
 
-        // Check if it's continuous before checking the whole map.
-        if head_height + 1 != height {
-            return Err(StoreError::NonContinuousAppend(head_height, height));
-        }
+    async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
+        let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
+            return Ok(());
+        };
 
         let tx = self
             .db
-            .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadWrite)?;
+            .transaction(&[HEADER_STORE_NAME, RANGES_STORE_NAME], TransactionMode::ReadWrite)?;
         let header_store = tx.store(HEADER_STORE_NAME)?;
+        let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
+        /*
         let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
         let jsvalue_height_key = KeyRange::only(&to_value(&height)?)?;
         if height_index
@@ -178,31 +183,44 @@ impl IndexedDbStore {
         {
             return Err(StoreError::HeightExists(height));
         }
+        */
+        let headers_range = head.height().value()..=tail.height().value();
+        let neighbours_exist = try_insert_to_range(&ranges_store, headers_range).await?;
 
-        let hash_index = header_store.index(HASH_INDEX_NAME)?;
-        let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?)?;
-        if hash_index.count(Some(&jsvalue_hash_key)).await.unwrap_or(0) != 0 {
-            return Err(StoreError::HashExists(hash));
+        if verify_neighbours {
+            verify_against_neighbours(&header_store, head, tail, neighbours_exist)?;
+        } else {
+            // TODO: verify range continuous
         }
 
-        // make sure Result is Infallible, we unwrap it later
-        let serialized_header: std::result::Result<_, Infallible> = header.encode_vec();
+        for header in &headers {
+            let hash = header.hash();
+            let hash_index = header_store.index(HASH_INDEX_NAME)?;
+            let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?)?;
+            if hash_index.count(Some(&jsvalue_hash_key)).await.unwrap_or(0) != 0 {
+                return Err(StoreError::HashExists(hash));
+            }
 
-        let header_height = header.height().value();
-        let header_entry = ExtendedHeaderEntry {
-            height: header_height,
-            hash: header.hash(),
-            header: serialized_header.unwrap(),
-        };
+            // make sure Result is Infallible, we unwrap it later
+            let serialized_header: std::result::Result<_, Infallible> = header.encode_vec();
 
-        let jsvalue_header = to_value(&header_entry)?;
+            let height = header.height().value();
+            let header_entry = ExtendedHeaderEntry {
+                height,
+                hash,
+                header: serialized_header.unwrap(),
+            };
 
-        header_store.add(&jsvalue_header, None).await?;
-        tx.commit().await?;
+            let jsvalue_header = to_value(&header_entry)?;
 
-        // this shouldn't panic, we don't borrow across await points and wasm is single threaded
-        self.head.replace(Some(header));
+            header_store.add(&jsvalue_header, None).await?;
+        }
+
+        if tail.height().value() > self.head.borrow().as_ref().map(|h| h.height().value()).unwrap_or(0) {
+            self.head.replace(Some(tail.clone()));
+        }
         self.header_added_notifier.notify_waiters();
+        tx.commit().await?;
 
         Ok(())
     }
@@ -222,12 +240,11 @@ impl IndexedDbStore {
         Ok(hash_count > 0)
     }
 
-    fn contains_height(&self, height: u64) -> bool {
-        let Ok(head_height) = self.get_head_height() else {
+    async fn contains_height(&self, height: u64) -> bool {
+        let Ok(stored_ranges) = self.get_stored_header_ranges().await else {
             return false;
         };
-
-        height > 0 && height <= head_height
+        stored_ranges.0.into_iter().any(|range| range.contains(&height))
     }
 
     async fn update_sampling_metadata(
@@ -236,8 +253,9 @@ impl IndexedDbStore {
         accepted: bool,
         cids: Vec<Cid>,
     ) -> Result<u64> {
+        // TODO: noope
         // quick check with contains_height, which uses cached head
-        if !self.contains_height(height) {
+        if !self.contains_height(height).await {
             return Err(StoreError::NotFound);
         }
 
@@ -297,7 +315,7 @@ impl IndexedDbStore {
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
-        if !self.contains_height(height) {
+        if !self.contains_height(height).await {
             return Err(StoreError::NotFound);
         }
 
@@ -337,7 +355,8 @@ impl Store for IndexedDbStore {
         let mut notifier = pin!(self.header_added_notifier.notified());
 
         loop {
-            if self.contains_height(height) {
+            let fut = SendWrapper::new(self.contains_height(height));
+            if fut.await {
                 return Ok(());
             }
 
@@ -359,11 +378,7 @@ impl Store for IndexedDbStore {
     }
 
     async fn has_at(&self, height: u64) -> bool {
-        self.contains_height(height)
-    }
-
-    async fn insert_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
-        let fut = SendWrapper::new(self.insert_single_unchecked(header));
+        let fut = SendWrapper::new(self.contains_height(height));
         fut.await
     }
 
@@ -386,6 +401,17 @@ impl Store for IndexedDbStore {
         let fut = SendWrapper::new(self.get_sampling_metadata(height));
         fut.await
     }
+
+    async fn insert(&self, header: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
+        let fut = SendWrapper::new(self.insert(header, verify_neighbours));
+        fut.await
+    }
+
+    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+        let fut = SendWrapper::new(self.get_stored_header_ranges());
+        fut.await
+    }
+
 }
 
 impl From<rexie::Error> for StoreError {
@@ -460,6 +486,49 @@ async fn get_next_unsampled_height_from_database(
     }
 }
 
+async fn try_insert_to_range(ranges_store: &rexie::Store, new_range: HeaderRange) -> Result<(bool, bool)> {
+    let stored_ranges = ranges_store
+        .get_all(None, None, None, Some(Direction::Next))
+        .await?
+        .into_iter()
+        .map(|(_k, v)| {
+            from_value::<(u64, u64)>(v).map(|(start, end)| start..=end)
+        })
+    .collect::<Result<_, _>>()?;
+
+    let RangeScanResult {
+        range_index,
+        range,
+        range_to_remove,
+        //neighbours_exist,
+    } = check_range_insert(HeaderRanges(stored_ranges), new_range.clone())?; // XXX: cloneeeeee
+
+    if let Some(to_remove) = range_to_remove {
+        let jsvalue_key_to_remove = to_value(&to_remove)?;
+        ranges_store.delete(&jsvalue_key_to_remove).await?;
+    }
+
+    let jsvalue_range = to_value(&(*range.start(), *range.end()))?;
+    let jsvalue_key = to_value(&range_index)?;
+
+    ranges_store.put(&jsvalue_range, Some(&jsvalue_key)).await.expect("wannnnnna insert");
+
+    let prev_exists = new_range.start() != range.start();
+    let next_exists = new_range.end() != range.end();
+
+    Ok((prev_exists, next_exists))
+}
+
+fn verify_against_neighbours(
+    _headers_store: &rexie::Store,
+    _lowest_header: &ExtendedHeader,
+    _highest_header: &ExtendedHeader,
+    _neighbours_exist: (bool, bool),
+) -> Result<()> {
+    // TODO:
+    Ok(())
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -480,7 +549,7 @@ pub mod tests {
         let expected_height = 1_000;
 
         for h in 1..=expected_height {
-            s.insert_single_unchecked(gen.next())
+            s.append_single_unchecked(gen.next())
                 .await
                 .expect("inserting test data failed");
             s.update_sampling_metadata(h, true, vec![])
@@ -515,7 +584,7 @@ pub mod tests {
 
         for h in &original_headers {
             original_store
-                .insert_single_unchecked(h.clone())
+                .append_single_unchecked(h.clone())
                 .await
                 .expect("inserting test data failed");
         }
@@ -540,7 +609,7 @@ pub mod tests {
         let mut new_headers = gen.next_many(10);
         for h in &new_headers {
             reopened_store
-                .insert_single_unchecked(h.clone())
+                .append_single_unchecked(h.clone())
                 .await
                 .expect("failed to insert data");
         }
@@ -675,7 +744,7 @@ pub mod tests {
         let headers = gen.next_many(amount);
 
         for header in headers {
-            s.insert_single_unchecked(header)
+            s.append_single_unchecked(header)
                 .await
                 .expect("inserting test data failed");
         }

@@ -24,7 +24,9 @@ async function show_stats(node) {
     return;
   }
   const info = await node.syncer_info();
-  document.getElementById("syncer").innerText = `${info.local_head}/${info.subjective_head}`;
+  document.getElementById("stored-ranges").innerText = info.stored_headers.map((range) => {
+    return `${range.start}..${range.end}`;
+  }).join(", ");
 
   let peers_ul = document.createElement('ul');
   (await node.connected_peers()).forEach(peer => {

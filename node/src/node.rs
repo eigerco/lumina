@@ -4,7 +4,7 @@
 //! [`Store`]: crate::store::Store
 //! [`Syncer`]: crate::syncer::Syncer
 
-use std::ops::RangeBounds;
+use std::ops::{RangeBounds, RangeInclusive};
 use std::sync::Arc;
 
 use blockstore::Blockstore;
@@ -267,6 +267,10 @@ where
     /// Get the latest header announced in the network.
     pub fn get_network_head_header(&self) -> Option<ExtendedHeader> {
         self.p2p.header_sub_watcher().borrow().clone()
+    }
+
+    pub async fn get_stored_header_ranges(&self) -> Result<Vec<RangeInclusive<u64>>> {
+        Ok(self.store.get_stored_header_ranges().await?.0.to_vec())
     }
 
     /// Get the latest locally synced header.
