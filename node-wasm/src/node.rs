@@ -17,9 +17,9 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::BroadcastChannel;
 
-use crate::utils::{get_crypto, js_value_from_display, JsContext, Network};
+use crate::error::{Context, Result};
+use crate::utils::{get_crypto, js_value_from_display, Network};
 use crate::wrapper::libp2p::NetworkInfo;
-use crate::Result;
 
 /// Lumina wasm node.
 #[wasm_bindgen(js_name = Node)]
@@ -56,11 +56,11 @@ impl WasmNode {
 
         let node = Node::new(config)
             .await
-            .js_context("Failed to start the node")?;
+            .context("Failed to start the node")?;
 
         let events_channel_name = format!("NodeEventChannel-{}", get_crypto()?.random_uuid());
         let events_channel = BroadcastChannel::new(&events_channel_name)
-            .map_err(|_| JsError::new("Failed to allocate BroadcastChannel"))?;
+            .context("Failed to allocate BroadcastChannel")?;
 
         let mut events_sub = node.event_subscriber();
 
@@ -131,7 +131,7 @@ impl WasmNode {
 
     /// Trust or untrust the peer with a given ID.
     pub async fn set_peer_trust(&self, peer_id: &str, is_trusted: bool) -> Result<()> {
-        let peer_id = peer_id.parse().js_context("Parsing peer id failed")?;
+        let peer_id = peer_id.parse().context("Parsing peer id failed")?;
         Ok(self.node.set_peer_trust(peer_id, is_trusted).await?)
     }
 
@@ -159,7 +159,7 @@ impl WasmNode {
     /// The headers will be verified with the `from` header.
     pub async fn request_verified_headers(&self, from: JsValue, amount: u64) -> Result<Array> {
         let header =
-            from_value::<ExtendedHeader>(from).js_context("Parsing extended header failed")?;
+            from_value::<ExtendedHeader>(from).context("Parsing extended header failed")?;
         let verified_headers = self.node.request_verified_headers(&header, amount).await?;
 
         Ok(verified_headers
@@ -188,7 +188,7 @@ impl WasmNode {
 
     /// Get a synced header for the block with a given hash.
     pub async fn get_header_by_hash(&self, hash: &str) -> Result<JsValue> {
-        let hash: Hash = hash.parse().js_context("parsing hash failed")?;
+        let hash: Hash = hash.parse().context("parsing hash failed")?;
         let eh = self.node.get_header_by_hash(&hash).await?;
         Ok(to_value(&eh)?)
     }
@@ -265,10 +265,10 @@ impl WasmNodeConfig {
         let network_id = network_id(self.network.into());
         let store = IndexedDbStore::new(network_id)
             .await
-            .js_context("Failed to open the store")?;
+            .context("Failed to open the store")?;
         let blockstore = IndexedDbBlockstore::new(&format!("{network_id}-blockstore"))
             .await
-            .js_context("Failed to open the blockstore")?;
+            .context("Failed to open the blockstore")?;
 
         let p2p_local_keypair = Keypair::generate_ed25519();
 
