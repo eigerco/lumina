@@ -14,7 +14,7 @@ impl Error {
         Error(js_sys::Error::new(msg).into())
     }
 
-    /// Create a new `Error` from `JsValue` without lossing any information.
+    /// Create a new `Error` from `JsValue` without losing any information.
     pub(crate) fn from_js_value<T>(value: T) -> Error
     where
         T: Into<JsValue>,
