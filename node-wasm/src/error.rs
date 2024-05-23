@@ -1,21 +1,25 @@
+//! Error type and utilities.
+
 use std::fmt::Display;
 
 use wasm_bindgen::convert::IntoWasmAbi;
 use wasm_bindgen::describe::WasmDescribe;
 use wasm_bindgen::JsValue;
 
-pub(crate) type Result<T, E = Error> = std::result::Result<T, E>;
+/// Alias for a `Result` with the error type [`Error`].
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub(crate) struct Error(JsValue);
+/// An error that can cross the WASM ABI border.
+pub struct Error(JsValue);
 
 impl Error {
     /// Create a new `Error` with the specified message.
-    pub(crate) fn new(msg: &str) -> Error {
+    pub fn new(msg: &str) -> Error {
         Error(js_sys::Error::new(msg).into())
     }
 
     /// Create a new `Error` from `JsValue` without losing any information.
-    pub(crate) fn from_js_value<T>(value: T) -> Error
+    pub fn from_js_value<T>(value: T) -> Error
     where
         T: Into<JsValue>,
     {
@@ -26,7 +30,7 @@ impl Error {
     ///
     /// This can be used on types that implement [`std::error::Error`] but
     /// some information is lost.
-    pub(crate) fn from_display<T>(value: T) -> Error
+    pub fn from_display<T>(value: T) -> Error
     where
         T: Display,
     {
@@ -34,7 +38,7 @@ impl Error {
     }
 
     /// Add more context to the `Error`.
-    pub(crate) fn context<C>(self, context: C) -> Error
+    pub fn context<C>(self, context: C) -> Error
     where
         C: Display,
     {
@@ -111,7 +115,9 @@ from_display! {
     lumina_node::store::StoreError,
 }
 
-pub(crate) trait Context<T> {
+/// Utility to add more context to the [`Error`].
+pub trait Context<T> {
+    /// Adds more context to the [`Error`].
     fn context<C>(self, context: C) -> Result<T, Error>
     where
         C: Display;

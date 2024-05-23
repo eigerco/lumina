@@ -23,7 +23,7 @@ use crate::wrapper::libp2p::NetworkInfo;
 
 /// Lumina wasm node.
 #[wasm_bindgen(js_name = Node)]
-struct WasmNode {
+pub struct WasmNode {
     node: Node<IndexedDbStore>,
     events_channel_name: String,
 }
@@ -87,7 +87,7 @@ impl WasmNode {
         self.node.local_peer_id().to_string()
     }
 
-    /// Get current [`PeerTracker`] info.
+    /// Get current `PeerTracker` info.
     pub fn peer_tracker_info(&self) -> Result<JsValue> {
         let peer_tracker_info = self.node.peer_tracker_info();
         Ok(to_value(&peer_tracker_info)?)
