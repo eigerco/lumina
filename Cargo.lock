@@ -2844,6 +2844,8 @@ name = "lumina-node-wasm"
 version = "0.1.1"
 dependencies = [
  "anyhow",
+ "blockstore",
+ "celestia-tendermint",
  "celestia-types",
  "console_error_panic_hook",
  "js-sys",
