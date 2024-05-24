@@ -60,7 +60,7 @@ impl RangeLengthExt for RangeInclusive<u64> {
 }
 
 // TODO: less pub?
-#[derive(Debug, Clone, PartialEq)] // TODO: manual Display implementation probably
+#[derive(Debug, Clone, PartialEq, Default)] // TODO: manual Display implementation probably
 pub struct HeaderRanges(pub SmallVec<[RangeInclusive<u64>; 2]>);
 
 impl HeaderRanges {
@@ -68,11 +68,32 @@ impl HeaderRanges {
         // TODO
         Ok(())
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.iter().all(|r| r.is_empty())
+    }
 }
 
 impl From<RangeInclusive<u64>> for HeaderRanges {
     fn from(value: RangeInclusive<u64>) -> Self {
         Self(smallvec![value])
+    }
+}
+
+/*
+impl<T> From<T> for HeaderRanges 
+where 
+T: IntoIterator<Item = RangeInclusive<u64>>
+{
+    fn from(value: T) -> Self {
+        Self(value.into_iter().collect())
+    }
+}
+*/
+
+impl<const T: usize> From<[RangeInclusive<u64>; T]> for HeaderRanges {
+    fn from(value: [RangeInclusive<u64>; T]) -> Self {
+        Self(value.into_iter().collect())
     }
 }
 
@@ -287,7 +308,7 @@ pub enum StoreError {
     NonContinuousAppend(u64, u64),
 
     /// TODO: reword
-    #[error("Failed to insert header span into the store, following range overlaps with already existing ones in store: {0}..={1}")]
+    #[error("Failed to insert header range, it overlaps with one already existing in the store: {0}..={1}")]
     HeaderRangeOverlap(u64, u64),
 
     /// TODO: this is super unhelpful on its own
@@ -1222,5 +1243,11 @@ mod tests {
         IndexedDbStore::new(&db_name)
             .await
             .expect("creating test store failed")
+    }
+
+    #[test]
+    async fn test_header_ranges_empty() {
+        assert!(HeaderRanges::from([]).is_empty());
+        assert!(!HeaderRanges::from([1..=3]).is_empty());
     }
 }

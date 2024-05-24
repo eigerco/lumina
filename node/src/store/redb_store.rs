@@ -16,7 +16,7 @@ use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::{debug, info, trace};
 
-use crate::store::utils::{RangeScanResult, check_range_insert};
+use crate::store::utils::{check_range_insert, verify_range_contiguous, RangeScanResult};
 use crate::store::{HeaderRange, HeaderRanges, Result, SamplingMetadata, Store, StoreError};
 use crate::utils::validate_headers;
 
@@ -263,20 +263,7 @@ impl RedbStore {
             if verify_neighbours {
                 verify_against_neighbours(&headers_table, head, tail, neighbours_exist)?;
             } else {
-                // XXX: better
-                let mut prev = None;
-                for h in &headers {
-                    let current_height = h.height().value();
-                    if let Some(prev_height) = prev {
-                        if prev_height + 1 != current_height {
-                            return Err(StoreError::InsertRangeWithGap(
-                                prev_height,
-                                current_height,
-                            ));
-                        }
-                    }
-                    prev = Some(current_height);
-                }
+                verify_range_contiguous(&headers)?;
             }
 
             for header in &headers {

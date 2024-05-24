@@ -29,15 +29,9 @@ pub(crate) use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
 /// Generate a store pre-filled with headers.
 pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
-    let s = InMemoryStore::new();
     let mut gen = ExtendedHeaderGenerator::new();
 
-    let headers = gen.next_many(amount);
-
-    s.insert(headers, false)
-        .expect("inserting test data failed");
-
-    (s, gen)
+    (InMemoryStore::from(gen.next_many(amount)), gen)
 }
 
 /// [`NodeConfig`] with default values for the usage in tests.

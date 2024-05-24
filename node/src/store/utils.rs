@@ -1,6 +1,7 @@
 use std::iter::once;
 use std::ops::RangeInclusive;
 
+use celestia_types::ExtendedHeader;
 use itertools::Itertools;
 
 use crate::store::{HeaderRange, HeaderRanges, Result, StoreError};
@@ -16,7 +17,7 @@ pub(crate) fn calculate_missing_ranges(
         .chain(
             store_headers
                 .iter()
-                .inspect(|r| println!("{r:?}"))
+                //.inspect(|r| println!("{r:?}"))
                 .flat_map(|r| [*r.start(), *r.end()])
                 .rev(),
         )
@@ -177,6 +178,23 @@ pub(crate) fn check_range_insert(
     }
 
     Ok(found_range)
+}
+
+pub(crate) fn verify_range_contiguous(headers: &[ExtendedHeader]) -> Result<()> {
+    let mut prev = None;
+    for h in headers {
+        let current_height = h.height().value();
+        if let Some(prev_height) = prev {
+            if prev_height + 1 != current_height {
+                return Err(StoreError::InsertRangeWithGap(
+                        prev_height,
+                        current_height,
+                        ));
+            }
+        }
+        prev = Some(current_height);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

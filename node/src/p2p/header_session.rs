@@ -62,7 +62,7 @@ impl HeaderSession {
                         // Reschedule the missing sub-range
                         let height = height + headers_len;
                         let amount = requested_amount - headers_len;
-                        //tracing::info!("retrying {height} +{amount}");
+                        tracing::info!("requested {requested_amount}, got {headers_len}: retrying {height} +{amount}");
                         self.send_request(height, amount).await?;
                     } else {
                         // Schedule next request
