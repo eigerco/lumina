@@ -10,6 +10,9 @@ use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::prelude::*;
 use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
+use web_sys::Crypto;
+
+use crate::error::{Context, Error, Result};
 
 /// Supported Celestia networks.
 #[wasm_bindgen]
@@ -70,36 +73,10 @@ pub(crate) fn js_value_from_display<D: fmt::Display>(value: D) -> JsValue {
     JsValue::from(value.to_string())
 }
 
-pub(crate) trait JsContext<T> {
-    fn js_context<C>(self, context: C) -> Result<T, JsError>
-    where
-        C: fmt::Display + Send + Sync + 'static;
-
-    fn with_js_context<F, C>(self, context_fn: F) -> Result<T, JsError>
-    where
-        C: fmt::Display + Send + Sync + 'static,
-        F: FnOnce() -> C;
-}
-
-impl<T, E> JsContext<T> for std::result::Result<T, E>
-where
-    E: std::error::Error,
-{
-    fn js_context<C>(self, context: C) -> Result<T, JsError>
-    where
-        C: fmt::Display + Send + Sync + 'static,
-    {
-        self.map_err(|e| JsError::new(&format!("{context}: {e}")))
-    }
-
-    fn with_js_context<F, C>(self, context_fn: F) -> Result<T, JsError>
-    where
-        C: fmt::Display + Send + Sync + 'static,
-        F: FnOnce() -> C,
-    {
-        self.map_err(|e| {
-            let context = context_fn();
-            JsError::new(&format!("{context}: {e}"))
-        })
-    }
+pub(crate) fn get_crypto() -> Result<Crypto, Error> {
+    js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("crypto"))
+        .context("failed to get `crypto` from global object")?
+        .dyn_into::<web_sys::Crypto>()
+        .ok()
+        .context("`crypto` is not `Crypto` type")
 }

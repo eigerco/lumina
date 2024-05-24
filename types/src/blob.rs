@@ -52,6 +52,10 @@ pub struct Blob {
     pub share_version: u8,
     /// A [`Commitment`] computed from the [`Blob`]s data.
     pub commitment: Commitment,
+    /// Index of the blob's first share in the EDS. Only set for blobs retrieved from chain.
+    // note: celestia supports deserializing blobs without index, so we should too
+    #[serde(default, with = "index_serde")]
+    pub index: Option<u64>,
 }
 
 impl Blob {
@@ -76,7 +80,8 @@ impl Blob {
     ///       "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
     ///       "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
     ///       "share_version": 0,
-    ///       "commitment": "m0A4feU6Fqd5Zy9td3M7lntG8A3PKqe6YdugmAsWz28="
+    ///       "commitment": "m0A4feU6Fqd5Zy9td3M7lntG8A3PKqe6YdugmAsWz28=",
+    ///       "index": -1
     ///     }"#},
     /// );
     /// ```
@@ -89,6 +94,7 @@ impl Blob {
             data,
             share_version: appconsts::SHARE_VERSION_ZERO,
             commitment,
+            index: None,
         })
     }
 
@@ -170,6 +176,7 @@ impl TryFrom<RawBlob> for Blob {
             namespace,
             data: value.data,
             share_version: value.share_version as u8,
+            index: None,
         })
     }
 }
@@ -206,6 +213,32 @@ mod gas_prize_serde {
     }
 }
 
+mod index_serde {
+    use serde::ser::Error;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    /// Serialize [`Option<u64>`] as `i64` with `None` represented as `-1`.
+    pub fn serialize<S>(value: &Option<u64>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let x = value
+            .map(i64::try_from)
+            .transpose()
+            .map_err(S::Error::custom)?
+            .unwrap_or(-1);
+        serializer.serialize_i64(x)
+    }
+
+    /// Deserialize [`Option<u64>`] from `i64` with negative values as `None`.
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        i64::deserialize(deserializer).map(|val| if val >= 0 { Some(val as u64) } else { None })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,7 +252,8 @@ mod tests {
               "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAADCBNOWAP3dM=",
               "data": "8fIMqAB+kQo7+LLmHaDya8oH73hxem6lQWX1",
               "share_version": 0,
-              "commitment": "D6YGsPWdxR8ju2OcOspnkgPG2abD30pSHxsFdiPqnVk="
+              "commitment": "D6YGsPWdxR8ju2OcOspnkgPG2abD30pSHxsFdiPqnVk=",
+              "index": -1
             }"#,
         )
         .unwrap()
@@ -245,5 +279,18 @@ mod tests {
         blob.commitment.0.fill(7);
 
         blob.validate().unwrap_err();
+    }
+
+    #[test]
+    fn deserialize_blob_with_missing_index() {
+        serde_json::from_str::<Blob>(
+            r#"{
+              "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAADCBNOWAP3dM=",
+              "data": "8fIMqAB+kQo7+LLmHaDya8oH73hxem6lQWX1",
+              "share_version": 0,
+              "commitment": "D6YGsPWdxR8ju2OcOspnkgPG2abD30pSHxsFdiPqnVk="
+            }"#,
+        )
+        .unwrap();
     }
 }

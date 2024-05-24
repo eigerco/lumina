@@ -13,8 +13,9 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
-use crate::store::utils::{check_range_insert, RangeScanResult};
-use crate::store::{HeaderRange, HeaderRanges, Result, SamplingMetadata, Store, StoreError};
+use crate::store::utils::{check_range_insert, RangeScanResult, verify_range_contiguous};
+use crate::store::{SamplingStatus, HeaderRange, HeaderRanges, Result, SamplingMetadata, Store, StoreError};
+use crate::utils::validate_headers;
 
 /// indexeddb version, needs to be incremented on every schema schange
 const DB_VERSION: u32 = 3;
@@ -27,9 +28,6 @@ const RANGES_STORE_NAME: &str = "ranges";
 // Additional indexes set on HEADER_STORE, for querying by height and hash
 const HASH_INDEX_NAME: &str = "hash";
 const HEIGHT_INDEX_NAME: &str = "height";
-
-// Maximumum number of headers to fetch at once when updating sampling height from database
-const MAX_UNSAMPLED_HEIGHT_SCAN_BATCH_SIZE: u32 = 100;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ExtendedHeaderEntry {
@@ -44,7 +42,6 @@ struct ExtendedHeaderEntry {
 pub struct IndexedDbStore {
     // SendWrapper usage is safe in wasm because we're running on a single thread
     head: SendWrapper<RefCell<Option<ExtendedHeader>>>,
-    lowest_unsampled_height: SendWrapper<RefCell<u64>>,
     db: SendWrapper<Rexie>,
     header_added_notifier: Notify,
 }
@@ -74,12 +71,8 @@ impl IndexedDbStore {
             Err(e) => return Err(e),
         };
 
-        // 1 is lowest valid header heigth, start from there
-        let last_sampled = get_next_unsampled_height_from_database(&rexie, 1).await?;
-
         Ok(Self {
             head: SendWrapper::new(RefCell::new(db_head)),
-            lowest_unsampled_height: SendWrapper::new(RefCell::new(last_sampled)),
             db: SendWrapper::new(rexie),
             header_added_notifier: Notify::new(),
         })
@@ -166,6 +159,8 @@ impl IndexedDbStore {
             return Ok(());
         };
 
+        validate_headers(&headers).await?;
+
         let tx = self.db.transaction(
             &[HEADER_STORE_NAME, RANGES_STORE_NAME],
             TransactionMode::ReadWrite,
@@ -191,7 +186,7 @@ impl IndexedDbStore {
         if verify_neighbours {
             verify_against_neighbours(&header_store, head, tail, neighbours_exist)?;
         } else {
-            // TODO: verify range continuous
+            verify_range_contiguous(&headers)?;
         }
 
         for header in &headers {
@@ -261,9 +256,9 @@ impl IndexedDbStore {
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
-    ) -> Result<u64> {
+    ) -> Result<()> {
         // TODO: noope
         // quick check with contains_height, which uses cached head
         if !self.contains_height(height).await {
@@ -278,18 +273,17 @@ impl IndexedDbStore {
         let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
 
         let previous_entry = sampling_store.get(&height_key).await?;
+
         let new_entry = if previous_entry.is_falsy() {
-            SamplingMetadata {
-                accepted,
-                cids_sampled: cids,
-            }
+            SamplingMetadata { status, cids }
         } else {
             let mut value: SamplingMetadata = from_value(previous_entry)?;
-            value.accepted = accepted;
 
-            for cid in &cids {
-                if !value.cids_sampled.contains(cid) {
-                    value.cids_sampled.push(cid.to_owned());
+            value.status = status;
+
+            for cid in cids {
+                if !value.cids.contains(&cid) {
+                    value.cids.push(cid);
                 }
             }
 
@@ -304,25 +298,7 @@ impl IndexedDbStore {
 
         tx.commit().await?;
 
-        self.update_unsampled_height().await
-    }
-
-    async fn update_unsampled_height(&self) -> Result<u64> {
-        loop {
-            let previously_lowest_unsampled = *self.lowest_unsampled_height.borrow();
-            let new_highest_sampled_height =
-                get_next_unsampled_height_from_database(&self.db, previously_lowest_unsampled)
-                    .await?;
-
-            // wasm is single threaded, but the value could have changed on await point, re-check
-            if previously_lowest_unsampled != *self.lowest_unsampled_height.borrow() {
-                continue;
-            }
-
-            self.lowest_unsampled_height
-                .replace(new_highest_sampled_height);
-            return Ok(new_highest_sampled_height);
-        }
+        Ok(())
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -362,6 +338,25 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
+    async fn wait_new_head(&self) -> u64 {
+        let head = self.get_head_height().unwrap_or(0);
+        let mut notifier = pin!(self.header_added_notifier.notified());
+
+        loop {
+            let new_head = self.get_head_height().unwrap_or(0);
+
+            if head != new_head {
+                return new_head;
+            }
+
+            // Await for a notification
+            notifier.as_mut().await;
+
+            // Reset notifier
+            notifier.set(self.header_added_notifier.notified());
+        }
+    }
+
     async fn wait_height(&self, height: u64) -> Result<()> {
         let mut notifier = pin!(self.header_added_notifier.notified());
 
@@ -393,18 +388,13 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn next_unsampled_height(&self) -> Result<u64> {
-        // this shouldn't panic, we don't borrow across await points and wasm is single threaded
-        Ok(*self.lowest_unsampled_height.borrow())
-    }
-
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
-    ) -> Result<u64> {
-        let fut = SendWrapper::new(self.update_sampling_metadata(height, accepted, cids));
+    ) -> Result<()> {
+        let fut = SendWrapper::new(self.update_sampling_metadata(height, status, cids));
         fut.await
     }
 
@@ -456,44 +446,6 @@ async fn get_head_from_database(db: &Rexie) -> Result<ExtendedHeader> {
 
     ExtendedHeader::decode(serialized_header.as_ref())
         .map_err(|e| StoreError::CelestiaTypes(e.into()))
-}
-
-/// Return the height of the lowest unsampled header from the database, starting
-/// from `last_known_unsampled` offset
-async fn get_next_unsampled_height_from_database(
-    db: &Rexie,
-    last_known_unsampled: u64,
-) -> Result<u64> {
-    let mut starting_index = last_known_unsampled;
-    let tx = db.transaction(&[SAMPLING_STORE_NAME], TransactionMode::ReadOnly)?;
-    let store = tx.store(SAMPLING_STORE_NAME)?;
-
-    loop {
-        let pending_headers_keyrange = KeyRange::lower_bound(&to_value(&starting_index)?, false)?;
-        let pending_sampled_headers = store
-            .get_all(
-                Some(&pending_headers_keyrange),
-                Some(MAX_UNSAMPLED_HEIGHT_SCAN_BATCH_SIZE),
-                None,
-                Some(Direction::Next),
-            )
-            .await?;
-
-        let mut potential_new_height = starting_index;
-        for (height, _) in pending_sampled_headers {
-            if height.as_f64() == Some(potential_new_height as f64) {
-                potential_new_height += 1;
-            } else {
-                break;
-            }
-        }
-
-        if potential_new_height - starting_index == MAX_UNSAMPLED_HEIGHT_SCAN_BATCH_SIZE as u64 {
-            starting_index += MAX_UNSAMPLED_HEIGHT_SCAN_BATCH_SIZE as u64;
-        } else {
-            return Ok(potential_new_height);
-        }
-    }
 }
 
 async fn try_insert_to_range(
@@ -566,16 +518,12 @@ pub mod tests {
             s.append_single_unchecked(gen.next())
                 .await
                 .expect("inserting test data failed");
-            s.update_sampling_metadata(h, true, vec![])
+            s.update_sampling_metadata(h, SamplingStatus::Accepted, vec![])
                 .await
                 .expect("marking sampled failed");
         }
 
         assert_eq!(s.get_head().unwrap().height().value(), expected_height);
-        assert_eq!(
-            s.next_unsampled_height().await.unwrap(),
-            expected_height + 1
-        );
 
         drop(s);
         // re-open the store, to force re-calculation of the cached heights
@@ -584,10 +532,6 @@ pub mod tests {
             .expect("re-opening large test store failed");
 
         assert_eq!(s.get_head().unwrap().height().value(), expected_height);
-        assert_eq!(
-            s.next_unsampled_height().await.unwrap(),
-            expected_height + 1
-        );
     }
 
     #[named]
@@ -736,11 +680,11 @@ pub mod tests {
             }
 
             store
-                .update_sampling_metadata(1, true, vec![])
+                .update_sampling_metadata(1, SamplingStatus::Accepted, vec![])
                 .await
                 .unwrap();
             let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-            assert!(sampling_data.accepted);
+            assert_eq!(sampling_data.status, SamplingStatus::Accepted);
         }
     }
 

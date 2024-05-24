@@ -54,4 +54,4 @@ wasm-bindgen = ["celestia-types/wasm-bindgen"]
 
 [package.metadata.docs.rs]
 features = ["p2p"]
-rustdoc-args = ["--cfg", "docs_rs"]
+rustdoc-args = ["--cfg", "docsrs"]

@@ -1,8 +1,9 @@
-#![cfg_attr(docs_rs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
 pub mod blockstore;
 pub mod daser;
+pub mod events;
 mod executor;
 pub mod network;
 pub mod node;
@@ -11,7 +12,7 @@ pub mod peer_tracker;
 pub mod store;
 pub mod syncer;
 #[cfg(any(test, feature = "test-utils"))]
-#[cfg_attr(docs_rs, doc(cfg(feature = "test-utils")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-utils")))]
 pub mod test_utils;
 mod utils;
 

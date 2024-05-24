@@ -31,7 +31,6 @@ use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
 use celestia_types::{ExtendedHeader, FraudProof, Height};
 use cid::Cid;
 use futures::StreamExt;
-use instant::Instant;
 use libp2p::{
     autonat,
     core::{ConnectedPoint, Endpoint},
@@ -49,6 +48,7 @@ use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, instrument, trace, warn};
+use web_time::Instant;
 
 mod header_ex;
 mod header_session;
@@ -86,7 +86,7 @@ const KADEMLIA_BOOTSTRAP_PERIOD: Duration = Duration::from_secs(5 * 60);
 // Maximum size of a [`Multihash`].
 pub(crate) const MAX_MH_SIZE: usize = 64;
 
-const GET_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const GET_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 // all fraud proofs for height bigger than head height by this threshold
 // will be ignored
@@ -432,7 +432,11 @@ impl P2p {
     }
 
     /// Request a [`Cid`] on bitswap protocol.
-    async fn get_shwap_cid(&self, cid: Cid, timeout: Option<Duration>) -> Result<Vec<u8>> {
+    pub(crate) async fn get_shwap_cid(
+        &self,
+        cid: Cid,
+        timeout: Option<Duration>,
+    ) -> Result<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::GetShwapCid {

@@ -38,6 +38,10 @@ serde_repr = { version = "0.1", optional = true }
 sha2 = "0.10.6"
 thiserror = "1.0.40"
 
+# `time` is a dependency of a dependency but we need to specify it
+# for fixing rust-lang/rust#125319.
+time = { version = "0.3.36", default-features = false }
+
 [dev-dependencies]
 ed25519-consensus = "2.1.0"
 rand = "0.8.5"
@@ -58,7 +62,7 @@ wasm-bindgen = ["celestia-tendermint/wasm-bindgen"]
 
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]
-rustdoc-args = ["--cfg", "docs_rs"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-udeps.ignore]
 development = ["indoc"]

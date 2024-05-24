@@ -8,14 +8,11 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use tokio::sync::Notify;
-use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tokio::sync::{Notify, RwLock};
+use tracing::debug;
 
 use crate::store::utils::{check_range_insert, verify_range_contiguous, RangeScanResult};
-use crate::store::{HeaderRanges, Result, SamplingMetadata, Store, StoreError};
-
-// TODO: synchronisation
+use crate::store::{HeaderRanges, Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -34,6 +31,8 @@ pub struct InMemoryStore {
     /// Notify when a new header is added
     header_added_notifier: Notify,
 }
+
+// TODO: synchronisation
 
 impl InMemoryStore {
     /// Create a new store.
@@ -58,11 +57,6 @@ impl InMemoryStore {
             .first()
             .ok_or(StoreError::NotFound)?
             .end())
-    }
-
-    #[inline]
-    fn get_next_unsampled_height(&self) -> u64 {
-        self.lowest_unsampled_height.load(Ordering::Acquire)
     }
 
     pub(crate) async fn insert(
@@ -108,14 +102,6 @@ impl InMemoryStore {
             height_entry.insert(hash);
         }
 
-        /*
-        if append {
-            self.head_height.store(height, Ordering::Relaxed);
-        } else {
-            self.tail_height.store(height, Ordering::Relaxed)
-        }
-        fence(Ordering::Release);
-        */
         self.header_added_notifier.notify_waiters();
 
         Ok(())
@@ -162,62 +148,30 @@ impl InMemoryStore {
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
-    ) -> Result<u64> {
+    ) -> Result<()> {
         if !self.contains_height(height).await {
             return Err(StoreError::NotFound);
         }
 
-        let new_inserted = match self.sampling_data.entry(height) {
+        match self.sampling_data.entry(height) {
             Entry::Vacant(entry) => {
-                entry.insert(SamplingMetadata {
-                    accepted,
-                    cids_sampled: cids,
-                });
-                true
+                entry.insert(SamplingMetadata { status, cids });
             }
             Entry::Occupied(mut entry) => {
                 let metadata = entry.get_mut();
-                metadata.accepted = accepted;
+                metadata.status = status;
 
-                for cid in &cids {
-                    if !metadata.cids_sampled.contains(cid) {
-                        metadata.cids_sampled.push(cid.to_owned());
+                for cid in cids {
+                    if !metadata.cids.contains(&cid) {
+                        metadata.cids.push(cid);
                     }
                 }
-
-                false
-            }
-        };
-
-        if new_inserted {
-            self.update_lowest_unsampled_height()
-        } else {
-            info!("Overriding existing sampling metadata for height {height}");
-            // modified header wasn't new, no need to update the height
-            Ok(self.get_next_unsampled_height())
-        }
-    }
-
-    fn update_lowest_unsampled_height(&self) -> Result<u64> {
-        loop {
-            let previous_height = self.lowest_unsampled_height.load(Ordering::Acquire);
-            let mut current_height = previous_height;
-            while self.sampling_data.contains_key(&current_height) {
-                current_height += 1;
-            }
-
-            if self.lowest_unsampled_height.compare_exchange(
-                previous_height,
-                current_height,
-                Ordering::Release,
-                Ordering::Relaxed,
-            ) == Ok(previous_height)
-            {
-                break Ok(current_height);
             }
         }
+
+        Ok(())
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -320,6 +274,25 @@ impl Store for InMemoryStore {
         self.get_by_height(height)
     }
 
+    async fn wait_new_head(&self) -> u64 {
+        let head = self.get_head_height().await.unwrap_or(0);
+        let mut notifier = pin!(self.header_added_notifier.notified());
+
+        loop {
+            let new_head = self.get_head_height().await.unwrap_or(0);
+
+            if head != new_head {
+                return new_head;
+            }
+
+            // Await for a notification
+            notifier.as_mut().await;
+
+            // Reset notifier
+            notifier.set(self.header_added_notifier.notified());
+        }
+    }
+
     async fn wait_height(&self, height: u64) -> Result<()> {
         let mut notifier = pin!(self.header_added_notifier.notified());
 
@@ -352,17 +325,13 @@ impl Store for InMemoryStore {
         self.insert(header, verify_neighbours).await
     }
 
-    async fn next_unsampled_height(&self) -> Result<u64> {
-        Ok(self.get_next_unsampled_height())
-    }
-
     async fn update_sampling_metadata(
         &self,
         height: u64,
-        accepted: bool,
+        status: SamplingStatus,
         cids: Vec<Cid>,
-    ) -> Result<u64> {
-        self.update_sampling_metadata(height, accepted, cids).await
+    ) -> Result<()> {
+        self.update_sampling_metadata(height, status, cids).await
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {

@@ -1,4 +1,4 @@
-#![cfg_attr(docs_rs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
 mod blob;
@@ -16,7 +16,7 @@ pub use crate::client::Client;
 pub use crate::error::{Error, Result};
 pub use crate::header::HeaderClient;
 #[cfg(feature = "p2p")]
-#[cfg_attr(docs_rs, doc(cfg(feature = "p2p")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "p2p")))]
 pub use crate::p2p::P2PClient;
 pub use crate::share::ShareClient;
 pub use crate::state::StateClient;

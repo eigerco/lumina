@@ -536,7 +536,6 @@ mod tests {
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use smallvec::smallvec;
 
     #[async_test]
     async fn init_without_genesis_hash() {
