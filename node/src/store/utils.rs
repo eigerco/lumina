@@ -186,10 +186,7 @@ pub(crate) fn verify_range_contiguous(headers: &[ExtendedHeader]) -> Result<()> 
         let current_height = h.height().value();
         if let Some(prev_height) = prev {
             if prev_height + 1 != current_height {
-                return Err(StoreError::InsertRangeWithGap(
-                        prev_height,
-                        current_height,
-                        ));
+                return Err(StoreError::InsertRangeWithGap(prev_height, current_height));
             }
         }
         prev = Some(current_height);
@@ -321,7 +318,8 @@ mod tests {
             }
         );
 
-        let result = check_range_insert(HeaderRanges(smallvec![1..=2, 5..=5, 8..=9]), 3..=4).unwrap();
+        let result =
+            check_range_insert(HeaderRanges(smallvec![1..=2, 5..=5, 8..=9]), 3..=4).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -331,7 +329,8 @@ mod tests {
             }
         );
 
-        let result = check_range_insert(HeaderRanges(smallvec![1..=2, 4..=4, 8..=9]), 5..=7).unwrap();
+        let result =
+            check_range_insert(HeaderRanges(smallvec![1..=2, 4..=4, 8..=9]), 5..=7).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -345,40 +344,22 @@ mod tests {
     #[test]
     fn check_range_insert_overlapping() {
         let result = check_range_insert(HeaderRanges(smallvec![1..=2]), 1..=1).unwrap_err();
-        assert!(matches!(
-            result,
-            StoreError::HeaderRangeOverlap(1, 1)
-        ));
+        assert!(matches!(result, StoreError::HeaderRangeOverlap(1, 1)));
 
         let result = check_range_insert(HeaderRanges(smallvec![1..=4]), 2..=8).unwrap_err();
-        assert!(matches!(
-            result,
-            StoreError::HeaderRangeOverlap(2, 4)
-        ));
+        assert!(matches!(result, StoreError::HeaderRangeOverlap(2, 4)));
 
         let result = check_range_insert(HeaderRanges(smallvec![1..=4]), 2..=3).unwrap_err();
-        assert!(matches!(
-            result,
-            StoreError::HeaderRangeOverlap(2, 3)
-        ));
+        assert!(matches!(result, StoreError::HeaderRangeOverlap(2, 3)));
 
         let result = check_range_insert(HeaderRanges(smallvec![5..=9]), 1..=5).unwrap_err();
-        assert!(matches!(
-            result,
-            StoreError::HeaderRangeOverlap(5, 5)
-        ));
+        assert!(matches!(result, StoreError::HeaderRangeOverlap(5, 5)));
 
         let result = check_range_insert(HeaderRanges(smallvec![5..=8]), 2..=8).unwrap_err();
-        assert!(matches!(
-            result,
-            StoreError::HeaderRangeOverlap(5, 8)
-        ));
+        assert!(matches!(result, StoreError::HeaderRangeOverlap(5, 8)));
 
         let result = check_range_insert(HeaderRanges(smallvec![1..=3, 6..=9]), 3..=6).unwrap_err();
-        assert!(matches!(
-            result,
-            StoreError::HeaderRangeOverlap(3, 3)
-        ));
+        assert!(matches!(result, StoreError::HeaderRangeOverlap(3, 3)));
     }
 
     #[test]

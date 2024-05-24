@@ -11,7 +11,7 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use smallvec::{smallvec, IntoIter, SmallVec};
+use smallvec::{IntoIter, SmallVec};
 use thiserror::Error;
 
 pub use in_memory_store::InMemoryStore;
@@ -53,9 +53,7 @@ pub(crate) trait RangeLengthExt {
 
 impl RangeLengthExt for RangeInclusive<u64> {
     fn len(&self) -> u64 {
-        (self.end() - self.start() + 1)
-            .try_into()
-            .expect("out of range")
+        self.end() - self.start() + 1
     }
 }
 
@@ -73,23 +71,6 @@ impl HeaderRanges {
         self.0.iter().all(|r| r.is_empty())
     }
 }
-
-impl From<RangeInclusive<u64>> for HeaderRanges {
-    fn from(value: RangeInclusive<u64>) -> Self {
-        Self(smallvec![value])
-    }
-}
-
-/*
-impl<T> From<T> for HeaderRanges 
-where 
-T: IntoIterator<Item = RangeInclusive<u64>>
-{
-    fn from(value: T) -> Self {
-        Self(value.into_iter().collect())
-    }
-}
-*/
 
 impl<const T: usize> From<[RangeInclusive<u64>; T]> for HeaderRanges {
     fn from(value: [RangeInclusive<u64>; T]) -> Self {
@@ -1063,10 +1044,7 @@ mod tests {
     ) {
         let store = s;
 
-        assert_eq!(
-            store.get_stored_header_ranges().await.unwrap(),
-            HeaderRanges(smallvec![])
-        );
+        assert_eq!(store.get_stored_header_ranges().await.unwrap(), [].into());
     }
 
     #[rstest]
@@ -1094,7 +1072,7 @@ mod tests {
         store.append_single(gen.next()).await.unwrap();
 
         let final_ranges = store.get_stored_header_ranges().await.unwrap();
-        assert_eq!(final_ranges, HeaderRanges(smallvec![20..=40]))
+        assert_eq!(final_ranges, [20..=40].into());
     }
 
     // no in-memory store for tests below. It doesn't expect to be resumed from disk,
@@ -1137,7 +1115,7 @@ mod tests {
         store.append(skip0).await.unwrap();
 
         let final_ranges = store.get_stored_header_ranges().await.unwrap();
-        assert_eq!(final_ranges, HeaderRanges(smallvec![10..=42]))
+        assert_eq!(final_ranges, [10..=42].into());
     }
 
     #[rstest]
@@ -1159,21 +1137,20 @@ mod tests {
         store.append(gen.next_many(4)).await.unwrap();
 
         store.append_single(fork.next()).await.unwrap_err();
-
     }
 
     #[test]
     async fn test_iter() {
-        let ranges = HeaderRanges(smallvec![1..=5, 7..=10]);
+        let ranges = HeaderRanges::from([1..=5, 7..=10]);
         assert_eq!(
             ranges.into_iter().collect::<Vec<_>>(),
             vec![1, 2, 3, 4, 5, 7, 8, 9, 10]
         );
 
-        let ranges = HeaderRanges(smallvec![1..=1, 2..=4, 8..=8]);
+        let ranges = HeaderRanges::from([1..=1, 2..=4, 8..=8]);
         assert_eq!(ranges.into_iter().collect::<Vec<_>>(), vec![1, 2, 3, 4, 8]);
 
-        let mut iter = HeaderRanges(smallvec![1..=1]).into_iter();
+        let mut iter = HeaderRanges::from([1..=1]).into_iter();
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), None);
         assert_eq!(iter.next(), None);
@@ -1182,12 +1159,12 @@ mod tests {
 
     #[test]
     async fn test_iter_batches() {
-        let mut ranges = HeaderRanges(smallvec![1..=100]).into_iter();
+        let mut ranges = HeaderRanges::from([1..=100]).into_iter();
         assert_eq!(ranges.next_batch(10), Some(1..=10));
         assert_eq!(ranges.next_batch(10), Some(11..=20));
         assert_eq!(ranges.next_batch(100), Some(21..=100));
 
-        let mut ranges = HeaderRanges(smallvec![1..=10, 21..=30, 41..=50]).into_iter();
+        let mut ranges = HeaderRanges::from([1..=10, 21..=30, 41..=50]).into_iter();
         assert_eq!(ranges.next_batch(20), Some(1..=10));
         assert_eq!(ranges.next_batch(1), Some(21..=21));
         assert_eq!(ranges.next_batch(2), Some(22..=23));
@@ -1208,14 +1185,6 @@ mod tests {
             .append_unchecked(gen.next_many(amount))
             .await
             .expect("inserting test data failed");
-        /*
-        for header in headers {
-            store
-                .append_single_unchecked(header)
-                .await
-                .expect("inserting test data failed");
-        }
-        */
 
         gen
     }

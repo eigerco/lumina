@@ -10,9 +10,9 @@
 //! to the `network_head` as possible.
 
 use std::marker::PhantomData;
+use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
-use std::ops::RangeInclusive;
 
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoffBuilder;
@@ -307,7 +307,12 @@ where
 
     async fn syncing_info(&self) -> SyncingInfo {
         SyncingInfo {
-            stored_headers: self.store.get_stored_header_ranges().await.map(|r| r.0.to_vec()).unwrap_or_default(),
+            stored_headers: self
+                .store
+                .get_stored_header_ranges()
+                .await
+                .map(|r| r.0.to_vec())
+                .unwrap_or_default(),
             subjective_head: self.subjective_head_height.unwrap_or(0),
         }
     }
@@ -573,8 +578,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let genesis = gen.next();
 
-        let (_syncer, _store, mut p2p_mock) =
-            initialized_syncer(genesis.clone()).await;
+        let (_syncer, _store, mut p2p_mock) = initialized_syncer(genesis.clone()).await;
 
         // Genesis == HEAD, so nothing else is produced.
         p2p_mock.expect_no_cmd().await;
@@ -586,9 +590,8 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(26);
 
-        let (syncer, store, mut p2p_mock) =
-            initialized_syncer(headers[25].clone()).await;
-        assert_syncing(&syncer, &store, (26..=26).into(), 26).await;
+        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[25].clone()).await;
+        assert_syncing(&syncer, &store, [26..=26].into(), 26).await;
 
         // Expecting request for [1, 26]
         let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
@@ -600,7 +603,7 @@ mod tests {
             // Mapping to avoid spamming error message on failure
             .map_err(|_| "headers [1, 25]")
             .unwrap();
-        assert_syncing(&syncer, &store, (1..=26).into(), 26).await;
+        assert_syncing(&syncer, &store, [1..=26].into(), 26).await;
 
         // Syncer is fulling synced and awaiting for events
         p2p_mock.expect_no_cmd().await;
@@ -610,13 +613,13 @@ mod tests {
         p2p_mock.announce_new_head(header27.clone());
         // Height 27 is adjacent to the last header of Store, so it is appended
         // immediately
-        assert_syncing(&syncer, &store, (1..=27).into(), 27).await;
+        assert_syncing(&syncer, &store, [1..=27].into(), 27).await;
         p2p_mock.expect_no_cmd().await;
 
         // New HEAD was received by HeaderSub (height 30)
         let header_28_30 = gen.next_many(3);
         p2p_mock.announce_new_head(header_28_30[2].clone());
-        assert_syncing(&syncer, &store, (1..=27).into(), 30).await;
+        assert_syncing(&syncer, &store, [1..=27].into(), 30).await;
 
         // New HEAD is not adjacent to store, so Syncer requests a range
         let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
@@ -626,12 +629,12 @@ mod tests {
             .send(Ok(header_28_30))
             .map_err(|_| "headers [28, 30]")
             .unwrap();
-        assert_syncing(&syncer, &store, (1..=30).into(), 30).await;
+        assert_syncing(&syncer, &store, [1..=30].into(), 30).await;
 
         // New HEAD was received by HeaderSub (height 1058)
         let mut headers = gen.next_many(1028);
         p2p_mock.announce_new_head(headers.last().cloned().unwrap());
-        assert_syncing(&syncer, &store, (1..=30).into(), 1058).await;
+        assert_syncing(&syncer, &store, [1..=30].into(), 1058).await;
 
         // Syncer requested the first batch ([547, 1058])
         handle_session_batch(
@@ -657,7 +660,11 @@ mod tests {
         p2p_mock.announce_new_head(headers.last().cloned().unwrap());
         assert_syncing(&syncer, &store, [1..=30, 547..=1058].into(), 1059).await;
 
-        info!("remaining headers: {}..={}", headers.first().unwrap().height().value(), headers.last().unwrap().height().value());
+        info!(
+            "remaining headers: {}..={}",
+            headers.first().unwrap().height().value(),
+            headers.last().unwrap().height().value()
+        );
 
         // Syncer requested the second batch ([543, 1054])
         handle_session_batch(
@@ -677,18 +684,9 @@ mod tests {
         .await;
         assert_syncing(&syncer, &store, [1..=30, 35..=1058].into(), 1059).await;
 
+        // Syncer requested the last batch ([31..=34, 1059..=1059])
         handle_session_batch(&mut p2p_mock, &mut headers, vec![(31, 4), (1059, 1)]).await;
-        /*
-        // Syncer requested the last batch ([31, 34])
-        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
-        assert_eq!(height, 31);
-        assert_eq!(amount, 5);
-        respond_to
-            .send(Ok(headers.drain(..5).collect()))
-            .map_err(|_| "headers [31, 35]")
-            .unwrap();
-        */
-        assert_syncing(&syncer, &store, (1..=1059).into(), 1059).await;
+        assert_syncing(&syncer, &store, [1..=1059].into(), 1059).await;
 
         // Syncer is fulling synced and awaiting for events
         p2p_mock.expect_no_cmd().await;
@@ -722,7 +720,7 @@ mod tests {
         let head_from_syncer = p2p_mock.expect_init_header_sub().await;
         assert_eq!(head_from_syncer, network_head);
 
-        assert_syncing(&syncer, &store, (1..=25).into(), 545).await;
+        assert_syncing(&syncer, &store, [1..=25].into(), 545).await;
 
         // Syncer requested the first batch ([37, 545])
         handle_session_batch(
@@ -750,7 +748,7 @@ mod tests {
             .send(Ok(headers.drain(..8).collect()))
             .map_err(|_| "headers [538, 545]")
             .unwrap();
-        assert_syncing(&syncer, &store, (1..=545).into(), 545).await;
+        assert_syncing(&syncer, &store, [1..=545].into(), 545).await;
 
         // Syncer is fulling synced and awaiting for events
         p2p_mock.expect_no_cmd().await;
@@ -761,8 +759,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let head = gen.next();
 
-        let (syncer, _store, mut p2p_mock) =
-            initialized_syncer(head.clone()).await;
+        let (syncer, _store, mut p2p_mock) = initialized_syncer(head.clone()).await;
 
         // network head height == 1, so nothing else is produced.
         p2p_mock.expect_no_cmd().await;
@@ -783,8 +780,7 @@ mod tests {
         let headers = gen.next_many(26);
 
         // Start Syncer and report height 25 as HEAD
-        let (syncer, store, mut p2p_mock) =
-            initialized_syncer(headers[25].clone()).await;
+        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[25].clone()).await;
 
         // Wait for the request but do not reply to it
         let (height, amount, _respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
@@ -817,7 +813,7 @@ mod tests {
             .map_err(|_| "headers [1, 26]")
             .unwrap();
 
-        assert_syncing(&syncer, &store, (1..=26).into(), 26).await;
+        assert_syncing(&syncer, &store, [1..=26].into(), 26).await;
 
         // Node is fully synced, so nothing else is produced.
         p2p_mock.expect_no_cmd().await;
@@ -837,7 +833,10 @@ mod tests {
         let syncing_info = syncer.info().await.unwrap();
 
         assert_eq!(store_ranges, expected_synced_ranges);
-        assert_eq!(syncing_info.stored_headers, expected_synced_ranges.0.to_vec());
+        assert_eq!(
+            syncing_info.stored_headers,
+            expected_synced_ranges.0.to_vec()
+        );
         assert_eq!(syncing_info.subjective_head, expected_subjective_head);
     }
 
@@ -874,41 +873,31 @@ mod tests {
 
     async fn handle_session_batch(
         p2p_mock: &mut MockP2pHandle,
-        remaining_headers: &mut Vec<ExtendedHeader>,
+        remaining_headers: &Vec<ExtendedHeader>,
         mut requests: Vec<(u64, u64)>,
     ) {
-        let first_start = remaining_headers.first().unwrap().height().value(); //requests[0].0;
-        info!("range start = {first_start}");
-        let mut sum_amount = 0;
-
         for _ in 0..requests.len() {
             let (height, amount, respond_to) =
                 p2p_mock.expect_header_request_for_height_cmd().await;
 
             info!("got request for {height}+{amount}");
-            let pos = requests
+            let request_index = requests
                 .iter()
                 .position(|x| *x == (height, amount))
                 .expect("invalid request");
-            requests.remove(pos);
+            requests.remove(request_index);
 
+            let header_index = remaining_headers
+                .iter()
+                .position(|h| h.height().value() == height)
+                .expect("height not found in provided headers");
 
-            let pos = remaining_headers.iter().position(|h| h.height().value() == height).expect("height not found in provided headers");
-
-            //let start = (height - first_start) as usize;
-            //let end = (height - first_start + amount) as usize;
-
-            let response_range = remaining_headers[pos..pos+amount as usize].to_vec();
-            info!("responding with {}..={}", response_range.first().unwrap().height().value(), response_range.last().unwrap().height().value());
+            let response_range =
+                remaining_headers[header_index..header_index + amount as usize].to_vec();
             respond_to
                 .send(Ok(response_range))
                 .map_err(|_| format!("headers [{}, {}]", height, height + amount - 1))
                 .unwrap();
-
-            sum_amount += amount;
         }
-
-        // Remove already sent batch, this assumes backwards sync!
-        //remaining_headers.drain(sum_amount as usize..);
     }
 }

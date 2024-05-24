@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
-use crate::store::{Result, SamplingMetadata, Store, StoreError, HeaderRanges, HeaderRange};
 use crate::store::utils::{check_range_insert, RangeScanResult};
+use crate::store::{HeaderRange, HeaderRanges, Result, SamplingMetadata, Store, StoreError};
 
 /// indexeddb version, needs to be incremented on every schema schange
 const DB_VERSION: u32 = 3;
@@ -146,16 +146,16 @@ impl IndexedDbStore {
     }
 
     async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
-        let tx = self.db.transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)?;
+        let tx = self
+            .db
+            .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)?;
         let store = tx.store(RANGES_STORE_NAME)?;
 
         let ranges = store
             .get_all(None, None, None, Some(Direction::Next))
             .await?
             .into_iter()
-            .map(|(_k, v)| {
-                from_value::<(u64, u64)>(v).map(|(begin, end)| begin..=end)
-            })
+            .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(begin, end)| begin..=end))
             .collect::<Result<_, _>>()?;
 
         Ok(HeaderRanges(ranges))
@@ -166,9 +166,10 @@ impl IndexedDbStore {
             return Ok(());
         };
 
-        let tx = self
-            .db
-            .transaction(&[HEADER_STORE_NAME, RANGES_STORE_NAME], TransactionMode::ReadWrite)?;
+        let tx = self.db.transaction(
+            &[HEADER_STORE_NAME, RANGES_STORE_NAME],
+            TransactionMode::ReadWrite,
+        )?;
         let header_store = tx.store(HEADER_STORE_NAME)?;
         let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
@@ -216,7 +217,14 @@ impl IndexedDbStore {
             header_store.add(&jsvalue_header, None).await?;
         }
 
-        if tail.height().value() > self.head.borrow().as_ref().map(|h| h.height().value()).unwrap_or(0) {
+        if tail.height().value()
+            > self
+                .head
+                .borrow()
+                .as_ref()
+                .map(|h| h.height().value())
+                .unwrap_or(0)
+        {
             self.head.replace(Some(tail.clone()));
         }
         self.header_added_notifier.notify_waiters();
@@ -244,7 +252,10 @@ impl IndexedDbStore {
         let Ok(stored_ranges) = self.get_stored_header_ranges().await else {
             return false;
         };
-        stored_ranges.0.into_iter().any(|range| range.contains(&height))
+        stored_ranges
+            .0
+            .into_iter()
+            .any(|range| range.contains(&height))
     }
 
     async fn update_sampling_metadata(
@@ -411,7 +422,6 @@ impl Store for IndexedDbStore {
         let fut = SendWrapper::new(self.get_stored_header_ranges());
         fut.await
     }
-
 }
 
 impl From<rexie::Error> for StoreError {
@@ -486,15 +496,16 @@ async fn get_next_unsampled_height_from_database(
     }
 }
 
-async fn try_insert_to_range(ranges_store: &rexie::Store, new_range: HeaderRange) -> Result<(bool, bool)> {
+async fn try_insert_to_range(
+    ranges_store: &rexie::Store,
+    new_range: HeaderRange,
+) -> Result<(bool, bool)> {
     let stored_ranges = ranges_store
         .get_all(None, None, None, Some(Direction::Next))
         .await?
         .into_iter()
-        .map(|(_k, v)| {
-            from_value::<(u64, u64)>(v).map(|(start, end)| start..=end)
-        })
-    .collect::<Result<_, _>>()?;
+        .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(start, end)| start..=end))
+        .collect::<Result<_, _>>()?;
 
     let RangeScanResult {
         range_index,
@@ -511,7 +522,10 @@ async fn try_insert_to_range(ranges_store: &rexie::Store, new_range: HeaderRange
     let jsvalue_range = to_value(&(*range.start(), *range.end()))?;
     let jsvalue_key = to_value(&range_index)?;
 
-    ranges_store.put(&jsvalue_range, Some(&jsvalue_key)).await.expect("wannnnnna insert");
+    ranges_store
+        .put(&jsvalue_range, Some(&jsvalue_key))
+        .await
+        .expect("wannnnnna insert");
 
     let prev_exists = new_range.start() != range.start();
     let next_exists = new_range.end() != range.end();

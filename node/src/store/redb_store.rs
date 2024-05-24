@@ -276,13 +276,13 @@ impl RedbStore {
                     .insert(height, &serialized_header[..])?
                     .is_some()
                 {
-                    panic!("should have been verified in ranges");
-                    return Err(StoreError::HeightExists(height));
+                    return Err(StoreError::StoredDataError(
+                        "inconsistency between headers and ranges table".into(),
+                    ));
                 }
 
                 let hash = header.hash();
                 if heights_table.insert(hash.as_bytes(), height)?.is_some() {
-                    panic!("should have been verified in ranges");
                     return Err(StoreError::HashExists(hash));
                 }
 
@@ -566,11 +566,13 @@ fn try_insert_to_range(
     //height: u64,
     //verify_neighbours: bool,
 ) -> Result<(bool, bool)> {
-    let stored_ranges = ranges_table.iter()?.map(|range_guard| {
-        let range = range_guard?.1.value();
-        Ok(range.0..=range.1)
-    })
-    .collect::<Result<_>>()?;
+    let stored_ranges = ranges_table
+        .iter()?
+        .map(|range_guard| {
+            let range = range_guard?.1.value();
+            Ok(range.0..=range.1)
+        })
+        .collect::<Result<_>>()?;
 
     let RangeScanResult {
         range_index,

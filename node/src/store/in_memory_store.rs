@@ -2,7 +2,6 @@ use std::ops::RangeInclusive;
 use std::pin::pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use tokio::sync::RwLock;
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
@@ -10,6 +9,7 @@ use cid::Cid;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use tokio::sync::Notify;
+use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 use crate::store::utils::{check_range_insert, verify_range_contiguous, RangeScanResult};
@@ -50,21 +50,15 @@ impl InMemoryStore {
 
     #[inline]
     async fn get_head_height(&self) -> Result<u64> {
-        Ok(*self.stored_ranges.read().await.0.first().ok_or(StoreError::NotFound)?.end())
+        Ok(*self
+            .stored_ranges
+            .read()
+            .await
+            .0
+            .first()
+            .ok_or(StoreError::NotFound)?
+            .end())
     }
-
-    /*
-    #[inline]
-    fn get_tail_height(&self) -> Result<u64> {
-        let height = *self.get_stored_ranges().start();
-
-        if height == 0 {
-            Err(StoreError::NotFound)
-        } else {
-            Ok(height)
-        }
-    }
-    */
 
     #[inline]
     fn get_next_unsampled_height(&self) -> u64 {
@@ -89,7 +83,6 @@ impl InMemoryStore {
         } else {
             verify_range_contiguous(&headers)?;
         }
-
 
         for header in headers {
             let hash = header.hash();
@@ -146,7 +139,12 @@ impl InMemoryStore {
     }
 
     async fn contains_height(&self, height: u64) -> bool {
-        self.stored_ranges.read().await.0.iter().any(|range| range.contains(&height))
+        self.stored_ranges
+            .read()
+            .await
+            .0
+            .iter()
+            .any(|range| range.contains(&height))
     }
 
     fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
@@ -161,7 +159,12 @@ impl InMemoryStore {
             .ok_or(StoreError::LostHash(hash))
     }
 
-    async fn update_sampling_metadata(&self, height: u64, accepted: bool, cids: Vec<Cid>) -> Result<u64> {
+    async fn update_sampling_metadata(
+        &self,
+        height: u64,
+        accepted: bool,
+        cids: Vec<Cid>,
+    ) -> Result<u64> {
         if !self.contains_height(height).await {
             return Err(StoreError::NotFound);
         }
@@ -261,29 +264,42 @@ impl InMemoryStore {
         Ok((prev_exists, next_exists))
     }
 
-    fn verify_against_neighbours(&self, lowest_header: &ExtendedHeader, highest_header: &ExtendedHeader, neighbours_exist: (bool, bool) ) -> Result<()> {
+    fn verify_against_neighbours(
+        &self,
+        lowest_header: &ExtendedHeader,
+        highest_header: &ExtendedHeader,
+        neighbours_exist: (bool, bool),
+    ) -> Result<()> {
         debug_assert!(lowest_header.height().value() <= highest_header.height().value());
         let (prev_exists, next_exists) = neighbours_exist;
 
         if prev_exists {
-            let prev = self.get_by_height(lowest_header.height().value() - 1).map_err(|e| {
-                if let StoreError::NotFound = e {
-                    StoreError::StoredDataError("inconsistency between headers and ranges table".into())
-                } else {
-                    e
-                }
-            })?;
+            let prev = self
+                .get_by_height(lowest_header.height().value() - 1)
+                .map_err(|e| {
+                    if let StoreError::NotFound = e {
+                        StoreError::StoredDataError(
+                            "inconsistency between headers and ranges table".into(),
+                        )
+                    } else {
+                        e
+                    }
+                })?;
             prev.verify(lowest_header)?;
         }
 
         if next_exists {
-            let next = self.get_by_height(highest_header.height().value() + 1).map_err(|e| {
-                if let StoreError::NotFound = e {
-                    StoreError::StoredDataError("inconsistency between headers and ranges table".into())
-                } else {
-                    e
-                }
-            })?;
+            let next = self
+                .get_by_height(highest_header.height().value() + 1)
+                .map_err(|e| {
+                    if let StoreError::NotFound = e {
+                        StoreError::StoredDataError(
+                            "inconsistency between headers and ranges table".into(),
+                        )
+                    } else {
+                        e
+                    }
+                })?;
             highest_header.verify(&next)?;
         }
         Ok(())
@@ -361,9 +377,11 @@ impl Store for InMemoryStore {
 impl From<Vec<ExtendedHeader>> for InMemoryStore {
     fn from(hs: Vec<ExtendedHeader>) -> Self {
         let range = match (hs.first(), hs.last()) {
-            (Some(head), Some(tail)) => HeaderRanges::from(head.height().value()..=tail.height().value()),
+            (Some(head), Some(tail)) => {
+                HeaderRanges::from([head.height().value()..=tail.height().value()])
+            }
             (None, None) => HeaderRanges::default(),
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         let height_to_hash = DashMap::default();
@@ -382,7 +400,7 @@ impl From<Vec<ExtendedHeader>> for InMemoryStore {
             height_to_hash,
             stored_ranges: RwLock::new(range),
             lowest_unsampled_height: AtomicU64::new(0),
-            header_added_notifier: Notify::new()
+            header_added_notifier: Notify::new(),
         }
     }
 }
@@ -407,21 +425,3 @@ impl Clone for InMemoryStore {
         }
     }
 }
-
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use celestia_types::test_utils::ExtendedHeaderGenerator;
-
-    #[test]
-    fn prepend() {
-        let store = InMemoryStore::new();
-        let mut gen = ExtendedHeaderGenerator::new();
-        let _ = gen.next_many(10);
-        let hs = gen.next_many(40);
-
-        store.prepend(hs).unwrap();
-    }
-}
-*/

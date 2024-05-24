@@ -174,7 +174,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(64);
 
-        let mut session = HeaderSession::new((1..=64).into(), p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new([1..=64].into(), p2p_mock.cmd_tx.clone()).unwrap();
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -203,7 +203,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(520);
 
-        let mut session = HeaderSession::new((1..=520).into(), p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new([1..=520].into(), p2p_mock.cmd_tx.clone()).unwrap();
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -239,7 +239,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(64);
 
-        let mut session = HeaderSession::new((1..=64).into(), p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new([1..=64].into(), p2p_mock.cmd_tx.clone()).unwrap();
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -268,7 +268,7 @@ mod tests {
     async fn no_peers_is_fatal() {
         let (_p2p, mut p2p_mock) = P2p::mocked();
 
-        let mut session = HeaderSession::new((1..=64).into(), p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new([1..=64].into(), p2p_mock.cmd_tx.clone()).unwrap();
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;

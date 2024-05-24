@@ -400,7 +400,7 @@ impl P2p {
 
         let range = height..=height + amount;
 
-        let mut session = HeaderSession::new(range.into(), self.cmd_tx.clone())?;
+        let mut session = HeaderSession::new([range].into(), self.cmd_tx.clone())?;
         let headers = session.run().await?.pop().unwrap(); // XXX
 
         from.verify_adjacent_range(&headers)
