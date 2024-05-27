@@ -124,19 +124,22 @@ pub trait Store: Send + Sync + Debug {
     /// Returns true if height exists in the store.
     async fn has_at(&self, height: u64) -> bool;
 
-    // === LEGACY APPENDS ===
+    /// Insert single header into the store
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
         self.insert_single(header, false).await
     }
 
+    /// Insert single header into the store, validating it against neightbours, if present in store
     async fn append_single(&self, header: ExtendedHeader) -> Result<()> {
         self.insert_single(header, true).await
     }
 
+    /// Insert list of headers, validating that the inserted range is contiguous
     async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
         self.insert(headers, false).await
     }
 
+    /// Insert list of headers validating them against neighbouring headers if they exist in store
     async fn append(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
         self.insert(headers, true).await
     }
@@ -165,8 +168,14 @@ pub trait Store: Send + Sync + Debug {
         self.insert(vec![header], verify_neighbours).await
     }
 
+    /// Insert a range of headers into the store.
+    ///
+    /// `verify_neighbours` determines whether entire range will be validated against headers next
+    /// to them (if present in store), or whether to just validate a contiguity of the inserted
+    /// header range
     async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()>;
 
+    /// Return a list of header ranges currenty held in store
     async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;
 }
 
@@ -185,19 +194,19 @@ pub enum StoreError {
     #[error("Failed to append header at height {1}")]
     NonContinuousAppend(u64, u64),
 
-    /// TODO: reword
+    /// Store already contains some of the headers from the range that's being inserted
     #[error("Failed to insert header range, it overlaps with one already existing in the store: {0}..={1}")]
     HeaderRangeOverlap(u64, u64),
 
-    /// TODO: this is super unhelpful on its own
+    /// Store only allows inserts that grow existing header ranges, or starting a new network head,
+    /// ahead of all the existing ranges
     #[error("Trying to insert new header range at disallowed position: {0}..={1}")]
     InsertPlacementDisallowed(u64, u64),
 
-    #[error("provided header range has a gap between heights {0} and {1}")]
+    /// Range of headers provided to insert is not contiguous
+    #[error("Provided header range has a gap between heights {0} and {1}")]
     InsertRangeWithGap(u64, u64),
 
-    //#[error("Failed to find range to add header with height {0} to: {1}")]
-    //RangeFinderError(u64, HeaderRange),
     /// Header validation has failed.
     #[error("Failed to validate header at height {0}")]
     HeaderChecksError(u64),

@@ -638,7 +638,7 @@ mod tests {
         // Syncer requested the first batch ([547, 1058])
         handle_session_batch(
             &mut p2p_mock,
-            &mut headers,
+            &headers,
             vec![
                 (547, 64),
                 (611, 64),
@@ -668,7 +668,7 @@ mod tests {
         // Syncer requested the second batch ([543, 1054])
         handle_session_batch(
             &mut p2p_mock,
-            &mut headers,
+            &headers,
             vec![
                 (35, 64),
                 (99, 64),
@@ -684,7 +684,7 @@ mod tests {
         assert_syncing(&syncer, &store, [1..=30, 35..=1058].into(), 1059).await;
 
         // Syncer requested the last batch ([31..=34, 1059..=1059])
-        handle_session_batch(&mut p2p_mock, &mut headers, vec![(31, 4), (1059, 1)]).await;
+        handle_session_batch(&mut p2p_mock, &headers, vec![(31, 4), (1059, 1)]).await;
         assert_syncing(&syncer, &store, [1..=1059].into(), 1059).await;
 
         // Syncer is fulling synced and awaiting for events
@@ -724,7 +724,7 @@ mod tests {
         // Syncer requested the first batch ([37, 545])
         handle_session_batch(
             &mut p2p_mock,
-            &mut headers,
+            &headers,
             vec![
                 (34, 64),
                 (98, 64),
@@ -872,7 +872,7 @@ mod tests {
 
     async fn handle_session_batch(
         p2p_mock: &mut MockP2pHandle,
-        remaining_headers: &Vec<ExtendedHeader>,
+        remaining_headers: &[ExtendedHeader],
         mut requests: Vec<(u64, u64)>,
     ) {
         for _ in 0..requests.len() {

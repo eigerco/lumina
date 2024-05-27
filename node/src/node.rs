@@ -278,6 +278,7 @@ where
         self.p2p.header_sub_watcher().borrow().clone()
     }
 
+    /// Get ranges of headers currently stored.
     pub async fn get_stored_header_ranges(&self) -> Result<Vec<RangeInclusive<u64>>> {
         Ok(self.store.get_stored_header_ranges().await?.0.to_vec())
     }
