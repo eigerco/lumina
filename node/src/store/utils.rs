@@ -36,7 +36,7 @@ impl HeaderRanges {
         let mut prev: Option<&RangeInclusive<u64>> = None;
         for current in &self.0 {
             if let Some(prev) = prev {
-                if current.start() < prev.end() {
+                if current.start() > prev.end() {
                     return Err(HeaderRangeError::RangeOverlap(
                         *current.start(),
                         *prev.end(),
