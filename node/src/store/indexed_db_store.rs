@@ -13,10 +13,10 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
-use crate::store::utils::{check_range_insert, verify_range_contiguous, RangeScanResult};
-use crate::store::{
-    HeaderRange, HeaderRanges, Result, SamplingMetadata, SamplingStatus, Store, StoreError,
+use crate::store::utils::{
+    check_range_insert, verify_range_contiguous, HeaderRange, RangeScanResult,
 };
+use crate::store::{HeaderRanges, Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 use crate::utils::validate_headers;
 
 /// indexeddb version, needs to be incremented on every schema schange
