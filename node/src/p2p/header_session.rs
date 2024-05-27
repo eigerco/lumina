@@ -1,12 +1,12 @@
 use celestia_proto::p2p::pb::HeaderRequest;
 use celestia_types::ExtendedHeader;
 use tokio::sync::{mpsc, oneshot};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::executor::spawn;
 use crate::p2p::header_ex::utils::HeaderRequestExt;
-use crate::p2p::{P2pCmd, P2pError};
-use crate::store::{HeaderRanges, HeaderRangesIterator, RangeLengthExt};
+use crate::p2p::{HeaderExError, P2pCmd, P2pError};
+use crate::store::utils::{HeaderRanges, HeaderRangesIterator, RangeLengthExt};
 
 const MAX_AMOUNT_PER_REQ: u64 = 64;
 const MAX_CONCURRENT_REQS: usize = 1;
@@ -24,8 +24,10 @@ pub(crate) struct HeaderSession {
 
 impl HeaderSession {
     pub(crate) fn new(ranges: HeaderRanges, cmd_tx: mpsc::Sender<P2pCmd>) -> Result<Self> {
-        // TODO:
-        //ranges.validate()?;
+        ranges.validate().map_err(|e| {
+            warn!("invalid header range: {e:?}");
+            HeaderExError::InvalidRequest
+        })?;
 
         let ranges_count = ranges.0.len();
         let (response_tx, response_rx) = mpsc::channel(MAX_CONCURRENT_REQS);

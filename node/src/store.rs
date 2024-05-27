@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use std::io::Cursor;
 use std::ops::{Bound, RangeBounds, RangeInclusive};
 
+use crate::store::utils::HeaderRanges;
 use async_trait::async_trait;
 use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
@@ -11,7 +12,6 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use smallvec::{IntoIter, SmallVec};
 use thiserror::Error;
 
 pub use in_memory_store::InMemoryStore;
@@ -56,82 +56,6 @@ pub enum SamplingStatus {
 }
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
-
-pub type HeaderRange = RangeInclusive<u64>;
-
-pub(crate) trait RangeLengthExt {
-    fn len(&self) -> u64;
-}
-
-impl RangeLengthExt for RangeInclusive<u64> {
-    fn len(&self) -> u64 {
-        self.end() - self.start() + 1
-    }
-}
-
-// TODO: less pub?
-#[derive(Debug, Clone, PartialEq, Default)] // TODO: manual Display implementation probably
-pub struct HeaderRanges(pub SmallVec<[RangeInclusive<u64>; 2]>);
-
-impl HeaderRanges {
-    pub fn validate(&self) -> Result<()> {
-        // TODO
-        Ok(())
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.iter().all(|r| r.is_empty())
-    }
-}
-
-impl<const T: usize> From<[RangeInclusive<u64>; T]> for HeaderRanges {
-    fn from(value: [RangeInclusive<u64>; T]) -> Self {
-        Self(value.into_iter().collect())
-    }
-}
-
-impl IntoIterator for HeaderRanges {
-    type Item = u64;
-    type IntoIter = HeaderRangesIterator;
-    fn into_iter(self) -> Self::IntoIter {
-        let mut outer_iter = self.0.into_iter();
-        HeaderRangesIterator {
-            inner_iter: outer_iter.next(),
-            outer_iter,
-        }
-    }
-}
-
-pub struct HeaderRangesIterator {
-    inner_iter: Option<RangeInclusive<u64>>,
-    outer_iter: IntoIter<[RangeInclusive<u64>; 2]>,
-}
-
-impl HeaderRangesIterator {
-    pub fn next_batch(&mut self, limit: u64) -> Option<RangeInclusive<u64>> {
-        let current_range = self.inner_iter.take()?;
-
-        if current_range.len() <= limit {
-            self.inner_iter = self.outer_iter.next();
-            Some(current_range)
-        } else {
-            let returned_range = *current_range.start()..=*current_range.start() + limit - 1;
-            self.inner_iter = Some(*current_range.start() + limit..=*current_range.end());
-            Some(returned_range)
-        }
-    }
-}
-
-impl Iterator for HeaderRangesIterator {
-    type Item = u64;
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(v) = self.inner_iter.as_mut()?.next() {
-            return Some(v);
-        }
-        self.inner_iter = self.outer_iter.next();
-        self.next()
-    }
-}
 
 /// An asynchronous [`ExtendedHeader`] storage.
 ///
@@ -235,21 +159,6 @@ pub trait Store: Send + Sync + Debug {
     ///
     /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
-
-    /// Append a range of headers maintaining continuity from the genesis to the head.
-    ///
-    /// # Note
-    ///
-    /// This method does not validate or verify that `headers` are indeed correct.
-    /*
-    async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        for header in headers.into_iter() {
-            self.append_single_unchecked(header).await?;
-        }
-
-        Ok(())
-    }
-    */
 
     /// new main insertion function
     async fn insert_single(&self, header: ExtendedHeader, verify_neighbours: bool) -> Result<()> {

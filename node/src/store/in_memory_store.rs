@@ -11,8 +11,10 @@ use dashmap::DashMap;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
-use crate::store::utils::{check_range_insert, verify_range_contiguous, RangeScanResult};
-use crate::store::{HeaderRanges, Result, SamplingMetadata, SamplingStatus, Store, StoreError};
+use crate::store::utils::{
+    check_range_insert, verify_range_contiguous, HeaderRanges, RangeScanResult,
+};
+use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -386,7 +388,7 @@ impl Clone for InMemoryStore {
             headers: self.headers.clone(),
             sampling_data: self.sampling_data.clone(),
             height_to_hash: self.height_to_hash.clone(),
-            stored_ranges: todo!(), // self.stored_ranges.clone(),
+            stored_ranges: RwLock::new(self.stored_ranges.blocking_read().clone()),
             lowest_unsampled_height: AtomicU64::new(
                 self.lowest_unsampled_height.load(Ordering::Acquire),
             ),

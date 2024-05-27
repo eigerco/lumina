@@ -16,10 +16,10 @@ use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::{debug, info, trace};
 
-use crate::store::utils::{check_range_insert, verify_range_contiguous, RangeScanResult};
-use crate::store::{
-    HeaderRange, HeaderRanges, Result, SamplingMetadata, SamplingStatus, Store, StoreError,
+use crate::store::utils::{
+    check_range_insert, verify_range_contiguous, HeaderRange, HeaderRanges, RangeScanResult,
 };
+use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 use crate::utils::validate_headers;
 
 const SCHEMA_VERSION: u64 = 1;

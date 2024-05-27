@@ -3,8 +3,104 @@ use std::ops::RangeInclusive;
 
 use celestia_types::ExtendedHeader;
 use itertools::Itertools;
+use smallvec::{IntoIter, SmallVec};
+use thiserror::Error;
 
-use crate::store::{HeaderRange, HeaderRanges, Result, StoreError};
+use crate::store::{Result, StoreError};
+
+pub type HeaderRange = RangeInclusive<u64>;
+
+pub(crate) trait RangeLengthExt {
+    fn len(&self) -> u64;
+}
+
+impl RangeLengthExt for RangeInclusive<u64> {
+    fn len(&self) -> u64 {
+        self.end() - self.start() + 1
+    }
+}
+
+// TODO: could we make this not public and expose just the necessary interface
+// TODO: do we want this to have a manual display implementation?
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct HeaderRanges(pub SmallVec<[RangeInclusive<u64>; 2]>);
+
+#[derive(Debug, Error)]
+pub enum HeaderRangeError {
+    #[error("Overlapping range: {0}, {1}")]
+    RangeOverlap(u64, u64),
+}
+
+impl HeaderRanges {
+    pub fn validate(&self) -> Result<(), HeaderRangeError> {
+        let mut prev: Option<&RangeInclusive<u64>> = None;
+        for current in &self.0 {
+            if let Some(prev) = prev {
+                if current.start() < prev.end() {
+                    return Err(HeaderRangeError::RangeOverlap(
+                        *current.start(),
+                        *prev.end(),
+                    ));
+                }
+            }
+            prev = Some(current);
+        }
+        Ok(())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.iter().all(|r| r.is_empty())
+    }
+}
+
+impl<const T: usize> From<[RangeInclusive<u64>; T]> for HeaderRanges {
+    fn from(value: [RangeInclusive<u64>; T]) -> Self {
+        Self(value.into_iter().collect())
+    }
+}
+
+impl IntoIterator for HeaderRanges {
+    type Item = u64;
+    type IntoIter = HeaderRangesIterator;
+    fn into_iter(self) -> Self::IntoIter {
+        let mut outer_iter = self.0.into_iter();
+        HeaderRangesIterator {
+            inner_iter: outer_iter.next(),
+            outer_iter,
+        }
+    }
+}
+
+pub struct HeaderRangesIterator {
+    inner_iter: Option<RangeInclusive<u64>>,
+    outer_iter: IntoIter<[RangeInclusive<u64>; 2]>,
+}
+
+impl HeaderRangesIterator {
+    pub fn next_batch(&mut self, limit: u64) -> Option<RangeInclusive<u64>> {
+        let current_range = self.inner_iter.take()?;
+
+        if current_range.len() <= limit {
+            self.inner_iter = self.outer_iter.next();
+            Some(current_range)
+        } else {
+            let returned_range = *current_range.start()..=*current_range.start() + limit - 1;
+            self.inner_iter = Some(*current_range.start() + limit..=*current_range.end());
+            Some(returned_range)
+        }
+    }
+}
+
+impl Iterator for HeaderRangesIterator {
+    type Item = u64;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(v) = self.inner_iter.as_mut()?.next() {
+            return Some(v);
+        }
+        self.inner_iter = self.outer_iter.next();
+        self.next()
+    }
+}
 
 /// based on the stored headers and current network head height, calculate range of headers that
 /// should be fetched from the network, starting from the front up to a `limit` of headers
@@ -17,7 +113,6 @@ pub(crate) fn calculate_missing_ranges(
         .chain(
             store_headers
                 .iter()
-                //.inspect(|r| println!("{r:?}"))
                 .flat_map(|r| [*r.start(), *r.end()])
                 .rev(),
         )
@@ -37,6 +132,7 @@ pub(crate) fn calculate_missing_ranges(
             let range_len = upper_bound.checked_sub(lower_bound)?;
 
             if range_len == 0 {
+                // empty range
                 return Some(RangeInclusive::new(1, 0));
             }
 

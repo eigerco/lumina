@@ -13,8 +13,10 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
-use crate::store::utils::{check_range_insert, RangeScanResult, verify_range_contiguous};
-use crate::store::{SamplingStatus, HeaderRange, HeaderRanges, Result, SamplingMetadata, Store, StoreError};
+use crate::store::utils::{check_range_insert, verify_range_contiguous, RangeScanResult};
+use crate::store::{
+    HeaderRange, HeaderRanges, Result, SamplingMetadata, SamplingStatus, Store, StoreError,
+};
 use crate::utils::validate_headers;
 
 /// indexeddb version, needs to be incremented on every schema schange
@@ -168,18 +170,6 @@ impl IndexedDbStore {
         let header_store = tx.store(HEADER_STORE_NAME)?;
         let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
-        /*
-        let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
-        let jsvalue_height_key = KeyRange::only(&to_value(&height)?)?;
-        if height_index
-            .count(Some(&jsvalue_height_key))
-            .await
-            .unwrap_or(0)
-            != 0
-        {
-            return Err(StoreError::HeightExists(height));
-        }
-        */
         let headers_range = head.height().value()..=tail.height().value();
         let neighbours_exist = try_insert_to_range(&ranges_store, headers_range).await?;
 
@@ -259,8 +249,6 @@ impl IndexedDbStore {
         status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()> {
-        // TODO: noope
-        // quick check with contains_height, which uses cached head
         if !self.contains_height(height).await {
             return Err(StoreError::NotFound);
         }
