@@ -285,14 +285,14 @@ pub(crate) fn check_range_insert(
         // TODO: break early
         //if sth
 
-        if let Some(intersection) = ranges_intersection(stored_range, &to_insert) {
+        if let Some(intersection) = ranges_intersection(stored_range, to_insert) {
             return Err(StoreError::HeaderRangeOverlap(
                 *intersection.start(),
                 *intersection.end(),
             ));
         }
 
-        if let Some(consolidated) = try_consolidate_ranges(stored_range, &to_insert) {
+        if let Some(consolidated) = try_consolidate_ranges(stored_range, to_insert) {
             break RangeScanResult {
                 range_index: idx,
                 range: consolidated,
@@ -303,7 +303,7 @@ pub(crate) fn check_range_insert(
 
     // we have a hit, check whether we can merge with the next range too
     if let Some((idx, range_after)) = stored_ranges_iter.next() {
-        if let Some(intersection) = ranges_intersection(range_after, &to_insert) {
+        if let Some(intersection) = ranges_intersection(range_after, to_insert) {
             return Err(StoreError::HeaderRangeOverlap(
                 *intersection.start(),
                 *intersection.end(),
@@ -349,7 +349,7 @@ mod tests {
             RangeInclusive::new(23, 28),
             RangeInclusive::new(30, 40),
         ];
-        let expected_missing_ranges = [41..=50, 29..=29, 21..=22, 6..=14,].into();
+        let expected_missing_ranges = [41..=50, 29..=29, 21..=22, 6..=14].into();
 
         let missing_ranges = calculate_missing_ranges(head_height, &ranges, 512);
         assert_eq!(missing_ranges, expected_missing_ranges);
@@ -459,8 +459,7 @@ mod tests {
             }
         );
 
-        let result =
-            check_range_insert(&[1..=2, 5..=5, 8..=9].into(), &(3..=4)).unwrap();
+        let result = check_range_insert(&[1..=2, 5..=5, 8..=9].into(), &(3..=4)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -470,8 +469,7 @@ mod tests {
             }
         );
 
-        let result =
-            check_range_insert(&[1..=2, 4..=4, 8..=9].into(), &(5..=7)).unwrap();
+        let result = check_range_insert(&[1..=2, 4..=4, 8..=9].into(), &(5..=7)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {

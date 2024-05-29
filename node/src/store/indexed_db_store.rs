@@ -73,11 +73,31 @@ impl IndexedDbStore {
             Err(e) => return Err(e),
         };
 
-        Ok(Self {
-            head: SendWrapper::new(RefCell::new(db_head)),
+        let store = Self {
+            head: SendWrapper::new(RefCell::new(db_head.clone())),
             db: SendWrapper::new(rexie),
             header_added_notifier: Notify::new(),
-        })
+        };
+
+        if let Some(head) = &db_head {
+            if store.get_stored_header_ranges().await?.is_empty() {
+                let tx = store
+                    .db
+                    .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadWrite)?;
+                let ranges_store = tx.store(RANGES_STORE_NAME)?;
+                let jsvalue_range = to_value(&(1, head.height().value()))?;
+                let jsvalue_key = to_value(&0)?;
+
+                ranges_store
+                    .put(&jsvalue_range, Some(&jsvalue_key))
+                    .await
+                    .expect("wannnnnna insert");
+
+                tx.commit().await?;
+            }
+        }
+
+        Ok(store)
     }
 
     /// Delete the persistent store.
@@ -105,20 +125,8 @@ impl IndexedDbStore {
         let tx = self
             .db
             .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
-        let header_store = tx.store(HEADER_STORE_NAME)?;
-        let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
 
-        let height_key = to_value(&height)?;
-        let header_entry = height_index.get(&height_key).await?;
-
-        // querying unset key returns empty value
-        if header_entry.is_falsy() {
-            return Err(StoreError::NotFound);
-        }
-
-        let serialized_header = from_value::<ExtendedHeaderEntry>(header_entry)?.header;
-        ExtendedHeader::decode(serialized_header.as_ref())
-            .map_err(|e| StoreError::CelestiaTypes(e.into()))
+        get_by_height(&tx.store(HEADER_STORE_NAME)?, height).await
     }
 
     async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
@@ -161,8 +169,6 @@ impl IndexedDbStore {
             return Ok(());
         };
 
-        validate_headers(&headers).await?;
-
         let tx = self.db.transaction(
             &[HEADER_STORE_NAME, RANGES_STORE_NAME],
             TransactionMode::ReadWrite,
@@ -174,7 +180,8 @@ impl IndexedDbStore {
         let neighbours_exist = try_insert_to_range(&ranges_store, headers_range).await?;
 
         if verify_neighbours {
-            verify_against_neighbours(&header_store, head, tail, neighbours_exist)?;
+            validate_headers(&headers).await?;
+            verify_against_neighbours(&header_store, head, tail, neighbours_exist).await?;
         } else {
             verify_range_contiguous(&headers)?;
         }
@@ -212,8 +219,8 @@ impl IndexedDbStore {
         {
             self.head.replace(Some(tail.clone()));
         }
-        self.header_added_notifier.notify_waiters();
         tx.commit().await?;
+        self.header_added_notifier.notify_waiters();
 
         Ok(())
     }
@@ -469,13 +476,60 @@ async fn try_insert_to_range(
     Ok((prev_exists, next_exists))
 }
 
-fn verify_against_neighbours(
-    _headers_store: &rexie::Store,
-    _lowest_header: &ExtendedHeader,
-    _highest_header: &ExtendedHeader,
-    _neighbours_exist: (bool, bool),
+async fn get_by_height(header_store: &rexie::Store, height: u64) -> Result<ExtendedHeader> {
+    let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
+
+    let height_key = to_value(&height)?;
+    let header_entry = height_index.get(&height_key).await?;
+
+    // querying unset key returns empty value
+    if header_entry.is_falsy() {
+        return Err(StoreError::NotFound);
+    }
+
+    let serialized_header = from_value::<ExtendedHeaderEntry>(header_entry)?.header;
+    ExtendedHeader::decode(serialized_header.as_ref())
+        .map_err(|e| StoreError::CelestiaTypes(e.into()))
+}
+
+async fn verify_against_neighbours(
+    header_store: &rexie::Store,
+    lowest_header: &ExtendedHeader,
+    highest_header: &ExtendedHeader,
+    neighbours_exist: (bool, bool),
 ) -> Result<()> {
-    // TODO:
+    debug_assert!(lowest_header.height().value() <= highest_header.height().value());
+    let (prev_exists, next_exists) = neighbours_exist;
+
+    if prev_exists {
+        let prev = get_by_height(header_store, lowest_header.height().value() - 1)
+            .await
+            .map_err(|e| {
+                if let StoreError::NotFound = e {
+                    StoreError::StoredDataError(
+                        "inconsistency between headers and ranges table".into(),
+                    )
+                } else {
+                    e
+                }
+            })?;
+        prev.verify(lowest_header)?;
+    }
+
+    if next_exists {
+        let next = get_by_height(header_store, highest_header.height().value() + 1)
+            .await
+            .map_err(|e| {
+                if let StoreError::NotFound = e {
+                    StoreError::StoredDataError(
+                        "inconsistency between headers and ranges table".into(),
+                    )
+                } else {
+                    e
+                }
+            })?;
+        highest_header.verify(&next)?;
+    }
     Ok(())
 }
 

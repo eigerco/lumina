@@ -581,7 +581,6 @@ mod tests {
         p2p_mock.expect_no_cmd().await;
     }
 
-    #[tracing_test::traced_test]
     #[async_test]
     async fn syncing() {
         let mut gen = ExtendedHeaderGenerator::new();
@@ -689,7 +688,6 @@ mod tests {
         p2p_mock.expect_no_cmd().await;
     }
 
-    #[tracing_test::traced_test]
     #[async_test]
     async fn start_with_filled_store() {
         let (p2p, mut p2p_mock) = P2p::mocked();
@@ -770,7 +768,6 @@ mod tests {
         ));
     }
 
-    #[tracing_test::traced_test]
     #[async_test]
     async fn all_peers_disconnected() {
         let mut gen = ExtendedHeaderGenerator::new();
@@ -830,10 +827,7 @@ mod tests {
         let syncing_info = syncer.info().await.unwrap();
 
         assert_eq!(store_ranges, expected_synced_ranges);
-        assert_eq!(
-            syncing_info.stored_headers,
-            expected_synced_ranges,
-        );
+        assert_eq!(syncing_info.stored_headers, expected_synced_ranges,);
         assert_eq!(syncing_info.subjective_head, expected_subjective_head);
     }
 

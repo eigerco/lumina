@@ -49,12 +49,11 @@ impl InMemoryStore {
 
     #[inline]
     async fn get_head_height(&self) -> Result<u64> {
-        Ok(self
-            .stored_ranges
+        self.stored_ranges
             .read()
             .await
             .head()
-            .ok_or(StoreError::NotFound)?)
+            .ok_or(StoreError::NotFound)
     }
 
     pub(crate) async fn insert(
