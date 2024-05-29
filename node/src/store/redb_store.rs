@@ -292,10 +292,7 @@ impl RedbStore {
         self.write_tx(move |tx| {
             let mut sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
             let ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
-            if !get_all_ranges(&ranges_table)?
-                .iter()
-                .any(|r| r.contains(&height))
-            {
+            if !get_all_ranges(&ranges_table)?.contains(height) {
                 return Err(StoreError::NotFound);
             }
 
@@ -348,7 +345,7 @@ impl RedbStore {
             })
             .await?;
 
-        dbg!(Ok(HeaderRanges(ranges.into_iter().collect())))
+        Ok(ranges)
     }
 }
 
@@ -435,127 +432,11 @@ impl Store for RedbStore {
     }
 }
 
-/*
-struct RangeScanInformation {
-    /// index of the range that header is being inserted into
-    range_index: u64,
-    /// updated bounds of the range header is being inserted into
-    range: HeaderRange,
-    /// index of the range that should be removed from the table, if we're consolidating two
-    /// ranges. None otherwise.
-    range_to_remove: Option<u64>,
-    /// cached information about whether previous and next header exist in store
-    neighbours_exist: (bool, bool),
-}
-
-fn try_find_range_for_height<R>(
-    ranges_table: &R,
-    new_range: HeaderRange,
-) -> Result<RangeScanInformation>
-where
-    R: ReadableTable<u64, (u64, u64)>,
-{
-    // ranges are kept in ascending order, since usually we're inserting at the
-    // front
-    let range_iter = ranges_table.iter()?.rev();
-
-    let mut found_range: Option<RangeScanInformation> = None;
-    let mut head_range = true;
-
-    for range in range_iter {
-        let (key, bounds) = range?;
-        let (start, end) = bounds.value();
-
-        // appending to the found range
-        if end + 1 == *new_range.start() {
-            if let Some(previously_found_range) = found_range.as_mut() {
-                previously_found_range.range_to_remove = Some(key.value());
-                previously_found_range.range = start..=*previously_found_range.range.end();
-                previously_found_range.neighbours_exist = (true, true);
-            } else {
-                found_range = Some(RangeScanInformation {
-                    range_index: key.value(),
-                    range: start..=*new_range.end(),
-                    range_to_remove: None,
-                    neighbours_exist: (true, false),
-                });
-            }
-        }
-
-        // we return only after considering range after and before provided height
-        // to have the opportunity to consolidate existing ranges into one
-        if let Some(found_range) = found_range {
-            return Ok(found_range);
-        }
-
-        // prepending to the found range
-        if start - 1 == *new_range.end() {
-            found_range = Some(RangeScanInformation {
-                range_index: key.value(),
-                range: *new_range.start()..=end,
-                range_to_remove: None,
-                neighbours_exist: (false, true),
-            });
-        }
-
-        if let Some(intersection) = ranges_intersection(&new_range, &(start..=end)) {
-            return Err(StoreError::HeaderRangeOverlap(
-                *intersection.start(),
-                *intersection.end(),
-            ));
-        }
-
-        // if new range is in front of or overlaping considered range
-        if *new_range.end() > end && found_range.is_none() {
-            // allow creation of a new range in front of the head range
-            if head_range {
-                return Ok(RangeScanInformation {
-                    range_index: key.value() + 1,
-                    range: new_range,
-                    range_to_remove: None,
-                    neighbours_exist: (false, false),
-                });
-            } else {
-                tracing::error!("intra range error for height {new_range:?}: {start}..={end}");
-                return Err(StoreError::HeaderRangeOverlap(end, *new_range.start()));
-            }
-        }
-
-        // only allow creating new ranges in front of the highest range
-        head_range = false;
-    }
-
-    // return in case we're prepending and there only one range, thus one iteration
-    if let Some(found_range) = found_range {
-        return Ok(found_range);
-    }
-
-    // allow creation of new range at any height for an empty store
-    if head_range {
-        Ok(RangeScanInformation {
-            range_index: 0,
-            range: new_range,
-            range_to_remove: None,
-            neighbours_exist: (false, false),
-        })
-    } else {
-        // TODO: errors again
-        Err(StoreError::InsertPlacementDisallowed(
-            *new_range.start(),
-            *new_range.end(),
-        ))
-    }
-}
-*/
-
 fn try_insert_to_range(
     ranges_table: &mut Table<u64, (u64, u64)>,
-    //headers_table: &R,
     new_range: HeaderRange,
-    //height: u64,
-    //verify_neighbours: bool,
 ) -> Result<(bool, bool)> {
-    let stored_ranges = ranges_table
+    let stored_ranges: HeaderRanges = ranges_table
         .iter()?
         .map(|range_guard| {
             let range = range_guard?.1.value();
@@ -567,12 +448,11 @@ fn try_insert_to_range(
         range_index,
         range,
         range_to_remove,
-        //neighbours_exist,
-    } = check_range_insert(HeaderRanges(stored_ranges), new_range.clone())?; // XXX: cloneeeeee
+    } = check_range_insert(&stored_ranges, &new_range)?;
 
     if let Some(to_remove) = range_to_remove {
         let (start, end) = ranges_table
-            .remove(to_remove)?
+            .remove(u64::try_from(to_remove).expect("usize->u64"))?
             .expect("missing range")
             .value();
 
@@ -581,7 +461,10 @@ fn try_insert_to_range(
     let prev_exists = new_range.start() != range.start();
     let next_exists = new_range.end() != range.end();
 
-    ranges_table.insert(range_index, (*range.start(), *range.end()))?;
+    ranges_table.insert(
+        u64::try_from(range_index).expect("usize->u64"),
+        (*range.start(), *range.end()),
+    )?;
 
     Ok((prev_exists, next_exists))
 }
@@ -637,7 +520,7 @@ where
         .ok_or(StoreError::NotFound)
 }
 
-fn get_all_ranges<R>(ranges_table: &R) -> Result<Vec<RangeInclusive<u64>>>
+fn get_all_ranges<R>(ranges_table: &R) -> Result<HeaderRanges>
 where
     R: ReadableTable<u64, (u64, u64)>,
 {
@@ -647,7 +530,7 @@ where
             let range = range_guard?.1.value();
             Ok(range.0..=range.1)
         })
-        .collect::<Result<Vec<_>, _>>()
+        .collect::<Result<_, _>>()
 }
 
 #[inline]

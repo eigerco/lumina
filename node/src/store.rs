@@ -344,6 +344,7 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 mod tests {
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
+    use celestia_types::Height;
     use rstest::rstest;
 
     // rstest only supports attributes which last segment is `test`
@@ -555,7 +556,6 @@ mod tests {
         let header101 = gen.next();
         s.append_single_unchecked(header101.clone()).await.unwrap();
 
-        //s.append_single_unchecked(header101).await.unwrap();
         assert!(matches!(
             s.append_single_unchecked(header101).await,
             Err(StoreError::HeaderRangeOverlap(101, 101))
@@ -586,7 +586,6 @@ mod tests {
         ));
     }
 
-    /*
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
@@ -603,15 +602,11 @@ mod tests {
         let mut dup_header = s.get_by_height(33).await.unwrap();
         dup_header.header.height = Height::from(101u32);
         let insert_existing_result = s.append_single_unchecked(dup_header).await;
-        insert_existing_result.unwrap();
-        /*
         assert!(matches!(
             insert_existing_result,
             Err(StoreError::HashExists(_))
         ));
-        */
     }
-    */
 
     #[rstest]
     #[case::in_memory(new_in_memory_store())]

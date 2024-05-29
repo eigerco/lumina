@@ -3,6 +3,7 @@ use std::ops::RangeInclusive;
 
 use celestia_types::ExtendedHeader;
 use itertools::Itertools;
+use serde::Serialize;
 use smallvec::{IntoIter, SmallVec};
 use thiserror::Error;
 
@@ -22,8 +23,8 @@ impl RangeLengthExt for RangeInclusive<u64> {
 
 // TODO: could we make this not public and expose just the necessary interface
 // TODO: do we want this to have a manual display implementation?
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct HeaderRanges(pub SmallVec<[RangeInclusive<u64>; 2]>);
+#[derive(Debug, Clone, PartialEq, Default, Serialize)]
+pub struct HeaderRanges(SmallVec<[RangeInclusive<u64>; 2]>);
 
 #[derive(Debug, Error)]
 pub enum HeaderRangeError {
@@ -48,8 +49,60 @@ impl HeaderRanges {
         Ok(())
     }
 
+    /// Commit previously calculated `check_range_insert`
+    pub(crate) fn update_range(&mut self, scan_information: RangeScanResult) {
+        let RangeScanResult {
+            range_index,
+            range,
+            range_to_remove,
+        } = scan_information;
+
+        if self.0.len() == range_index {
+            self.0.push(range);
+        } else {
+            self.0[range_index] = range;
+        }
+
+        if let Some(to_remove) = range_to_remove {
+            self.0.remove(to_remove);
+        }
+    }
+
+    /// Return whether range is empty
     pub fn is_empty(&self) -> bool {
         self.0.iter().all(|r| r.is_empty())
+    }
+
+    pub fn contains(&self, height: u64) -> bool {
+        self.0.iter().any(|r| r.contains(&height))
+    }
+
+    /// Return highest height in the range
+    pub fn head(&self) -> Option<u64> {
+        self.0.last().map(|r| *r.end())
+    }
+
+    /// Return lowest height in the range
+    pub fn tail(&self) -> Option<u64> {
+        self.0.first().map(|r| *r.start())
+    }
+}
+
+impl AsRef<[RangeInclusive<u64>]> for HeaderRanges {
+    fn as_ref(&self) -> &[RangeInclusive<u64>] {
+        &self.0
+    }
+}
+
+impl AsMut<[RangeInclusive<u64>]> for HeaderRanges {
+    fn as_mut(&mut self) -> &mut [RangeInclusive<u64>] {
+        &mut self.0
+    }
+}
+
+impl FromIterator<RangeInclusive<u64>> for HeaderRanges {
+    fn from_iter<T: IntoIterator<Item = RangeInclusive<u64>>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
     }
 }
 
@@ -179,7 +232,7 @@ pub(crate) fn ranges_intersection(
         return None;
     }
 
-    match dbg!((left.start() >= right.start(), left.end() >= right.end())) {
+    match (left.start() >= right.start(), left.end() >= right.end()) {
         (false, false) => Some(*right.start()..=*left.end()),
         (false, true) => Some(right.clone()),
         (true, false) => Some(left.clone()),
@@ -190,39 +243,32 @@ pub(crate) fn ranges_intersection(
 #[derive(Debug, PartialEq)]
 pub(crate) struct RangeScanResult {
     /// index of the range that header is being inserted into
-    pub range_index: u64,
+    pub range_index: usize,
     /// updated bounds of the range header is being inserted into
     pub range: HeaderRange,
     /// index of the range that should be removed from the table, if we're consolidating two
     /// ranges. None otherwise.
-    pub range_to_remove: Option<u64>,
-    // cached information about whether previous and next header exist in store
-    //neighbours_exist: (bool, bool),
+    pub range_to_remove: Option<usize>,
 }
 
 pub(crate) fn check_range_insert(
-    stored_ranges: HeaderRanges,
-    to_insert: RangeInclusive<u64>,
+    stored_ranges: &HeaderRanges,
+    to_insert: &RangeInclusive<u64>,
 ) -> Result<RangeScanResult> {
-    // TODO: don't require reverse
-
     let Some(head_range) = stored_ranges.0.last() else {
         // Empty store case
         return Ok(RangeScanResult {
             range_index: 0,
-            range: to_insert,
+            range: to_insert.clone(),
             range_to_remove: None,
-            //neighbours_exist: (false, false)
         });
     };
 
     // allow inserting a new header range in front of the current head range
     if *to_insert.start() > head_range.end() + 1 {
-        println!("pre ppp: {to_insert:?} > {head_range:?}");
         return Ok(RangeScanResult {
-            // XXX: should db key be usize?
-            range_index: stored_ranges.0.len() as u64,
-            range: to_insert,
+            range_index: stored_ranges.0.len(),
+            range: to_insert.clone(),
             range_to_remove: None,
         });
     }
@@ -248,7 +294,7 @@ pub(crate) fn check_range_insert(
 
         if let Some(consolidated) = try_consolidate_ranges(stored_range, &to_insert) {
             break RangeScanResult {
-                range_index: idx as u64,
+                range_index: idx,
                 range: consolidated,
                 range_to_remove: None,
             };
@@ -268,7 +314,7 @@ pub(crate) fn check_range_insert(
             found_range = RangeScanResult {
                 range_index: found_range.range_index,
                 range: consolidated,
-                range_to_remove: Some(idx as u64),
+                range_to_remove: Some(idx),
             };
         }
     }
@@ -293,7 +339,6 @@ pub(crate) fn verify_range_contiguous(headers: &[ExtendedHeader]) -> Result<()> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use smallvec::smallvec;
 
     #[test]
     fn test_calc_missing_ranges() {
@@ -304,7 +349,7 @@ mod tests {
             RangeInclusive::new(23, 28),
             RangeInclusive::new(30, 40),
         ];
-        let expected_missing_ranges = HeaderRanges(smallvec![41..=50, 29..=29, 21..=22, 6..=14,]);
+        let expected_missing_ranges = [41..=50, 29..=29, 21..=22, 6..=14,].into();
 
         let missing_ranges = calculate_missing_ranges(head_height, &ranges, 512);
         assert_eq!(missing_ranges, expected_missing_ranges);
@@ -314,7 +359,7 @@ mod tests {
     fn test_calc_missing_ranges_partial() {
         let head_height = 10;
         let ranges = [RangeInclusive::new(6, 7)];
-        let expected_missing_ranges = HeaderRanges(smallvec![8..=10, 4..=5]);
+        let expected_missing_ranges = [8..=10, 4..=5].into();
 
         let missing_ranges = calculate_missing_ranges(head_height, &ranges, 5);
         assert_eq!(missing_ranges, expected_missing_ranges);
@@ -324,7 +369,7 @@ mod tests {
     fn test_calc_missing_ranges_contiguous() {
         let head_height = 10;
         let ranges = [RangeInclusive::new(5, 6), RangeInclusive::new(7, 9)];
-        let expected_missing_ranges = HeaderRanges(smallvec![10..=10, 1..=4]);
+        let expected_missing_ranges = [10..=10, 1..=4].into();
 
         let missing_ranges = calculate_missing_ranges(head_height, &ranges, 5);
         assert_eq!(missing_ranges, expected_missing_ranges);
@@ -333,10 +378,10 @@ mod tests {
     #[test]
     fn test_calc_missing_ranges_edge_cases() {
         let missing = calculate_missing_ranges(1, &[], 100);
-        assert_eq!(missing, HeaderRanges(smallvec![1..=1]));
+        assert_eq!(missing, [1..=1].into());
 
         let missing = calculate_missing_ranges(1, &[1..=1], 100);
-        assert_eq!(missing, HeaderRanges(smallvec![]));
+        assert_eq!(missing, [].into());
     }
 
     #[test]
@@ -361,7 +406,7 @@ mod tests {
 
     #[test]
     fn check_range_insert_append() {
-        let result = check_range_insert(HeaderRanges(smallvec![]), 1..=5).unwrap();
+        let result = check_range_insert(&[].into(), &(1..=5)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -371,7 +416,7 @@ mod tests {
             }
         );
 
-        let result = check_range_insert(HeaderRanges(smallvec![1..=4]), 5..=5).unwrap();
+        let result = check_range_insert(&[1..=4].into(), &(5..=5)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -381,7 +426,7 @@ mod tests {
             }
         );
 
-        let result = check_range_insert(HeaderRanges(smallvec![1..=5]), 6..=9).unwrap();
+        let result = check_range_insert(&[1..=5].into(), &(6..=9)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -391,7 +436,7 @@ mod tests {
             }
         );
 
-        let result = check_range_insert(HeaderRanges(smallvec![6..=8]), 2..=5).unwrap();
+        let result = check_range_insert(&[6..=8].into(), &(2..=5)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -404,7 +449,7 @@ mod tests {
 
     #[test]
     fn check_range_insert_with_consolidation() {
-        let result = check_range_insert(HeaderRanges(smallvec![1..=3, 6..=9]), 4..=5).unwrap();
+        let result = check_range_insert(&[1..=3, 6..=9].into(), &(4..=5)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -415,7 +460,7 @@ mod tests {
         );
 
         let result =
-            check_range_insert(HeaderRanges(smallvec![1..=2, 5..=5, 8..=9]), 3..=4).unwrap();
+            check_range_insert(&[1..=2, 5..=5, 8..=9].into(), &(3..=4)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -426,7 +471,7 @@ mod tests {
         );
 
         let result =
-            check_range_insert(HeaderRanges(smallvec![1..=2, 4..=4, 8..=9]), 5..=7).unwrap();
+            check_range_insert(&[1..=2, 4..=4, 8..=9].into(), &(5..=7)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -439,40 +484,40 @@ mod tests {
 
     #[test]
     fn check_range_insert_overlapping() {
-        let result = check_range_insert(HeaderRanges(smallvec![1..=2]), 1..=1).unwrap_err();
+        let result = check_range_insert(&[1..=2].into(), &(1..=1)).unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(1, 1)));
 
-        let result = check_range_insert(HeaderRanges(smallvec![1..=4]), 2..=8).unwrap_err();
+        let result = check_range_insert(&[1..=4].into(), &(2..=8)).unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(2, 4)));
 
-        let result = check_range_insert(HeaderRanges(smallvec![1..=4]), 2..=3).unwrap_err();
+        let result = check_range_insert(&[1..=4].into(), &(2..=3)).unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(2, 3)));
 
-        let result = check_range_insert(HeaderRanges(smallvec![5..=9]), 1..=5).unwrap_err();
+        let result = check_range_insert(&[5..=9].into(), &(1..=5)).unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(5, 5)));
 
-        let result = check_range_insert(HeaderRanges(smallvec![5..=8]), 2..=8).unwrap_err();
+        let result = check_range_insert(&[5..=8].into(), &(2..=8)).unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(5, 8)));
 
-        let result = check_range_insert(HeaderRanges(smallvec![1..=3, 6..=9]), 3..=6).unwrap_err();
+        let result = check_range_insert(&[1..=3, 6..=9].into(), &(3..=6)).unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(3, 3)));
     }
 
     #[test]
     fn check_range_insert_invalid_placement() {
-        let result = check_range_insert(HeaderRanges(smallvec![1..=2, 7..=9]), 4..=4).unwrap_err();
+        let result = check_range_insert(&[1..=2, 7..=9].into(), &(4..=4)).unwrap_err();
         assert!(matches!(
             result,
             StoreError::InsertPlacementDisallowed(4, 4)
         ));
 
-        let result = check_range_insert(HeaderRanges(smallvec![1..=2, 8..=9]), 4..=6).unwrap_err();
+        let result = check_range_insert(&[1..=2, 8..=9].into(), &(4..=6)).unwrap_err();
         assert!(matches!(
             result,
             StoreError::InsertPlacementDisallowed(4, 6)
         ));
 
-        let result = check_range_insert(HeaderRanges(smallvec![4..=5, 7..=8]), 1..=2).unwrap_err();
+        let result = check_range_insert(&[4..=5, 7..=8].into(), &(1..=2)).unwrap_err();
         assert!(matches!(
             result,
             StoreError::InsertPlacementDisallowed(1, 2)

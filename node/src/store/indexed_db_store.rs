@@ -146,14 +146,14 @@ impl IndexedDbStore {
             .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)?;
         let store = tx.store(RANGES_STORE_NAME)?;
 
-        let ranges = store
+        let ranges: HeaderRanges = store
             .get_all(None, None, None, Some(Direction::Next))
             .await?
             .into_iter()
             .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(begin, end)| begin..=end))
             .collect::<Result<_, _>>()?;
 
-        Ok(HeaderRanges(ranges))
+        Ok(ranges)
     }
 
     async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
@@ -237,10 +237,7 @@ impl IndexedDbStore {
         let Ok(stored_ranges) = self.get_stored_header_ranges().await else {
             return false;
         };
-        stored_ranges
-            .0
-            .into_iter()
-            .any(|range| range.contains(&height))
+        stored_ranges.contains(height)
     }
 
     async fn update_sampling_metadata(
@@ -451,8 +448,7 @@ async fn try_insert_to_range(
         range_index,
         range,
         range_to_remove,
-        //neighbours_exist,
-    } = check_range_insert(HeaderRanges(stored_ranges), new_range.clone())?; // XXX: cloneeeeee
+    } = check_range_insert(&stored_ranges, &new_range)?;
 
     if let Some(to_remove) = range_to_remove {
         let jsvalue_key_to_remove = to_value(&to_remove)?;

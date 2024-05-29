@@ -11,9 +11,7 @@ use dashmap::DashMap;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
-use crate::store::utils::{
-    check_range_insert, verify_range_contiguous, HeaderRanges, RangeScanResult,
-};
+use crate::store::utils::{check_range_insert, verify_range_contiguous, HeaderRanges};
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
@@ -51,14 +49,12 @@ impl InMemoryStore {
 
     #[inline]
     async fn get_head_height(&self) -> Result<u64> {
-        Ok(*self
+        Ok(self
             .stored_ranges
             .read()
             .await
-            .0
-            .first()
-            .ok_or(StoreError::NotFound)?
-            .end())
+            .head()
+            .ok_or(StoreError::NotFound)?)
     }
 
     pub(crate) async fn insert(
@@ -127,12 +123,7 @@ impl InMemoryStore {
     }
 
     async fn contains_height(&self, height: u64) -> bool {
-        self.stored_ranges
-            .read()
-            .await
-            .0
-            .iter()
-            .any(|range| range.contains(&height))
+        self.stored_ranges.read().await.contains(height)
     }
 
     fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
@@ -195,27 +186,12 @@ impl InMemoryStore {
     async fn try_insert_to_range(&self, new_range: RangeInclusive<u64>) -> Result<(bool, bool)> {
         let mut stored_ranges_guard = self.stored_ranges.write().await;
 
-        let stored_ranges = stored_ranges_guard.clone(); // XXX: ugh
+        let range_scan_result = check_range_insert(&stored_ranges_guard, &new_range)?;
 
-        let RangeScanResult {
-            range_index,
-            range,
-            range_to_remove,
-            //neighbours_exist,
-        } = check_range_insert(stored_ranges, new_range.clone())?; // XXX: cloneeeeee
+        let prev_exists = new_range.start() != range_scan_result.range.start();
+        let next_exists = new_range.end() != range_scan_result.range.end();
 
-        let prev_exists = new_range.start() != range.start();
-        let next_exists = new_range.end() != range.end();
-
-        if stored_ranges_guard.0.len() == range_index as usize {
-            stored_ranges_guard.0.push(range);
-        } else {
-            stored_ranges_guard.0[range_index as usize] = range;
-        }
-
-        if let Some(to_remove) = range_to_remove {
-            stored_ranges_guard.0.remove(to_remove as usize);
-        }
+        stored_ranges_guard.update_range(range_scan_result);
 
         Ok((prev_exists, next_exists))
     }

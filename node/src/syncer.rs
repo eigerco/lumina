@@ -10,7 +10,6 @@
 //! to the `network_head` as possible.
 
 use std::marker::PhantomData;
-use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -97,7 +96,7 @@ enum SyncerCmd {
 #[derive(Debug, Serialize)]
 pub struct SyncingInfo {
     /// Ranges of headers that are already synchronised
-    pub stored_headers: Vec<RangeInclusive<u64>>,
+    pub stored_headers: HeaderRanges,
     /// Syncing target. The latest height seen in the network that was successfully verified.
     pub subjective_head: u64,
 }
@@ -311,7 +310,6 @@ where
                 .store
                 .get_stored_header_ranges()
                 .await
-                .map(|r| r.0.to_vec())
                 .unwrap_or_default(),
             subjective_head: self.subjective_head_height.unwrap_or(0),
         }
@@ -430,7 +428,7 @@ where
 
         let fetch_ranges = calculate_missing_ranges(
             subjective_head_height,
-            &store_ranges.0,
+            store_ranges.as_ref(),
             MAX_HEADERS_IN_BATCH,
         );
 
@@ -834,7 +832,7 @@ mod tests {
         assert_eq!(store_ranges, expected_synced_ranges);
         assert_eq!(
             syncing_info.stored_headers,
-            expected_synced_ranges.0.to_vec()
+            expected_synced_ranges,
         );
         assert_eq!(syncing_info.subjective_head, expected_subjective_head);
     }

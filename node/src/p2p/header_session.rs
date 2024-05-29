@@ -29,7 +29,7 @@ impl HeaderSession {
             HeaderExError::InvalidRequest
         })?;
 
-        let ranges_count = ranges.0.len();
+        let ranges_count = ranges.as_ref().len();
         let (response_tx, response_rx) = mpsc::channel(MAX_CONCURRENT_REQS);
 
         Ok(HeaderSession {
