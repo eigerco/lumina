@@ -20,7 +20,6 @@ use crate::store::utils::{
     check_range_insert, verify_range_contiguous, HeaderRange, HeaderRanges, RangeScanResult,
 };
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
-use crate::utils::validate_headers;
 
 const SCHEMA_VERSION: u64 = 1;
 
@@ -229,7 +228,6 @@ impl RedbStore {
 
     async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
         info!("inserting: {}", headers.len());
-        validate_headers(&headers).await?;
 
         self.write_tx(move |tx| {
             let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {

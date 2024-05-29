@@ -94,6 +94,7 @@ impl MultiaddrExt for Multiaddr {
     }
 }
 
+#[allow(unused)]
 pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_types::Result<()> {
     for headers in headers.chunks(VALIDATIONS_PER_YIELD) {
         for header in headers {
