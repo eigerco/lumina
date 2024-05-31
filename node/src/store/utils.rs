@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::iter::once;
 use std::ops::RangeInclusive;
 
@@ -7,7 +8,10 @@ use serde::Serialize;
 use smallvec::{IntoIter, SmallVec};
 use thiserror::Error;
 
+use crate::executor::yield_now;
 use crate::store::{Result, StoreError};
+
+pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
 
 pub type HeaderRange = RangeInclusive<u64>;
 
@@ -21,8 +25,6 @@ impl RangeLengthExt for RangeInclusive<u64> {
     }
 }
 
-// TODO: could we make this not public and expose just the necessary interface
-// TODO: do we want this to have a manual display implementation?
 #[derive(Debug, Clone, PartialEq, Default, Serialize)]
 pub struct HeaderRanges(SmallVec<[RangeInclusive<u64>; 2]>);
 
@@ -88,15 +90,23 @@ impl HeaderRanges {
     }
 }
 
-impl AsRef<[RangeInclusive<u64>]> for HeaderRanges {
-    fn as_ref(&self) -> &[RangeInclusive<u64>] {
-        &self.0
+impl Display for HeaderRanges {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        for (idx, range) in self.0.iter().enumerate() {
+            if idx == 0 {
+                write!(f, "{}..={}", range.start(), range.end())?;
+            } else {
+                write!(f, ", {}..={}", range.start(), range.end())?;
+            }
+        }
+        write!(f, "]")
     }
 }
 
-impl AsMut<[RangeInclusive<u64>]> for HeaderRanges {
-    fn as_mut(&mut self) -> &mut [RangeInclusive<u64>] {
-        &mut self.0
+impl AsRef<[RangeInclusive<u64>]> for HeaderRanges {
+    fn as_ref(&self) -> &[RangeInclusive<u64>] {
+        &self.0
     }
 }
 
@@ -333,6 +343,20 @@ pub(crate) fn verify_range_contiguous(headers: &[ExtendedHeader]) -> Result<()> 
         }
         prev = Some(current_height);
     }
+    Ok(())
+}
+
+#[allow(unused)]
+pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_types::Result<()> {
+    for headers in headers.chunks(VALIDATIONS_PER_YIELD) {
+        for header in headers {
+            header.validate()?;
+        }
+
+        // Validation is computation heavy so we yield on every chunk
+        yield_now().await;
+    }
+
     Ok(())
 }
 

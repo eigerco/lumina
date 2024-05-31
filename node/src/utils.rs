@@ -2,16 +2,11 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use celestia_types::ExtendedHeader;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::{PeerId, StreamProtocol};
 use tokio::sync::oneshot;
 use tokio_util::sync::ReusableBoxFuture;
-
-use crate::executor::yield_now;
-
-pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
 
 pub(crate) fn protocol_id(network: &str, protocol: &str) -> StreamProtocol {
     let network = network.trim_matches('/');
@@ -92,20 +87,6 @@ impl MultiaddrExt for Multiaddr {
             _ => None,
         })
     }
-}
-
-#[allow(unused)]
-pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_types::Result<()> {
-    for headers in headers.chunks(VALIDATIONS_PER_YIELD) {
-        for header in headers {
-            header.validate()?;
-        }
-
-        // Validation is computation heavy so we yield on every chunk
-        yield_now().await;
-    }
-
-    Ok(())
 }
 
 pub(crate) struct FusedReusableBoxFuture<T> {

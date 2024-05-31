@@ -23,16 +23,13 @@ pub struct InMemoryStore {
     sampling_data: DashMap<u64, SamplingMetadata>,
     /// Maps header height to its hash, in case we need to do lookup by height
     height_to_hash: DashMap<u64, Hash>,
-
+    /// Source of truth about headers present in the db, used to synchronise inserts
     stored_ranges: RwLock<HeaderRanges>,
-
     /// Cached height of the lowest header that wasn't sampled yet
     lowest_unsampled_height: AtomicU64,
     /// Notify when a new header is added
     header_added_notifier: Notify,
 }
-
-// TODO: synchronisation
 
 impl InMemoryStore {
     /// Create a new store.
@@ -88,10 +85,9 @@ impl InMemoryStore {
             }
 
             if matches!(height_entry, Entry::Occupied(_)) {
-                panic!("shouldn't happen");
-                // Reaching this point means another thread won the race and
-                // there is a new head already.
-                //return Err(StoreError::HeightExists(height));
+                return Err(StoreError::StoredDataError(
+                    "inconsistency between headers and ranges table".into(),
+                ));
             }
 
             debug!("Inserting header {hash} with height {height}");

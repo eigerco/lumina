@@ -344,7 +344,7 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 mod tests {
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::Height;
+    use celestia_types::{Error, Height};
     use rstest::rstest;
 
     // rstest only supports attributes which last segment is `test`
@@ -669,7 +669,10 @@ mod tests {
         let upcoming_head = gen.next();
 
         s.append_single(upcoming_head).await.unwrap();
-        s.append_single(another_chain).await.unwrap_err(); // TODO: match?
+        assert!(matches!(
+            s.append_single(another_chain).await,
+            Err(StoreError::CelestiaTypes(Error::Verification(_)))
+        ));
     }
 
     #[rstest]

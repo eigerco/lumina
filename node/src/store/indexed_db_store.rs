@@ -13,11 +13,11 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
+use crate::store::utils::validate_headers;
 use crate::store::utils::{
     check_range_insert, verify_range_contiguous, HeaderRange, RangeScanResult,
 };
 use crate::store::{HeaderRanges, Result, SamplingMetadata, SamplingStatus, Store, StoreError};
-use crate::utils::validate_headers;
 
 /// indexeddb version, needs to be incremented on every schema schange
 const DB_VERSION: u32 = 3;
@@ -88,10 +88,7 @@ impl IndexedDbStore {
                 let jsvalue_range = to_value(&(1, head.height().value()))?;
                 let jsvalue_key = to_value(&0)?;
 
-                ranges_store
-                    .put(&jsvalue_range, Some(&jsvalue_key))
-                    .await
-                    .expect("wannnnnna insert");
+                ranges_store.put(&jsvalue_range, Some(&jsvalue_key)).await?;
 
                 tx.commit().await?;
             }
@@ -465,10 +462,7 @@ async fn try_insert_to_range(
     let jsvalue_range = to_value(&(*range.start(), *range.end()))?;
     let jsvalue_key = to_value(&range_index)?;
 
-    ranges_store
-        .put(&jsvalue_range, Some(&jsvalue_key))
-        .await
-        .expect("wannnnnna insert");
+    ranges_store.put(&jsvalue_range, Some(&jsvalue_key)).await?;
 
     let prev_exists = new_range.start() != range.start();
     let next_exists = new_range.end() != range.end();
