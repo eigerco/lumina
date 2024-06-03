@@ -231,6 +231,20 @@ impl InMemoryStore {
         }
         Ok(())
     }
+
+    /// Clone the store and all its contents. Async fn due to internal use of async mutex.
+    pub async fn async_clone(&self) -> Self {
+        InMemoryStore {
+            headers: self.headers.clone(),
+            sampling_data: self.sampling_data.clone(),
+            height_to_hash: self.height_to_hash.clone(),
+            stored_ranges: RwLock::new(self.stored_ranges.read().await.clone()),
+            lowest_unsampled_height: AtomicU64::new(
+                self.lowest_unsampled_height.load(Ordering::Acquire),
+            ),
+            header_added_notifier: Notify::new(),
+        }
+    }
 }
 
 #[async_trait]
@@ -350,20 +364,5 @@ impl From<Vec<ExtendedHeader>> for InMemoryStore {
 impl Default for InMemoryStore {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl Clone for InMemoryStore {
-    fn clone(&self) -> Self {
-        InMemoryStore {
-            headers: self.headers.clone(),
-            sampling_data: self.sampling_data.clone(),
-            height_to_hash: self.height_to_hash.clone(),
-            stored_ranges: RwLock::new(self.stored_ranges.blocking_read().clone()),
-            lowest_unsampled_height: AtomicU64::new(
-                self.lowest_unsampled_height.load(Ordering::Acquire),
-            ),
-            header_added_notifier: Notify::new(),
-        }
     }
 }

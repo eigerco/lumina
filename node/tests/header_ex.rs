@@ -150,19 +150,19 @@ async fn head_selection_with_multiple_peers() {
     // Server group A, nodes with synced stores
     let mut servers = vec![
         Node::new(NodeConfig {
-            store: server_store.clone(),
+            store: server_store.async_clone().await,
             ..listening_test_node_config()
         })
         .await
         .unwrap(),
         Node::new(NodeConfig {
-            store: server_store.clone(),
+            store: server_store.async_clone().await,
             ..listening_test_node_config()
         })
         .await
         .unwrap(),
         Node::new(NodeConfig {
-            store: server_store.clone(),
+            store: server_store.async_clone().await,
             ..listening_test_node_config()
         })
         .await
@@ -178,7 +178,7 @@ async fn head_selection_with_multiple_peers() {
 
     servers.push(
         Node::new(NodeConfig {
-            store: server_store.clone(),
+            store: server_store.async_clone().await,
             ..listening_test_node_config()
         })
         .await
@@ -226,7 +226,7 @@ async fn head_selection_with_multiple_peers() {
 
     // new node from group B joins, head should go up
     let new_b_node = Node::new(NodeConfig {
-        store: server_store.clone(),
+        store: server_store.async_clone().await,
         p2p_bootnodes: client_addr,
         ..test_node_config()
     })

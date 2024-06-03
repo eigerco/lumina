@@ -398,7 +398,7 @@ impl P2p {
 
         let height = from.height().value() + 1;
 
-        let range = height..=height + amount;
+        let range = height..=height + amount - 1;
 
         let mut session = HeaderSession::new([range].into(), self.cmd_tx.clone())?;
         let headers = session.run().await?.pop().unwrap(); // XXX
