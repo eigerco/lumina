@@ -43,6 +43,7 @@ async fn add_remove_peer_test() {
         .p2p_peers()
         .await
         .expect("failed to get peer list after connect request");
+    println!("{peers:?}");
     assert!(peers.contains(&addr_info.id));
 
     let connected_to_peer = client
@@ -264,5 +265,5 @@ async fn resource_state_test() {
 async fn rpc_call_delay() {
     // delay for RPC calls like connect/close to let node finish the operation before we query it
     // again. Below 150 ms I start getting intermittent failures.
-    sleep(Duration::from_millis(150)).await;
+    sleep(Duration::from_millis(300)).await;
 }
