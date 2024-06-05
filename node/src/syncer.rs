@@ -25,7 +25,7 @@ use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::header_ranges::{HeaderRanges};
+use crate::store::header_ranges::{HeaderRanges, HeaderRangesExt};
 use crate::store::utils::calculate_missing_ranges;
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;

@@ -4,7 +4,7 @@
 //! [`Store`]: crate::store::Store
 //! [`Syncer`]: crate::syncer::Syncer
 
-use std::ops::{RangeBounds, RangeInclusive};
+use std::ops::RangeBounds;
 use std::sync::Arc;
 
 use blockstore::Blockstore;
@@ -26,6 +26,7 @@ use crate::events::{EventChannel, EventSubscriber};
 use crate::executor::spawn;
 use crate::p2p::{P2p, P2pArgs, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
+use crate::store::header_ranges::HeaderRanges;
 use crate::store::{SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs, SyncerError, SyncingInfo};
 
@@ -279,13 +280,8 @@ where
     }
 
     /// Get ranges of headers currently stored.
-    pub async fn get_stored_header_ranges(&self) -> Result<Vec<RangeInclusive<u64>>> {
-        Ok(self
-            .store
-            .get_stored_header_ranges()
-            .await?
-            .as_ref()
-            .to_vec())
+    pub async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+        Ok(self.store.get_stored_header_ranges().await?)
     }
 
     /// Get the latest locally synced header.

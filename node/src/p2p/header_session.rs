@@ -6,7 +6,9 @@ use tracing::{debug, warn};
 use crate::executor::spawn;
 use crate::p2p::header_ex::utils::HeaderRequestExt;
 use crate::p2p::{HeaderExError, P2pCmd, P2pError};
-use crate::store::header_ranges::{HeaderRanges, HeaderRangesIterator, RangeLengthExt};
+use crate::store::header_ranges::{
+    HeaderRanges, HeaderRangesExt, HeaderRangesIterator, RangeLengthExt,
+};
 
 const MAX_AMOUNT_PER_REQ: u64 = 64;
 const MAX_CONCURRENT_REQS: usize = 1;
@@ -23,9 +25,9 @@ pub(crate) struct HeaderSession {
 }
 
 impl HeaderSession {
-    /// Create a new HeaderSession responsible for fetching provided `ranges` headers. 
+    /// Create a new HeaderSession responsible for fetching provided `ranges` headers.
     /// `HeaderRanges` can be created manually, or more probably using
-    /// [`Store::get_stored_header_ranges`] to fetch existing header ranges and then using 
+    /// [`Store::get_stored_header_ranges`] to fetch existing header ranges and then using
     /// [`calculate_missing_ranges`] to convert that into ranges of headers that are missing.
     ///
     /// [`calculate_missing_ranges`]: crate::store::utils::calculate_missing_ranges

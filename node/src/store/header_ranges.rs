@@ -29,8 +29,26 @@ pub enum HeaderRangeError {
     RangeOverlap(u64, u64),
 }
 
-impl HeaderRanges {
-    pub fn validate(&self) -> Result<(), HeaderRangeError> {
+pub(crate) trait HeaderRangesExt {
+    /// check whether sub-ranges do not overlap
+    fn validate(&self) -> Result<(), HeaderRangeError>;
+    /// Check whether provided `to_insert` range can be inserted into the header ranges represented
+    /// by self. New range can be inserted ahead of all existing ranges to allow syncing from the
+    /// head but otherwise, only growing the existing ranges is allowed.
+    /// Returned [`RangeScanResult`] contains information necessary to persist the range
+    /// modification in the database manually, or one can call [`update_range`] to modify ranges in
+    /// memory.
+    fn check_range_insert(&self, to_insert: &HeaderRange) -> Result<RangeScanResult, StoreError>;
+    /// Modify the header ranges, committing insert previously checked with [`check_range_insert`]
+    fn update_range(&mut self, scan_information: RangeScanResult);
+    /// return whether range is empty
+    fn is_empty(&self) -> bool;
+    /// Return highest height in the range
+    fn head(&self) -> Option<u64>;
+}
+
+impl HeaderRangesExt for HeaderRanges {
+    fn validate(&self) -> Result<(), HeaderRangeError> {
         let mut prev: Option<&HeaderRange> = None;
         for current in &self.0 {
             if let Some(prev) = prev {
@@ -47,7 +65,7 @@ impl HeaderRanges {
     }
 
     /// Commit previously calculated `check_range_insert`
-    pub(crate) fn update_range(&mut self, scan_information: RangeScanResult) {
+    fn update_range(&mut self, scan_information: RangeScanResult) {
         let RangeScanResult {
             range_index,
             range,
@@ -65,10 +83,7 @@ impl HeaderRanges {
         }
     }
 
-    pub(crate) fn check_range_insert(
-        &self,
-        to_insert: &HeaderRange,
-    ) -> Result<RangeScanResult, StoreError> {
+    fn check_range_insert(&self, to_insert: &HeaderRange) -> Result<RangeScanResult, StoreError> {
         let Some(head_range) = self.0.last() else {
             // Empty store case
             return Ok(RangeScanResult {
@@ -137,17 +152,20 @@ impl HeaderRanges {
     }
 
     /// Return whether range is empty
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.0.iter().all(|r| r.is_empty())
     }
 
+    /// Return highest height in the range
+    fn head(&self) -> Option<u64> {
+        self.0.last().map(|r| *r.end())
+    }
+}
+
+impl HeaderRanges {
+    /// Return whether `headerRanges` contains provided height
     pub fn contains(&self, height: u64) -> bool {
         self.0.iter().any(|r| r.contains(&height))
-    }
-
-    /// Return highest height in the range
-    pub fn head(&self) -> Option<u64> {
-        self.0.last().map(|r| *r.end())
     }
 }
 

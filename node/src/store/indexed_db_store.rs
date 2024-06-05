@@ -13,9 +13,9 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
-use crate::store::utils::{ validate_headers, verify_range_contiguous, RangeScanResult, };
+use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt};
+use crate::store::utils::{validate_headers, verify_range_contiguous, RangeScanResult};
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
-use crate::store::header_ranges::{HeaderRange, HeaderRanges};
 
 /// indexeddb version, needs to be incremented on every schema schange
 const DB_VERSION: u32 = 3;

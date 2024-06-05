@@ -16,7 +16,7 @@ use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::{debug, info, trace};
 
-use crate::store::header_ranges::{HeaderRange, HeaderRanges};
+use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt};
 use crate::store::utils::{verify_range_contiguous, RangeScanResult};
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
