@@ -612,7 +612,6 @@ mod tests {
     }
 
     #[async_test]
-    #[cfg(not(target_arch = "wasm32"))] // wasm_bindgen_test doesn't seem to support #[ignore]
     async fn request_range_responds_with_smaller_one() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -624,15 +623,14 @@ mod tests {
 
         let mut gen = ExtendedHeaderGenerator::new_from_height(5);
         let header5 = gen.next();
-        let header6 = gen.next();
 
         mock_req.send_n_responses(
             &mut handler,
             1,
-            vec![header5.to_header_response(), header6.to_header_response()],
+            vec![header5.to_header_response()],
         );
         let headers = rx.await.unwrap().unwrap();
-        assert_eq!(headers, vec![header5, header6]);
+        assert_eq!(headers, vec![header5]);
     }
 
     #[async_test]

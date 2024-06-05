@@ -25,7 +25,9 @@ use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::{calculate_missing_ranges, utils::HeaderRanges, Store, StoreError};
+use crate::store::{Store, StoreError};
+use crate::store::utils::calculate_missing_ranges;
+use crate::store::header_ranges::HeaderRanges;
 use crate::utils::OneshotSenderExt;
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;

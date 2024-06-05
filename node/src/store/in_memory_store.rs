@@ -11,7 +11,8 @@ use dashmap::DashMap;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
-use crate::store::utils::{check_range_insert, verify_range_contiguous, HeaderRanges};
+use crate::store::utils::verify_range_contiguous;
+use crate::store::header_ranges::HeaderRanges;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
@@ -181,7 +182,7 @@ impl InMemoryStore {
     async fn try_insert_to_range(&self, new_range: RangeInclusive<u64>) -> Result<(bool, bool)> {
         let mut stored_ranges_guard = self.stored_ranges.write().await;
 
-        let range_scan_result = check_range_insert(&stored_ranges_guard, &new_range)?;
+        let range_scan_result = stored_ranges_guard.check_range_insert(&new_range)?;
 
         let prev_exists = new_range.start() != range_scan_result.range.start();
         let next_exists = new_range.end() != range_scan_result.range.end();

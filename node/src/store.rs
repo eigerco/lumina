@@ -4,7 +4,6 @@ use std::fmt::Debug;
 use std::io::Cursor;
 use std::ops::{Bound, RangeBounds, RangeInclusive};
 
-use crate::store::utils::HeaderRanges;
 use async_trait::async_trait;
 use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
@@ -13,6 +12,8 @@ use cid::Cid;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::store::header_ranges::HeaderRanges;
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
@@ -27,8 +28,7 @@ mod indexed_db_store;
 mod redb_store;
 
 pub(crate) mod utils;
-
-pub(crate) use utils::calculate_missing_ranges;
+pub(crate) mod header_ranges;
 
 /// Sampling metadata for a block.
 ///
@@ -1046,41 +1046,6 @@ mod tests {
         store.append_single(fork.next()).await.unwrap_err();
     }
 
-    #[test]
-    async fn test_iter() {
-        let ranges = HeaderRanges::from([1..=5, 7..=10]);
-        assert_eq!(
-            ranges.into_iter().collect::<Vec<_>>(),
-            vec![1, 2, 3, 4, 5, 7, 8, 9, 10]
-        );
-
-        let ranges = HeaderRanges::from([1..=1, 2..=4, 8..=8]);
-        assert_eq!(ranges.into_iter().collect::<Vec<_>>(), vec![1, 2, 3, 4, 8]);
-
-        let mut iter = HeaderRanges::from([1..=1]).into_iter();
-        assert_eq!(iter.next(), Some(1));
-        assert_eq!(iter.next(), None);
-        assert_eq!(iter.next(), None);
-        assert_eq!(iter.next(), None);
-    }
-
-    #[test]
-    async fn test_iter_batches() {
-        let mut ranges = HeaderRanges::from([1..=100]).into_iter();
-        assert_eq!(ranges.next_batch(10), Some(1..=10));
-        assert_eq!(ranges.next_batch(10), Some(11..=20));
-        assert_eq!(ranges.next_batch(100), Some(21..=100));
-
-        let mut ranges = HeaderRanges::from([1..=10, 21..=30, 41..=50]).into_iter();
-        assert_eq!(ranges.next_batch(20), Some(1..=10));
-        assert_eq!(ranges.next_batch(1), Some(21..=21));
-        assert_eq!(ranges.next_batch(2), Some(22..=23));
-        assert_eq!(ranges.next_batch(3), Some(24..=26));
-        assert_eq!(ranges.next_batch(4), Some(27..=30));
-        assert_eq!(ranges.next_batch(5), Some(41..=45));
-        assert_eq!(ranges.next_batch(100), Some(46..=50));
-    }
-
     /// Fills an empty store
     async fn fill_store<S: Store>(store: &mut S, amount: u64) -> ExtendedHeaderGenerator {
         assert!(!store.has_at(1).await, "Store is not empty");
@@ -1119,11 +1084,5 @@ mod tests {
         IndexedDbStore::new(&db_name)
             .await
             .expect("creating test store failed")
-    }
-
-    #[test]
-    async fn test_header_ranges_empty() {
-        assert!(HeaderRanges::from([]).is_empty());
-        assert!(!HeaderRanges::from([1..=3]).is_empty());
     }
 }

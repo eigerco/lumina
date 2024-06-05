@@ -62,7 +62,8 @@ use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihash
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::store::{utils::HeaderRanges, Store};
+use crate::store::{Store};
+use crate::store::header_ranges::HeaderRanges;
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
     OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt,
@@ -413,7 +414,7 @@ impl P2p {
     ///
     /// For each of the ranges, headers are verified against each other, but it's the caller
     /// responsibility to verify range edges against headers existing in the store.
-    pub async fn get_unverified_header_ranges(
+    pub(crate) async fn get_unverified_header_ranges(
         &self,
         ranges: HeaderRanges,
     ) -> Result<Vec<Vec<ExtendedHeader>>> {

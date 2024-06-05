@@ -6,7 +6,7 @@ use tracing::{debug, warn};
 use crate::executor::spawn;
 use crate::p2p::header_ex::utils::HeaderRequestExt;
 use crate::p2p::{HeaderExError, P2pCmd, P2pError};
-use crate::store::utils::{HeaderRanges, HeaderRangesIterator, RangeLengthExt};
+use crate::store::header_ranges::{HeaderRanges, HeaderRangesIterator, RangeLengthExt};
 
 const MAX_AMOUNT_PER_REQ: u64 = 64;
 const MAX_CONCURRENT_REQS: usize = 1;
@@ -64,8 +64,9 @@ impl HeaderSession {
                         // Reschedule the missing sub-range
                         let height = height + headers_len;
                         let amount = requested_amount - headers_len;
-                        tracing::info!("requested {requested_amount}, got {headers_len}: retrying {height} +{amount}");
                         self.send_request(height, amount).await?;
+
+                        debug!("requested {requested_amount}, got {headers_len}: retrying {height} +{amount}");
                     } else {
                         // Schedule next request
                         self.send_next_request().await?;
@@ -97,8 +98,6 @@ impl HeaderSession {
         let Some(range) = self.ranges_iter.next_batch(MAX_AMOUNT_PER_REQ) else {
             return Ok(());
         };
-
-        tracing::info!("Sending batch {range:?}");
 
         self.send_request(*range.start(), range.len()).await?;
 

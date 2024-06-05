@@ -17,8 +17,9 @@ use tokio::task::spawn_blocking;
 use tracing::{debug, info, trace};
 
 use crate::store::utils::{
-    check_range_insert, verify_range_contiguous, HeaderRange, HeaderRanges, RangeScanResult,
+    verify_range_contiguous, RangeScanResult,
 };
+use crate::store::header_ranges::{HeaderRange, HeaderRanges};
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 const SCHEMA_VERSION: u64 = 1;
@@ -446,7 +447,7 @@ fn try_insert_to_range(
         range_index,
         range,
         range_to_remove,
-    } = check_range_insert(&stored_ranges, &new_range)?;
+    } = stored_ranges.check_range_insert(&new_range)?;
 
     if let Some(to_remove) = range_to_remove {
         let (start, end) = ranges_table

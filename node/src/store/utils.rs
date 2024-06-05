@@ -1,169 +1,14 @@
-use std::fmt::Display;
 use std::iter::once;
 use std::ops::RangeInclusive;
 
 use celestia_types::ExtendedHeader;
 use itertools::Itertools;
-use serde::Serialize;
-use smallvec::{IntoIter, SmallVec};
-use thiserror::Error;
 
 use crate::executor::yield_now;
 use crate::store::{Result, StoreError};
+use crate::store::header_ranges::{HeaderRange, HeaderRanges};
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
-
-pub type HeaderRange = RangeInclusive<u64>;
-
-pub(crate) trait RangeLengthExt {
-    fn len(&self) -> u64;
-}
-
-impl RangeLengthExt for RangeInclusive<u64> {
-    fn len(&self) -> u64 {
-        self.end() - self.start() + 1
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Default, Serialize)]
-pub struct HeaderRanges(SmallVec<[RangeInclusive<u64>; 2]>);
-
-#[derive(Debug, Error)]
-pub enum HeaderRangeError {
-    #[error("Overlapping range: {0}, {1}")]
-    RangeOverlap(u64, u64),
-}
-
-impl HeaderRanges {
-    pub fn validate(&self) -> Result<(), HeaderRangeError> {
-        let mut prev: Option<&RangeInclusive<u64>> = None;
-        for current in &self.0 {
-            if let Some(prev) = prev {
-                if current.start() > prev.end() {
-                    return Err(HeaderRangeError::RangeOverlap(
-                        *current.start(),
-                        *prev.end(),
-                    ));
-                }
-            }
-            prev = Some(current);
-        }
-        Ok(())
-    }
-
-    /// Commit previously calculated `check_range_insert`
-    pub(crate) fn update_range(&mut self, scan_information: RangeScanResult) {
-        let RangeScanResult {
-            range_index,
-            range,
-            range_to_remove,
-        } = scan_information;
-
-        if self.0.len() == range_index {
-            self.0.push(range);
-        } else {
-            self.0[range_index] = range;
-        }
-
-        if let Some(to_remove) = range_to_remove {
-            self.0.remove(to_remove);
-        }
-    }
-
-    /// Return whether range is empty
-    pub fn is_empty(&self) -> bool {
-        self.0.iter().all(|r| r.is_empty())
-    }
-
-    pub fn contains(&self, height: u64) -> bool {
-        self.0.iter().any(|r| r.contains(&height))
-    }
-
-    /// Return highest height in the range
-    pub fn head(&self) -> Option<u64> {
-        self.0.last().map(|r| *r.end())
-    }
-
-    /// Return lowest height in the range
-    pub fn tail(&self) -> Option<u64> {
-        self.0.first().map(|r| *r.start())
-    }
-}
-
-impl Display for HeaderRanges {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[")?;
-        for (idx, range) in self.0.iter().enumerate() {
-            if idx == 0 {
-                write!(f, "{}..={}", range.start(), range.end())?;
-            } else {
-                write!(f, ", {}..={}", range.start(), range.end())?;
-            }
-        }
-        write!(f, "]")
-    }
-}
-
-impl AsRef<[RangeInclusive<u64>]> for HeaderRanges {
-    fn as_ref(&self) -> &[RangeInclusive<u64>] {
-        &self.0
-    }
-}
-
-impl FromIterator<RangeInclusive<u64>> for HeaderRanges {
-    fn from_iter<T: IntoIterator<Item = RangeInclusive<u64>>>(iter: T) -> Self {
-        Self(iter.into_iter().collect())
-    }
-}
-
-impl<const T: usize> From<[RangeInclusive<u64>; T]> for HeaderRanges {
-    fn from(value: [RangeInclusive<u64>; T]) -> Self {
-        Self(value.into_iter().collect())
-    }
-}
-
-impl IntoIterator for HeaderRanges {
-    type Item = u64;
-    type IntoIter = HeaderRangesIterator;
-    fn into_iter(self) -> Self::IntoIter {
-        let mut outer_iter = self.0.into_iter();
-        HeaderRangesIterator {
-            inner_iter: outer_iter.next(),
-            outer_iter,
-        }
-    }
-}
-
-pub struct HeaderRangesIterator {
-    inner_iter: Option<RangeInclusive<u64>>,
-    outer_iter: IntoIter<[RangeInclusive<u64>; 2]>,
-}
-
-impl HeaderRangesIterator {
-    pub fn next_batch(&mut self, limit: u64) -> Option<RangeInclusive<u64>> {
-        let current_range = self.inner_iter.take()?;
-
-        if current_range.len() <= limit {
-            self.inner_iter = self.outer_iter.next();
-            Some(current_range)
-        } else {
-            let returned_range = *current_range.start()..=*current_range.start() + limit - 1;
-            self.inner_iter = Some(*current_range.start() + limit..=*current_range.end());
-            Some(returned_range)
-        }
-    }
-}
-
-impl Iterator for HeaderRangesIterator {
-    type Item = u64;
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(v) = self.inner_iter.as_mut()?.next() {
-            return Some(v);
-        }
-        self.inner_iter = self.outer_iter.next();
-        self.next()
-    }
-}
 
 /// based on the stored headers and current network head height, calculate range of headers that
 /// should be fetched from the network, starting from the front up to a `limit` of headers
@@ -182,7 +27,7 @@ pub(crate) fn calculate_missing_ranges(
         .chain(once(0));
 
     let mut left = limit;
-    let missing_ranges = range_edges
+    range_edges
         .chunks(2)
         .into_iter()
         .map_while(|mut range| {
@@ -209,8 +54,7 @@ pub(crate) fn calculate_missing_ranges(
             }
         })
         .filter(|v| !v.is_empty())
-        .collect();
-    HeaderRanges(missing_ranges)
+        .collect()
 }
 
 pub(crate) fn try_consolidate_ranges(
@@ -259,77 +103,6 @@ pub(crate) struct RangeScanResult {
     /// index of the range that should be removed from the table, if we're consolidating two
     /// ranges. None otherwise.
     pub range_to_remove: Option<usize>,
-}
-
-pub(crate) fn check_range_insert(
-    stored_ranges: &HeaderRanges,
-    to_insert: &RangeInclusive<u64>,
-) -> Result<RangeScanResult> {
-    let Some(head_range) = stored_ranges.0.last() else {
-        // Empty store case
-        return Ok(RangeScanResult {
-            range_index: 0,
-            range: to_insert.clone(),
-            range_to_remove: None,
-        });
-    };
-
-    // allow inserting a new header range in front of the current head range
-    if *to_insert.start() > head_range.end() + 1 {
-        return Ok(RangeScanResult {
-            range_index: stored_ranges.0.len(),
-            range: to_insert.clone(),
-            range_to_remove: None,
-        });
-    }
-
-    let mut stored_ranges_iter = stored_ranges.0.iter().enumerate();
-    let mut found_range = loop {
-        let Some((idx, stored_range)) = stored_ranges_iter.next() else {
-            return Err(StoreError::InsertPlacementDisallowed(
-                *to_insert.start(),
-                *to_insert.end(),
-            ));
-        };
-
-        // TODO: break early
-        //if sth
-
-        if let Some(intersection) = ranges_intersection(stored_range, to_insert) {
-            return Err(StoreError::HeaderRangeOverlap(
-                *intersection.start(),
-                *intersection.end(),
-            ));
-        }
-
-        if let Some(consolidated) = try_consolidate_ranges(stored_range, to_insert) {
-            break RangeScanResult {
-                range_index: idx,
-                range: consolidated,
-                range_to_remove: None,
-            };
-        }
-    };
-
-    // we have a hit, check whether we can merge with the next range too
-    if let Some((idx, range_after)) = stored_ranges_iter.next() {
-        if let Some(intersection) = ranges_intersection(range_after, to_insert) {
-            return Err(StoreError::HeaderRangeOverlap(
-                *intersection.start(),
-                *intersection.end(),
-            ));
-        }
-
-        if let Some(consolidated) = try_consolidate_ranges(range_after, &found_range.range) {
-            found_range = RangeScanResult {
-                range_index: found_range.range_index,
-                range: consolidated,
-                range_to_remove: Some(idx),
-            };
-        }
-    }
-
-    Ok(found_range)
 }
 
 pub(crate) fn verify_range_contiguous(headers: &[ExtendedHeader]) -> Result<()> {
@@ -426,123 +199,5 @@ mod tests {
         assert_eq!(ranges_intersection(&(3..=7), &(5..=6)), Some(5..=6));
         assert_eq!(ranges_intersection(&(3..=5), &(3..=3)), Some(3..=3));
         assert_eq!(ranges_intersection(&(3..=5), &(1..=4)), Some(3..=4));
-    }
-
-    #[test]
-    fn check_range_insert_append() {
-        let result = check_range_insert(&[].into(), &(1..=5)).unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 1..=5,
-                range_to_remove: None,
-            }
-        );
-
-        let result = check_range_insert(&[1..=4].into(), &(5..=5)).unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 1..=5,
-                range_to_remove: None,
-            }
-        );
-
-        let result = check_range_insert(&[1..=5].into(), &(6..=9)).unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 1..=9,
-                range_to_remove: None,
-            }
-        );
-
-        let result = check_range_insert(&[6..=8].into(), &(2..=5)).unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 2..=8,
-                range_to_remove: None,
-            }
-        );
-    }
-
-    #[test]
-    fn check_range_insert_with_consolidation() {
-        let result = check_range_insert(&[1..=3, 6..=9].into(), &(4..=5)).unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 1..=9,
-                range_to_remove: Some(1),
-            }
-        );
-
-        let result = check_range_insert(&[1..=2, 5..=5, 8..=9].into(), &(3..=4)).unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 1..=5,
-                range_to_remove: Some(1),
-            }
-        );
-
-        let result = check_range_insert(&[1..=2, 4..=4, 8..=9].into(), &(5..=7)).unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 1,
-                range: 4..=9,
-                range_to_remove: Some(2),
-            }
-        );
-    }
-
-    #[test]
-    fn check_range_insert_overlapping() {
-        let result = check_range_insert(&[1..=2].into(), &(1..=1)).unwrap_err();
-        assert!(matches!(result, StoreError::HeaderRangeOverlap(1, 1)));
-
-        let result = check_range_insert(&[1..=4].into(), &(2..=8)).unwrap_err();
-        assert!(matches!(result, StoreError::HeaderRangeOverlap(2, 4)));
-
-        let result = check_range_insert(&[1..=4].into(), &(2..=3)).unwrap_err();
-        assert!(matches!(result, StoreError::HeaderRangeOverlap(2, 3)));
-
-        let result = check_range_insert(&[5..=9].into(), &(1..=5)).unwrap_err();
-        assert!(matches!(result, StoreError::HeaderRangeOverlap(5, 5)));
-
-        let result = check_range_insert(&[5..=8].into(), &(2..=8)).unwrap_err();
-        assert!(matches!(result, StoreError::HeaderRangeOverlap(5, 8)));
-
-        let result = check_range_insert(&[1..=3, 6..=9].into(), &(3..=6)).unwrap_err();
-        assert!(matches!(result, StoreError::HeaderRangeOverlap(3, 3)));
-    }
-
-    #[test]
-    fn check_range_insert_invalid_placement() {
-        let result = check_range_insert(&[1..=2, 7..=9].into(), &(4..=4)).unwrap_err();
-        assert!(matches!(
-            result,
-            StoreError::InsertPlacementDisallowed(4, 4)
-        ));
-
-        let result = check_range_insert(&[1..=2, 8..=9].into(), &(4..=6)).unwrap_err();
-        assert!(matches!(
-            result,
-            StoreError::InsertPlacementDisallowed(4, 6)
-        ));
-
-        let result = check_range_insert(&[4..=5, 7..=8].into(), &(1..=2)).unwrap_err();
-        assert!(matches!(
-            result,
-            StoreError::InsertPlacementDisallowed(1, 2)
-        ));
     }
 }
