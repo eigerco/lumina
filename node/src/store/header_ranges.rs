@@ -220,11 +220,12 @@ impl HeaderRangesIterator {
 impl Iterator for HeaderRangesIterator {
     type Item = u64;
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(v) = self.inner_iter.as_mut()?.next() {
-            return Some(v);
+        loop {
+            if let Some(v) = self.inner_iter.as_mut()?.next() {
+                return Some(v);
+            }
+            self.inner_iter = self.outer_iter.next();
         }
-        self.inner_iter = self.outer_iter.next();
-        self.next()
     }
 }
 

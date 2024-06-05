@@ -624,11 +624,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new_from_height(5);
         let header5 = gen.next();
 
-        mock_req.send_n_responses(
-            &mut handler,
-            1,
-            vec![header5.to_header_response()],
-        );
+        mock_req.send_n_responses(&mut handler, 1, vec![header5.to_header_response()]);
         let headers = rx.await.unwrap().unwrap();
         assert_eq!(headers, vec![header5]);
     }
