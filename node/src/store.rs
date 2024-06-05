@@ -11,9 +11,10 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use prost::Message;
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use thiserror::Error;
 
-use crate::store::header_ranges::HeaderRanges;
+use crate::store::header_ranges::HeaderRange;
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
@@ -27,8 +28,8 @@ mod indexed_db_store;
 #[cfg(not(target_arch = "wasm32"))]
 mod redb_store;
 
-pub(crate) mod utils;
 pub(crate) mod header_ranges;
+pub(crate) mod utils;
 
 /// Sampling metadata for a block.
 ///
@@ -176,7 +177,7 @@ pub trait Store: Send + Sync + Debug {
     async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()>;
 
     /// Return a list of header ranges currenty held in store
-    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;
+    async fn get_stored_header_ranges(&self) -> Result<SmallVec<[HeaderRange; 2]>>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].

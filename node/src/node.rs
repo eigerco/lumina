@@ -280,7 +280,12 @@ where
 
     /// Get ranges of headers currently stored.
     pub async fn get_stored_header_ranges(&self) -> Result<Vec<RangeInclusive<u64>>> {
-        Ok(self.store.get_stored_header_ranges().await?.as_ref().to_vec())
+        Ok(self
+            .store
+            .get_stored_header_ranges()
+            .await?
+            .as_ref()
+            .to_vec())
     }
 
     /// Get the latest locally synced header.

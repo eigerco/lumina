@@ -5,8 +5,8 @@ use celestia_types::ExtendedHeader;
 use itertools::Itertools;
 
 use crate::executor::yield_now;
-use crate::store::{Result, StoreError};
 use crate::store::header_ranges::{HeaderRange, HeaderRanges};
+use crate::store::{Result, StoreError};
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
 

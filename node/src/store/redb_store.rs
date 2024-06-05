@@ -12,14 +12,13 @@ use redb::{
     CommitError, Database, ReadTransaction, ReadableTable, StorageError, Table, TableDefinition,
     TableError, TransactionError, WriteTransaction,
 };
+use smallvec::SmallVec;
 use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::{debug, info, trace};
 
-use crate::store::utils::{
-    verify_range_contiguous, RangeScanResult,
-};
 use crate::store::header_ranges::{HeaderRange, HeaderRanges};
+use crate::store::utils::{verify_range_contiguous, RangeScanResult};
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 const SCHEMA_VERSION: u64 = 1;
@@ -336,7 +335,7 @@ impl RedbStore {
         .await
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+    async fn get_stored_ranges(&self) -> Result<HeaderRanges> {
         let ranges = self
             .read_tx(|tx| {
                 let table = tx.open_table(HEADER_HEIGHT_RANGES)?;
@@ -426,8 +425,8 @@ impl Store for RedbStore {
         self.get_sampling_metadata(height).await
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
-        self.get_stored_header_ranges().await
+    async fn get_stored_header_ranges(&self) -> Result<SmallVec<[HeaderRange; 2]>> {
+        Ok(self.get_stored_ranges().await?.into())
     }
 }
 
