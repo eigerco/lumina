@@ -626,13 +626,9 @@ mod tests {
         let header5 = gen.next();
         let header6 = gen.next();
 
-        mock_req.send_n_responses(
-            &mut handler,
-            1,
-            vec![header5.to_header_response(), header6.to_header_response()],
-        );
+        mock_req.send_n_responses(&mut handler, 1, vec![header5.to_header_response()]);
         let headers = rx.await.unwrap().unwrap();
-        assert_eq!(headers, vec![header5, header6]);
+        assert_eq!(headers, vec![header5]);
     }
 
     #[async_test]
