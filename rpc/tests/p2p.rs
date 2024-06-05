@@ -43,7 +43,6 @@ async fn add_remove_peer_test() {
         .p2p_peers()
         .await
         .expect("failed to get peer list after connect request");
-    println!("{peers:?}");
     assert!(peers.contains(&addr_info.id));
 
     let connected_to_peer = client

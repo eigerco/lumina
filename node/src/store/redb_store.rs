@@ -12,7 +12,6 @@ use redb::{
     CommitError, Database, ReadTransaction, ReadableTable, StorageError, Table, TableDefinition,
     TableError, TransactionError, WriteTransaction,
 };
-use smallvec::SmallVec;
 use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::{debug, info, trace};
@@ -425,8 +424,8 @@ impl Store for RedbStore {
         self.get_sampling_metadata(height).await
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<SmallVec<[HeaderRange; 2]>> {
-        Ok(self.get_stored_ranges().await?.into())
+    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+        Ok(self.get_stored_ranges().await?)
     }
 }
 

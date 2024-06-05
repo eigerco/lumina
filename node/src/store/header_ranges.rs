@@ -21,7 +21,7 @@ impl RangeLengthExt for RangeInclusive<u64> {
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize)]
-pub(crate) struct HeaderRanges(SmallVec<[HeaderRange; 2]>);
+pub struct HeaderRanges(SmallVec<[HeaderRange; 2]>);
 
 #[derive(Debug, Error)]
 pub enum HeaderRangeError {

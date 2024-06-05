@@ -25,7 +25,7 @@ use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::header_ranges::{HeaderRange, HeaderRanges};
+use crate::store::header_ranges::{HeaderRanges};
 use crate::store::utils::calculate_missing_ranges;
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
@@ -98,7 +98,7 @@ enum SyncerCmd {
 #[derive(Debug, Serialize)]
 pub struct SyncingInfo {
     /// Ranges of headers that are already synchronised
-    pub stored_headers: Vec<HeaderRange>,
+    pub stored_headers: HeaderRanges,
     /// Syncing target. The latest height seen in the network that was successfully verified.
     pub subjective_head: u64,
 }
@@ -312,7 +312,6 @@ where
                 .store
                 .get_stored_header_ranges()
                 .await
-                .map(|r| r.to_vec())
                 .unwrap_or_default(),
             subjective_head: self.subjective_head_height.unwrap_or(0),
         }
@@ -564,15 +563,12 @@ mod tests {
         assert_eq!(amount, 1);
         respond_to.send(Ok(vec![genesis.clone()])).unwrap();
 
-        println!("fooooo");
         // Now Syncer initializes HeaderSub with the latest HEAD
         let head_from_syncer = handle.expect_init_header_sub().await;
         assert_eq!(head_from_syncer, genesis);
-        println!("fooooo");
 
         // Genesis == HEAD, so nothing else is produced.
         handle.expect_no_cmd().await;
-        println!("fooooo");
     }
 
     #[async_test]
@@ -826,7 +822,7 @@ mod tests {
         let syncing_info = syncer.info().await.unwrap();
 
         assert_eq!(store_ranges.as_ref(), expected_synced_ranges);
-        assert_eq!(syncing_info.stored_headers, expected_synced_ranges,);
+        assert_eq!(syncing_info.stored_headers.as_ref(), expected_synced_ranges);
         assert_eq!(syncing_info.subjective_head, expected_subjective_head);
     }
 

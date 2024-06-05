@@ -23,6 +23,13 @@ pub(crate) struct HeaderSession {
 }
 
 impl HeaderSession {
+    /// Create a new HeaderSession responsible for fetching provided `ranges` headers. 
+    /// `HeaderRanges` can be created manually, or more probably using
+    /// [`Store::get_stored_header_ranges`] to fetch existing header ranges and then using 
+    /// [`calculate_missing_ranges`] to convert that into ranges of headers that are missing.
+    ///
+    /// [`calculate_missing_ranges`]: crate::store::utils::calculate_missing_ranges
+    /// [`Store::get_stored_header_ranges`]: crate::store::Store::get_stored_header_ranges
     pub(crate) fn new(ranges: HeaderRanges, cmd_tx: mpsc::Sender<P2pCmd>) -> Result<Self> {
         ranges.validate().map_err(|e| {
             warn!("invalid header range: {e:?}");
@@ -80,7 +87,7 @@ impl HeaderSession {
             }
         }
 
-        let ranges = sort_header_spans_into_ranges(responses, self.ranges_count);
+        let ranges = sort_and_flatten_header_ranges(responses, self.ranges_count);
 
         Ok(ranges)
     }
@@ -134,7 +141,13 @@ impl HeaderSession {
     }
 }
 
-fn sort_header_spans_into_ranges(
+/// Given a vector of header spans which are internally sorted, return a vector of header ranges
+/// with contiguous spans merged. For example input with following header heights
+/// [[1, 2, 3], [6, 7], \[4\], [8, 9]]
+/// will return
+/// [[1, 2, 3, 4], [6, 7, 8, 9]]
+///
+fn sort_and_flatten_header_ranges(
     mut header_spans: Vec<Vec<ExtendedHeader>>,
     ranges_count: usize,
 ) -> Vec<Vec<ExtendedHeader>> {
@@ -301,7 +314,7 @@ mod tests {
 
         let spans = vec![span0.clone(), span1.clone(), span2.clone(), span3.clone()];
 
-        let ranges = sort_header_spans_into_ranges(spans, 3);
+        let ranges = sort_and_flatten_header_ranges(spans, 3);
 
         span1.append(&mut span2);
         assert_eq!(ranges[0], span0);

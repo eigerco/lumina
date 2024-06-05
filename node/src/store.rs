@@ -11,10 +11,9 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 use thiserror::Error;
 
-use crate::store::header_ranges::HeaderRange;
+use crate::store::header_ranges::HeaderRanges;
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
@@ -177,7 +176,7 @@ pub trait Store: Send + Sync + Debug {
     async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()>;
 
     /// Return a list of header ranges currenty held in store
-    async fn get_stored_header_ranges(&self) -> Result<SmallVec<[HeaderRange; 2]>>;
+    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].

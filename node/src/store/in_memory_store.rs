@@ -8,15 +8,12 @@ use celestia_types::ExtendedHeader;
 use cid::Cid;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use smallvec::SmallVec;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
 use crate::store::header_ranges::HeaderRanges;
 use crate::store::utils::verify_range_contiguous;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
-
-use super::header_ranges::HeaderRange;
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -67,7 +64,6 @@ impl InMemoryStore {
         };
 
         let headers_range = head.height().value()..=tail.height().value();
-        println!("I: {headers_range:?}");
         let neighbours_exist = self.try_insert_to_range(headers_range).await?;
 
         if verify_neighbours {
@@ -329,8 +325,8 @@ impl Store for InMemoryStore {
         self.get_sampling_metadata(height).await
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<SmallVec<[HeaderRange; 2]>> {
-        Ok(self.get_stored_ranges().await.into())
+    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+        Ok(self.get_stored_ranges().await)
     }
 }
 

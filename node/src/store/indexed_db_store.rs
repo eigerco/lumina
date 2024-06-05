@@ -12,7 +12,6 @@ use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
-use smallvec::SmallVec;
 
 use crate::store::utils::{ validate_headers, verify_range_contiguous, RangeScanResult, };
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
@@ -396,9 +395,9 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<SmallVec<[HeaderRange; 2]>> {
+    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
         let fut = SendWrapper::new(self.get_stored_header_ranges());
-        Ok(fut.await?.into())
+        fut.await
     }
 }
 
