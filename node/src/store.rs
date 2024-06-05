@@ -1051,7 +1051,6 @@ mod tests {
         assert!(!store.has_at(1).await, "Store is not empty");
 
         let mut gen = ExtendedHeaderGenerator::new();
-        //let headers = gen.next_many(amount);
 
         store
             .append_unchecked(gen.next_many(amount))
