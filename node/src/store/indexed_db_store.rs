@@ -12,12 +12,11 @@ use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
+use smallvec::SmallVec;
 
-use crate::store::utils::validate_headers;
-use crate::store::utils::{
-    check_range_insert, verify_range_contiguous, HeaderRange, RangeScanResult,
-};
-use crate::store::{HeaderRanges, Result, SamplingMetadata, SamplingStatus, Store, StoreError};
+use crate::store::utils::{ validate_headers, verify_range_contiguous, RangeScanResult, };
+use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
+use crate::store::header_ranges::{HeaderRange, HeaderRanges};
 
 /// indexeddb version, needs to be incremented on every schema schange
 const DB_VERSION: u32 = 3;
@@ -397,9 +396,9 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+    async fn get_stored_header_ranges(&self) -> Result<SmallVec<[HeaderRange; 2]>> {
         let fut = SendWrapper::new(self.get_stored_header_ranges());
-        fut.await
+        Ok(fut.await?.into())
     }
 }
 
@@ -446,13 +445,13 @@ async fn try_insert_to_range(
         .await?
         .into_iter()
         .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(start, end)| start..=end))
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<HeaderRanges, _>>()?;
 
     let RangeScanResult {
         range_index,
         range,
         range_to_remove,
-    } = check_range_insert(&stored_ranges, &new_range)?;
+    } = stored_ranges.check_range_insert(&new_range)?;
 
     if let Some(to_remove) = range_to_remove {
         let jsvalue_key_to_remove = to_value(&to_remove)?;
