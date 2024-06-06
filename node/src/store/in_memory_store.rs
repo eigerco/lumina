@@ -1,6 +1,5 @@
 use std::collections::hash_map::Entry as HashMapEntry;
 use std::collections::HashMap;
-use std::ops::RangeInclusive;
 use std::pin::pin;
 
 use async_trait::async_trait;
@@ -91,7 +90,8 @@ impl InMemoryStore {
         self.inner
             .write()
             .await
-            .insert(headers, verify_neighbours)?;
+            .insert(headers, verify_neighbours)
+            .await?;
         self.header_added_notifier.notify_waiters();
         Ok(())
     }
@@ -184,18 +184,34 @@ impl InMemoryStoreInner {
             .ok_or(StoreError::LostHash(hash))
     }
 
-    fn insert(&mut self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
+    async fn insert(
+        &mut self,
+        headers: Vec<ExtendedHeader>,
+        verify_neighbours: bool,
+    ) -> Result<()> {
         let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
             return Ok(());
         };
 
         let headers_range = head.height().value()..=tail.height().value();
-        let neighbours_exist = self.try_insert_to_range(headers_range)?;
+        let range_scan_result = self.stored_ranges.check_range_insert(&headers_range)?;
 
         if verify_neighbours {
-            self.verify_against_neighbours(head, tail, neighbours_exist)?;
+            let prev_exists = headers_range.start() != range_scan_result.range.start();
+            let next_exists = headers_range.end() != range_scan_result.range.end();
+            // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
+            self.verify_against_neighbours(head, tail, (prev_exists, next_exists))?;
         } else {
             verify_range_contiguous(&headers)?;
+        }
+
+        // make sure we don't already have any of the provided hashes before doing any inserts to
+        // avoid having to do a rollback
+        for header in &headers {
+            let hash = header.hash();
+            if self.headers.contains_key(&hash) {
+                return Err(StoreError::HashExists(hash));
+            }
         }
 
         for header in headers {
@@ -203,7 +219,9 @@ impl InMemoryStoreInner {
             let height = header.height().value();
 
             let HashMapEntry::Vacant(hash_entry) = self.headers.entry(hash) else {
-                return Err(StoreError::HashExists(hash));
+                panic!(
+                    "hash present in store right after we checked its absence, should not happen"
+                );
             };
             let HashMapEntry::Vacant(height_entry) = self.height_to_hash.entry(height) else {
                 return Err(StoreError::StoredDataError(
@@ -216,18 +234,9 @@ impl InMemoryStoreInner {
             height_entry.insert(hash);
         }
 
-        Ok(())
-    }
-
-    fn try_insert_to_range(&mut self, new_range: RangeInclusive<u64>) -> Result<(bool, bool)> {
-        let range_scan_result = self.stored_ranges.check_range_insert(&new_range)?;
-
-        let prev_exists = new_range.start() != range_scan_result.range.start();
-        let next_exists = new_range.end() != range_scan_result.range.end();
-
         self.stored_ranges.update_range(range_scan_result);
 
-        Ok((prev_exists, next_exists))
+        Ok(())
     }
 
     fn verify_against_neighbours(

@@ -240,6 +240,7 @@ impl RedbStore {
             let neighbours_exist = try_insert_to_range(&mut height_ranges_table, headers_range)?;
 
             if verify_neighbours {
+                // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
                 verify_against_neighbours(&headers_table, head, tail, neighbours_exist)?;
             } else {
                 verify_range_contiguous(&headers)?;
@@ -466,7 +467,6 @@ fn try_insert_to_range(
     Ok((prev_exists, next_exists))
 }
 
-// TODO: this should do full range verify
 fn verify_against_neighbours<R>(
     headers_table: &R,
     lowest_header: &ExtendedHeader,

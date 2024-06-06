@@ -29,6 +29,11 @@ impl HeaderSession {
     /// `HeaderRanges` can be created manually, or more probably using
     /// [`Store::get_stored_header_ranges`] to fetch existing header ranges and then using
     /// [`calculate_missing_ranges`] to convert that into ranges of headers that are missing.
+    /// Received headers are sent over `cmd_tx` as a vector of contiguous header ranges, e.g.
+    /// for requested ranges
+    /// `[1..=3, 6..=9]`
+    /// response would be
+    /// `vec![vec![1, 2, 3], vec![6, 7, 8, 9]]`
     ///
     /// [`calculate_missing_ranges`]: crate::store::utils::calculate_missing_ranges
     /// [`Store::get_stored_header_ranges`]: crate::store::Store::get_stored_header_ranges
@@ -148,7 +153,6 @@ impl HeaderSession {
 /// [[1, 2, 3], [6, 7], \[4\], [8, 9]]
 /// will return
 /// [[1, 2, 3, 4], [6, 7, 8, 9]]
-///
 fn sort_and_flatten_header_ranges(
     mut header_spans: Vec<Vec<ExtendedHeader>>,
     ranges_count: usize,

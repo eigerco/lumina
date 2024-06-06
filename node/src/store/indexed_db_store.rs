@@ -14,7 +14,7 @@ use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
 use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt};
-use crate::store::utils::{validate_headers, verify_range_contiguous, RangeScanResult};
+use crate::store::utils::{verify_range_contiguous, RangeScanResult};
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// indexeddb version, needs to be incremented on every schema schange
@@ -174,8 +174,8 @@ impl IndexedDbStore {
         let headers_range = head.height().value()..=tail.height().value();
         let neighbours_exist = try_insert_to_range(&ranges_store, headers_range).await?;
 
+        // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
         if verify_neighbours {
-            validate_headers(&headers).await?;
             verify_against_neighbours(&header_store, head, tail, neighbours_exist).await?;
         } else {
             verify_range_contiguous(&headers)?;

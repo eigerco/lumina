@@ -16,7 +16,7 @@ pub(crate) trait RangeLengthExt {
 
 impl RangeLengthExt for RangeInclusive<u64> {
     fn len(&self) -> u64 {
-        self.end() - self.start() + 1
+        self.end().saturating_sub(*self.start()) + 1
     }
 }
 
