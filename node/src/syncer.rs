@@ -330,7 +330,7 @@ where
             .map(|ongoing| format!("{}", ongoing.fetch_ranges))
             .unwrap_or_else(|| "None".to_string());
 
-        info!("syncing: {stored_headers}/{subjective_head}, ongoing batches: {ongoing_batch}",);
+        info!("syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}",);
     }
 
     fn spawn_try_init(&self) -> oneshot::Receiver<u64> {

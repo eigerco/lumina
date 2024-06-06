@@ -226,8 +226,6 @@ impl RedbStore {
     }
 
     async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
-        info!("inserting: {}", headers.len());
-
         self.write_tx(move |tx| {
             let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
                 return Ok(());

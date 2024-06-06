@@ -254,7 +254,7 @@ mod tests {
         assert_eq!((0u64..=0).len(), 1);
         assert_eq!((0u64..=5).len(), 6);
         assert_eq!((1u64..=2).len(), 2);
-        assert_eq!((2u64..=1).len(), 0);
+        assert_eq!(RangeInclusive::new(2u64, 1).len(), 0);
         assert_eq!((10001u64..=20000).len(), 10000);
     }
 
