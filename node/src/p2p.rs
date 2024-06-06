@@ -402,9 +402,7 @@ impl P2p {
         let range = height..=height + amount - 1;
 
         let mut session = HeaderSession::new([range].into(), self.cmd_tx.clone())?;
-        let Some(headers) = session.run().await?.pop() else {
-            panic!("invalid response");
-        };
+        let headers = session.run().await?.pop().ok_or(HeaderExError::InvalidResponse)?;
 
         from.verify_adjacent_range(&headers)
             .map_err(|_| HeaderExError::InvalidResponse)?;
