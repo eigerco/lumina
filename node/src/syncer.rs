@@ -1,4 +1,4 @@
-//! Component respnsible for synchronizing block headers announced in the Celestia network.
+//! Component responsible for synchronizing block headers announced in the Celestia network.
 //!
 //! It starts by asking the trusted peers for their current head headers and picks
 //! the latest header returned by at least two of them as the initial synchronization target
