@@ -16,7 +16,10 @@ pub(crate) trait RangeLengthExt {
 
 impl RangeLengthExt for RangeInclusive<u64> {
     fn len(&self) -> u64 {
-        self.end().saturating_sub(*self.start()) + 1
+        match self.end().checked_sub(*self.start()) {
+            Some(difference) => difference + 1,
+            None => 0,
+        }
     }
 }
 
@@ -30,7 +33,7 @@ pub enum HeaderRangeError {
 }
 
 pub(crate) trait HeaderRangesExt {
-    /// check whether sub-ranges do not overlap
+    /// Check that sub-ranges do not overlap
     fn validate(&self) -> Result<(), HeaderRangeError>;
     /// Check whether provided `to_insert` range can be inserted into the header ranges represented
     /// by self. New range can be inserted ahead of all existing ranges to allow syncing from the
@@ -41,10 +44,6 @@ pub(crate) trait HeaderRangesExt {
     fn check_range_insert(&self, to_insert: &HeaderRange) -> Result<RangeScanResult, StoreError>;
     /// Modify the header ranges, committing insert previously checked with [`check_range_insert`]
     fn update_range(&mut self, scan_information: RangeScanResult);
-    /// return whether range is empty
-    fn is_empty(&self) -> bool;
-    /// Return highest height in the range
-    fn head(&self) -> Option<u64>;
 }
 
 impl HeaderRangesExt for HeaderRanges {
@@ -64,7 +63,6 @@ impl HeaderRangesExt for HeaderRanges {
         Ok(())
     }
 
-    /// Commit previously calculated `check_range_insert`
     fn update_range(&mut self, scan_information: RangeScanResult) {
         let RangeScanResult {
             range_index,
@@ -111,9 +109,6 @@ impl HeaderRangesExt for HeaderRanges {
                 ));
             };
 
-            // TODO: break early
-            //if sth
-
             if let Some(intersection) = ranges_intersection(stored_range, to_insert) {
                 return Err(StoreError::HeaderRangeOverlap(
                     *intersection.start(),
@@ -150,22 +145,27 @@ impl HeaderRangesExt for HeaderRanges {
 
         Ok(found_range)
     }
+}
+
+impl HeaderRanges {
+    /// Return whether `HeaderRanges` contains provided height
+    pub fn contains(&self, height: u64) -> bool {
+        self.0.iter().any(|r| r.contains(&height))
+    }
 
     /// Return whether range is empty
-    fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.0.iter().all(|r| r.is_empty())
     }
 
     /// Return highest height in the range
-    fn head(&self) -> Option<u64> {
+    pub fn head(&self) -> Option<u64> {
         self.0.last().map(|r| *r.end())
     }
-}
 
-impl HeaderRanges {
-    /// Return whether `headerRanges` contains provided height
-    pub fn contains(&self, height: u64) -> bool {
-        self.0.iter().any(|r| r.contains(&height))
+    /// Return lowest height in the range
+    pub fn tail(&self) -> Option<u64> {
+        self.0.first().map(|r| *r.start())
     }
 }
 
@@ -174,9 +174,9 @@ impl Display for HeaderRanges {
         write!(f, "[")?;
         for (idx, range) in self.0.iter().enumerate() {
             if idx == 0 {
-                write!(f, "{}..={}", range.start(), range.end())?;
+                write!(f, "{}-{}", range.start(), range.end())?;
             } else {
-                write!(f, ", {}..={}", range.start(), range.end())?;
+                write!(f, ", {}-{}", range.start(), range.end())?;
             }
         }
         write!(f, "]")
@@ -198,12 +198,6 @@ impl FromIterator<RangeInclusive<u64>> for HeaderRanges {
 impl<const T: usize> From<[RangeInclusive<u64>; T]> for HeaderRanges {
     fn from(value: [RangeInclusive<u64>; T]) -> Self {
         Self(value.into_iter().collect())
-    }
-}
-
-impl From<HeaderRanges> for SmallVec<[HeaderRange; 2]> {
-    fn from(value: HeaderRanges) -> Self {
-        value.0
     }
 }
 
@@ -256,6 +250,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn range_len() {
+        assert_eq!((0u64..=0).len(), 1);
+        assert_eq!((0u64..=5).len(), 6);
+        assert_eq!((1u64..=2).len(), 2);
+        assert_eq!((2u64..=1).len(), 0);
+        assert_eq!((10001u64..=20000).len(), 10000);
+    }
+
+    #[test]
     fn test_iter() {
         let ranges = HeaderRanges::from([1..=5, 7..=10]);
         assert_eq!(
@@ -299,10 +302,17 @@ mod tests {
     #[test]
     fn header_ranges_head() {
         assert_eq!(HeaderRanges::from([]).head(), None);
-        assert_eq!(HeaderRanges::from([1..=1]).head(), Some(1));
-        assert_eq!(HeaderRanges::from([1..=9]).head(), Some(9));
-        assert_eq!(HeaderRanges::from([1..=3, 5..=8]).head(), Some(8));
-        assert_eq!(HeaderRanges::from([1..=2, 3..=5, 7..=9]).head(), Some(9));
+        assert_eq!(HeaderRanges::from([1..=3]).head(), Some(3));
+        assert_eq!(HeaderRanges::from([1..=3, 6..=9]).head(), Some(9));
+        assert_eq!(HeaderRanges::from([1..=3, 5..=5, 8..=9]).head(), Some(9));
+    }
+
+    #[test]
+    fn header_ranges_tail() {
+        assert_eq!(HeaderRanges::from([]).tail(), None);
+        assert_eq!(HeaderRanges::from([1..=3]).tail(), Some(1));
+        assert_eq!(HeaderRanges::from([1..=3, 6..=9]).tail(), Some(1));
+        assert_eq!(HeaderRanges::from([1..=3, 5..=5, 8..=9]).tail(), Some(1));
     }
 
     #[test]

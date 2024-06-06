@@ -25,7 +25,7 @@ use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::header_ranges::{HeaderRanges, HeaderRangesExt};
+use crate::store::header_ranges::HeaderRanges;
 use crate::store::utils::calculate_missing_ranges;
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
@@ -301,7 +301,7 @@ where
         }
 
         if let Some(ongoing) = self.ongoing_batch.take() {
-            warn!("Cancelling fetching of [{:?}]", ongoing.fetch_ranges,);
+            warn!("Cancelling fetching of {}", ongoing.fetch_ranges,);
             ongoing.cancellation_token.cancel();
         }
     }
@@ -491,21 +491,10 @@ where
         };
 
         for headers in headers_spans {
-            let first_header = headers.first().unwrap();
-            let last_header = headers.last().unwrap();
-
-            info!(
-                "on_fetch_next_batch_result received headers range: {}..={}",
-                first_header.height().value(),
-                last_header.height().value()
-            );
-
             // Headers ranges are verified internally, but we need to validate the edges against
             // headers possibly stored in store already
             if let Err(e) = self.store.insert(headers, true).await {
                 warn!("Failed to store batch {}: {e}", ongoing.fetch_ranges);
-            } else {
-                info!("stored successfully");
             }
         }
     }

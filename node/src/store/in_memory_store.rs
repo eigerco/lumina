@@ -367,9 +367,7 @@ impl Store for InMemoryStore {
 impl From<Vec<ExtendedHeader>> for InMemoryStore {
     fn from(hs: Vec<ExtendedHeader>) -> Self {
         let range = match (hs.first(), hs.last()) {
-            (Some(head), Some(tail)) => {
-                HeaderRanges::from([head.height().value()..=tail.height().value()])
-            }
+            (Some(head), Some(tail)) => [head.height().value()..=tail.height().value()].into(),
             (None, None) => HeaderRanges::default(),
             _ => unreachable!(),
         };
