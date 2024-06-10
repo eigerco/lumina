@@ -355,7 +355,8 @@ mod tests {
 
     #[test]
     fn untrust_after_connect() {
-        let tracker = PeerTracker::new();
+        let event_channel = EventChannel::new();
+        let tracker = PeerTracker::new(event_channel.publisher());
         let mut watcher = tracker.info_watcher();
         let peer = PeerId::random();
 
