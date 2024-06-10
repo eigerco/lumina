@@ -11,11 +11,14 @@ use serde::Serialize;
 use smallvec::SmallVec;
 use tokio::sync::watch;
 
+use crate::events::{EventPublisher, NodeEvent};
+
 /// Keeps track various information about peers.
 #[derive(Debug)]
 pub struct PeerTracker {
     peers: DashMap<PeerId, PeerInfo>,
     info_tx: watch::Sender<PeerTrackerInfo>,
+    event_pub: EventPublisher,
 }
 
 /// Statistics of the connected peers
@@ -51,10 +54,11 @@ impl PeerInfo {
 
 impl PeerTracker {
     /// Constructs an empty PeerTracker.
-    pub fn new() -> Self {
+    pub fn new(event_pub: EventPublisher) -> Self {
         PeerTracker {
             peers: DashMap::new(),
             info_tx: watch::channel(PeerTrackerInfo::default()).0,
+            event_pub,
         }
     }
 
@@ -164,7 +168,13 @@ impl PeerTracker {
         // If peer was not already connected from before
         if !peer_info.is_connected() {
             peer_info.state = PeerState::Connected;
+
             increment_connected_peers(&self.info_tx, peer_info.trusted);
+
+            self.event_pub.send(NodeEvent::PeerConnected {
+                id: peer,
+                trusted: peer_info.trusted,
+            });
         }
     }
 
@@ -185,6 +195,12 @@ impl PeerTracker {
             }
 
             decrement_connected_peers(&self.info_tx, peer_info.trusted);
+
+            self.event_pub.send(NodeEvent::PeerDisconnected {
+                id: peer,
+                trusted: peer_info.trusted,
+            });
+
             true
         } else {
             false
@@ -270,12 +286,6 @@ impl PeerTracker {
     }
 }
 
-impl Default for PeerTracker {
-    fn default() -> Self {
-        PeerTracker::new()
-    }
-}
-
 fn increment_connected_peers(info_tx: &watch::Sender<PeerTrackerInfo>, trusted: bool) {
     info_tx.send_modify(|tracker_info| {
         tracker_info.num_connected_peers += 1;
@@ -298,11 +308,14 @@ fn decrement_connected_peers(info_tx: &watch::Sender<PeerTrackerInfo>, trusted: 
 
 #[cfg(test)]
 mod tests {
+    use crate::events::EventChannel;
+
     use super::*;
 
     #[test]
     fn trust_before_connect() {
-        let tracker = PeerTracker::new();
+        let event_channel = EventChannel::new();
+        let tracker = PeerTracker::new(event_channel.publisher());
         let mut watcher = tracker.info_watcher();
         let peer = PeerId::random();
 
@@ -320,7 +333,8 @@ mod tests {
 
     #[test]
     fn trust_after_connect() {
-        let tracker = PeerTracker::new();
+        let event_channel = EventChannel::new();
+        let tracker = PeerTracker::new(event_channel.publisher());
         let mut watcher = tracker.info_watcher();
         let peer = PeerId::random();
 
