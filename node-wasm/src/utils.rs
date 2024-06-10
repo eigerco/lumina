@@ -35,7 +35,7 @@ pub fn setup_logging() {
     console_error_panic_hook::set_once();
 
     let fmt_layer = tracing_subscriber::fmt::layer()
-        .with_ansi(true) // Only partially supported across browsers, but we target only chrome now
+        .with_ansi(false) // Only partially supported across browsers, but we target only chrome now
         .with_timer(UtcTime::rfc_3339()) // std::time is not available in browsers
         .with_writer(MakeConsoleWriter) // write events to the console
         .with_filter(LevelFilter::INFO); // TODO: allow customizing the log level

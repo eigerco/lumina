@@ -12,6 +12,7 @@ use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
+use tracing::{debug, instrument};
 
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
@@ -139,61 +140,56 @@ impl IndexedDbStore {
             .map_err(|e| StoreError::CelestiaTypes(e.into()))
     }
 
-    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
-        let height = header.height().value();
-        let hash = header.hash();
+    #[instrument(skip_all)]
+    async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        if headers.is_empty() {
+            return Ok(());
+        }
 
         let head_height = self.get_head_height().unwrap_or(0);
+        let start_height = headers[0].height().value();
+        let new_head = headers.last().expect("!is_empty()").clone();
 
         // A light check before checking the whole map
-        if head_height > 0 && height <= head_height {
-            return Err(StoreError::HeightExists(height));
+        if head_height > 0 && start_height <= head_height {
+            return Err(StoreError::HeightExists(start_height));
         }
 
         // Check if it's continuous before checking the whole map.
-        if head_height + 1 != height {
-            return Err(StoreError::NonContinuousAppend(head_height, height));
+        if head_height + 1 != start_height {
+            return Err(StoreError::NonContinuousAppend(head_height, start_height));
         }
+
+        // serialize all headers before starting transaction
+        let headers: Vec<_> = headers
+            .into_iter()
+            .map(|h| {
+                // make sure Result is Infallible, we unwrap it later
+                let header: Result<_, Infallible> = h.encode_vec();
+                let entry = ExtendedHeaderEntry {
+                    height: h.height().value(),
+                    hash: h.hash(),
+                    header: header.unwrap(),
+                };
+                to_value(&entry)
+            })
+            .collect::<Result<_, _>>()?;
 
         let tx = self
             .db
             .transaction(&[HEADER_STORE_NAME], TransactionMode::ReadWrite)?;
         let header_store = tx.store(HEADER_STORE_NAME)?;
 
-        let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
-        let jsvalue_height_key = KeyRange::only(&to_value(&height)?)?;
-        if height_index
-            .count(Some(&jsvalue_height_key))
-            .await
-            .unwrap_or(0)
-            != 0
-        {
-            return Err(StoreError::HeightExists(height));
+        // we have `unique` property on indexes, we can just insert all headers and delegate checks
+        // to idb
+        for header in headers {
+            header_store.add(&header, None).await?;
         }
-
-        let hash_index = header_store.index(HASH_INDEX_NAME)?;
-        let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?)?;
-        if hash_index.count(Some(&jsvalue_hash_key)).await.unwrap_or(0) != 0 {
-            return Err(StoreError::HashExists(hash));
-        }
-
-        // make sure Result is Infallible, we unwrap it later
-        let serialized_header: std::result::Result<_, Infallible> = header.encode_vec();
-
-        let header_height = header.height().value();
-        let header_entry = ExtendedHeaderEntry {
-            height: header_height,
-            hash: header.hash(),
-            header: serialized_header.unwrap(),
-        };
-
-        let jsvalue_header = to_value(&header_entry)?;
-
-        header_store.add(&jsvalue_header, None).await?;
         tx.commit().await?;
+        debug!("committed transaction");
 
         // this shouldn't panic, we don't borrow across await points and wasm is single threaded
-        self.head.replace(Some(header));
+        self.head.replace(Some(new_head));
         self.header_added_notifier.notify_waiters();
 
         Ok(())
@@ -355,7 +351,12 @@ impl Store for IndexedDbStore {
     }
 
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
-        let fut = SendWrapper::new(self.append_single_unchecked(header));
+        let fut = SendWrapper::new(self.append_unchecked(vec![header]));
+        fut.await
+    }
+
+    async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        let fut = SendWrapper::new(self.append_unchecked(headers));
         fut.await
     }
 
