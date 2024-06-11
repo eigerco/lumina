@@ -326,9 +326,9 @@ impl From<ConsAddress> for Raw {
 }
 
 fn address_to_string(addr: &impl AddressTrait) -> String {
-    // We have full control of address lenght and prefix, so we know the following will not fail
+    // We have full control of address length and prefix, so we know the following will not fail
     let hrp = Hrp::parse(addr.prefix()).expect("Invalid prefix");
-    bech32::encode::<bech32::Bech32>(hrp, addr.as_bytes()).expect("Invalid address leght")
+    bech32::encode::<bech32::Bech32>(hrp, addr.as_bytes()).expect("Invalid address length")
 }
 
 fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
