@@ -341,7 +341,7 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 mod tests {
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::{Error, Height};
+    use celestia_types::{Error, Height, VerificationError};
     use rstest::rstest;
 
     // rstest only supports attributes which last segment is `test`
@@ -598,7 +598,7 @@ mod tests {
 
         let mut dup_header = s.get_by_height(33).await.unwrap();
         dup_header.header.height = Height::from(101u32);
-        let insert_existing_result = s.append_single_unchecked(dup_header).await;
+        let insert_existing_result = dbg!(s.append_single_unchecked(dup_header).await);
         assert!(matches!(
             insert_existing_result,
             Err(StoreError::HashExists(_))
@@ -689,10 +689,14 @@ mod tests {
         // remove height 14
         hs.remove(3);
 
-        assert!(matches!(
-            s.append_unchecked(hs).await,
-            Err(StoreError::InsertRangeWithGap(13, 15))
-        ));
+        let Err(StoreError::CelestiaTypes(celestia_types::Error::Verification(
+            VerificationError::Other(message),
+        ))) = dbg!(s.append_unchecked(hs).await)
+        else {
+            panic!("unexpected error");
+        };
+        assert!(message
+            .contains("untrusted header height (15) not adjacent to the current trusted (13)"));
     }
 
     #[rstest]
