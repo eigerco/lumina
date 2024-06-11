@@ -235,11 +235,16 @@ impl RedbStore {
             let mut height_ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
 
             let headers_range = head.height().value()..=tail.height().value();
-            let neighbours_exist = try_insert_to_range(&mut height_ranges_table, headers_range)?;
+            let (prev_exists, next_exists) =
+                try_insert_to_range(&mut height_ranges_table, headers_range)?;
 
             if verify_neighbours {
                 // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
-                verify_against_neighbours(&headers_table, head, tail, neighbours_exist)?;
+                verify_against_neighbours(
+                    &headers_table,
+                    prev_exists.then_some(head),
+                    next_exists.then_some(tail),
+                )?;
             } else {
                 verify_range_contiguous(&headers)?;
             }
@@ -470,17 +475,13 @@ fn try_insert_to_range(
 
 fn verify_against_neighbours<R>(
     headers_table: &R,
-    lowest_header: &ExtendedHeader,
-    highest_header: &ExtendedHeader,
-    neighbours_exist: (bool, bool),
+    lowest_header: Option<&ExtendedHeader>,
+    highest_header: Option<&ExtendedHeader>,
 ) -> Result<()>
 where
     R: ReadableTable<u64, &'static [u8]>,
 {
-    debug_assert!(lowest_header.height().value() <= highest_header.height().value());
-    let (prev_exists, next_exists) = neighbours_exist;
-
-    if prev_exists {
+    if let Some(lowest_header) = lowest_header {
         let prev = get_header(headers_table, lowest_header.height().value() - 1).map_err(|e| {
             if let StoreError::NotFound = e {
                 StoreError::StoredDataError("inconsistency between headers and ranges table".into())
@@ -491,7 +492,7 @@ where
         prev.verify(lowest_header)?;
     }
 
-    if next_exists {
+    if let Some(highest_header) = highest_header {
         let next = get_header(headers_table, highest_header.height().value() + 1).map_err(|e| {
             if let StoreError::NotFound = e {
                 StoreError::StoredDataError("inconsistency between headers and ranges table".into())

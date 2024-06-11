@@ -174,11 +174,16 @@ impl IndexedDbStore {
         let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
         let headers_range = head.height().value()..=tail.height().value();
-        let neighbours_exist = try_insert_to_range(&ranges_store, headers_range).await?;
+        let (prev_exists, next_exists) = try_insert_to_range(&ranges_store, headers_range).await?;
 
         // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
         if verify_neighbours {
-            verify_against_neighbours(&header_store, head, tail, neighbours_exist).await?;
+            verify_against_neighbours(
+                &header_store,
+                prev_exists.then_some(head),
+                next_exists.then_some(tail),
+            )
+            .await?;
         } else {
             verify_range_contiguous(&headers)?;
         }
@@ -490,14 +495,10 @@ async fn get_by_height(header_store: &rexie::Store, height: u64) -> Result<Exten
 
 async fn verify_against_neighbours(
     header_store: &rexie::Store,
-    lowest_header: &ExtendedHeader,
-    highest_header: &ExtendedHeader,
-    neighbours_exist: (bool, bool),
+    lowest_header: Option<&ExtendedHeader>,
+    highest_header: Option<&ExtendedHeader>,
 ) -> Result<()> {
-    debug_assert!(lowest_header.height().value() <= highest_header.height().value());
-    let (prev_exists, next_exists) = neighbours_exist;
-
-    if prev_exists {
+    if let Some(lowest_header) = lowest_header {
         let prev = get_by_height(header_store, lowest_header.height().value() - 1)
             .await
             .map_err(|e| {
@@ -512,7 +513,7 @@ async fn verify_against_neighbours(
         prev.verify(lowest_header)?;
     }
 
-    if next_exists {
+    if let Some(highest_header) = highest_header {
         let next = get_by_height(header_store, highest_header.height().value() + 1)
             .await
             .map_err(|e| {

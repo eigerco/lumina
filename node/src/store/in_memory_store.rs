@@ -200,7 +200,10 @@ impl InMemoryStoreInner {
             let prev_exists = headers_range.start() != range_scan_result.range.start();
             let next_exists = headers_range.end() != range_scan_result.range.end();
             // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
-            self.verify_against_neighbours(head, tail, (prev_exists, next_exists))?;
+            self.verify_against_neighbours(
+                prev_exists.then_some(head),
+                next_exists.then_some(tail),
+            )?;
         } else {
             verify_range_contiguous(&headers)?;
         }
@@ -241,14 +244,10 @@ impl InMemoryStoreInner {
 
     fn verify_against_neighbours(
         &self,
-        lowest_header: &ExtendedHeader,
-        highest_header: &ExtendedHeader,
-        neighbours_exist: (bool, bool),
+        lowest_header: Option<&ExtendedHeader>,
+        highest_header: Option<&ExtendedHeader>,
     ) -> Result<()> {
-        debug_assert!(lowest_header.height().value() <= highest_header.height().value());
-        let (prev_exists, next_exists) = neighbours_exist;
-
-        if prev_exists {
+        if let Some(lowest_header) = lowest_header {
             let prev = self
                 .get_by_height(lowest_header.height().value() - 1)
                 .map_err(|e| {
@@ -263,7 +262,7 @@ impl InMemoryStoreInner {
             prev.verify(lowest_header)?;
         }
 
-        if next_exists {
+        if let Some(highest_header) = highest_header {
             let next = self
                 .get_by_height(highest_header.height().value() + 1)
                 .map_err(|e| {
