@@ -280,6 +280,7 @@ where
     }
 
     /// Get ranges of headers currently stored.
+    #[doc(hidden)]
     pub async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
         Ok(self.store.get_stored_header_ranges().await?)
     }

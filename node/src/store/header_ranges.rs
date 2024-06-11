@@ -3,7 +3,6 @@ use std::ops::RangeInclusive;
 
 use serde::Serialize;
 use smallvec::{IntoIter, SmallVec};
-use thiserror::Error;
 
 use crate::store::utils::{ranges_intersection, try_consolidate_ranges, RangeScanResult};
 use crate::store::StoreError;
@@ -26,15 +25,7 @@ impl RangeLengthExt for RangeInclusive<u64> {
 #[derive(Debug, Clone, PartialEq, Default, Serialize)]
 pub struct HeaderRanges(SmallVec<[HeaderRange; 2]>);
 
-#[derive(Debug, Error)]
-pub enum HeaderRangeError {
-    #[error("Overlapping range: {0}, {1}")]
-    RangeOverlap(u64, u64),
-}
-
 pub(crate) trait HeaderRangesExt {
-    /// Check that sub-ranges do not overlap
-    fn validate(&self) -> Result<(), HeaderRangeError>;
     /// Check whether provided `to_insert` range can be inserted into the header ranges represented
     /// by self. New range can be inserted ahead of all existing ranges to allow syncing from the
     /// head but otherwise, only growing the existing ranges is allowed.
@@ -47,22 +38,6 @@ pub(crate) trait HeaderRangesExt {
 }
 
 impl HeaderRangesExt for HeaderRanges {
-    fn validate(&self) -> Result<(), HeaderRangeError> {
-        let mut prev: Option<&HeaderRange> = None;
-        for current in &self.0 {
-            if let Some(prev) = prev {
-                if current.start() > prev.end() {
-                    return Err(HeaderRangeError::RangeOverlap(
-                        *current.start(),
-                        *prev.end(),
-                    ));
-                }
-            }
-            prev = Some(current);
-        }
-        Ok(())
-    }
-
     fn update_range(&mut self, scan_information: RangeScanResult) {
         let RangeScanResult {
             range_index,
@@ -167,6 +142,27 @@ impl HeaderRanges {
     pub fn tail(&self) -> Option<u64> {
         self.0.first().map(|r| *r.start())
     }
+    /// Crate HeaderRanges from correctly pre-sorted, non-overlapping SmallVec of ranges
+    pub(crate) fn from_vec(from: SmallVec<[HeaderRange; 2]>) -> Self {
+        let mut prev: Option<&RangeInclusive<u64>> = None;
+        for range in &from {
+            debug_assert!(
+                range.start() <= range.end(),
+                "range isn't sorted internally"
+            );
+
+            if let Some(prev) = prev {
+                debug_assert!(
+                    prev.end() < range.start(),
+                    "header ranges aren't sorted correctly"
+                );
+            }
+
+            prev = Some(range);
+        }
+
+        Self(from)
+    }
 }
 
 impl Display for HeaderRanges {
@@ -186,18 +182,6 @@ impl Display for HeaderRanges {
 impl AsRef<[RangeInclusive<u64>]> for HeaderRanges {
     fn as_ref(&self) -> &[RangeInclusive<u64>] {
         &self.0
-    }
-}
-
-impl FromIterator<RangeInclusive<u64>> for HeaderRanges {
-    fn from_iter<T: IntoIterator<Item = RangeInclusive<u64>>>(iter: T) -> Self {
-        Self(iter.into_iter().collect())
-    }
-}
-
-impl<const T: usize> From<[RangeInclusive<u64>; T]> for HeaderRanges {
-    fn from(value: [RangeInclusive<u64>; T]) -> Self {
-        Self(value.into_iter().collect())
     }
 }
 
@@ -260,16 +244,16 @@ mod tests {
 
     #[test]
     fn test_iter() {
-        let ranges = HeaderRanges::from([1..=5, 7..=10]);
+        let ranges = header_ranges![1..=5, 7..=10];
         assert_eq!(
             ranges.into_iter().collect::<Vec<_>>(),
             vec![1, 2, 3, 4, 5, 7, 8, 9, 10]
         );
 
-        let ranges = HeaderRanges::from([1..=1, 2..=4, 8..=8]);
+        let ranges = header_ranges![1..=1, 2..=4, 8..=8];
         assert_eq!(ranges.into_iter().collect::<Vec<_>>(), vec![1, 2, 3, 4, 8]);
 
-        let mut iter = HeaderRanges::from([1..=1]).into_iter();
+        let mut iter = header_ranges![1..=1].into_iter();
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), None);
         assert_eq!(iter.next(), None);
@@ -278,12 +262,12 @@ mod tests {
 
     #[test]
     fn test_iter_batches() {
-        let mut ranges = HeaderRanges::from([1..=100]).into_iter();
+        let mut ranges = header_ranges![1..=100].into_iter();
         assert_eq!(ranges.next_batch(10), Some(1..=10));
         assert_eq!(ranges.next_batch(10), Some(11..=20));
         assert_eq!(ranges.next_batch(100), Some(21..=100));
 
-        let mut ranges = HeaderRanges::from([1..=10, 21..=30, 41..=50]).into_iter();
+        let mut ranges = header_ranges![1..=10, 21..=30, 41..=50].into_iter();
         assert_eq!(ranges.next_batch(20), Some(1..=10));
         assert_eq!(ranges.next_batch(1), Some(21..=21));
         assert_eq!(ranges.next_batch(2), Some(22..=23));
@@ -295,29 +279,29 @@ mod tests {
 
     #[test]
     fn header_ranges_empty() {
-        assert!(HeaderRanges::from([]).is_empty());
-        assert!(!HeaderRanges::from([1..=3]).is_empty());
+        assert!(header_ranges![].is_empty());
+        assert!(!header_ranges![1..=3].is_empty());
     }
 
     #[test]
     fn header_ranges_head() {
-        assert_eq!(HeaderRanges::from([]).head(), None);
-        assert_eq!(HeaderRanges::from([1..=3]).head(), Some(3));
-        assert_eq!(HeaderRanges::from([1..=3, 6..=9]).head(), Some(9));
-        assert_eq!(HeaderRanges::from([1..=3, 5..=5, 8..=9]).head(), Some(9));
+        assert_eq!(header_ranges![].head(), None);
+        assert_eq!(header_ranges![1..=3].head(), Some(3));
+        assert_eq!(header_ranges![1..=3, 6..=9].head(), Some(9));
+        assert_eq!(header_ranges![1..=3, 5..=5, 8..=9].head(), Some(9));
     }
 
     #[test]
     fn header_ranges_tail() {
-        assert_eq!(HeaderRanges::from([]).tail(), None);
-        assert_eq!(HeaderRanges::from([1..=3]).tail(), Some(1));
-        assert_eq!(HeaderRanges::from([1..=3, 6..=9]).tail(), Some(1));
-        assert_eq!(HeaderRanges::from([1..=3, 5..=5, 8..=9]).tail(), Some(1));
+        assert_eq!(header_ranges![].tail(), None);
+        assert_eq!(header_ranges![1..=3].tail(), Some(1));
+        assert_eq!(header_ranges![1..=3, 6..=9].tail(), Some(1));
+        assert_eq!(header_ranges![1..=3, 5..=5, 8..=9].tail(), Some(1));
     }
 
     #[test]
     fn check_range_insert_append() {
-        let result = HeaderRanges::from([]).check_range_insert(&(1..=5)).unwrap();
+        let result = header_ranges![].check_range_insert(&(1..=5)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -327,9 +311,7 @@ mod tests {
             }
         );
 
-        let result = HeaderRanges::from([1..=4])
-            .check_range_insert(&(5..=5))
-            .unwrap();
+        let result = header_ranges![1..=4].check_range_insert(&(5..=5)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -339,9 +321,7 @@ mod tests {
             }
         );
 
-        let result = HeaderRanges::from([1..=5])
-            .check_range_insert(&(6..=9))
-            .unwrap();
+        let result = header_ranges![1..=5].check_range_insert(&(6..=9)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -351,9 +331,7 @@ mod tests {
             }
         );
 
-        let result = HeaderRanges::from([6..=8])
-            .check_range_insert(&(2..=5))
-            .unwrap();
+        let result = header_ranges![6..=8].check_range_insert(&(2..=5)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -366,7 +344,7 @@ mod tests {
 
     #[test]
     fn check_range_insert_with_consolidation() {
-        let result = HeaderRanges::from([1..=3, 6..=9])
+        let result = header_ranges![1..=3, 6..=9]
             .check_range_insert(&(4..=5))
             .unwrap();
         assert_eq!(
@@ -378,7 +356,7 @@ mod tests {
             }
         );
 
-        let result = HeaderRanges::from([1..=2, 5..=5, 8..=9])
+        let result = header_ranges![1..=2, 5..=5, 8..=9]
             .check_range_insert(&(3..=4))
             .unwrap();
         assert_eq!(
@@ -390,7 +368,7 @@ mod tests {
             }
         );
 
-        let result = HeaderRanges::from([1..=2, 4..=4, 8..=9])
+        let result = header_ranges![1..=2, 4..=4, 8..=9]
             .check_range_insert(&(5..=7))
             .unwrap();
         assert_eq!(
@@ -405,32 +383,32 @@ mod tests {
 
     #[test]
     fn check_range_insert_overlapping() {
-        let result = HeaderRanges::from([1..=2])
+        let result = header_ranges![1..=2]
             .check_range_insert(&(1..=1))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(1, 1)));
 
-        let result = HeaderRanges::from([1..=4])
+        let result = header_ranges![1..=4]
             .check_range_insert(&(2..=8))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(2, 4)));
 
-        let result = HeaderRanges::from([1..=4])
+        let result = header_ranges![1..=4]
             .check_range_insert(&(2..=3))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(2, 3)));
 
-        let result = HeaderRanges::from([5..=9])
+        let result = header_ranges![5..=9]
             .check_range_insert(&(1..=5))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(5, 5)));
 
-        let result = HeaderRanges::from([5..=8])
+        let result = header_ranges![5..=8]
             .check_range_insert(&(2..=8))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(5, 8)));
 
-        let result = HeaderRanges::from([1..=3, 6..=9])
+        let result = header_ranges![1..=3, 6..=9]
             .check_range_insert(&(3..=6))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(3, 3)));
@@ -438,7 +416,7 @@ mod tests {
 
     #[test]
     fn check_range_insert_invalid_placement() {
-        let result = HeaderRanges::from([1..=2, 7..=9])
+        let result = header_ranges![1..=2, 7..=9]
             .check_range_insert(&(4..=4))
             .unwrap_err();
         assert!(matches!(
@@ -446,7 +424,7 @@ mod tests {
             StoreError::InsertPlacementDisallowed(4, 4)
         ));
 
-        let result = HeaderRanges::from([1..=2, 8..=9])
+        let result = header_ranges![1..=2, 8..=9]
             .check_range_insert(&(4..=6))
             .unwrap_err();
         assert!(matches!(
@@ -454,12 +432,37 @@ mod tests {
             StoreError::InsertPlacementDisallowed(4, 6)
         ));
 
-        let result = HeaderRanges::from([4..=5, 7..=8])
+        let result = header_ranges![4..=5, 7..=8]
             .check_range_insert(&(1..=2))
             .unwrap_err();
         assert!(matches!(
             result,
             StoreError::InsertPlacementDisallowed(1, 2)
         ));
+    }
+
+    #[test]
+    fn test_header_range_creation_ok() {
+        header_ranges![1..=3, 5..=8];
+        header_ranges![];
+        header_ranges![1..=1, 1000000..=2000000];
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_header_range_creation_overlap() {
+        header_ranges![1..=3, 2..=5];
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_header_range_creation_inverse() {
+        header_ranges![1..=3, RangeInclusive::new(9, 5)];
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_header_range_creation_wrong_order() {
+        header_ranges![10..=15, 1..=5];
     }
 }

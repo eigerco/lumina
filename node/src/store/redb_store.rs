@@ -432,13 +432,15 @@ fn try_insert_to_range(
     ranges_table: &mut Table<u64, (u64, u64)>,
     new_range: HeaderRange,
 ) -> Result<(bool, bool)> {
-    let stored_ranges: HeaderRanges = ranges_table
-        .iter()?
-        .map(|range_guard| {
-            let range = range_guard?.1.value();
-            Ok(range.0..=range.1)
-        })
-        .collect::<Result<_>>()?;
+    let stored_ranges = HeaderRanges::from_vec(
+        ranges_table
+            .iter()?
+            .map(|range_guard| {
+                let range = range_guard?.1.value();
+                Ok(range.0..=range.1)
+            })
+            .collect::<Result<_>>()?,
+    );
 
     let RangeScanResult {
         range_index,
@@ -519,13 +521,15 @@ fn get_all_ranges<R>(ranges_table: &R) -> Result<HeaderRanges>
 where
     R: ReadableTable<u64, (u64, u64)>,
 {
-    ranges_table
-        .iter()?
-        .map(|range_guard| {
-            let range = range_guard?.1.value();
-            Ok(range.0..=range.1)
-        })
-        .collect::<Result<_, _>>()
+    Ok(HeaderRanges::from_vec(
+        ranges_table
+            .iter()?
+            .map(|range_guard| {
+                let range = range_guard?.1.value();
+                Ok(range.0..=range.1)
+            })
+            .collect::<Result<_>>()?,
+    ))
 }
 
 #[inline]

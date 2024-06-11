@@ -951,7 +951,10 @@ mod tests {
     ) {
         let store = s;
 
-        assert_eq!(store.get_stored_header_ranges().await.unwrap(), [].into());
+        assert_eq!(
+            store.get_stored_header_ranges().await.unwrap().as_ref(),
+            &[]
+        );
     }
 
     #[rstest]
@@ -979,7 +982,7 @@ mod tests {
         store.append_single(gen.next()).await.unwrap();
 
         let final_ranges = store.get_stored_header_ranges().await.unwrap();
-        assert_eq!(final_ranges, [20..=40].into());
+        assert_eq!(final_ranges.as_ref(), &[20..=40]);
     }
 
     // no in-memory store for tests below. It doesn't expect to be resumed from disk,
@@ -1022,7 +1025,7 @@ mod tests {
         store.append(skip0).await.unwrap();
 
         let final_ranges = store.get_stored_header_ranges().await.unwrap();
-        assert_eq!(final_ranges, [10..=42].into());
+        assert_eq!(final_ranges.as_ref(), &[10..=42]);
     }
 
     #[rstest]

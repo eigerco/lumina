@@ -1,14 +1,12 @@
 use celestia_proto::p2p::pb::HeaderRequest;
 use celestia_types::ExtendedHeader;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::executor::spawn;
 use crate::p2p::header_ex::utils::HeaderRequestExt;
-use crate::p2p::{HeaderExError, P2pCmd, P2pError};
-use crate::store::header_ranges::{
-    HeaderRanges, HeaderRangesExt, HeaderRangesIterator, RangeLengthExt,
-};
+use crate::p2p::{P2pCmd, P2pError};
+use crate::store::header_ranges::{HeaderRanges, HeaderRangesIterator, RangeLengthExt};
 
 const MAX_AMOUNT_PER_REQ: u64 = 64;
 const MAX_CONCURRENT_REQS: usize = 1;
@@ -37,23 +35,18 @@ impl HeaderSession {
     ///
     /// [`calculate_missing_ranges`]: crate::store::utils::calculate_missing_ranges
     /// [`Store::get_stored_header_ranges`]: crate::store::Store::get_stored_header_ranges
-    pub(crate) fn new(ranges: HeaderRanges, cmd_tx: mpsc::Sender<P2pCmd>) -> Result<Self> {
-        ranges.validate().map_err(|e| {
-            warn!("invalid header range: {e:?}");
-            HeaderExError::InvalidRequest
-        })?;
-
+    pub(crate) fn new(ranges: HeaderRanges, cmd_tx: mpsc::Sender<P2pCmd>) -> Self {
         let ranges_count = ranges.as_ref().len();
         let (response_tx, response_rx) = mpsc::channel(MAX_CONCURRENT_REQS);
 
-        Ok(HeaderSession {
+        HeaderSession {
             ranges_iter: ranges.into_iter(),
             ranges_count,
             cmd_tx,
             response_tx,
             response_rx,
             ongoing: 0,
-        })
+        }
     }
 
     pub(crate) async fn run(&mut self) -> Result<Vec<Vec<ExtendedHeader>>> {
@@ -194,7 +187,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(64);
 
-        let mut session = HeaderSession::new([1..=64].into(), p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new(header_ranges![1..=64], p2p_mock.cmd_tx.clone());
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -223,7 +216,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(520);
 
-        let mut session = HeaderSession::new([1..=520].into(), p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new(header_ranges![1..=520], p2p_mock.cmd_tx.clone());
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -259,7 +252,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(64);
 
-        let mut session = HeaderSession::new([1..=64].into(), p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new(header_ranges![1..=64], p2p_mock.cmd_tx.clone());
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -288,7 +281,7 @@ mod tests {
     async fn no_peers_is_fatal() {
         let (_p2p, mut p2p_mock) = P2p::mocked();
 
-        let mut session = HeaderSession::new([1..=64].into(), p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new(header_ranges![1..=64], p2p_mock.cmd_tx.clone());
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;

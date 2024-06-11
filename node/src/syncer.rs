@@ -426,13 +426,19 @@ where
             return;
         };
 
-        let store_ranges = self.store.get_stored_header_ranges().await.unwrap();
+        let store_ranges = match self.store.get_stored_header_ranges().await {
+            Ok(ranges) => ranges,
+            Err(err) => {
+                warn!("failed getting stored header ranges: {err}, will retry later");
+                return;
+            }
+        };
 
-        let fetch_ranges = calculate_missing_ranges(
+        let fetch_ranges = dbg!(calculate_missing_ranges(
             subjective_head_height,
             store_ranges.as_ref(),
             MAX_HEADERS_IN_BATCH,
-        );
+        ));
 
         if fetch_ranges.is_empty() {
             // no headers to fetch
@@ -572,6 +578,7 @@ mod tests {
     }
 
     #[async_test]
+    //#[tracing_test::traced_test]
     async fn syncing() {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(26);

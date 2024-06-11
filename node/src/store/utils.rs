@@ -3,6 +3,7 @@ use std::ops::RangeInclusive;
 
 use celestia_types::ExtendedHeader;
 use itertools::Itertools;
+use smallvec::SmallVec;
 
 use crate::executor::yield_now;
 use crate::store::header_ranges::{HeaderRange, HeaderRanges};
@@ -27,34 +28,39 @@ pub(crate) fn calculate_missing_ranges(
         .chain(once(0));
 
     let mut left = limit;
-    range_edges
-        .chunks(2)
-        .into_iter()
-        .map_while(|mut range| {
-            if left == 0 {
-                return None;
-            }
-            // ranges_edges is even and we divide into 2 element chunks, this is safe
-            let upper_bound = range.next().unwrap() - 1;
-            let lower_bound = range.next().unwrap();
-            let range_len = upper_bound.checked_sub(lower_bound)?;
+    HeaderRanges::from_vec(
+        range_edges
+            .chunks(2)
+            .into_iter()
+            .map_while(|mut range| {
+                if left == 0 {
+                    return None;
+                }
+                // ranges_edges is even and we divide into 2 element chunks, this is safe
+                let upper_bound = range.next().unwrap() - 1;
+                let lower_bound = range.next().unwrap();
+                let range_len = upper_bound.checked_sub(lower_bound)?;
 
-            if range_len == 0 {
-                // empty range
-                return Some(RangeInclusive::new(1, 0));
-            }
+                if range_len == 0 {
+                    // empty range
+                    return Some(RangeInclusive::new(1, 0));
+                }
 
-            if left > range_len {
-                left -= range_len;
-                Some(lower_bound + 1..=upper_bound)
-            } else {
-                let truncated_lower_bound = upper_bound - left;
-                left = 0;
-                Some(truncated_lower_bound + 1..=upper_bound)
-            }
-        })
-        .filter(|v| !v.is_empty())
-        .collect()
+                if left > range_len {
+                    left -= range_len;
+                    Some(lower_bound + 1..=upper_bound)
+                } else {
+                    let truncated_lower_bound = upper_bound - left;
+                    left = 0;
+                    Some(truncated_lower_bound + 1..=upper_bound)
+                }
+            })
+            .filter(|v| !v.is_empty())
+            .collect::<SmallVec<[HeaderRange; 2]>>()
+            .into_iter()
+            .rev()
+            .collect(),
+    )
 }
 
 pub(crate) fn try_consolidate_ranges(
@@ -140,45 +146,40 @@ mod tests {
     #[test]
     fn test_calc_missing_ranges() {
         let head_height = 50;
-        let ranges = [
-            RangeInclusive::new(1, 5),
-            RangeInclusive::new(15, 20),
-            RangeInclusive::new(23, 28),
-            RangeInclusive::new(30, 40),
-        ];
-        let expected_missing_ranges = [41..=50, 29..=29, 21..=22, 6..=14].into();
+        let ranges = [1..=5, 15..=20, 23..=28, 30..=40];
 
         let missing_ranges = calculate_missing_ranges(head_height, &ranges, 512);
-        assert_eq!(missing_ranges, expected_missing_ranges);
+        assert_eq!(
+            missing_ranges.as_ref(),
+            &[6..=14, 21..=22, 29..=29, 41..=50]
+        );
     }
 
     #[test]
     fn test_calc_missing_ranges_partial() {
         let head_height = 10;
-        let ranges = [RangeInclusive::new(6, 7)];
-        let expected_missing_ranges = [8..=10, 4..=5].into();
+        let ranges = [6..=7];
 
         let missing_ranges = calculate_missing_ranges(head_height, &ranges, 5);
-        assert_eq!(missing_ranges, expected_missing_ranges);
+        assert_eq!(missing_ranges.as_ref(), &[4..=5, 8..=10]);
     }
 
     #[test]
     fn test_calc_missing_ranges_contiguous() {
         let head_height = 10;
-        let ranges = [RangeInclusive::new(5, 6), RangeInclusive::new(7, 9)];
-        let expected_missing_ranges = [10..=10, 1..=4].into();
+        let ranges = [5..=6, 7..=9];
 
         let missing_ranges = calculate_missing_ranges(head_height, &ranges, 5);
-        assert_eq!(missing_ranges, expected_missing_ranges);
+        assert_eq!(missing_ranges.as_ref(), &[1..=4, 10..=10]);
     }
 
     #[test]
     fn test_calc_missing_ranges_edge_cases() {
         let missing = calculate_missing_ranges(1, &[], 100);
-        assert_eq!(missing, [1..=1].into());
+        assert_eq!(missing, header_ranges![1..=1]);
 
         let missing = calculate_missing_ranges(1, &[1..=1], 100);
-        assert_eq!(missing, [].into());
+        assert_eq!(missing, header_ranges![]);
     }
 
     #[test]

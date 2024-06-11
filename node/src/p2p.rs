@@ -401,7 +401,7 @@ impl P2p {
 
         let range = height..=height + amount - 1;
 
-        let mut session = HeaderSession::new([range].into(), self.cmd_tx.clone())?;
+        let mut session = HeaderSession::new(header_ranges![range], self.cmd_tx.clone());
         let headers = session
             .run()
             .await?
@@ -422,13 +422,15 @@ impl P2p {
         &self,
         ranges: HeaderRanges,
     ) -> Result<Vec<Vec<ExtendedHeader>>> {
-        let mut session = HeaderSession::new(ranges, self.cmd_tx.clone())?;
+        println!("get unverified {ranges}");
+        let mut session = HeaderSession::new(ranges, self.cmd_tx.clone());
         let header_ranges = session.run().await?;
 
         for range in &header_ranges {
             let Some(head) = range.first() else {
                 continue;
             };
+            println!("got {head:?}");
             head.verify_adjacent_range(&range[1..])
                 .map_err(|_| HeaderExError::InvalidResponse)?;
         }
