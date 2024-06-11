@@ -19,16 +19,16 @@ categories = [
 ]
 
 [dependencies]
-async-trait = "0.1"
+async-trait = "0.1.80"
 celestia-types = { workspace = true }
-jsonrpsee = { version = "0.20", features = ["client-core", "macros"] }
-serde = { version = "1.0.188", features = ["derive"] }
-thiserror = "1.0.40"
-tracing = "0.1.37"
+jsonrpsee = { version = "0.23.1", features = ["client-core", "macros"] }
+serde = { version = "1.0.203", features = ["derive"] }
+thiserror = "1.0.61"
+tracing = "0.1.40"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-http = "0.2.9"
-jsonrpsee = { version = "0.20", features = ["http-client", "ws-client"] }
+http = "1.1.0"
+jsonrpsee = { version = "0.23.1", features = ["http-client", "ws-client"] }
 
 [dev-dependencies]
 libp2p = { workspace = true, features = [
@@ -39,13 +39,13 @@ libp2p = { workspace = true, features = [
   "yamux",
 ] }
 
-anyhow = "1.0.71"
+anyhow = "1.0.86"
 dotenvy = "0.15.7"
-futures = "0.3.28"
+futures = "0.3.30"
 nmt-rs = "0.1.0"
 rand = "0.8.5"
-tokio = { version = "1.32.0", features = ["rt", "macros"] }
-tracing = "0.1.37"
+tokio = { version = "1.38.0", features = ["rt", "macros"] }
+tracing = "0.1.40"
 
 [features]
 default = ["p2p"]

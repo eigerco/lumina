@@ -18,7 +18,7 @@ mod native {
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
-    use jsonrpsee::core::Error as JrpcError;
+    use jsonrpsee::core::ClientError;
     use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
     use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
     use serde::de::DeserializeOwned;
@@ -74,7 +74,7 @@ mod native {
             &self,
             method: &str,
             params: Params,
-        ) -> StdResult<(), JrpcError>
+        ) -> StdResult<(), ClientError>
         where
             Params: ToRpcParams + Send,
         {
@@ -84,7 +84,11 @@ mod native {
             }
         }
 
-        async fn request<R, Params>(&self, method: &str, params: Params) -> StdResult<R, JrpcError>
+        async fn request<R, Params>(
+            &self,
+            method: &str,
+            params: Params,
+        ) -> StdResult<R, ClientError>
         where
             R: DeserializeOwned,
             Params: ToRpcParams + Send,
@@ -98,7 +102,7 @@ mod native {
         async fn batch_request<'a, R>(
             &self,
             batch: BatchRequestBuilder<'a>,
-        ) -> StdResult<BatchResponse<'a, R>, JrpcError>
+        ) -> StdResult<BatchResponse<'a, R>, ClientError>
         where
             R: DeserializeOwned + fmt::Debug + 'a,
         {
@@ -116,7 +120,7 @@ mod native {
             subscribe_method: &'a str,
             params: Params,
             unsubscribe_method: &'a str,
-        ) -> StdResult<Subscription<N>, JrpcError>
+        ) -> StdResult<Subscription<N>, ClientError>
         where
             Params: ToRpcParams + Send,
             N: DeserializeOwned,
@@ -138,7 +142,7 @@ mod native {
         async fn subscribe_to_method<'a, N>(
             &self,
             method: &'a str,
-        ) -> StdResult<Subscription<N>, JrpcError>
+        ) -> StdResult<Subscription<N>, ClientError>
         where
             N: DeserializeOwned,
         {

@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use bech32::{FromBase32, ToBase32};
+use bech32::Hrp;
 use celestia_tendermint::account::Id;
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
@@ -326,17 +326,15 @@ impl From<ConsAddress> for Raw {
 }
 
 fn address_to_string(addr: &impl AddressTrait) -> String {
-    let data_u5 = addr.as_bytes().to_base32();
-
-    // We have full control on the prefix, so we know this will not fail
-    bech32::encode(addr.prefix(), data_u5, bech32::Variant::Bech32).expect("Invalid prefix")
+    // We have full control of address lenght and prefix, so we know the following will not fail
+    let hrp = Hrp::parse(addr.prefix()).expect("Invalid prefix");
+    bech32::encode::<bech32::Bech32>(hrp, addr.as_bytes()).expect("Invalid address leght")
 }
 
 fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
-    let (hrp, data_u5, _) = bech32::decode(s).map_err(|_| Error::InvalidAddress(s.to_owned()))?;
-    let data = Vec::from_base32(&data_u5).map_err(|_| Error::InvalidAddress(s.to_owned()))?;
+    let (hrp, data) = bech32::decode(s).map_err(|_| Error::InvalidAddress(s.to_owned()))?;
 
-    let kind = hrp.parse()?;
+    let kind = hrp.as_str().parse()?;
     let bytes = data[..]
         .try_into()
         .map_err(|_| Error::InvalidAddressSize(data.len()))?;
