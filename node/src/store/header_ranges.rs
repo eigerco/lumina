@@ -1,6 +1,8 @@
 use std::fmt::Display;
 use std::ops::RangeInclusive;
+use std::vec;
 
+use celestia_types::ExtendedHeader;
 use serde::Serialize;
 use smallvec::{IntoIter, SmallVec};
 
@@ -8,6 +10,46 @@ use crate::store::utils::{ranges_intersection, try_consolidate_ranges, RangeScan
 use crate::store::StoreError;
 
 pub type HeaderRange = RangeInclusive<u64>;
+
+/// Span of header that's been verified internally
+pub struct VerifiedHeaderSpan(Vec<ExtendedHeader>);
+
+impl IntoIterator for VerifiedHeaderSpan {
+    type Item = ExtendedHeader;
+
+    type IntoIter = vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl AsRef<[ExtendedHeader]> for VerifiedHeaderSpan {
+    fn as_ref(&self) -> &[ExtendedHeader] {
+        &self.0
+    }
+}
+
+/// 1-length hedaer span is internally verified, this is valid
+impl From<[ExtendedHeader; 1]> for VerifiedHeaderSpan {
+    fn from(value: [ExtendedHeader; 1]) -> Self {
+        Self(value.into())
+    }
+}
+
+impl TryFrom<Vec<ExtendedHeader>> for VerifiedHeaderSpan {
+    type Error = celestia_types::Error;
+
+    fn try_from(headers: Vec<ExtendedHeader>) -> Result<Self, Self::Error> {
+        let Some(head) = headers.first() else {
+            return Ok(VerifiedHeaderSpan(Vec::default()));
+        };
+
+        head.verify_adjacent_range(&headers[1..])?;
+
+        Ok(Self(headers))
+    }
+}
 
 pub(crate) trait RangeLengthExt {
     fn len(&self) -> u64;

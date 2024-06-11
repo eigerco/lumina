@@ -21,6 +21,8 @@ pub use indexed_db_store::IndexedDbStore;
 #[cfg(not(target_arch = "wasm32"))]
 pub use redb_store::RedbStore;
 
+use self::header_ranges::VerifiedHeaderSpan;
+
 mod in_memory_store;
 #[cfg(target_arch = "wasm32")]
 mod indexed_db_store;
@@ -126,22 +128,22 @@ pub trait Store: Send + Sync + Debug {
 
     /// Insert single header into the store
     async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
-        self.insert_single(header, false).await
+        self.insert([header].into()).await
     }
 
     /// Insert single header into the store, validating it against neightbours, if present in store
     async fn append_single(&self, header: ExtendedHeader) -> Result<()> {
-        self.insert_single(header, true).await
+        self.insert([header].into()).await
     }
 
     /// Insert list of headers, validating that the inserted range is contiguous
     async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        self.insert(headers, false).await
+        self.insert(headers.try_into()?).await
     }
 
     /// Insert list of headers validating them against neighbouring headers if they exist in store
     async fn append(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        self.insert(headers, true).await
+        self.insert(headers.try_into()?).await
     }
 
     /// Sets or updates sampling result for the header.
@@ -163,17 +165,12 @@ pub trait Store: Send + Sync + Debug {
     /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 
-    /// new main insertion function
-    async fn insert_single(&self, header: ExtendedHeader, verify_neighbours: bool) -> Result<()> {
-        self.insert(vec![header], verify_neighbours).await
-    }
-
     /// Insert a range of headers into the store.
     ///
     /// `verify_neighbours` determines whether entire range will be validated against headers next
     /// to them (if present in store), or whether to just validate a contiguity of the inserted
     /// header range
-    async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()>;
+    async fn insert(&self, headers: VerifiedHeaderSpan) -> Result<()>;
 
     /// Return a list of header ranges currenty held in store
     async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;

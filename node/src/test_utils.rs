@@ -32,9 +32,9 @@ pub async fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGene
     let s = InMemoryStore::new();
     let mut gen = ExtendedHeaderGenerator::new();
 
-    s.insert(gen.next_many(amount), false)
-        .await
-        .expect("inserting test data failed");
+    let headers = gen.next_many(amount).try_into().unwrap();
+
+    s.insert(headers).await.expect("inserting test data failed");
 
     (s, gen)
 }

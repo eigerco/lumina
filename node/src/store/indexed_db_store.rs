@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
-use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt};
-use crate::store::utils::{verify_range_contiguous, RangeScanResult};
+use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt, VerifiedHeaderSpan};
+use crate::store::utils::RangeScanResult;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// indexeddb version, needs to be incremented on every schema schange
@@ -161,8 +161,8 @@ impl IndexedDbStore {
         Ok(ranges)
     }
 
-    async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
-        let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
+    async fn insert(&self, headers: VerifiedHeaderSpan) -> Result<()> {
+        let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
             return Ok(());
         };
 
@@ -177,18 +177,14 @@ impl IndexedDbStore {
         let (prev_exists, next_exists) = try_insert_to_range(&ranges_store, headers_range).await?;
 
         // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
-        if verify_neighbours {
-            verify_against_neighbours(
-                &header_store,
-                prev_exists.then_some(head),
-                next_exists.then_some(tail),
-            )
-            .await?;
-        } else {
-            verify_range_contiguous(&headers)?;
-        }
+        verify_against_neighbours(
+            &header_store,
+            prev_exists.then_some(head),
+            next_exists.then_some(tail),
+        )
+        .await?;
 
-        for header in &headers {
+        for header in headers.as_ref() {
             let hash = header.hash();
             let hash_index = header_store.index(HASH_INDEX_NAME)?;
             let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?)?;
@@ -397,8 +393,8 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn insert(&self, header: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
-        let fut = SendWrapper::new(self.insert(header, verify_neighbours));
+    async fn insert(&self, header: VerifiedHeaderSpan) -> Result<()> {
+        let fut = SendWrapper::new(self.insert(header));
         fut.await
     }
 

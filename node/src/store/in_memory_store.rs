@@ -12,8 +12,9 @@ use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
 use crate::store::header_ranges::{HeaderRanges, HeaderRangesExt};
-use crate::store::utils::verify_range_contiguous;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
+
+use super::header_ranges::VerifiedHeaderSpan;
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -82,16 +83,8 @@ impl InMemoryStore {
         self.inner.read().await.get_by_height(height)
     }
 
-    pub(crate) async fn insert(
-        &self,
-        headers: Vec<ExtendedHeader>,
-        verify_neighbours: bool,
-    ) -> Result<()> {
-        self.inner
-            .write()
-            .await
-            .insert(headers, verify_neighbours)
-            .await?;
+    pub(crate) async fn insert(&self, headers: VerifiedHeaderSpan) -> Result<()> {
+        self.inner.write().await.insert(headers).await?;
         self.header_added_notifier.notify_waiters();
         Ok(())
     }
@@ -184,40 +177,29 @@ impl InMemoryStoreInner {
             .ok_or(StoreError::LostHash(hash))
     }
 
-    async fn insert(
-        &mut self,
-        headers: Vec<ExtendedHeader>,
-        verify_neighbours: bool,
-    ) -> Result<()> {
-        let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
+    async fn insert(&mut self, headers: VerifiedHeaderSpan) -> Result<()> {
+        let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
             return Ok(());
         };
 
         let headers_range = head.height().value()..=tail.height().value();
         let range_scan_result = self.stored_ranges.check_range_insert(&headers_range)?;
 
-        if verify_neighbours {
-            let prev_exists = headers_range.start() != range_scan_result.range.start();
-            let next_exists = headers_range.end() != range_scan_result.range.end();
-            // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
-            self.verify_against_neighbours(
-                prev_exists.then_some(head),
-                next_exists.then_some(tail),
-            )?;
-        } else {
-            verify_range_contiguous(&headers)?;
-        }
+        let prev_exists = headers_range.start() != range_scan_result.range.start();
+        let next_exists = headers_range.end() != range_scan_result.range.end();
+        // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
+        self.verify_against_neighbours(prev_exists.then_some(head), next_exists.then_some(tail))?;
 
         // make sure we don't already have any of the provided hashes before doing any inserts to
         // avoid having to do a rollback
-        for header in &headers {
+        for header in headers.as_ref() {
             let hash = header.hash();
             if self.headers.contains_key(&hash) {
                 return Err(StoreError::HashExists(hash));
             }
         }
 
-        for header in headers {
+        for header in headers.into_iter() {
             let hash = header.hash();
             let height = header.height().value();
 
@@ -341,8 +323,8 @@ impl Store for InMemoryStore {
         self.contains_height(height).await
     }
 
-    async fn insert(&self, header: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
-        self.insert(header, verify_neighbours).await
+    async fn insert(&self, header: VerifiedHeaderSpan) -> Result<()> {
+        self.insert(header).await
     }
 
     async fn update_sampling_metadata(

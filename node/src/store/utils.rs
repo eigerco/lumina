@@ -111,6 +111,7 @@ pub(crate) struct RangeScanResult {
     pub range_to_remove: Option<usize>,
 }
 
+#[allow(unused)]
 pub(crate) fn verify_range_contiguous(headers: &[ExtendedHeader]) -> Result<()> {
     let mut prev = None;
     for h in headers {

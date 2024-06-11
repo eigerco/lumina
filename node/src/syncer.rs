@@ -400,7 +400,7 @@ where
                 // If our new header is adjacent to the HEAD of the store
                 if store_head_height + 1 == new_head_height {
                     // Header is already verified by HeaderSub
-                    if self.store.insert_single(new_head, false).await.is_ok() {
+                    if self.store.insert([new_head].into()).await.is_ok() {
                         info!("Added header {new_head_height} from HeaderSub");
                     }
                 }
@@ -497,12 +497,15 @@ where
         };
 
         for headers in headers_spans {
-            // Headers ranges are verified internally, but we need to validate the edges against
-            // headers possibly stored in store already
-            if let Err(e) = self.store.insert(headers, true).await {
-                warn!("Failed to store batch {}: {e}", ongoing.fetch_ranges);
+            if let Err(e) = self.insert_header_span(headers).await {
+                warn!("Failed to store range {}: {e}", ongoing.fetch_ranges);
             }
         }
+    }
+
+    async fn insert_header_span(&mut self, headers: Vec<ExtendedHeader>) -> Result<()> {
+        self.store.insert(headers.try_into()?).await?;
+        Ok(())
     }
 }
 
@@ -517,7 +520,7 @@ where
 
     // If store is empty, intialize it with network head
     if store.head_height().await.is_err() {
-        store.append_single_unchecked(network_head.clone()).await?;
+        store.insert([network_head.clone()].into()).await?;
     }
 
     p2p.init_header_sub(network_head).await?;

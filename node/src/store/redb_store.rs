@@ -17,8 +17,10 @@ use tokio::task::spawn_blocking;
 use tracing::{debug, info, trace};
 
 use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt};
-use crate::store::utils::{verify_range_contiguous, RangeScanResult};
+use crate::store::utils::RangeScanResult;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
+
+use super::header_ranges::VerifiedHeaderSpan;
 
 const SCHEMA_VERSION: u64 = 1;
 
@@ -225,8 +227,9 @@ impl RedbStore {
         .unwrap_or(false)
     }
 
-    async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
+    async fn insert(&self, headers: VerifiedHeaderSpan) -> Result<()> {
         self.write_tx(move |tx| {
+            let headers = headers.as_ref();
             let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
                 return Ok(());
             };
@@ -238,18 +241,13 @@ impl RedbStore {
             let (prev_exists, next_exists) =
                 try_insert_to_range(&mut height_ranges_table, headers_range)?;
 
-            if verify_neighbours {
-                // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
-                verify_against_neighbours(
-                    &headers_table,
-                    prev_exists.then_some(head),
-                    next_exists.then_some(tail),
-                )?;
-            } else {
-                verify_range_contiguous(&headers)?;
-            }
+            verify_against_neighbours(
+                &headers_table,
+                prev_exists.then_some(head),
+                next_exists.then_some(tail),
+            )?;
 
-            for header in &headers {
+            for header in headers {
                 let height = header.height().value();
                 // until unwrap_infallible is stabilised, make sure Result is Infallible manually
                 let serialized_header: Result<_, Infallible> = header.encode_vec();
@@ -412,8 +410,8 @@ impl Store for RedbStore {
         self.contains_height(height).await
     }
 
-    async fn insert(&self, headers: Vec<ExtendedHeader>, verify_neighbours: bool) -> Result<()> {
-        self.insert(headers, verify_neighbours).await
+    async fn insert(&self, headers: VerifiedHeaderSpan) -> Result<()> {
+        self.insert(headers).await
     }
 
     async fn update_sampling_metadata(
