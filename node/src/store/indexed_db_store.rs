@@ -149,12 +149,14 @@ impl IndexedDbStore {
             .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)?;
         let store = tx.store(RANGES_STORE_NAME)?;
 
-        let ranges: HeaderRanges = store
-            .get_all(None, None, None, Some(Direction::Next))
-            .await?
-            .into_iter()
-            .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(begin, end)| begin..=end))
-            .collect::<Result<_, _>>()?;
+        let ranges = HeaderRanges::from_vec(
+            store
+                .get_all(None, None, None, Some(Direction::Next))
+                .await?
+                .into_iter()
+                .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(begin, end)| begin..=end))
+                .collect::<Result<_, _>>()?,
+        );
 
         Ok(ranges)
     }
@@ -439,12 +441,14 @@ async fn try_insert_to_range(
     ranges_store: &rexie::Store,
     new_range: HeaderRange,
 ) -> Result<(bool, bool)> {
-    let stored_ranges = ranges_store
-        .get_all(None, None, None, Some(Direction::Next))
-        .await?
-        .into_iter()
-        .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(start, end)| start..=end))
-        .collect::<Result<HeaderRanges, _>>()?;
+    let stored_ranges = HeaderRanges::from_vec(
+        ranges_store
+            .get_all(None, None, None, Some(Direction::Next))
+            .await?
+            .into_iter()
+            .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(start, end)| start..=end))
+            .collect::<Result<_, _>>()?,
+    );
 
     let RangeScanResult {
         range_index,

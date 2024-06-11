@@ -364,40 +364,6 @@ impl Store for InMemoryStore {
     }
 }
 
-/*
-impl From<Vec<ExtendedHeader>> for InMemoryStore {
-    fn from(hs: Vec<ExtendedHeader>) -> Self {
-        let range = match (hs.first(), hs.last()) {
-            (Some(head), Some(tail)) => {
-                header_ranges![head.height().value()..=tail.height().value()]
-            }
-            (None, None) => HeaderRanges::default(),
-            _ => unreachable!(),
-        };
-
-        let mut height_to_hash = HashMap::default();
-        for h in &hs {
-            height_to_hash.insert(h.height().value(), h.hash());
-        }
-
-        let mut headers = HashMap::default();
-        for h in hs {
-            headers.insert(h.hash(), h);
-        }
-
-        InMemoryStore {
-            inner: RwLock::new(InMemoryStoreInner {
-                headers,
-                height_to_hash,
-                stored_ranges: range,
-            }),
-            sampling_data: Default::default(),
-            header_added_notifier: Notify::new(),
-        }
-    }
-}
-*/
-
 impl Default for InMemoryStore {
     fn default() -> Self {
         Self::new()
