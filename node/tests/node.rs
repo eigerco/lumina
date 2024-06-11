@@ -31,7 +31,7 @@ async fn connects_to_the_go_bridge_node() {
 
 #[tokio::test]
 async fn header_store_access() {
-    let (store, _) = gen_filled_store(100);
+    let (store, _) = gen_filled_store(100).await;
     let node = Node::new(NodeConfig {
         store,
         ..test_node_config()

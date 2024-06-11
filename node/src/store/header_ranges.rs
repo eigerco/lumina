@@ -67,6 +67,7 @@ impl HeaderRangesExt for HeaderRanges {
         };
 
         // allow inserting a new header range in front of the current head range
+        // +1 in here to let ranges merge below in case they're contiguous
         if *to_insert.start() > head_range.end() + 1 {
             return Ok(RangeScanResult {
                 range_index: self.0.len(),

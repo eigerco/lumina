@@ -364,6 +364,7 @@ impl Store for InMemoryStore {
     }
 }
 
+/*
 impl From<Vec<ExtendedHeader>> for InMemoryStore {
     fn from(hs: Vec<ExtendedHeader>) -> Self {
         let range = match (hs.first(), hs.last()) {
@@ -395,6 +396,7 @@ impl From<Vec<ExtendedHeader>> for InMemoryStore {
         }
     }
 }
+*/
 
 impl Default for InMemoryStore {
     fn default() -> Self {

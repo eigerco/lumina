@@ -682,7 +682,7 @@ mod tests {
     #[async_test]
     async fn start_with_filled_store() {
         let (p2p, mut p2p_mock) = P2p::mocked();
-        let (store, mut gen) = gen_filled_store(25);
+        let (store, mut gen) = gen_filled_store(25).await;
         let store = Arc::new(store);
 
         let mut headers = gen.next_many(520);

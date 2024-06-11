@@ -61,8 +61,6 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     let store = RedbStore::new(db.clone()).await?;
     let blockstore = RedbBlockstore::new(db);
 
-    info!("{:?}", store.get_stored_header_ranges().await?);
-
     let stored_ranges = store.get_stored_header_ranges().await?;
     if stored_ranges.is_empty() {
         info!("Initialised new store");

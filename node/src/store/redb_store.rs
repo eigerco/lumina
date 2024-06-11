@@ -321,12 +321,13 @@ impl RedbStore {
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
-        if !self.contains_height(height).await {
-            return Err(StoreError::NotFound);
-        }
-
         self.read_tx(move |tx| {
+            let headers_table = tx.open_table(HEADERS_TABLE)?;
             let sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
+
+            if headers_table.get(height)?.is_none() {
+                return Err(StoreError::NotFound);
+            }
 
             get_sampling_metadata(&sampling_metadata_table, height)
         })
