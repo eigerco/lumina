@@ -7,6 +7,7 @@ use js_sys::Array;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use lumina_node::blockstore::IndexedDbBlockstore;
+use lumina_node::events::{EventSubscriber, NodeEventInfo};
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
 use lumina_node::node::{Node, NodeConfig};
 use lumina_node::store::{IndexedDbStore, SamplingStatus, Store};
@@ -62,19 +63,8 @@ impl WasmNode {
         let events_channel = BroadcastChannel::new(&events_channel_name)
             .context("Failed to allocate BroadcastChannel")?;
 
-        let mut events_sub = node.event_subscriber();
-
-        spawn_local(async move {
-            while let Ok(ev) = events_sub.recv().await {
-                if let Ok(val) = to_value(&ev) {
-                    if events_channel.post_message(&val).is_err() {
-                        break;
-                    }
-                }
-            }
-
-            events_channel.close();
-        });
+        let events_sub = node.event_subscriber();
+        spawn_local(event_forwarder_task(events_sub, events_channel));
 
         Ok(WasmNode {
             node,
@@ -289,4 +279,28 @@ impl WasmNodeConfig {
             store,
         })
     }
+}
+
+async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: BroadcastChannel) {
+    #[derive(Serialize)]
+    struct Event {
+        message: String,
+        #[serde(flatten)]
+        info: NodeEventInfo,
+    }
+
+    while let Ok(ev) = events_sub.recv().await {
+        let ev = Event {
+            message: ev.event.to_string(),
+            info: ev,
+        };
+
+        if let Ok(val) = to_value(&ev) {
+            if events_channel.post_message(&val).is_err() {
+                break;
+            }
+        }
+    }
+
+    events_channel.close();
 }
