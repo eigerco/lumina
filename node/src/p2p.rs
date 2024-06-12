@@ -422,7 +422,6 @@ impl P2p {
         &self,
         ranges: HeaderRanges,
     ) -> Result<Vec<Vec<ExtendedHeader>>> {
-        println!("get unverified {ranges}");
         let mut session = HeaderSession::new(ranges, self.cmd_tx.clone());
         let header_ranges = session.run().await?;
 
