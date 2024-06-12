@@ -737,6 +737,7 @@ dependencies = [
  "celestia-types",
  "dotenvy",
  "futures",
+ "getrandom",
  "http",
  "jsonrpsee",
  "libp2p",
@@ -746,6 +747,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "wasm-bindgen-test",
 ]
 
 [[package]]
@@ -1659,6 +1661,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
+name = "gloo-net"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ac9e8288ae2c632fa9f8657ac70bfe38a1530f345282d7ba66a1f70b72b7dc4"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-sink",
+ "gloo-utils",
+ "http",
+ "js-sys",
+ "pin-project",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "gloo-timers"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1680,6 +1703,19 @@ dependencies = [
  "futures-core",
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "gloo-utils"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b5555354113b18c547c1d3a98fbf7fb32a9ff4f6fa112ce823a21641a0ba3aa"
+dependencies = [
+ "js-sys",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -2085,6 +2121,7 @@ dependencies = [
  "jsonrpsee-http-client",
  "jsonrpsee-proc-macros",
  "jsonrpsee-types",
+ "jsonrpsee-wasm-client",
  "jsonrpsee-ws-client",
  "tracing",
 ]
@@ -2095,7 +2132,9 @@ version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5b005c793122d03217da09af68ba9383363caa950b90d3436106df8cabce935"
 dependencies = [
+ "futures-channel",
  "futures-util",
+ "gloo-net",
  "http",
  "jsonrpsee-core",
  "pin-project",
@@ -2129,6 +2168,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -2176,6 +2216,17 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "jsonrpsee-wasm-client"
+version = "0.20.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c7cbb3447cf14fd4d2f407c3cc96e6c9634d5440aa1fbed868a31f3c02b27f0"
+dependencies = [
+ "jsonrpsee-client-transport",
+ "jsonrpsee-core",
+ "jsonrpsee-types",
 ]
 
 [[package]]

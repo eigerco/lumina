@@ -4,6 +4,7 @@ set -euo pipefail
 
 # Name for this node or `bridge-0` if not provided
 NODE_ID="${NODE_ID:-0}"
+SKIP_AUTH="${SKIP_AUTH:-false}"
 NODE_NAME="bridge-$NODE_ID"
 # a private local network
 P2P_NETWORK="private"
@@ -67,6 +68,7 @@ main() {
   # Start the bridge node
   echo "Configuration finished. Running a bridge node..."
   celestia bridge start \
+    --rpc.skip-auth=$SKIP_AUTH \
     --rpc.addr 0.0.0.0 \
     --core.ip validator \
     --keyring.accname "$NODE_NAME" \
