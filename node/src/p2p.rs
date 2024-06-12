@@ -54,6 +54,7 @@ mod header_session;
 pub(crate) mod shwap;
 mod swarm;
 
+use crate::events::EventPublisher;
 use crate::executor::{self, spawn, Interval};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
@@ -178,6 +179,8 @@ where
     pub blockstore: B,
     /// The store for headers.
     pub store: Arc<S>,
+    /// Event publisher.
+    pub event_pub: EventPublisher,
 }
 
 #[derive(Debug)]
@@ -225,7 +228,7 @@ impl P2p {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (header_sub_tx, header_sub_rx) = watch::channel(None);
 
-        let peer_tracker = Arc::new(PeerTracker::new());
+        let peer_tracker = Arc::new(PeerTracker::new(args.event_pub.clone()));
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
 
         let mut worker = Worker::new(args, cmd_rx, header_sub_tx, peer_tracker)?;
@@ -664,9 +667,8 @@ where
                 BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await,
                 BehaviourEvent::Kademlia(ev) => self.on_kademlia_event(ev).await?,
                 BehaviourEvent::Bitswap(ev) => self.on_bitswap_event(ev).await,
-                BehaviourEvent::Autonat(_)
-                | BehaviourEvent::Ping(_)
-                | BehaviourEvent::HeaderEx(_) => {}
+                BehaviourEvent::Ping(ev) => self.on_ping_event(ev).await,
+                BehaviourEvent::Autonat(_) | BehaviourEvent::HeaderEx(_) => {}
             },
             SwarmEvent::ConnectionEstablished {
                 peer_id,
@@ -845,6 +847,23 @@ where
                     let error: P2pError = error.into();
                     respond_to.maybe_send_err(error);
                 }
+            }
+        }
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    async fn on_ping_event(&mut self, ev: ping::Event) {
+        match ev.result {
+            Ok(dur) => debug!(
+                "Ping success: peer: {}, connection_id: {}, time: {:?}",
+                ev.peer, ev.connection, dur
+            ),
+            Err(e) => {
+                debug!(
+                    "Ping failure: peer: {}, connection_id: {}, error: {}",
+                    &ev.peer, &ev.connection, e
+                );
+                self.swarm.close_connection(ev.connection);
             }
         }
     }
