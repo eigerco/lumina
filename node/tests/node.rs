@@ -8,7 +8,8 @@ use celestia_types::fraud_proof::BadEncodingFraudProof;
 use celestia_types::hash::Hash;
 use celestia_types::test_utils::{corrupt_eds, generate_eds, ExtendedHeaderGenerator};
 use futures::StreamExt;
-use libp2p::{gossipsub, identity, noise, tcp, yamux, Multiaddr, SwarmBuilder};
+use libp2p::swarm::NetworkBehaviour;
+use libp2p::{gossipsub, identity, noise, ping, tcp, yamux, Multiaddr, SwarmBuilder};
 use lumina_node::node::{Node, NodeConfig};
 use lumina_node::store::{ExtendedHeaderGeneratorExt, InMemoryStore, Store};
 use lumina_node::test_utils::{
@@ -215,6 +216,12 @@ async fn stops_services_when_network_is_compromised() {
 }
 
 fn spawn_befp_announcer(connect_to: Multiaddr) -> mpsc::Sender<BadEncodingFraudProof> {
+    #[derive(NetworkBehaviour)]
+    struct Behaviour {
+        ping: ping::Behaviour,
+        gossipsub: gossipsub::Behaviour,
+    }
+
     // create a new libp2p node with gossipsub
     let mut announcer = SwarmBuilder::with_new_identity()
         .with_tokio()
@@ -225,11 +232,14 @@ fn spawn_befp_announcer(connect_to: Multiaddr) -> mpsc::Sender<BadEncodingFraudP
         )
         .unwrap()
         .with_behaviour(|key| {
+            let ping = ping::Behaviour::new(ping::Config::default());
+
             let config = gossipsub::ConfigBuilder::default().build().unwrap();
             let message_authenticity = gossipsub::MessageAuthenticity::Signed(key.clone());
-            let behaviour: gossipsub::Behaviour =
+            let gossipsub: gossipsub::Behaviour =
                 gossipsub::Behaviour::new(message_authenticity, config).unwrap();
-            Ok(behaviour)
+
+            Ok(Behaviour { ping, gossipsub })
         })
         .unwrap()
         .build();
@@ -238,7 +248,11 @@ fn spawn_befp_announcer(connect_to: Multiaddr) -> mpsc::Sender<BadEncodingFraudP
 
     // subscribe to the fraud-sub topic
     let topic = gossipsub::IdentTopic::new("/badencoding/fraud-sub/private/v0.0.1");
-    announcer.behaviour_mut().subscribe(&topic).unwrap();
+    announcer
+        .behaviour_mut()
+        .gossipsub
+        .subscribe(&topic)
+        .unwrap();
 
     // a channel for proof announcment
     let (tx, mut rx) = mpsc::channel::<BadEncodingFraudProof>(8);
@@ -249,7 +263,7 @@ fn spawn_befp_announcer(connect_to: Multiaddr) -> mpsc::Sender<BadEncodingFraudP
                 _ = announcer.select_next_some() => (),
                 Some(proof) = rx.recv() => {
                     let proof = proof.encode_vec().unwrap();
-                    announcer.behaviour_mut().publish(topic.hash(), proof).unwrap();
+                    announcer.behaviour_mut().gossipsub.publish(topic.hash(), proof).unwrap();
                 }
             }
         }

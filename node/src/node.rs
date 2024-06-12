@@ -106,6 +106,7 @@ where
             listen_on: config.p2p_listen_on,
             blockstore: config.blockstore,
             store: store.clone(),
+            event_pub: event_channel.publisher(),
         })?);
 
         let syncer = Arc::new(Syncer::start(SyncerArgs {
