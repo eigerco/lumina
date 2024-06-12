@@ -185,28 +185,32 @@ impl HeaderRanges {
     pub fn tail(&self) -> Option<u64> {
         self.0.first().map(|r| *r.start())
     }
+
     /// Crate HeaderRanges from correctly pre-sorted, non-overlapping SmallVec of ranges
     pub(crate) fn from_vec(from: SmallVec<[HeaderRange; 2]>) -> Self {
-        let mut prev: Option<&RangeInclusive<u64>> = None;
-        for range in &from {
-            debug_assert!(
-                range.start() <= range.end(),
-                "range isn't sorted internally"
-            );
+        #[cfg(debug_assertions)]
+        {
+            let mut prev: Option<&RangeInclusive<u64>> = None;
 
-            if let Some(prev) = prev {
-                debug_assert!(
-                    prev.end() < range.start(),
-                    "header ranges aren't sorted correctly"
+            for range in &from {
+                assert!(
+                    range.start() <= range.end(),
+                    "range isn't sorted internally"
                 );
-            }
 
-            prev = Some(range);
+                if let Some(prev) = prev {
+                    assert!(
+                        prev.end() < range.start(),
+                        "header ranges aren't sorted correctly"
+                    );
+                }
+
+                prev = Some(range);
+            }
         }
 
         Self(from)
     }
-}
 
 impl Display for HeaderRanges {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
