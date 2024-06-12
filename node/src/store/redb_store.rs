@@ -14,9 +14,11 @@ use redb::{
 };
 use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 
-use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders};
+use crate::store::header_ranges::{
+    HeaderRange, HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders,
+};
 use crate::store::utils::RangeScanResult;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
@@ -625,12 +627,10 @@ pub mod tests {
         let (original_store, mut gen) = gen_filled_store(0, Some(&db)).await;
         let mut original_headers = gen.next_many(20);
 
-        for h in &original_headers {
-            original_store
-                .append_single_unchecked(h.clone())
-                .await
-                .expect("inserting test data failed");
-        }
+        original_store
+            .insert(original_headers.clone().try_into().unwrap())
+            .await
+            .expect("inserting test data failed");
         drop(original_store);
 
         let reopened_store = create_store(Some(&db)).await;
@@ -648,12 +648,10 @@ pub mod tests {
         }
 
         let mut new_headers = gen.next_many(10);
-        for h in &new_headers {
-            reopened_store
-                .append_single_unchecked(h.clone())
-                .await
-                .expect("failed to insert data");
-        }
+        reopened_store
+            .insert(new_headers.clone().try_into().unwrap())
+            .await
+            .expect("failed to insert data");
         drop(reopened_store);
 
         original_headers.append(&mut new_headers);
@@ -678,17 +676,22 @@ pub mod tests {
         let store1 = create_store(None).await;
 
         let headers = gen0.next_many(10);
-        store0.append_unchecked(headers.clone()).await.unwrap();
-        store1.append_unchecked(headers).await.unwrap();
+        store0
+            .insert(headers.clone().try_into().unwrap())
+            .await
+            .unwrap();
+        store1.insert(headers.try_into().unwrap()).await.unwrap();
 
         let mut gen1 = gen0.fork();
 
-        for h in gen0.next_many(5) {
-            store0.append_single_unchecked(h.clone()).await.unwrap()
-        }
-        for h in gen1.next_many(6) {
-            store1.append_single_unchecked(h.clone()).await.unwrap();
-        }
+        store0
+            .insert(gen0.next_many(5).try_into().unwrap())
+            .await
+            .unwrap();
+        store1
+            .insert(gen1.next_many(6).try_into().unwrap())
+            .await
+            .unwrap();
 
         assert_eq!(
             store0.get_by_height(10).await.unwrap(),
@@ -718,11 +721,9 @@ pub mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(amount);
 
-        for header in headers {
-            s.append_single_unchecked(header)
-                .await
-                .expect("inserting test data failed");
-        }
+        s.insert(headers.try_into().unwrap())
+            .await
+            .expect("inserting test data failed");
 
         (s, gen)
     }

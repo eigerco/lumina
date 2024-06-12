@@ -10,7 +10,7 @@ use celestia_types::test_utils::{corrupt_eds, generate_eds, ExtendedHeaderGenera
 use futures::StreamExt;
 use libp2p::{gossipsub, identity, noise, tcp, yamux, Multiaddr, SwarmBuilder};
 use lumina_node::node::{Node, NodeConfig};
-use lumina_node::store::{InMemoryStore, Store};
+use lumina_node::store::{ExtendedHeaderGeneratorExt, InMemoryStore, Store};
 use lumina_node::test_utils::{
     gen_filled_store, listening_test_node_config, test_node_config, test_node_config_with_keypair,
 };
@@ -177,14 +177,13 @@ async fn stops_services_when_network_is_compromised() {
     let store = InMemoryStore::new();
 
     // add some initial headers
-    let headers = gen.next_many(64);
-    store.append(headers).await.unwrap();
+    store.insert(gen.next_many_verified(64)).await.unwrap();
 
     // create a corrupted block and insert it
     let mut eds = generate_eds(8);
     let (header, befp) = corrupt_eds(&mut gen, &mut eds);
 
-    store.append_single(header).await.unwrap();
+    store.insert(header.into()).await.unwrap();
 
     // spawn node
     let node = Node::new(NodeConfig {

@@ -21,12 +21,13 @@ pub use indexed_db_store::IndexedDbStore;
 #[cfg(not(target_arch = "wasm32"))]
 pub use redb_store::RedbStore;
 
-
 mod in_memory_store;
 #[cfg(target_arch = "wasm32")]
 mod indexed_db_store;
 #[cfg(not(target_arch = "wasm32"))]
 mod redb_store;
+
+pub use header_ranges::ExtendedHeaderGeneratorExt;
 
 pub(crate) mod header_ranges;
 pub(crate) mod utils;
@@ -318,9 +319,11 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 
 #[cfg(test)]
 mod tests {
+    use self::header_ranges::ExtendedHeaderGeneratorExt;
+
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::{Error, Height, VerificationError};
+    use celestia_types::{Error, Height};
     use rstest::rstest;
 
     // rstest only supports attributes which last segment is `test`
@@ -484,7 +487,7 @@ mod tests {
 
         let header = gen.next();
 
-        s.append_single_unchecked(header.clone()).await.unwrap();
+        s.insert(header.clone().into()).await.unwrap();
         assert_eq!(s.head_height().await.unwrap(), 1);
         assert_eq!(s.get_head().await.unwrap(), header);
         assert_eq!(s.get_by_height(1).await.unwrap(), header);
@@ -530,10 +533,10 @@ mod tests {
         let mut gen = fill_store(&mut s, 100).await;
 
         let header101 = gen.next();
-        s.append_single_unchecked(header101.clone()).await.unwrap();
+        s.insert(header101.clone().into()).await.unwrap();
 
         assert!(matches!(
-            s.append_single_unchecked(header101).await,
+            s.insert(header101.into()).await,
             Err(StoreError::HeaderRangeOverlap(101, 101))
         ));
     }
@@ -555,7 +558,7 @@ mod tests {
         let header29 = s.get_by_height(29).await.unwrap();
         let header30 = gen.next_of(&header29);
 
-        let insert_existing_result = s.append_single_unchecked(header30).await;
+        let insert_existing_result = s.insert(header30.into()).await;
         assert!(matches!(
             insert_existing_result,
             Err(StoreError::HeaderRangeOverlap(30, 30))
@@ -579,7 +582,7 @@ mod tests {
         dup_header.header.height = Height::from(102u32);
 
         assert!(matches!(
-            s.append_single_unchecked(dup_header).await,
+            s.insert(dup_header.into()).await,
             Err(StoreError::HashExists(_))
         ));
     }
@@ -597,8 +600,7 @@ mod tests {
         let mut s = s;
         let mut gen = fill_store(&mut s, 10).await;
 
-        let hs = gen.next_many(4);
-        s.append_unchecked(hs).await.unwrap();
+        s.insert(gen.next_many_verified(4)).await.unwrap();
         s.get_by_height(14).await.unwrap();
     }
 
@@ -620,8 +622,8 @@ mod tests {
         // height 12
         let upcoming_head = gen.next();
 
-        s.append_single_unchecked(upcoming_head).await.unwrap();
-        s.append_single_unchecked(skipped).await.unwrap();
+        s.insert(upcoming_head.into()).await.unwrap();
+        s.insert(skipped.into()).await.unwrap();
     }
 
     #[rstest]
@@ -644,38 +646,11 @@ mod tests {
         // height 12
         let upcoming_head = gen.next();
 
-        s.append_single(upcoming_head).await.unwrap();
+        s.insert(upcoming_head.into()).await.unwrap();
         assert!(matches!(
-            s.append_single(another_chain).await,
+            s.insert(another_chain.into()).await,
             Err(StoreError::CelestiaTypes(Error::Verification(_)))
         ));
-    }
-
-    #[rstest]
-    #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
-    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
-    #[self::test]
-    async fn test_non_continuous_append<S: Store>(
-        #[case]
-        #[future(awt)]
-        s: S,
-    ) {
-        let mut s = s;
-        let mut gen = fill_store(&mut s, 10).await;
-        let mut hs = gen.next_many(6);
-
-        // remove height 14
-        hs.remove(3);
-
-        let Err(StoreError::CelestiaTypes(celestia_types::Error::Verification(
-            VerificationError::Other(message),
-        ))) = dbg!(s.append_unchecked(hs).await)
-        else {
-            panic!("unexpected error");
-        };
-        assert!(message
-            .contains("untrusted header height (15) not adjacent to the current trusted (13)"));
     }
 
     #[rstest]
@@ -695,9 +670,9 @@ mod tests {
         gen.next_many(4);
         let header15 = gen.next();
 
-        s.append_single_unchecked(header5).await.unwrap();
-        s.append_single_unchecked(header15).await.unwrap();
-        s.append_single_unchecked(header10).await.unwrap_err();
+        s.insert(header5.into()).await.unwrap();
+        s.insert(header15.into()).await.unwrap();
+        s.insert(header10.into()).await.unwrap_err();
     }
 
     #[rstest]
@@ -953,13 +928,13 @@ mod tests {
         gen.skip(19);
 
         let prepend0 = gen.next();
-        let prepend1 = gen.next_many(5);
-        store.append(gen.next_many(4)).await.unwrap();
-        store.append(gen.next_many(5)).await.unwrap();
-        store.append(prepend1).await.unwrap();
-        store.append_single(prepend0).await.unwrap();
-        store.append(gen.next_many(5)).await.unwrap();
-        store.append_single(gen.next()).await.unwrap();
+        let prepend1 = gen.next_many_verified(5);
+        store.insert(gen.next_many_verified(4)).await.unwrap();
+        store.insert(gen.next_many_verified(5)).await.unwrap();
+        store.insert(prepend1).await.unwrap();
+        store.insert(prepend0.into()).await.unwrap();
+        store.insert(gen.next_many_verified(5)).await.unwrap();
+        store.insert(gen.next().into()).await.unwrap();
 
         let final_ranges = store.get_stored_header_ranges().await.unwrap();
         assert_eq!(final_ranges.as_ref(), &[20..=40]);
@@ -982,27 +957,27 @@ mod tests {
 
         gen.skip(9);
 
-        let skip0 = gen.next_many(5);
-        store.append(gen.next_many(2)).await.unwrap();
-        store.append(gen.next_many(3)).await.unwrap();
+        let skip0 = gen.next_many_verified(5);
+        store.insert(gen.next_many_verified(2)).await.unwrap();
+        store.insert(gen.next_many_verified(3)).await.unwrap();
 
         let skip1 = gen.next();
-        store.append_single_unchecked(gen.next()).await.unwrap();
+        store.insert(gen.next().into()).await.unwrap();
 
-        let skip2 = gen.next_many(5);
+        let skip2 = gen.next_many_verified(5);
 
-        store.append_single_unchecked(gen.next()).await.unwrap();
+        store.insert(gen.next().into()).await.unwrap();
 
-        let skip3 = gen.next_many(5);
-        let skip4 = gen.next_many(5);
-        let skip5 = gen.next_many(5);
+        let skip3 = gen.next_many_verified(5);
+        let skip4 = gen.next_many_verified(5);
+        let skip5 = gen.next_many_verified(5);
 
-        store.append(skip5).await.unwrap();
-        store.append(skip4).await.unwrap();
-        store.append(skip3).await.unwrap();
-        store.append(skip2).await.unwrap();
-        store.append_single(skip1).await.unwrap();
-        store.append(skip0).await.unwrap();
+        store.insert(skip5).await.unwrap();
+        store.insert(skip4).await.unwrap();
+        store.insert(skip3).await.unwrap();
+        store.insert(skip2).await.unwrap();
+        store.insert(skip1.into()).await.unwrap();
+        store.insert(skip0).await.unwrap();
 
         let final_ranges = store.get_stored_header_ranges().await.unwrap();
         assert_eq!(final_ranges.as_ref(), &[10..=42]);
@@ -1021,12 +996,12 @@ mod tests {
         let store = s;
         let mut gen = ExtendedHeaderGenerator::new();
 
-        store.append(gen.next_many(5)).await.unwrap();
+        store.insert(gen.next_many_verified(5)).await.unwrap();
         let mut fork = gen.fork();
         let _gap = gen.next();
-        store.append(gen.next_many(4)).await.unwrap();
+        store.insert(gen.next_many_verified(4)).await.unwrap();
 
-        store.append_single(fork.next()).await.unwrap_err();
+        store.insert(fork.next().into()).await.unwrap_err();
     }
 
     /// Fills an empty store
@@ -1036,7 +1011,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
 
         store
-            .append_unchecked(gen.next_many(amount))
+            .insert(gen.next_many_verified(amount))
             .await
             .expect("inserting test data failed");
 

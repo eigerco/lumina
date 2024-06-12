@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::vec;
 
+use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 use serde::Serialize;
 use smallvec::{IntoIter, SmallVec};
@@ -26,6 +27,7 @@ macro_rules! header_ranges {
 pub(crate) use header_ranges;
 
 /// Span of header that's been verified internally
+#[derive(Clone)]
 pub struct VerifiedExtendedHeaders(Vec<ExtendedHeader>);
 
 impl IntoIterator for VerifiedExtendedHeaders {
@@ -67,6 +69,13 @@ impl TryFrom<Vec<ExtendedHeader>> for VerifiedExtendedHeaders {
         head.verify_adjacent_range(&headers[1..])?;
 
         Ok(Self(headers))
+    }
+}
+
+impl VerifiedExtendedHeaders {
+    /// Create a new instance out of pre-checked vec of headers
+    fn from_verified_vec(headers: Vec<ExtendedHeader>) -> Self {
+        Self(headers)
     }
 }
 
@@ -293,6 +302,18 @@ impl Iterator for HeaderRangesIterator {
             }
             self.inner_iter = self.outer_iter.next();
         }
+    }
+}
+
+/// Extends test header generator for easier insertion into the store
+pub trait ExtendedHeaderGeneratorExt {
+    /// Generate next amount verified headers
+    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders;
+}
+
+impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
+    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders {
+        VerifiedExtendedHeaders::from_verified_vec(self.next_many(amount))
     }
 }
 

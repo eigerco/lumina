@@ -6,7 +6,7 @@ use celestia_types::test_utils::{invalidate, unverify};
 use lumina_node::{
     node::{Node, NodeConfig, NodeError},
     p2p::{HeaderExError, P2pError},
-    store::Store,
+    store::{ExtendedHeaderGeneratorExt, Store},
     test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
 };
 use tokio::time::{sleep, timeout};
@@ -57,11 +57,8 @@ async fn request_head() {
 async fn client_server() {
     // Server Node
     let (server_store, mut header_generator) = gen_filled_store(0).await;
-    let server_headers = header_generator.next_many(20);
-    server_store
-        .append_unchecked(server_headers.clone())
-        .await
-        .unwrap();
+    let server_headers = header_generator.next_many_verified(20);
+    server_store.insert(server_headers.clone()).await.unwrap();
 
     let server = Node::new(NodeConfig {
         store: server_store,
@@ -86,14 +83,14 @@ async fn client_server() {
 
     // request head (with one peer)
     let received_head = client.request_head_header().await.unwrap();
-    assert_eq!(server_headers.last().unwrap(), &received_head);
+    assert_eq!(server_headers.as_ref().last().unwrap(), &received_head);
 
     // request by height
     let received_header_by_height = client.request_header_by_height(10).await.unwrap();
-    assert_eq!(server_headers[9], received_header_by_height);
+    assert_eq!(server_headers.as_ref()[9], received_header_by_height);
 
     // request by hash
-    let expected_header = &server_headers[15];
+    let expected_header = &server_headers.as_ref()[15];
     let received_header_by_hash = client
         .request_header_by_hash(&expected_header.hash())
         .await
@@ -102,14 +99,14 @@ async fn client_server() {
 
     // request genesis by height
     let received_genesis = client.request_header_by_height(1).await.unwrap();
-    assert_eq!(server_headers.first().unwrap(), &received_genesis);
+    assert_eq!(server_headers.as_ref().first().unwrap(), &received_genesis);
 
     // request entire store range
     let received_all_headers = client
         .request_verified_headers(&received_genesis, 19)
         .await
         .unwrap();
-    assert_eq!(server_headers[1..], received_all_headers);
+    assert_eq!(server_headers.as_ref()[1..], received_all_headers);
 
     // reqest more headers than available in store
     timeout(
@@ -120,7 +117,7 @@ async fn client_server() {
     .expect_err("sessions keep retrying until all headers are received");
 
     // request unknown hash
-    let unstored_header = header_generator.next_of(&server_headers[0]);
+    let unstored_header = header_generator.next_of(&server_headers.as_ref()[0]);
     let unexpected_hash = client
         .request_header_by_hash(&unstored_header.hash())
         .await
@@ -141,9 +138,9 @@ async fn client_server() {
 #[tokio::test]
 async fn head_selection_with_multiple_peers() {
     let (server_store, mut header_generator) = gen_filled_store(0).await;
-    let common_server_headers = header_generator.next_many(20);
+    let common_server_headers = header_generator.next_many_verified(20);
     server_store
-        .append_unchecked(common_server_headers.clone())
+        .insert(common_server_headers.clone())
         .await
         .unwrap();
 
@@ -170,9 +167,9 @@ async fn head_selection_with_multiple_peers() {
     ];
 
     // Server group B, single node with additional headers
-    let additional_server_headers = header_generator.next_many(5);
+    let additional_server_headers = header_generator.next_many_verified(5);
     server_store
-        .append_unchecked(additional_server_headers.clone())
+        .insert(additional_server_headers.clone())
         .await
         .unwrap();
 
@@ -222,7 +219,10 @@ async fn head_selection_with_multiple_peers() {
 
     // client should prefer heighest head received from 2+ peers
     let network_head = client.request_head_header().await.unwrap();
-    assert_eq!(common_server_headers.last().unwrap(), &network_head);
+    assert_eq!(
+        common_server_headers.as_ref().last().unwrap(),
+        &network_head
+    );
 
     // new node from group B joins, head should go up
     let new_b_node = Node::new(NodeConfig {
@@ -244,7 +244,10 @@ async fn head_selection_with_multiple_peers() {
 
     // now 2 nodes agree on head with height 25
     let network_head = client.request_head_header().await.unwrap();
-    assert_eq!(additional_server_headers.last().unwrap(), &network_head);
+    assert_eq!(
+        additional_server_headers.as_ref().last().unwrap(),
+        &network_head
+    );
 }
 
 #[tokio::test]
@@ -257,7 +260,7 @@ async fn replaced_header_server_store() {
     server_headers[10] = replaced_header.clone();
 
     server_store
-        .append_unchecked(server_headers.clone())
+        .insert(server_headers.clone().try_into().unwrap())
         .await
         .unwrap();
 
@@ -317,7 +320,7 @@ async fn invalidated_header_server_store() {
     invalidate(&mut server_headers[10]);
 
     server_store
-        .append_unchecked(server_headers.clone())
+        .insert(server_headers.clone().try_into().unwrap())
         .await
         .unwrap();
 
@@ -379,7 +382,7 @@ async fn unverified_header_server_store() {
     unverify(&mut server_headers[10]);
 
     server_store
-        .append_unchecked(server_headers.clone())
+        .insert(server_headers.clone().try_into().unwrap())
         .await
         .unwrap();
 
