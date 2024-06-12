@@ -597,10 +597,10 @@ mod tests {
         fill_store(&mut s, 100).await;
 
         let mut dup_header = s.get_by_height(33).await.unwrap();
-        dup_header.header.height = Height::from(101u32);
-        let insert_existing_result = dbg!(s.append_single_unchecked(dup_header).await);
+        dup_header.header.height = Height::from(150u32);
+
         assert!(matches!(
-            insert_existing_result,
+            s.append_single_unchecked(dup_header).await,
             Err(StoreError::HashExists(_))
         ));
     }
