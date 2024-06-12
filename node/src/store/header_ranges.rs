@@ -14,7 +14,7 @@ pub type HeaderRange = RangeInclusive<u64>;
 macro_rules! header_ranges {
     ( $( $r:expr ),* ) => {
         {
-            HeaderRanges::from_vec(smallvec::smallvec![
+            crate::store::header_ranges::HeaderRanges::from_vec(smallvec::smallvec![
             $(
                 $r,
             )*
