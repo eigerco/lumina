@@ -430,7 +430,6 @@ impl P2p {
             let Some(head) = range.first() else {
                 continue;
             };
-            println!("got {head:?}");
             head.verify_adjacent_range(&range[1..])
                 .map_err(|_| HeaderExError::InvalidResponse)?;
         }
