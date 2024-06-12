@@ -30,7 +30,6 @@ pub struct VerifiedHeaderSpan(Vec<ExtendedHeader>);
 
 impl IntoIterator for VerifiedHeaderSpan {
     type Item = ExtendedHeader;
-
     type IntoIter = vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
