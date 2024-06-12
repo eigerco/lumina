@@ -11,6 +11,20 @@ use crate::store::StoreError;
 
 pub type HeaderRange = RangeInclusive<u64>;
 
+macro_rules! header_ranges {
+    ( $( $r:expr ),* ) => {
+        {
+            HeaderRanges::from_vec(smallvec::smallvec![
+            $(
+                $r,
+            )*
+            ])
+        }
+    };
+}
+
+pub(crate) use header_ranges;
+
 /// Span of header that's been verified internally
 pub struct VerifiedHeaderSpan(Vec<ExtendedHeader>);
 

@@ -1,18 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
-macro_rules! header_ranges {
-    ( $( $r:expr ),* ) => {
-        {
-            HeaderRanges::from_vec(smallvec::smallvec![
-            $(
-                $r,
-            )*
-            ])
-        }
-    };
-}
-
 pub mod blockstore;
 pub mod daser;
 pub mod events;
