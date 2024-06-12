@@ -596,8 +596,8 @@ mod tests {
         let mut s = s;
         fill_store(&mut s, 100).await;
 
-        let mut dup_header = s.get_by_height(33).await.unwrap();
-        dup_header.header.height = Height::from(150u32);
+        let mut dup_header = s.get_by_height(99).await.unwrap();
+        dup_header.header.height = Height::from(102u32);
 
         assert!(matches!(
             s.append_single_unchecked(dup_header).await,
