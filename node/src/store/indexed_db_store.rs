@@ -13,7 +13,9 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
-use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders};
+use crate::store::header_ranges::{
+    HeaderRange, HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders,
+};
 use crate::store::utils::RangeScanResult;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
