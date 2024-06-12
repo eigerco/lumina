@@ -225,6 +225,7 @@ impl HeaderRanges {
 
         Self(from)
     }
+}
 
 impl Display for HeaderRanges {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

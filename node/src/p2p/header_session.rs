@@ -178,6 +178,7 @@ fn sort_and_flatten_header_ranges(
 mod tests {
     use super::*;
     use crate::p2p::{HeaderExError, P2p};
+    use crate::store::header_ranges::header_ranges;
     use crate::test_utils::async_test;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
 

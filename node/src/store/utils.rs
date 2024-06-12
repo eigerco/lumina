@@ -142,6 +142,8 @@ pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_typ
 
 #[cfg(test)]
 mod tests {
+    use crate::store::header_ranges::header_ranges;
+
     use super::*;
 
     #[test]
