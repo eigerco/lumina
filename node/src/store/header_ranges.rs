@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::vec;
 
+#[cfg(any(test, feature = "test-utils"))]
 use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 use serde::Serialize;
@@ -74,7 +75,8 @@ impl TryFrom<Vec<ExtendedHeader>> for VerifiedExtendedHeaders {
 
 impl VerifiedExtendedHeaders {
     /// Create a new instance out of pre-checked vec of headers
-    fn from_verified_vec(headers: Vec<ExtendedHeader>) -> Self {
+    #[allow(dead_code)] // used by ExtendedHeaderGeneratorExt
+    pub(crate) fn from_verified_vec(headers: Vec<ExtendedHeader>) -> Self {
         Self(headers)
     }
 }
@@ -311,6 +313,7 @@ pub trait ExtendedHeaderGeneratorExt {
     fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders;
 }
 
+#[cfg(any(test, feature = "test-utils"))]
 impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
     fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders {
         VerifiedExtendedHeaders::from_verified_vec(self.next_many(amount))

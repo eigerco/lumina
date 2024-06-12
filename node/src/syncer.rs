@@ -301,7 +301,7 @@ where
         }
 
         if let Some(ongoing) = self.ongoing_batch.take() {
-            warn!("Cancelling fetching of {}", ongoing.fetch_ranges,);
+            warn!("Cancelling fetching of {}", ongoing.fetch_ranges);
             ongoing.cancellation_token.cancel();
         }
     }
@@ -330,7 +330,7 @@ where
             .map(|ongoing| format!("{}", ongoing.fetch_ranges))
             .unwrap_or_else(|| "None".to_string());
 
-        info!("syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}",);
+        info!("syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}");
     }
 
     fn spawn_try_init(&self) -> oneshot::Receiver<u64> {
@@ -434,11 +434,11 @@ where
             }
         };
 
-        let fetch_ranges = dbg!(calculate_missing_ranges(
+        let fetch_ranges = calculate_missing_ranges(
             subjective_head_height,
             store_ranges.as_ref(),
             MAX_HEADERS_IN_BATCH,
-        ));
+        );
 
         if fetch_ranges.is_empty() {
             // no headers to fetch
@@ -581,7 +581,6 @@ mod tests {
     }
 
     #[async_test]
-    //#[tracing_test::traced_test]
     async fn syncing() {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(26);

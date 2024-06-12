@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
-use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt, VerifiedHeaderSpan};
+use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders};
 use crate::store::utils::RangeScanResult;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
@@ -161,7 +161,7 @@ impl IndexedDbStore {
         Ok(ranges)
     }
 
-    async fn insert(&self, headers: VerifiedHeaderSpan) -> Result<()> {
+    async fn insert(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
         let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
             return Ok(());
         };
@@ -393,7 +393,7 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn insert(&self, header: VerifiedHeaderSpan) -> Result<()> {
+    async fn insert(&self, header: VerifiedExtendedHeaders) -> Result<()> {
         let fut = SendWrapper::new(self.insert(header));
         fut.await
     }
