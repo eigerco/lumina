@@ -55,6 +55,7 @@ mod header_session;
 pub(crate) mod shwap;
 mod swarm;
 
+use crate::events::EventPublisher;
 use crate::executor::{self, spawn, Interval};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
@@ -187,6 +188,8 @@ where
     pub blockstore: B,
     /// The store for headers.
     pub store: Arc<S>,
+    /// Event publisher.
+    pub event_pub: EventPublisher,
 }
 
 #[derive(Debug)]
@@ -234,7 +237,7 @@ impl P2p {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (header_sub_tx, header_sub_rx) = watch::channel(None);
 
-        let peer_tracker = Arc::new(PeerTracker::new());
+        let peer_tracker = Arc::new(PeerTracker::new(args.event_pub.clone()));
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
 
         let mut worker = Worker::new(args, cmd_rx, header_sub_tx, peer_tracker)?;

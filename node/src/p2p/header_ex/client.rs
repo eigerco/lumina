@@ -303,6 +303,7 @@ async fn decode_and_verify_responses(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::EventChannel;
     use crate::p2p::header_ex::utils::ExtendedHeaderExt;
     use crate::test_utils::async_test;
     use celestia_proto::p2p::pb::StatusCode;
@@ -1105,7 +1106,8 @@ mod tests {
     }
 
     fn peer_tracker_with_n_peers(amount: usize) -> Arc<PeerTracker> {
-        let peers = Arc::new(PeerTracker::new());
+        let event_channel = EventChannel::new();
+        let peers = Arc::new(PeerTracker::new(event_channel.publisher()));
 
         for i in 0..amount {
             let peer = PeerId::random();
