@@ -26,9 +26,9 @@ macro_rules! header_ranges {
 pub(crate) use header_ranges;
 
 /// Span of header that's been verified internally
-pub struct VerifiedHeaderSpan(Vec<ExtendedHeader>);
+pub struct VerifiedExtendedHeaders(Vec<ExtendedHeader>);
 
-impl IntoIterator for VerifiedHeaderSpan {
+impl IntoIterator for VerifiedExtendedHeaders {
     type Item = ExtendedHeader;
     type IntoIter = vec::IntoIter<Self::Item>;
 
@@ -37,25 +37,31 @@ impl IntoIterator for VerifiedHeaderSpan {
     }
 }
 
-impl AsRef<[ExtendedHeader]> for VerifiedHeaderSpan {
+impl AsRef<[ExtendedHeader]> for VerifiedExtendedHeaders {
     fn as_ref(&self) -> &[ExtendedHeader] {
         &self.0
     }
 }
 
 /// 1-length hedaer span is internally verified, this is valid
-impl From<[ExtendedHeader; 1]> for VerifiedHeaderSpan {
+impl From<[ExtendedHeader; 1]> for VerifiedExtendedHeaders {
     fn from(value: [ExtendedHeader; 1]) -> Self {
         Self(value.into())
     }
 }
 
-impl TryFrom<Vec<ExtendedHeader>> for VerifiedHeaderSpan {
+impl From<ExtendedHeader> for VerifiedExtendedHeaders {
+    fn from(value: ExtendedHeader) -> Self {
+        Self(vec![value])
+    }
+}
+
+impl TryFrom<Vec<ExtendedHeader>> for VerifiedExtendedHeaders {
     type Error = celestia_types::Error;
 
     fn try_from(headers: Vec<ExtendedHeader>) -> Result<Self, Self::Error> {
         let Some(head) = headers.first() else {
-            return Ok(VerifiedHeaderSpan(Vec::default()));
+            return Ok(VerifiedExtendedHeaders(Vec::default()));
         };
 
         head.verify_adjacent_range(&headers[1..])?;

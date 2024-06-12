@@ -11,10 +11,8 @@ use dashmap::DashMap;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
-use crate::store::header_ranges::{HeaderRanges, HeaderRangesExt};
+use crate::store::header_ranges::{HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders};
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
-
-use super::header_ranges::VerifiedHeaderSpan;
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -83,7 +81,7 @@ impl InMemoryStore {
         self.inner.read().await.get_by_height(height)
     }
 
-    pub(crate) async fn insert(&self, headers: VerifiedHeaderSpan) -> Result<()> {
+    pub(crate) async fn insert(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
         self.inner.write().await.insert(headers).await?;
         self.header_added_notifier.notify_waiters();
         Ok(())
@@ -177,7 +175,7 @@ impl InMemoryStoreInner {
             .ok_or(StoreError::LostHash(hash))
     }
 
-    async fn insert(&mut self, headers: VerifiedHeaderSpan) -> Result<()> {
+    async fn insert(&mut self, headers: VerifiedExtendedHeaders) -> Result<()> {
         let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
             return Ok(());
         };
@@ -323,7 +321,7 @@ impl Store for InMemoryStore {
         self.contains_height(height).await
     }
 
-    async fn insert(&self, header: VerifiedHeaderSpan) -> Result<()> {
+    async fn insert(&self, header: VerifiedExtendedHeaders) -> Result<()> {
         self.insert(header).await
     }
 

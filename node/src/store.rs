@@ -13,7 +13,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::store::header_ranges::HeaderRanges;
+use crate::store::header_ranges::{HeaderRanges, VerifiedExtendedHeaders};
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
@@ -21,7 +21,6 @@ pub use indexed_db_store::IndexedDbStore;
 #[cfg(not(target_arch = "wasm32"))]
 pub use redb_store::RedbStore;
 
-use self::header_ranges::VerifiedHeaderSpan;
 
 mod in_memory_store;
 #[cfg(target_arch = "wasm32")]
@@ -126,26 +125,6 @@ pub trait Store: Send + Sync + Debug {
     /// Returns true if height exists in the store.
     async fn has_at(&self, height: u64) -> bool;
 
-    /// Insert single header into the store
-    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
-        self.insert([header].into()).await
-    }
-
-    /// Insert single header into the store, validating it against neightbours, if present in store
-    async fn append_single(&self, header: ExtendedHeader) -> Result<()> {
-        self.insert([header].into()).await
-    }
-
-    /// Insert list of headers, validating that the inserted range is contiguous
-    async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        self.insert(headers.try_into()?).await
-    }
-
-    /// Insert list of headers validating them against neighbouring headers if they exist in store
-    async fn append(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        self.insert(headers.try_into()?).await
-    }
-
     /// Sets or updates sampling result for the header.
     ///
     /// In case of update, provided CID list is appended onto the existing one, as not to lose
@@ -170,7 +149,7 @@ pub trait Store: Send + Sync + Debug {
     /// `verify_neighbours` determines whether entire range will be validated against headers next
     /// to them (if present in store), or whether to just validate a contiguity of the inserted
     /// header range
-    async fn insert(&self, headers: VerifiedHeaderSpan) -> Result<()>;
+    async fn insert(&self, headers: VerifiedExtendedHeaders) -> Result<()>;
 
     /// Return a list of header ranges currenty held in store
     async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;

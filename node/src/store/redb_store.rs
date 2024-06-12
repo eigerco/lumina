@@ -16,11 +16,9 @@ use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::{debug, info, trace};
 
-use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt};
+use crate::store::header_ranges::{HeaderRange, HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders};
 use crate::store::utils::RangeScanResult;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
-
-use super::header_ranges::VerifiedHeaderSpan;
 
 const SCHEMA_VERSION: u64 = 1;
 
@@ -227,7 +225,7 @@ impl RedbStore {
         .unwrap_or(false)
     }
 
-    async fn insert(&self, headers: VerifiedHeaderSpan) -> Result<()> {
+    async fn insert(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
         self.write_tx(move |tx| {
             let headers = headers.as_ref();
             let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
@@ -410,7 +408,7 @@ impl Store for RedbStore {
         self.contains_height(height).await
     }
 
-    async fn insert(&self, headers: VerifiedHeaderSpan) -> Result<()> {
+    async fn insert(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
         self.insert(headers).await
     }
 
@@ -458,7 +456,7 @@ fn try_insert_to_range(
             .expect("missing range")
             .value();
 
-        info!("consolidating range, new range: {range:?}, removed {start}..={end}");
+        debug!("consolidating range, new range: {range:?}, removed {start}..={end}");
     };
     let prev_exists = new_range.start() != range.start();
     let next_exists = new_range.end() != range.end();
