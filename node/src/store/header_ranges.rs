@@ -81,7 +81,9 @@ impl TryFrom<Vec<ExtendedHeader>> for VerifiedExtendedHeaders {
 
 impl VerifiedExtendedHeaders {
     /// Create a new instance out of pre-checked vec of headers
+    ///
     /// # Safety
+    ///
     /// This function may produce invalid `VerifiedExtendedHeaders`, if passed range is not
     /// validated manually
     pub unsafe fn new_unchecked(headers: Vec<ExtendedHeader>) -> Self {
