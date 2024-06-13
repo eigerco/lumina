@@ -260,9 +260,7 @@ async fn replaced_header_server_store() {
     server_headers[10] = replaced_header.clone();
 
     server_store
-        .insert(VerifiedExtendedHeaders::from_verified_vec(
-            server_headers.clone(),
-        ))
+        .insert(unsafe { VerifiedExtendedHeaders::new_unchecked(server_headers.clone()) })
         .await
         .unwrap();
 
@@ -381,9 +379,7 @@ async fn unverified_header_server_store() {
     unverify(&mut server_headers[10]);
 
     server_store
-        .insert(VerifiedExtendedHeaders::from_verified_vec(
-            server_headers.clone(),
-        ))
+        .insert(unsafe { VerifiedExtendedHeaders::new_unchecked(server_headers.clone()) })
         .await
         .unwrap();
 

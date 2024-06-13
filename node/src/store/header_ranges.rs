@@ -81,8 +81,10 @@ impl TryFrom<Vec<ExtendedHeader>> for VerifiedExtendedHeaders {
 
 impl VerifiedExtendedHeaders {
     /// Create a new instance out of pre-checked vec of headers
-    #[cfg(any(test, feature = "test-utils"))]
-    pub fn from_verified_vec(headers: Vec<ExtendedHeader>) -> Self {
+    /// # Safety
+    /// This function may produce invalid `VerifiedExtendedHeaders`, if passed range is not
+    /// validated manually
+    pub unsafe fn new_unchecked(headers: Vec<ExtendedHeader>) -> Self {
         Self(headers)
     }
 }
@@ -323,7 +325,7 @@ pub trait ExtendedHeaderGeneratorExt {
 #[cfg(any(test, feature = "test-utils"))]
 impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
     fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders {
-        VerifiedExtendedHeaders::from_verified_vec(self.next_many(amount))
+        unsafe { VerifiedExtendedHeaders::new_unchecked(self.next_many(amount)) }
     }
 }
 
