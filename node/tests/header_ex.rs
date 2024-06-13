@@ -321,10 +321,7 @@ async fn invalidated_header_server_store() {
     let mut server_headers = header_generator.next_many(20);
     invalidate(&mut server_headers[10]);
 
-    server_store
-        .insert(server_headers.clone())
-        .await
-        .unwrap();
+    server_store.insert(server_headers.clone()).await.unwrap();
 
     let server = Node::new(NodeConfig {
         store: server_store,

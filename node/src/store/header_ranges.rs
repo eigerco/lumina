@@ -40,6 +40,12 @@ impl IntoIterator for VerifiedExtendedHeaders {
     }
 }
 
+impl From<VerifiedExtendedHeaders> for Vec<ExtendedHeader> {
+    fn from(value: VerifiedExtendedHeaders) -> Self {
+        value.into_iter().collect()
+    }
+}
+
 impl AsRef<[ExtendedHeader]> for VerifiedExtendedHeaders {
     fn as_ref(&self) -> &[ExtendedHeader] {
         &self.0

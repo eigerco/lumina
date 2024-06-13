@@ -150,7 +150,7 @@ pub trait Store: Send + Sync + Debug {
     ///
     /// Inserts are allowed at the front of the store or at the ends of any existing ranges. Edges
     /// of inserted header ranges are verified against headers present in the store, if they
-    /// exist. 
+    /// exist.
     async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
