@@ -184,7 +184,7 @@ async fn stops_services_when_network_is_compromised() {
     let mut eds = generate_eds(8);
     let (header, befp) = corrupt_eds(&mut gen, &mut eds);
 
-    store.insert(header.into()).await.unwrap();
+    store.insert(header).await.unwrap();
 
     // spawn node
     let node = Node::new(NodeConfig {

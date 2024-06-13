@@ -400,7 +400,7 @@ where
                 // If our new header is adjacent to the HEAD of the store
                 if store_head_height + 1 == new_head_height {
                     // Header is already verified by HeaderSub
-                    if self.store.insert([new_head].into()).await.is_ok() {
+                    if self.store.insert([new_head]).await.is_ok() {
                         info!("Added header {new_head_height} from HeaderSub");
                     }
                 }
@@ -504,7 +504,7 @@ where
     }
 
     async fn insert_header_span(&mut self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        self.store.insert(headers.try_into()?).await?;
+        self.store.insert(headers).await?;
         Ok(())
     }
 }
@@ -520,7 +520,7 @@ where
 
     // If store is empty, intialize it with network head
     if store.head_height().await.is_err() {
-        store.insert([network_head.clone()].into()).await?;
+        store.insert([network_head.clone()]).await?;
     }
 
     p2p.init_header_sub(network_head).await?;

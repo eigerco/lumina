@@ -163,7 +163,7 @@ impl IndexedDbStore {
         Ok(ranges)
     }
 
-    async fn insert(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
+    async fn insert_verified_headers(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
         let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
             return Ok(());
         };
@@ -395,8 +395,8 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn insert(&self, header: VerifiedExtendedHeaders) -> Result<()> {
-        let fut = SendWrapper::new(self.insert(header));
+    async fn insert_verified_headers(&self, header: VerifiedExtendedHeaders) -> Result<()> {
+        let fut = SendWrapper::new(self.insert_verified_headers(header));
         fut.await
     }
 

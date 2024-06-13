@@ -227,7 +227,7 @@ impl RedbStore {
         .unwrap_or(false)
     }
 
-    async fn insert(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
+    async fn insert_verified_headers(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
         self.write_tx(move |tx| {
             let headers = headers.as_ref();
             let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
@@ -410,8 +410,8 @@ impl Store for RedbStore {
         self.contains_height(height).await
     }
 
-    async fn insert(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
-        self.insert(headers).await
+    async fn insert_verified_headers(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
+        self.insert_verified_headers(headers).await
     }
 
     async fn update_sampling_metadata(
@@ -612,6 +612,8 @@ impl From<CommitError> for StoreError {
 
 #[cfg(test)]
 pub mod tests {
+    use crate::store::ExtendedHeaderGeneratorExt;
+
     use super::*;
 
     use std::path::Path;
@@ -628,7 +630,7 @@ pub mod tests {
         let mut original_headers = gen.next_many(20);
 
         original_store
-            .insert(original_headers.clone().try_into().unwrap())
+            .insert(original_headers.clone())
             .await
             .expect("inserting test data failed");
         drop(original_store);
@@ -649,7 +651,7 @@ pub mod tests {
 
         let mut new_headers = gen.next_many(10);
         reopened_store
-            .insert(new_headers.clone().try_into().unwrap())
+            .insert(new_headers.clone())
             .await
             .expect("failed to insert data");
         drop(reopened_store);
@@ -676,22 +678,13 @@ pub mod tests {
         let store1 = create_store(None).await;
 
         let headers = gen0.next_many(10);
-        store0
-            .insert(headers.clone().try_into().unwrap())
-            .await
-            .unwrap();
-        store1.insert(headers.try_into().unwrap()).await.unwrap();
+        store0.insert(headers.clone()).await.unwrap();
+        store1.insert(headers).await.unwrap();
 
         let mut gen1 = gen0.fork();
 
-        store0
-            .insert(gen0.next_many(5).try_into().unwrap())
-            .await
-            .unwrap();
-        store1
-            .insert(gen1.next_many(6).try_into().unwrap())
-            .await
-            .unwrap();
+        store0.insert(gen0.next_many_verified(5)).await.unwrap();
+        store1.insert(gen1.next_many_verified(6)).await.unwrap();
 
         assert_eq!(
             store0.get_by_height(10).await.unwrap(),
@@ -721,9 +714,7 @@ pub mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(amount);
 
-        s.insert(headers.try_into().unwrap())
-            .await
-            .expect("inserting test data failed");
+        s.insert(headers).await.expect("inserting test data failed");
 
         (s, gen)
     }

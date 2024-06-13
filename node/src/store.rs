@@ -1,5 +1,6 @@
 //! Primitives related to the [`ExtendedHeader`] storage.
 
+use std::convert::Infallible;
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::ops::{Bound, RangeBounds, RangeInclusive};
@@ -147,10 +148,21 @@ pub trait Store: Send + Sync + Debug {
 
     /// Insert a range of headers into the store.
     ///
-    /// `verify_neighbours` determines whether entire range will be validated against headers next
-    /// to them (if present in store), or whether to just validate a contiguity of the inserted
-    /// header range
-    async fn insert(&self, headers: VerifiedExtendedHeaders) -> Result<()>;
+    /// Inserts are allowed at the front of the store or at the ends of any existing ranges. Edges
+    /// of inserted header ranges are verified against headers present in the store, if they
+    /// exist. 
+    async fn insert<R>(&self, headers: R) -> Result<()>
+    where
+        R: TryInto<VerifiedExtendedHeaders> + Send,
+        //<R as TryInto<VerifiedExtendedHeaders>>::Error: Into<StoreError>
+        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+    {
+        let headers = headers.try_into()?;
+        self.insert_verified_headers(headers).await
+    }
+
+    /// Insert a range of headers into the store, see wrapper [`Store::insert`].
+    async fn insert_verified_headers(&self, header: VerifiedExtendedHeaders) -> Result<()>;
 
     /// Return a list of header ranges currenty held in store
     async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;
@@ -229,6 +241,13 @@ pub enum StoreError {
 impl From<tokio::task::JoinError> for StoreError {
     fn from(error: tokio::task::JoinError) -> StoreError {
         StoreError::ExecutorError(error.to_string())
+    }
+}
+
+impl From<Infallible> for StoreError {
+    fn from(_: Infallible) -> Self {
+        // Infallable should not be possible to construct
+        unreachable!("")
     }
 }
 
@@ -487,7 +506,7 @@ mod tests {
 
         let header = gen.next();
 
-        s.insert(header.clone().into()).await.unwrap();
+        s.insert(header.clone()).await.unwrap();
         assert_eq!(s.head_height().await.unwrap(), 1);
         assert_eq!(s.get_head().await.unwrap(), header);
         assert_eq!(s.get_by_height(1).await.unwrap(), header);
@@ -533,10 +552,10 @@ mod tests {
         let mut gen = fill_store(&mut s, 100).await;
 
         let header101 = gen.next();
-        s.insert(header101.clone().into()).await.unwrap();
+        s.insert(header101.clone()).await.unwrap();
 
         assert!(matches!(
-            s.insert(header101.into()).await,
+            s.insert(header101).await,
             Err(StoreError::HeaderRangeOverlap(101, 101))
         ));
     }
@@ -558,7 +577,7 @@ mod tests {
         let header29 = s.get_by_height(29).await.unwrap();
         let header30 = gen.next_of(&header29);
 
-        let insert_existing_result = s.insert(header30.into()).await;
+        let insert_existing_result = s.insert(header30).await;
         assert!(matches!(
             insert_existing_result,
             Err(StoreError::HeaderRangeOverlap(30, 30))
@@ -582,7 +601,7 @@ mod tests {
         dup_header.header.height = Height::from(102u32);
 
         assert!(matches!(
-            s.insert(dup_header.into()).await,
+            s.insert(dup_header).await,
             Err(StoreError::HashExists(_))
         ));
     }
@@ -622,8 +641,8 @@ mod tests {
         // height 12
         let upcoming_head = gen.next();
 
-        s.insert(upcoming_head.into()).await.unwrap();
-        s.insert(skipped.into()).await.unwrap();
+        s.insert(upcoming_head).await.unwrap();
+        s.insert(skipped).await.unwrap();
     }
 
     #[rstest]
@@ -646,9 +665,9 @@ mod tests {
         // height 12
         let upcoming_head = gen.next();
 
-        s.insert(upcoming_head.into()).await.unwrap();
+        s.insert(upcoming_head).await.unwrap();
         assert!(matches!(
-            s.insert(another_chain.into()).await,
+            s.insert(another_chain).await,
             Err(StoreError::CelestiaTypes(Error::Verification(_)))
         ));
     }
@@ -670,9 +689,9 @@ mod tests {
         gen.next_many(4);
         let header15 = gen.next();
 
-        s.insert(header5.into()).await.unwrap();
-        s.insert(header15.into()).await.unwrap();
-        s.insert(header10.into()).await.unwrap_err();
+        s.insert(header5).await.unwrap();
+        s.insert(header15).await.unwrap();
+        s.insert(header10).await.unwrap_err();
     }
 
     #[rstest]
@@ -932,9 +951,9 @@ mod tests {
         store.insert(gen.next_many_verified(4)).await.unwrap();
         store.insert(gen.next_many_verified(5)).await.unwrap();
         store.insert(prepend1).await.unwrap();
-        store.insert(prepend0.into()).await.unwrap();
+        store.insert(prepend0).await.unwrap();
         store.insert(gen.next_many_verified(5)).await.unwrap();
-        store.insert(gen.next().into()).await.unwrap();
+        store.insert(gen.next()).await.unwrap();
 
         let final_ranges = store.get_stored_header_ranges().await.unwrap();
         assert_eq!(final_ranges.as_ref(), &[20..=40]);
@@ -962,11 +981,11 @@ mod tests {
         store.insert(gen.next_many_verified(3)).await.unwrap();
 
         let skip1 = gen.next();
-        store.insert(gen.next().into()).await.unwrap();
+        store.insert(gen.next()).await.unwrap();
 
         let skip2 = gen.next_many_verified(5);
 
-        store.insert(gen.next().into()).await.unwrap();
+        store.insert(gen.next()).await.unwrap();
 
         let skip3 = gen.next_many_verified(5);
         let skip4 = gen.next_many_verified(5);
@@ -976,7 +995,7 @@ mod tests {
         store.insert(skip4).await.unwrap();
         store.insert(skip3).await.unwrap();
         store.insert(skip2).await.unwrap();
-        store.insert(skip1.into()).await.unwrap();
+        store.insert(skip1).await.unwrap();
         store.insert(skip0).await.unwrap();
 
         let final_ranges = store.get_stored_header_ranges().await.unwrap();
@@ -1001,7 +1020,7 @@ mod tests {
         let _gap = gen.next();
         store.insert(gen.next_many_verified(4)).await.unwrap();
 
-        store.insert(fork.next().into()).await.unwrap_err();
+        store.insert(fork.next()).await.unwrap_err();
     }
 
     /// Fills an empty store

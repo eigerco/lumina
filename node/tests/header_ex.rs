@@ -322,7 +322,7 @@ async fn invalidated_header_server_store() {
     invalidate(&mut server_headers[10]);
 
     server_store
-        .insert(server_headers.clone().try_into().unwrap())
+        .insert(server_headers.clone())
         .await
         .unwrap();
 
