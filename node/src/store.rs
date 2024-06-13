@@ -154,7 +154,6 @@ pub trait Store: Send + Sync + Debug {
     async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
-        //<R as TryInto<VerifiedExtendedHeaders>>::Error: Into<StoreError>
         StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
     {
         let headers = headers.try_into()?;
@@ -248,7 +247,7 @@ impl From<tokio::task::JoinError> for StoreError {
 impl From<Infallible> for StoreError {
     fn from(_: Infallible) -> Self {
         // Infallable should not be possible to construct
-        unreachable!("")
+        unreachable!("Infallible failed")
     }
 }
 

@@ -40,9 +40,17 @@ impl IntoIterator for VerifiedExtendedHeaders {
     }
 }
 
+impl<'a> TryFrom<&'a [ExtendedHeader]> for VerifiedExtendedHeaders {
+    type Error = celestia_types::Error;
+
+    fn try_from(value: &'a [ExtendedHeader]) -> Result<Self, Self::Error> {
+        value.to_vec().try_into()
+    }
+}
+
 impl From<VerifiedExtendedHeaders> for Vec<ExtendedHeader> {
     fn from(value: VerifiedExtendedHeaders) -> Self {
-        value.into_iter().collect()
+        value.0
     }
 }
 
@@ -62,6 +70,12 @@ impl From<[ExtendedHeader; 1]> for VerifiedExtendedHeaders {
 impl From<ExtendedHeader> for VerifiedExtendedHeaders {
     fn from(value: ExtendedHeader) -> Self {
         Self(vec![value])
+    }
+}
+
+impl<'a> From<&'a ExtendedHeader> for VerifiedExtendedHeaders {
+    fn from(value: &ExtendedHeader) -> Self {
+        Self(vec![value.to_owned()])
     }
 }
 
