@@ -520,7 +520,7 @@ where
 
     // If store is empty, intialize it with network head
     if store.head_height().await.is_err() {
-        store.insert([network_head.clone()]).await?;
+        store.insert(network_head.clone()).await?;
     }
 
     p2p.init_header_sub(network_head).await?;

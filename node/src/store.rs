@@ -154,14 +154,7 @@ pub trait Store: Send + Sync + Debug {
     async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
-    {
-        let headers = headers.try_into()?;
-        self.insert_verified_headers(headers).await
-    }
-
-    /// Insert a range of headers into the store, see wrapper [`Store::insert`].
-    async fn insert_verified_headers(&self, header: VerifiedExtendedHeaders) -> Result<()>;
+        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>;
 
     /// Return a list of header ranges currenty held in store
     async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;

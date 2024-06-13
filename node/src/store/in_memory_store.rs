@@ -81,15 +81,13 @@ impl InMemoryStore {
         self.inner.read().await.get_by_height(height)
     }
 
-    pub(crate) async fn insert_verified_headers(
-        &self,
-        headers: VerifiedExtendedHeaders,
-    ) -> Result<()> {
-        self.inner
-            .write()
-            .await
-            .insert_verified_headers(headers)
-            .await?;
+    pub(crate) async fn insert<R>(&self, headers: R) -> Result<()>
+    where
+        R: TryInto<VerifiedExtendedHeaders> + Send,
+        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+    {
+        let headers = headers.try_into()?;
+        self.inner.write().await.insert(headers).await?;
         self.header_added_notifier.notify_waiters();
         Ok(())
     }
@@ -182,7 +180,7 @@ impl InMemoryStoreInner {
             .ok_or(StoreError::LostHash(hash))
     }
 
-    async fn insert_verified_headers(&mut self, headers: VerifiedExtendedHeaders) -> Result<()> {
+    async fn insert(&mut self, headers: VerifiedExtendedHeaders) -> Result<()> {
         let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
             return Ok(());
         };
@@ -328,8 +326,12 @@ impl Store for InMemoryStore {
         self.contains_height(height).await
     }
 
-    async fn insert_verified_headers(&self, header: VerifiedExtendedHeaders) -> Result<()> {
-        self.insert_verified_headers(header).await
+    async fn insert<R>(&self, header: R) -> Result<()>
+    where
+        R: TryInto<VerifiedExtendedHeaders> + Send,
+        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+    {
+        self.insert(header).await
     }
 
     async fn update_sampling_metadata(

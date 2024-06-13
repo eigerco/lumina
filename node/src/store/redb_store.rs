@@ -227,7 +227,12 @@ impl RedbStore {
         .unwrap_or(false)
     }
 
-    async fn insert_verified_headers(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
+    async fn insert<R>(&self, headers: R) -> Result<()>
+    where
+        R: TryInto<VerifiedExtendedHeaders> + Send,
+        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+    {
+        let headers = headers.try_into()?;
         self.write_tx(move |tx| {
             let headers = headers.as_ref();
             let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
@@ -410,8 +415,12 @@ impl Store for RedbStore {
         self.contains_height(height).await
     }
 
-    async fn insert_verified_headers(&self, headers: VerifiedExtendedHeaders) -> Result<()> {
-        self.insert_verified_headers(headers).await
+    async fn insert<R>(&self, headers: R) -> Result<()>
+    where
+        R: TryInto<VerifiedExtendedHeaders> + Send,
+        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+    {
+        self.insert(headers).await
     }
 
     async fn update_sampling_metadata(
