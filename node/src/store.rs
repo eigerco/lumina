@@ -13,7 +13,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::store::header_ranges::{HeaderRanges, VerifiedExtendedHeaders};
+pub use crate::store::header_ranges::{HeaderRanges, VerifiedExtendedHeaders};
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]

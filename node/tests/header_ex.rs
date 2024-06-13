@@ -6,7 +6,7 @@ use celestia_types::test_utils::{invalidate, unverify};
 use lumina_node::{
     node::{Node, NodeConfig, NodeError},
     p2p::{HeaderExError, P2pError},
-    store::{ExtendedHeaderGeneratorExt, Store},
+    store::{ExtendedHeaderGeneratorExt, Store, VerifiedExtendedHeaders},
     test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
 };
 use tokio::time::{sleep, timeout};
@@ -260,7 +260,9 @@ async fn replaced_header_server_store() {
     server_headers[10] = replaced_header.clone();
 
     server_store
-        .insert(server_headers.clone().try_into().unwrap())
+        .insert(VerifiedExtendedHeaders::from_verified_vec(
+            server_headers.clone(),
+        ))
         .await
         .unwrap();
 
@@ -382,7 +384,9 @@ async fn unverified_header_server_store() {
     unverify(&mut server_headers[10]);
 
     server_store
-        .insert(server_headers.clone().try_into().unwrap())
+        .insert(VerifiedExtendedHeaders::from_verified_vec(
+            server_headers.clone(),
+        ))
         .await
         .unwrap();
 

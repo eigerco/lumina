@@ -75,8 +75,8 @@ impl TryFrom<Vec<ExtendedHeader>> for VerifiedExtendedHeaders {
 
 impl VerifiedExtendedHeaders {
     /// Create a new instance out of pre-checked vec of headers
-    #[allow(dead_code)] // used by ExtendedHeaderGeneratorExt
-    pub(crate) fn from_verified_vec(headers: Vec<ExtendedHeader>) -> Self {
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn from_verified_vec(headers: Vec<ExtendedHeader>) -> Self {
         Self(headers)
     }
 }
@@ -94,6 +94,7 @@ impl RangeLengthExt for RangeInclusive<u64> {
     }
 }
 
+/// Represents possibly multiple non-overlapping, sorted ranges of header heights
 #[derive(Debug, Clone, PartialEq, Default, Serialize)]
 pub struct HeaderRanges(SmallVec<[HeaderRange; 2]>);
 

@@ -531,6 +531,7 @@ async fn verify_against_neighbours(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::store::header_ranges::ExtendedHeaderGeneratorExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use function_name::named;
     use wasm_bindgen_test::wasm_bindgen_test;
@@ -547,10 +548,11 @@ pub mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let expected_height = 1_000;
 
+        s.insert(gen.next_many_verified(expected_height))
+            .await
+            .expect("inserting test data failed");
+
         for h in 1..=expected_height {
-            s.append_single_unchecked(gen.next())
-                .await
-                .expect("inserting test data failed");
             s.update_sampling_metadata(h, SamplingStatus::Accepted, vec![])
                 .await
                 .expect("marking sampled failed");
@@ -571,14 +573,12 @@ pub mod tests {
     #[wasm_bindgen_test]
     async fn test_persistence() {
         let (original_store, mut gen) = gen_filled_store(0, function_name!()).await;
-        let mut original_headers = gen.next_many(20);
+        let original_headers = gen.next_many_verified(20);
 
-        for h in &original_headers {
-            original_store
-                .append_single_unchecked(h.clone())
-                .await
-                .expect("inserting test data failed");
-        }
+        original_store
+            .insert(original_headers.clone())
+            .await
+            .expect("inserting test data failed");
         drop(original_store);
 
         let reopened_store = IndexedDbStore::new(function_name!())
@@ -586,10 +586,10 @@ pub mod tests {
             .expect("failed to reopen store");
 
         assert_eq!(
-            original_headers.last().unwrap().height().value(),
+            original_headers.as_ref().last().unwrap().height().value(),
             reopened_store.head_height().await.unwrap()
         );
-        for original_header in &original_headers {
+        for original_header in original_headers.as_ref() {
             let stored_header = reopened_store
                 .get_by_height(original_header.height().value())
                 .await
@@ -597,26 +597,27 @@ pub mod tests {
             assert_eq!(original_header, &stored_header);
         }
 
-        let mut new_headers = gen.next_many(10);
-        for h in &new_headers {
-            reopened_store
-                .append_single_unchecked(h.clone())
-                .await
-                .expect("failed to insert data");
-        }
+        let new_headers = gen.next_many_verified(10);
+        reopened_store
+            .insert(new_headers.clone())
+            .await
+            .expect("failed to insert data");
         drop(reopened_store);
 
-        original_headers.append(&mut new_headers);
+        let final_headers = original_headers
+            .into_iter()
+            .chain(new_headers.into_iter())
+            .collect::<Vec<_>>();
 
         let reopened_store = IndexedDbStore::new(function_name!())
             .await
             .expect("failed to reopen store");
 
         assert_eq!(
-            original_headers.last().unwrap().height().value(),
+            final_headers.last().unwrap().height().value(),
             reopened_store.head_height().await.unwrap()
         );
-        for original_header in &original_headers {
+        for original_header in &final_headers {
             let stored_header = reopened_store
                 .get_by_height(original_header.height().value())
                 .await
@@ -732,13 +733,9 @@ pub mod tests {
             .expect("creating test store failed");
         let mut gen = ExtendedHeaderGenerator::new();
 
-        let headers = gen.next_many(amount);
-
-        for header in headers {
-            s.append_single_unchecked(header)
-                .await
-                .expect("inserting test data failed");
-        }
+        s.insert(gen.next_many_verified(amount))
+            .await
+            .expect("inserting test data failed");
 
         (s, gen)
     }
