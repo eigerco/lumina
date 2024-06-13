@@ -5,6 +5,7 @@ use std::panic::Location;
 use std::time::Duration;
 
 use instant::SystemTime;
+use libp2p::PeerId;
 use serde::Serialize;
 use tokio::sync::broadcast;
 
@@ -161,6 +162,24 @@ pub struct NodeEventInfo {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum NodeEvent {
+    /// Peer just connected
+    PeerConnected {
+        #[serde(serialize_with = "serialize_as_string")]
+        /// The ID of the peer.
+        id: PeerId,
+        /// Whether peer was in the trusted list or not.
+        trusted: bool,
+    },
+
+    /// Peer just disconnected
+    PeerDisconnected {
+        #[serde(serialize_with = "serialize_as_string")]
+        /// The ID of the peer.
+        id: PeerId,
+        /// Whether peer was in the trusted list or not.
+        trusted: bool,
+    },
+
     /// Sampling just started.
     SamplingStarted {
         /// The block height that will be sampled.
@@ -205,6 +224,20 @@ pub enum NodeEvent {
 impl fmt::Display for NodeEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            NodeEvent::PeerConnected { id, trusted } => {
+                if *trusted {
+                    write!(f, "Trusted peer connected: {id}")
+                } else {
+                    write!(f, "Peer connected: {id}")
+                }
+            }
+            NodeEvent::PeerDisconnected { id, trusted } => {
+                if *trusted {
+                    write!(f, "Trusted peer disconnected: {id}")
+                } else {
+                    write!(f, "Peer disconnected: {id}")
+                }
+            }
             NodeEvent::SamplingStarted {
                 height,
                 square_width,
@@ -241,6 +274,14 @@ impl fmt::Display for NodeEvent {
             }
         }
     }
+}
+
+fn serialize_as_string<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    T: ToString,
+    S: serde::ser::Serializer,
+{
+    value.to_string().serialize(serializer)
 }
 
 #[cfg(target_arch = "wasm32")]
