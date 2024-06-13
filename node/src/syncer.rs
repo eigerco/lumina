@@ -400,7 +400,7 @@ where
                 // If our new header is adjacent to the HEAD of the store
                 if store_head_height + 1 == new_head_height {
                     // Header is already verified by HeaderSub
-                    if self.store.insert([new_head]).await.is_ok() {
+                    if self.store.insert(new_head).await.is_ok() {
                         info!("Added header {new_head_height} from HeaderSub");
                     }
                 }
