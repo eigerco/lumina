@@ -11,7 +11,17 @@ mod share;
 mod state;
 
 pub use crate::blob::BlobClient;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    all(target_arch = "wasm32", feature = "wasm-bindgen")
+))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(
+        not(target_arch = "wasm32"),
+        all(target_arch = "wasm32", feature = "wasm-bindgen")
+    )))
+)]
 pub use crate::client::Client;
 pub use crate::error::{Error, Result};
 pub use crate::header::HeaderClient;

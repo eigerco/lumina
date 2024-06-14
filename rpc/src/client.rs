@@ -7,12 +7,13 @@
 #[cfg(not(target_arch = "wasm32"))]
 pub use self::native::Client;
 
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use self::wasm::Client;
+
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
-    use std::fmt;
-    use std::result::Result as StdResult;
+    use std::{fmt, result::Result};
 
-    use crate::{Error, Result};
     use async_trait::async_trait;
     use http::{header, HeaderValue};
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
@@ -22,6 +23,8 @@ mod native {
     use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
     use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
     use serde::de::DeserializeOwned;
+
+    use crate::Error;
 
     /// Json RPC client.
     pub enum Client {
@@ -40,7 +43,7 @@ mod native {
         ///
         /// Please note that currently the celestia-node supports only 'http' and 'ws'.
         /// For a secure connection you have to hide it behind a proxy.
-        pub async fn new(conn_str: &str, auth_token: Option<&str>) -> Result<Self> {
+        pub async fn new(conn_str: &str, auth_token: Option<&str>) -> Result<Self, Error> {
             let mut headers = HeaderMap::new();
 
             if let Some(token) = auth_token {
@@ -70,11 +73,7 @@ mod native {
 
     #[async_trait]
     impl ClientT for Client {
-        async fn notification<Params>(
-            &self,
-            method: &str,
-            params: Params,
-        ) -> StdResult<(), JrpcError>
+        async fn notification<Params>(&self, method: &str, params: Params) -> Result<(), JrpcError>
         where
             Params: ToRpcParams + Send,
         {
@@ -84,7 +83,7 @@ mod native {
             }
         }
 
-        async fn request<R, Params>(&self, method: &str, params: Params) -> StdResult<R, JrpcError>
+        async fn request<R, Params>(&self, method: &str, params: Params) -> Result<R, JrpcError>
         where
             R: DeserializeOwned,
             Params: ToRpcParams + Send,
@@ -98,7 +97,7 @@ mod native {
         async fn batch_request<'a, R>(
             &self,
             batch: BatchRequestBuilder<'a>,
-        ) -> StdResult<BatchResponse<'a, R>, JrpcError>
+        ) -> Result<BatchResponse<'a, R>, JrpcError>
         where
             R: DeserializeOwned + fmt::Debug + 'a,
         {
@@ -116,7 +115,7 @@ mod native {
             subscribe_method: &'a str,
             params: Params,
             unsubscribe_method: &'a str,
-        ) -> StdResult<Subscription<N>, JrpcError>
+        ) -> Result<Subscription<N>, JrpcError>
         where
             Params: ToRpcParams + Send,
             N: DeserializeOwned,
@@ -138,7 +137,7 @@ mod native {
         async fn subscribe_to_method<'a, N>(
             &self,
             method: &'a str,
-        ) -> StdResult<Subscription<N>, JrpcError>
+        ) -> Result<Subscription<N>, JrpcError>
         where
             N: DeserializeOwned,
         {
@@ -150,7 +149,101 @@ mod native {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod wasm {
-    // TODO: implement HttpClient with `fetch`
+    use std::{fmt, result::Result};
+
+    use async_trait::async_trait;
+    use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
+    use jsonrpsee::core::params::BatchRequestBuilder;
+    use jsonrpsee::core::traits::ToRpcParams;
+    use jsonrpsee::core::Error as JrpcError;
+    use jsonrpsee::wasm_client::{Client as WasmClient, WasmClientBuilder};
+    use serde::de::DeserializeOwned;
+
+    use crate::Error;
+
+    /// Json RPC client.
+    pub struct Client {
+        client: WasmClient,
+    }
+
+    impl Client {
+        /// Create a new Json RPC client.
+        ///
+        /// Only the 'ws\[s\]' protocols are supported and they should
+        /// be specified in the provided `conn_str`. For more flexibility
+        /// consider creating the client using [`jsonrpsee`] directly.
+        ///
+        /// Since headers are not supported in the current version of
+        /// `jsonrpsee-wasm-client`, celestia-node requires disabling
+        /// authentication (--rpc.skip-auth) to use wasm.
+        ///
+        /// For a secure connection you have to hide it behind a proxy.
+        pub async fn new(conn_str: &str) -> Result<Self, Error> {
+            let protocol = conn_str.split_once(':').map(|(proto, _)| proto);
+            let client = match protocol {
+                Some("ws") | Some("wss") => WasmClientBuilder::default().build(conn_str).await?,
+                _ => return Err(Error::ProtocolNotSupported(conn_str.into())),
+            };
+
+            Ok(Client { client })
+        }
+    }
+
+    #[async_trait]
+    impl ClientT for Client {
+        async fn notification<Params>(&self, method: &str, params: Params) -> Result<(), JrpcError>
+        where
+            Params: ToRpcParams + Send,
+        {
+            self.client.notification(method, params).await
+        }
+
+        async fn request<R, Params>(&self, method: &str, params: Params) -> Result<R, JrpcError>
+        where
+            R: DeserializeOwned,
+            Params: ToRpcParams + Send,
+        {
+            self.client.request(method, params).await
+        }
+
+        async fn batch_request<'a, R>(
+            &self,
+            batch: BatchRequestBuilder<'a>,
+        ) -> Result<BatchResponse<'a, R>, JrpcError>
+        where
+            R: DeserializeOwned + fmt::Debug + 'a,
+        {
+            self.client.batch_request(batch).await
+        }
+    }
+
+    #[async_trait]
+    impl SubscriptionClientT for Client {
+        async fn subscribe<'a, N, Params>(
+            &self,
+            subscribe_method: &'a str,
+            params: Params,
+            unsubscribe_method: &'a str,
+        ) -> Result<Subscription<N>, JrpcError>
+        where
+            Params: ToRpcParams + Send,
+            N: DeserializeOwned,
+        {
+            self.client
+                .subscribe(subscribe_method, params, unsubscribe_method)
+                .await
+        }
+
+        async fn subscribe_to_method<'a, N>(
+            &self,
+            method: &'a str,
+        ) -> Result<Subscription<N>, JrpcError>
+        where
+            N: DeserializeOwned,
+        {
+            self.client.subscribe_to_method(method).await
+        }
+    }
 }
