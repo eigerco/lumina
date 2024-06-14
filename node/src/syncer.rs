@@ -497,15 +497,10 @@ where
         };
 
         for headers in headers_spans {
-            if let Err(e) = self.insert_header_span(headers).await {
+            if let Err(e) = self.store.insert(headers).await {
                 warn!("Failed to store range {}: {e}", ongoing.fetch_ranges);
             }
         }
-    }
-
-    async fn insert_header_span(&mut self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        self.store.insert(headers).await?;
-        Ok(())
     }
 }
 
