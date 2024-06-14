@@ -211,7 +211,7 @@ impl ExtendedHeader {
 
         if !untrusted.time().after(self.time()) {
             bail_verification!(
-                "untrusted header time ({}) mut be after current trusted header ({})",
+                "untrusted header time ({}) must be after current trusted header ({})",
                 untrusted.time(),
                 self.time()
             );

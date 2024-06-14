@@ -19,7 +19,8 @@ use crate::p2p::header_ex::utils::{HeaderRequestExt, HeaderResponseExt};
 use crate::p2p::header_ex::{HeaderExError, ReqRespBehaviour};
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
-use crate::utils::{OneshotResultSender, OneshotResultSenderExt, VALIDATIONS_PER_YIELD};
+use crate::store::utils::VALIDATIONS_PER_YIELD;
+use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
 
 const MAX_PEERS: usize = 10;
 
@@ -612,8 +613,6 @@ mod tests {
     }
 
     #[async_test]
-    #[ignore] // TODO: Enable this test after sessions are implemented
-    #[cfg(not(target_arch = "wasm32"))] // wasm_bindgen_test doesn't seem to support #[ignore]
     async fn request_range_responds_with_smaller_one() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -627,11 +626,8 @@ mod tests {
         let header5 = gen.next();
 
         mock_req.send_n_responses(&mut handler, 1, vec![header5.to_header_response()]);
-
-        assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
-        ));
+        let headers = rx.await.unwrap().unwrap();
+        assert_eq!(headers, vec![header5]);
     }
 
     #[async_test]

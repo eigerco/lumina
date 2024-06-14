@@ -1,5 +1,6 @@
 //! Primitives related to the [`ExtendedHeader`] storage.
 
+use std::convert::Infallible;
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::ops::{Bound, RangeBounds, RangeInclusive};
@@ -13,6 +14,8 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub use crate::store::header_ranges::{HeaderRanges, VerifiedExtendedHeaders};
+
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
 pub use indexed_db_store::IndexedDbStore;
@@ -25,7 +28,10 @@ mod indexed_db_store;
 #[cfg(not(target_arch = "wasm32"))]
 mod redb_store;
 
-use crate::utils::validate_headers;
+pub use header_ranges::ExtendedHeaderGeneratorExt;
+
+pub(crate) mod header_ranges;
+pub(crate) mod utils;
 
 /// Sampling metadata for a block.
 ///
@@ -121,13 +127,6 @@ pub trait Store: Send + Sync + Debug {
     /// Returns true if height exists in the store.
     async fn has_at(&self, height: u64) -> bool;
 
-    /// Append single header maintaining continuity from the genesis to the head.
-    ///
-    /// # Note
-    ///
-    /// This method does not validate or verify that `header` is indeed correct.
-    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()>;
-
     /// Sets or updates sampling result for the header.
     ///
     /// In case of update, provided CID list is appended onto the existing one, as not to lose
@@ -147,50 +146,18 @@ pub trait Store: Send + Sync + Debug {
     /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 
-    /// Append a range of headers maintaining continuity from the genesis to the head.
+    /// Insert a range of headers into the store.
     ///
-    /// # Note
-    ///
-    /// This method does not validate or verify that `headers` are indeed correct.
-    async fn append_unchecked(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        for header in headers.into_iter() {
-            self.append_single_unchecked(header).await?;
-        }
+    /// Inserts are allowed at the front of the store or at the ends of any existing ranges. Edges
+    /// of inserted header ranges are verified against headers present in the store, if they
+    /// exist.
+    async fn insert<R>(&self, headers: R) -> Result<()>
+    where
+        R: TryInto<VerifiedExtendedHeaders> + Send,
+        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>;
 
-        Ok(())
-    }
-
-    /// Append single header maintaining continuity from the genesis to the head.
-    async fn append_single(&self, header: ExtendedHeader) -> Result<()> {
-        header.validate()?;
-
-        match self.get_head().await {
-            Ok(head) => {
-                head.verify(&header)?;
-            }
-            // Empty store, we can not verify
-            Err(StoreError::NotFound) => {}
-            Err(e) => return Err(e),
-        }
-
-        self.append_single_unchecked(header).await
-    }
-
-    /// Append a range of headers maintaining continuity from the genesis to the head.
-    async fn append(&self, headers: Vec<ExtendedHeader>) -> Result<()> {
-        validate_headers(&headers).await?;
-
-        match self.get_head().await {
-            Ok(head) => {
-                head.verify_adjacent_range(&headers)?;
-            }
-            // Empty store, we can not verify
-            Err(StoreError::NotFound) => {}
-            Err(e) => return Err(e),
-        }
-
-        self.append_unchecked(headers).await
-    }
+    /// Return a list of header ranges currenty held in store
+    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].
@@ -205,8 +172,21 @@ pub enum StoreError {
     HeightExists(u64),
 
     /// Inserted height is not following store's current head.
-    #[error("Failed to append header at height {1}, current head {0}")]
+    #[error("Failed to append header at height {1}")]
     NonContinuousAppend(u64, u64),
+
+    /// Store already contains some of the headers from the range that's being inserted
+    #[error("Failed to insert header range, it overlaps with one already existing in the store: {0}..={1}")]
+    HeaderRangeOverlap(u64, u64),
+
+    /// Store only allows inserts that grow existing header ranges, or starting a new network head,
+    /// ahead of all the existing ranges
+    #[error("Trying to insert new header range at disallowed position: {0}..={1}")]
+    InsertPlacementDisallowed(u64, u64),
+
+    /// Range of headers provided to insert is not contiguous
+    #[error("Provided header range has a gap between heights {0} and {1}")]
+    InsertRangeWithGap(u64, u64),
 
     /// Header validation has failed.
     #[error("Failed to validate header at height {0}")]
@@ -253,6 +233,14 @@ pub enum StoreError {
 impl From<tokio::task::JoinError> for StoreError {
     fn from(error: tokio::task::JoinError) -> StoreError {
         StoreError::ExecutorError(error.to_string())
+    }
+}
+
+// Needed for `Into<VerifiedExtendedHeaders>`
+impl From<Infallible> for StoreError {
+    fn from(_: Infallible) -> Self {
+        // Infallable should not be possible to construct
+        unreachable!("Infallible failed")
     }
 }
 
@@ -343,9 +331,11 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 
 #[cfg(test)]
 mod tests {
+    use self::header_ranges::ExtendedHeaderGeneratorExt;
+
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::Height;
+    use celestia_types::{Error, Height};
     use rstest::rstest;
 
     // rstest only supports attributes which last segment is `test`
@@ -509,7 +499,7 @@ mod tests {
 
         let header = gen.next();
 
-        s.append_single_unchecked(header.clone()).await.unwrap();
+        s.insert(header.clone()).await.unwrap();
         assert_eq!(s.head_height().await.unwrap(), 1);
         assert_eq!(s.get_head().await.unwrap(), header);
         assert_eq!(s.get_by_height(1).await.unwrap(), header);
@@ -555,10 +545,11 @@ mod tests {
         let mut gen = fill_store(&mut s, 100).await;
 
         let header101 = gen.next();
-        s.append_single_unchecked(header101.clone()).await.unwrap();
+        s.insert(header101.clone()).await.unwrap();
+
         assert!(matches!(
-            s.append_single_unchecked(header101).await,
-            Err(StoreError::HeightExists(101))
+            s.insert(header101).await,
+            Err(StoreError::HeaderRangeOverlap(101, 101))
         ));
     }
 
@@ -579,10 +570,10 @@ mod tests {
         let header29 = s.get_by_height(29).await.unwrap();
         let header30 = gen.next_of(&header29);
 
-        let insert_existing_result = s.append_single_unchecked(header30).await;
+        let insert_existing_result = s.insert(header30).await;
         assert!(matches!(
             insert_existing_result,
-            Err(StoreError::HeightExists(30))
+            Err(StoreError::HeaderRangeOverlap(30, 30))
         ));
     }
 
@@ -599,11 +590,11 @@ mod tests {
         let mut s = s;
         fill_store(&mut s, 100).await;
 
-        let mut dup_header = s.get_by_height(33).await.unwrap();
-        dup_header.header.height = Height::from(101u32);
-        let insert_existing_result = s.append_single_unchecked(dup_header).await;
+        let mut dup_header = s.get_by_height(99).await.unwrap();
+        dup_header.header.height = Height::from(102u32);
+
         assert!(matches!(
-            insert_existing_result,
+            s.insert(dup_header).await,
             Err(StoreError::HashExists(_))
         ));
     }
@@ -621,8 +612,7 @@ mod tests {
         let mut s = s;
         let mut gen = fill_store(&mut s, 10).await;
 
-        let hs = gen.next_many(4);
-        s.append_unchecked(hs).await.unwrap();
+        s.insert(gen.next_many_verified(4)).await.unwrap();
         s.get_by_height(14).await.unwrap();
     }
 
@@ -631,7 +621,7 @@ mod tests {
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
-    async fn test_append_gap_between_head<S: Store>(
+    async fn test_fill_range_gap<S: Store>(
         #[case]
         #[future(awt)]
         s: S,
@@ -640,15 +630,12 @@ mod tests {
         let mut gen = fill_store(&mut s, 10).await;
 
         // height 11
-        gen.next();
+        let skipped = gen.next();
         // height 12
         let upcoming_head = gen.next();
 
-        let insert_with_gap_result = s.append_single_unchecked(upcoming_head).await;
-        assert!(matches!(
-            insert_with_gap_result,
-            Err(StoreError::NonContinuousAppend(10, 12))
-        ));
+        s.insert(upcoming_head).await.unwrap();
+        s.insert(skipped).await.unwrap();
     }
 
     #[rstest]
@@ -656,22 +643,25 @@ mod tests {
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
-    async fn test_non_continuous_append<S: Store>(
+    async fn test_fill_range_gap_with_invalid_header<S: Store>(
         #[case]
         #[future(awt)]
         s: S,
     ) {
         let mut s = s;
         let mut gen = fill_store(&mut s, 10).await;
-        let mut hs = gen.next_many(6);
 
-        // remove height 14
-        hs.remove(3);
+        let mut gen_prime = gen.fork();
+        // height 11
+        let _skipped = gen.next();
+        let another_chain = gen_prime.next();
+        // height 12
+        let upcoming_head = gen.next();
 
-        let insert_existing_result = s.append_unchecked(hs).await;
+        s.insert(upcoming_head).await.unwrap();
         assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::NonContinuousAppend(13, 15))
+            s.insert(another_chain).await,
+            Err(StoreError::CelestiaTypes(Error::Verification(_)))
         ));
     }
 
@@ -680,18 +670,21 @@ mod tests {
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
-    async fn test_genesis_with_height<S: Store>(
+    async fn test_appends_with_gaps<S: Store>(
         #[case]
         #[future(awt)]
         s: S,
     ) {
         let mut gen = ExtendedHeaderGenerator::new_from_height(5);
         let header5 = gen.next();
+        gen.next_many(4);
+        let header10 = gen.next();
+        gen.next_many(4);
+        let header15 = gen.next();
 
-        assert!(matches!(
-            s.append_single_unchecked(header5).await,
-            Err(StoreError::NonContinuousAppend(0, 5))
-        ));
+        s.insert(header5).await.unwrap();
+        s.insert(header15).await.unwrap();
+        s.insert(header10).await.unwrap_err();
     }
 
     #[rstest]
@@ -913,19 +906,126 @@ mod tests {
         ));
     }
 
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn test_empty_store_range<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+
+        assert_eq!(
+            store.get_stored_header_ranges().await.unwrap().as_ref(),
+            &[]
+        );
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn test_single_header_range<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        gen.skip(19);
+
+        let prepend0 = gen.next();
+        let prepend1 = gen.next_many_verified(5);
+        store.insert(gen.next_many_verified(4)).await.unwrap();
+        store.insert(gen.next_many_verified(5)).await.unwrap();
+        store.insert(prepend1).await.unwrap();
+        store.insert(prepend0).await.unwrap();
+        store.insert(gen.next_many_verified(5)).await.unwrap();
+        store.insert(gen.next()).await.unwrap();
+
+        let final_ranges = store.get_stored_header_ranges().await.unwrap();
+        assert_eq!(final_ranges.as_ref(), &[20..=40]);
+    }
+
+    // no in-memory store for tests below. It doesn't expect to be resumed from disk,
+    // so it doesn't support multiple ranges.
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn test_ranges_consolidation<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        gen.skip(9);
+
+        let skip0 = gen.next_many_verified(5);
+        store.insert(gen.next_many_verified(2)).await.unwrap();
+        store.insert(gen.next_many_verified(3)).await.unwrap();
+
+        let skip1 = gen.next();
+        store.insert(gen.next()).await.unwrap();
+
+        let skip2 = gen.next_many_verified(5);
+
+        store.insert(gen.next()).await.unwrap();
+
+        let skip3 = gen.next_many_verified(5);
+        let skip4 = gen.next_many_verified(5);
+        let skip5 = gen.next_many_verified(5);
+
+        store.insert(skip5).await.unwrap();
+        store.insert(skip4).await.unwrap();
+        store.insert(skip3).await.unwrap();
+        store.insert(skip2).await.unwrap();
+        store.insert(skip1).await.unwrap();
+        store.insert(skip0).await.unwrap();
+
+        let final_ranges = store.get_stored_header_ranges().await.unwrap();
+        assert_eq!(final_ranges.as_ref(), &[10..=42]);
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn test_neighbour_validation<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        store.insert(gen.next_many_verified(5)).await.unwrap();
+        let mut fork = gen.fork();
+        let _gap = gen.next();
+        store.insert(gen.next_many_verified(4)).await.unwrap();
+
+        store.insert(fork.next()).await.unwrap_err();
+    }
+
     /// Fills an empty store
     async fn fill_store<S: Store>(store: &mut S, amount: u64) -> ExtendedHeaderGenerator {
         assert!(!store.has_at(1).await, "Store is not empty");
 
         let mut gen = ExtendedHeaderGenerator::new();
-        let headers = gen.next_many(amount);
 
-        for header in headers {
-            store
-                .append_single_unchecked(header)
-                .await
-                .expect("inserting test data failed");
-        }
+        store
+            .insert(gen.next_many_verified(amount))
+            .await
+            .expect("inserting test data failed");
 
         gen
     }

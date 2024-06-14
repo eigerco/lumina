@@ -1,3 +1,4 @@
+use std::ops::RangeInclusive;
 use std::pin::pin;
 use std::sync::Arc;
 use std::{convert::Infallible, path::Path};
@@ -8,19 +9,23 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
 use redb::{
-    CommitError, Database, ReadTransaction, ReadableTable, StorageError, TableDefinition,
+    CommitError, Database, ReadTransaction, ReadableTable, StorageError, Table, TableDefinition,
     TableError, TransactionError, WriteTransaction,
 };
 use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
-use tracing::debug;
+use tracing::{debug, trace};
 
+use crate::store::header_ranges::{
+    HeaderRange, HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders,
+};
+use crate::store::utils::RangeScanResult;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 const SCHEMA_VERSION: u64 = 1;
 
-const HEAD_HEIGHT_KEY: &[u8] = b"KEY.HEAD_HEIGHT";
-
+const HEADER_HEIGHT_RANGES: TableDefinition<'static, u64, (u64, u64)> =
+    TableDefinition::new("STORE.HEIGHT_RANGES");
 const HEIGHTS_TABLE: TableDefinition<'static, &[u8], u64> = TableDefinition::new("STORE.HEIGHTS");
 const HEADERS_TABLE: TableDefinition<'static, u64, &[u8]> = TableDefinition::new("STORE.HEADERS");
 const SAMPLING_METADATA_TABLE: TableDefinition<'static, u64, &[u8]> =
@@ -79,7 +84,7 @@ impl RedbStore {
 
                 match schema_version {
                     Some(schema_version) => {
-                        // TODO: When we schema we should migrate from older versions to newer ones.
+                        // TODO: When we update the schema we need to perform manual migration
                         if schema_version != SCHEMA_VERSION {
                             let e = format!("Incompatible database schema; found {schema_version}, expected {SCHEMA_VERSION}.");
                             return Err(StoreError::OpenFailed(e));
@@ -90,11 +95,9 @@ impl RedbStore {
                     }
                 }
 
-                let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
-
-                if heights_table.get(HEAD_HEIGHT_KEY)?.is_none() {
-                    heights_table.insert(HEAD_HEIGHT_KEY, 0)?;
-                }
+                // create tables, so that reads later don't complain
+                let _heights_table = tx.open_table(HEIGHTS_TABLE)?;
+                let _ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
 
                 Ok(())
             })
@@ -157,13 +160,13 @@ impl RedbStore {
 
     async fn head_height(&self) -> Result<u64> {
         self.read_tx(|tx| {
-            let table = tx.open_table(HEIGHTS_TABLE)?;
-            let head_height = get_height(&table, HEAD_HEIGHT_KEY)?;
+            let table = tx.open_table(HEADER_HEIGHT_RANGES)?;
+            let highest_range = get_head_range(&table)?;
 
-            if head_height == 0 {
+            if highest_range.is_empty() {
                 Err(StoreError::NotFound)
             } else {
-                Ok(head_height)
+                Ok(*highest_range.end())
             }
         })
         .await
@@ -192,11 +195,11 @@ impl RedbStore {
 
     async fn get_head(&self) -> Result<ExtendedHeader> {
         self.read_tx(|tx| {
-            let heights_table = tx.open_table(HEIGHTS_TABLE)?;
+            let height_ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
             let headers_table = tx.open_table(HEADERS_TABLE)?;
 
-            let head_height = get_height(&heights_table, HEAD_HEIGHT_KEY)?;
-            get_header(&headers_table, head_height)
+            let head_range = get_head_range(&height_ranges_table)?;
+            get_header(&headers_table, *head_range.end())
         })
         .await
     }
@@ -224,43 +227,57 @@ impl RedbStore {
         .unwrap_or(false)
     }
 
-    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
+    async fn insert<R>(&self, headers: R) -> Result<()>
+    where
+        R: TryInto<VerifiedExtendedHeaders> + Send,
+        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+    {
+        let headers = headers.try_into()?;
         self.write_tx(move |tx| {
+            let headers = headers.as_ref();
+            let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
+                return Ok(());
+            };
             let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let mut headers_table = tx.open_table(HEADERS_TABLE)?;
+            let mut height_ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
 
-            let hash = header.hash();
-            let height = header.height().value();
-            let head_height = get_height(&heights_table, HEAD_HEIGHT_KEY)?;
+            let headers_range = head.height().value()..=tail.height().value();
+            let (prev_exists, next_exists) =
+                try_insert_to_range(&mut height_ranges_table, headers_range)?;
 
-            // A light check before checking the whole map
-            if head_height > 0 && height <= head_height {
-                return Err(StoreError::HeightExists(height));
+            verify_against_neighbours(
+                &headers_table,
+                prev_exists.then_some(head),
+                next_exists.then_some(tail),
+            )?;
+
+            for header in headers {
+                let height = header.height().value();
+                // until unwrap_infallible is stabilised, make sure Result is Infallible manually
+                let serialized_header: Result<_, Infallible> = header.encode_vec();
+                let serialized_header = serialized_header.unwrap();
+
+                if headers_table
+                    .insert(height, &serialized_header[..])?
+                    .is_some()
+                {
+                    return Err(StoreError::StoredDataError(
+                        "inconsistency between headers and ranges table".into(),
+                    ));
+                }
+
+                let hash = header.hash();
+                if heights_table.insert(hash.as_bytes(), height)?.is_some() {
+                    return Err(StoreError::HashExists(hash));
+                }
+
+                trace!("Inserted header {hash} with height {height}");
             }
-
-            // Check if it's continuous before checking the whole map.
-            if head_height + 1 != height {
-                return Err(StoreError::NonContinuousAppend(head_height, height));
-            }
-
-            // make sure Result is Infallible and unwrap it later
-            let serialized_header: Result<_, Infallible> = header.encode_vec();
-            let serialized_header = serialized_header.unwrap();
-
-            if headers_table
-                .insert(height, &serialized_header[..])?
-                .is_some()
-            {
-                return Err(StoreError::HeightExists(height));
-            }
-
-            if heights_table.insert(hash.as_bytes(), height)?.is_some() {
-                return Err(StoreError::HashExists(hash));
-            }
-
-            heights_table.insert(HEAD_HEIGHT_KEY, height)?;
-
-            debug!("Inserted header {hash} with height {height}");
+            debug!(
+                "Inserted header range {:?}",
+                head.height().value()..=tail.height().value()
+            );
             Ok(())
         })
         .await?;
@@ -277,13 +294,9 @@ impl RedbStore {
         cids: Vec<Cid>,
     ) -> Result<()> {
         self.write_tx(move |tx| {
-            let heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let mut sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
-
-            // Make sure we have the header being marked
-            let head_height = get_height(&heights_table, HEAD_HEIGHT_KEY)?;
-
-            if height == 0 || height > head_height {
+            let ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
+            if !get_all_ranges(&ranges_table)?.contains(height) {
                 return Err(StoreError::NotFound);
             }
 
@@ -317,19 +330,27 @@ impl RedbStore {
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         self.read_tx(move |tx| {
-            let heights_table = tx.open_table(HEIGHTS_TABLE)?;
+            let headers_table = tx.open_table(HEADERS_TABLE)?;
             let sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
 
-            // Make sure we have the header of height
-            let head_height = get_height(&heights_table, HEAD_HEIGHT_KEY)?;
-
-            if height == 0 || height > head_height {
+            if headers_table.get(height)?.is_none() {
                 return Err(StoreError::NotFound);
             }
 
             get_sampling_metadata(&sampling_metadata_table, height)
         })
         .await
+    }
+
+    async fn get_stored_ranges(&self) -> Result<HeaderRanges> {
+        let ranges = self
+            .read_tx(|tx| {
+                let table = tx.open_table(HEADER_HEIGHT_RANGES)?;
+                get_all_ranges(&table)
+            })
+            .await?;
+
+        Ok(ranges)
     }
 }
 
@@ -394,8 +415,12 @@ impl Store for RedbStore {
         self.contains_height(height).await
     }
 
-    async fn append_single_unchecked(&self, header: ExtendedHeader) -> Result<()> {
-        self.append_single_unchecked(header).await
+    async fn insert<R>(&self, headers: R) -> Result<()>
+    where
+        R: TryInto<VerifiedExtendedHeaders> + Send,
+        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+    {
+        self.insert(headers).await
     }
 
     async fn update_sampling_metadata(
@@ -410,6 +435,110 @@ impl Store for RedbStore {
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         self.get_sampling_metadata(height).await
     }
+
+    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+        Ok(self.get_stored_ranges().await?)
+    }
+}
+
+fn try_insert_to_range(
+    ranges_table: &mut Table<u64, (u64, u64)>,
+    new_range: HeaderRange,
+) -> Result<(bool, bool)> {
+    let stored_ranges = HeaderRanges::from_vec(
+        ranges_table
+            .iter()?
+            .map(|range_guard| {
+                let range = range_guard?.1.value();
+                Ok(range.0..=range.1)
+            })
+            .collect::<Result<_>>()?,
+    );
+
+    let RangeScanResult {
+        range_index,
+        range,
+        range_to_remove,
+    } = stored_ranges.check_range_insert(&new_range)?;
+
+    if let Some(to_remove) = range_to_remove {
+        let (start, end) = ranges_table
+            .remove(u64::try_from(to_remove).expect("usize->u64"))?
+            .expect("missing range")
+            .value();
+
+        debug!("consolidating range, new range: {range:?}, removed {start}..={end}");
+    };
+    let prev_exists = new_range.start() != range.start();
+    let next_exists = new_range.end() != range.end();
+
+    ranges_table.insert(
+        u64::try_from(range_index).expect("usize->u64"),
+        (*range.start(), *range.end()),
+    )?;
+
+    Ok((prev_exists, next_exists))
+}
+
+fn verify_against_neighbours<R>(
+    headers_table: &R,
+    lowest_header: Option<&ExtendedHeader>,
+    highest_header: Option<&ExtendedHeader>,
+) -> Result<()>
+where
+    R: ReadableTable<u64, &'static [u8]>,
+{
+    if let Some(lowest_header) = lowest_header {
+        let prev = get_header(headers_table, lowest_header.height().value() - 1).map_err(|e| {
+            if let StoreError::NotFound = e {
+                StoreError::StoredDataError("inconsistency between headers and ranges table".into())
+            } else {
+                e
+            }
+        })?;
+        prev.verify(lowest_header)?;
+    }
+
+    if let Some(highest_header) = highest_header {
+        let next = get_header(headers_table, highest_header.height().value() + 1).map_err(|e| {
+            if let StoreError::NotFound = e {
+                StoreError::StoredDataError("inconsistency between headers and ranges table".into())
+            } else {
+                e
+            }
+        })?;
+        highest_header.verify(&next)?;
+    }
+
+    Ok(())
+}
+
+fn get_head_range<R>(ranges_table: &R) -> Result<RangeInclusive<u64>>
+where
+    R: ReadableTable<u64, (u64, u64)>,
+{
+    ranges_table
+        .last()?
+        .map(|(_key_guard, value_guard)| {
+            let range = value_guard.value();
+            range.0..=range.1
+        })
+        .ok_or(StoreError::NotFound)
+}
+
+fn get_all_ranges<R>(ranges_table: &R) -> Result<HeaderRanges>
+where
+    R: ReadableTable<u64, (u64, u64)>,
+{
+    Ok(HeaderRanges::from_vec(
+        ranges_table
+            .iter()?
+            .map(|range_guard| {
+                let range = range_guard?.1.value();
+                Ok(range.0..=range.1)
+            })
+            .collect::<Result<_>>()?,
+    ))
 }
 
 #[inline]
@@ -492,9 +621,12 @@ impl From<CommitError> for StoreError {
 
 #[cfg(test)]
 pub mod tests {
-    use std::path::Path;
+    use crate::store::ExtendedHeaderGeneratorExt;
 
     use super::*;
+
+    use std::path::Path;
+
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use tempfile::TempDir;
 
@@ -506,12 +638,10 @@ pub mod tests {
         let (original_store, mut gen) = gen_filled_store(0, Some(&db)).await;
         let mut original_headers = gen.next_many(20);
 
-        for h in &original_headers {
-            original_store
-                .append_single_unchecked(h.clone())
-                .await
-                .expect("inserting test data failed");
-        }
+        original_store
+            .insert(original_headers.clone())
+            .await
+            .expect("inserting test data failed");
         drop(original_store);
 
         let reopened_store = create_store(Some(&db)).await;
@@ -529,12 +659,10 @@ pub mod tests {
         }
 
         let mut new_headers = gen.next_many(10);
-        for h in &new_headers {
-            reopened_store
-                .append_single_unchecked(h.clone())
-                .await
-                .expect("failed to insert data");
-        }
+        reopened_store
+            .insert(new_headers.clone())
+            .await
+            .expect("failed to insert data");
         drop(reopened_store);
 
         original_headers.append(&mut new_headers);
@@ -559,17 +687,13 @@ pub mod tests {
         let store1 = create_store(None).await;
 
         let headers = gen0.next_many(10);
-        store0.append(headers.clone()).await.unwrap();
-        store1.append(headers).await.unwrap();
+        store0.insert(headers.clone()).await.unwrap();
+        store1.insert(headers).await.unwrap();
 
         let mut gen1 = gen0.fork();
 
-        for h in gen0.next_many(5) {
-            store0.append_single_unchecked(h.clone()).await.unwrap()
-        }
-        for h in gen1.next_many(6) {
-            store1.append_single_unchecked(h.clone()).await.unwrap();
-        }
+        store0.insert(gen0.next_many_verified(5)).await.unwrap();
+        store1.insert(gen1.next_many_verified(6)).await.unwrap();
 
         assert_eq!(
             store0.get_by_height(10).await.unwrap(),
@@ -599,11 +723,7 @@ pub mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(amount);
 
-        for header in headers {
-            s.append_single_unchecked(header)
-                .await
-                .expect("inserting test data failed");
-        }
+        s.insert(headers).await.expect("inserting test data failed");
 
         (s, gen)
     }

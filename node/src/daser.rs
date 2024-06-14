@@ -584,10 +584,10 @@ mod tests {
             headers.push(header);
         }
 
-        store.append(headers[0..10].to_vec()).await.unwrap();
+        store.insert(headers[0..10].to_vec()).await.unwrap();
         // Wait a bit for sampling of block 10 start
         sleep(Duration::from_millis(10)).await;
-        store.append(headers[10..].to_vec()).await.unwrap();
+        store.insert(headers[10..].to_vec()).await.unwrap();
         // Wait a bit for the queue to be populated with higher blocks
         sleep(Duration::from_millis(10)).await;
 
@@ -659,7 +659,7 @@ mod tests {
         let eds = generate_eds(2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         let header = gen.next_with_dah(dah);
-        store.append_single(header).await.unwrap();
+        store.insert(header).await.unwrap();
 
         // Sample block 21
         handle_get_shwap_cid(&mut handle, &store, &mut event_sub, 21, &eds, false).await;
@@ -680,7 +680,7 @@ mod tests {
         let header = gen.next_with_dah(dah);
         let height = header.height().value();
 
-        store.append_single(header).await.unwrap();
+        store.insert(header).await.unwrap();
 
         let cids = handle_get_shwap_cid(
             handle,

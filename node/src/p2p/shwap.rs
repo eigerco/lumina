@@ -156,7 +156,7 @@ mod tests {
         let cid = sample_cid(0, 0, 1).unwrap();
 
         sample.verify(&dah).unwrap();
-        store.append_single(header).await.unwrap();
+        store.insert(header).await.unwrap();
 
         let hash = ShwapMultihasher::new(store)
             .hash(SAMPLE_ID_MULTIHASH_CODE, &sample_bytes)
