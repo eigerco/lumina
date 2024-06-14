@@ -16,7 +16,7 @@ use tracing::{debug, warn};
 
 // how long to wait during startup for node to start listening on interfaces, before we return a
 // list of addresses
-const NODE_ADDRESS_ACQUIRE_DELAY_TIME: Duration = Duration::from_millis(100);
+const NODE_ADDRESS_ACQUIRE_DELAY_TIME: Duration = Duration::from_millis(200);
 
 /// Our network behaviour.
 #[derive(NetworkBehaviour)]
@@ -53,12 +53,19 @@ pub async fn start_tiny_node() -> anyhow::Result<p2p::AddrInfo> {
 
     tokio::task::spawn(async move {
         loop {
-            if let Some(SwarmEvent::NewListenAddr { address, .. }) = swarm.next().await {
-                debug!("{address:?}");
+            match swarm.next().await {
+                Some(SwarmEvent::NewListenAddr { address, .. }) => {
+                    debug!("{address:?}");
 
-                if addr_tx.send(address).await.is_err() {
-                    warn!("received new addr after set startup time, unittests might not have all the node addresses");
+                    if addr_tx.send(address).await.is_err() {
+                        warn!("received new addr after set startup time, unittests might not have all the node addresses");
+                    }
                 }
+                Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
+                    debug!("{peer_id}: established");
+                }
+                Some(_) => (),
+                None => (),
             }
         }
     });

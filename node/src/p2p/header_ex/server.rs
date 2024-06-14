@@ -208,7 +208,7 @@ mod tests {
 
     #[async_test]
     async fn request_head_test() {
-        let (store, _) = gen_filled_store(4);
+        let (store, _) = gen_filled_store(4).await;
         let expected_head = store.get_head().await.unwrap();
         let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
@@ -224,7 +224,7 @@ mod tests {
 
     #[async_test]
     async fn request_header_test() {
-        let (store, _) = gen_filled_store(3);
+        let (store, _) = gen_filled_store(3).await;
         let expected_genesis = store.get_by_height(1).await.unwrap();
         let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
@@ -245,7 +245,7 @@ mod tests {
 
     #[async_test]
     async fn invalid_amount_request_test() {
-        let (store, _) = gen_filled_store(1);
+        let (store, _) = gen_filled_store(1).await;
         let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         handler.on_request_received(
@@ -263,7 +263,7 @@ mod tests {
 
     #[async_test]
     async fn none_data_request_test() {
-        let (store, _) = gen_filled_store(1);
+        let (store, _) = gen_filled_store(1).await;
         let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         let request = HeaderRequest {
@@ -280,7 +280,7 @@ mod tests {
 
     #[async_test]
     async fn request_hash_test() {
-        let (store, _) = gen_filled_store(1);
+        let (store, _) = gen_filled_store(1).await;
         let stored_header = store.get_head().await.unwrap();
         let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
@@ -301,7 +301,7 @@ mod tests {
 
     #[async_test]
     async fn request_malformed_hash_test() {
-        let (store, _) = gen_filled_store(1);
+        let (store, _) = gen_filled_store(1).await;
         let mut handler = HeaderExServerHandler::new(Arc::new(store));
 
         let request = HeaderRequest {
@@ -319,7 +319,7 @@ mod tests {
 
     #[async_test]
     async fn request_range_test() {
-        let (store, _) = gen_filled_store(10);
+        let (store, _) = gen_filled_store(10).await;
         let expected_headers = [
             store.get_by_height(5).await.unwrap(),
             store.get_by_height(6).await.unwrap(),
@@ -344,7 +344,7 @@ mod tests {
 
     #[async_test]
     async fn request_range_beyond_head_test() {
-        let (store, _) = gen_filled_store(5);
+        let (store, _) = gen_filled_store(5).await;
         let expected_hashes = [store.get_by_height(5).await.ok()];
         let expected_status_codes = [StatusCode::Ok];
         assert_eq!(expected_hashes.len(), expected_status_codes.len());

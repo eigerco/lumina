@@ -61,9 +61,11 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     let store = RedbStore::new(db.clone()).await?;
     let blockstore = RedbBlockstore::new(db);
 
-    match store.head_height().await {
-        Ok(height) => info!("Initialised store with head height: {height}"),
-        Err(_) => info!("Initialised new store"),
+    let stored_ranges = store.get_stored_header_ranges().await?;
+    if stored_ranges.is_empty() {
+        info!("Initialised new store");
+    } else {
+        info!("Initialised store, present headers: {stored_ranges}");
     }
 
     let node = Node::new(NodeConfig {

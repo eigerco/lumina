@@ -16,7 +16,7 @@ use crate::{
     node::NodeConfig,
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
-    store::InMemoryStore,
+    store::{ExtendedHeaderGeneratorExt, InMemoryStore},
     utils::OneshotResultSender,
 };
 
@@ -28,16 +28,13 @@ pub(crate) use tokio::test as async_test;
 pub(crate) use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
 /// Generate a store pre-filled with headers.
-pub fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
+pub async fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
     let s = InMemoryStore::new();
     let mut gen = ExtendedHeaderGenerator::new();
 
-    let headers = gen.next_many(amount);
-
-    for header in headers {
-        s.append_single_unchecked(header)
-            .expect("inserting test data failed");
-    }
+    s.insert(gen.next_many_verified(amount))
+        .await
+        .expect("inserting test data failed");
 
     (s, gen)
 }

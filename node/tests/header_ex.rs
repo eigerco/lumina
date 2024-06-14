@@ -6,7 +6,7 @@ use celestia_types::test_utils::{invalidate, unverify};
 use lumina_node::{
     node::{Node, NodeConfig, NodeError},
     p2p::{HeaderExError, P2pError},
-    store::Store,
+    store::{Store, VerifiedExtendedHeaders},
     test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
 };
 use tokio::time::{sleep, timeout};
@@ -56,12 +56,9 @@ async fn request_head() {
 #[tokio::test]
 async fn client_server() {
     // Server Node
-    let (server_store, mut header_generator) = gen_filled_store(0);
+    let (server_store, mut header_generator) = gen_filled_store(0).await;
     let server_headers = header_generator.next_many(20);
-    server_store
-        .append_unchecked(server_headers.clone())
-        .await
-        .unwrap();
+    server_store.insert(&server_headers[..]).await.unwrap();
 
     let server = Node::new(NodeConfig {
         store: server_store,
@@ -140,29 +137,29 @@ async fn client_server() {
 
 #[tokio::test]
 async fn head_selection_with_multiple_peers() {
-    let (server_store, mut header_generator) = gen_filled_store(0);
+    let (server_store, mut header_generator) = gen_filled_store(0).await;
     let common_server_headers = header_generator.next_many(20);
     server_store
-        .append_unchecked(common_server_headers.clone())
+        .insert(&common_server_headers[..])
         .await
         .unwrap();
 
     // Server group A, nodes with synced stores
     let mut servers = vec![
         Node::new(NodeConfig {
-            store: server_store.clone(),
+            store: server_store.async_clone().await,
             ..listening_test_node_config()
         })
         .await
         .unwrap(),
         Node::new(NodeConfig {
-            store: server_store.clone(),
+            store: server_store.async_clone().await,
             ..listening_test_node_config()
         })
         .await
         .unwrap(),
         Node::new(NodeConfig {
-            store: server_store.clone(),
+            store: server_store.async_clone().await,
             ..listening_test_node_config()
         })
         .await
@@ -172,13 +169,13 @@ async fn head_selection_with_multiple_peers() {
     // Server group B, single node with additional headers
     let additional_server_headers = header_generator.next_many(5);
     server_store
-        .append_unchecked(additional_server_headers.clone())
+        .insert(&additional_server_headers[..])
         .await
         .unwrap();
 
     servers.push(
         Node::new(NodeConfig {
-            store: server_store.clone(),
+            store: server_store.async_clone().await,
             ..listening_test_node_config()
         })
         .await
@@ -209,7 +206,7 @@ async fn head_selection_with_multiple_peers() {
 
     // Rogue node, connects to client so isn't trusted
     let rogue_node = Node::new(NodeConfig {
-        store: gen_filled_store(26).0,
+        store: gen_filled_store(26).await.0,
         p2p_bootnodes: client_addr.clone(),
         ..listening_test_node_config()
     })
@@ -226,7 +223,7 @@ async fn head_selection_with_multiple_peers() {
 
     // new node from group B joins, head should go up
     let new_b_node = Node::new(NodeConfig {
-        store: server_store.clone(),
+        store: server_store.async_clone().await,
         p2p_bootnodes: client_addr,
         ..test_node_config()
     })
@@ -250,14 +247,14 @@ async fn head_selection_with_multiple_peers() {
 #[tokio::test]
 async fn replaced_header_server_store() {
     // Server node, header at height 11 shouldn't pass verification as it's been tampered with
-    let (server_store, mut header_generator) = gen_filled_store(0);
+    let (server_store, mut header_generator) = gen_filled_store(0).await;
     let mut server_headers = header_generator.next_many(20);
     // replaced header still pases verification and validation against itself
     let replaced_header = header_generator.another_of(&server_headers[10]);
     server_headers[10] = replaced_header.clone();
 
     server_store
-        .append_unchecked(server_headers.clone())
+        .insert(unsafe { VerifiedExtendedHeaders::new_unchecked(server_headers.clone()) })
         .await
         .unwrap();
 
@@ -312,14 +309,11 @@ async fn replaced_header_server_store() {
 #[tokio::test]
 async fn invalidated_header_server_store() {
     // Server node, header at height 11 shouldn't pass verification as it's been tampered with
-    let (server_store, mut header_generator) = gen_filled_store(0);
+    let (server_store, mut header_generator) = gen_filled_store(0).await;
     let mut server_headers = header_generator.next_many(20);
     invalidate(&mut server_headers[10]);
 
-    server_store
-        .append_unchecked(server_headers.clone())
-        .await
-        .unwrap();
+    server_store.insert(&server_headers[..]).await.unwrap();
 
     let server = Node::new(NodeConfig {
         store: server_store,
@@ -374,12 +368,12 @@ async fn invalidated_header_server_store() {
 #[tokio::test]
 async fn unverified_header_server_store() {
     // Server node, header at height 11 shouldn't pass verification as it's been tampered with
-    let (server_store, mut header_generator) = gen_filled_store(0);
+    let (server_store, mut header_generator) = gen_filled_store(0).await;
     let mut server_headers = header_generator.next_many(20);
     unverify(&mut server_headers[10]);
 
     server_store
-        .append_unchecked(server_headers.clone())
+        .insert(unsafe { VerifiedExtendedHeaders::new_unchecked(server_headers.clone()) })
         .await
         .unwrap();
 
