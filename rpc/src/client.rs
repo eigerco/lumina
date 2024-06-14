@@ -12,14 +12,15 @@ pub use self::wasm::Client;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
-    use std::{fmt, result::Result};
+    use std::fmt;
+    use std::result::Result;
 
     use async_trait::async_trait;
     use http::{header, HeaderValue};
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
-    use jsonrpsee::core::Error as JrpcError;
+    use jsonrpsee::core::ClientError;
     use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
     use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
     use serde::de::DeserializeOwned;
@@ -73,7 +74,11 @@ mod native {
 
     #[async_trait]
     impl ClientT for Client {
-        async fn notification<Params>(&self, method: &str, params: Params) -> Result<(), JrpcError>
+        async fn notification<Params>(
+            &self,
+            method: &str,
+            params: Params,
+        ) -> Result<(), ClientError>
         where
             Params: ToRpcParams + Send,
         {
@@ -83,7 +88,7 @@ mod native {
             }
         }
 
-        async fn request<R, Params>(&self, method: &str, params: Params) -> Result<R, JrpcError>
+        async fn request<R, Params>(&self, method: &str, params: Params) -> Result<R, ClientError>
         where
             R: DeserializeOwned,
             Params: ToRpcParams + Send,
@@ -97,7 +102,7 @@ mod native {
         async fn batch_request<'a, R>(
             &self,
             batch: BatchRequestBuilder<'a>,
-        ) -> Result<BatchResponse<'a, R>, JrpcError>
+        ) -> Result<BatchResponse<'a, R>, ClientError>
         where
             R: DeserializeOwned + fmt::Debug + 'a,
         {
@@ -115,7 +120,7 @@ mod native {
             subscribe_method: &'a str,
             params: Params,
             unsubscribe_method: &'a str,
-        ) -> Result<Subscription<N>, JrpcError>
+        ) -> Result<Subscription<N>, ClientError>
         where
             Params: ToRpcParams + Send,
             N: DeserializeOwned,
@@ -137,7 +142,7 @@ mod native {
         async fn subscribe_to_method<'a, N>(
             &self,
             method: &'a str,
-        ) -> Result<Subscription<N>, JrpcError>
+        ) -> Result<Subscription<N>, ClientError>
         where
             N: DeserializeOwned,
         {
@@ -157,7 +162,7 @@ mod wasm {
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
-    use jsonrpsee::core::Error as JrpcError;
+    use jsonrpsee::core::ClientError;
     use jsonrpsee::wasm_client::{Client as WasmClient, WasmClientBuilder};
     use serde::de::DeserializeOwned;
 
@@ -193,14 +198,18 @@ mod wasm {
 
     #[async_trait]
     impl ClientT for Client {
-        async fn notification<Params>(&self, method: &str, params: Params) -> Result<(), JrpcError>
+        async fn notification<Params>(
+            &self,
+            method: &str,
+            params: Params,
+        ) -> Result<(), ClientError>
         where
             Params: ToRpcParams + Send,
         {
             self.client.notification(method, params).await
         }
 
-        async fn request<R, Params>(&self, method: &str, params: Params) -> Result<R, JrpcError>
+        async fn request<R, Params>(&self, method: &str, params: Params) -> Result<R, ClientError>
         where
             R: DeserializeOwned,
             Params: ToRpcParams + Send,
@@ -211,7 +220,7 @@ mod wasm {
         async fn batch_request<'a, R>(
             &self,
             batch: BatchRequestBuilder<'a>,
-        ) -> Result<BatchResponse<'a, R>, JrpcError>
+        ) -> Result<BatchResponse<'a, R>, ClientError>
         where
             R: DeserializeOwned + fmt::Debug + 'a,
         {
@@ -226,7 +235,7 @@ mod wasm {
             subscribe_method: &'a str,
             params: Params,
             unsubscribe_method: &'a str,
-        ) -> Result<Subscription<N>, JrpcError>
+        ) -> Result<Subscription<N>, ClientError>
         where
             Params: ToRpcParams + Send,
             N: DeserializeOwned,
@@ -239,7 +248,7 @@ mod wasm {
         async fn subscribe_to_method<'a, N>(
             &self,
             method: &'a str,
-        ) -> Result<Subscription<N>, JrpcError>
+        ) -> Result<Subscription<N>, ClientError>
         where
             N: DeserializeOwned,
         {
