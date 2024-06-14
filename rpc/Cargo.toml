@@ -12,10 +12,10 @@ readme = "README.md"
 keywords = ["blockchain", "celestia", "lumina"]
 # Must be one of <https://crates.io/category_slugs>
 categories = [
-    "api-bindings",
-    "asynchronous",
-    "encoding",
-    "cryptography::cryptocurrencies",
+  "api-bindings",
+  "asynchronous",
+  "encoding",
+  "cryptography::cryptocurrencies",
 ]
 
 [dependencies]
