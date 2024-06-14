@@ -32,11 +32,11 @@ jsonrpsee = { version = "0.20", features = ["http-client", "ws-client"] }
 
 [dev-dependencies]
 libp2p = { workspace = true, features = [
-    "tokio",
-    "macros",
-    "tcp",
-    "noise",
-    "yamux",
+  "tokio",
+  "macros",
+  "tcp",
+  "noise",
+  "yamux",
 ] }
 anyhow = "1.0.71"
 dotenvy = "0.15.7"
