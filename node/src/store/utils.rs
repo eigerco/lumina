@@ -1,66 +1,41 @@
-use std::iter::once;
 use std::ops::RangeInclusive;
 
 use celestia_types::ExtendedHeader;
-use itertools::Itertools;
-use smallvec::SmallVec;
 
 use crate::executor::yield_now;
-use crate::store::header_ranges::{HeaderRange, HeaderRanges};
+use crate::store::header_ranges::HeaderRange;
 use crate::store::{Result, StoreError};
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
 
 /// based on the stored headers and current network head height, calculate range of headers that
 /// should be fetched from the network, starting from the front up to a `limit` of headers
-pub(crate) fn calculate_missing_ranges(
+pub(crate) fn calculate_fetch_range(
     head_height: u64,
     store_headers: &[RangeInclusive<u64>],
     limit: u64,
-) -> HeaderRanges {
-    let range_edges = once(head_height + 1)
-        .chain(
-            store_headers
-                .iter()
-                .flat_map(|r| [*r.start(), *r.end()])
-                .rev(),
-        )
-        .chain(once(0));
+) -> HeaderRange {
+    let mut store_headers_iter = store_headers.iter().rev();
 
-    let mut left = limit;
-    HeaderRanges::from_vec(
-        range_edges
-            .chunks(2)
-            .into_iter()
-            .map_while(|mut range| {
-                if left == 0 {
-                    return None;
-                }
-                // ranges_edges is even and we divide into 2 element chunks, this is safe
-                let upper_bound = range.next().unwrap() - 1;
-                let lower_bound = range.next().unwrap();
-                let range_len = upper_bound.checked_sub(lower_bound)?;
+    let Some(head_range) = store_headers_iter.next() else {
+        // empty store, just fetch from head
+        return head_height.saturating_sub(limit) + 1..=head_height;
+    };
 
-                if range_len == 0 {
-                    // empty range
-                    return Some(RangeInclusive::new(1, 0));
-                }
+    if head_range.end() != &head_height {
+        // if we haven't caught up with network head, start from there
+        let fetch_start = u64::max(head_range.end() + 1, head_height.saturating_sub(limit) + 1);
+        return fetch_start..=head_height;
+    }
 
-                if left > range_len {
-                    left -= range_len;
-                    Some(lower_bound + 1..=upper_bound)
-                } else {
-                    let truncated_lower_bound = upper_bound - left;
-                    left = 0;
-                    Some(truncated_lower_bound + 1..=upper_bound)
-                }
-            })
-            .filter(|v| !v.is_empty())
-            .collect::<SmallVec<[HeaderRange; 2]>>()
-            .into_iter()
-            .rev()
-            .collect(),
-    )
+    // there exists a range contiguous with network head. inspect previous range end
+    let penultimate_range_end = store_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
+
+    let fetch_end = head_range.start().saturating_sub(1);
+    u64::max(
+        penultimate_range_end + 1,
+        fetch_end.saturating_sub(limit) + 1,
+    )..=fetch_end
 }
 
 pub(crate) fn try_consolidate_ranges(
@@ -142,8 +117,6 @@ pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_typ
 
 #[cfg(test)]
 mod tests {
-    use crate::store::header_ranges::header_ranges;
-
     use super::*;
 
     #[test]
@@ -151,11 +124,8 @@ mod tests {
         let head_height = 50;
         let ranges = [1..=5, 15..=20, 23..=28, 30..=40];
 
-        let missing_ranges = calculate_missing_ranges(head_height, &ranges, 512);
-        assert_eq!(
-            missing_ranges.as_ref(),
-            &[6..=14, 21..=22, 29..=29, 41..=50]
-        );
+        let fetch_range = calculate_fetch_range(head_height, &ranges, 512);
+        assert_eq!(fetch_range, 41..=50);
     }
 
     #[test]
@@ -163,8 +133,28 @@ mod tests {
         let head_height = 10;
         let ranges = [6..=7];
 
-        let missing_ranges = calculate_missing_ranges(head_height, &ranges, 5);
-        assert_eq!(missing_ranges.as_ref(), &[4..=5, 8..=10]);
+        let fetch_range = calculate_fetch_range(head_height, &ranges, 5);
+        assert_eq!(fetch_range, 8..=10);
+        let fetch_range = calculate_fetch_range(head_height, &[], 5);
+        assert_eq!(fetch_range, 6..=10);
+    }
+
+    #[test]
+    fn test_calc_missing_ranges_limit() {
+        let head_height = 1024;
+        let ranges = [256..=512];
+
+        let fetch_range = calculate_fetch_range(head_height, &ranges, 16);
+        assert_eq!(fetch_range, 1009..=1024);
+
+        let fetch_range = calculate_fetch_range(head_height, &ranges, 511);
+        assert_eq!(fetch_range, 514..=1024);
+        let fetch_range = calculate_fetch_range(head_height, &ranges, 512);
+        assert_eq!(fetch_range, 513..=1024);
+        let fetch_range = calculate_fetch_range(head_height, &ranges, 513);
+        assert_eq!(fetch_range, 513..=1024);
+        let fetch_range = calculate_fetch_range(head_height, &ranges, 1024);
+        assert_eq!(fetch_range, 513..=1024);
     }
 
     #[test]
@@ -172,17 +162,17 @@ mod tests {
         let head_height = 10;
         let ranges = [5..=6, 7..=9];
 
-        let missing_ranges = calculate_missing_ranges(head_height, &ranges, 5);
-        assert_eq!(missing_ranges.as_ref(), &[1..=4, 10..=10]);
+        let fetch_range = calculate_fetch_range(head_height, &ranges, 5);
+        assert_eq!(fetch_range, 10..=10);
     }
 
     #[test]
     fn test_calc_missing_ranges_edge_cases() {
-        let missing = calculate_missing_ranges(1, &[], 100);
-        assert_eq!(missing, header_ranges![1..=1]);
+        let fetch_range = calculate_fetch_range(1, &[], 100);
+        assert_eq!(fetch_range, 1..=1);
 
-        let missing = calculate_missing_ranges(1, &[1..=1], 100);
-        assert_eq!(missing, header_ranges![]);
+        let fetch_range = calculate_fetch_range(1, &[1..=1], 100);
+        assert!(fetch_range.is_empty())
     }
 
     #[test]
