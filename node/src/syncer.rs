@@ -451,9 +451,10 @@ where
 
         let cancellation_token = self.cancellation_token.child_token();
 
-        info!("Fetching range {next_batch:?}");
+        let batch = PrintableHeaderRange(next_batch.clone());
+        info!("Fetching range {batch}");
         self.ongoing_batch = Some(Ongoing {
-            batch: PrintableHeaderRange(next_batch.clone()),
+            batch,
             cancellation_token: cancellation_token.clone(),
         });
 
