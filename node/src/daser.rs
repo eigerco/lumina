@@ -34,8 +34,9 @@ use std::sync::Arc;
 
 use celestia_tendermint::Time;
 use celestia_types::ExtendedHeader;
+use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 use rand::Rng;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
@@ -46,8 +47,7 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::spawn;
 use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pError};
-use crate::store::{SamplingStatus, Store, StoreError};
-use crate::utils::FusedReusableBoxFuture;
+use crate::store::{HeaderRanges, SamplingStatus, Store, StoreError};
 
 const MAX_SAMPLES_NEEDED: usize = 16;
 
@@ -133,8 +133,9 @@ where
     p2p: Arc<P2p>,
     store: Arc<S>,
     max_samples_needed: usize,
-    sampling_fut: FusedReusableBoxFuture<Result<(u64, bool)>>,
+    sampling_futs: FuturesUnordered<BoxFuture<'static, Result<(u64, bool)>>>,
     queue: VecDeque<SamplingArgs>,
+    prev_stored_blocks: HeaderRanges,
     prev_head: Option<u64>,
 }
 
@@ -156,8 +157,9 @@ where
             p2p: args.p2p,
             store: args.store,
             max_samples_needed: MAX_SAMPLES_NEEDED,
-            sampling_fut: FusedReusableBoxFuture::terminated(),
+            sampling_futs: FuturesUnordered::new(),
             queue: VecDeque::new(),
+            prev_stored_blocks: HeaderRanges::default(),
             prev_head: None,
         })
     }
@@ -216,10 +218,19 @@ where
             return Ok(());
         }
 
-        self.populate_queue().await;
+        self.populate_queue().await?;
 
         loop {
-            if self.sampling_fut.is_terminated() {
+            // If we have a new HEAD queued, schedule it now!
+            if let Some(queue_front) = self.queue.front().map(|args| args.height) {
+                if queue_front > self.prev_head.unwrap_or(0) {
+                    self.schedule_next_sample_block().await?;
+                    self.prev_head = Some(queue_front);
+                }
+            }
+
+            // If there is no ongoing data sampling, schedule the next one.
+            if self.sampling_futs.is_empty() {
                 self.schedule_next_sample_block().await?;
             }
 
@@ -233,7 +244,7 @@ where
                         break;
                     }
                 }
-                res = &mut self.sampling_fut => {
+                Some(res) = self.sampling_futs.next() => {
                     // Beetswap only returns fatal errors that are not related
                     // to P2P nor networking.
                     let (height, accepted) = res?;
@@ -249,21 +260,20 @@ where
                         .await?;
                 },
                 _ = self.store.wait_new_head() => {
-                    self.populate_queue().await;
+                    self.populate_queue().await?;
                 }
             }
         }
 
-        self.sampling_fut.terminate();
+        self.sampling_futs.clear();
         self.queue.clear();
+        self.prev_stored_blocks = HeaderRanges::default();
         self.prev_head = None;
 
         Ok(())
     }
 
     async fn schedule_next_sample_block(&mut self) -> Result<()> {
-        assert!(self.sampling_fut.is_terminated());
-
         let Some(args) = self.queue.pop_front() else {
             return Ok(());
         };
@@ -294,7 +304,7 @@ where
         let event_pub = self.event_pub.clone();
 
         // Schedule retrival of the CIDs. This will be run later on in the `select!` loop.
-        self.sampling_fut.set(async move {
+        let fut = async move {
             let now = Instant::now();
 
             event_pub.send(NodeEvent::SamplingStarted {
@@ -348,7 +358,10 @@ where
             });
 
             Ok((args.height, block_accepted))
-        });
+        }
+        .boxed();
+
+        self.sampling_futs.push(fut);
 
         Ok(())
     }
@@ -359,56 +372,36 @@ where
     /// in some unrelated edge-cases, such us network issues. This is a Shwap
     /// limitation that's coming from bitswap: only way for us to know if sampling
     /// failed is via timeout.
-    async fn populate_queue(&mut self) {
-        // TODO: Adjust algorithm for backward syncing.
+    async fn populate_queue(&mut self) -> Result<()> {
+        let stored_blocks = self.store.get_stored_header_ranges().await?;
 
-        let Ok(new_head) = self.store.head_height().await else {
-            return;
-        };
-
-        match self.prev_head {
-            Some(prev_head) => {
-                for height in prev_head + 1..=new_head {
-                    if is_block_accepted(&*self.store, height).await {
-                        continue;
-                    }
-
-                    let Ok(header) = self.store.get_by_height(height).await else {
-                        // Maybe header was pruned, continue to the next one.
-                        continue;
-                    };
-
-                    if !in_sampling_window(header.time()) {
-                        // Block is older than the sampling window, continue to the next one.
-                        continue;
-                    }
-
-                    queue_sampling(&mut self.queue, &header);
+        for block_range in stored_blocks.clone().into_inner().into_iter().rev() {
+            for height in block_range.rev() {
+                if self.prev_stored_blocks.contains(height) {
+                    continue;
                 }
-            }
-            None => {
-                // Reverse iterate heights
-                for height in (1..=new_head).rev() {
-                    if is_block_accepted(&*self.store, height).await {
-                        continue;
-                    }
 
-                    let Ok(header) = self.store.get_by_height(height).await else {
-                        // We reached the tail of the known heights
-                        break;
-                    };
-
-                    if !in_sampling_window(header.time()) {
-                        // We've reached the tail of the sampling window
-                        break;
-                    }
-
-                    queue_sampling(&mut self.queue, &header);
+                if is_block_accepted(&*self.store, height).await {
+                    continue;
                 }
+
+                let Ok(header) = self.store.get_by_height(height).await else {
+                    // We reached the tail of the known heights
+                    break;
+                };
+
+                if !in_sampling_window(header.time()) {
+                    // We've reached the tail of the sampling window
+                    break;
+                }
+
+                queue_sampling(&mut self.queue, &header);
             }
         }
 
-        self.prev_head = Some(new_head);
+        self.prev_stored_blocks = stored_blocks;
+
+        Ok(())
     }
 }
 
