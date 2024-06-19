@@ -282,26 +282,6 @@ impl AsRef<[RangeInclusive<u64>]> for HeaderRanges {
     }
 }
 
-pub(crate) struct RangeBatchIterator(Option<RangeInclusive<u64>>);
-
-impl RangeBatchIterator {
-    pub(crate) fn new(range: RangeInclusive<u64>) -> Self {
-        Self(Some(range))
-    }
-
-    pub(crate) fn take_next_batch(&mut self, limit: u64) -> Option<RangeInclusive<u64>> {
-        let current_range = self.0.take()?;
-
-        if current_range.len() <= limit {
-            Some(current_range)
-        } else {
-            let returned_range = *current_range.start()..=*current_range.start() + limit - 1;
-            self.0 = Some(*current_range.start() + limit..=*current_range.end());
-            Some(returned_range)
-        }
-    }
-}
-
 /// Extends test header generator for easier insertion into the store
 pub trait ExtendedHeaderGeneratorExt {
     /// Generate next amount verified headers
@@ -327,18 +307,6 @@ mod tests {
         assert_eq!((1u64..=2).len(), 2);
         assert_eq!(RangeInclusive::new(2u64, 1).len(), 0);
         assert_eq!((10001u64..=20000).len(), 10000);
-    }
-
-    #[test]
-    fn test_iter_batches() {
-        let mut range = RangeBatchIterator::new(1..=100);
-        assert_eq!(range.take_next_batch(10), Some(1..=10));
-        assert_eq!(range.take_next_batch(10), Some(11..=20));
-        assert_eq!(range.take_next_batch(50), Some(21..=70));
-        assert_eq!(range.take_next_batch(1), Some(71..=71));
-        assert_eq!(range.take_next_batch(9), Some(72..=80));
-        assert_eq!(range.take_next_batch(100), Some(81..=100));
-        assert_eq!(range.take_next_batch(100), None);
     }
 
     #[test]

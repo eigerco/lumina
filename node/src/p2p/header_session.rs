@@ -6,7 +6,7 @@ use tracing::debug;
 use crate::executor::spawn;
 use crate::p2p::header_ex::utils::HeaderRequestExt;
 use crate::p2p::{P2pCmd, P2pError};
-use crate::store::header_ranges::{HeaderRange, RangeBatchIterator, RangeLengthExt};
+use crate::store::header_ranges::{HeaderRange, RangeLengthExt};
 
 const MAX_AMOUNT_PER_REQ: u64 = 64;
 const MAX_CONCURRENT_REQS: usize = 1;
@@ -14,7 +14,7 @@ const MAX_CONCURRENT_REQS: usize = 1;
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
 pub(crate) struct HeaderSession {
-    ranges_iter: RangeBatchIterator,
+    to_fetch: Option<HeaderRange>,
     cmd_tx: mpsc::Sender<P2pCmd>,
     response_tx: mpsc::Sender<(u64, u64, Result<Vec<ExtendedHeader>>)>,
     response_rx: mpsc::Receiver<(u64, u64, Result<Vec<ExtendedHeader>>)>,
@@ -34,7 +34,7 @@ impl HeaderSession {
         let (response_tx, response_rx) = mpsc::channel(MAX_CONCURRENT_REQS);
 
         HeaderSession {
-            ranges_iter: RangeBatchIterator::new(range),
+            to_fetch: Some(range),
             cmd_tx,
             response_tx,
             response_rx,
@@ -100,7 +100,7 @@ impl HeaderSession {
     }
 
     pub(crate) async fn send_next_request(&mut self) -> Result<()> {
-        let Some(range) = self.ranges_iter.take_next_batch(MAX_AMOUNT_PER_REQ) else {
+        let Some(range) = take_next_batch(&mut self.to_fetch, MAX_AMOUNT_PER_REQ) else {
             return Ok(());
         };
 
@@ -136,6 +136,20 @@ impl HeaderSession {
         self.ongoing += 1;
 
         Ok(())
+    }
+}
+
+fn take_next_batch(range_to_fetch: &mut Option<HeaderRange>, limit: u64) -> Option<HeaderRange> {
+    let Some(end_offset) = limit.checked_sub(1) else {
+        return None;
+    };
+
+    let to_fetch = range_to_fetch.take()?;
+    if to_fetch.len() <= limit {
+        Some(to_fetch)
+    } else {
+        let _ = range_to_fetch.insert(*to_fetch.start() + limit..=*to_fetch.end());
+        Some(*to_fetch.start()..=*to_fetch.start() + end_offset)
     }
 }
 
@@ -264,5 +278,45 @@ mod tests {
             result_rx.await,
             Ok(Err(P2pError::NoConnectedPeers))
         ));
+    }
+
+    #[test]
+    fn take_next_batch_full_batch() {
+        let mut range_to_fetch = Some(1..=10);
+        let batch = take_next_batch(&mut range_to_fetch, 16);
+        assert_eq!(batch, Some(1..=10));
+        assert_eq!(range_to_fetch, None);
+    }
+
+    #[test]
+    fn take_next_batch_equal_limit() {
+        let mut range_to_fetch = Some(1..=10);
+        let batch = take_next_batch(&mut range_to_fetch, 10);
+        assert_eq!(batch, Some(1..=10));
+        assert_eq!(range_to_fetch, None);
+    }
+
+    #[test]
+    fn take_next_batch_truncated_batch() {
+        let mut range_to_fetch = Some(1..=10);
+        let batch = take_next_batch(&mut range_to_fetch, 5);
+        assert_eq!(batch, Some(1..=5));
+        assert_eq!(range_to_fetch, Some(6..=10));
+    }
+
+    #[test]
+    fn take_next_batch_none() {
+        let mut range_to_fetch = None;
+        let batch = take_next_batch(&mut range_to_fetch, 5);
+        assert_eq!(batch, None);
+        assert_eq!(range_to_fetch, None);
+    }
+
+    #[test]
+    fn take_next_batch_zero_batch() {
+        let mut range_to_fetch = Some(1..=5);
+        let batch = take_next_batch(&mut range_to_fetch, 0);
+        assert_eq!(batch, None);
+        assert_eq!(range_to_fetch, Some(1..=5));
     }
 }

@@ -22,16 +22,19 @@ pub(crate) fn calculate_range_to_fetch(
         return head_height.saturating_sub(limit) + 1..=head_height;
     };
 
-    if head_range.end() != &head_height {
+    if store_head_range.end() != &head_height {
         // if we haven't caught up with network head, start from there
-        let fetch_start = u64::max(head_range.end() + 1, head_height.saturating_sub(limit) + 1);
+        let fetch_start = u64::max(
+            store_head_range.end() + 1,
+            head_height.saturating_sub(limit) + 1,
+        );
         return fetch_start..=head_height;
     }
 
     // there exists a range contiguous with network head. inspect previous range end
     let penultimate_range_end = store_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
 
-    let fetch_end = head_range.start().saturating_sub(1);
+    let fetch_end = store_head_range.start().saturating_sub(1);
     let fetch_start = u64::max(
         penultimate_range_end + 1,
         fetch_end.saturating_sub(limit) + 1,
