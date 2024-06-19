@@ -32,10 +32,8 @@ pub(crate) fn calculate_fetch_range(
     let penultimate_range_end = store_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
 
     let fetch_end = head_range.start().saturating_sub(1);
-    u64::max(
-        penultimate_range_end + 1,
-        fetch_end.saturating_sub(limit) + 1,
-    )..=fetch_end
+    let fetch_start = u64::max(penultimate_range_end + 1, fetch_end.saturating_sub(limit) + 1);
+    fetch_start..=fetch_end
 }
 
 pub(crate) fn try_consolidate_ranges(
