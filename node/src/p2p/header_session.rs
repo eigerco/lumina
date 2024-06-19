@@ -140,9 +140,8 @@ impl HeaderSession {
 }
 
 fn take_next_batch(range_to_fetch: &mut Option<HeaderRange>, limit: u64) -> Option<HeaderRange> {
-    let Some(end_offset) = limit.checked_sub(1) else {
-        return None;
-    };
+    // calculate potential end before we modify range_to_fetch
+    let end_offset = limit.checked_sub(1)?;
 
     let to_fetch = range_to_fetch.take()?;
     if to_fetch.len() <= limit {
