@@ -32,7 +32,11 @@ pub(crate) fn calculate_range_to_fetch(
     let penultimate_range_end = store_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
 
     let fetch_end = head_range.start().saturating_sub(1);
-    let fetch_start = u64::max(penultimate_range_end + 1, fetch_end.saturating_sub(limit) + 1);
+    let fetch_start = u64::max(
+        penultimate_range_end + 1,
+        fetch_end.saturating_sub(limit) + 1,
+    );
+
     fetch_start..=fetch_end
 }
 
@@ -118,59 +122,64 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_calc_missing_ranges() {
-        let head_height = 50;
-        let ranges = [1..=5, 15..=20, 23..=28, 30..=40];
-
-        let fetch_range = calculate_fetch_range(head_height, &ranges, 512);
-        assert_eq!(fetch_range, 41..=50);
-    }
-
-    #[test]
-    fn test_calc_missing_ranges_partial() {
-        let head_height = 10;
-        let ranges = [6..=7];
-
-        let fetch_range = calculate_fetch_range(head_height, &ranges, 5);
-        assert_eq!(fetch_range, 8..=10);
-        let fetch_range = calculate_fetch_range(head_height, &[], 5);
-        assert_eq!(fetch_range, 6..=10);
-    }
-
-    #[test]
-    fn test_calc_missing_ranges_limit() {
+    fn calculate_range_to_fetch_test_header_limit() {
         let head_height = 1024;
         let ranges = [256..=512];
 
-        let fetch_range = calculate_fetch_range(head_height, &ranges, 16);
+        let fetch_range = calculate_range_to_fetch(head_height, &ranges, 16);
         assert_eq!(fetch_range, 1009..=1024);
 
-        let fetch_range = calculate_fetch_range(head_height, &ranges, 511);
+        let fetch_range = calculate_range_to_fetch(head_height, &ranges, 511);
         assert_eq!(fetch_range, 514..=1024);
-        let fetch_range = calculate_fetch_range(head_height, &ranges, 512);
+        let fetch_range = calculate_range_to_fetch(head_height, &ranges, 512);
         assert_eq!(fetch_range, 513..=1024);
-        let fetch_range = calculate_fetch_range(head_height, &ranges, 513);
+        let fetch_range = calculate_range_to_fetch(head_height, &ranges, 513);
         assert_eq!(fetch_range, 513..=1024);
-        let fetch_range = calculate_fetch_range(head_height, &ranges, 1024);
+
+        let fetch_range = calculate_range_to_fetch(head_height, &ranges, 1024);
         assert_eq!(fetch_range, 513..=1024);
     }
 
     #[test]
-    fn test_calc_missing_ranges_contiguous() {
-        let head_height = 10;
-        let ranges = [5..=6, 7..=9];
-
-        let fetch_range = calculate_fetch_range(head_height, &ranges, 5);
-        assert_eq!(fetch_range, 10..=10);
-    }
-
-    #[test]
-    fn test_calc_missing_ranges_edge_cases() {
-        let fetch_range = calculate_fetch_range(1, &[], 100);
+    fn calculate_range_to_fetch_empty_store() {
+        let fetch_range = calculate_range_to_fetch(1, &[], 100);
         assert_eq!(fetch_range, 1..=1);
 
-        let fetch_range = calculate_fetch_range(1, &[1..=1], 100);
-        assert!(fetch_range.is_empty())
+        let fetch_range = calculate_range_to_fetch(100, &[], 10);
+        assert_eq!(fetch_range, 91..=100);
+    }
+
+    #[test]
+    fn calculate_range_to_fetch_fully_synced() {
+        let fetch_range = calculate_range_to_fetch(1, &[1..=1], 100);
+        assert!(fetch_range.is_empty());
+
+        let fetch_range = calculate_range_to_fetch(100, &[1..=100], 10);
+        assert!(fetch_range.is_empty());
+    }
+
+    #[test]
+    fn calculate_range_to_fetch_caught_up() {
+        let head_height = 4000;
+
+        let fetch_range = calculate_range_to_fetch(head_height, &[3000..=4000], 500);
+        assert_eq!(fetch_range, 2500..=2999);
+        let fetch_range = calculate_range_to_fetch(head_height, &[500..=1000, 3000..=4000], 500);
+        assert_eq!(fetch_range, 2500..=2999);
+        let fetch_range = calculate_range_to_fetch(head_height, &[2500..=2800, 3000..=4000], 500);
+        assert_eq!(fetch_range, 2801..=2999);
+        let fetch_range = calculate_range_to_fetch(head_height, &[300..=4000], 500);
+        assert_eq!(fetch_range, 1..=299);
+    }
+
+    #[test]
+    fn calculate_range_to_fetch_catching_up() {
+        let head_height = 4000;
+
+        let fetch_range = calculate_range_to_fetch(head_height, &[2000..=3000], 500);
+        assert_eq!(fetch_range, 3501..=4000);
+        let fetch_range = calculate_range_to_fetch(head_height, &[1..=2998, 3000..=3800], 500);
+        assert_eq!(fetch_range, 3801..=4000);
     }
 
     #[test]

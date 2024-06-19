@@ -26,7 +26,7 @@ use tracing::{debug, info, info_span, instrument, warn, Instrument};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
 use crate::store::header_ranges::{HeaderRanges, PrintableHeaderRange};
-use crate::store::utils::calculate_fetch_range;
+use crate::store::utils::calculate_range_to_fetch;
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
 
@@ -178,7 +178,7 @@ where
 }
 
 struct Ongoing {
-    fetch_range: PrintableHeaderRange,
+    batch: PrintableHeaderRange,
     cancellation_token: CancellationToken,
 }
 
@@ -301,7 +301,7 @@ where
         }
 
         if let Some(ongoing) = self.ongoing_batch.take() {
-            warn!("Cancelling fetching of {}", ongoing.fetch_range);
+            warn!("Cancelling fetching of {}", ongoing.batch);
             ongoing.cancellation_token.cancel();
         }
     }
@@ -327,7 +327,7 @@ where
         let ongoing_batch = self
             .ongoing_batch
             .as_ref()
-            .map(|ongoing| format!("{}", ongoing.fetch_range))
+            .map(|ongoing| format!("{}", ongoing.batch))
             .unwrap_or_else(|| "None".to_string());
 
         info!("syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}");
@@ -432,13 +432,13 @@ where
             }
         };
 
-        let fetch_range = calculate_fetch_range(
+        let next_batch = calculate_range_to_fetch(
             subjective_head_height,
             store_ranges.as_ref(),
             MAX_HEADERS_IN_BATCH,
         );
 
-        if fetch_range.is_empty() {
+        if next_batch.is_empty() {
             // no headers to fetch
             return;
         }
@@ -451,9 +451,9 @@ where
 
         let cancellation_token = self.cancellation_token.child_token();
 
-        info!("Fetching range {fetch_range:?}");
+        info!("Fetching range {next_batch:?}");
         self.ongoing_batch = Some(Ongoing {
-            fetch_range: PrintableHeaderRange(fetch_range.clone()),
+            batch: PrintableHeaderRange(next_batch.clone()),
             cancellation_token: cancellation_token.clone(),
         });
 
@@ -461,7 +461,7 @@ where
         let p2p = self.p2p.clone();
 
         spawn_cancellable(cancellation_token, async move {
-            let result = p2p.get_unverified_header_range(fetch_range).await;
+            let result = p2p.get_unverified_header_range(next_batch).await;
             match result {
                 Ok(headers) => {
                     let _ = tx.send(Ok(headers)).await;
@@ -483,16 +483,13 @@ where
         let headers = match res {
             Ok(headers) => headers,
             Err(e) => {
-                warn!(
-                    "Failed to receive batch for ranges {}: {e}",
-                    ongoing.fetch_range
-                );
+                warn!("Failed to receive batch for ranges {}: {e}", ongoing.batch);
                 return;
             }
         };
 
         if let Err(e) = self.store.insert(headers).await {
-            warn!("Failed to store range {}: {e}", ongoing.fetch_range);
+            warn!("Failed to store range {}: {e}", ongoing.batch);
         }
     }
 }
