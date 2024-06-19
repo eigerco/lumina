@@ -10,7 +10,7 @@ pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
 
 /// based on the stored headers and current network head height, calculate range of headers that
 /// should be fetched from the network, starting from the front up to a `limit` of headers
-pub(crate) fn calculate_fetch_range(
+pub(crate) fn calculate_range_to_fetch(
     head_height: u64,
     store_headers: &[RangeInclusive<u64>],
     limit: u64,
