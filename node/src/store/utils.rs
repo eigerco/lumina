@@ -17,7 +17,7 @@ pub(crate) fn calculate_range_to_fetch(
 ) -> HeaderRange {
     let mut store_headers_iter = store_headers.iter().rev();
 
-    let Some(head_range) = store_headers_iter.next() else {
+    let Some(store_head_range) = store_headers_iter.next() else {
         // empty store, just fetch from head
         return head_height.saturating_sub(limit) + 1..=head_height;
     };
