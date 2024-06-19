@@ -176,17 +176,6 @@ impl WasmNode {
         Ok(to_value(&local_head)?)
     }
 
-    /// Get ranges of headers currently stored.
-    pub async fn get_stored_header_ranges(&self) -> Result<Array> {
-        let ranges = self.node.get_stored_header_ranges().await?;
-
-        Ok(ranges
-            .as_ref()
-            .iter()
-            .map(to_value)
-            .collect::<Result<_, _>>()?)
-    }
-
     /// Get a synced header for the block with a given hash.
     pub async fn get_header_by_hash(&self, hash: &str) -> Result<JsValue> {
         let hash: Hash = hash.parse().context("parsing hash failed")?;

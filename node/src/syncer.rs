@@ -25,8 +25,8 @@ use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::header_ranges::HeaderRanges;
-use crate::store::utils::calculate_missing_ranges;
+use crate::store::header_ranges::{HeaderRanges, PrintableHeaderRange};
+use crate::store::utils::calculate_range_to_fetch;
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
 
@@ -172,13 +172,13 @@ where
     store: Arc<S>,
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     subjective_head_height: Option<u64>,
-    headers_tx: mpsc::Sender<Result<Vec<Vec<ExtendedHeader>>, P2pError>>,
-    headers_rx: mpsc::Receiver<Result<Vec<Vec<ExtendedHeader>>, P2pError>>,
+    headers_tx: mpsc::Sender<Result<Vec<ExtendedHeader>, P2pError>>,
+    headers_rx: mpsc::Receiver<Result<Vec<ExtendedHeader>, P2pError>>,
     ongoing_batch: Option<Ongoing>,
 }
 
 struct Ongoing {
-    fetch_ranges: HeaderRanges,
+    batch: PrintableHeaderRange,
     cancellation_token: CancellationToken,
 }
 
@@ -301,7 +301,7 @@ where
         }
 
         if let Some(ongoing) = self.ongoing_batch.take() {
-            warn!("Cancelling fetching of {}", ongoing.fetch_ranges);
+            warn!("Cancelling fetching of {}", ongoing.batch);
             ongoing.cancellation_token.cancel();
         }
     }
@@ -327,7 +327,7 @@ where
         let ongoing_batch = self
             .ongoing_batch
             .as_ref()
-            .map(|ongoing| format!("{}", ongoing.fetch_ranges))
+            .map(|ongoing| format!("{}", ongoing.batch))
             .unwrap_or_else(|| "None".to_string());
 
         info!("syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}");
@@ -394,15 +394,13 @@ where
 
         let new_head_height = new_head.height().value();
 
-        // We don't want to interfere with any ongoing batch fetching
-        if self.ongoing_batch.is_none() {
-            if let Ok(store_head_height) = self.store.head_height().await {
-                // If our new header is adjacent to the HEAD of the store
-                if store_head_height + 1 == new_head_height {
-                    // Header is already verified by HeaderSub
-                    if self.store.insert(new_head).await.is_ok() {
-                        info!("Added header {new_head_height} from HeaderSub");
-                    }
+        if let Ok(store_head_height) = self.store.head_height().await {
+            // If our new header is adjacent to the HEAD of the store
+            if store_head_height + 1 == new_head_height {
+                // Header is already verified by HeaderSub and will be validated against previous
+                // head on insert
+                if self.store.insert(new_head).await.is_ok() {
+                    info!("Added header {new_head_height} from HeaderSub");
                 }
             }
         }
@@ -434,13 +432,13 @@ where
             }
         };
 
-        let fetch_ranges = calculate_missing_ranges(
+        let next_batch = calculate_range_to_fetch(
             subjective_head_height,
             store_ranges.as_ref(),
             MAX_HEADERS_IN_BATCH,
         );
 
-        if fetch_ranges.is_empty() {
+        if next_batch.is_empty() {
             // no headers to fetch
             return;
         }
@@ -453,9 +451,10 @@ where
 
         let cancellation_token = self.cancellation_token.child_token();
 
-        info!("Fetching batch with ranges {fetch_ranges}");
+        let batch = PrintableHeaderRange(next_batch.clone());
+        info!("Fetching range {batch}");
         self.ongoing_batch = Some(Ongoing {
-            fetch_ranges: fetch_ranges.clone(),
+            batch,
             cancellation_token: cancellation_token.clone(),
         });
 
@@ -463,7 +462,7 @@ where
         let p2p = self.p2p.clone();
 
         spawn_cancellable(cancellation_token, async move {
-            let result = p2p.get_unverified_header_ranges(fetch_ranges).await;
+            let result = p2p.get_unverified_header_range(next_batch).await;
             match result {
                 Ok(headers) => {
                     let _ = tx.send(Ok(headers)).await;
@@ -476,30 +475,22 @@ where
     }
 
     #[instrument(skip_all)]
-    async fn on_fetch_next_batch_result(
-        &mut self,
-        res: Result<Vec<Vec<ExtendedHeader>>, P2pError>,
-    ) {
+    async fn on_fetch_next_batch_result(&mut self, res: Result<Vec<ExtendedHeader>, P2pError>) {
         let Some(ongoing) = self.ongoing_batch.take() else {
             warn!("No batch was scheduled, however result was received. Discarding it.");
             return;
         };
 
-        let headers_spans = match res {
+        let headers = match res {
             Ok(headers) => headers,
             Err(e) => {
-                warn!(
-                    "Failed to receive batch for ranges {}: {e}",
-                    ongoing.fetch_ranges
-                );
+                warn!("Failed to receive batch for ranges {}: {e}", ongoing.batch);
                 return;
             }
         };
 
-        for headers in headers_spans {
-            if let Err(e) = self.store.insert(headers).await {
-                warn!("Failed to store range {}: {e}", ongoing.fetch_ranges);
-            }
+        if let Err(e) = self.store.insert(headers).await {
+            warn!("Failed to store range {}: {e}", ongoing.batch);
         }
     }
 }
@@ -606,7 +597,7 @@ mod tests {
         assert_syncing(&syncer, &store, &[1..=27], 27).await;
         p2p_mock.expect_no_cmd().await;
 
-        // New HEAD was received by HeaderSub (height 30)
+        // New HEAD was received by HeaderSub (height 30), it should NOT be appended
         let header_28_30 = gen.next_many(3);
         p2p_mock.announce_new_head(header_28_30[2].clone());
         assert_syncing(&syncer, &store, &[1..=27], 30).await;
@@ -621,7 +612,7 @@ mod tests {
             .unwrap();
         assert_syncing(&syncer, &store, &[1..=30], 30).await;
 
-        // New HEAD was received by HeaderSub (height 1058)
+        // New HEAD was received by HeaderSub (height 1058), it SHOULD be appended as it's adjacent
         let mut headers = gen.next_many(1028);
         p2p_mock.announce_new_head(headers.last().cloned().unwrap());
         assert_syncing(&syncer, &store, &[1..=30], 1058).await;
@@ -644,11 +635,9 @@ mod tests {
         .await;
         assert_syncing(&syncer, &store, &[1..=30, 547..=1058], 1058).await;
 
-        // TODO: eeeer should we optimise here?
-        // Still syncing, but new HEAD arrived (height 1059)
         headers.push(gen.next());
         p2p_mock.announce_new_head(headers.last().cloned().unwrap());
-        assert_syncing(&syncer, &store, &[1..=30, 547..=1058], 1059).await;
+        assert_syncing(&syncer, &store, &[1..=30, 547..=1059], 1059).await;
 
         // Syncer requested the second batch ([543, 1054])
         handle_session_batch(
@@ -666,10 +655,10 @@ mod tests {
             ],
         )
         .await;
-        assert_syncing(&syncer, &store, &[1..=30, 35..=1058], 1059).await;
+        assert_syncing(&syncer, &store, &[1..=30, 35..=1059], 1059).await;
 
-        // Syncer requested the last batch ([31..=34, 1059..=1059])
-        handle_session_batch(&mut p2p_mock, &headers, vec![(31, 4), (1059, 1)]).await;
+        // Syncer requested the last batch ([31..=34])
+        handle_session_batch(&mut p2p_mock, &headers, vec![(31, 4)]).await;
         assert_syncing(&syncer, &store, &[1..=1059], 1059).await;
 
         // Syncer is fulling synced and awaiting for events
@@ -936,7 +925,6 @@ mod tests {
             let (height, amount, respond_to) =
                 p2p_mock.expect_header_request_for_height_cmd().await;
 
-            info!("got request for {height}+{amount}");
             let request_index = requests
                 .iter()
                 .position(|x| *x == (height, amount))

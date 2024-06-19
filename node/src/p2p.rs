@@ -63,7 +63,7 @@ use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihash
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::store::header_ranges::{header_ranges, HeaderRanges};
+use crate::store::header_ranges::HeaderRange;
 use crate::store::Store;
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
@@ -404,12 +404,8 @@ impl P2p {
 
         let range = height..=height + amount - 1;
 
-        let mut session = HeaderSession::new(header_ranges![range], self.cmd_tx.clone());
-        let headers = session
-            .run()
-            .await?
-            .pop()
-            .ok_or(HeaderExError::InvalidResponse)?;
+        let mut session = HeaderSession::new(range, self.cmd_tx.clone());
+        let headers = session.run().await?;
 
         from.verify_adjacent_range(&headers)
             .map_err(|_| HeaderExError::InvalidResponse)?;
@@ -421,22 +417,25 @@ impl P2p {
     ///
     /// For each of the ranges, headers are verified against each other, but it's the caller
     /// responsibility to verify range edges against headers existing in the store.
-    pub(crate) async fn get_unverified_header_ranges(
+    pub(crate) async fn get_unverified_header_range(
         &self,
-        ranges: HeaderRanges,
-    ) -> Result<Vec<Vec<ExtendedHeader>>> {
-        let mut session = HeaderSession::new(ranges, self.cmd_tx.clone());
-        let header_ranges = session.run().await?;
-
-        for range in &header_ranges {
-            let Some(head) = range.first() else {
-                continue;
-            };
-            head.verify_adjacent_range(&range[1..])
-                .map_err(|_| HeaderExError::InvalidResponse)?;
+        range: HeaderRange,
+    ) -> Result<Vec<ExtendedHeader>> {
+        if range.is_empty() {
+            return Err(HeaderExError::InvalidRequest.into());
         }
 
-        Ok(header_ranges)
+        let mut session = HeaderSession::new(range, self.cmd_tx.clone());
+        let headers = session.run().await?;
+
+        let Some(head) = headers.first() else {
+            return Err(HeaderExError::InvalidResponse.into());
+        };
+
+        head.verify_adjacent_range(&headers[1..])
+            .map_err(|_| HeaderExError::InvalidResponse)?;
+
+        Ok(headers)
     }
 
     /// Request a [`Cid`] on bitswap protocol.
