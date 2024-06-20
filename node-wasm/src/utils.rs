@@ -2,6 +2,7 @@
 use std::fmt::{self, Debug};
 
 use js_sys::JsString;
+use lumina_node::network;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -13,8 +14,8 @@ use tracing_subscriber::prelude::*;
 use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
 use web_sys::{
-    window, DedicatedWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker,
-    WorkerGlobalScope, Crypto
+    window, Crypto, DedicatedWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker,
+    WorkerGlobalScope,
 };
 
 use crate::error::{Context, Error, Result};
@@ -182,7 +183,7 @@ where
     }
 }
 
-const CHROME_USER_AGENT_DETECTION: &str = "Chrome/";
+const CHROME_USER_AGENT_DETECTION_STR: &str = "Chrome/";
 
 // currently there's issue with SharedWorkers on Chrome, where restarting lumina's worker
 // causes all network connections to fail. Until that's resolved detect chrome and apply
@@ -200,7 +201,7 @@ pub(crate) fn is_chrome() -> bool {
         user_agent
             .as_deref()
             .unwrap_or("")
-            .contains(CHROME_USER_AGENT_DETECTION)
+            .contains(CHROME_USER_AGENT_DETECTION_STR)
     } else {
         false
     }

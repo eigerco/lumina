@@ -2,20 +2,23 @@ use std::fmt::Debug;
 
 use js_sys::Array;
 use libp2p::{Multiaddr, PeerId};
+use lumina_node::events::{EventSubscriber, NodeEventInfo};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use wasm_bindgen::prelude::*;
-use web_sys::{MessageEvent, SharedWorker};
+use wasm_bindgen_futures::spawn_local;
+use web_sys::{BroadcastChannel, MessageEvent, SharedWorker};
 
-use lumina_node::node::{Node, NodeError};
-use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store, StoreError};
+use lumina_node::node::Node;
+use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 use lumina_node::syncer::SyncingInfo;
 
+use crate::error::{Context, Error, Result};
 use crate::node::WasmNodeConfig;
-use crate::utils::{to_jsvalue_or_undefined, WorkerSelf};
+use crate::utils::{get_crypto, to_jsvalue_or_undefined, WorkerSelf};
 use crate::worker::channel::{
     DedicatedWorkerMessageServer, MessageServer, SharedWorkerMessageServer, WorkerMessage,
 };
@@ -29,67 +32,35 @@ pub(crate) use channel::WorkerClient;
 
 const WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH: usize = 64;
 
-/// actual type that's sent over javascript MessagePort
-type Result<T, E = WorkerError> = std::result::Result<T, E>;
-
 #[derive(Debug, Serialize, Deserialize, Error)]
 pub enum WorkerError {
     #[error("node hasn't been started yet")]
     NodeNotRunning,
-    #[error("node has already been started")]
-    NodeAlreadyRunning,
-    #[error("setting up node failed: {0}")]
-    NodeSetupFailed(String),
-    #[error("node error: {0}")]
-    NodeError(String),
-    #[error("value could not be serialized: {0}")]
-    SerdeError(String),
-    #[error("command message could not be serialised, should not happen: {0}")]
-    CouldNotSerialiseCommand(String),
-    #[error("command message could not be deserialised, should not happen: {0}")]
-    CouldNotDeserialiseCommand(String),
     #[error("command response could not be serialised, should not happen: {0}")]
     CouldNotSerialiseResponse(String),
     #[error("command response could not be deserialised, should not happen: {0}")]
     CouldNotDeserialiseResponse(String),
-    #[error("response message could not be sent: {0}")]
-    CouldNotSendCommand(String),
     #[error("response channel from worker closed, should not happen")]
     ResponseChannelDropped,
     #[error("invalid command received")]
     InvalidCommandReceived,
+    #[error("Worker encountered an error: {0:?}")]
+    NodeError(Error),
 }
 
-impl From<blockstore::Error> for WorkerError {
-    fn from(error: blockstore::Error) -> Self {
-        WorkerError::NodeSetupFailed(format!("could not create blockstore: {error}"))
-    }
-}
-
-impl From<StoreError> for WorkerError {
-    fn from(error: StoreError) -> Self {
-        WorkerError::NodeSetupFailed(format!("could not create header store: {error}"))
-    }
-}
-
-impl From<NodeError> for WorkerError {
-    fn from(error: NodeError) -> Self {
-        WorkerError::NodeError(error.to_string())
-    }
-}
-
-impl From<serde_wasm_bindgen::Error> for WorkerError {
-    fn from(error: serde_wasm_bindgen::Error) -> Self {
-        WorkerError::SerdeError(error.to_string())
+impl From<crate::error::Error> for WorkerError {
+    fn from(error: crate::error::Error) -> Self {
+        WorkerError::NodeError(error)
     }
 }
 
 struct NodeWorker {
     node: Node<IndexedDbStore>,
+    events_channel_name: String,
 }
 
 impl NodeWorker {
-    async fn new(config: WasmNodeConfig) -> Result<Self, WorkerError> {
+    async fn new(config: WasmNodeConfig) -> Result<Self> {
         let config = config.into_node_config().await?;
 
         if let Ok(store_height) = config.store.head_height().await {
@@ -100,7 +71,17 @@ impl NodeWorker {
 
         let node = Node::new(config).await?;
 
-        Ok(Self { node })
+        let events_channel_name = format!("NodeEventChannel-{}", get_crypto()?.random_uuid());
+        let events_channel = BroadcastChannel::new(&events_channel_name)
+            .context("Failed to allocate BroadcastChannel")?;
+
+        let events_sub = node.event_subscriber();
+        spawn_local(event_forwarder_task(events_sub, events_channel));
+
+        Ok(Self {
+            node,
+            events_channel_name,
+        })
     }
 
     async fn get_syncer_info(&mut self) -> Result<SyncingInfo> {
@@ -144,7 +125,7 @@ impl NodeWorker {
             SingleHeaderQuery::ByHash(hash) => self.node.request_header_by_hash(&hash).await,
             SingleHeaderQuery::ByHeight(height) => self.node.request_header_by_height(height).await,
         }?;
-        to_value(&header).map_err(|e| WorkerError::CouldNotSerialiseResponse(e.to_string()))
+        to_value(&header).context("could not serialise requested header")
     }
 
     async fn get_header(&mut self, query: SingleHeaderQuery) -> Result<JsValue> {
@@ -153,18 +134,22 @@ impl NodeWorker {
             SingleHeaderQuery::ByHash(hash) => self.node.get_header_by_hash(&hash).await,
             SingleHeaderQuery::ByHeight(height) => self.node.get_header_by_height(height).await,
         }?;
-        to_value(&header).map_err(|e| WorkerError::CouldNotSerialiseResponse(e.to_string()))
+        to_value(&header).context("could not serialise requested header")
     }
 
     async fn get_verified_headers(&mut self, from: JsValue, amount: u64) -> Result<Array> {
         let verified_headers = self
             .node
-            .request_verified_headers(&from_value(from)?, amount)
+            .request_verified_headers(
+                &from_value(from).context("could not deserialise verified header")?,
+                amount,
+            )
             .await?;
-        Ok(verified_headers
+        verified_headers
             .iter()
             .map(|h| to_value(&h))
-            .collect::<Result<Array, _>>()?)
+            .collect::<Result<Array, _>>()
+            .context("could not serialise fetched headers")
     }
 
     async fn get_headers_range(
@@ -179,10 +164,11 @@ impl NodeWorker {
             (Some(start), Some(end)) => self.node.get_headers(start..=end).await,
         }?;
 
-        Ok(headers
+        headers
             .iter()
             .map(|h| to_value(&h))
-            .collect::<Result<Array, _>>()?)
+            .collect::<Result<Array, _>>()
+            .context("could not serialise fetched headers")
     }
 
     async fn get_last_seen_network_head(&mut self) -> JsValue {
@@ -197,10 +183,13 @@ impl NodeWorker {
         match command {
             NodeCommand::IsRunning => WorkerResponse::IsRunning(true),
             NodeCommand::StartNode(_) => {
-                WorkerResponse::NodeStarted(Err(WorkerError::NodeAlreadyRunning))
+                WorkerResponse::NodeStarted(Err(Error::new("Node already started")))
             }
             NodeCommand::GetLocalPeerId => {
                 WorkerResponse::LocalPeerId(self.node.local_peer_id().to_string())
+            }
+            NodeCommand::GetEventsChannelName => {
+                WorkerResponse::EventsChannelName(self.events_channel_name.clone())
             }
             NodeCommand::GetSyncerInfo => WorkerResponse::SyncerInfo(self.get_syncer_info().await),
             NodeCommand::GetPeerTrackerInfo => {
@@ -246,7 +235,7 @@ impl NodeWorker {
             }
             NodeCommand::CloseWorker => {
                 SharedWorker::worker_self().close();
-                WorkerResponse::WorkerClosed
+                WorkerResponse::WorkerClosed(())
             }
         }
     }
@@ -308,6 +297,30 @@ pub async fn run_worker(queued_events: Vec<MessageEvent>) {
     }
 
     info!("Channel to WorkerMessageServer closed, exiting the SharedWorker");
+}
+
+async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: BroadcastChannel) {
+    #[derive(Serialize)]
+    struct Event {
+        message: String,
+        #[serde(flatten)]
+        info: NodeEventInfo,
+    }
+
+    while let Ok(ev) = events_sub.recv().await {
+        let ev = Event {
+            message: ev.event.to_string(),
+            info: ev,
+        };
+
+        if let Ok(val) = to_value(&ev) {
+            if events_channel.post_message(&val).is_err() {
+                break;
+            }
+        }
+    }
+
+    events_channel.close();
 }
 
 #[wasm_bindgen(module = "/js/worker.js")]

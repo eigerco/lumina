@@ -2,6 +2,7 @@
 
 use std::fmt::Display;
 
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::convert::IntoWasmAbi;
 use wasm_bindgen::describe::WasmDescribe;
 use wasm_bindgen::JsValue;
@@ -10,7 +11,8 @@ use wasm_bindgen::JsValue;
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// An error that can cross the WASM ABI border.
-pub struct Error(JsValue);
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Error(#[serde(with = "serde_wasm_bindgen::preserve")] JsValue);
 
 impl Error {
     /// Create a new `Error` with the specified message.
@@ -113,6 +115,7 @@ from_display! {
     libp2p::multiaddr::Error,
     lumina_node::node::NodeError,
     lumina_node::store::StoreError,
+    crate::worker::WorkerError,
 }
 
 /// Utility to add more context to the [`Error`].

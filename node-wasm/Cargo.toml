@@ -51,7 +51,7 @@ web-sys = { version = "0.3.69", features = [
   "Blob",
   "BlobPropertyBag",
   "BroadcastChannel",
-  "Crypto"
+  "Crypto",
   "DedicatedWorkerGlobalScope",
   "MessageEvent",
   "MessagePort",

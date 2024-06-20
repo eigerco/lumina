@@ -1,30 +1,24 @@
 //! A browser compatible wrappers for the [`lumina-node`].
-use std::result::Result as StdResult;
 
 use js_sys::Array;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::{from_value, to_value};
+use serde_wasm_bindgen::to_value;
 use tracing::info;
 use wasm_bindgen::prelude::*;
-use web_sys::{SharedWorker, Worker, WorkerOptions, WorkerType, BroadcastChannel};
-use wasm_bindgen_futures::spawn_local;
+use web_sys::{BroadcastChannel, SharedWorker, Worker, WorkerOptions, WorkerType};
 
 use lumina_node::blockstore::IndexedDbBlockstore;
-use lumina_node::events::{EventSubscriber, NodeEventInfo};
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
-use lumina_node::node::{Node, NodeConfig};
-use lumina_node::store::{IndexedDbStore, SamplingStatus, Store};
+use lumina_node::node::NodeConfig;
+use lumina_node::store::IndexedDbStore;
 
+use crate::error::{Context, Result};
 use crate::utils::{is_chrome, js_value_from_display, JsValueToJsError, Network};
 use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::worker::{worker_script_url, WorkerClient, WorkerError};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
-use crate::Result;
-use crate::error::{Context, Result};
-use crate::utils::{get_crypto, js_value_from_display, Network};
-use crate::wrapper::libp2p::NetworkInfo;
 
 const LUMINA_WORKER_NAME: &str = "lumina";
 
@@ -47,7 +41,6 @@ pub struct WasmNodeConfig {
 #[wasm_bindgen(js_name = NodeClient)]
 struct NodeDriver {
     client: WorkerClient,
-    events_channel_name: String,
 }
 
 /// Type of worker to run lumina in. Allows overriding automatically detected worker kind
@@ -81,13 +74,6 @@ impl NodeDriver {
         } else {
             NodeWorkerKind::Shared
         };
-        
-        let events_channel_name = format!("NodeEventChannel-{}", get_crypto()?.random_uuid());
-        let events_channel = BroadcastChannel::new(&events_channel_name)
-            .context("Failed to allocate BroadcastChannel")?;
-
-        let events_sub = node.event_subscriber();
-        spawn_local(event_forwarder_task(events_sub, events_channel));
 
         let client = match worker_type.unwrap_or(default_worker_type) {
             NodeWorkerKind::Shared => {
@@ -104,7 +90,7 @@ impl NodeDriver {
             }
         };
 
-        Ok(Self { client, events_channel_name })
+        Ok(Self { client })
     }
 
     /// Check whether Lumina is currently running
@@ -120,9 +106,9 @@ impl NodeDriver {
     pub async fn start(&self, config: WasmNodeConfig) -> Result<()> {
         let command = NodeCommand::StartNode(config);
         let response = self.client.exec(command).await?;
-        let started = response.into_node_started().check_variant()?;
+        let _ = response.into_node_started().check_variant()?;
 
-        Ok(started?)
+        Ok(())
     }
 
     /// Get node's local peer ID.
@@ -147,27 +133,24 @@ impl NodeDriver {
     pub async fn wait_connected(&self) -> Result<()> {
         let command = NodeCommand::WaitConnected { trusted: false };
         let response = self.client.exec(command).await?;
-        let result = response.into_connected().check_variant()?;
+        let _ = response.into_connected().check_variant()?;
 
-        Ok(result?)
+        Ok(())
     }
 
     /// Wait until the node is connected to at least 1 trusted peer.
     pub async fn wait_connected_trusted(&self) -> Result<()> {
         let command = NodeCommand::WaitConnected { trusted: true };
         let response = self.client.exec(command).await?;
-        let result = response.into_connected().check_variant()?;
-
-        Ok(result?)
+        response.into_connected().check_variant()?
     }
 
     /// Get current network info.
     pub async fn network_info(&self) -> Result<NetworkInfoSnapshot> {
         let command = NodeCommand::GetNetworkInfo;
         let response = self.client.exec(command).await?;
-        let network_info = response.into_network_info().check_variant()?;
 
-        Ok(network_info?)
+        response.into_network_info().check_variant()?
     }
 
     /// Get all the multiaddresses on which the node listens.
@@ -197,9 +180,7 @@ impl NodeDriver {
             is_trusted,
         };
         let response = self.client.exec(command).await?;
-        let set_result = response.into_set_peer_trust().check_variant()?;
-
-        Ok(set_result?)
+        response.into_set_peer_trust().check_variant()?
     }
 
     /// Request the head header from the network.
@@ -208,7 +189,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.into_result()?)
+        header.into_result()
     }
 
     /// Request a header for the block with a given hash from the network.
@@ -217,7 +198,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.into_result()?)
+        header.into_result()
     }
 
     /// Request a header for the block with a given height from the network.
@@ -226,18 +207,25 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.into_result()?)
+        header.into_result()
     }
 
     /// Request headers in range (from, from + amount] from the network.
     ///
     /// The headers will be verified with the `from` header.
-    pub async fn request_verified_headers(&self, from: JsValue, amount: u64) -> Result<Array> {
-        let header =
-            from_value::<ExtendedHeader>(from).context("Parsing extended header failed")?;
-        let verified_headers = self.node.request_verified_headers(&header, amount).await?;
+    pub async fn request_verified_headers(
+        &self,
+        from_header: JsValue,
+        amount: u64,
+    ) -> Result<Array> {
+        let command = NodeCommand::GetVerifiedHeaders {
+            from: from_header,
+            amount,
+        };
+        let response = self.client.exec(command).await?;
+        let headers = response.into_headers().check_variant()?;
 
-        Ok(headers.into_result()?)
+        headers.into_result()
     }
 
     /// Get current header syncing info.
@@ -264,18 +252,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.into_result()?)
-    }
-
-    /// Get ranges of headers currently stored.
-    pub async fn get_stored_header_ranges(&self) -> Result<Array> {
-        let ranges = self.node.get_stored_header_ranges().await?;
-
-        Ok(ranges
-            .as_ref()
-            .iter()
-            .map(to_value)
-            .collect::<Result<_, _>>()?)
+        header.into_result()
     }
 
     /// Get a synced header for the block with a given hash.
@@ -284,7 +261,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.into_result()?)
+        header.into_result()
     }
 
     /// Get a synced header for the block with a given height.
@@ -293,7 +270,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        Ok(header.into_result()?)
+        header.into_result()
     }
 
     /// Get synced headers from the given heights range.
@@ -317,7 +294,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let headers = response.into_headers().check_variant()?;
 
-        Ok(headers.into_result()?)
+        headers.into_result()
     }
 
     /// Get data sampling metadata of an already sampled height.
@@ -334,18 +311,18 @@ impl NodeDriver {
     pub async fn close(&self) -> Result<()> {
         let command = NodeCommand::CloseWorker;
         let response = self.client.exec(command).await?;
-        if response.is_worker_closed() {
-            Ok(())
-        } else {
-            Err(JsError::new(
-                "invalid response received for the command sent",
-            ))
-        }
+        response.into_worker_closed().check_variant()?;
+
+        Ok(())
     }
 
     /// Returns a [`BroadcastChannel`] for events generated by [`Node`].
-    pub fn events_channel(&self) -> Result<BroadcastChannel> {
-        Ok(BroadcastChannel::new(&self.events_channel_name).unwrap())
+    pub async fn events_channel(&self) -> Result<BroadcastChannel> {
+        let command = NodeCommand::GetEventsChannelName;
+        let response = self.client.exec(command).await?;
+        let name = response.into_events_channel_name().check_variant()?;
+
+        Ok(BroadcastChannel::new(&name).unwrap())
     }
 }
 
@@ -367,17 +344,12 @@ impl WasmNodeConfig {
         self,
     ) -> Result<NodeConfig<IndexedDbBlockstore, IndexedDbStore>, WorkerError> {
         let network_id = network_id(self.network.into());
-<<<<<<< HEAD
-        let store = IndexedDbStore::new(network_id).await?;
-        let blockstore = IndexedDbBlockstore::new(&format!("{network_id}-blockstore")).await?;
-=======
         let store = IndexedDbStore::new(network_id)
             .await
             .context("Failed to open the store")?;
         let blockstore = IndexedDbBlockstore::new(&format!("{network_id}-blockstore"))
             .await
             .context("Failed to open the blockstore")?;
->>>>>>> origin/main
 
         let p2p_local_keypair = Keypair::generate_ed25519();
 
@@ -385,15 +357,14 @@ impl WasmNodeConfig {
             .genesis_hash
             .map(|h| h.parse())
             .transpose()
-            .map_err(|e| WorkerError::NodeSetupFailed(format!("genesis hash invalid: {e}")))?;
+            .context("genesis hash invalid")?;
+
         let p2p_bootnodes = self
             .bootnodes
             .iter()
             .map(|addr| addr.parse())
-            .collect::<StdResult<_, _>>()
-            .map_err(|e| {
-                WorkerError::NodeSetupFailed(format!("bootstrap multiaddr invalid: {e}"))
-            })?;
+            .collect::<std::result::Result<_, _>>()
+            .context("bootstrap multiaddr invalid")?;
 
         Ok(NodeConfig {
             network_id: network_id.to_string(),
@@ -405,28 +376,4 @@ impl WasmNodeConfig {
             store,
         })
     }
-}
-
-async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: BroadcastChannel) {
-    #[derive(Serialize)]
-    struct Event {
-        message: String,
-        #[serde(flatten)]
-        info: NodeEventInfo,
-    }
-
-    while let Ok(ev) = events_sub.recv().await {
-        let ev = Event {
-            message: ev.event.to_string(),
-            info: ev,
-        };
-
-        if let Ok(val) = to_value(&ev) {
-            if events_channel.post_message(&val).is_err() {
-                break;
-            }
-        }
-    }
-
-    events_channel.close();
 }

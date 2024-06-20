@@ -13,16 +13,17 @@ use lumina_node::peer_tracker::PeerTrackerInfo;
 use lumina_node::store::SamplingMetadata;
 use lumina_node::syncer::SyncingInfo;
 
+use crate::error::Error;
+use crate::error::Result;
 use crate::node::WasmNodeConfig;
 use crate::utils::JsResult;
-use crate::worker::Result;
-use crate::worker::WorkerError;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NodeCommand {
     IsRunning,
     StartNode(WasmNodeConfig),
+    GetEventsChannelName,
     GetLocalPeerId,
     GetSyncerInfo,
     GetPeerTrackerInfo,
@@ -65,6 +66,7 @@ pub(crate) enum SingleHeaderQuery {
 pub(crate) enum WorkerResponse {
     IsRunning(bool),
     NodeStarted(Result<()>),
+    EventsChannelName(String),
     LocalPeerId(String),
     SyncerInfo(Result<SyncingInfo>),
     PeerTrackerInfo(PeerTrackerInfo),
@@ -73,16 +75,17 @@ pub(crate) enum WorkerResponse {
     SetPeerTrust(Result<()>),
     Connected(Result<()>),
     Listeners(Result<Vec<Multiaddr>>),
-    Header(JsResult<JsValue, WorkerError>),
-    Headers(JsResult<Array, WorkerError>),
+    Header(JsResult<JsValue, Error>),
+    Headers(JsResult<Array, Error>),
     #[serde(with = "serde_wasm_bindgen::preserve")]
     LastSeenNetworkHead(JsValue),
     SamplingMetadata(Result<Option<SamplingMetadata>>),
-    WorkerClosed,
+    WorkerClosed(()),
 }
 
 pub(crate) trait CheckableResponseExt {
     type Output;
+
     fn check_variant(self) -> Result<Self::Output, JsError>;
 }
 

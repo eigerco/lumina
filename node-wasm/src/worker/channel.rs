@@ -1,6 +1,5 @@
 use std::fmt::{self, Debug};
 
-use js_sys::JsString;
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::{mpsc, Mutex};
 use tracing::{debug, error, info, warn};
@@ -8,6 +7,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, MessagePort, SharedWorker, Worker};
 
+use crate::error::{Context, Result};
 use crate::utils::WorkerSelf;
 use crate::worker::commands::{NodeCommand, WorkerResponse};
 use crate::worker::WorkerError;
@@ -130,20 +130,17 @@ impl WorkerClient {
         message
     }
 
-    fn send(&self, command: NodeCommand) -> Result<(), WorkerError> {
+    fn send(&self, command: NodeCommand) -> Result<()> {
         let command_value =
-            to_value(&command).map_err(|e| WorkerError::CouldNotSerialiseCommand(e.to_string()))?;
+            to_value(&command).context("could not serialise worker command to be sent")?;
         match &self.worker {
-            AnyWorker::DedicatedWorker(worker) => {
-                worker.post_message(&command_value).map_err(|e| {
-                    WorkerError::CouldNotSendCommand(format!("{:?}", e.dyn_ref::<JsString>()))
-                })
-            }
-            AnyWorker::SharedWorker(worker) => {
-                worker.port().post_message(&command_value).map_err(|e| {
-                    WorkerError::CouldNotSendCommand(format!("{:?}", e.dyn_ref::<JsString>()))
-                })
-            }
+            AnyWorker::DedicatedWorker(worker) => worker
+                .post_message(&command_value)
+                .context("could not send command to worker"),
+            AnyWorker::SharedWorker(worker) => worker
+                .port()
+                .post_message(&command_value)
+                .context("could not send command to worker"),
         }
     }
 }
