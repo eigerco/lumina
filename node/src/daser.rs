@@ -385,6 +385,7 @@ where
 
         'outer: for block_range in stored_blocks.clone().into_inner().into_iter().rev() {
             for height in block_range.rev() {
+                // Skip blocks that we already checked
                 if self.prev_stored_blocks.contains(height) {
                     continue;
                 }
