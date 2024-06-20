@@ -793,7 +793,7 @@ mod tests {
             })
             .collect::<HashMap<_, _>>();
 
-        let needed_samples_sum = infos.iter().map(|(_, info)| info.needed_samples).sum();
+        let needed_samples_sum = infos.values().map(|info| info.needed_samples).sum();
         let mut cids = Vec::with_capacity(needed_samples_sum);
 
         for _ in 0..needed_samples_sum {
@@ -803,7 +803,7 @@ mod tests {
             let sample_id: SampleId = cid.try_into().unwrap();
             let info = infos
                 .get_mut(&sample_id.block_height())
-                .expect(&format!("Unexpected height: {}", sample_id.block_height()));
+                .unwrap_or_else(|| panic!("Unexpected height: {}", sample_id.block_height()));
 
             info.requests_count += 1;
 
