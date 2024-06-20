@@ -1,11 +1,12 @@
 use std::net::SocketAddr;
 
 use anyhow::Result;
+use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::{header, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
-use axum::{body, Json, Router};
+use axum::{Json, Router};
 use celestia_types::hash::Hash;
 use clap::Args;
 use libp2p::multiaddr::Protocol;
@@ -13,6 +14,7 @@ use libp2p::Multiaddr;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis};
 use rust_embed::RustEmbed;
 use serde::Serialize;
+use tokio::net::TcpListener;
 use tracing::info;
 
 use crate::common::ArgNetwork;
@@ -74,9 +76,9 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         .with_state(state);
 
     info!("listening on {}", args.listen_addr);
-    Ok(axum::Server::bind(&args.listen_addr)
-        .serve(app.into_make_service())
-        .await?)
+    let listener = TcpListener::bind(&args.listen_addr).await?;
+
+    Ok(axum::serve(listener, app.into_make_service()).await?)
 }
 
 async fn serve_index_html() -> Result<Response, StatusCode> {
@@ -90,7 +92,7 @@ async fn serve_embedded_path<Source: RustEmbed>(
         let mime = mime_guess::from_path(&path).first_or_octet_stream();
         Ok(Response::builder()
             .header(header::CONTENT_TYPE, mime.as_ref())
-            .body(body::boxed(body::Full::from(content.data)))
+            .body(Body::from(content.data))
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?)
     } else {
         Err(StatusCode::NOT_FOUND)

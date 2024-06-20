@@ -1,7 +1,6 @@
 use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use celestia_rpc::prelude::*;
@@ -10,11 +9,11 @@ use clap::Parser;
 use directories::ProjectDirs;
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use lumina_node::blockstore::RedbBlockstore;
+use lumina_node::events::NodeEvent;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
 use lumina_node::node::{Node, NodeConfig};
 use lumina_node::store::{RedbStore, Store};
 use tokio::task::spawn_blocking;
-use tokio::time::sleep;
 use tracing::info;
 use tracing::warn;
 
@@ -62,9 +61,11 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     let store = RedbStore::new(db.clone()).await?;
     let blockstore = RedbBlockstore::new(db);
 
-    match store.head_height().await {
-        Ok(height) => info!("Initialised store with head height: {height}"),
-        Err(_) => info!("Initialised new store"),
+    let stored_ranges = store.get_stored_header_ranges().await?;
+    if stored_ranges.is_empty() {
+        info!("Initialised new store");
+    } else {
+        info!("Initialised store, present headers: {stored_ranges}");
     }
 
     let node = Node::new(NodeConfig {
@@ -80,11 +81,18 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     .context("Failed to start node")?;
 
     node.wait_connected_trusted().await?;
+    let mut events = node.event_subscriber();
 
     // We have nothing else to do, but we want to keep main alive
-    loop {
-        sleep(Duration::from_secs(1)).await;
+    while let Ok(ev) = events.recv().await {
+        match ev.event {
+            // Skip noisy events
+            NodeEvent::ShareSamplingResult { .. } => continue,
+            event => info!("{event}"),
+        }
     }
+
+    Ok(())
 }
 
 async fn open_db(path: Option<PathBuf>, network_id: &str) -> Result<Arc<redb::Database>> {

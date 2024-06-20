@@ -5,16 +5,17 @@ use tracing::debug;
 
 use crate::executor::spawn;
 use crate::p2p::header_ex::utils::HeaderRequestExt;
-use crate::p2p::{HeaderExError, P2pCmd, P2pError};
+use crate::p2p::{P2pCmd, P2pError};
+use crate::store::header_ranges::{HeaderRanges, HeaderRangesIterator, RangeLengthExt};
 
 const MAX_AMOUNT_PER_REQ: u64 = 64;
-const MAX_CONCURRENT_REQS: usize = 8;
+const MAX_CONCURRENT_REQS: usize = 1;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
 pub(crate) struct HeaderSession {
-    next_height: u64,
-    remaining_amount: u64,
+    ranges_iter: HeaderRangesIterator,
+    ranges_count: usize,
     cmd_tx: mpsc::Sender<P2pCmd>,
     response_tx: mpsc::Sender<(u64, u64, Result<Vec<ExtendedHeader>>)>,
     response_rx: mpsc::Receiver<(u64, u64, Result<Vec<ExtendedHeader>>)>,
@@ -22,31 +23,36 @@ pub(crate) struct HeaderSession {
 }
 
 impl HeaderSession {
-    pub(crate) fn new(from_height: u64, amount: u64, cmd_tx: mpsc::Sender<P2pCmd>) -> Result<Self> {
-        if from_height < 1 || amount < 1 {
-            return Err(P2pError::HeaderEx(HeaderExError::InvalidRequest));
-        }
-
+    /// Create a new HeaderSession responsible for fetching provided `ranges` headers.
+    /// `HeaderRanges` can be created manually, or more probably using
+    /// [`Store::get_stored_header_ranges`] to fetch existing header ranges and then using
+    /// [`calculate_missing_ranges`] to convert that into ranges of headers that are missing.
+    /// Received headers are sent over `cmd_tx` as a vector of contiguous header ranges, e.g.
+    /// for requested ranges
+    /// `[1..=3, 6..=9]`
+    /// response would be
+    /// `vec![vec![1, 2, 3], vec![6, 7, 8, 9]]`
+    ///
+    /// [`calculate_missing_ranges`]: crate::store::utils::calculate_missing_ranges
+    /// [`Store::get_stored_header_ranges`]: crate::store::Store::get_stored_header_ranges
+    pub(crate) fn new(ranges: HeaderRanges, cmd_tx: mpsc::Sender<P2pCmd>) -> Self {
+        let ranges_count = ranges.as_ref().len();
         let (response_tx, response_rx) = mpsc::channel(MAX_CONCURRENT_REQS);
 
-        Ok(HeaderSession {
-            next_height: from_height,
-            remaining_amount: amount,
+        HeaderSession {
+            ranges_iter: ranges.into_iter(),
+            ranges_count,
             cmd_tx,
             response_tx,
             response_rx,
             ongoing: 0,
-        })
+        }
     }
 
-    pub(crate) async fn run(&mut self) -> Result<Vec<ExtendedHeader>> {
+    pub(crate) async fn run(&mut self) -> Result<Vec<Vec<ExtendedHeader>>> {
         let mut responses = Vec::new();
 
         for _ in 0..MAX_CONCURRENT_REQS {
-            if self.remaining_amount == 0 {
-                break;
-            }
-
             self.send_next_request().await?;
         }
 
@@ -57,13 +63,17 @@ impl HeaderSession {
                 Ok(headers) => {
                     let headers_len = headers.len() as u64;
 
-                    responses.push(headers);
+                    if headers_len > 0 {
+                        responses.push(headers);
+                    }
 
                     if headers_len < requested_amount {
                         // Reschedule the missing sub-range
                         let height = height + headers_len;
                         let amount = requested_amount - headers_len;
                         self.send_request(height, amount).await?;
+
+                        debug!("requested {requested_amount}, got {headers_len}: retrying {height} +{amount}");
                     } else {
                         // Schedule next request
                         self.send_next_request().await?;
@@ -77,11 +87,9 @@ impl HeaderSession {
             }
         }
 
-        let mut headers = responses.into_iter().flatten().collect::<Vec<_>>();
+        let ranges = sort_and_flatten_header_ranges(responses, self.ranges_count);
 
-        headers.sort_unstable_by_key(|header| header.height().value());
-
-        Ok(headers)
+        Ok(ranges)
     }
 
     async fn recv_response(&mut self) -> (u64, u64, Result<Vec<ExtendedHeader>>) {
@@ -94,15 +102,11 @@ impl HeaderSession {
     }
 
     pub(crate) async fn send_next_request(&mut self) -> Result<()> {
-        if self.remaining_amount == 0 {
+        let Some(range) = self.ranges_iter.next_batch(MAX_AMOUNT_PER_REQ) else {
             return Ok(());
-        }
+        };
 
-        let amount = self.remaining_amount.min(MAX_AMOUNT_PER_REQ);
-        self.send_request(self.next_height, amount).await?;
-
-        self.next_height += amount;
-        self.remaining_amount -= amount;
+        self.send_request(*range.start(), range.len()).await?;
 
         Ok(())
     }
@@ -137,10 +141,44 @@ impl HeaderSession {
     }
 }
 
+/// Given a vector of header spans which are internally sorted, return a vector of header ranges
+/// with contiguous spans merged. For example input with following header heights
+/// [[1, 2, 3], [6, 7], \[4\], [8, 9]]
+/// will return
+/// [[1, 2, 3, 4], [6, 7, 8, 9]]
+fn sort_and_flatten_header_ranges(
+    mut header_spans: Vec<Vec<ExtendedHeader>>,
+    ranges_count: usize,
+) -> Vec<Vec<ExtendedHeader>> {
+    header_spans.sort_unstable_by_key(|span| {
+        debug_assert!(!span.is_empty());
+        span.first().unwrap().height().value()
+    });
+
+    let mut ranges = Vec::with_capacity(ranges_count);
+    for mut span in header_spans {
+        let Some(last_range) = ranges.last_mut() else {
+            ranges.push(span);
+            continue;
+        };
+
+        // we know that current and previously inserted spans aren't empty, unwraps are safe
+        if last_range.last().unwrap().height().value() + 1 == span.first().unwrap().height().value()
+        {
+            last_range.append(&mut span);
+        } else {
+            ranges.push(span);
+        }
+    }
+
+    ranges
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::p2p::P2p;
+    use crate::p2p::{HeaderExError, P2p};
+    use crate::store::header_ranges::header_ranges;
     use crate::test_utils::async_test;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
 
@@ -150,7 +188,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(64);
 
-        let mut session = HeaderSession::new(1, 64, p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new(header_ranges![1..=64], p2p_mock.cmd_tx.clone());
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -170,7 +208,7 @@ mod tests {
         p2p_mock.expect_no_cmd().await;
 
         let received_headers = result_rx.await.unwrap().unwrap();
-        assert_eq!(headers, received_headers);
+        assert_eq!(vec![headers], received_headers);
     }
 
     #[async_test]
@@ -179,7 +217,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(520);
 
-        let mut session = HeaderSession::new(1, 520, p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new(header_ranges![1..=520], p2p_mock.cmd_tx.clone());
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -206,7 +244,7 @@ mod tests {
         p2p_mock.expect_no_cmd().await;
 
         let received_headers = result_rx.await.unwrap().unwrap();
-        assert_eq!(headers, received_headers);
+        assert_eq!(vec![headers], received_headers);
     }
 
     #[async_test]
@@ -215,7 +253,7 @@ mod tests {
         let mut gen = ExtendedHeaderGenerator::new();
         let headers = gen.next_many(64);
 
-        let mut session = HeaderSession::new(1, 64, p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new(header_ranges![1..=64], p2p_mock.cmd_tx.clone());
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -237,14 +275,14 @@ mod tests {
         p2p_mock.expect_no_cmd().await;
 
         let received_headers = result_rx.await.unwrap().unwrap();
-        assert_eq!(headers, received_headers);
+        assert_eq!(vec![headers], received_headers);
     }
 
     #[async_test]
     async fn no_peers_is_fatal() {
         let (_p2p, mut p2p_mock) = P2p::mocked();
 
-        let mut session = HeaderSession::new(1, 64, p2p_mock.cmd_tx.clone()).unwrap();
+        let mut session = HeaderSession::new(header_ranges![1..=64], p2p_mock.cmd_tx.clone());
         let (result_tx, result_rx) = oneshot::channel();
         spawn(async move {
             let res = session.run().await;
@@ -262,5 +300,25 @@ mod tests {
             result_rx.await,
             Ok(Err(P2pError::NoConnectedPeers))
         ));
+    }
+
+    #[test]
+    fn test_da_sort_headers_test() {
+        let mut gen = ExtendedHeaderGenerator::new();
+        let span0 = gen.next_many(10);
+        gen.skip(10);
+        let mut span1 = gen.next_many(10);
+        let mut span2 = gen.next_many(10);
+        gen.skip(10);
+        let span3 = gen.next_many(10);
+
+        let spans = vec![span0.clone(), span1.clone(), span2.clone(), span3.clone()];
+
+        let ranges = sort_and_flatten_header_ranges(spans, 3);
+
+        span1.append(&mut span2);
+        assert_eq!(ranges[0], span0);
+        assert_eq!(ranges[1], span1);
+        assert_eq!(ranges[2], span3);
     }
 }

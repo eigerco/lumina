@@ -14,10 +14,10 @@ use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
 use web_sys::{
     window, DedicatedWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker,
-    WorkerGlobalScope,
+    WorkerGlobalScope, Crypto
 };
 
-use lumina_node::network;
+use crate::error::{Context, Error, Result};
 
 /// Supported Celestia networks.
 #[wasm_bindgen]
@@ -204,4 +204,12 @@ pub(crate) fn is_chrome() -> bool {
     } else {
         false
     }
+}
+
+pub(crate) fn get_crypto() -> Result<Crypto, Error> {
+    js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("crypto"))
+        .context("failed to get `crypto` from global object")?
+        .dyn_into::<web_sys::Crypto>()
+        .ok()
+        .context("`crypto` is not `Crypto` type")
 }

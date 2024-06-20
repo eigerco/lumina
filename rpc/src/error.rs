@@ -19,5 +19,5 @@ pub enum Error {
 
     /// Error propagated from the [`jsonrpsee`].
     #[error(transparent)]
-    JsonRpc(#[from] jsonrpsee::core::Error),
+    JsonRpc(#[from] jsonrpsee::core::ClientError),
 }

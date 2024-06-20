@@ -1,5 +1,5 @@
-use instant::Duration;
 use libp2p::{identity::Keypair, swarm::NetworkBehaviour, Swarm, SwarmBuilder};
+use web_time::Duration;
 
 use crate::p2p::P2pError;
 

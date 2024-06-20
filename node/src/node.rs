@@ -22,9 +22,11 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::daser::{Daser, DaserArgs, DaserError};
+use crate::events::{EventChannel, EventSubscriber};
 use crate::executor::spawn;
 use crate::p2p::{P2p, P2pArgs, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
+use crate::store::header_ranges::HeaderRanges;
 use crate::store::{SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs, SyncerError, SyncingInfo};
 
@@ -77,6 +79,7 @@ pub struct Node<S>
 where
     S: Store + 'static,
 {
+    event_channel: EventChannel,
     p2p: Arc<P2p>,
     store: Arc<S>,
     syncer: Arc<Syncer<S>>,
@@ -93,6 +96,7 @@ where
     where
         B: Blockstore + 'static,
     {
+        let event_channel = EventChannel::new();
         let store = Arc::new(config.store);
 
         let p2p = Arc::new(P2p::start(P2pArgs {
@@ -102,10 +106,10 @@ where
             listen_on: config.p2p_listen_on,
             blockstore: config.blockstore,
             store: store.clone(),
+            event_pub: event_channel.publisher(),
         })?);
 
         let syncer = Arc::new(Syncer::start(SyncerArgs {
-            genesis_hash: config.genesis_hash,
             store: store.clone(),
             p2p: p2p.clone(),
         })?);
@@ -113,6 +117,7 @@ where
         let daser = Arc::new(Daser::start(DaserArgs {
             p2p: p2p.clone(),
             store: store.clone(),
+            event_pub: event_channel.publisher(),
         })?);
 
         // spawn the task that will stop the services when the fraud is detected
@@ -137,12 +142,18 @@ where
         });
 
         Ok(Node {
+            event_channel,
             p2p,
             store,
             syncer,
             _daser: daser,
             tasks_cancellation_token,
         })
+    }
+
+    /// Returns a new `EventSubscriber`.
+    pub fn event_subscriber(&self) -> EventSubscriber {
+        self.event_channel.subscribe()
     }
 
     /// Get node's local peer ID.
@@ -267,6 +278,12 @@ where
     /// Get the latest header announced in the network.
     pub fn get_network_head_header(&self) -> Option<ExtendedHeader> {
         self.p2p.header_sub_watcher().borrow().clone()
+    }
+
+    /// Get ranges of headers currently stored.
+    #[doc(hidden)]
+    pub async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+        Ok(self.store.get_stored_header_ranges().await?)
     }
 
     /// Get the latest locally synced header.

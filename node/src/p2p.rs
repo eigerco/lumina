@@ -31,7 +31,6 @@ use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
 use celestia_types::{ExtendedHeader, FraudProof, Height};
 use cid::Cid;
 use futures::StreamExt;
-use instant::Instant;
 use libp2p::{
     autonat,
     core::{ConnectedPoint, Endpoint},
@@ -49,12 +48,14 @@ use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, instrument, trace, warn};
+use web_time::Instant;
 
 mod header_ex;
 mod header_session;
 pub(crate) mod shwap;
 mod swarm;
 
+use crate::events::EventPublisher;
 use crate::executor::{self, spawn, Interval};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
@@ -62,6 +63,7 @@ use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihash
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
+use crate::store::header_ranges::{header_ranges, HeaderRanges};
 use crate::store::Store;
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
@@ -187,6 +189,8 @@ where
     pub blockstore: B,
     /// The store for headers.
     pub store: Arc<S>,
+    /// Event publisher.
+    pub event_pub: EventPublisher,
 }
 
 #[derive(Debug)]
@@ -234,7 +238,7 @@ impl P2p {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (header_sub_tx, header_sub_rx) = watch::channel(None);
 
-        let peer_tracker = Arc::new(PeerTracker::new());
+        let peer_tracker = Arc::new(PeerTracker::new(args.event_pub.clone()));
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
 
         let mut worker = Worker::new(args, cmd_rx, header_sub_tx, peer_tracker)?;
@@ -398,13 +402,41 @@ impl P2p {
 
         let height = from.height().value() + 1;
 
-        let mut session = HeaderSession::new(height, amount, self.cmd_tx.clone())?;
-        let headers = session.run().await?;
+        let range = height..=height + amount - 1;
+
+        let mut session = HeaderSession::new(header_ranges![range], self.cmd_tx.clone());
+        let headers = session
+            .run()
+            .await?
+            .pop()
+            .ok_or(HeaderExError::InvalidResponse)?;
 
         from.verify_adjacent_range(&headers)
             .map_err(|_| HeaderExError::InvalidResponse)?;
 
         Ok(headers)
+    }
+
+    /// Request a list of ranges with the `header-ex` protocol
+    ///
+    /// For each of the ranges, headers are verified against each other, but it's the caller
+    /// responsibility to verify range edges against headers existing in the store.
+    pub(crate) async fn get_unverified_header_ranges(
+        &self,
+        ranges: HeaderRanges,
+    ) -> Result<Vec<Vec<ExtendedHeader>>> {
+        let mut session = HeaderSession::new(ranges, self.cmd_tx.clone());
+        let header_ranges = session.run().await?;
+
+        for range in &header_ranges {
+            let Some(head) = range.first() else {
+                continue;
+            };
+            head.verify_adjacent_range(&range[1..])
+                .map_err(|_| HeaderExError::InvalidResponse)?;
+        }
+
+        Ok(header_ranges)
     }
 
     /// Request a [`Cid`] on bitswap protocol.
@@ -676,9 +708,8 @@ where
                 BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await,
                 BehaviourEvent::Kademlia(ev) => self.on_kademlia_event(ev).await?,
                 BehaviourEvent::Bitswap(ev) => self.on_bitswap_event(ev).await,
-                BehaviourEvent::Autonat(_)
-                | BehaviourEvent::Ping(_)
-                | BehaviourEvent::HeaderEx(_) => {}
+                BehaviourEvent::Ping(ev) => self.on_ping_event(ev).await,
+                BehaviourEvent::Autonat(_) | BehaviourEvent::HeaderEx(_) => {}
             },
             SwarmEvent::ConnectionEstablished {
                 peer_id,
@@ -857,6 +888,23 @@ where
                     let error: P2pError = error.into();
                     respond_to.maybe_send_err(error);
                 }
+            }
+        }
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    async fn on_ping_event(&mut self, ev: ping::Event) {
+        match ev.result {
+            Ok(dur) => debug!(
+                "Ping success: peer: {}, connection_id: {}, time: {:?}",
+                ev.peer, ev.connection, dur
+            ),
+            Err(e) => {
+                debug!(
+                    "Ping failure: peer: {}, connection_id: {}, error: {}",
+                    &ev.peer, &ev.connection, e
+                );
+                self.swarm.close_connection(ev.connection);
             }
         }
     }

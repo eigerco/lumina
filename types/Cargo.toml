@@ -20,35 +20,39 @@ celestia-tendermint = { workspace = true, features = ["std", "rust-crypto"] }
 celestia-tendermint-proto = { workspace = true }
 nmt-rs = { workspace = true }
 
-base64 = "0.21.2"
-bech32 = "0.9.1"
-bytes = "1.4.0"
-cid = { version = "0.11", default-features = false, features = ["std"] }
-const_format = "0.2.31"
+base64 = "0.22.1"
+bech32 = "0.11.0"
+bytes = "1.6.0"
+cid = { version = "0.11.1", default-features = false, features = ["std"] }
+const_format = "0.2.32"
 ed25519-consensus = { version = "2.1.0", optional = true }
-enum_dispatch = "0.3.12"
-leopard-codec = "0.1"
-libp2p-identity = { version = "0.2.7", optional = true }
-multiaddr = { version = "0.18.0", optional = true }
+enum_dispatch = "0.3.13"
+leopard-codec = "0.1.0"
+libp2p-identity = { version = "0.2.9", optional = true }
+multiaddr = { version = "0.18.1", optional = true }
 multihash = "0.19.1"
 rand = { version = "0.8.5", optional = true }
-ruint = { version = "1.8.0", features = ["serde"] }
-serde = { version = "1.0.164", features = ["derive"] }
-serde_repr = { version = "0.1", optional = true }
+ruint = { version = "1.12.3", features = ["serde"] }
+serde = { version = "1.0.203", features = ["derive"] }
+serde_repr = { version = "0.1.19", optional = true }
 sha2 = "0.10.6"
-thiserror = "1.0.40"
+thiserror = "1.0.61"
+
+# `time` is a dependency of a dependency but we need to specify it
+# for fixing rust-lang/rust#125319.
+time = { version = "0.3.36", default-features = false }
 
 [dev-dependencies]
 ed25519-consensus = "2.1.0"
 rand = "0.8.5"
-serde_json = "1.0.97"
+serde_json = "1.0.117"
 
 # doc-tests
-indoc = "2.0.4"
+indoc = "2.0.5"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-getrandom = { version = "0.2.10", features = ["js"] }
-wasm-bindgen-test = "0.3"
+getrandom = { version = "0.2.15", features = ["js"] }
+wasm-bindgen-test = "0.3.42"
 
 [features]
 default = ["p2p"]

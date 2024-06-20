@@ -36,15 +36,16 @@ use celestia_tendermint::Time;
 use celestia_types::ExtendedHeader;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use instant::{Duration, Instant};
 use rand::Rng;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
+use web_time::{Duration, Instant};
 
+use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::spawn;
 use crate::p2p::shwap::sample_cid;
-use crate::p2p::{P2p, P2pError, GET_SAMPLE_TIMEOUT};
+use crate::p2p::{P2p, P2pError};
 use crate::store::{SamplingStatus, Store, StoreError};
 use crate::utils::FusedReusableBoxFuture;
 
@@ -82,6 +83,8 @@ where
     pub p2p: Arc<P2p>,
     /// Headers storage.
     pub store: Arc<S>,
+    /// Event publisher.
+    pub event_pub: EventPublisher,
 }
 
 impl Daser {
@@ -91,11 +94,16 @@ impl Daser {
         S: Store + 'static,
     {
         let cancellation_token = CancellationToken::new();
+        let event_pub = args.event_pub.clone();
         let mut worker = Worker::new(args, cancellation_token.child_token())?;
 
         spawn(async move {
             if let Err(e) = worker.run().await {
                 error!("Daser stopped because of a fatal error: {e}");
+
+                event_pub.send(NodeEvent::FatalDaserError {
+                    error: e.to_string(),
+                });
             }
         });
 
@@ -121,6 +129,7 @@ where
     S: Store + 'static,
 {
     cancellation_token: CancellationToken,
+    event_pub: EventPublisher,
     p2p: Arc<P2p>,
     store: Arc<S>,
     max_samples_needed: usize,
@@ -143,6 +152,7 @@ where
     fn new(args: DaserArgs<S>, cancellation_token: CancellationToken) -> Result<Worker<S>> {
         Ok(Worker {
             cancellation_token,
+            event_pub: args.event_pub,
             p2p: args.p2p,
             store: args.store,
             max_samples_needed: MAX_SAMPLES_NEEDED,
@@ -267,54 +277,77 @@ where
             return Ok(());
         }
 
-        let mut cids = Vec::new();
-
-        // Select random shares to be sampled and generate their CIDs.
-        for (row, col) in random_indexes(args.square_width, self.max_samples_needed) {
-            let cid = sample_cid(row, col, args.height)?;
-            cids.push(cid);
-        }
+        // Select random shares to be sampled
+        let share_indexes = random_indexes(args.square_width, self.max_samples_needed);
 
         // Update the CID list before we start sampling, otherwise it's possible for us
         // to leak CIDs causing associated blocks to never get cleaned from blockstore.
+        let cids = share_indexes
+            .iter()
+            .map(|(row, col)| sample_cid(*row, *col, args.height))
+            .collect::<Result<Vec<_>, _>>()?;
         self.store
-            .update_sampling_metadata(args.height, SamplingStatus::Unknown, cids.clone())
+            .update_sampling_metadata(args.height, SamplingStatus::Unknown, cids)
             .await?;
 
         let p2p = self.p2p.clone();
+        let event_pub = self.event_pub.clone();
 
         // Schedule retrival of the CIDs. This will be run later on in the `select!` loop.
         self.sampling_fut.set(async move {
             let now = Instant::now();
-            let mut futs = FuturesUnordered::new();
 
-            for cid in cids {
-                let fut = p2p.get_shwap_cid(cid, Some(GET_SAMPLE_TIMEOUT));
-                futs.push(fut);
-            }
+            event_pub.send(NodeEvent::SamplingStarted {
+                height: args.height,
+                square_width: args.square_width,
+                shares: share_indexes.iter().copied().collect(),
+            });
 
-            let mut accepted = true;
+            // Initialize all futures
+            let mut futs = share_indexes
+                .into_iter()
+                .map(|(row, col)| {
+                    let p2p = p2p.clone();
 
-            while let Some(res) = futs.next().await {
-                match res {
-                    Ok(_) => {}
+                    async move {
+                        let res = p2p.get_sample(row, col, args.height).await;
+                        (row, col, res)
+                    }
+                })
+                .collect::<FuturesUnordered<_>>();
+
+            let mut block_accepted = true;
+
+            // Run futures to completion
+            while let Some((row, column, res)) = futs.next().await {
+                let share_accepted = match res {
+                    Ok(_) => true,
                     // Validation is done at Bitswap level, through `ShwapMultihasher`.
                     // If the sample is not valid, it will never be delivered to us
                     // as the data of the CID. Because of that, the only signal
                     // that data sampling verification failed is query timing out.
-                    Err(P2pError::BitswapQueryTimeout) => accepted = false,
+                    Err(P2pError::BitswapQueryTimeout) => false,
                     Err(e) => return Err(e.into()),
-                }
+                };
+
+                block_accepted &= share_accepted;
+
+                event_pub.send(NodeEvent::ShareSamplingResult {
+                    height: args.height,
+                    square_width: args.square_width,
+                    row,
+                    column,
+                    accepted: share_accepted,
+                });
             }
 
-            debug!(
-                "Data sampling of {} is {}. Took {:?}",
-                args.height,
-                if accepted { "accepted" } else { "rejected" },
-                now.elapsed()
-            );
+            event_pub.send(NodeEvent::SamplingFinished {
+                height: args.height,
+                accepted: block_accepted,
+                took: now.elapsed(),
+            });
 
-            Ok((args.height, accepted))
+            Ok((args.height, block_accepted))
         });
 
         Ok(())
@@ -456,7 +489,9 @@ fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::sleep;
+    use crate::events::{EventChannel, EventSubscriber};
+    use crate::executor::{sleep, timeout};
+    use crate::p2p::P2pCmd;
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, MockP2pHandle};
     use celestia_tendermint_proto::Protobuf;
@@ -470,8 +505,11 @@ mod tests {
     async fn received_valid_samples() {
         let (mock, mut handle) = P2p::mocked();
         let store = Arc::new(InMemoryStore::new());
+        let events = EventChannel::new();
+        let mut event_sub = events.subscribe();
 
         let _daser = Daser::start(DaserArgs {
+            event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
         })
@@ -483,18 +521,21 @@ mod tests {
         handle.announce_peer_connected();
         handle.expect_no_cmd().await;
 
-        gen_and_sample_block(&mut handle, &mut gen, &store, 2, false).await;
-        gen_and_sample_block(&mut handle, &mut gen, &store, 4, false).await;
-        gen_and_sample_block(&mut handle, &mut gen, &store, 8, false).await;
-        gen_and_sample_block(&mut handle, &mut gen, &store, 16, false).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 2, false).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 4, false).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 8, false).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 16, false).await;
     }
 
     #[async_test]
     async fn received_invalid_sample() {
         let (mock, mut handle) = P2p::mocked();
         let store = Arc::new(InMemoryStore::new());
+        let events = EventChannel::new();
+        let mut event_sub = events.subscribe();
 
         let _daser = Daser::start(DaserArgs {
+            event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
         })
@@ -506,17 +547,20 @@ mod tests {
         handle.announce_peer_connected();
         handle.expect_no_cmd().await;
 
-        gen_and_sample_block(&mut handle, &mut gen, &store, 2, false).await;
-        gen_and_sample_block(&mut handle, &mut gen, &store, 4, true).await;
-        gen_and_sample_block(&mut handle, &mut gen, &store, 8, false).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 2, false).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 4, true).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 8, false).await;
     }
 
     #[async_test]
     async fn backward_dasing() {
         let (mock, mut handle) = P2p::mocked();
         let store = Arc::new(InMemoryStore::new());
+        let events = EventChannel::new();
+        let mut event_sub = events.subscribe();
 
         let _daser = Daser::start(DaserArgs {
+            event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
         })
@@ -540,40 +584,73 @@ mod tests {
             headers.push(header);
         }
 
-        store.append(headers[0..10].to_vec()).await.unwrap();
+        store.insert(headers[0..10].to_vec()).await.unwrap();
         // Wait a bit for sampling of block 10 start
         sleep(Duration::from_millis(10)).await;
-        store.append(headers[10..].to_vec()).await.unwrap();
+        store.insert(headers[10..].to_vec()).await.unwrap();
         // Wait a bit for the queue to be populated with higher blocks
         sleep(Duration::from_millis(10)).await;
 
         // Sample block 10
-        handle_get_shwap_cid(&mut handle, &store, 10, &edses[9], false).await;
+        handle_get_shwap_cid(&mut handle, &store, &mut event_sub, 10, &edses[9], false).await;
 
         // Sample block 20
-        handle_get_shwap_cid(&mut handle, &store, 20, &edses[19], false).await;
+        handle_get_shwap_cid(&mut handle, &store, &mut event_sub, 20, &edses[19], false).await;
 
         // Sample and reject block 19
-        handle_get_shwap_cid(&mut handle, &store, 19, &edses[18], true).await;
+        handle_get_shwap_cid(&mut handle, &store, &mut event_sub, 19, &edses[18], true).await;
 
         // Simulate disconnection
         handle.announce_all_peers_disconnected();
+
+        // Daser may scheduled Block 18 already, so we need to reply to that requests.
+        // For the sake of the test we reply with a bitswap timeout.
+        while let Some(cmd) = handle.try_recv_cmd().await {
+            match cmd {
+                P2pCmd::GetShwapCid { respond_to, .. } => {
+                    let _ = respond_to.send(Err(P2pError::BitswapQueryTimeout));
+                }
+                cmd => panic!("Unexpected command: {cmd:?}"),
+            }
+        }
+        // Discard also any events that were generated.
+        while try_recv_event(&mut event_sub).await.is_some() {}
+
+        // We shouldn't have any other requests from daser because it's in connecting state.
         handle.expect_no_cmd().await;
+
+        // Simulate that a peer connected
         handle.announce_peer_connected();
 
         // Because of disconnection, daser will resample block 19
-        handle_get_shwap_cid(&mut handle, &store, 19, &edses[18], false).await;
+        handle_get_shwap_cid(&mut handle, &store, &mut event_sub, 19, &edses[18], false).await;
 
         // Sample block 18 until 11
         for height in (11..=18).rev() {
             let idx = height as usize - 1;
-            handle_get_shwap_cid(&mut handle, &store, height, &edses[idx], false).await;
+            handle_get_shwap_cid(
+                &mut handle,
+                &store,
+                &mut event_sub,
+                height,
+                &edses[idx],
+                false,
+            )
+            .await;
         }
 
         // Sample block 9 until 1
         for height in (1..=9).rev() {
             let idx = height as usize - 1;
-            handle_get_shwap_cid(&mut handle, &store, height, &edses[idx], false).await;
+            handle_get_shwap_cid(
+                &mut handle,
+                &store,
+                &mut event_sub,
+                height,
+                &edses[idx],
+                false,
+            )
+            .await;
         }
 
         handle.expect_no_cmd().await;
@@ -582,10 +659,10 @@ mod tests {
         let eds = generate_eds(2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         let header = gen.next_with_dah(dah);
-        store.append_single(header).await.unwrap();
+        store.insert(header).await.unwrap();
 
         // Sample block 21
-        handle_get_shwap_cid(&mut handle, &store, 21, &eds, false).await;
+        handle_get_shwap_cid(&mut handle, &store, &mut event_sub, 21, &eds, false).await;
 
         handle.expect_no_cmd().await;
     }
@@ -594,6 +671,7 @@ mod tests {
         handle: &mut MockP2pHandle,
         gen: &mut ExtendedHeaderGenerator,
         store: &InMemoryStore,
+        event_sub: &mut EventSubscriber,
         square_width: usize,
         simulate_invalid_sampling: bool,
     ) {
@@ -602,10 +680,17 @@ mod tests {
         let header = gen.next_with_dah(dah);
         let height = header.height().value();
 
-        store.append_single(header).await.unwrap();
+        store.insert(header).await.unwrap();
 
-        let cids =
-            handle_get_shwap_cid(handle, store, height, &eds, simulate_invalid_sampling).await;
+        let cids = handle_get_shwap_cid(
+            handle,
+            store,
+            event_sub,
+            height,
+            &eds,
+            simulate_invalid_sampling,
+        )
+        .await;
         handle.expect_no_cmd().await;
 
         let sampling_metadata = store.get_sampling_metadata(height).await.unwrap().unwrap();
@@ -623,6 +708,7 @@ mod tests {
     async fn handle_get_shwap_cid(
         handle: &mut MockP2pHandle,
         store: &InMemoryStore,
+        event_sub: &mut EventSubscriber,
         height: u64,
         eds: &ExtendedDataSquare,
         simulate_invalid_sampling: bool,
@@ -630,25 +716,94 @@ mod tests {
         let square_width = eds.square_width() as usize;
         let needed_samples = (square_width * square_width).min(MAX_SAMPLES_NEEDED);
 
+        // Check if we get the correct event
+        let mut remaining_shares = match expect_event(event_sub).await {
+            NodeEvent::SamplingStarted {
+                height: ev_height,
+                square_width: ev_square_width,
+                shares,
+            } => {
+                assert_eq!(ev_height, height);
+                assert_eq!(ev_square_width as usize, square_width);
+                shares.into_iter().collect::<HashSet<_>>()
+            }
+            ev => panic!("Unexpected event: {ev}"),
+        };
+        assert_eq!(remaining_shares.len(), needed_samples);
+
         let mut cids = Vec::with_capacity(needed_samples);
 
         for i in 0..needed_samples {
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
             cids.push(cid);
 
+            let sample_id: SampleId = cid.try_into().unwrap();
+            assert_eq!(sample_id.block_height(), height);
+
+            // Check if share was in the event
+            assert!(remaining_shares.remove(&(sample_id.row_index(), sample_id.column_index())));
+
             // Simulate invalid sample by triggering BitswapQueryTimeout
             if simulate_invalid_sampling && i == 2 {
                 respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
+
+                // Check if we get the correct event
+                match expect_event(event_sub).await {
+                    NodeEvent::ShareSamplingResult {
+                        height: ev_height,
+                        square_width: ev_square_width,
+                        row,
+                        column,
+                        accepted,
+                    } => {
+                        assert_eq!(ev_height, height);
+                        assert_eq!(ev_square_width as usize, square_width);
+                        assert_eq!(row, sample_id.row_index());
+                        assert_eq!(column, sample_id.column_index());
+                        assert!(!accepted);
+                    }
+                    ev => panic!("Unexpected event: {ev}"),
+                }
+
                 continue;
             }
-
-            let sample_id: SampleId = cid.try_into().unwrap();
-            assert_eq!(sample_id.block_height(), height);
 
             let sample = gen_sample_of_cid(sample_id, eds, store).await;
             let sample_bytes = sample.encode_vec().unwrap();
 
             respond_to.send(Ok(sample_bytes)).unwrap();
+
+            // Check if we get the correct event
+            match expect_event(event_sub).await {
+                NodeEvent::ShareSamplingResult {
+                    height: ev_height,
+                    square_width: ev_square_width,
+                    row,
+                    column,
+                    accepted,
+                } => {
+                    assert_eq!(ev_height, height);
+                    assert_eq!(ev_square_width as usize, square_width);
+                    assert_eq!(row, sample_id.row_index());
+                    assert_eq!(column, sample_id.column_index());
+                    assert!(accepted);
+                }
+                ev => panic!("Unexpected event: {ev}"),
+            }
+        }
+
+        // Check if we get the correct event
+        match expect_event(event_sub).await {
+            NodeEvent::SamplingFinished {
+                height: ev_height,
+                accepted,
+                took,
+            } => {
+                assert_eq!(ev_height, height);
+                assert_eq!(accepted, !simulate_invalid_sampling);
+                assert_ne!(took, Duration::default());
+            }
+            ev => panic!("Unexpected event: {ev}"),
         }
 
         cids
@@ -669,5 +824,19 @@ mod tests {
             header.height().value(),
         )
         .unwrap()
+    }
+
+    async fn try_recv_event(event_sub: &mut EventSubscriber) -> Option<NodeEvent> {
+        timeout(Duration::from_millis(300), async move {
+            event_sub.recv().await.unwrap().event
+        })
+        .await
+        .ok()
+    }
+
+    async fn expect_event(event_sub: &mut EventSubscriber) -> NodeEvent {
+        try_recv_event(event_sub)
+            .await
+            .expect("Expecting NodeEvent, but timed-out")
     }
 }

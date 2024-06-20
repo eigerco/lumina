@@ -264,5 +264,5 @@ async fn resource_state_test() {
 async fn rpc_call_delay() {
     // delay for RPC calls like connect/close to let node finish the operation before we query it
     // again. Below 150 ms I start getting intermittent failures.
-    sleep(Duration::from_millis(150)).await;
+    sleep(Duration::from_millis(500)).await;
 }
