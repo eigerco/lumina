@@ -505,6 +505,8 @@ mod tests {
     use std::time::Duration;
 
     // In which request number the tests can simulate invalid sampling
+    //
+    // NOTE: The smallest block has 4 shares, so a 2nd request will always happen.
     const INVALID_SHARE_REQ_NUM: usize = 2;
 
     #[async_test]
@@ -607,7 +609,7 @@ mod tests {
         // To avoid race conditions we wait a bit for the new head (block 20) to be scheduled
         sleep(Duration::from_millis(10)).await;
 
-        // Now daser run two concurrent data sampling: block 8 and block 20
+        // Now daser runs two concurrent data sampling: block 8 and block 20
         handle_concurrent_get_shwap_cid(
             &mut handle,
             &store,
@@ -809,8 +811,6 @@ mod tests {
             info.requests_count += 1;
 
             // Simulate invalid sample by triggering BitswapQueryTimeout
-            //
-            // NOTE: The smallest block has 4 shares, so 2nd request can always happen.
             if info.simulate_invalid_sampling && info.requests_count == INVALID_SHARE_REQ_NUM {
                 respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
                 continue;
