@@ -26,7 +26,6 @@ use crate::events::{EventChannel, EventSubscriber};
 use crate::executor::spawn;
 use crate::p2p::{P2p, P2pArgs, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::store::header_ranges::HeaderRanges;
 use crate::store::{SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs, SyncerError, SyncingInfo};
 
@@ -278,12 +277,6 @@ where
     /// Get the latest header announced in the network.
     pub fn get_network_head_header(&self) -> Option<ExtendedHeader> {
         self.p2p.header_sub_watcher().borrow().clone()
-    }
-
-    /// Get ranges of headers currently stored.
-    #[doc(hidden)]
-    pub async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
-        Ok(self.store.get_stored_header_ranges().await?)
     }
 
     /// Get the latest locally synced header.
