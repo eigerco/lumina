@@ -385,12 +385,18 @@ where
 
         'outer: for block_range in stored_blocks.clone().into_inner().into_iter().rev() {
             for height in block_range.rev() {
-                // Skip blocks that we already checked
                 if self.prev_stored_blocks.contains(height) {
+                    // Skip blocks that were checked before
                     continue;
                 }
 
-                if is_block_accepted(&*self.store, height).await {
+                // Optimization: We check if the block was accepted only if this is
+                // the first time we check the store (i.e. prev_stored_blocks is empty),
+                // otherwise we can safely assume that block needs sampling.
+                if self.prev_stored_blocks.is_empty()
+                    && is_block_accepted(&*self.store, height).await
+                {
+                    // Skip already sampled blocks
                     continue;
                 }
 
