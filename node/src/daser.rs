@@ -705,7 +705,7 @@ mod tests {
         // Check if CIDs we received successfully made it in the store
         assert_eq!(&sampling_metadata.cids, &cids);
 
-        // Check if received `SamplingStarted` event
+        // Check if we received `SamplingStarted` event
         let mut remaining_shares = match event_sub.try_recv().unwrap().event {
             NodeEvent::SamplingStarted {
                 height: ev_height,
