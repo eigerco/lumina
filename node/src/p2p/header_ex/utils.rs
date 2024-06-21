@@ -51,13 +51,13 @@ impl HeaderRequestExt for HeaderRequest {
 }
 
 pub(super) trait HeaderResponseExt {
-    fn to_extended_header(&self) -> Result<ExtendedHeader, HeaderExError>;
+    fn to_validated_extented_header(&self) -> Result<ExtendedHeader, HeaderExError>;
     fn not_found() -> HeaderResponse;
     fn invalid() -> HeaderResponse;
 }
 
 impl HeaderResponseExt for HeaderResponse {
-    fn to_extended_header(&self) -> Result<ExtendedHeader, HeaderExError> {
+    fn to_validated_extented_header(&self) -> Result<ExtendedHeader, HeaderExError> {
         match self.status_code() {
             StatusCode::Invalid => Err(HeaderExError::InvalidResponse),
             StatusCode::NotFound => Err(HeaderExError::HeaderNotFound),

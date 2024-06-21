@@ -392,12 +392,14 @@ impl P2p {
 
     /// Request the headers following the one given with the `header-ex` protocol.
     ///
-    /// First header from the requested range will be verified against the provided one, then each subsequent is verified against the previous one.
+    /// First header from the requested range will be verified against the provided one,
+    /// then each subsequent is verified against the previous one.
     pub async fn get_verified_headers_range(
         &self,
         from: &ExtendedHeader,
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
+        // User can give us a bad header, so validate it.
         from.validate().map_err(|_| HeaderExError::InvalidRequest)?;
 
         let height = from.height().value() + 1;
@@ -407,6 +409,11 @@ impl P2p {
         let mut session = HeaderSession::new(range, self.cmd_tx.clone());
         let headers = session.run().await?;
 
+        // Cryptographic validation is done on each header separatetly
+        // by `HeaderExClientHandler`.
+        //
+        // The last step is to verify that all headers are from the same chain
+        // and indeed connected with the next one.
         from.verify_adjacent_range(&headers)
             .map_err(|_| HeaderExError::InvalidResponse)?;
 
