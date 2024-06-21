@@ -4,8 +4,7 @@
 //! Sampling procedure comprises the following steps:
 //!
 //! 1. Daser waits for at least one peer to connect.
-//! 2. Daser gets the local head height from the [`Store`] and iterates in reverse order
-//!    over all the stored blocks.
+//! 2. Daser iterates in descending order over all stored headers of the [`Store`].
 //!    - If a block has not been sampled or it was rejected, Daser will queue it for sampling.
 //!      Rejected blocks are resampled because their rejection could be caused by
 //!      edge-cases unrelated to data availability, such as network issues.
@@ -13,8 +12,9 @@
 //!    - Queue is always sorted in descending order to give priority to latest blocks.
 //! 3. As new headers become available in the [`Store`], Daser adds them to the queue if
 //!    they are within the sampling window.
-//! 4. If there isn't any ongoing sampling, Daser pops from the queue the next block to sample
-//!    and initiates the following procedure:
+//! 4. If new HEAD was queued, it is scheduled immediately and concurently.
+//! 5. If there isn't any ongoing sampling, the next block from the queue is scheduled.
+//! 6. Daser initiates the following procedure for every scheduled block:
 //!    - It makes sure that the block is still within the sampling window.
 //!    - It selects which random shares are going to be sampled and generates their Shwap CIDs.
 //!    - It updates [`Store`] with the CIDs that are going to be sampled. Tracking of the the CIDs
@@ -26,7 +26,7 @@
 //!    - If we reach a timeout of 10 seconds and at least one of the CIDs is not received, then
 //!      block is considered sampled and rejected.
 //!    - [`Store`] is updated with the sampling result.
-//! 5. Steps 3 and 4 are repeated concurently, unless we detect that all peers have disconnected.
+//! 5. Steps 3 and 4-5-6 are repeated concurently, unless we detect that all peers have disconnected.
 //!    At that point Daser cleans the queue and moves back to step 1.
 
 use std::collections::{HashSet, VecDeque};
@@ -382,6 +382,7 @@ where
     /// failed is via timeout.
     async fn populate_queue(&mut self) -> Result<()> {
         let stored_blocks = self.store.get_stored_header_ranges().await?;
+        let first_check = self.prev_stored_blocks.is_empty();
 
         'outer: for block_range in stored_blocks.clone().into_inner().into_iter().rev() {
             for height in block_range.rev() {
@@ -393,9 +394,7 @@ where
                 // Optimization: We check if the block was accepted only if this is
                 // the first time we check the store (i.e. prev_stored_blocks is empty),
                 // otherwise we can safely assume that block needs sampling.
-                if self.prev_stored_blocks.is_empty()
-                    && is_block_accepted(&*self.store, height).await
-                {
+                if first_check && is_block_accepted(&*self.store, height).await {
                     // Skip already sampled blocks
                     continue;
                 }
