@@ -702,7 +702,7 @@ mod tests {
             assert_eq!(sampling_metadata.status, SamplingStatus::Accepted);
         }
 
-        // Check if CIDs we received succefully made it in the store
+        // Check if CIDs we received successfully made it in the store
         assert_eq!(&sampling_metadata.cids, &cids);
 
         // Check if received `SamplingStarted` event
