@@ -12,9 +12,9 @@
 //!    - Queue is always sorted in descending order to give priority to latest blocks.
 //! 3. As new headers become available in the [`Store`], Daser adds them to the queue if
 //!    they are within the sampling window.
-//! 4. If at any point new HEAD is queued, it is scheduled immediately and concurrently. Otherwise Daser 
-//!    waits for any ongoing sampling to finish and schedules a next block from the queue.
-//! 6. Daser initiates the following procedure for every scheduled block:
+//! 4. If at any point new HEAD is queued, it is scheduled immediately and concurrently. Otherwise
+//!    Daser waits for any ongoing sampling to finish and schedules a next block from the queue.
+//!    Daser executes the following procedure for every scheduled block:
 //!    - It makes sure that the block is still within the sampling window.
 //!    - It selects which random shares are going to be sampled and generates their Shwap CIDs.
 //!    - It updates [`Store`] with the CIDs that are going to be sampled. Tracking of the the CIDs
@@ -26,7 +26,7 @@
 //!    - If we reach a timeout of 10 seconds and at least one of the CIDs is not received, then
 //!      block is considered sampled and rejected.
 //!    - [`Store`] is updated with the sampling result.
-//! 7. Steps 3 and 4-5-6 are repeated concurently, unless we detect that all peers have disconnected.
+//! 5. Steps 3 and 4 are repeated concurently, unless we detect that all peers have disconnected.
 //!    At that point Daser cleans the queue and moves back to step 1.
 
 use std::collections::{HashSet, VecDeque};
