@@ -878,7 +878,6 @@ mod tests {
         assert_syncing(&syncer, &store, &[1..=20], 20).await;
     }
 
-    #[track_caller]
     async fn assert_syncing(
         syncer: &Syncer<InMemoryStore>,
         store: &InMemoryStore,

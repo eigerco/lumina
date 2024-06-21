@@ -116,7 +116,6 @@ impl MockP2pHandle {
     /// Assert that a command was sent to the [`P2p`] worker.
     ///
     /// [`P2p`]: crate::p2p::P2p
-    #[track_caller]
     pub(crate) async fn expect_cmd(&mut self) -> P2pCmd {
         self.try_recv_cmd()
             .await
@@ -126,7 +125,6 @@ impl MockP2pHandle {
     /// Assert that no command was sent to the [`P2p`] worker.
     ///
     /// [`P2p`]: crate::p2p::P2p
-    #[track_caller]
     pub async fn expect_no_cmd(&mut self) {
         if let Some(cmd) = self.try_recv_cmd().await {
             panic!("Expecting no P2pCmd, but received: {cmd:?}");
@@ -144,7 +142,6 @@ impl MockP2pHandle {
     /// Assert that a header request was sent to the [`P2p`] worker and obtain a response channel.
     ///
     /// [`P2p`]: crate::p2p::P2p
-    #[track_caller]
     pub async fn expect_header_request_cmd(
         &mut self,
     ) -> (
@@ -163,7 +160,6 @@ impl MockP2pHandle {
     /// Assert that a header request for height was sent to the [`P2p`] worker and obtain a response channel.
     ///
     /// [`P2p`]: crate::p2p::P2p
-    #[track_caller]
     pub async fn expect_header_request_for_height_cmd(
         &mut self,
     ) -> (u64, u64, OneshotResultSender<Vec<ExtendedHeader>, P2pError>) {
@@ -178,7 +174,6 @@ impl MockP2pHandle {
     /// Assert that a header request for hash was sent to the [`P2p`] worker and obtain a response channel.
     ///
     /// [`P2p`]: crate::p2p::P2p
-    #[track_caller]
     pub async fn expect_header_request_for_hash_cmd(
         &mut self,
     ) -> (Hash, OneshotResultSender<Vec<ExtendedHeader>, P2pError>) {
@@ -197,7 +192,6 @@ impl MockP2pHandle {
     /// Assert that a header-sub initialization command was sent to the [`P2p`] worker.
     ///
     /// [`P2p`]: crate::p2p::P2p
-    #[track_caller]
     pub async fn expect_init_header_sub(&mut self) -> ExtendedHeader {
         match self.expect_cmd().await {
             P2pCmd::InitHeaderSub { head } => *head,
@@ -208,7 +202,6 @@ impl MockP2pHandle {
     /// Assert that a CID request was sent to the [`P2p`] worker and obtain a response channel.
     ///
     /// [`P2p`]: crate::p2p::P2p
-    #[track_caller]
     pub async fn expect_get_shwap_cid(&mut self) -> (Cid, OneshotResultSender<Vec<u8>, P2pError>) {
         match self.expect_cmd().await {
             P2pCmd::GetShwapCid { cid, respond_to } => (cid, respond_to),
