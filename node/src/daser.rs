@@ -26,7 +26,7 @@
 //!    - If we reach a timeout of 10 seconds and at least one of the CIDs is not received, then
 //!      block is considered sampled and rejected.
 //!    - [`Store`] is updated with the sampling result.
-//! 5. Steps 3 and 4-5-6 are repeated concurently, unless we detect that all peers have disconnected.
+//! 7. Steps 3 and 4-5-6 are repeated concurently, unless we detect that all peers have disconnected.
 //!    At that point Daser cleans the queue and moves back to step 1.
 
 use std::collections::{HashSet, VecDeque};
