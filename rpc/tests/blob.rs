@@ -167,6 +167,7 @@ async fn blob_get_get_proof_wrong_commitment() {
 /// Blobs received from chain have index field set, so to
 /// compare if they are equal to the ones we sent, we need
 /// to overwrite the index field with received one.
+#[track_caller]
 fn assert_blob_equal_to_sent(received: &Blob, sent: &Blob) {
     let mut sent = sent.clone();
     sent.index = received.index;
