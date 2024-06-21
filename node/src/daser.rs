@@ -834,7 +834,6 @@ mod tests {
         .ok()
     }
 
-    #[track_caller]
     async fn expect_event(event_sub: &mut EventSubscriber) -> NodeEvent {
         try_recv_event(event_sub)
             .await
