@@ -509,7 +509,7 @@ mod tests {
     use std::collections::HashMap;
     use std::time::Duration;
 
-    // In which request number the tests can simulate invalid sampling
+    // Request number for which tests will simulate invalid sampling
     //
     // NOTE: The smallest block has 4 shares, so a 2nd request will always happen.
     const INVALID_SHARE_REQ_NUM: usize = 2;
