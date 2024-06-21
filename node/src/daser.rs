@@ -12,8 +12,8 @@
 //!    - Queue is always sorted in descending order to give priority to latest blocks.
 //! 3. As new headers become available in the [`Store`], Daser adds them to the queue if
 //!    they are within the sampling window.
-//! 4. If new HEAD was queued, it is scheduled immediately and concurently.
-//! 5. If there isn't any ongoing sampling, the next block from the queue is scheduled.
+//! 4. If at any point new HEAD is queued, it is scheduled immediately and concurrently. Otherwise Daser 
+//!    waits for any ongoing sampling to finish and schedules a next block from the queue.
 //! 6. Daser initiates the following procedure for every scheduled block:
 //!    - It makes sure that the block is still within the sampling window.
 //!    - It selects which random shares are going to be sampled and generates their Shwap CIDs.
