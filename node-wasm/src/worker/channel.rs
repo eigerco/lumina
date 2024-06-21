@@ -7,7 +7,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, MessagePort, SharedWorker, Worker};
 
-use crate::error::{Context, Result};
+use crate::error::{Context, Error, Result};
 use crate::utils::WorkerSelf;
 use crate::worker::commands::{NodeCommand, WorkerResponse};
 use crate::worker::WorkerError;
@@ -40,7 +40,8 @@ impl From<Worker> for WorkerClient {
                     Ok(jsvalue) => jsvalue,
                     Err(e) => {
                         error!("WorkerClient could not convert from JsValue: {e}");
-                        Err(WorkerError::CouldNotDeserialiseResponse(e.to_string()))
+                        let error = Error::from(e).context("could not deserialise worker response");
+                        Err(WorkerError::WorkerCommunicationError(error))
                     }
                 };
 
@@ -78,7 +79,8 @@ impl From<SharedWorker> for WorkerClient {
                     Ok(jsvalue) => jsvalue,
                     Err(e) => {
                         error!("WorkerClient could not convert from JsValue: {e}");
-                        Err(WorkerError::CouldNotDeserialiseResponse(e.to_string()))
+                        let error = Error::from(e).context("could not deserialise worker response");
+                        Err(WorkerError::WorkerCommunicationError(error))
                     }
                 };
 
@@ -121,12 +123,13 @@ impl WorkerClient {
     /// [`CheckableResponseExt`]: crate::utils::CheckableResponseExt
     pub async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse, WorkerError> {
         let mut response_channel = self.response_channel.lock().await;
-        self.send(command)?;
+        self.send(command)
+            .map_err(WorkerError::WorkerCommunicationError)?;
 
-        let message: WireMessage = response_channel
-            .recv()
-            .await
-            .ok_or(WorkerError::ResponseChannelDropped)?;
+        let message: WireMessage = response_channel.recv().await.ok_or_else(|| {
+            WorkerError::WorkerCommunicationError(Error::new("worker response channel dropped"))
+        })?;
+
         message
     }
 
@@ -170,6 +173,18 @@ pub(super) trait MessageServer {
 
     fn respond_err_to(&self, client: ClientId, error: WorkerError) {
         self.send_response(client, Err(error))
+    }
+
+    fn prepare_message(&self, message: &WireMessage) -> JsValue {
+        match to_value(message) {
+            Ok(jsvalue) => jsvalue,
+            Err(e) => {
+                warn!("provided response could not be coverted to JsValue: {e}");
+                let error = Error::from(e).context("couldn't serialise worker response");
+                to_value(&WorkerError::WorkerCommunicationError(error))
+                    .expect("something's very wrong, couldn't serialise serialisation error")
+            }
+        }
     }
 }
 
@@ -226,21 +241,12 @@ impl MessageServer for SharedWorkerMessageServer {
     }
 
     fn send_response(&self, client: ClientId, message: WireMessage) {
-        let message = match to_value(&message) {
-            Ok(jsvalue) => jsvalue,
-            Err(e) => {
-                warn!("provided response could not be coverted to JsValue: {e}");
-                to_value(&WorkerError::CouldNotSerialiseResponse(e.to_string()))
-                    .expect("something's wrong, couldn't serialise serialisation error")
-            }
-        };
-
         let Some((client_port, _)) = self.clients.get(client.0) else {
-            error!("client {client} not found on client list, should not happen");
+            error!("client {client} not found on the client list, should not happen");
             return;
         };
 
-        if let Err(e) = client_port.post_message(&message) {
+        if let Err(e) = client_port.post_message(&self.prepare_message(&message)) {
             error!("could not post response message to client {client}: {e:?}");
         }
     }
@@ -280,20 +286,11 @@ impl DedicatedWorkerMessageServer {
 
 impl MessageServer for DedicatedWorkerMessageServer {
     fn add(&mut self, _port: MessagePort) {
-        warn!("DedicatedWorkerMessageServer::add called, should not happen");
+        error!("DedicatedWorkerMessageServer::add called, should not happen");
     }
 
     fn send_response(&self, client: ClientId, message: WireMessage) {
-        let message = match to_value(&message) {
-            Ok(jsvalue) => jsvalue,
-            Err(e) => {
-                warn!("provided response could not be coverted to JsValue: {e}");
-                to_value(&WorkerError::CouldNotSerialiseResponse(e.to_string()))
-                    .expect("something's wrong, couldn't serialise serialisation error")
-            }
-        };
-
-        if let Err(e) = self.worker.post_message(&message) {
+        if let Err(e) = self.worker.post_message(&self.prepare_message(&message)) {
             error!("could not post response message to client {client}: {e:?}");
         }
     }

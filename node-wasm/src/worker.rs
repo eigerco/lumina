@@ -34,24 +34,19 @@ const WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH: usize = 64;
 
 #[derive(Debug, Serialize, Deserialize, Error)]
 pub enum WorkerError {
+    /// Worker is initialised, but the node has not been started yet. Use [`NodeDriver::start`].
     #[error("node hasn't been started yet")]
     NodeNotRunning,
-    #[error("command response could not be serialised, should not happen: {0}")]
-    CouldNotSerialiseResponse(String),
-    #[error("command response could not be deserialised, should not happen: {0}")]
-    CouldNotDeserialiseResponse(String),
-    #[error("response channel from worker closed, should not happen")]
-    ResponseChannelDropped,
+    /// Communication with worker has been broken and we're unable to send or receive messages from it.
+    /// Try creating new [`NodeDriver`] instance.
+    #[error("error trying to communicate with worker")]
+    WorkerCommunicationError(Error),
+    /// Worker received unrecognised command
     #[error("invalid command received")]
     InvalidCommandReceived,
+    /// Worker encountered error coming from lumina-node
     #[error("Worker encountered an error: {0:?}")]
     NodeError(Error),
-}
-
-impl From<crate::error::Error> for WorkerError {
-    fn from(error: crate::error::Error) -> Self {
-        WorkerError::NodeError(error)
-    }
 }
 
 struct NodeWorker {

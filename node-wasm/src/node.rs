@@ -17,7 +17,7 @@ use lumina_node::store::IndexedDbStore;
 use crate::error::{Context, Result};
 use crate::utils::{is_chrome, js_value_from_display, JsValueToJsError, Network};
 use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
-use crate::worker::{worker_script_url, WorkerClient, WorkerError};
+use crate::worker::{worker_script_url, WorkerClient};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 const LUMINA_WORKER_NAME: &str = "lumina";
@@ -342,7 +342,7 @@ impl WasmNodeConfig {
 
     pub(crate) async fn into_node_config(
         self,
-    ) -> Result<NodeConfig<IndexedDbBlockstore, IndexedDbStore>, WorkerError> {
+    ) -> Result<NodeConfig<IndexedDbBlockstore, IndexedDbStore>> {
         let network_id = network_id(self.network.into());
         let store = IndexedDbStore::new(network_id)
             .await
