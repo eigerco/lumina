@@ -4,7 +4,7 @@
 //! Sampling procedure comprises the following steps:
 //!
 //! 1. Daser waits for at least one peer to connect.
-//! 2. Daser iterates in descending order over all stored headers of the [`Store`].
+//! 2. Daser iterates in descending order over all the headers stored in the [`Store`].
 //!    - If a block has not been sampled or it was rejected, Daser will queue it for sampling.
 //!      Rejected blocks are resampled because their rejection could be caused by
 //!      edge-cases unrelated to data availability, such as network issues.
