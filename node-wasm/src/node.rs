@@ -5,9 +5,8 @@ use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
-use tracing::info;
 use wasm_bindgen::prelude::*;
-use web_sys::{BroadcastChannel, SharedWorker, Worker, WorkerOptions, WorkerType};
+use web_sys::BroadcastChannel;
 
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
@@ -15,9 +14,9 @@ use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 
 use crate::error::{Context, Result};
-use crate::utils::{is_chrome, js_value_from_display, JsValueToJsError, Network};
+use crate::utils::{is_chrome, js_value_from_display, Network};
 use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
-use crate::worker::{worker_script_url, WorkerClient};
+use crate::worker::{worker_script_url, AnyWorker, WorkerClient};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 const LUMINA_WORKER_NAME: &str = "lumina";
@@ -65,32 +64,27 @@ impl NodeDriver {
     #[wasm_bindgen(constructor)]
     pub async fn new(worker_type: Option<NodeWorkerKind>) -> Result<NodeDriver> {
         let url = worker_script_url();
-        let mut opts = WorkerOptions::new();
-        opts.type_(WorkerType::Module);
-        opts.name(LUMINA_WORKER_NAME);
 
+        // For chrome we default to running in a dedicated Worker because:
+        // 1. Chrome Android does not support SharedWorkers at all
+        // 2. On desktop Chrome, if tab running lumina is reloaded, it fails to re-connect to
+        //    previous worker instance and doesn't create a new one, leaving it in non functioning
+        //    limbo
         let default_worker_type = if is_chrome().unwrap_or(false) {
             NodeWorkerKind::Dedicated
         } else {
             NodeWorkerKind::Shared
         };
 
-        let client = match worker_type.unwrap_or(default_worker_type) {
-            NodeWorkerKind::Shared => {
-                info!("Starting SharedWorker");
-                let worker = SharedWorker::new_with_worker_options(&url, &opts)
-                    .to_error("could not create SharedWorker")?;
-                WorkerClient::new(worker.into())
-            }
-            NodeWorkerKind::Dedicated => {
-                info!("Starting Worker");
-                let worker =
-                    Worker::new_with_options(&url, &opts).to_error("could not create Worker")?;
-                WorkerClient::new(worker.into())
-            }
-        };
+        let worker = AnyWorker::new(
+            worker_type.unwrap_or(default_worker_type),
+            &url,
+            LUMINA_WORKER_NAME,
+        )?;
 
-        Ok(Self { client })
+        Ok(Self {
+            client: WorkerClient::new(worker),
+        })
     }
 
     /// Check whether Lumina is currently running

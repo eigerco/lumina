@@ -28,7 +28,7 @@ use crate::wrapper::libp2p::NetworkInfoSnapshot;
 mod channel;
 pub(crate) mod commands;
 
-pub(crate) use channel::WorkerClient;
+pub(crate) use channel::{AnyWorker, WorkerClient};
 
 const WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH: usize = 64;
 

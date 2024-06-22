@@ -5,9 +5,13 @@ use tokio::sync::{mpsc, Mutex};
 use tracing::{debug, error, info, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, MessagePort, SharedWorker, Worker};
+use web_sys::{
+    DedicatedWorkerGlobalScope, MessageEvent, MessagePort, SharedWorker, Worker, WorkerOptions,
+    WorkerType,
+};
 
 use crate::error::{Context, Error, Result};
+use crate::node::NodeWorkerKind;
 use crate::utils::WorkerSelf;
 use crate::worker::commands::{NodeCommand, WorkerResponse};
 use crate::worker::WorkerError;
@@ -47,6 +51,28 @@ impl From<Worker> for AnyWorker {
 }
 
 impl AnyWorker {
+    pub(crate) fn new(kind: NodeWorkerKind, url: &str, name: &str) -> Result<Self> {
+        let mut opts = WorkerOptions::new();
+        opts.type_(WorkerType::Module);
+        opts.name(name);
+
+        Ok(match kind {
+            NodeWorkerKind::Shared => {
+                info!("Starting SharedWorker");
+                AnyWorker::SharedWorker(
+                    SharedWorker::new_with_worker_options(url, &opts)
+                        .context("could not create SharedWorker")?,
+                )
+            }
+            NodeWorkerKind::Dedicated => {
+                info!("Starting Worker");
+                AnyWorker::DedicatedWorker(
+                    Worker::new_with_options(url, &opts).context("could not create Worker")?,
+                )
+            }
+        })
+    }
+
     fn setup_on_message_callback(
         &self,
         response_tx: mpsc::Sender<WireMessage>,
@@ -127,9 +153,10 @@ impl WorkerClient {
         self.send(command)
             .map_err(WorkerError::WorkerCommunicationError)?;
 
-        let message: WireMessage = response_channel.recv().await.ok_or_else(|| {
-            WorkerError::WorkerCommunicationError(Error::new("worker response channel dropped"))
-        })?;
+        let message: WireMessage = response_channel
+            .recv()
+            .await
+            .expect("response channel should never be dropped");
 
         message
     }

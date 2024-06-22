@@ -53,12 +53,13 @@ web-sys = { version = "0.3.69", features = [
   "DedicatedWorkerGlobalScope",
   "MessageEvent",
   "MessagePort",
+  "Navigator",
   "SharedWorker",
   "SharedWorkerGlobalScope",
   "Worker",
   "WorkerGlobalScope",
   "WorkerOptions",
-  "WorkerType"
+  "WorkerType",
 ] }
 
 [package.metadata.docs.rs]
