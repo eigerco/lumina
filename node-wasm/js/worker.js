@@ -1,4 +1,4 @@
-// this file should be installed by wasm-pack in pkg/snippets/<pkg-name>-<hash>/js/
+// this file will be installed by wasm-pack in pkg/snippets/<pkg-name>-<hash>/js/
 import init, { run_worker } from '../../../lumina_node_wasm.js';
 
 // get the path to this file
