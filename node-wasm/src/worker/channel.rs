@@ -20,7 +20,7 @@ type WorkerClientConnection = (MessagePort, Closure<dyn Fn(MessageEvent)>);
 const WORKER_CHANNEL_SIZE: usize = 1;
 
 /// `WorkerClient` is responsible for sending messages to and receiving responses from [`WorkerMessageServer`].
-/// It covers JS details like callbacks, having to synchronise requests and responses and exposes
+/// It covers JS details like callbacks, having to synchronise requests, responses, and exposes
 /// simple RPC-like function call interface.
 pub(crate) struct WorkerClient {
     worker: AnyWorker,
@@ -29,99 +29,100 @@ pub(crate) struct WorkerClient {
     _onerror: Closure<dyn Fn(MessageEvent)>,
 }
 
-impl From<Worker> for WorkerClient {
-    fn from(worker: Worker) -> WorkerClient {
-        let (response_tx, response_rx) = mpsc::channel(WORKER_CHANNEL_SIZE);
-
-        let onmessage_callback = move |ev: MessageEvent| {
-            let response_tx = response_tx.clone();
-            spawn_local(async move {
-                let data: WireMessage = match from_value(ev.data()) {
-                    Ok(jsvalue) => jsvalue,
-                    Err(e) => {
-                        error!("WorkerClient could not convert from JsValue: {e}");
-                        let error = Error::from(e).context("could not deserialise worker response");
-                        Err(WorkerError::WorkerCommunicationError(error))
-                    }
-                };
-
-                if let Err(e) = response_tx.send(data).await {
-                    error!("message forwarding channel closed, should not happen: {e}");
-                }
-            })
-        };
-
-        let onmessage = Closure::new(onmessage_callback);
-        worker.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
-
-        let onerror = Closure::new(|ev: MessageEvent| {
-            error!("received error from Worker: {:?}", ev.to_string());
-        });
-        worker.set_onerror(Some(onerror.as_ref().unchecked_ref()));
-
-        Self {
-            worker: AnyWorker::DedicatedWorker(worker),
-            response_channel: Mutex::new(response_rx),
-            _onmessage: onmessage,
-            _onerror: onerror,
-        }
-    }
-}
-
-impl From<SharedWorker> for WorkerClient {
-    fn from(worker: SharedWorker) -> WorkerClient {
-        let (response_tx, response_rx) = mpsc::channel(WORKER_CHANNEL_SIZE);
-
-        let onmessage_callback = move |ev: MessageEvent| {
-            let response_tx = response_tx.clone();
-            spawn_local(async move {
-                let data: WireMessage = match from_value(ev.data()) {
-                    Ok(jsvalue) => jsvalue,
-                    Err(e) => {
-                        error!("WorkerClient could not convert from JsValue: {e}");
-                        let error = Error::from(e).context("could not deserialise worker response");
-                        Err(WorkerError::WorkerCommunicationError(error))
-                    }
-                };
-
-                if let Err(e) = response_tx.send(data).await {
-                    error!("message forwarding channel closed, should not happen: {e}");
-                }
-            })
-        };
-
-        let onmessage = Closure::new(onmessage_callback);
-        let message_port = worker.port();
-        message_port.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
-
-        let onerror: Closure<dyn Fn(MessageEvent)> = Closure::new(|ev: MessageEvent| {
-            error!("received error from SharedWorker: {:?}", ev.to_string());
-        });
-        worker.set_onerror(Some(onerror.as_ref().unchecked_ref()));
-
-        message_port.start();
-        Self {
-            worker: AnyWorker::SharedWorker(worker),
-            response_channel: Mutex::new(response_rx),
-            _onmessage: onmessage,
-            _onerror: onerror,
-        }
-    }
-}
-
-enum AnyWorker {
+pub(crate) enum AnyWorker {
     DedicatedWorker(Worker),
     SharedWorker(SharedWorker),
 }
 
+impl From<SharedWorker> for AnyWorker {
+    fn from(worker: SharedWorker) -> Self {
+        AnyWorker::SharedWorker(worker)
+    }
+}
+
+impl From<Worker> for AnyWorker {
+    fn from(worker: Worker) -> Self {
+        AnyWorker::DedicatedWorker(worker)
+    }
+}
+
+impl AnyWorker {
+    fn setup_on_message_callback(
+        &self,
+        response_tx: mpsc::Sender<WireMessage>,
+    ) -> Closure<dyn Fn(MessageEvent)> {
+        let onmessage_callback = move |ev: MessageEvent| {
+            let response_tx = response_tx.clone();
+            spawn_local(async move {
+                let data: WireMessage = match from_value(ev.data()) {
+                    Ok(jsvalue) => jsvalue,
+                    Err(e) => {
+                        error!("WorkerClient could not convert from JsValue: {e}");
+                        let error = Error::from(e).context("could not deserialise worker response");
+                        Err(WorkerError::WorkerCommunicationError(error))
+                    }
+                };
+
+                if let Err(e) = response_tx.send(data).await {
+                    error!("message forwarding channel closed, should not happen: {e}");
+                }
+            })
+        };
+
+        let onmessage = Closure::new(onmessage_callback);
+        match self {
+            AnyWorker::SharedWorker(worker) => {
+                let message_port = worker.port();
+                message_port.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
+            }
+            AnyWorker::DedicatedWorker(worker) => {
+                worker.set_onmessage(Some(onmessage.as_ref().unchecked_ref()))
+            }
+        }
+        onmessage
+    }
+
+    fn setup_on_error_callback(&self) -> Closure<dyn Fn(MessageEvent)> {
+        let onerror = Closure::new(|ev: MessageEvent| {
+            error!("received error from Worker: {:?}", ev.to_string());
+        });
+        match self {
+            AnyWorker::SharedWorker(worker) => {
+                worker.set_onerror(Some(onerror.as_ref().unchecked_ref()))
+            }
+            AnyWorker::DedicatedWorker(worker) => {
+                worker.set_onerror(Some(onerror.as_ref().unchecked_ref()))
+            }
+        }
+
+        onerror
+    }
+}
+
 impl WorkerClient {
+    /// Create a new WorkerClient to control newly created Shared or Dedicated Worker running
+    /// MessageServer
+    pub(crate) fn new(worker: AnyWorker) -> Self {
+        let (response_tx, response_rx) = mpsc::channel(WORKER_CHANNEL_SIZE);
+
+        let onmessage = worker.setup_on_message_callback(response_tx);
+        let onerror = worker.setup_on_error_callback();
+
+        Self {
+            worker,
+            response_channel: Mutex::new(response_rx),
+            _onmessage: onmessage,
+            _onerror: onerror,
+        }
+    }
+
     /// Send command to lumina and wait for a response.
     ///
     /// Response enum variant can be converted into appropriate type at runtime with a provided
     /// [`CheckableResponseExt`] helper.
     ///
     /// [`CheckableResponseExt`]: crate::utils::CheckableResponseExt
-    pub async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse, WorkerError> {
+    pub(crate) async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse, WorkerError> {
         let mut response_channel = self.response_channel.lock().await;
         self.send(command)
             .map_err(WorkerError::WorkerCommunicationError)?;
@@ -173,18 +174,6 @@ pub(super) trait MessageServer {
 
     fn respond_err_to(&self, client: ClientId, error: WorkerError) {
         self.send_response(client, Err(error))
-    }
-
-    fn prepare_message(&self, message: &WireMessage) -> JsValue {
-        match to_value(message) {
-            Ok(jsvalue) => jsvalue,
-            Err(e) => {
-                warn!("provided response could not be coverted to JsValue: {e}");
-                let error = Error::from(e).context("couldn't serialise worker response");
-                to_value(&WorkerError::WorkerCommunicationError(error))
-                    .expect("something's very wrong, couldn't serialise serialisation error")
-            }
-        }
     }
 }
 
@@ -246,7 +235,7 @@ impl MessageServer for SharedWorkerMessageServer {
             return;
         };
 
-        if let Err(e) = client_port.post_message(&self.prepare_message(&message)) {
+        if let Err(e) = client_port.post_message(&serialize_response_message(&message)) {
             error!("could not post response message to client {client}: {e:?}");
         }
     }
@@ -290,7 +279,10 @@ impl MessageServer for DedicatedWorkerMessageServer {
     }
 
     fn send_response(&self, client: ClientId, message: WireMessage) {
-        if let Err(e) = self.worker.post_message(&self.prepare_message(&message)) {
+        if let Err(e) = self
+            .worker
+            .post_message(&serialize_response_message(&message))
+        {
             error!("could not post response message to client {client}: {e:?}");
         }
     }
@@ -342,6 +334,18 @@ fn parse_message_event_to_worker_message(ev: MessageEvent, client: ClientId) -> 
         Err(e) => {
             warn!("could not deserialize message from client {client}: {e}");
             WorkerMessage::InvalidCommandReceived(client)
+        }
+    }
+}
+
+fn serialize_response_message(message: &WireMessage) -> JsValue {
+    match to_value(message) {
+        Ok(jsvalue) => jsvalue,
+        Err(e) => {
+            warn!("provided response could not be coverted to JsValue: {e}");
+            let error = Error::from(e).context("couldn't serialise worker response");
+            to_value(&WorkerError::WorkerCommunicationError(error))
+                .expect("something's very wrong, couldn't serialise serialisation error")
         }
     }
 }

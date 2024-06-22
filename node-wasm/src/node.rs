@@ -69,7 +69,7 @@ impl NodeDriver {
         opts.type_(WorkerType::Module);
         opts.name(LUMINA_WORKER_NAME);
 
-        let default_worker_type = if is_chrome() {
+        let default_worker_type = if is_chrome().unwrap_or(false) {
             NodeWorkerKind::Dedicated
         } else {
             NodeWorkerKind::Shared
@@ -80,13 +80,13 @@ impl NodeDriver {
                 info!("Starting SharedWorker");
                 let worker = SharedWorker::new_with_worker_options(&url, &opts)
                     .to_error("could not create SharedWorker")?;
-                WorkerClient::from(worker)
+                WorkerClient::new(worker.into())
             }
             NodeWorkerKind::Dedicated => {
                 info!("Starting Worker");
                 let worker =
                     Worker::new_with_options(&url, &opts).to_error("could not create Worker")?;
-                WorkerClient::from(worker)
+                WorkerClient::new(worker.into())
             }
         };
 

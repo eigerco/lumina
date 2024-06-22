@@ -13,10 +13,7 @@ use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::prelude::*;
 use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
-use web_sys::{
-    window, Crypto, DedicatedWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker,
-    WorkerGlobalScope,
-};
+use web_sys::{Crypto, DedicatedWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker};
 
 use crate::error::{Context, Error, Result};
 
@@ -188,23 +185,14 @@ const CHROME_USER_AGENT_DETECTION_STR: &str = "Chrome/";
 // currently there's issue with SharedWorkers on Chrome, where restarting lumina's worker
 // causes all network connections to fail. Until that's resolved detect chrome and apply
 // a workaround.
-pub(crate) fn is_chrome() -> bool {
-    let mut user_agent = None;
-    if let Some(window) = window() {
-        user_agent = Some(window.navigator().user_agent());
-    };
-    if let Some(worker_scope) = JsValue::from(js_sys::global()).dyn_ref::<WorkerGlobalScope>() {
-        user_agent = Some(worker_scope.navigator().user_agent());
-    }
-
-    if let Some(user_agent) = user_agent {
-        user_agent
-            .as_deref()
-            .unwrap_or("")
-            .contains(CHROME_USER_AGENT_DETECTION_STR)
-    } else {
-        false
-    }
+pub(crate) fn is_chrome() -> Result<bool, Error> {
+    js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("navigator"))
+        .context("failed to get `navigator` from global object")?
+        .dyn_into::<web_sys::Navigator>()
+        .context("`navigator` is not instanceof `Navigator`")?
+        .user_agent()
+        .context("could not get UserAgent from Navigator")
+        .map(|user_agent| user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
 }
 
 pub(crate) fn get_crypto() -> Result<Crypto, Error> {
