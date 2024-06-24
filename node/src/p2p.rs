@@ -409,8 +409,7 @@ impl P2p {
         let mut session = HeaderSession::new(range, self.cmd_tx.clone());
         let headers = session.run().await?;
 
-        // Cryptographic validation is done on each header separatetly
-        // by `HeaderExClientHandler`.
+        // `.validate()` is called on each header separately by `HeaderExClientHandler`.
         //
         // The last step is to verify that all headers are from the same chain
         // and indeed connected with the next one.
