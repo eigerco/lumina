@@ -227,6 +227,10 @@ impl HeaderRanges {
         self.0.first().map(|r| *r.start())
     }
 
+    pub(crate) fn into_inner(self) -> SmallVec<[HeaderRange; 2]> {
+        self.0
+    }
+
     /// Crate HeaderRanges from correctly pre-sorted, non-overlapping SmallVec of ranges
     pub(crate) fn from_vec(from: SmallVec<[HeaderRange; 2]>) -> Self {
         #[cfg(debug_assertions)]
