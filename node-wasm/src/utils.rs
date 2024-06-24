@@ -12,7 +12,9 @@ use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::prelude::*;
 use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
-use web_sys::{Crypto, DedicatedWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker};
+use web_sys::{
+    Crypto, DedicatedWorkerGlobalScope, Navigator, SharedWorker, SharedWorkerGlobalScope, Worker,
+};
 
 use crate::error::{Context, Error, Result};
 
@@ -110,6 +112,12 @@ impl WorkerSelf for Worker {
     }
 }
 
+/// This type is useful in cases where we want to deal with de/serialising `Result<T, E>`, with
+/// [`serde_wasm_bindgen::preserve`] where `T` is a JavaScript object (which are not serializable by
+/// Rust standards, but can be passed through unchanged via cast as they implement [`JsCast`]).
+///
+/// [`serde_wasm_bindgen::preserve`]: https://docs.rs/serde-wasm-bindgen/latest/serde_wasm_bindgen/preserve
+/// [`JsCast`]: https://docs.rs/wasm-bindgen/latest/wasm_bindgen/trait.JsCast.html
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) enum JsResult<T, E>
 where
@@ -119,17 +127,6 @@ where
     #[serde(with = "serde_wasm_bindgen::preserve")]
     Ok(T),
     Err(E),
-}
-
-// once try_trait_v2 is stabilised, this can go
-impl<T, E> JsResult<T, E>
-where
-    T: JsCast + Debug,
-    E: Serialize + DeserializeOwned + Debug,
-{
-    pub fn into_result(self) -> Result<T, E> {
-        self.into()
-    }
 }
 
 impl<T, E> From<Result<T, E>> for JsResult<T, E>
@@ -160,17 +157,21 @@ where
 
 const CHROME_USER_AGENT_DETECTION_STR: &str = "Chrome/";
 
-// currently there's issue with SharedWorkers on Chrome, where restarting lumina's worker
+// Currently, there's an issue with SharedWorkers on Chrome where restarting Lumina's worker
 // causes all network connections to fail. Until that's resolved detect chrome and apply
 // a workaround.
 pub(crate) fn is_chrome() -> Result<bool, Error> {
-    js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("navigator"))
-        .context("failed to get `navigator` from global object")?
-        .dyn_into::<web_sys::Navigator>()
-        .context("`navigator` is not instanceof `Navigator`")?
+    get_navigator()?
         .user_agent()
         .context("could not get UserAgent from Navigator")
         .map(|user_agent| user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
+}
+
+pub(crate) fn get_navigator() -> Result<Navigator, Error> {
+    js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("navigator"))
+        .context("failed to get `navigator` from global object")?
+        .dyn_into::<Navigator>()
+        .context("`navigator` is not instanceof `Navigator`")
 }
 
 pub(crate) fn get_crypto() -> Result<Crypto, Error> {

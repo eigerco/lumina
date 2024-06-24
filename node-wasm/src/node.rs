@@ -67,9 +67,7 @@ impl NodeDriver {
 
         // For chrome we default to running in a dedicated Worker because:
         // 1. Chrome Android does not support SharedWorkers at all
-        // 2. On desktop Chrome, if tab running lumina is reloaded, it fails to re-connect to
-        //    previous worker instance and doesn't create a new one, leaving it in non functioning
-        //    limbo
+        // 2. On desktop Chrome, restarting Lumina's worker causes all network connections to fail.
         let default_worker_type = if is_chrome().unwrap_or(false) {
             NodeWorkerKind::Dedicated
         } else {
@@ -183,7 +181,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        header.into_result()
+        header.into()
     }
 
     /// Request a header for the block with a given hash from the network.
@@ -192,7 +190,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        header.into_result()
+        header.into()
     }
 
     /// Request a header for the block with a given height from the network.
@@ -201,7 +199,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        header.into_result()
+        header.into()
     }
 
     /// Request headers in range (from, from + amount] from the network.
@@ -219,7 +217,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let headers = response.into_headers().check_variant()?;
 
-        headers.into_result()
+        headers.into()
     }
 
     /// Get current header syncing info.
@@ -246,7 +244,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        header.into_result()
+        header.into()
     }
 
     /// Get a synced header for the block with a given hash.
@@ -255,7 +253,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        header.into_result()
+        header.into()
     }
 
     /// Get a synced header for the block with a given height.
@@ -264,7 +262,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
-        header.into_result()
+        header.into()
     }
 
     /// Get synced headers from the given heights range.
@@ -288,7 +286,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let headers = response.into_headers().check_variant()?;
 
-        headers.into_result()
+        headers.into()
     }
 
     /// Get data sampling metadata of an already sampled height.
