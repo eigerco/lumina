@@ -5,7 +5,7 @@ use std::vec;
 #[cfg(any(test, feature = "test-utils"))]
 use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
 use crate::store::utils::{ranges_intersection, try_consolidate_ranges, RangeScanResult};
@@ -105,7 +105,7 @@ impl RangeLengthExt for RangeInclusive<u64> {
 }
 
 /// Represents possibly multiple non-overlapping, sorted ranges of header heights
-#[derive(Debug, Clone, PartialEq, Default, Serialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct HeaderRanges(SmallVec<[HeaderRange; 2]>);
 
 pub(crate) trait HeaderRangesExt {
