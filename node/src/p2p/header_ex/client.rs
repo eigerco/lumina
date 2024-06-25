@@ -256,7 +256,7 @@ async fn decode_and_verify_responses(
         for response in responses {
             // Unmarshal and validate. Propagate error only if nothing
             // was decoded before.
-            let header = match response.to_extended_header() {
+            let header = match response.to_validated_extented_header() {
                 Ok(header) => header,
                 Err(e) if headers.is_empty() => return Err(e),
                 Err(_) => break 'outer,
