@@ -62,6 +62,7 @@ use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihash
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
+use crate::store::header_ranges::HeaderRange;
 use crate::store::Store;
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
@@ -382,20 +383,53 @@ impl P2p {
 
     /// Request the headers following the one given with the `header-ex` protocol.
     ///
-    /// First header from the requested range will be verified against the provided one, then each subsequent is verified against the previous one.
+    /// First header from the requested range will be verified against the provided one,
+    /// then each subsequent is verified against the previous one.
     pub async fn get_verified_headers_range(
         &self,
         from: &ExtendedHeader,
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
+        // User can give us a bad header, so validate it.
         from.validate().map_err(|_| HeaderExError::InvalidRequest)?;
 
         let height = from.height().value() + 1;
 
-        let mut session = HeaderSession::new(height, amount, self.cmd_tx.clone())?;
+        let range = height..=height + amount - 1;
+
+        let mut session = HeaderSession::new(range, self.cmd_tx.clone());
         let headers = session.run().await?;
 
+        // `.validate()` is called on each header separately by `HeaderExClientHandler`.
+        //
+        // The last step is to verify that all headers are from the same chain
+        // and indeed connected with the next one.
         from.verify_adjacent_range(&headers)
+            .map_err(|_| HeaderExError::InvalidResponse)?;
+
+        Ok(headers)
+    }
+
+    /// Request a list of ranges with the `header-ex` protocol
+    ///
+    /// For each of the ranges, headers are verified against each other, but it's the caller
+    /// responsibility to verify range edges against headers existing in the store.
+    pub(crate) async fn get_unverified_header_range(
+        &self,
+        range: HeaderRange,
+    ) -> Result<Vec<ExtendedHeader>> {
+        if range.is_empty() {
+            return Err(HeaderExError::InvalidRequest.into());
+        }
+
+        let mut session = HeaderSession::new(range, self.cmd_tx.clone());
+        let headers = session.run().await?;
+
+        let Some(head) = headers.first() else {
+            return Err(HeaderExError::InvalidResponse.into());
+        };
+
+        head.verify_adjacent_range(&headers[1..])
             .map_err(|_| HeaderExError::InvalidResponse)?;
 
         Ok(headers)

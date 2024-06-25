@@ -109,7 +109,6 @@ where
         })?);
 
         let syncer = Arc::new(Syncer::start(SyncerArgs {
-            genesis_hash: config.genesis_hash,
             store: store.clone(),
             p2p: p2p.clone(),
         })?);

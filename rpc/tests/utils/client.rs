@@ -6,7 +6,7 @@ use celestia_rpc::prelude::*;
 use celestia_rpc::Client;
 use celestia_types::{blob::GasPrice, Blob};
 use jsonrpsee::core::client::ClientT;
-use jsonrpsee::core::Error;
+use jsonrpsee::core::ClientError;
 use tokio::sync::{Mutex, MutexGuard};
 
 const CELESTIA_RPC_URL: &str = "ws://localhost:26658";
@@ -50,7 +50,7 @@ pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
     Ok(client)
 }
 
-pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, Error>
+pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, ClientError>
 where
     C: ClientT + Sync,
 {
