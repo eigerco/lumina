@@ -18,7 +18,7 @@ use lumina_node::syncer::SyncingInfo;
 
 use crate::error::{Context, Error, Result};
 use crate::node::WasmNodeConfig;
-use crate::utils::{get_crypto, to_jsvalue_or_undefined, WorkerSelf};
+use crate::utils::{get_crypto, WorkerSelf};
 use crate::worker::channel::{
     DedicatedWorkerMessageServer, MessageServer, SharedWorkerMessageServer, WorkerMessage,
 };
@@ -167,7 +167,8 @@ impl NodeWorker {
     }
 
     async fn get_last_seen_network_head(&mut self) -> JsValue {
-        to_jsvalue_or_undefined(&self.node.get_network_head_header())
+        // JS interface returns `undefined`, if node haven't received any headers from HeaderSub yet
+        to_value(&self.node.get_network_head_header()).unwrap_or(JsValue::UNDEFINED)
     }
 
     async fn get_sampling_metadata(&mut self, height: u64) -> Result<Option<SamplingMetadata>> {

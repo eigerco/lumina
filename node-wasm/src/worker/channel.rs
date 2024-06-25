@@ -33,6 +33,57 @@ pub(crate) struct WorkerClient {
     _onerror: Closure<dyn Fn(MessageEvent)>,
 }
 
+impl WorkerClient {
+    /// Create a new WorkerClient to control newly created Shared or Dedicated Worker running
+    /// MessageServer
+    pub(crate) fn new(worker: AnyWorker) -> Self {
+        let (response_tx, response_rx) = mpsc::channel(WORKER_CHANNEL_SIZE);
+
+        let onmessage = worker.setup_on_message_callback(response_tx);
+        let onerror = worker.setup_on_error_callback();
+
+        Self {
+            worker,
+            response_channel: Mutex::new(response_rx),
+            _onmessage: onmessage,
+            _onerror: onerror,
+        }
+    }
+
+    /// Send command to lumina and wait for a response.
+    ///
+    /// Response enum variant can be converted into appropriate type at runtime with a provided
+    /// [`CheckableResponseExt`] helper.
+    ///
+    /// [`CheckableResponseExt`]: crate::utils::CheckableResponseExt
+    pub(crate) async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse, WorkerError> {
+        let mut response_channel = self.response_channel.lock().await;
+        self.send(command)
+            .map_err(WorkerError::WorkerCommunicationError)?;
+
+        let message: WireMessage = response_channel
+            .recv()
+            .await
+            .expect("response channel should never be dropped");
+
+        message
+    }
+
+    fn send(&self, command: NodeCommand) -> Result<()> {
+        let command_value =
+            to_value(&command).context("could not serialise worker command to be sent")?;
+        match &self.worker {
+            AnyWorker::DedicatedWorker(worker) => worker
+                .post_message(&command_value)
+                .context("could not send command to worker"),
+            AnyWorker::SharedWorker(worker) => worker
+                .port()
+                .post_message(&command_value)
+                .context("could not send command to worker"),
+        }
+    }
+}
+
 pub(crate) enum AnyWorker {
     DedicatedWorker(Worker),
     SharedWorker(SharedWorker),
@@ -125,57 +176,6 @@ impl AnyWorker {
     }
 }
 
-impl WorkerClient {
-    /// Create a new WorkerClient to control newly created Shared or Dedicated Worker running
-    /// MessageServer
-    pub(crate) fn new(worker: AnyWorker) -> Self {
-        let (response_tx, response_rx) = mpsc::channel(WORKER_CHANNEL_SIZE);
-
-        let onmessage = worker.setup_on_message_callback(response_tx);
-        let onerror = worker.setup_on_error_callback();
-
-        Self {
-            worker,
-            response_channel: Mutex::new(response_rx),
-            _onmessage: onmessage,
-            _onerror: onerror,
-        }
-    }
-
-    /// Send command to lumina and wait for a response.
-    ///
-    /// Response enum variant can be converted into appropriate type at runtime with a provided
-    /// [`CheckableResponseExt`] helper.
-    ///
-    /// [`CheckableResponseExt`]: crate::utils::CheckableResponseExt
-    pub(crate) async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse, WorkerError> {
-        let mut response_channel = self.response_channel.lock().await;
-        self.send(command)
-            .map_err(WorkerError::WorkerCommunicationError)?;
-
-        let message: WireMessage = response_channel
-            .recv()
-            .await
-            .expect("response channel should never be dropped");
-
-        message
-    }
-
-    fn send(&self, command: NodeCommand) -> Result<()> {
-        let command_value =
-            to_value(&command).context("could not serialise worker command to be sent")?;
-        match &self.worker {
-            AnyWorker::DedicatedWorker(worker) => worker
-                .post_message(&command_value)
-                .context("could not send command to worker"),
-            AnyWorker::SharedWorker(worker) => worker
-                .port()
-                .post_message(&command_value)
-                .context("could not send command to worker"),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub(super) struct ClientId(usize);
 
@@ -189,6 +189,22 @@ pub(super) enum WorkerMessage {
     NewConnection(MessagePort),
     InvalidCommandReceived(ClientId),
     Command((NodeCommand, ClientId)),
+}
+
+impl From<(MessageEvent, ClientId)> for WorkerMessage {
+    fn from(value: (MessageEvent, ClientId)) -> Self {
+        let (event, client) = value;
+        match from_value(event.data()) {
+            Ok(command) => {
+                debug!("received command from client {client}: {command:#?}");
+                WorkerMessage::Command((command, client))
+            }
+            Err(e) => {
+                warn!("could not deserialize message from client {client}: {e}");
+                WorkerMessage::InvalidCommandReceived(client)
+            }
+        }
+    }
 }
 
 pub(super) trait MessageServer {
@@ -225,7 +241,7 @@ impl SharedWorkerMessageServer {
 
         let mut server = Self {
             _onconnect: onconnect,
-            clients: Vec::with_capacity(1), // we usually expect to have exactly one client
+            clients: Vec::with_capacity(usize::max(queued.len(), 1)),
             command_channel,
         };
 
@@ -282,7 +298,7 @@ impl DedicatedWorkerMessageServer {
         queued: Vec<MessageEvent>,
     ) -> Self {
         for event in queued {
-            let message = parse_message_event_to_worker_message(event, ClientId(0));
+            let message = WorkerMessage::from((event, ClientId(0)));
 
             if let Err(e) = command_channel.send(message).await {
                 error!("command channel inside worker closed, should not happen: {e}");
@@ -343,26 +359,13 @@ fn get_client_message_callback(
     Closure::new(move |ev: MessageEvent| {
         let command_channel = command_channel.clone();
         spawn_local(async move {
-            let message = parse_message_event_to_worker_message(ev, client);
+            let message = WorkerMessage::from((ev, client));
 
             if let Err(e) = command_channel.send(message).await {
                 error!("command channel inside worker closed, should not happen: {e}");
             }
         })
     })
-}
-
-fn parse_message_event_to_worker_message(ev: MessageEvent, client: ClientId) -> WorkerMessage {
-    match from_value(ev.data()) {
-        Ok(command) => {
-            debug!("received command from client {client}: {command:#?}");
-            WorkerMessage::Command((command, client))
-        }
-        Err(e) => {
-            warn!("could not deserialize message from client {client}: {e}");
-            WorkerMessage::InvalidCommandReceived(client)
-        }
-    }
 }
 
 fn serialize_response_message(message: &WireMessage) -> JsValue {

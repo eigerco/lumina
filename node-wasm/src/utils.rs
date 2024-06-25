@@ -5,7 +5,6 @@ use lumina_node::network;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use serde_wasm_bindgen::to_value;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::format::Pretty;
 use tracing_subscriber::fmt::time::UtcTime;
@@ -75,10 +74,6 @@ impl From<network::Network> for Network {
 
 pub(crate) fn js_value_from_display<D: fmt::Display>(value: D) -> JsValue {
     JsValue::from(value.to_string())
-}
-
-pub(crate) fn to_jsvalue_or_undefined<T: Serialize>(value: &T) -> JsValue {
-    to_value(value).unwrap_or(JsValue::UNDEFINED)
 }
 
 pub(crate) trait WorkerSelf {
