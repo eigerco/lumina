@@ -316,7 +316,7 @@ impl fmt::Display for NodeEvent {
                 write!(f, "New subjective head: {height}")
             }
             NodeEvent::AddedHeaderFromHeaderSub { height } => {
-                write!(f, "Added header {height} from HeaderSub")
+                write!(f, "Added header {height} from header-sub")
             }
             NodeEvent::FetchingHeadHeader => {
                 write!(f, "Fetching header of network head block")
