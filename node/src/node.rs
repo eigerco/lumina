@@ -22,7 +22,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::daser::{Daser, DaserArgs, DaserError};
-use crate::events::{EventChannel, EventSubscriber};
+use crate::events::{EventChannel, EventSubscriber, NodeEvent};
 use crate::executor::spawn;
 use crate::p2p::{P2p, P2pArgs, P2pError};
 use crate::peer_tracker::PeerTrackerInfo;
@@ -95,7 +95,20 @@ where
     where
         B: Blockstore + 'static,
     {
+        let (node, _) = Node::new_subscribed(config).await?;
+        Ok(node)
+    }
+
+    /// Creates and starts a new celestia node with a given config.
+    ///
+    /// Returns `Node` alogn with `EventSubscriber`. Use this to avoid missing any
+    /// events that will be generated on the construction of the node.
+    pub async fn new_subscribed<B>(config: NodeConfig<B, S>) -> Result<(Self, EventSubscriber)>
+    where
+        B: Blockstore + 'static,
+    {
         let event_channel = EventChannel::new();
+        let event_sub = event_channel.subscribe();
         let store = Arc::new(config.store);
 
         let p2p = Arc::new(P2p::start(P2pArgs {
@@ -111,6 +124,7 @@ where
         let syncer = Arc::new(Syncer::start(SyncerArgs {
             store: store.clone(),
             p2p: p2p.clone(),
+            event_pub: event_channel.publisher(),
         })?);
 
         let daser = Arc::new(Daser::start(DaserArgs {
@@ -122,32 +136,42 @@ where
         // spawn the task that will stop the services when the fraud is detected
         let network_compromised_token = p2p.get_network_compromised_token().await?;
         let tasks_cancellation_token = CancellationToken::new();
+
         spawn({
             let syncer = syncer.clone();
             let daser = daser.clone();
             let tasks_cancellation_token = tasks_cancellation_token.child_token();
+            let event_pub = event_channel.publisher();
+
             async move {
                 select! {
                     _ = tasks_cancellation_token.cancelled() => (),
                     _ = network_compromised_token.cancelled() => {
-                        warn!("The network is compromised and should not be trusted.");
-                        warn!("The node will stop synchronizing and sampling.");
-                        warn!("You can still make some queries to the network.");
                         syncer.stop();
                         daser.stop();
+
+                        if event_pub.has_subscribers() {
+                            event_pub.send(NodeEvent::NetworkCompromised);
+                        } else {
+                            // This is a very important message and we want to log it if user
+                            // does not consume our events.
+                            warn!("{}", NodeEvent::NetworkCompromised);
+                        }
                     }
                 }
             }
         });
 
-        Ok(Node {
+        let node = Node {
             event_channel,
             p2p,
             store,
             syncer,
             _daser: daser,
             tasks_cancellation_token,
-        })
+        };
+
+        Ok((node, event_sub))
     }
 
     /// Returns a new `EventSubscriber`.

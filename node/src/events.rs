@@ -72,6 +72,11 @@ impl EventChannel {
             rx: self.tx.subscribe(),
         }
     }
+
+    /// Returns if there are any active subscribers or not.
+    pub fn has_subscribers(&self) -> bool {
+        self.tx.receiver_count() > 0
+    }
 }
 
 impl Default for EventChannel {
@@ -93,6 +98,10 @@ impl EventPublisher {
             file_path: location.file(),
             file_line: location.line(),
         });
+    }
+
+    pub(crate) fn has_subscribers(&self) -> bool {
+        self.tx.receiver_count() > 0
     }
 }
 
@@ -219,6 +228,32 @@ pub enum NodeEvent {
         /// A human readable error.
         error: String,
     },
+
+    /// A new head that was observed by the node.
+    NewSubjectiveHead {
+        /// The height of the head.
+        height: u64,
+    },
+
+    /// A new header was added from HeaderSub.
+    AddedHeaderFromHeaderSub {
+        /// The height of the header.
+        height: u64,
+    },
+
+    /// Fetching header of network head in progress.
+    FetchingHeadHeader,
+
+    /// Fetching headers for a specific block range.
+    FetchingHeaders { from_height: u64, to_height: u64 },
+
+    /// Network was compromised.
+    ///
+    /// This happens when a valid bad encoding fraud proof is received.
+    /// Ideally it would never happen, but protection needs to exist.
+    /// In case of compromised network, syncing and data sampling will
+    /// stop immediately.
+    NetworkCompromised,
 }
 
 impl fmt::Display for NodeEvent {
@@ -271,6 +306,29 @@ impl fmt::Display for NodeEvent {
             }
             NodeEvent::FatalDaserError { error } => {
                 write!(f, "Daser stopped because of a fatal error: {error}")
+            }
+            NodeEvent::NewSubjectiveHead { height } => {
+                write!(f, "New subjective head: {height}")
+            }
+            NodeEvent::AddedHeaderFromHeaderSub { height } => {
+                write!(f, "Added header {height} from HeaderSub")
+            }
+            NodeEvent::FetchingHeadHeader => {
+                write!(f, "Fetching header of network head block")
+            }
+            NodeEvent::FetchingHeaders {
+                from_height,
+                to_height,
+            } => {
+                if from_height == to_height {
+                    write!(f, "Fetching header of {from_height} block")
+                } else {
+                    write!(f, "Fetching headers of {from_height}-{to_height} blocks")
+                }
+            }
+            NodeEvent::NetworkCompromised => {
+                write!(f, "The network is compromised and should not be trusted. ")?;
+                write!(f, "Node stopped synchronizing and sampling, but you can still make some queries to the network.")
             }
         }
     }

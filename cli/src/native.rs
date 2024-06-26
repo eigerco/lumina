@@ -68,7 +68,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         info!("Initialised store, present headers: {stored_ranges}");
     }
 
-    let node = Node::new(NodeConfig {
+    let (_node, mut events) = Node::new_subscribed(NodeConfig {
         network_id,
         genesis_hash,
         p2p_local_keypair,
@@ -80,14 +80,13 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     .await
     .context("Failed to start node")?;
 
-    node.wait_connected_trusted().await?;
-    let mut events = node.event_subscriber();
-
-    // We have nothing else to do, but we want to keep main alive
     while let Ok(ev) = events.recv().await {
         match ev.event {
             // Skip noisy events
             NodeEvent::ShareSamplingResult { .. } => continue,
+            event @ (NodeEvent::FatalDaserError { .. } | NodeEvent::NetworkCompromised) => {
+                warn!("{event}");
+            }
             event => info!("{event}"),
         }
     }
