@@ -245,7 +245,12 @@ pub enum NodeEvent {
     FetchingHeadHeader,
 
     /// Fetching headers for a specific block range.
-    FetchingHeaders { from_height: u64, to_height: u64 },
+    FetchingHeaders {
+        /// Start of the range.
+        from_height: u64,
+        /// End of the range (included).
+        to_height: u64,
+    },
 
     /// Network was compromised.
     ///

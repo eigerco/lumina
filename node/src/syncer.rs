@@ -86,6 +86,7 @@ where
     pub p2p: Arc<P2p>,
     /// Headers storage.
     pub store: Arc<S>,
+    /// Event publisher.
     pub event_pub: EventPublisher,
 }
 
