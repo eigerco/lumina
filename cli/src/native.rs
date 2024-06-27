@@ -84,7 +84,9 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         match ev.event {
             // Skip noisy events
             NodeEvent::ShareSamplingResult { .. } => continue,
-            event @ (NodeEvent::FatalDaserError { .. } | NodeEvent::NetworkCompromised) => {
+            event @ (NodeEvent::FatalDaserError { .. }
+            | NodeEvent::FetchingHeadersFailed { .. }
+            | NodeEvent::NetworkCompromised) => {
                 warn!("{event}");
             }
             event => info!("{event}"),

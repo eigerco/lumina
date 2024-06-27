@@ -229,27 +229,51 @@ pub enum NodeEvent {
         error: String,
     },
 
-    /// A new head that was observed by the node.
-    NewSubjectiveHead {
-        /// The height of the head.
-        height: u64,
-    },
-
     /// A new header was added from HeaderSub.
     AddedHeaderFromHeaderSub {
         /// The height of the header.
         height: u64,
     },
 
-    /// Fetching header of network head in progress.
-    FetchingHeadHeader,
+    /// Fetching header of network head just started.
+    FetchingHeadHeaderStarted,
 
-    /// Fetching headers for a specific block range.
-    FetchingHeaders {
+    /// Fetching header of network head just finished.
+    FetchingHeadHeaderFinished {
+        /// The height of the network head.
+        height: u64,
+        /// How much time fetching took.
+        took: Duration,
+    },
+
+    /// Fetching headers of a specific block range just started.
+    FetchingHeadersStarted {
         /// Start of the range.
         from_height: u64,
         /// End of the range (included).
         to_height: u64,
+    },
+
+    /// Fetching headers of a specific block range just finished.
+    FetchingHeadersFinished {
+        /// Start of the range.
+        from_height: u64,
+        /// End of the range (included).
+        to_height: u64,
+        /// How much time fetching took.
+        took: Duration,
+    },
+
+    /// Fetching headers of a specific block range just finished.
+    FetchingHeadersFailed {
+        /// Start of the range.
+        from_height: u64,
+        /// End of the range (included).
+        to_height: u64,
+        /// A human readable error.
+        error: String,
+        /// How much time fetching took.
+        took: Duration,
     },
 
     /// Network was compromised.
@@ -283,7 +307,7 @@ impl fmt::Display for NodeEvent {
                 square_width,
                 shares,
             } => {
-                write!(f, "Sampling for {height} block started. Square: {square_width}x{square_width}, Shares: {shares:?}.")
+                write!(f, "Sampling for {height} block started. Square: {square_width}x{square_width}, Shares: {shares:?}")
             }
             NodeEvent::ShareSamplingResult {
                 height,
@@ -295,7 +319,7 @@ impl fmt::Display for NodeEvent {
                 let acc = if *accepted { "accepted" } else { "rejected" };
                 write!(
                     f,
-                    "Sampling for share [{row}, {column}] of {height} block was {acc}."
+                    "Sampling for share [{row}, {column}] of {height} block was {acc}"
                 )
             }
             NodeEvent::SamplingFinished {
@@ -306,29 +330,61 @@ impl fmt::Display for NodeEvent {
                 let acc = if *accepted { "accepted" } else { "rejected" };
                 write!(
                     f,
-                    "Sampling for {height} block finished and {acc}. Took {took:?}."
+                    "Sampling for {height} block finished and {acc}. Took: {took:?}"
                 )
             }
             NodeEvent::FatalDaserError { error } => {
                 write!(f, "Daser stopped because of a fatal error: {error}")
             }
-            NodeEvent::NewSubjectiveHead { height } => {
-                write!(f, "New subjective head: {height}")
-            }
             NodeEvent::AddedHeaderFromHeaderSub { height } => {
                 write!(f, "Added header {height} from header-sub")
             }
-            NodeEvent::FetchingHeadHeader => {
-                write!(f, "Fetching header of network head block")
+            NodeEvent::FetchingHeadHeaderStarted => {
+                write!(f, "Fetching header of network head block started")
             }
-            NodeEvent::FetchingHeaders {
+            NodeEvent::FetchingHeadHeaderFinished { height, took } => {
+                write!(f, "Fetching header of network head block finished. Height: {height}, Took: {took:?}")
+            }
+            NodeEvent::FetchingHeadersStarted {
                 from_height,
                 to_height,
             } => {
                 if from_height == to_height {
-                    write!(f, "Fetching header of {from_height} block")
+                    write!(f, "Fetching header of {from_height} block started")
                 } else {
-                    write!(f, "Fetching headers of {from_height}-{to_height} blocks")
+                    write!(
+                        f,
+                        "Fetching headers of {from_height}-{to_height} blocks started"
+                    )
+                }
+            }
+            NodeEvent::FetchingHeadersFinished {
+                from_height,
+                to_height,
+                took,
+            } => {
+                if from_height == to_height {
+                    write!(
+                        f,
+                        "Fetching header of {from_height} block finished. Took: {took:?}"
+                    )
+                } else {
+                    write!(f, "Fetching headers of {from_height}-{to_height} blocks finished. Took: {took:?}")
+                }
+            }
+            NodeEvent::FetchingHeadersFailed {
+                from_height,
+                to_height,
+                error,
+                took,
+            } => {
+                if from_height == to_height {
+                    write!(
+                        f,
+                        "Fetching header of {from_height} block failed. Took: {took:?}, Error: {error}"
+                    )
+                } else {
+                    write!(f, "Fetching headers of {from_height}-{to_height} blocks failed. Took: {took:?}, Error: {error}")
                 }
             }
             NodeEvent::NetworkCompromised => {

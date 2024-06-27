@@ -22,6 +22,7 @@ use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, info_span, instrument, warn, Instrument};
+use web_time::Instant;
 
 use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
@@ -176,8 +177,8 @@ where
     store: Arc<S>,
     header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     subjective_head_height: Option<u64>,
-    headers_tx: mpsc::Sender<Result<Vec<ExtendedHeader>, P2pError>>,
-    headers_rx: mpsc::Receiver<Result<Vec<ExtendedHeader>, P2pError>>,
+    headers_tx: mpsc::Sender<(Result<Vec<ExtendedHeader>, P2pError>, Duration)>,
+    headers_rx: mpsc::Receiver<(Result<Vec<ExtendedHeader>, P2pError>, Duration)>,
     ongoing_batch: Option<Ongoing>,
 }
 
@@ -248,9 +249,13 @@ where
                 _ = report_interval.tick() => {
                     self.report().await;
                 }
-                Ok(network_head_height) = &mut try_init_result => {
+                Ok((network_head_height, took)) = &mut try_init_result => {
                     info!("Setting initial subjective head to {network_head_height}");
                     self.set_subjective_head_height(network_head_height);
+                    self.event_pub.send(NodeEvent::FetchingHeadHeaderFinished {
+                        height: network_head_height,
+                        took,
+                    });
                     break;
                 }
                 Some(cmd) = self.cmd_rx.recv() => {
@@ -298,8 +303,8 @@ where
                 Some(cmd) = self.cmd_rx.recv() => {
                     self.on_cmd(cmd).await;
                 }
-                Some(res) = self.headers_rx.recv() => {
-                    self.on_fetch_next_batch_result(res).await;
+                Some((res, took)) = self.headers_rx.recv() => {
+                    self.on_fetch_next_batch_result(res, took).await;
                     self.fetch_next_batch().await;
                 }
             }
@@ -338,12 +343,13 @@ where
         info!("syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}");
     }
 
-    fn spawn_try_init(&self) -> oneshot::Receiver<u64> {
+    fn spawn_try_init(&self) -> oneshot::Receiver<(u64, Duration)> {
         let p2p = self.p2p.clone();
         let store = self.store.clone();
         let (tx, rx) = oneshot::channel();
 
         let fut = async move {
+            let now = Instant::now();
             let mut backoff = ExponentialBackoffBuilder::default()
                 .with_max_interval(TRY_INIT_BACKOFF_MAX_INTERVAL)
                 .with_max_elapsed_time(None)
@@ -352,7 +358,7 @@ where
             loop {
                 match try_init(&p2p, &*store).await {
                     Ok(network_height) => {
-                        tx.maybe_send(network_height);
+                        tx.maybe_send((network_height, now.elapsed()));
                         break;
                     }
                     Err(e) => {
@@ -367,7 +373,7 @@ where
             }
         };
 
-        self.event_pub.send(NodeEvent::FetchingHeadHeader);
+        self.event_pub.send(NodeEvent::FetchingHeadHeaderStarted);
 
         spawn_cancellable(
             self.cancellation_token.child_token(),
@@ -425,7 +431,6 @@ where
         }
 
         self.subjective_head_height = Some(height);
-        self.event_pub.send(NodeEvent::NewSubjectiveHead { height });
     }
 
     #[instrument(skip_all)]
@@ -469,7 +474,7 @@ where
             return;
         }
 
-        self.event_pub.send(NodeEvent::FetchingHeaders {
+        self.event_pub.send(NodeEvent::FetchingHeadersStarted {
             from_height: *next_batch.start(),
             to_height: *next_batch.end(),
         });
@@ -485,32 +490,44 @@ where
         let p2p = self.p2p.clone();
 
         spawn_cancellable(cancellation_token, async move {
-            let result = p2p.get_unverified_header_range(next_batch).await;
-            match result {
-                Ok(headers) => {
-                    let _ = tx.send(Ok(headers)).await;
-                }
-                Err(e) => {
-                    let _ = tx.send(Err(e)).await;
-                }
-            }
+            let now = Instant::now();
+            let res = p2p.get_unverified_header_range(next_batch).await;
+            let _ = tx.send((res, now.elapsed())).await;
         });
     }
 
     #[instrument(skip_all)]
-    async fn on_fetch_next_batch_result(&mut self, res: Result<Vec<ExtendedHeader>, P2pError>) {
+    async fn on_fetch_next_batch_result(
+        &mut self,
+        res: Result<Vec<ExtendedHeader>, P2pError>,
+        took: Duration,
+    ) {
         let Some(ongoing) = self.ongoing_batch.take() else {
             warn!("No batch was scheduled, however result was received. Discarding it.");
             return;
         };
 
+        let from_height = *ongoing.batch.0.start();
+        let to_height = *ongoing.batch.0.end();
+
         let headers = match res {
             Ok(headers) => headers,
             Err(e) => {
-                warn!("Failed to receive batch for ranges {}: {e}", ongoing.batch);
+                self.event_pub.send(NodeEvent::FetchingHeadersFailed {
+                    from_height,
+                    to_height,
+                    error: e.to_string(),
+                    took,
+                });
                 return;
             }
         };
+
+        self.event_pub.send(NodeEvent::FetchingHeadersFinished {
+            from_height,
+            to_height,
+            took,
+        });
 
         if let Err(e) = self.store.insert(headers).await {
             warn!("Failed to store range {}: {e}", ongoing.batch);
