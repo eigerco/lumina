@@ -285,6 +285,26 @@ pub enum NodeEvent {
     NetworkCompromised,
 }
 
+impl NodeEvent {
+    pub fn is_error(&self) -> bool {
+        match self {
+            NodeEvent::FatalDaserError { .. }
+            | NodeEvent::FetchingHeadersFailed { .. }
+            | NodeEvent::NetworkCompromised => true,
+            NodeEvent::PeerConnected { .. }
+            | NodeEvent::PeerDisconnected { .. }
+            | NodeEvent::SamplingStarted { .. }
+            | NodeEvent::ShareSamplingResult { .. }
+            | NodeEvent::SamplingFinished { .. }
+            | NodeEvent::AddedHeaderFromHeaderSub { .. }
+            | NodeEvent::FetchingHeadHeaderStarted
+            | NodeEvent::FetchingHeadHeaderFinished { .. }
+            | NodeEvent::FetchingHeadersStarted { .. }
+            | NodeEvent::FetchingHeadersFinished { .. } => false,
+        }
+    }
+}
+
 impl fmt::Display for NodeEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
