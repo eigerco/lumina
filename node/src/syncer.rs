@@ -523,15 +523,20 @@ where
             }
         };
 
+        if let Err(e) = self.store.insert(headers).await {
+            self.event_pub.send(NodeEvent::FetchingHeadersFailed {
+                from_height,
+                to_height,
+                error: format!("Failed to store headers: {e}"),
+                took,
+            });
+        }
+
         self.event_pub.send(NodeEvent::FetchingHeadersFinished {
             from_height,
             to_height,
             took,
         });
-
-        if let Err(e) = self.store.insert(headers).await {
-            warn!("Failed to store range {}: {e}", ongoing.batch);
-        }
     }
 }
 
