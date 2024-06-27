@@ -286,6 +286,7 @@ pub enum NodeEvent {
 }
 
 impl NodeEvent {
+    /// Returns `true` if the event indicates an error.
     pub fn is_error(&self) -> bool {
         match self {
             NodeEvent::FatalDaserError { .. }
