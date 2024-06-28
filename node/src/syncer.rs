@@ -710,7 +710,7 @@ mod tests {
         .await;
         assert_syncing(&syncer, &store, &[1537..=2049], 2049).await;
 
-        // Syncer requested the second batch ([1025, 2049]) hitting the syncing window
+        // Syncer requested the second batch ([1025, 1536]) hitting the syncing window
         handle_session_batch(
             &mut p2p_mock,
             &headers,
@@ -728,7 +728,7 @@ mod tests {
         .await;
         assert_syncing(&syncer, &store, &[1025..=2049], 2049).await;
 
-        // Syncer is fulling synced and awaiting for events
+        // Syncer is fully synced and awaiting for events
         p2p_mock.expect_no_cmd().await;
     }
 
