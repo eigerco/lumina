@@ -306,6 +306,7 @@ async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: B
     #[derive(Serialize)]
     struct Event {
         message: String,
+        is_error: bool,
         #[serde(flatten)]
         info: NodeEventInfo,
     }
@@ -313,6 +314,7 @@ async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: B
     while let Ok(ev) = events_sub.recv().await {
         let ev = Event {
             message: ev.event.to_string(),
+            is_error: ev.event.is_error(),
             info: ev,
         };
 
