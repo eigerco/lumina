@@ -1,6 +1,8 @@
 # Lumina
 
-Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in browser-based environments.
+Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in browser-based environments. 
+
+Run Lumina now at [lumina.rs](https://lumina.rs/) and directly verify Celestia.
 
 Supported features:
 - [x] Synchronize and verify `ExtendedHeader`s from genesis to the network head
@@ -88,12 +90,12 @@ lumina browser --help
 
 For security reasons, browsers only allow WebTransport to be used in [Secure Context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts). When running Lumina in a browser make sure to access it either locally or over HTTPS.
 
-## Running Go celestia node for integration
+## Running Go Celestia node for integration
 
 Follow [this guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)
 to authorize yourself in github's container registry.
 
-Starting a celestia network with single validator and bridge
+Starting a Celestia network with single validator and bridge
 ```bash
 docker compose -f ci/docker-compose.yml up --build --force-recreate -d
 # and to stop it
@@ -117,9 +119,9 @@ Extracting blocks for test cases:
 celestia rpc header GetByHeight 27 | jq .result
 ```
 
-## Running integration tests with celestia node
+## Running integration tests with Celestia node
 
-Make sure you have the celestia network running inside docker compose from the section above.
+Make sure you have the Celestia network running inside docker compose from the section above.
 
 Generate authentication tokens
 ```bash
@@ -146,3 +148,13 @@ How to upgrade:
 ./tools/upgrade-deps.sh -i  # `-i` upgrades incompatible versions too
 cargo update
 ```
+
+## Frontend
+
+Check out the front end at [eigerco/lumina-front](https://github.com/eigerco/lumina-front) 
+
+## About Eiger
+
+We are engineers. We contribute to various ecosystems by building low level implementations and core components. We built Lumina because we believe in the modular thesis. We wanted to make the Celestia light node available and easy to run for as many users so that everyone can perform sampling to ensure data availability.
+
+Contact us at hello@eiger.co
