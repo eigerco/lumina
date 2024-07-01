@@ -55,7 +55,7 @@ struct NodeWorker {
 }
 
 impl NodeWorker {
-    async fn new(config: WasmNodeConfig) -> Result<Self> {
+    async fn new(events_channel_name: &str, config: WasmNodeConfig) -> Result<Self> {
         let config = config.into_node_config().await?;
 
         if let Ok(store_height) = config.store.head_height().await {
@@ -64,18 +64,16 @@ impl NodeWorker {
             info!("Initialised new empty store");
         }
 
-        let node = Node::new(config).await?;
+        let (node, events_sub) = Node::new_subscribed(config).await?;
 
-        let events_channel_name = format!("NodeEventChannel-{}", get_crypto()?.random_uuid());
-        let events_channel = BroadcastChannel::new(&events_channel_name)
+        let events_channel = BroadcastChannel::new(events_channel_name)
             .context("Failed to allocate BroadcastChannel")?;
 
-        let events_sub = node.event_subscriber();
         spawn_local(event_forwarder_task(events_sub, events_channel));
 
         Ok(Self {
             node,
-            events_channel_name,
+            events_channel_name: events_channel_name.to_owned(),
         })
     }
 
@@ -238,9 +236,10 @@ impl NodeWorker {
 }
 
 #[wasm_bindgen]
-pub async fn run_worker(queued_events: Vec<MessageEvent>) {
+pub async fn run_worker(queued_events: Vec<MessageEvent>) -> Result<()> {
     info!("Entered run_worker");
     let (tx, mut rx) = mpsc::channel(WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH);
+    let events_channel_name = format!("NodeEventChannel-{}", get_crypto()?.random_uuid());
 
     let mut message_server: Box<dyn MessageServer> = if SharedWorker::is_worker_type() {
         Box::new(SharedWorkerMessageServer::new(tx.clone(), queued_events))
@@ -265,8 +264,14 @@ pub async fn run_worker(queued_events: Vec<MessageEvent>) {
                         NodeCommand::IsRunning => {
                             message_server.respond_to(client_id, WorkerResponse::IsRunning(false));
                         }
+                        NodeCommand::GetEventsChannelName => {
+                            message_server.respond_to(
+                                client_id,
+                                WorkerResponse::EventsChannelName(events_channel_name.clone()),
+                            );
+                        }
                         NodeCommand::StartNode(config) => {
-                            match NodeWorker::new(config).await {
+                            match NodeWorker::new(&events_channel_name, config).await {
                                 Ok(node) => {
                                     worker = Some(node);
                                     message_server
@@ -293,12 +298,15 @@ pub async fn run_worker(queued_events: Vec<MessageEvent>) {
     }
 
     info!("Channel to WorkerMessageServer closed, exiting the SharedWorker");
+
+    Ok(())
 }
 
 async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: BroadcastChannel) {
     #[derive(Serialize)]
     struct Event {
         message: String,
+        is_error: bool,
         #[serde(flatten)]
         info: NodeEventInfo,
     }
@@ -306,6 +314,7 @@ async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: B
     while let Ok(ev) = events_sub.recv().await {
         let ev = Event {
             message: ev.event.to_string(),
+            is_error: ev.event.is_error(),
             info: ev,
         };
 
@@ -317,10 +326,4 @@ async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: B
     }
 
     events_channel.close();
-}
-
-#[wasm_bindgen(module = "/js/worker.js")]
-extern "C" {
-    // must be called in order to include this script in generated package
-    pub(crate) fn worker_script_url() -> String;
 }

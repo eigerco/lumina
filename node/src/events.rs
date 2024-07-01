@@ -72,6 +72,11 @@ impl EventChannel {
             rx: self.tx.subscribe(),
         }
     }
+
+    /// Returns if there are any active subscribers or not.
+    pub fn has_subscribers(&self) -> bool {
+        self.tx.receiver_count() > 0
+    }
 }
 
 impl Default for EventChannel {
@@ -93,6 +98,10 @@ impl EventPublisher {
             file_path: location.file(),
             file_line: location.line(),
         });
+    }
+
+    pub(crate) fn has_subscribers(&self) -> bool {
+        self.tx.receiver_count() > 0
     }
 }
 
@@ -219,6 +228,82 @@ pub enum NodeEvent {
         /// A human readable error.
         error: String,
     },
+
+    /// A new header was added from HeaderSub.
+    AddedHeaderFromHeaderSub {
+        /// The height of the header.
+        height: u64,
+    },
+
+    /// Fetching header of network head just started.
+    FetchingHeadHeaderStarted,
+
+    /// Fetching header of network head just finished.
+    FetchingHeadHeaderFinished {
+        /// The height of the network head.
+        height: u64,
+        /// How much time fetching took.
+        took: Duration,
+    },
+
+    /// Fetching headers of a specific block range just started.
+    FetchingHeadersStarted {
+        /// Start of the range.
+        from_height: u64,
+        /// End of the range (included).
+        to_height: u64,
+    },
+
+    /// Fetching headers of a specific block range just finished.
+    FetchingHeadersFinished {
+        /// Start of the range.
+        from_height: u64,
+        /// End of the range (included).
+        to_height: u64,
+        /// How much time fetching took.
+        took: Duration,
+    },
+
+    /// Fetching headers of a specific block range just failed.
+    FetchingHeadersFailed {
+        /// Start of the range.
+        from_height: u64,
+        /// End of the range (included).
+        to_height: u64,
+        /// A human readable error.
+        error: String,
+        /// How much time fetching took.
+        took: Duration,
+    },
+
+    /// Network was compromised.
+    ///
+    /// This happens when a valid bad encoding fraud proof is received.
+    /// Ideally it would never happen, but protection needs to exist.
+    /// In case of compromised network, syncing and data sampling will
+    /// stop immediately.
+    NetworkCompromised,
+}
+
+impl NodeEvent {
+    /// Returns `true` if the event indicates an error.
+    pub fn is_error(&self) -> bool {
+        match self {
+            NodeEvent::FatalDaserError { .. }
+            | NodeEvent::FetchingHeadersFailed { .. }
+            | NodeEvent::NetworkCompromised => true,
+            NodeEvent::PeerConnected { .. }
+            | NodeEvent::PeerDisconnected { .. }
+            | NodeEvent::SamplingStarted { .. }
+            | NodeEvent::ShareSamplingResult { .. }
+            | NodeEvent::SamplingFinished { .. }
+            | NodeEvent::AddedHeaderFromHeaderSub { .. }
+            | NodeEvent::FetchingHeadHeaderStarted
+            | NodeEvent::FetchingHeadHeaderFinished { .. }
+            | NodeEvent::FetchingHeadersStarted { .. }
+            | NodeEvent::FetchingHeadersFinished { .. } => false,
+        }
+    }
 }
 
 impl fmt::Display for NodeEvent {
@@ -243,7 +328,7 @@ impl fmt::Display for NodeEvent {
                 square_width,
                 shares,
             } => {
-                write!(f, "Sampling for {height} block started. Square: {square_width}x{square_width}, Shares: {shares:?}.")
+                write!(f, "Sampling for {height} block started. Square: {square_width}x{square_width}, Shares: {shares:?}")
             }
             NodeEvent::ShareSamplingResult {
                 height,
@@ -255,7 +340,7 @@ impl fmt::Display for NodeEvent {
                 let acc = if *accepted { "accepted" } else { "rejected" };
                 write!(
                     f,
-                    "Sampling for share [{row}, {column}] of {height} block was {acc}."
+                    "Sampling for share [{row}, {column}] of {height} block was {acc}"
                 )
             }
             NodeEvent::SamplingFinished {
@@ -266,11 +351,66 @@ impl fmt::Display for NodeEvent {
                 let acc = if *accepted { "accepted" } else { "rejected" };
                 write!(
                     f,
-                    "Sampling for {height} block finished and {acc}. Took {took:?}."
+                    "Sampling for {height} block finished and {acc}. Took: {took:?}"
                 )
             }
             NodeEvent::FatalDaserError { error } => {
                 write!(f, "Daser stopped because of a fatal error: {error}")
+            }
+            NodeEvent::AddedHeaderFromHeaderSub { height } => {
+                write!(f, "Added header {height} from header-sub")
+            }
+            NodeEvent::FetchingHeadHeaderStarted => {
+                write!(f, "Fetching header of network head block started")
+            }
+            NodeEvent::FetchingHeadHeaderFinished { height, took } => {
+                write!(f, "Fetching header of network head block finished. Height: {height}, Took: {took:?}")
+            }
+            NodeEvent::FetchingHeadersStarted {
+                from_height,
+                to_height,
+            } => {
+                if from_height == to_height {
+                    write!(f, "Fetching header of {from_height} block started")
+                } else {
+                    write!(
+                        f,
+                        "Fetching headers of {from_height}-{to_height} blocks started"
+                    )
+                }
+            }
+            NodeEvent::FetchingHeadersFinished {
+                from_height,
+                to_height,
+                took,
+            } => {
+                if from_height == to_height {
+                    write!(
+                        f,
+                        "Fetching header of {from_height} block finished. Took: {took:?}"
+                    )
+                } else {
+                    write!(f, "Fetching headers of {from_height}-{to_height} blocks finished. Took: {took:?}")
+                }
+            }
+            NodeEvent::FetchingHeadersFailed {
+                from_height,
+                to_height,
+                error,
+                took,
+            } => {
+                if from_height == to_height {
+                    write!(
+                        f,
+                        "Fetching header of {from_height} block failed. Took: {took:?}, Error: {error}"
+                    )
+                } else {
+                    write!(f, "Fetching headers of {from_height}-{to_height} blocks failed. Took: {took:?}, Error: {error}")
+                }
+            }
+            NodeEvent::NetworkCompromised => {
+                write!(f, "The network is compromised and should not be trusted. ")?;
+                write!(f, "Node stopped synchronizing and sampling, but you can still make some queries to the network.")
             }
         }
     }

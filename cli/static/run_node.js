@@ -95,10 +95,34 @@ function bind_config(data) {
   });
 }
 
+function log_event(event) {
+  // Skip noisy events
+  if (event.data.get("event").type == "share_sampling_result") {
+    return;
+  }
+
+  const time = new Date(event.data.get("time"));
+
+  const log = time.getHours().toString().padStart(2, '0')
+    + ":" + time.getMinutes().toString().padStart(2, '0')
+    + ":" + time.getSeconds().toString().padStart(2, '0')
+    + "." + time.getMilliseconds().toString().padStart(3, '0')
+    + ": " + event.data.get("message");
+
+  var textarea = document.getElementById("event-logs");
+  textarea.value += log + "\n";
+  textarea.scrollTop = textarea.scrollHeight;
+}
+
 async function main(document, window) {
   await init();
 
-  window.node = await new NodeClient();
+  window.node = await new NodeClient("/js/worker.js");
+
+  window.events = await window.node.events_channel();
+  window.events.onmessage = (event) => {
+    log_event(event);
+  };
 
   bind_config(await fetch_config());
 
