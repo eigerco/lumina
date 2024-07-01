@@ -98,7 +98,7 @@ function bind_config(data) {
 async function main(document, window) {
   await init();
 
-  window.node = await new NodeClient();
+  window.node = await new NodeClient("/js/worker.js");
 
   bind_config(await fetch_config());
 

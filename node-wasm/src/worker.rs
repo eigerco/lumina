@@ -318,9 +318,3 @@ async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: B
 
     events_channel.close();
 }
-
-#[wasm_bindgen(module = "/js/worker.js")]
-extern "C" {
-    // must be called in order to include this script in generated package
-    pub(crate) fn worker_script_url() -> String;
-}
