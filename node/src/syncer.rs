@@ -177,6 +177,7 @@ where
     headers_tx: mpsc::Sender<Result<Vec<ExtendedHeader>, P2pError>>,
     headers_rx: mpsc::Receiver<Result<Vec<ExtendedHeader>, P2pError>>,
     ongoing_batch: Option<Ongoing>,
+    estimated_syncing_window_end: Option<u64>,
 }
 
 struct Ongoing {
@@ -206,6 +207,7 @@ where
             headers_tx,
             headers_rx,
             ongoing_batch: None,
+            estimated_syncing_window_end: None,
         })
     }
 
@@ -437,6 +439,7 @@ where
         let next_batch = calculate_range_to_fetch(
             subjective_head_height,
             store_ranges.as_ref(),
+            self.estimated_syncing_window_end,
             MAX_HEADERS_IN_BATCH,
         );
 
@@ -445,16 +448,10 @@ where
             return;
         }
 
-        let syncing_window_start = Time::now().checked_sub(SYNCING_WINDOW).unwrap_or_else(|| {
-            warn!("underflow when computing syncing window start, defaulting to unix epoch");
-            Time::unix_epoch()
-        });
-
         // make sure we're inside the syncing window before we start
         if let Ok(known_header) = self.store.get_by_height(next_batch.end() + 1).await {
-            if known_header.time().before(syncing_window_start) {
-                debug!("synced to the end of syncing window");
-                return;
+            if !in_syncing_window(&known_header) {
+                self.estimated_syncing_window_end = Some(known_header.height().value());
             }
         }
 
@@ -508,6 +505,15 @@ where
             warn!("Failed to store range {}: {e}", ongoing.batch);
         }
     }
+}
+
+fn in_syncing_window(header: &ExtendedHeader) -> bool {
+    let syncing_window_start = Time::now().checked_sub(SYNCING_WINDOW).unwrap_or_else(|| {
+        warn!("underflow when computing syncing window start, defaulting to unix epoch");
+        Time::unix_epoch()
+    });
+
+    header.time().after(syncing_window_start)
 }
 
 async fn try_init<S>(p2p: &P2p, store: &S) -> Result<u64>
