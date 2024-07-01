@@ -59,6 +59,13 @@
       color: var(--fg2);
     }
 
+    .event-logs {
+      background-color: var(--bg1);
+      color: var(--fg1);
+      border: 1px solid var(--border);
+      font-family: var(--fonts-mono);
+    }
+
     h2.status {
       margin: 2rem 0 1rem 0;
       color: var(--fg1);
@@ -95,6 +102,9 @@
   <div>
     <button id="start" class="config"><b>Start!</b></button>
   </div>
+
+  <h2 class="event_logs">Event Logs</h2>
+  <textarea readonly id="event-logs" class="event-logs" cols=120 rows=8></textarea>
 
   <h2 class="status">Status</h2>
 
