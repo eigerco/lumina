@@ -117,7 +117,7 @@ function log_event(event) {
 async function main(document, window) {
   await init();
 
-  window.node = await new NodeClient();
+  window.node = await new NodeClient("/js/worker.js");
 
   window.events = await window.node.events_channel();
   window.events.onmessage = (event) => {

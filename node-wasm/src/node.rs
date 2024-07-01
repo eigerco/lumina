@@ -16,7 +16,7 @@ use lumina_node::store::IndexedDbStore;
 use crate::error::{Context, Result};
 use crate::utils::{is_chrome, js_value_from_display, Network};
 use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
-use crate::worker::{worker_script_url, AnyWorker, WorkerClient};
+use crate::worker::{AnyWorker, WorkerClient};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 const LUMINA_WORKER_NAME: &str = "lumina";
@@ -61,10 +61,37 @@ impl NodeDriver {
     /// Create a new connection to a Lumina node running in a Shared Worker.
     /// Note that single Shared Worker can be accessed from multiple tabs, so Lumina may
     /// already have been started. Otherwise it needs to be started with [`NodeDriver::start`].
+    ///
+    /// Requires serving a worker script and providing an url to it. The script should look like
+    /// so (the import statement may vary depending on your js-bundler):
+    /// ```js
+    /// import init, { run_worker } from 'lumina_node_wasm.js';
+    ///
+    /// Error.stackTraceLimit = 99;
+    ///
+    /// // for SharedWorker we queue incoming connections
+    /// // for dedicated Worker we queue incoming messages (coming from the single client)
+    /// let queued = [];
+    /// if (typeof SharedWorkerGlobalScope !== 'undefined' && self instanceof SharedWorkerGlobalScope) {
+    ///   onconnect = (event) => {
+    ///     queued.push(event)
+    ///   }
+    /// } else {
+    ///   onmessage = (event) => {
+    ///     queued.push(event);
+    ///   }
+    /// }
+    ///
+    /// init().then(() => {
+    ///   console.log("starting worker, queued messages: ", queued.length);
+    ///   run_worker(queued);
+    /// })
+    /// ```
     #[wasm_bindgen(constructor)]
-    pub async fn new(worker_type: Option<NodeWorkerKind>) -> Result<NodeDriver> {
-        let url = worker_script_url();
-
+    pub async fn new(
+        worker_script_url: &str,
+        worker_type: Option<NodeWorkerKind>,
+    ) -> Result<NodeDriver> {
         // For chrome we default to running in a dedicated Worker because:
         // 1. Chrome Android does not support SharedWorkers at all
         // 2. On desktop Chrome, restarting Lumina's worker causes all network connections to fail.
@@ -76,7 +103,7 @@ impl NodeDriver {
 
         let worker = AnyWorker::new(
             worker_type.unwrap_or(default_worker_type),
-            &url,
+            worker_script_url,
             LUMINA_WORKER_NAME,
         )?;
 
