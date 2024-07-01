@@ -264,7 +264,7 @@ pub enum NodeEvent {
         took: Duration,
     },
 
-    /// Fetching headers of a specific block range just finished.
+    /// Fetching headers of a specific block range just failed.
     FetchingHeadersFailed {
         /// Start of the range.
         from_height: u64,
