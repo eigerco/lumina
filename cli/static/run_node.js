@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import init, { Node, NodeConfig } from "/wasm/lumina_node_wasm.js";
+import init, { NodeConfig, NodeClient } from "/wasm/lumina_node_wasm.js";
 
 async function fetch_config() {
   const response = await fetch('/cfg.json');
@@ -20,7 +20,7 @@ async function fetch_config() {
 }
 
 async function show_stats(node) {
-  if (!node) {
+  if (!node || !await node.is_running()) {
     return;
   }
   const info = await node.syncer_info();
@@ -38,7 +38,7 @@ async function show_stats(node) {
 
   document.getElementById("peers").replaceChildren(peers_ul);
 
-  const network_head = node.get_network_head_header();
+  const network_head = await node.get_network_head_header();
   if (network_head == null) {
     return
   }
@@ -95,21 +95,49 @@ function bind_config(data) {
   });
 }
 
-async function start_node(config) {
-  window.node = await new Node(config);
+function log_event(event) {
+  // Skip noisy events
+  if (event.data.get("event").type == "share_sampling_result") {
+    return;
+  }
 
-  document.getElementById("peer-id").innerText = await window.node.local_peer_id();
-  document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
+  const time = new Date(event.data.get("time"));
+
+  const log = time.getHours().toString().padStart(2, '0')
+    + ":" + time.getMinutes().toString().padStart(2, '0')
+    + ":" + time.getSeconds().toString().padStart(2, '0')
+    + "." + time.getMilliseconds().toString().padStart(3, '0')
+    + ": " + event.data.get("message");
+
+  var textarea = document.getElementById("event-logs");
+  textarea.value += log + "\n";
+  textarea.scrollTop = textarea.scrollHeight;
 }
 
 async function main(document, window) {
   await init();
 
+  window.node = await new NodeClient("/js/worker.js");
+
+  window.events = await window.node.events_channel();
+  window.events.onmessage = (event) => {
+    log_event(event);
+  };
+
   bind_config(await fetch_config());
+
+  if (await window.node.is_running() === true) {
+    document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
+    document.getElementById("peer-id").innerText = await window.node.local_peer_id();
+    document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
+  }
 
   document.getElementById("start").addEventListener("click", async () => {
     document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
-    start_node(window.config);
+
+    await window.node.start(window.config);
+    document.getElementById("peer-id").innerText = await window.node.local_peer_id();
+    document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
   });
 
   setInterval(async () => await show_stats(window.node), 1000)
