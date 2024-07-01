@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoffBuilder;
+use celestia_tendermint::Time;
 use celestia_types::ExtendedHeader;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
@@ -36,6 +37,7 @@ type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
 const MAX_HEADERS_IN_BATCH: u64 = 512;
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
+const SYNCING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
 /// Representation of all the errors that can occur when interacting with the [`Syncer`].
 #[derive(Debug, thiserror::Error)]
@@ -180,6 +182,7 @@ where
     headers_tx: mpsc::Sender<(Result<Vec<ExtendedHeader>, P2pError>, Duration)>,
     headers_rx: mpsc::Receiver<(Result<Vec<ExtendedHeader>, P2pError>, Duration)>,
     ongoing_batch: Option<Ongoing>,
+    estimated_syncing_window_end: Option<u64>,
 }
 
 struct Ongoing {
@@ -210,6 +213,7 @@ where
             headers_tx,
             headers_rx,
             ongoing_batch: None,
+            estimated_syncing_window_end: None,
         })
     }
 
@@ -466,12 +470,21 @@ where
         let next_batch = calculate_range_to_fetch(
             subjective_head_height,
             store_ranges.as_ref(),
+            self.estimated_syncing_window_end,
             MAX_HEADERS_IN_BATCH,
         );
 
         if next_batch.is_empty() {
             // no headers to fetch
             return;
+        }
+
+        // make sure we're inside the syncing window before we start
+        if let Ok(known_header) = self.store.get_by_height(next_batch.end() + 1).await {
+            if !in_syncing_window(&known_header) {
+                self.estimated_syncing_window_end = Some(known_header.height().value());
+                return;
+            }
         }
 
         self.event_pub.send(NodeEvent::FetchingHeadersStarted {
@@ -538,6 +551,15 @@ where
             took,
         });
     }
+}
+
+fn in_syncing_window(header: &ExtendedHeader) -> bool {
+    let syncing_window_start = Time::now().checked_sub(SYNCING_WINDOW).unwrap_or_else(|| {
+        warn!("underflow when computing syncing window start, defaulting to unix epoch");
+        Time::unix_epoch()
+    });
+
+    header.time().after(syncing_window_start)
 }
 
 async fn try_init<S>(p2p: &P2p, store: &S) -> Result<u64>
@@ -710,6 +732,58 @@ mod tests {
         assert_syncing(&syncer, &store, &[1..=1059], 1059).await;
 
         // Syncer is fulling synced and awaiting for events
+        p2p_mock.expect_no_cmd().await;
+    }
+
+    #[async_test]
+    async fn syncing_window_edge() {
+        let month_and_day_ago = Duration::from_secs(31 * 24 * 60 * 60);
+        let mut gen = ExtendedHeaderGenerator::new();
+        gen.set_time((Time::now() - month_and_day_ago).expect("to not underflow"));
+        let mut headers = gen.next_many(1200);
+        gen.set_time(Time::now());
+        headers.append(&mut gen.next_many(2049 - 1200));
+
+        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[2048].clone()).await;
+        assert_syncing(&syncer, &store, &[2049..=2049], 2049).await;
+
+        // Syncer requested the first batch ([1537..=2048])
+        handle_session_batch(
+            &mut p2p_mock,
+            &headers,
+            vec![
+                (1537, 64),
+                (1601, 64),
+                (1665, 64),
+                (1729, 64),
+                (1793, 64),
+                (1857, 64),
+                (1921, 64),
+                (1985, 64),
+            ],
+        )
+        .await;
+        assert_syncing(&syncer, &store, &[1537..=2049], 2049).await;
+
+        // Syncer requested the second batch ([1025, 1536]) hitting the syncing window
+        handle_session_batch(
+            &mut p2p_mock,
+            &headers,
+            vec![
+                (1025, 64),
+                (1089, 64),
+                (1153, 64),
+                (1217, 64),
+                (1281, 64),
+                (1345, 64),
+                (1409, 64),
+                (1473, 64),
+            ],
+        )
+        .await;
+        assert_syncing(&syncer, &store, &[1025..=2049], 2049).await;
+
+        // Syncer is fully synced and awaiting for events
         p2p_mock.expect_no_cmd().await;
     }
 

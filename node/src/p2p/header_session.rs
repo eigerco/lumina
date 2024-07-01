@@ -9,7 +9,7 @@ use crate::p2p::{P2pCmd, P2pError};
 use crate::store::header_ranges::{HeaderRange, RangeLengthExt};
 
 const MAX_AMOUNT_PER_REQ: u64 = 64;
-const MAX_CONCURRENT_REQS: usize = 1;
+const MAX_CONCURRENT_REQS: usize = 8;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
@@ -139,16 +139,18 @@ impl HeaderSession {
     }
 }
 
+/// take a next batch of up to `limit` headers from the front of the `range_to_fetch`
 fn take_next_batch(range_to_fetch: &mut Option<HeaderRange>, limit: u64) -> Option<HeaderRange> {
-    // calculate potential end before we modify range_to_fetch
+    // calculate potential end offset before we modify range_to_fetch
     let end_offset = limit.checked_sub(1)?;
 
     let to_fetch = range_to_fetch.take()?;
     if to_fetch.len() <= limit {
         Some(to_fetch)
     } else {
-        let _ = range_to_fetch.insert(*to_fetch.start() + limit..=*to_fetch.end());
-        Some(*to_fetch.start()..=*to_fetch.start() + end_offset)
+        // to_fetch.len() > limit, we shouldn't underflow here
+        let _ = range_to_fetch.insert(*to_fetch.start()..=*to_fetch.end() - limit);
+        Some(*to_fetch.end() - end_offset..=*to_fetch.end())
     }
 }
 
@@ -201,10 +203,10 @@ mod tests {
             result_tx.send(res).unwrap();
         });
 
-        for i in 0..8 {
+        for i in (0..8).rev() {
             let (height, amount, respond_to) =
                 p2p_mock.expect_header_request_for_height_cmd().await;
-            assert_eq!(height, 1 + 64 * i);
+            assert_eq!(height, 9 + 64 * i);
             assert_eq!(amount, 64);
             let start = (height - 1) as usize;
             let end = start + amount as usize;
@@ -212,7 +214,7 @@ mod tests {
         }
 
         let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
-        assert_eq!(height, 513);
+        assert_eq!(height, 1);
         assert_eq!(amount, 8);
         let start = (height - 1) as usize;
         let end = start + amount as usize;
@@ -299,8 +301,38 @@ mod tests {
     fn take_next_batch_truncated_batch() {
         let mut range_to_fetch = Some(1..=10);
         let batch = take_next_batch(&mut range_to_fetch, 5);
-        assert_eq!(batch, Some(1..=5));
-        assert_eq!(range_to_fetch, Some(6..=10));
+        assert_eq!(batch, Some(6..=10));
+        assert_eq!(range_to_fetch, Some(1..=5));
+    }
+
+    #[test]
+    fn take_next_batch_truncated_calc() {
+        let mut range_to_fetch = Some(1..=512);
+
+        let batch = take_next_batch(&mut range_to_fetch, 64);
+        assert_eq!(batch, Some(449..=512));
+        assert_eq!(range_to_fetch, Some(1..=448));
+        let batch = take_next_batch(&mut range_to_fetch, 64);
+        assert_eq!(batch, Some(385..=448));
+        assert_eq!(range_to_fetch, Some(1..=384));
+        let batch = take_next_batch(&mut range_to_fetch, 64);
+        assert_eq!(batch, Some(321..=384));
+        assert_eq!(range_to_fetch, Some(1..=320));
+        let batch = take_next_batch(&mut range_to_fetch, 64);
+        assert_eq!(batch, Some(257..=320));
+        assert_eq!(range_to_fetch, Some(1..=256));
+        let batch = take_next_batch(&mut range_to_fetch, 64);
+        assert_eq!(batch, Some(193..=256));
+        assert_eq!(range_to_fetch, Some(1..=192));
+        let batch = take_next_batch(&mut range_to_fetch, 64);
+        assert_eq!(batch, Some(129..=192));
+        assert_eq!(range_to_fetch, Some(1..=128));
+        let batch = take_next_batch(&mut range_to_fetch, 64);
+        assert_eq!(batch, Some(65..=128));
+        assert_eq!(range_to_fetch, Some(1..=64));
+        let batch = take_next_batch(&mut range_to_fetch, 64);
+        assert_eq!(batch, Some(1..=64));
+        assert_eq!(range_to_fetch, None);
     }
 
     #[test]

@@ -1,4 +1,5 @@
 //! Utilities for writing tests.
+use std::time::Duration;
 
 use celestia_tendermint::block::header::{Header, Version};
 use celestia_tendermint::block::{parts, Commit, CommitSig};
@@ -23,6 +24,7 @@ pub struct ExtendedHeaderGenerator {
     chain_id: chain::Id,
     key: SigningKey,
     current_header: Option<ExtendedHeader>,
+    spoofed_time: Option<Time>,
 }
 
 impl ExtendedHeaderGenerator {
@@ -35,6 +37,7 @@ impl ExtendedHeaderGenerator {
             chain_id,
             key,
             current_header: None,
+            spoofed_time: None,
         }
     }
 
@@ -53,7 +56,13 @@ impl ExtendedHeaderGenerator {
         gen.current_header = if prev_height == 0 {
             None
         } else {
-            Some(generate_new(prev_height, &gen.chain_id, &gen.key, None))
+            Some(generate_new(
+                prev_height,
+                &gen.chain_id,
+                Time::now(),
+                &gen.key,
+                None,
+            ))
         };
 
         gen
@@ -69,9 +78,10 @@ impl ExtendedHeaderGenerator {
     /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> ExtendedHeader {
+        let time = self.get_and_increment_time();
         let header = match self.current_header {
-            Some(ref header) => generate_next(1, header, &self.key, None),
-            None => generate_new(GENESIS_HEIGHT, &self.chain_id, &self.key, None),
+            Some(ref header) => generate_next(1, header, time, &self.key, None),
+            None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, None),
         };
 
         self.current_header = Some(header.clone());
@@ -91,9 +101,10 @@ impl ExtendedHeaderGenerator {
     /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next_with_dah(&mut self, dah: DataAvailabilityHeader) -> ExtendedHeader {
+        let time = self.get_and_increment_time();
         let header = match self.current_header {
-            Some(ref header) => generate_next(1, header, &self.key, Some(dah)),
-            None => generate_new(GENESIS_HEIGHT, &self.chain_id, &self.key, Some(dah)),
+            Some(ref header) => generate_next(1, header, time, &self.key, Some(dah)),
+            None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, Some(dah)),
         };
 
         self.current_header = Some(header.clone());
@@ -128,7 +139,8 @@ impl ExtendedHeaderGenerator {
     ///
     /// This method does not change the state of `ExtendedHeaderGenerator`.
     pub fn next_of(&self, header: &ExtendedHeader) -> ExtendedHeader {
-        generate_next(1, header, &self.key, None)
+        let time = self.spoofed_time.unwrap_or_else(Time::now);
+        generate_next(1, header, time, &self.key, None)
     }
 
     /// Generates the next header of the provided header with the given [`DataAvailabilityHeader`].
@@ -155,7 +167,8 @@ impl ExtendedHeaderGenerator {
         header: &ExtendedHeader,
         dah: DataAvailabilityHeader,
     ) -> ExtendedHeader {
-        generate_next(1, header, &self.key, Some(dah))
+        let time = self.spoofed_time.unwrap_or_else(Time::now);
+        generate_next(1, header, time, &self.key, Some(dah))
     }
 
     /// Generates the next amount of headers of the provided header.
@@ -220,9 +233,11 @@ impl ExtendedHeaderGenerator {
             return;
         }
 
+        let time = self.get_and_increment_time();
+
         let header = match self.current_header {
-            Some(ref header) => generate_next(amount, header, &self.key, None),
-            None => generate_new(amount, &self.chain_id, &self.key, None),
+            Some(ref header) => generate_next(amount, header, time, &self.key, None),
+            None => generate_new(amount, &self.chain_id, time, &self.key, None),
         };
 
         self.current_header = Some(header.clone());
@@ -249,6 +264,24 @@ impl ExtendedHeaderGenerator {
     /// This is the same as clone, but the name describes the intention.
     pub fn fork(&self) -> ExtendedHeaderGenerator {
         self.clone()
+    }
+
+    /// Change header generator time. Headers generated from now on will have `time` as creation
+    /// time.
+    pub fn set_time(&mut self, time: Time) {
+        self.spoofed_time = Some(time);
+    }
+
+    // private function which also increments time, since we cannot have multiple headers on the
+    // exact same timestamp
+    fn get_and_increment_time(&mut self) -> Time {
+        let Some(spoofed_time) = self.spoofed_time.take() else {
+            return Time::now();
+        };
+
+        self.spoofed_time =
+            Some((spoofed_time + Duration::from_millis(1)).expect("not to overflow"));
+        self.spoofed_time.unwrap()
     }
 }
 
@@ -338,6 +371,7 @@ pub(crate) fn random_bytes(len: usize) -> Vec<u8> {
 fn generate_new(
     height: u64,
     chain_id: &chain::Id,
+    time: Time,
     signing_key: &SigningKey,
     dah: Option<DataAvailabilityHeader>,
 ) -> ExtendedHeader {
@@ -365,7 +399,7 @@ fn generate_new(
             },
             chain_id: chain_id.clone(),
             height: height.try_into().unwrap(),
-            time: Time::now(),
+            time,
             last_block_id,
             last_commit_hash: Hash::default_sha256(),
             data_hash: Hash::None,
@@ -391,7 +425,7 @@ fn generate_new(
             },
             signatures: vec![CommitSig::BlockIdFlagCommit {
                 validator_address,
-                timestamp: Time::now(),
+                timestamp: time,
                 signature: None,
             }],
         },
@@ -423,6 +457,7 @@ fn generate_new(
 fn generate_next(
     increment: u64,
     current: &ExtendedHeader,
+    time: Time,
     signing_key: &SigningKey,
     dah: Option<DataAvailabilityHeader>,
 ) -> ExtendedHeader {
@@ -449,7 +484,7 @@ fn generate_next(
             version: current.header.version,
             chain_id: current.header.chain_id.clone(),
             height,
-            time: Time::now(),
+            time,
             last_block_id,
             last_commit_hash: Hash::default_sha256(),
             data_hash: Hash::None,
@@ -475,7 +510,7 @@ fn generate_next(
             },
             signatures: vec![CommitSig::BlockIdFlagCommit {
                 validator_address,
-                timestamp: Time::now(),
+                timestamp: time,
                 signature: None,
             }],
         },
