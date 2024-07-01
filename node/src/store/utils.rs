@@ -46,7 +46,7 @@ fn get_most_recent_missing_range(
         return 1..=head_height;
     };
 
-    if store_head_range.end() != &head_height {
+    if store_head_range.end() < &head_height {
         // if we haven't caught up with network head, start from there
         return store_head_range.end() + 1..=head_height;
     }
