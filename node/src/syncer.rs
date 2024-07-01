@@ -452,6 +452,7 @@ where
         if let Ok(known_header) = self.store.get_by_height(next_batch.end() + 1).await {
             if !in_syncing_window(&known_header) {
                 self.estimated_syncing_window_end = Some(known_header.height().value());
+                return;
             }
         }
 
