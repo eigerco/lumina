@@ -48,7 +48,6 @@ use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, instrument, trace, warn};
-use web_time::Instant;
 
 mod header_ex;
 mod header_session;
@@ -76,14 +75,6 @@ pub use crate::p2p::header_ex::HeaderExError;
 // If we have fewer peers than that, we will try to reconnect / discover
 // more aggresively.
 const MIN_CONNECTED_PEERS: u64 = 4;
-
-// Bootstrap procedure is a bit misleading as a name. It is actually
-// scanning the network thought the already known peers and find new
-// ones. It also recovers connectivity of previously known peers and
-// refreshes the routing table.
-//
-// libp2p team suggests to start bootstrap procedure every 5 minute.
-const KADEMLIA_BOOTSTRAP_PERIOD: Duration = Duration::from_secs(5 * 60);
 
 // Maximum size of a [`Multihash`].
 pub(crate) const MAX_MH_SIZE: usize = 64;
@@ -655,7 +646,6 @@ where
     async fn run(&mut self) {
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
         let mut kademlia_interval = Interval::new(Duration::from_secs(30)).await;
-        let mut kademlia_last_bootstrap = Instant::now();
 
         // Initiate discovery
         let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
@@ -667,11 +657,9 @@ where
                 }
                 _ = kademlia_interval.tick() => {
                     if self.peer_tracker.info().num_connected_peers < MIN_CONNECTED_PEERS
-                        || kademlia_last_bootstrap.elapsed() > KADEMLIA_BOOTSTRAP_PERIOD
                     {
                         debug!("Running kademlia bootstrap procedure.");
                         let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
-                        kademlia_last_bootstrap = Instant::now();
                     }
                 }
                 _ = poll_closed(&mut self.bitswap_queries) => {
@@ -1116,13 +1104,11 @@ where
     S: Store,
 {
     let local_peer_id = PeerId::from(args.local_keypair.public());
-    let mut config = kad::Config::default();
+    let store = kad::store::MemoryStore::new(local_peer_id);
 
     let protocol_id = celestia_protocol_id(&args.network_id, "/kad/1.0.0");
+    let config = kad::Config::new(protocol_id);
 
-    config.set_protocol_names(vec![protocol_id]);
-
-    let store = kad::store::MemoryStore::new(local_peer_id);
     let mut kademlia = kad::Behaviour::with_config(local_peer_id, store, config);
 
     for addr in &args.bootnodes {
