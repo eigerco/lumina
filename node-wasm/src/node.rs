@@ -5,6 +5,7 @@ use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
+use tracing::error;
 use wasm_bindgen::prelude::*;
 use web_sys::BroadcastChannel;
 
@@ -14,7 +15,7 @@ use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 
 use crate::error::{Context, Result};
-use crate::utils::{is_chrome, js_value_from_display, Network};
+use crate::utils::{is_chrome, js_value_from_display, request_storage_persistence, Network};
 use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::worker::{AnyWorker, WorkerClient};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -92,6 +93,10 @@ impl NodeDriver {
         worker_script_url: &str,
         worker_type: Option<NodeWorkerKind>,
     ) -> Result<NodeDriver> {
+        if let Err(e) = request_storage_persistence().await {
+            error!("Error requesting storage persistence: {e}");
+        }
+
         // For chrome we default to running in a dedicated Worker because:
         // 1. Chrome Android does not support SharedWorkers at all
         // 2. On desktop Chrome, restarting Lumina's worker causes all network connections to fail.
