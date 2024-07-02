@@ -161,7 +161,7 @@ impl AnyWorker {
 
     fn setup_on_error_callback(&self) -> Closure<dyn Fn(MessageEvent)> {
         let onerror = Closure::new(|ev: MessageEvent| {
-            error!("received error from Worker: {:?}", ev.to_string());
+            error!("received error from Worker: {:?}", Error::from_js_value(ev));
         });
         match self {
             AnyWorker::SharedWorker(worker) => {
