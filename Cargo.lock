@@ -3136,7 +3136,6 @@ dependencies = [
  "futures",
  "getrandom",
  "gloo-timers 0.3.0",
- "hex",
  "instant",
  "libp2p",
  "lumina-node",

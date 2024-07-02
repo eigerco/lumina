@@ -10,7 +10,7 @@ use directories::ProjectDirs;
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use lumina_node::blockstore::RedbBlockstore;
 use lumina_node::events::NodeEvent;
-use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id, Network};
+use lumina_node::network::{canonical_network_bootnodes, network_id, Network};
 use lumina_node::node::{Node, NodeConfig};
 use lumina_node::store::{RedbStore, Store};
 use tokio::task::spawn_blocking;
@@ -54,7 +54,6 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     };
 
     let network_id = network_id(network).to_owned();
-    let genesis_hash = network_genesis(network);
 
     info!("Initializing store");
     let db = open_db(args.store, &network_id).await?;
@@ -70,7 +69,6 @@ pub(crate) async fn run(args: Params) -> Result<()> {
 
     let (_node, mut events) = Node::new_subscribed(NodeConfig {
         network_id,
-        genesis_hash,
         p2p_local_keypair,
         p2p_bootnodes,
         p2p_listen_on: args.listen_addrs,

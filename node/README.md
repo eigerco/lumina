@@ -7,7 +7,7 @@ use std::sync::Arc;
 use libp2p::{identity, multiaddr::Protocol, Multiaddr};
 use lumina_node::blockstore::RedbBlockstore;
 use lumina_node::network::{
-    canonical_network_bootnodes, network_genesis, network_id, Network,
+    canonical_network_bootnodes, network_id, Network,
 };
 use lumina_node::node::{Node, NodeConfig};
 use lumina_node::store::RedbStore;
@@ -18,7 +18,6 @@ async fn main() {
     let p2p_local_keypair = identity::Keypair::generate_ed25519();
     let network = Network::Mainnet;
     let network_id = network_id(network).to_owned();
-    let genesis_hash = network_genesis(network);
     let p2p_bootnodes = canonical_network_bootnodes(network).collect();
 
     let db = spawn_blocking(|| redb::Database::create("path/to/db"))
@@ -34,7 +33,6 @@ async fn main() {
 
     let node = Node::new(NodeConfig {
         network_id,
-        genesis_hash,
         p2p_local_keypair,
         p2p_bootnodes,
         p2p_listen_on: vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()],
