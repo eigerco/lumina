@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{self, Debug, Display};
 use std::iter;
 use std::ops::{RangeBounds, RangeInclusive, Sub};
 use std::vec;
@@ -23,52 +23,104 @@ impl RangeLengthExt for RangeInclusive<u64> {
     }
 }
 
-pub type BlockRange = RangeInclusive<u64>;
+//pub type BlockRange = RangeInclusive<u64>;
 
-/*
-#[derive(thiserror::Error)]
-enum BlockRangesError {
-    #[error("Invalid block range: {.0}")]
-    InvalidBlockRange(RangeInclusive<u64>),
+#[derive(Debug, thiserror::Error)]
+pub enum BlockRangesError {
+    #[error("Invalid block range: {0}-{1}")]
+    InvalidBlockRange(u64, u64),
 }
 
+type Result<T, E = BlockRangesError> = std::result::Result<T, E>;
+
+pub type BlockRangeOld = RangeInclusive<u64>;
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(transparent)]
-pub struct BlockRange(RangeInclusive<u64>);
+#[serde(transparent)]
+pub struct BlockRangeNew(RangeInclusive<u64>);
 
-impl BlockRange {
-    pub fn start(&self) -> u64 {
-        *self.0.start()
+impl BlockRangeNew {
+    pub fn new(start: u64, end: u64) -> Result<BlockRangeNew> {
+        if start == 0 || start > end {
+            Err(BlockRangesError::InvalidBlockRange(start, end))
+        } else {
+            Ok(BlockRangeNew(start..=end))
+        }
     }
 
-    pub fn end(&self) -> u64 {
-        *self.0.end()
+    pub fn start(&self) -> &u64 {
+        self.0.start()
+    }
+
+    pub fn end(&self) -> &u64 {
+        self.0.end()
+    }
+
+    pub fn contains(&self, value: &u64) -> bool {
+        self.0.contains(value)
+    }
+
+    pub fn len(&self) -> u64 {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.len() == 0
     }
 }
 
-impl TryFrom<RangeInclusive<u64>> for BlockRange {
+impl Display for BlockRangeNew {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}-{}", self.start(), self.end())
+    }
+}
+
+impl Debug for BlockRangeNew {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Debug::fmt(&self.0, f)
+    }
+}
+
+impl From<BlockRangeNew> for RangeInclusive<u64> {
+    fn from(value: BlockRangeNew) -> Self {
+        value.0
+    }
+}
+
+impl Iterator for BlockRangeNew {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+}
+
+impl DoubleEndedIterator for BlockRangeNew {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.0.next_back()
+    }
+}
+
+impl TryFrom<RangeInclusive<u64>> for BlockRangeNew {
     type Error = BlockRangesError;
 
     fn try_from(value: RangeInclusive<u64>) -> Result<Self, Self::Error> {
-        if value.start() == 0 || value.end() < value.start() {
-            Err(BlockRangesError::InvalidBlockRange(value))
-        } else {
-            Ok(BlockRange(value))
-        }
+        BlockRangeNew::new(*value.start(), *value.end())
     }
 }
 
-impl TryFrom<&RangeInclusive<u64>> for BlockRange {
+impl TryFrom<&RangeInclusive<u64>> for BlockRangeNew {
     type Error = BlockRangesError;
 
     fn try_from(value: &RangeInclusive<u64>) -> Result<Self, Self::Error> {
-        value.to_owned().try_into()
+        BlockRangeNew::new(*value.start(), *value.end())
     }
 }
-*/
 
 /// Represents possibly multiple non-overlapping, sorted ranges of header heights
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct BlockRanges(SmallVec<[BlockRange; 2]>);
+pub struct BlockRanges(SmallVec<[BlockRangeNew; 2]>);
 
 pub(crate) trait BlockRangesExt {
     /// Check whether provided `to_insert` range can be inserted into the header ranges represented
@@ -77,7 +129,7 @@ pub(crate) trait BlockRangesExt {
     /// Returned [`RangeScanResult`] contains information necessary to persist the range
     /// modification in the database manually, or one can call [`update_range`] to modify ranges in
     /// memory.
-    fn check_range_insert(&self, to_insert: &BlockRange) -> Result<RangeScanResult, StoreError>;
+    fn check_range_insert(&self, to_insert: &BlockRangeOld) -> Result<RangeScanResult, StoreError>;
     /// Modify the header ranges, committing insert previously checked with [`check_range_insert`]
     fn update_range(&mut self, scan_information: RangeScanResult);
 }
@@ -91,9 +143,9 @@ impl BlockRangesExt for BlockRanges {
         } = scan_information;
 
         if self.0.len() == range_index {
-            self.0.push(range);
+            self.0.push(BlockRangeNew(range));
         } else {
-            self.0[range_index] = range;
+            self.0[range_index] = BlockRangeNew(range);
         }
 
         if let Some(to_remove) = range_to_remove {
@@ -101,7 +153,7 @@ impl BlockRangesExt for BlockRanges {
         }
     }
 
-    fn check_range_insert(&self, to_insert: &BlockRange) -> Result<RangeScanResult, StoreError> {
+    fn check_range_insert(&self, to_insert: &BlockRangeOld) -> Result<RangeScanResult, StoreError> {
         let Some(head_range) = self.0.last() else {
             // Empty store case
             return Ok(RangeScanResult {
@@ -130,14 +182,14 @@ impl BlockRangesExt for BlockRanges {
                 ));
             };
 
-            if let Some(intersection) = ranges_intersection(stored_range, to_insert) {
+            if let Some(intersection) = ranges_intersection(&stored_range.0, to_insert) {
                 return Err(StoreError::HeaderRangeOverlap(
                     *intersection.start(),
                     *intersection.end(),
                 ));
             }
 
-            if let Some(consolidated) = try_consolidate_ranges(stored_range, to_insert) {
+            if let Some(consolidated) = try_consolidate_ranges(&stored_range.0, to_insert) {
                 break RangeScanResult {
                     range_index: idx,
                     range: consolidated,
@@ -148,14 +200,14 @@ impl BlockRangesExt for BlockRanges {
 
         // we have a hit, check whether we can merge with the next range too
         if let Some((idx, range_after)) = stored_ranges_iter.next() {
-            if let Some(intersection) = ranges_intersection(range_after, to_insert) {
+            if let Some(intersection) = ranges_intersection(&range_after.0, to_insert) {
                 return Err(StoreError::HeaderRangeOverlap(
                     *intersection.start(),
                     *intersection.end(),
                 ));
             }
 
-            if let Some(consolidated) = try_consolidate_ranges(range_after, &found_range.range) {
+            if let Some(consolidated) = try_consolidate_ranges(&range_after.0, &found_range.range) {
                 found_range = RangeScanResult {
                     range_index: found_range.range_index,
                     range: consolidated,
@@ -189,14 +241,14 @@ impl BlockRanges {
         self.0.first().map(|r| *r.start())
     }
 
-    pub(crate) fn into_inner(self) -> SmallVec<[BlockRange; 2]> {
+    pub(crate) fn into_inner(self) -> SmallVec<[BlockRangeNew; 2]> {
         self.0
     }
 
     /// Returns the start index and end index of an intersection.
     ///
     /// Intersection in our case means overlapping or touching of a range.
-    fn find_intersecting_ranges(&self, range: &BlockRange) -> Option<(usize, usize)> {
+    fn find_intersecting_ranges(&self, range: &BlockRangeNew) -> Option<(usize, usize)> {
         let mut start_idx = None;
         let mut end_idx = None;
 
@@ -224,7 +276,7 @@ impl BlockRanges {
 
         for range in self.0.iter() {
             if next_start < *range.start() {
-                ranges.push(next_start..=*range.start() - 1);
+                ranges.push(BlockRangeNew(next_start..=*range.start() - 1));
             }
             next_start = *range.end() + 1;
         }
@@ -239,14 +291,16 @@ impl BlockRanges {
         if last.len() == 1 {
             self.0.remove(self.0.len() - 1);
         } else {
-            *last = *last.start()..=*last.end() - 1;
+            *last = BlockRangeNew(*last.start()..=*last.end() - 1);
         }
 
         Some(head)
     }
 
     // TODO: what about 0?
-    pub(crate) fn insert_relaxed(&mut self, range: BlockRange) {
+    pub(crate) fn insert_relaxed(&mut self, range: impl TryInto<BlockRangeNew>) {
+        let range = range.try_into().unwrap_or_else(|_| panic!("AA"));
+
         match self.find_intersecting_ranges(&range) {
             // `range` must be merged with other ranges
             Some((start_idx, end_idx)) => {
@@ -254,7 +308,7 @@ impl BlockRanges {
                 let end = *self.0[end_idx].end().max(range.end());
 
                 self.0.drain(start_idx..=end_idx);
-                self.0.insert(start_idx, start..=end);
+                self.0.insert(start_idx, BlockRangeNew(start..=end));
             }
             // `range` can not be merged with other ranges
             None => {
@@ -270,7 +324,9 @@ impl BlockRanges {
         }
     }
 
-    pub(crate) fn remove_relaxed(&mut self, range: BlockRange) {
+    pub(crate) fn remove_relaxed(&mut self, range: impl TryInto<BlockRangeNew>) {
+        let range = range.try_into().unwrap_or_else(|_| panic!("AA"));
+
         let Some((start_idx, end_idx)) = self.find_intersecting_ranges(&range) else {
             // Nothing to remove
             return;
@@ -280,7 +336,7 @@ impl BlockRanges {
         let old_ranges = self
             .0
             .drain(start_idx..=end_idx)
-            .collect::<SmallVec<[RangeInclusive<u64>; 2]>>();
+            .collect::<SmallVec<[_; 2]>>();
 
         // ranges:       |-----|  |----|  |----|
         // remove:           |--------------|
@@ -290,19 +346,23 @@ impl BlockRanges {
 
         if range.end() < last_range.end() {
             // Add the right range
-            self.0
-                .insert(start_idx, *range.end() + 1..=*last_range.end());
+            self.0.insert(
+                start_idx,
+                BlockRangeNew(*range.end() + 1..=*last_range.end()),
+            );
         }
 
         if first_range.start() < range.start() {
             // Add the left range
-            self.0
-                .insert(start_idx, *first_range.start()..=*range.start() - 1);
+            self.0.insert(
+                start_idx,
+                BlockRangeNew(*first_range.start()..=*range.start() - 1),
+            );
         }
     }
 
     /// Crate BlockRanges from correctly pre-sorted, non-overlapping SmallVec of ranges
-    pub(crate) fn from_vec(from: SmallVec<[BlockRange; 2]>) -> Self {
+    pub(crate) fn from_vec(from: SmallVec<[BlockRangeOld; 2]>) -> Self {
         #[cfg(debug_assertions)]
         {
             let mut prev: Option<&RangeInclusive<u64>> = None;
@@ -324,7 +384,7 @@ impl BlockRanges {
             }
         }
 
-        Self(from)
+        BlockRanges(from.into_iter().map(BlockRangeNew).collect())
     }
 }
 
@@ -347,7 +407,7 @@ impl Sub<&BlockRanges> for BlockRanges {
     }
 }
 
-fn is_touching(range1: &BlockRange, range2: &BlockRange) -> bool {
+fn is_touching(range1: &BlockRangeNew, range2: &BlockRangeNew) -> bool {
     // End of range1 touches start of range2
     //
     // range1: |------|
@@ -367,7 +427,7 @@ fn is_touching(range1: &BlockRange, range2: &BlockRange) -> bool {
     false
 }
 
-fn is_overlapping(range1: &BlockRange, range2: &BlockRange) -> bool {
+fn is_overlapping(range1: &BlockRangeNew, range2: &BlockRangeNew) -> bool {
     // range1 is partial set of range2, case 1
     //
     // range1: |------|
@@ -427,7 +487,10 @@ impl Display for PrintableHeaderRange {
 
 impl AsRef<[RangeInclusive<u64>]> for BlockRanges {
     fn as_ref(&self) -> &[RangeInclusive<u64>] {
-        &self.0
+        unsafe {
+            // SAFETY: It is safe to transmute because of `repr(transparent)`.
+            std::mem::transmute(self.0.as_ref())
+        }
     }
 }
 
