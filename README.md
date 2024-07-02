@@ -9,13 +9,15 @@ Supported features:
 - Header exchange (`header-ex`) client and server
 - Listening for, verifying and redistributing extended headers on gossip protocol (`header-sub`)
 - Listening for, verifying and redistributing fraud proofs on gossip protocol (`fraud-sub`)
-- Backward and forward Data Availability Sampling[^1]
+- Backward and forward Data Availability Sampling
 - Native and browser persistent storage
 - Integration tests with Go implementation
 
-[^1]: Lumina implements [`shwap`](https://github.com/celestiaorg/CIPs/blob/main/cips/cip-19.md) protocol to perform DASing,
-  which is not yet enabled on all networks in the Go implementation. This means that even tho Lumina will be sampling all
-  blocks, the network is unlikely to provide requested data.
+> [!NOTE]
+> Lumina implements [`shwap`](https://github.com/celestiaorg/CIPs/blob/main/cips/cip-19.md) protocol to perform DASing,
+which is not yet enabled on all networks in the Go implementation. This means that even tho Lumina will be sampling all
+blocks, the network is unlikely to provide requested data yet. Shwap is going to become the main DASing protocol in next
+celestia-node updates.
 
 ## Installing the node
 
