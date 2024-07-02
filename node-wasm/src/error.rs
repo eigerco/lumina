@@ -124,6 +124,15 @@ pub trait Context<T> {
     fn context<C>(self, context: C) -> Result<T, Error>
     where
         C: Display;
+
+    fn with_context<F, C>(self, context_fn: F) -> Result<T, Error>
+    where
+        C: Display,
+        F: FnOnce() -> C,
+        Self: Sized,
+    {
+        self.context(context_fn())
+    }
 }
 
 impl<T, E> Context<T> for Result<T, E>

@@ -55,9 +55,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     let network = args.network.into();
     let genesis_hash = network_genesis(network);
     let bootnodes = if args.bootnodes.is_empty() {
-        canonical_network_bootnodes(network)
-            .filter(|addr| addr.iter().any(|proto| proto == Protocol::WebTransport))
-            .collect()
+        canonical_network_bootnodes(network).collect()
     } else {
         args.bootnodes
     };

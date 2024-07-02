@@ -1,6 +1,8 @@
 //! Various utilities for interacting with node from wasm.
 use std::fmt::{self, Debug};
 
+use libp2p::multiaddr::Protocol;
+use libp2p::Multiaddr;
 use lumina_node::network;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -11,8 +13,10 @@ use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::prelude::*;
 use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    Crypto, DedicatedWorkerGlobalScope, Navigator, SharedWorker, SharedWorkerGlobalScope, Worker,
+    Crypto, DedicatedWorkerGlobalScope, Navigator, Request, RequestInit, RequestMode, Response,
+    SharedWorker, SharedWorkerGlobalScope, Worker,
 };
 
 use crate::error::{Context, Error, Result};
@@ -173,6 +177,97 @@ pub(crate) fn get_crypto() -> Result<Crypto, Error> {
     js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("crypto"))
         .context("failed to get `crypto` from global object")?
         .dyn_into::<web_sys::Crypto>()
-        .ok()
         .context("`crypto` is not `Crypto` type")
+}
+
+async fn fetch(url: &str, opts: &RequestInit, headers: &[(&str, &str)]) -> Result<Response, Error> {
+    let request = Request::new_with_str_and_init(url, opts)
+        .with_context(|| format!("failed to create a request to {url}"))?;
+
+    for (name, value) in headers {
+        request
+            .headers()
+            .set(name, value)
+            .with_context(|| format!("failed setting header: '{name}: {value}'"))?;
+    }
+
+    let fetch_promise = if let Some(window) = web_sys::window() {
+        window.fetch_with_request(&request)
+    } else if Worker::is_worker_type() {
+        Worker::worker_self().fetch_with_request(&request)
+    } else if SharedWorker::is_worker_type() {
+        SharedWorker::worker_self().fetch_with_request(&request)
+    } else {
+        return Err(Error::new("`fetch` not found in global scope"));
+    };
+
+    JsFuture::from(fetch_promise)
+        .await
+        .with_context(|| format!("failed fetching {url}"))?
+        .dyn_into()
+        .context("`response` is not `Response` type")
+}
+
+/// If provided multiaddress uses dnsaddr protocol, resolve it using dns-over-https.
+/// Otherwise returns the provided address.
+pub(crate) async fn resolve_dnsaddr_multiaddress(ma: Multiaddr) -> Result<Vec<Multiaddr>> {
+    const TXT_TYPE: u16 = 16;
+
+    #[derive(Debug, Deserialize)]
+    struct DohEntry {
+        r#type: u16,
+        data: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct DohResponse {
+        answer: Vec<DohEntry>,
+    }
+
+    let Some(dnsaddr) = ma.iter().find_map(|protocol| {
+        if let Protocol::Dnsaddr(addr) = protocol {
+            Some(addr)
+        } else {
+            None
+        }
+    }) else {
+        // not a dnsaddr multiaddr
+        return Ok(vec![ma]);
+    };
+
+    let mut opts = RequestInit::new();
+    opts.method("GET");
+    opts.mode(RequestMode::Cors);
+
+    let url = format!("https://1.1.1.1/dns-query?type=txt&name=_dnsaddr.{dnsaddr}");
+    let response = fetch(&url, &opts, &[("Accept", "application/dns-json")]).await?;
+
+    let json_promise = response.json().context("`Response::json()` failed")?;
+    let json = JsFuture::from(json_promise)
+        .await
+        .context("failed parsing response as json")?;
+
+    let doh_response: DohResponse = serde_wasm_bindgen::from_value(json)
+        .context("failed deserializing dns-over-https response")?;
+
+    let mut resolved_addrs = Vec::with_capacity(3);
+    for entry in doh_response.answer {
+        if entry.r#type == TXT_TYPE {
+            // we receive data as json encoded strings in this format:
+            // "data": "\"dnsaddr=/dns/da-bridge-1.celestia-arabica-11.com/tcp/2121/p2p/12D3KooWGqwzdEqM54Dce6LXzfFr97Bnhvm6rN7KM7MFwdomfm4S\""
+            let Ok(data) = serde_json::from_str::<String>(&entry.data) else {
+                continue;
+            };
+            let Some((_, ma)) = data.split_once('=') else {
+                continue;
+            };
+            let Ok(ma) = ma.parse() else {
+                continue;
+            };
+            resolved_addrs.push(ma);
+        }
+    }
+
+    Ok(resolved_addrs)
 }
