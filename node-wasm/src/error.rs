@@ -5,7 +5,7 @@ use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::convert::IntoWasmAbi;
 use wasm_bindgen::describe::WasmDescribe;
-use wasm_bindgen::{JsValue, JsCast};
+use wasm_bindgen::{JsCast, JsValue};
 
 /// Alias for a `Result` with the error type [`Error`].
 pub type Result<T, E = Error> = std::result::Result<T, E>;

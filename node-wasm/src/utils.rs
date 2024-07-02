@@ -167,9 +167,12 @@ pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
     });
 
     // don't drop the promise, we'll log the result and hope user clicked the right button
-    let _promise = get_navigator()?.storage().persist()?.then2(&fullfiled, &rejected);
+    let _promise = get_navigator()?
+        .storage()
+        .persist()?
+        .then2(&fullfiled, &rejected);
 
-    // stop rust from dropping them 
+    // stop rust from dropping them
     fullfiled.forget();
     rejected.forget();
 
