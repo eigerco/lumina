@@ -11,6 +11,8 @@ Supported features:
 - Listening for, verifying and redistributing fraud proofs on gossip protocol (`fraud-sub`)
 - Backward and forward Data Availability Sampling
 - Native and browser persistent storage
+- Streaming events happening on the node
+- Native and wasm library, embed the node anywhere
 - Integration tests with Go implementation
 
 > [!NOTE]
