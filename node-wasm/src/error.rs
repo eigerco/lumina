@@ -125,6 +125,7 @@ pub trait Context<T> {
     where
         C: Display;
 
+    /// Adds more context to the [`Error`] that is evaluated lazily.
     fn with_context<F, C>(self, context_fn: F) -> Result<T, Error>
     where
         C: Display,
