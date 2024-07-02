@@ -5,13 +5,17 @@ Rust implementation of Celestia's [data availability node](https://github.com/ce
 Run Lumina now at [lumina.rs](https://lumina.rs/) and directly verify Celestia.
 
 Supported features:
-- [x] Synchronize and verify `ExtendedHeader`s from genesis to the network head
-- [x] Header exchange (`header-ex`) client and server
-- [x] Listening for, verifying and redistributing extended headers on gossip protocol (`header-sub`)
-- [x] Persistent store for Headers
-- [x] Integration tests with Go implementation
-- [ ] Data Availability Sampling
-- [ ] Creating, distributing, and listening for Fraud proofs
+- Backward and forward synchronization of block headers within syncing window
+- Header exchange (`header-ex`) client and server
+- Listening for, verifying and redistributing extended headers on gossip protocol (`header-sub`)
+- Listening for, verifying and redistributing fraud proofs on gossip protocol (`fraud-sub`)
+- Backward and forward Data Availability Sampling[^1]
+- Native and browser persistent storage
+- Integration tests with Go implementation
+
+[^1]: Lumina implements [`shwap`](https://github.com/celestiaorg/CIPs/blob/main/cips/cip-19.md) protocol to perform DASing,
+  which is not yet enabled on all networks in the Go implementation. This means that even tho Lumina will be sampling all
+  blocks, the network is unlikely to provide requested data.
 
 ## Installing the node
 
@@ -111,12 +115,14 @@ export CELESTIA_NODE_AUTH_TOKEN=$(docker compose -f ci/docker-compose.yml exec b
 
 Accessing json RPC api with Go `celestia` cli:
 ```bash
-celestia rpc blob Submit 0x0c204d39600fddd3 '"Hello world"' --print-request
+docker compose -f ci/docker-compose.yml exec bridge-0 \
+    celestia blob submit 0x0c204d39600fddd3 '"Hello world"' --token "$CELESTIA_NODE_AUTH_TOKEN"
 ```
 
 Extracting blocks for test cases:
 ```bash
-celestia rpc header GetByHeight 27 | jq .result
+docker compose -f ci/docker-compose.yml exec bridge-0 \
+    celestia header get-by-height 27 --token "$CELESTIA_NODE_AUTH_TOKEN" | jq .result
 ```
 
 ## Running integration tests with Celestia node
