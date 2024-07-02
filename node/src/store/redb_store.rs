@@ -16,10 +16,8 @@ use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::{debug, trace};
 
-use crate::store::header_ranges::{
-    HeaderRange, HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders,
-};
-use crate::store::utils::RangeScanResult;
+use crate::store::header_ranges::{BlockRange, BlockRanges, BlockRangesExt};
+use crate::store::utils::{RangeScanResult, VerifiedExtendedHeaders};
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 const SCHEMA_VERSION: u64 = 1;
@@ -342,7 +340,7 @@ impl RedbStore {
         .await
     }
 
-    async fn get_stored_ranges(&self) -> Result<HeaderRanges> {
+    async fn get_stored_ranges(&self) -> Result<BlockRanges> {
         let ranges = self
             .read_tx(|tx| {
                 let table = tx.open_table(HEADER_HEIGHT_RANGES)?;
@@ -436,16 +434,16 @@ impl Store for RedbStore {
         self.get_sampling_metadata(height).await
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+    async fn get_stored_header_ranges(&self) -> Result<BlockRanges> {
         Ok(self.get_stored_ranges().await?)
     }
 }
 
 fn try_insert_to_range(
     ranges_table: &mut Table<u64, (u64, u64)>,
-    new_range: HeaderRange,
+    new_range: BlockRange,
 ) -> Result<(bool, bool)> {
-    let stored_ranges = HeaderRanges::from_vec(
+    let stored_ranges = BlockRanges::from_vec(
         ranges_table
             .iter()?
             .map(|range_guard| {
@@ -526,11 +524,11 @@ where
         .ok_or(StoreError::NotFound)
 }
 
-fn get_all_ranges<R>(ranges_table: &R) -> Result<HeaderRanges>
+fn get_all_ranges<R>(ranges_table: &R) -> Result<BlockRanges>
 where
     R: ReadableTable<u64, (u64, u64)>,
 {
-    Ok(HeaderRanges::from_vec(
+    Ok(BlockRanges::from_vec(
         ranges_table
             .iter()?
             .map(|range_guard| {

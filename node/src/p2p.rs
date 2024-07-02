@@ -63,7 +63,7 @@ use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihash
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::store::header_ranges::HeaderRange;
+use crate::store::header_ranges::BlockRange;
 use crate::store::Store;
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
@@ -425,7 +425,7 @@ impl P2p {
     /// responsibility to verify range edges against headers existing in the store.
     pub(crate) async fn get_unverified_header_range(
         &self,
-        range: HeaderRange,
+        range: BlockRange,
     ) -> Result<Vec<ExtendedHeader>> {
         if range.is_empty() {
             return Err(HeaderExError::InvalidRequest.into());

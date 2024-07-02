@@ -11,7 +11,8 @@ use dashmap::DashMap;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
-use crate::store::header_ranges::{HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders};
+use crate::store::header_ranges::{BlockRanges, BlockRangesExt};
+use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
@@ -32,7 +33,7 @@ struct InMemoryStoreInner {
     /// Maps header height to its hash, in case we need to do lookup by height
     height_to_hash: HashMap<u64, Hash>,
     /// Source of truth about headers present in the db, used to synchronise inserts
-    stored_ranges: HeaderRanges,
+    stored_ranges: BlockRanges,
 }
 
 impl InMemoryStoreInner {
@@ -40,7 +41,7 @@ impl InMemoryStoreInner {
         Self {
             headers: HashMap::new(),
             height_to_hash: HashMap::new(),
-            stored_ranges: HeaderRanges::default(),
+            stored_ranges: BlockRanges::default(),
         }
     }
 }
@@ -133,7 +134,7 @@ impl InMemoryStore {
         Ok(Some(metadata.clone()))
     }
 
-    async fn get_stored_ranges(&self) -> HeaderRanges {
+    async fn get_stored_ranges(&self) -> BlockRanges {
         self.inner.read().await.get_stored_ranges()
     }
 
@@ -148,7 +149,7 @@ impl InMemoryStore {
 }
 
 impl InMemoryStoreInner {
-    fn get_stored_ranges(&self) -> HeaderRanges {
+    fn get_stored_ranges(&self) -> BlockRanges {
         self.stored_ranges.clone()
     }
 
@@ -347,7 +348,7 @@ impl Store for InMemoryStore {
         self.get_sampling_metadata(height).await
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+    async fn get_stored_header_ranges(&self) -> Result<BlockRanges> {
         Ok(self.get_stored_ranges().await)
     }
 }

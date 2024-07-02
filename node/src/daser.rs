@@ -47,7 +47,7 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::spawn;
 use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pError};
-use crate::store::{HeaderRanges, SamplingStatus, Store, StoreError};
+use crate::store::{BlockRanges, SamplingStatus, Store, StoreError};
 
 const MAX_SAMPLES_NEEDED: usize = 16;
 
@@ -134,8 +134,9 @@ where
     store: Arc<S>,
     max_samples_needed: usize,
     sampling_futs: FuturesUnordered<BoxFuture<'static, Result<(u64, bool)>>>,
-    queue: VecDeque<SamplingArgs>,
-    prev_stored_blocks: HeaderRanges,
+    queue: BlockRanges,
+    done: BlockRanges,
+    ongoing: BlockRanges,
     prev_head: Option<u64>,
 }
 
@@ -158,8 +159,9 @@ where
             store: args.store,
             max_samples_needed: MAX_SAMPLES_NEEDED,
             sampling_futs: FuturesUnordered::new(),
-            queue: VecDeque::new(),
-            prev_stored_blocks: HeaderRanges::default(),
+            queue: BlockRanges::default(),
+            done: BlockRanges::default(),
+            ongoing: BlockRanges::default(),
             prev_head: None,
         })
     }
@@ -229,10 +231,10 @@ where
 
         loop {
             // If we have a new HEAD queued, schedule it now!
-            if let Some(queue_front) = self.queue.front().map(|args| args.height) {
-                if queue_front > self.prev_head.unwrap_or(0) {
+            if let Some(queue_head) = self.queue.head() {
+                if queue_head > self.prev_head.unwrap_or(0) {
                     self.schedule_next_sample_block().await?;
-                    self.prev_head = Some(queue_front);
+                    self.prev_head = Some(queue_head);
                 }
             }
 
@@ -265,6 +267,9 @@ where
                     self.store
                         .update_sampling_metadata(height, status, Vec::new())
                         .await?;
+
+                    self.ongoing.remove_relaxed(height..=height);
+                    self.done.insert_relaxed(height..=height);
                 },
                 _ = &mut wait_new_head => {
                     wait_new_head = store.wait_new_head();
@@ -274,38 +279,43 @@ where
         }
 
         self.sampling_futs.clear();
-        self.queue.clear();
-        self.prev_stored_blocks = HeaderRanges::default();
+        self.queue = BlockRanges::default();
+        self.ongoing = BlockRanges::default();
+        self.done = BlockRanges::default();
         self.prev_head = None;
 
         Ok(())
     }
 
     async fn schedule_next_sample_block(&mut self) -> Result<()> {
-        let Some(args) = self.queue.pop_front() else {
+        let Some(height) = self.queue.pop_head() else {
             return Ok(());
         };
 
+        // TODO: what if the height is pruned??
+        let header = self.store.get_by_height(height).await?;
+        let square_width = header.dah.square_width();
+
         // Make sure that the block is still in the sampling window.
-        if !in_sampling_window(args.time) {
-            // Queue is sorted by block height in descending order,
-            // so as soon as we reach a block that is not in the sampling
+        if !in_sampling_window(header.time()) {
+            // As soon as we reach a block that is not in the sampling
             // window, it means the rest wouldn't be either.
-            self.queue.clear();
+            self.queue.remove_relaxed(1..=height);
+            self.done.insert_relaxed(1..=height);
             return Ok(());
         }
 
         // Select random shares to be sampled
-        let share_indexes = random_indexes(args.square_width, self.max_samples_needed);
+        let share_indexes = random_indexes(square_width, self.max_samples_needed);
 
         // Update the CID list before we start sampling, otherwise it's possible for us
         // to leak CIDs causing associated blocks to never get cleaned from blockstore.
         let cids = share_indexes
             .iter()
-            .map(|(row, col)| sample_cid(*row, *col, args.height))
+            .map(|(row, col)| sample_cid(*row, *col, height))
             .collect::<Result<Vec<_>, _>>()?;
         self.store
-            .update_sampling_metadata(args.height, SamplingStatus::Unknown, cids)
+            .update_sampling_metadata(height, SamplingStatus::Unknown, cids)
             .await?;
 
         let p2p = self.p2p.clone();
@@ -316,8 +326,8 @@ where
             let now = Instant::now();
 
             event_pub.send(NodeEvent::SamplingStarted {
-                height: args.height,
-                square_width: args.square_width,
+                height,
+                square_width,
                 shares: share_indexes.iter().copied().collect(),
             });
 
@@ -328,7 +338,7 @@ where
                     let p2p = p2p.clone();
 
                     async move {
-                        let res = p2p.get_sample(row, col, args.height).await;
+                        let res = p2p.get_sample(row, col, height).await;
                         (row, col, res)
                     }
                 })
@@ -351,8 +361,8 @@ where
                 block_accepted &= share_accepted;
 
                 event_pub.send(NodeEvent::ShareSamplingResult {
-                    height: args.height,
-                    square_width: args.square_width,
+                    height,
+                    square_width,
                     row,
                     column,
                     accepted: share_accepted,
@@ -360,12 +370,12 @@ where
             }
 
             event_pub.send(NodeEvent::SamplingFinished {
-                height: args.height,
+                height,
                 accepted: block_accepted,
                 took: now.elapsed(),
             });
 
-            Ok((args.height, block_accepted))
+            Ok((height, block_accepted))
         }
         .boxed();
 
@@ -381,6 +391,12 @@ where
     /// limitation that's coming from bitswap: only way for us to know if sampling
     /// failed is via timeout.
     async fn populate_queue(&mut self) -> Result<()> {
+        let accepted = BlockRanges::default(); // TODO
+        let stored = self.store.get_stored_header_ranges().await?;
+
+        self.queue = stored.inverted_up_to_head() - accepted - &self.done - &self.ongoing;
+
+        /*
         let stored_blocks = self.store.get_stored_header_ranges().await?;
         let first_check = self.prev_stored_blocks.is_empty();
 
@@ -414,6 +430,7 @@ where
         }
 
         self.prev_stored_blocks = stored_blocks;
+        */
 
         Ok(())
     }

@@ -14,7 +14,8 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub use crate::store::header_ranges::{HeaderRanges, VerifiedExtendedHeaders};
+pub use crate::store::header_ranges::BlockRanges;
+pub use crate::store::utils::{ExtendedHeaderGeneratorExt, VerifiedExtendedHeaders};
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
@@ -27,8 +28,6 @@ mod in_memory_store;
 mod indexed_db_store;
 #[cfg(not(target_arch = "wasm32"))]
 mod redb_store;
-
-pub use header_ranges::ExtendedHeaderGeneratorExt;
 
 pub(crate) mod header_ranges;
 pub(crate) mod utils;
@@ -157,7 +156,7 @@ pub trait Store: Send + Sync + Debug {
         StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>;
 
     /// Return a list of header ranges currenty held in store
-    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;
+    async fn get_stored_header_ranges(&self) -> Result<BlockRanges>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].
@@ -331,8 +330,6 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 
 #[cfg(test)]
 mod tests {
-    use self::header_ranges::ExtendedHeaderGeneratorExt;
-
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::{Error, Height};

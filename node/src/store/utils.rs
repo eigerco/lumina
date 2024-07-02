@@ -1,9 +1,11 @@
 use std::ops::RangeInclusive;
 
+#[cfg(any(test, feature = "test-utils"))]
+use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 
 use crate::executor::yield_now;
-use crate::store::header_ranges::{HeaderRange, RangeLengthExt};
+use crate::store::header_ranges::{BlockRange, RangeLengthExt};
 use crate::store::{Result, StoreError};
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
@@ -15,7 +17,7 @@ pub(crate) fn calculate_range_to_fetch(
     store_headers: &[RangeInclusive<u64>],
     syncing_window_edge: Option<u64>,
     limit: u64,
-) -> HeaderRange {
+) -> BlockRange {
     let mut missing_range = get_most_recent_missing_range(head_height, store_headers);
 
     // truncate to syncing window, if height is known
@@ -38,7 +40,7 @@ pub(crate) fn calculate_range_to_fetch(
 fn get_most_recent_missing_range(
     head_height: u64,
     store_headers: &[RangeInclusive<u64>],
-) -> HeaderRange {
+) -> BlockRange {
     let mut store_headers_iter = store_headers.iter().rev();
 
     let Some(store_head_range) = store_headers_iter.next() else {
@@ -99,10 +101,101 @@ pub(crate) struct RangeScanResult {
     /// index of the range that header is being inserted into
     pub range_index: usize,
     /// updated bounds of the range header is being inserted into
-    pub range: HeaderRange,
+    pub range: BlockRange,
     /// index of the range that should be removed from the table, if we're consolidating two
     /// ranges. None otherwise.
     pub range_to_remove: Option<usize>,
+}
+
+/// Span of header that's been verified internally
+#[derive(Clone)]
+pub struct VerifiedExtendedHeaders(Vec<ExtendedHeader>);
+
+impl IntoIterator for VerifiedExtendedHeaders {
+    type Item = ExtendedHeader;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a> TryFrom<&'a [ExtendedHeader]> for VerifiedExtendedHeaders {
+    type Error = celestia_types::Error;
+
+    fn try_from(value: &'a [ExtendedHeader]) -> Result<Self, Self::Error> {
+        value.to_vec().try_into()
+    }
+}
+
+impl From<VerifiedExtendedHeaders> for Vec<ExtendedHeader> {
+    fn from(value: VerifiedExtendedHeaders) -> Self {
+        value.0
+    }
+}
+
+impl AsRef<[ExtendedHeader]> for VerifiedExtendedHeaders {
+    fn as_ref(&self) -> &[ExtendedHeader] {
+        &self.0
+    }
+}
+
+/// 1-length hedaer span is internally verified, this is valid
+impl From<[ExtendedHeader; 1]> for VerifiedExtendedHeaders {
+    fn from(value: [ExtendedHeader; 1]) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<ExtendedHeader> for VerifiedExtendedHeaders {
+    fn from(value: ExtendedHeader) -> Self {
+        Self(vec![value])
+    }
+}
+
+impl<'a> From<&'a ExtendedHeader> for VerifiedExtendedHeaders {
+    fn from(value: &ExtendedHeader) -> Self {
+        Self(vec![value.to_owned()])
+    }
+}
+
+impl TryFrom<Vec<ExtendedHeader>> for VerifiedExtendedHeaders {
+    type Error = celestia_types::Error;
+
+    fn try_from(headers: Vec<ExtendedHeader>) -> Result<Self, Self::Error> {
+        let Some(head) = headers.first() else {
+            return Ok(VerifiedExtendedHeaders(Vec::default()));
+        };
+
+        head.verify_adjacent_range(&headers[1..])?;
+
+        Ok(Self(headers))
+    }
+}
+
+impl VerifiedExtendedHeaders {
+    /// Create a new instance out of pre-checked vec of headers
+    ///
+    /// # Safety
+    ///
+    /// This function may produce invalid `VerifiedExtendedHeaders`, if passed range is not
+    /// validated manually
+    pub unsafe fn new_unchecked(headers: Vec<ExtendedHeader>) -> Self {
+        Self(headers)
+    }
+}
+
+/// Extends test header generator for easier insertion into the store
+pub trait ExtendedHeaderGeneratorExt {
+    /// Generate next amount verified headers
+    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders;
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
+    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders {
+        unsafe { VerifiedExtendedHeaders::new_unchecked(self.next_many(amount)) }
+    }
 }
 
 #[allow(unused)]
@@ -137,6 +230,8 @@ pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_typ
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use smallvec::smallvec;
 
     #[test]
     fn calculate_range_to_fetch_test_header_limit() {

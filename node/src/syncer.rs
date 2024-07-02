@@ -28,7 +28,7 @@ use web_time::Instant;
 use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::header_ranges::{HeaderRanges, PrintableHeaderRange};
+use crate::store::header_ranges::{BlockRanges, PrintableHeaderRange};
 use crate::store::utils::calculate_range_to_fetch;
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
@@ -104,7 +104,7 @@ enum SyncerCmd {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SyncingInfo {
     /// Ranges of headers that are already synchronised
-    pub stored_headers: HeaderRanges,
+    pub stored_headers: BlockRanges,
     /// Syncing target. The latest height seen in the network that was successfully verified.
     pub subjective_head: u64,
 }
