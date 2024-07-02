@@ -46,7 +46,6 @@ pub fn test_node_config() -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
     let node_keypair = identity::Keypair::generate_ed25519();
     NodeConfig {
         network_id: "private".to_string(),
-        genesis_hash: None,
         p2p_local_keypair: node_keypair,
         p2p_bootnodes: vec![],
         p2p_listen_on: vec![],
