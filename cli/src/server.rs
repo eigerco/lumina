@@ -7,7 +7,6 @@ use axum::http::{header, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
 use axum::{Json, Router};
-use celestia_types::hash::Hash;
 use clap::Args;
 use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
