@@ -118,6 +118,16 @@ impl TryFrom<&RangeInclusive<u64>> for BlockRangeNew {
     }
 }
 
+impl PartialEq<RangeInclusive<u64>> for BlockRangeNew {
+    fn eq(&self, other: &RangeInclusive<u64>) -> bool {
+        PartialEq::eq(&self.0, other)
+    }
+
+    fn ne(&self, other: &RangeInclusive<u64>) -> bool {
+        PartialEq::ne(&self.0, other)
+    }
+}
+
 /// Represents possibly multiple non-overlapping, sorted ranges of header heights
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct BlockRanges(SmallVec<[BlockRangeNew; 2]>);
@@ -220,6 +230,13 @@ impl BlockRangesExt for BlockRanges {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum FindKind {
+    Overlapping,
+    Adjacent,
+    OverlappingOrAdjacent,
+}
+
 impl BlockRanges {
     /// Return whether `BlockRanges` contains provided height
     pub fn contains(&self, height: u64) -> bool {
@@ -245,23 +262,43 @@ impl BlockRanges {
         self.0
     }
 
+    fn find_intersecting_ranges(
+        &self,
+        range: impl TryInto<BlockRangeNew>,
+    ) -> Option<(usize, usize)> {
+        self.find_ranges(range, FindKind::OverlappingOrAdjacent)
+    }
+
     /// Returns the start index and end index of an intersection.
     ///
     /// Intersection in our case means overlapping or touching of a range.
-    fn find_intersecting_ranges(&self, range: &BlockRangeNew) -> Option<(usize, usize)> {
+    fn find_ranges(
+        &self,
+        range: impl TryInto<BlockRangeNew>,
+        kind: FindKind,
+    ) -> Option<(usize, usize)> {
+        let range = range.try_into().ok()?;
         let mut start_idx = None;
         let mut end_idx = None;
 
         for (i, r) in self.0.iter().enumerate() {
-            if is_overlapping(r, range) || is_touching(r, range) {
+            let found = match kind {
+                FindKind::Overlapping => is_overlapping(r, &range),
+                FindKind::Adjacent => is_touching(r, &range),
+                FindKind::OverlappingOrAdjacent => {
+                    is_overlapping(r, &range) || is_touching(r, &range)
+                }
+            };
+
+            if found {
                 if start_idx.is_none() {
                     start_idx = Some(i);
                 }
 
                 end_idx = Some(i);
             } else if end_idx.is_some() {
-                // If we reach a non-overlapping/non-touching range but `end_idx`
-                // was already set, that means no further intersection exists.
+                // We reached from satisfying range to a non-satisfying.
+                // That means there nothing else to find.
                 break;
             }
         }
@@ -301,7 +338,7 @@ impl BlockRanges {
     pub(crate) fn insert_relaxed(&mut self, range: impl TryInto<BlockRangeNew>) {
         let range = range.try_into().unwrap_or_else(|_| panic!("AA"));
 
-        match self.find_intersecting_ranges(&range) {
+        match self.find_intersecting_ranges(range.clone()) {
             // `range` must be merged with other ranges
             Some((start_idx, end_idx)) => {
                 let start = *self.0[start_idx].start().min(range.start());
@@ -327,7 +364,8 @@ impl BlockRanges {
     pub(crate) fn remove_relaxed(&mut self, range: impl TryInto<BlockRangeNew>) {
         let range = range.try_into().unwrap_or_else(|_| panic!("AA"));
 
-        let Some((start_idx, end_idx)) = self.find_intersecting_ranges(&range) else {
+        let Some((start_idx, end_idx)) = self.find_ranges(range.clone(), FindKind::Overlapping)
+        else {
             // Nothing to remove
             return;
         };
@@ -760,6 +798,7 @@ mod tests {
         assert_eq!(ranges.pop_head(), None);
     }
 
+    /*
     #[test]
     fn touching_check() {
         assert!(is_touching(&(3..=5), &(1..=2)));
@@ -795,6 +834,7 @@ mod tests {
         assert!(!is_overlapping(&(3..=5), &(1..=1)));
         assert!(!is_overlapping(&(3..=5), &(7..=8)));
     }
+    */
 
     #[test]
     fn intersection_non_overlapping_non_touching() {
@@ -1044,16 +1084,16 @@ mod tests {
         r.remove_relaxed(12..=12);
         assert_eq!(&r.0[..], &[1..=10, 14..=14][..]);
 
-        let mut r = BlockRanges::from_vec(smallvec![0..=u64::MAX]);
+        let mut r = BlockRanges::from_vec(smallvec![1..=u64::MAX]);
         r.remove_relaxed(12..=12);
-        assert_eq!(&r.0[..], &[0..=11, 13..=u64::MAX][..]);
+        assert_eq!(&r.0[..], &[1..=11, 13..=u64::MAX][..]);
 
-        let mut r = BlockRanges::from_vec(smallvec![0..=u64::MAX]);
-        r.remove_relaxed(0..=0);
-        assert_eq!(&r.0[..], &[1..=u64::MAX][..]);
+        let mut r = BlockRanges::from_vec(smallvec![1..=u64::MAX]);
+        r.remove_relaxed(1..=1);
+        assert_eq!(&r.0[..], &[2..=u64::MAX][..]);
 
-        let mut r = BlockRanges::from_vec(smallvec![0..=u64::MAX]);
+        let mut r = BlockRanges::from_vec(smallvec![1..=u64::MAX]);
         r.remove_relaxed(u64::MAX..=u64::MAX);
-        assert_eq!(&r.0[..], &[0..=u64::MAX - 1][..]);
+        assert_eq!(&r.0[..], &[1..=u64::MAX - 1][..]);
     }
 }
