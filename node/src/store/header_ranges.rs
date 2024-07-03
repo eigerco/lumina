@@ -1,5 +1,6 @@
 use std::fmt::{self, Debug, Display};
 use std::iter;
+use std::mem;
 use std::ops::{RangeBounds, RangeInclusive, Sub};
 use std::vec;
 
@@ -10,11 +11,13 @@ use smallvec::SmallVec;
 use crate::store::utils::{ranges_intersection, try_consolidate_ranges, RangeScanResult};
 use crate::store::StoreError;
 
+pub type BlockRangeOld = RangeInclusive<u64>;
+
 pub(crate) trait RangeLengthExt {
     fn len(&self) -> u64;
 }
 
-impl RangeLengthExt for RangeInclusive<u64> {
+impl RangeLengthExt for BlockRangeOld {
     fn len(&self) -> u64 {
         match self.end().checked_sub(*self.start()) {
             Some(difference) => difference + 1,
@@ -32,8 +35,6 @@ pub enum BlockRangesError {
 }
 
 type Result<T, E = BlockRangesError> = std::result::Result<T, E>;
-
-pub type BlockRangeOld = RangeInclusive<u64>;
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(transparent)]
@@ -67,6 +68,12 @@ impl BlockRangeNew {
 
     pub fn is_empty(&self) -> bool {
         self.0.len() == 0
+    }
+}
+
+impl AsRef<RangeInclusive<u64>> for BlockRangeNew {
+    fn as_ref(&self) -> &RangeInclusive<u64> {
+        &self.0
     }
 }
 
@@ -274,10 +281,10 @@ impl BlockRanges {
     /// Intersection in our case means overlapping or touching of a range.
     fn find_ranges(
         &self,
-        range: impl TryInto<BlockRangeNew>,
+        range: impl AsRef<RangeInclusive<u64>>,
         kind: FindKind,
     ) -> Option<(usize, usize)> {
-        let range = range.try_into().ok()?;
+        let range = range.as_ref();
         let mut start_idx = None;
         let mut end_idx = None;
 
@@ -426,6 +433,15 @@ impl BlockRanges {
     }
 }
 
+impl AsRef<[RangeInclusive<u64>]> for BlockRanges {
+    fn as_ref(&self) -> &[RangeInclusive<u64>] {
+        unsafe {
+            // SAFETY: It is safe to transmute because of `repr(transparent)`.
+            mem::transmute(self.0.as_ref())
+        }
+    }
+}
+
 impl Sub for BlockRanges {
     type Output = Self;
 
@@ -442,6 +458,20 @@ impl Sub<&BlockRanges> for BlockRanges {
             self.remove_relaxed(range.to_owned());
         }
         self
+    }
+}
+
+impl Display for BlockRanges {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        for (idx, range) in self.0.iter().enumerate() {
+            if idx == 0 {
+                write!(f, "{range}")?;
+            } else {
+                write!(f, ", {range}")?;
+            }
+        }
+        write!(f, "]")
     }
 }
 
@@ -501,34 +531,11 @@ fn is_overlapping(range1: &BlockRangeNew, range2: &BlockRangeNew) -> bool {
     false
 }
 
-impl Display for BlockRanges {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[")?;
-        for (idx, range) in self.0.iter().enumerate() {
-            if idx == 0 {
-                write!(f, "{}-{}", range.start(), range.end())?;
-            } else {
-                write!(f, ", {}-{}", range.start(), range.end())?;
-            }
-        }
-        write!(f, "]")
-    }
-}
-
 pub(crate) struct PrintableHeaderRange(pub RangeInclusive<u64>);
 
 impl Display for PrintableHeaderRange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}-{}", self.0.start(), self.0.end())
-    }
-}
-
-impl AsRef<[RangeInclusive<u64>]> for BlockRanges {
-    fn as_ref(&self) -> &[RangeInclusive<u64>] {
-        unsafe {
-            // SAFETY: It is safe to transmute because of `repr(transparent)`.
-            std::mem::transmute(self.0.as_ref())
-        }
     }
 }
 
