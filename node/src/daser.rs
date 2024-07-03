@@ -382,6 +382,9 @@ where
         .boxed();
 
         self.sampling_futs.push(fut);
+        self.ongoing
+            .insert_relaxed(height..=height)
+            .expect("invalid range");
 
         Ok(())
     }
@@ -393,46 +396,10 @@ where
     /// limitation that's coming from bitswap: only way for us to know if sampling
     /// failed is via timeout.
     async fn populate_queue(&mut self) -> Result<()> {
-        let accepted = BlockRanges::default(); // TODO
         let stored = self.store.get_stored_header_ranges().await?;
+        let accepted = self.store.get_accepted_sampling_ranges().await?;
 
-        self.queue = stored.inverted_up_to_head() - accepted - &self.done - &self.ongoing;
-
-        /*
-        let stored_blocks = self.store.get_stored_header_ranges().await?;
-        let first_check = self.prev_stored_blocks.is_empty();
-
-        'outer: for block_range in stored_blocks.clone().into_inner().into_iter().rev() {
-            for height in block_range.rev() {
-                if self.prev_stored_blocks.contains(height) {
-                    // Skip blocks that were checked before
-                    continue;
-                }
-
-                // Optimization: We check if the block was accepted only if this is
-                // the first time we check the store (i.e. prev_stored_blocks is empty),
-                // otherwise we can safely assume that block needs sampling.
-                if first_check && is_block_accepted(&*self.store, height).await {
-                    // Skip already sampled blocks
-                    continue;
-                }
-
-                let Ok(header) = self.store.get_by_height(height).await else {
-                    // We reached the tail of the known heights
-                    break 'outer;
-                };
-
-                if !in_sampling_window(header.time()) {
-                    // We've reached the tail of the sampling window
-                    break 'outer;
-                }
-
-                queue_sampling(&mut self.queue, &header);
-            }
-        }
-
-        self.prev_stored_blocks = stored_blocks;
-        */
+        self.queue = stored - accepted - &self.done - &self.ongoing;
 
         Ok(())
     }
@@ -549,11 +516,17 @@ mod tests {
 
         let mut gen = ExtendedHeaderGenerator::new();
 
+        println!("A1");
         handle.expect_no_cmd().await;
+        println!("A2");
         handle.announce_peer_connected();
+        println!("A3");
         handle.expect_no_cmd().await;
+        println!("A4");
 
+        println!("A5");
         gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 2, false).await;
+        println!("A6");
         gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 4, false).await;
         gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 8, false).await;
         gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 16, false).await;
@@ -824,7 +797,9 @@ mod tests {
         let mut cids = Vec::with_capacity(needed_samples_sum);
 
         for _ in 0..needed_samples_sum {
+            println!("B0");
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
+            println!("B1");
             cids.push(cid);
 
             let sample_id: SampleId = cid.try_into().unwrap();

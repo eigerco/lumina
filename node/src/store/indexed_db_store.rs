@@ -11,7 +11,8 @@ use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
+use wasm_bindgen::JsValue;
 
 use crate::store::header_ranges::{BlockRange, BlockRanges, BlockRangesExt};
 use crate::store::utils::{RangeScanResult, VerifiedExtendedHeaders};
@@ -24,10 +25,13 @@ const DB_VERSION: u32 = 3;
 const HEADER_STORE_NAME: &str = "headers";
 const SAMPLING_STORE_NAME: &str = "sampling";
 const RANGES_STORE_NAME: &str = "ranges";
+const RANGES_GENERIC_STORE_NAME: &str = "ranges_generic";
 
 // Additional indexes set on HEADER_STORE, for querying by height and hash
 const HASH_INDEX_NAME: &str = "hash";
 const HEIGHT_INDEX_NAME: &str = "height";
+
+const ACCEPTED_SAMPLING_RANGES_KEY: &str = "accepted_sampling_ranges";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ExtendedHeaderEntry {
@@ -59,8 +63,9 @@ impl IndexedDbStore {
                     .add_index(Index::new(HASH_INDEX_NAME, "hash").unique(true))
                     .add_index(Index::new(HEIGHT_INDEX_NAME, "height").unique(true)),
             )
-            .add_object_store(ObjectStore::new(SAMPLING_STORE_NAME))
             .add_object_store(ObjectStore::new(RANGES_STORE_NAME))
+            .add_object_store(ObjectStore::new(SAMPLING_STORE_NAME))
+            .add_object_store(ObjectStore::new(RANGES_GENERIC_STORE_NAME))
             .build()
             .await
             .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
@@ -91,6 +96,14 @@ impl IndexedDbStore {
                 tx.commit().await?;
             }
         }
+
+        /*
+        let tx = store
+            .db
+            .transaction(&[RANGES2_STORE_NAME], TransactionMode::ReadWrite)?;
+        let ranges_store = tx.store(RANGES2_STORE_NAME)?;
+        tx.commit().await?;
+        */
 
         Ok(store)
     }
@@ -262,10 +275,12 @@ impl IndexedDbStore {
 
         let height_key = to_value(&height)?;
 
-        let tx = self
-            .db
-            .transaction(&[SAMPLING_STORE_NAME], TransactionMode::ReadWrite)?;
+        let tx = self.db.transaction(
+            &[SAMPLING_STORE_NAME, RANGES_GENERIC_STORE_NAME],
+            TransactionMode::ReadWrite,
+        )?;
         let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
+        let ranges_store = tx.store(RANGES_GENERIC_STORE_NAME)?;
 
         let previous_entry = sampling_store.get(&height_key).await?;
 
@@ -291,6 +306,24 @@ impl IndexedDbStore {
             .put(&metadata_jsvalue, Some(&height_key))
             .await?;
 
+        let mut accepted_ranges = get_ranges(&ranges_store, ACCEPTED_SAMPLING_RANGES_KEY).await?;
+
+        match status {
+            SamplingStatus::Accepted => accepted_ranges
+                .insert_relaxed(height..=height)
+                .expect("invalid range"),
+            _ => accepted_ranges
+                .remove_relaxed(height..=height)
+                .expect("invalid range"),
+        }
+
+        set_ranges(
+            &ranges_store,
+            ACCEPTED_SAMPLING_RANGES_KEY,
+            &accepted_ranges,
+        )
+        .await?;
+
         tx.commit().await?;
 
         Ok(())
@@ -314,6 +347,15 @@ impl IndexedDbStore {
         }
 
         Ok(Some(from_value(sampling_entry)?))
+    }
+
+    async fn get_sampling_ranges(&self) -> Result<BlockRanges> {
+        let tx = self
+            .db
+            .transaction(&[RANGES_GENERIC_STORE_NAME], TransactionMode::ReadWrite)?;
+        let store = tx.store(RANGES_GENERIC_STORE_NAME)?;
+
+        get_ranges(&store, ACCEPTED_SAMPLING_RANGES_KEY).await
     }
 }
 
@@ -411,6 +453,11 @@ impl Store for IndexedDbStore {
         let fut = SendWrapper::new(self.get_stored_header_ranges());
         fut.await
     }
+
+    async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
+        let fut = SendWrapper::new(self.get_sampling_ranges());
+        fut.await
+    }
 }
 
 impl From<rexie::Error> for StoreError {
@@ -427,6 +474,27 @@ impl From<serde_wasm_bindgen::Error> for StoreError {
     fn from(error: serde_wasm_bindgen::Error) -> StoreError {
         StoreError::StoredDataError(format!("Error de/serializing: {error}"))
     }
+}
+
+async fn get_ranges(store: &rexie::Store, name: &str) -> Result<BlockRanges> {
+    let key = JsValue::from_str(name);
+    let raw_ranges = store.get(&key).await?;
+
+    if raw_ranges.is_falsy() {
+        // Ranges not set yet
+        return Ok(BlockRanges::default());
+    }
+
+    Ok(from_value(raw_ranges)?)
+}
+
+async fn set_ranges(store: &rexie::Store, name: &str, ranges: &BlockRanges) -> Result<()> {
+    let key = JsValue::from_str(name);
+    let val = to_value(ranges)?;
+
+    store.put(&val, Some(&key)).await?;
+
+    Ok(())
 }
 
 async fn get_head_from_database(db: &Rexie) -> Result<ExtendedHeader> {
@@ -538,7 +606,7 @@ async fn verify_against_neighbours(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::store::header_ranges::ExtendedHeaderGeneratorExt;
+    use crate::store::utils::ExtendedHeaderGeneratorExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use function_name::named;
     use wasm_bindgen_test::wasm_bindgen_test;

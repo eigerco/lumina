@@ -12,6 +12,7 @@ use redb::{
     CommitError, Database, ReadTransaction, ReadableTable, StorageError, Table, TableDefinition,
     TableError, TransactionError, WriteTransaction,
 };
+use smallvec::SmallVec;
 use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::{debug, trace};
@@ -30,6 +31,11 @@ const SAMPLING_METADATA_TABLE: TableDefinition<'static, u64, &[u8]> =
     TableDefinition::new("STORE.SAMPLING_METADATA");
 const SCHEMA_VERSION_TABLE: TableDefinition<'static, (), u64> =
     TableDefinition::new("STORE.SCHEMA_VERSION");
+
+const RANGES_TABLE: TableDefinition<'static, &str, Vec<(u64, u64)>> =
+    TableDefinition::new("STORE.RANGES");
+
+const ACCEPTED_SAMPING_RANGES_KEY: &str = "KEY.ACCEPTED_SAMPING_RANGES";
 
 /// A [`Store`] implementation based on a [`redb`] database.
 #[derive(Debug)]
@@ -95,7 +101,8 @@ impl RedbStore {
 
                 // create tables, so that reads later don't complain
                 let _heights_table = tx.open_table(HEIGHTS_TABLE)?;
-                let _ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
+                let _header_ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
+                let _ranges_table = tx.open_table(RANGES_TABLE)?;
 
                 Ok(())
             })
@@ -293,8 +300,10 @@ impl RedbStore {
     ) -> Result<()> {
         self.write_tx(move |tx| {
             let mut sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
-            let ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
-            if !get_all_ranges(&ranges_table)?.contains(height) {
+            let mut ranges_table = tx.open_table(RANGES_TABLE)?;
+            let header_ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
+
+            if !get_all_ranges(&header_ranges_table)?.contains(height) {
                 return Err(StoreError::NotFound);
             }
 
@@ -320,6 +329,23 @@ impl RedbStore {
             let serialized = serialized.unwrap();
 
             sampling_metadata_table.insert(height, &serialized[..])?;
+
+            let mut sampling_ranges = get_ranges(&ranges_table, ACCEPTED_SAMPING_RANGES_KEY)?;
+
+            match status {
+                SamplingStatus::Accepted => sampling_ranges
+                    .insert_relaxed(height..=height)
+                    .expect("invalid height"),
+                _ => sampling_ranges
+                    .remove_relaxed(height..=height)
+                    .expect("invalid height"),
+            }
+
+            set_ranges(
+                &mut ranges_table,
+                ACCEPTED_SAMPING_RANGES_KEY,
+                &sampling_ranges,
+            )?;
 
             Ok(())
         })
@@ -349,6 +375,14 @@ impl RedbStore {
             .await?;
 
         Ok(ranges)
+    }
+
+    async fn get_sampling_ranges(&self) -> Result<BlockRanges> {
+        self.read_tx(|tx| {
+            let table = tx.open_table(RANGES_TABLE)?;
+            get_ranges(&table, ACCEPTED_SAMPING_RANGES_KEY)
+        })
+        .await
     }
 }
 
@@ -437,6 +471,10 @@ impl Store for RedbStore {
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges> {
         Ok(self.get_stored_ranges().await?)
     }
+
+    async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
+        self.get_sampling_ranges().await
+    }
 }
 
 fn try_insert_to_range(
@@ -451,7 +489,7 @@ fn try_insert_to_range(
                 Ok(range.0..=range.1)
             })
             .collect::<Result<_>>()?,
-    );
+    )?;
 
     let RangeScanResult {
         range_index,
@@ -536,7 +574,41 @@ where
                 Ok(range.0..=range.1)
             })
             .collect::<Result<_>>()?,
-    ))
+    )?)
+}
+
+fn get_ranges<R>(ranges_table: &R, name: &str) -> Result<BlockRanges>
+where
+    R: ReadableTable<&'static str, Vec<(u64, u64)>>,
+{
+    let raw_ranges = ranges_table
+        .get(name)?
+        .map(|guard| {
+            guard
+                .value()
+                .iter()
+                .map(|(start, end)| *start..=*end)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(BlockRanges::from_vec(raw_ranges)?)
+}
+
+fn set_ranges(
+    ranges_table: &mut Table<&str, Vec<(u64, u64)>>,
+    name: &str,
+    ranges: &BlockRanges,
+) -> Result<()> {
+    let raw_ranges: &[RangeInclusive<u64>] = ranges.as_ref();
+    let raw_ranges = raw_ranges
+        .into_iter()
+        .map(|range| (*range.start(), *range.end()))
+        .collect::<Vec<_>>();
+
+    ranges_table.insert(name, raw_ranges)?;
+
+    Ok(())
 }
 
 #[inline]

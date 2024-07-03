@@ -242,6 +242,18 @@ enum Strategy {
 }
 
 impl BlockRanges {
+    pub(crate) fn from_slice(slice: &[BlockRange]) -> Result<Self> {
+        let ranges = BlockRanges(slice.into_iter().cloned().collect());
+        ranges.validate()?;
+        Ok(ranges)
+    }
+
+    pub(crate) fn from_vec(from: SmallVec<[BlockRange; 2]>) -> Result<Self> {
+        let ranges = BlockRanges(from);
+        ranges.validate()?;
+        Ok(ranges)
+    }
+
     /// Returns `Ok()` if `BlockRanges` hold valid and sorted ranges
     pub(crate) fn validate(&self) -> Result<()> {
         let mut prev: Option<&RangeInclusive<u64>> = None;
@@ -406,13 +418,6 @@ impl BlockRanges {
 
         Ok(())
     }
-
-    /// Crate BlockRanges from correctly pre-sorted, non-overlapping SmallVec of ranges
-    pub(crate) fn from_vec(from: SmallVec<[BlockRange; 2]>) -> Self {
-        let ranges = BlockRanges(from);
-        debug_assert!(ranges.validate().is_ok());
-        ranges
-    }
 }
 
 impl AsRef<[RangeInclusive<u64>]> for BlockRanges {
@@ -468,6 +473,10 @@ mod tests {
     use super::*;
     use smallvec::smallvec;
 
+    fn new_block_ranges<const N: usize>(ranges: [BlockRange; N]) -> BlockRanges {
+        BlockRanges::from_vec(ranges.into_iter().collect()).expect("invalid BlockRanges")
+    }
+
     #[test]
     fn range_len() {
         assert_eq!((0u64..=0).len(), 1);
@@ -479,43 +488,29 @@ mod tests {
 
     #[test]
     fn header_ranges_empty() {
-        assert!(BlockRanges::from_vec(smallvec![]).is_empty());
-        assert!(!BlockRanges::from_vec(smallvec![1..=3]).is_empty());
+        assert!(new_block_ranges([]).is_empty());
+        assert!(!new_block_ranges([1..=3]).is_empty());
     }
 
     #[test]
     fn header_ranges_head() {
-        assert_eq!(BlockRanges::from_vec(smallvec![]).head(), None);
-        assert_eq!(BlockRanges::from_vec(smallvec![1..=3]).head(), Some(3));
-        assert_eq!(
-            BlockRanges::from_vec(smallvec![1..=3, 6..=9]).head(),
-            Some(9)
-        );
-        assert_eq!(
-            BlockRanges::from_vec(smallvec![1..=3, 5..=5, 8..=9]).head(),
-            Some(9)
-        );
+        assert_eq!(new_block_ranges([]).head(), None);
+        assert_eq!(new_block_ranges([1..=3]).head(), Some(3));
+        assert_eq!(new_block_ranges([1..=3, 6..=9]).head(), Some(9));
+        assert_eq!(new_block_ranges([1..=3, 5..=5, 8..=9]).head(), Some(9));
     }
 
     #[test]
     fn header_ranges_tail() {
-        assert_eq!(BlockRanges::from_vec(smallvec![]).tail(), None);
-        assert_eq!(BlockRanges::from_vec(smallvec![1..=3]).tail(), Some(1));
-        assert_eq!(
-            BlockRanges::from_vec(smallvec![1..=3, 6..=9]).tail(),
-            Some(1)
-        );
-        assert_eq!(
-            BlockRanges::from_vec(smallvec![1..=3, 5..=5, 8..=9]).tail(),
-            Some(1)
-        );
+        assert_eq!(new_block_ranges([]).tail(), None);
+        assert_eq!(new_block_ranges([1..=3]).tail(), Some(1));
+        assert_eq!(new_block_ranges([1..=3, 6..=9]).tail(), Some(1));
+        assert_eq!(new_block_ranges([1..=3, 5..=5, 8..=9]).tail(), Some(1));
     }
 
     #[test]
     fn check_range_insert_append() {
-        let result = BlockRanges::from_vec(smallvec![])
-            .check_range_insert(&(1..=5))
-            .unwrap();
+        let result = new_block_ranges([]).check_range_insert(&(1..=5)).unwrap();
         assert_eq!(
             result,
             RangeScanResult {
@@ -525,7 +520,7 @@ mod tests {
             }
         );
 
-        let result = BlockRanges::from_vec(smallvec![1..=4])
+        let result = new_block_ranges([1..=4])
             .check_range_insert(&(5..=5))
             .unwrap();
         assert_eq!(
@@ -537,7 +532,7 @@ mod tests {
             }
         );
 
-        let result = BlockRanges::from_vec(smallvec![1..=5])
+        let result = new_block_ranges([1..=5])
             .check_range_insert(&(6..=9))
             .unwrap();
         assert_eq!(
@@ -549,7 +544,7 @@ mod tests {
             }
         );
 
-        let result = BlockRanges::from_vec(smallvec![6..=8])
+        let result = new_block_ranges([6..=8])
             .check_range_insert(&(2..=5))
             .unwrap();
         assert_eq!(
@@ -564,7 +559,7 @@ mod tests {
 
     #[test]
     fn check_range_insert_with_consolidation() {
-        let result = BlockRanges::from_vec(smallvec![1..=3, 6..=9])
+        let result = new_block_ranges([1..=3, 6..=9])
             .check_range_insert(&(4..=5))
             .unwrap();
         assert_eq!(
@@ -576,7 +571,7 @@ mod tests {
             }
         );
 
-        let result = BlockRanges::from_vec(smallvec![1..=2, 5..=5, 8..=9])
+        let result = new_block_ranges([1..=2, 5..=5, 8..=9])
             .check_range_insert(&(3..=4))
             .unwrap();
         assert_eq!(
@@ -588,7 +583,7 @@ mod tests {
             }
         );
 
-        let result = BlockRanges::from_vec(smallvec![1..=2, 4..=4, 8..=9])
+        let result = new_block_ranges([1..=2, 4..=4, 8..=9])
             .check_range_insert(&(5..=7))
             .unwrap();
         assert_eq!(
@@ -603,32 +598,32 @@ mod tests {
 
     #[test]
     fn check_range_insert_overlapping() {
-        let result = BlockRanges::from_vec(smallvec![1..=2])
+        let result = new_block_ranges([1..=2])
             .check_range_insert(&(1..=1))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(1, 1)));
 
-        let result = BlockRanges::from_vec(smallvec![1..=4])
+        let result = new_block_ranges([1..=4])
             .check_range_insert(&(2..=8))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(2, 4)));
 
-        let result = BlockRanges::from_vec(smallvec![1..=4])
+        let result = new_block_ranges([1..=4])
             .check_range_insert(&(2..=3))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(2, 3)));
 
-        let result = BlockRanges::from_vec(smallvec![5..=9])
+        let result = new_block_ranges([5..=9])
             .check_range_insert(&(1..=5))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(5, 5)));
 
-        let result = BlockRanges::from_vec(smallvec![5..=8])
+        let result = new_block_ranges([5..=8])
             .check_range_insert(&(2..=8))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(5, 8)));
 
-        let result = BlockRanges::from_vec(smallvec![1..=3, 6..=9])
+        let result = new_block_ranges([1..=3, 6..=9])
             .check_range_insert(&(3..=6))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(3, 3)));
@@ -636,7 +631,7 @@ mod tests {
 
     #[test]
     fn check_range_insert_invalid_placement() {
-        let result = BlockRanges::from_vec(smallvec![1..=2, 7..=9])
+        let result = new_block_ranges([1..=2, 7..=9])
             .check_range_insert(&(4..=4))
             .unwrap_err();
         assert!(matches!(
@@ -644,7 +639,7 @@ mod tests {
             StoreError::InsertPlacementDisallowed(4, 4)
         ));
 
-        let result = BlockRanges::from_vec(smallvec![1..=2, 8..=9])
+        let result = new_block_ranges([1..=2, 8..=9])
             .check_range_insert(&(4..=6))
             .unwrap_err();
         assert!(matches!(
@@ -652,7 +647,7 @@ mod tests {
             StoreError::InsertPlacementDisallowed(4, 6)
         ));
 
-        let result = BlockRanges::from_vec(smallvec![4..=5, 7..=8])
+        let result = new_block_ranges([4..=5, 7..=8])
             .check_range_insert(&(1..=2))
             .unwrap_err();
         assert!(matches!(
@@ -663,27 +658,27 @@ mod tests {
 
     #[test]
     fn test_header_range_creation_ok() {
-        BlockRanges::from_vec(smallvec![1..=3, 5..=8]);
-        BlockRanges::from_vec(smallvec![]);
-        BlockRanges::from_vec(smallvec![1..=1, 1000000..=2000000]);
+        new_block_ranges([1..=3, 5..=8]);
+        new_block_ranges([]);
+        new_block_ranges([1..=1, 1000000..=2000000]);
     }
 
     #[test]
     #[should_panic]
     fn test_header_range_creation_overlap() {
-        BlockRanges::from_vec(smallvec![1..=3, 2..=5]);
+        new_block_ranges([1..=3, 2..=5]);
     }
 
     #[test]
     #[should_panic]
     fn test_header_range_creation_inverse() {
-        BlockRanges::from_vec(smallvec![1..=3, RangeInclusive::new(9, 5)]);
+        new_block_ranges([1..=3, RangeInclusive::new(9, 5)]);
     }
 
     #[test]
     #[should_panic]
     fn test_header_range_creation_wrong_order() {
-        BlockRanges::from_vec(smallvec![10..=15, 1..=5]);
+        new_block_ranges([10..=15, 1..=5]);
     }
 
     #[test]
@@ -693,31 +688,30 @@ mod tests {
             BlockRanges::default()
         );
         assert_eq!(
-            BlockRanges::from_vec(smallvec![1..=100]).inverted_up_to_head(),
+            new_block_ranges([1..=100]).inverted_up_to_head(),
             BlockRanges::default()
         );
         assert_eq!(
-            BlockRanges::from_vec(smallvec![2..=100]).inverted_up_to_head(),
-            BlockRanges::from_vec(smallvec![1..=1])
+            new_block_ranges([2..=100]).inverted_up_to_head(),
+            new_block_ranges([1..=1])
         );
         assert_eq!(
-            BlockRanges::from_vec(smallvec![2..=100, 102..=102]).inverted_up_to_head(),
-            BlockRanges::from_vec(smallvec![1..=1, 101..=101])
+            new_block_ranges([2..=100, 102..=102]).inverted_up_to_head(),
+            new_block_ranges([1..=1, 101..=101])
         );
 
         assert_eq!(
-            BlockRanges::from_vec(smallvec![2..=100, 150..=160, 200..=210, 300..=310])
-                .inverted_up_to_head(),
-            BlockRanges::from_vec(smallvec![1..=1, 101..=149, 161..=199, 211..=299])
+            new_block_ranges([2..=100, 150..=160, 200..=210, 300..=310]).inverted_up_to_head(),
+            new_block_ranges([1..=1, 101..=149, 161..=199, 211..=299])
         );
     }
 
     #[test]
     fn pop_head() {
-        let mut ranges = BlockRanges::from_vec(smallvec![]);
+        let mut ranges = new_block_ranges([]);
         assert_eq!(ranges.pop_head(), None);
 
-        let mut ranges = BlockRanges::from_vec(smallvec![1..=4, 6..=8, 10..=10]);
+        let mut ranges = new_block_ranges([1..=4, 6..=8, 10..=10]);
         assert_eq!(ranges.pop_head(), Some(10));
         assert_eq!(ranges.pop_head(), Some(8));
         assert_eq!(ranges.pop_head(), Some(7));
@@ -743,8 +737,8 @@ mod tests {
         assert!((3..=5).is_adjacent(&(1..=2)));
         assert!((3..=5).is_adjacent(&(6..=8)));
 
-        assert!(&(3..=5).is_adjacent(&(1..=1)));
-        assert!(&(3..=5).is_adjacent(&(7..=8)));
+        assert!(!(3..=5).is_adjacent(&(1..=1)));
+        assert!(!(3..=5).is_adjacent(&(7..=8)));
     }
 
     #[test]
@@ -776,7 +770,7 @@ mod tests {
 
     #[test]
     fn find_intersecting_ranges() {
-        let ranges = BlockRanges::from_vec(smallvec![30..=50, 80..=100, 130..=150]);
+        let ranges = new_block_ranges([30..=50, 80..=100, 130..=150]);
 
         assert_eq!(ranges.find_ranges(28..=28, Strategy::Intersecting), None);
         assert_eq!(ranges.find_ranges(1..=15, Strategy::Intersecting), None);
@@ -927,31 +921,28 @@ mod tests {
         assert_eq!(ranges.find_ranges(152..=152, Strategy::Intersecting), None);
 
         assert_eq!(
-            BlockRanges::from_vec(smallvec![]).find_ranges(1..=1, Strategy::Intersecting),
+            new_block_ranges([]).find_ranges(1..=1, Strategy::Intersecting),
             None
         );
 
         assert_eq!(
-            BlockRanges::from_vec(smallvec![1..=2]).find_ranges(6..=9, Strategy::Intersecting),
+            new_block_ranges([1..=2]).find_ranges(6..=9, Strategy::Intersecting),
             None
         );
         assert_eq!(
-            BlockRanges::from_vec(smallvec![4..=8]).find_ranges(1..=2, Strategy::Intersecting),
+            new_block_ranges([4..=8]).find_ranges(1..=2, Strategy::Intersecting),
             None
         );
         assert_eq!(
-            BlockRanges::from_vec(smallvec![4..=8, 20..=30])
-                .find_ranges(1..=2, Strategy::Intersecting),
+            new_block_ranges([4..=8, 20..=30]).find_ranges(1..=2, Strategy::Intersecting),
             None
         );
         assert_eq!(
-            BlockRanges::from_vec(smallvec![4..=8, 20..=30])
-                .find_ranges(10..=12, Strategy::Intersecting),
+            new_block_ranges([4..=8, 20..=30]).find_ranges(10..=12, Strategy::Intersecting),
             None
         );
         assert_eq!(
-            BlockRanges::from_vec(smallvec![4..=8, 20..=30])
-                .find_ranges(32..=32, Strategy::Intersecting),
+            new_block_ranges([4..=8, 20..=30]).find_ranges(32..=32, Strategy::Intersecting),
             None
         );
     }
@@ -962,7 +953,7 @@ mod tests {
         r.insert_relaxed(10..=10).unwrap();
         assert_eq!(&r.0[..], &[10..=10][..]);
 
-        let ranges = BlockRanges::from_vec(smallvec![30..=50, 80..=100, 130..=150]);
+        let ranges = new_block_ranges([30..=50, 80..=100, 130..=150]);
 
         let mut r = ranges.clone();
         r.insert_relaxed(1..=1).unwrap();
@@ -999,7 +990,7 @@ mod tests {
 
     #[test]
     fn insert_relaxed_intersected() {
-        let ranges = BlockRanges::from_vec(smallvec![30..=50, 80..=100, 130..=150]);
+        let ranges = new_block_ranges([30..=50, 80..=100, 130..=150]);
 
         let mut r = ranges.clone();
         r.insert_relaxed(29..=29).unwrap();
@@ -1053,14 +1044,14 @@ mod tests {
         r.insert_relaxed(151..=170).unwrap();
         assert_eq!(&r.0[..], &[30..=50, 80..=100, 130..=170][..]);
 
-        let mut r = BlockRanges::from_vec(smallvec![1..=2, 4..=6, 8..=10, 15..=20, 80..=100]);
+        let mut r = new_block_ranges([1..=2, 4..=6, 8..=10, 15..=20, 80..=100]);
         r.insert_relaxed(3..=79).unwrap();
         assert_eq!(&r.0[..], &[1..=100][..]);
     }
 
     #[test]
     fn remove_relaxed() {
-        let ranges = BlockRanges::from_vec(smallvec![30..=50, 80..=100, 130..=150]);
+        let ranges = new_block_ranges([30..=50, 80..=100, 130..=150]);
 
         let mut r = ranges.clone();
         r.remove_relaxed(29..=29).unwrap();
@@ -1114,19 +1105,19 @@ mod tests {
         r.remove_relaxed(10..=170).unwrap();
         assert!(r.0.is_empty());
 
-        let mut r = BlockRanges::from_vec(smallvec![1..=10, 12..=12, 14..=14]);
+        let mut r = new_block_ranges([1..=10, 12..=12, 14..=14]);
         r.remove_relaxed(12..=12).unwrap();
         assert_eq!(&r.0[..], &[1..=10, 14..=14][..]);
 
-        let mut r = BlockRanges::from_vec(smallvec![1..=u64::MAX]);
+        let mut r = new_block_ranges([1..=u64::MAX]);
         r.remove_relaxed(12..=12).unwrap();
         assert_eq!(&r.0[..], &[1..=11, 13..=u64::MAX][..]);
 
-        let mut r = BlockRanges::from_vec(smallvec![1..=u64::MAX]);
+        let mut r = new_block_ranges([1..=u64::MAX]);
         r.remove_relaxed(1..=1).unwrap();
         assert_eq!(&r.0[..], &[2..=u64::MAX][..]);
 
-        let mut r = BlockRanges::from_vec(smallvec![1..=u64::MAX]);
+        let mut r = new_block_ranges([1..=u64::MAX]);
         r.remove_relaxed(u64::MAX..=u64::MAX).unwrap();
         assert_eq!(&r.0[..], &[1..=u64::MAX - 1][..]);
     }

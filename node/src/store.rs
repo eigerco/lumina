@@ -157,6 +157,8 @@ pub trait Store: Send + Sync + Debug {
 
     /// Return a list of header ranges currenty held in store
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges>;
+
+    async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].
@@ -226,6 +228,10 @@ pub enum StoreError {
     /// Invalid range of headers provided.
     #[error("Invalid headers range")]
     InvalidHeadersRange,
+
+    /// BlockRanges error.
+    #[error(transparent)]
+    BlockRangesError(#[from] BlockRangesError),
 }
 
 #[cfg(not(target_arch = "wasm32"))]
