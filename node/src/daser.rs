@@ -518,17 +518,11 @@ mod tests {
 
         let mut gen = ExtendedHeaderGenerator::new();
 
-        println!("A1");
         handle.expect_no_cmd().await;
-        println!("A2");
         handle.announce_peer_connected();
-        println!("A3");
         handle.expect_no_cmd().await;
-        println!("A4");
 
-        println!("A5");
         gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 2, false).await;
-        println!("A6");
         gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 4, false).await;
         gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 8, false).await;
         gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 16, false).await;
