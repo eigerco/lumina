@@ -5,7 +5,7 @@ use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 
 use crate::executor::yield_now;
-use crate::store::header_ranges::{BlockRangeExt, BlockRangeOld};
+use crate::store::header_ranges::{BlockRange, BlockRangeExt};
 use crate::store::{Result, StoreError};
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
@@ -17,7 +17,7 @@ pub(crate) fn calculate_range_to_fetch(
     store_headers: &[RangeInclusive<u64>],
     syncing_window_edge: Option<u64>,
     limit: u64,
-) -> BlockRangeOld {
+) -> BlockRange {
     let mut missing_range = get_most_recent_missing_range(head_height, store_headers);
 
     // truncate to syncing window, if height is known
@@ -40,7 +40,7 @@ pub(crate) fn calculate_range_to_fetch(
 fn get_most_recent_missing_range(
     head_height: u64,
     store_headers: &[RangeInclusive<u64>],
-) -> BlockRangeOld {
+) -> BlockRange {
     let mut store_headers_iter = store_headers.iter().rev();
 
     let Some(store_head_range) = store_headers_iter.next() else {
@@ -101,7 +101,7 @@ pub(crate) struct RangeScanResult {
     /// index of the range that header is being inserted into
     pub range_index: usize,
     /// updated bounds of the range header is being inserted into
-    pub range: BlockRangeOld,
+    pub range: BlockRange,
     /// index of the range that should be removed from the table, if we're consolidating two
     /// ranges. None otherwise.
     pub range_to_remove: Option<usize>,

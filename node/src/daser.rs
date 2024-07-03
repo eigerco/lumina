@@ -268,8 +268,8 @@ where
                         .update_sampling_metadata(height, status, Vec::new())
                         .await?;
 
-                    self.ongoing.remove_relaxed(height..=height).expect("valid range");
-                    self.done.insert_relaxed(height..=height).expect("valid range");
+                    self.ongoing.remove_relaxed(height..=height).expect("invalid range");
+                    self.done.insert_relaxed(height..=height).expect("invalid range");
                 },
                 _ = &mut wait_new_head => {
                     wait_new_head = store.wait_new_head();
@@ -300,8 +300,10 @@ where
         if !in_sampling_window(header.time()) {
             // As soon as we reach a block that is not in the sampling
             // window, it means the rest wouldn't be either.
-            self.queue.remove_relaxed(1..=height).expect("valid range");
-            self.done.insert_relaxed(1..=height).expect("valid range");
+            self.queue
+                .remove_relaxed(1..=height)
+                .expect("invalid range");
+            self.done.insert_relaxed(1..=height).expect("invalid range");
             return Ok(());
         }
 

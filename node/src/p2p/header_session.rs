@@ -6,7 +6,7 @@ use tracing::debug;
 use crate::executor::spawn;
 use crate::p2p::header_ex::utils::HeaderRequestExt;
 use crate::p2p::{P2pCmd, P2pError};
-use crate::store::header_ranges::{BlockRangeExt, BlockRangeOld};
+use crate::store::header_ranges::{BlockRange, BlockRangeExt};
 
 const MAX_AMOUNT_PER_REQ: u64 = 64;
 const MAX_CONCURRENT_REQS: usize = 8;
@@ -14,7 +14,7 @@ const MAX_CONCURRENT_REQS: usize = 8;
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
 pub(crate) struct HeaderSession {
-    to_fetch: Option<BlockRangeOld>,
+    to_fetch: Option<BlockRange>,
     cmd_tx: mpsc::Sender<P2pCmd>,
     response_tx: mpsc::Sender<(u64, u64, Result<Vec<ExtendedHeader>>)>,
     response_rx: mpsc::Receiver<(u64, u64, Result<Vec<ExtendedHeader>>)>,
@@ -30,7 +30,7 @@ impl HeaderSession {
     ///
     /// [`calculate_fetch_range`] crate::store::utils::calculate_fetch_range
     /// [`Store::get_stored_header_ranges`]: crate::store::Store::get_stored_header_ranges
-    pub(crate) fn new(range: BlockRangeOld, cmd_tx: mpsc::Sender<P2pCmd>) -> Self {
+    pub(crate) fn new(range: BlockRange, cmd_tx: mpsc::Sender<P2pCmd>) -> Self {
         let (response_tx, response_rx) = mpsc::channel(MAX_CONCURRENT_REQS);
 
         HeaderSession {
@@ -140,10 +140,7 @@ impl HeaderSession {
 }
 
 /// take a next batch of up to `limit` headers from the front of the `range_to_fetch`
-fn take_next_batch(
-    range_to_fetch: &mut Option<BlockRangeOld>,
-    limit: u64,
-) -> Option<BlockRangeOld> {
+fn take_next_batch(range_to_fetch: &mut Option<BlockRange>, limit: u64) -> Option<BlockRange> {
     // calculate potential end offset before we modify range_to_fetch
     let end_offset = limit.checked_sub(1)?;
 

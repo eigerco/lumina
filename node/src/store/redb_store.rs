@@ -16,7 +16,7 @@ use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::{debug, trace};
 
-use crate::store::header_ranges::{BlockRangeOld, BlockRanges, BlockRangesExt};
+use crate::store::header_ranges::{BlockRange, BlockRanges, BlockRangesExt};
 use crate::store::utils::{RangeScanResult, VerifiedExtendedHeaders};
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
@@ -441,7 +441,7 @@ impl Store for RedbStore {
 
 fn try_insert_to_range(
     ranges_table: &mut Table<u64, (u64, u64)>,
-    new_range: BlockRangeOld,
+    new_range: BlockRange,
 ) -> Result<(bool, bool)> {
     let stored_ranges = BlockRanges::from_vec(
         ranges_table
