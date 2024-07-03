@@ -97,13 +97,7 @@ impl IndexedDbStore {
             }
         }
 
-        /*
-        let tx = store
-            .db
-            .transaction(&[RANGES2_STORE_NAME], TransactionMode::ReadWrite)?;
-        let ranges_store = tx.store(RANGES2_STORE_NAME)?;
-        tx.commit().await?;
-        */
+        // TODO: migrate ranges
 
         Ok(store)
     }
