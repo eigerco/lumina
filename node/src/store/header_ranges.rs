@@ -16,8 +16,11 @@ pub type BlockRange = RangeInclusive<u64>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BlockRangesError {
-    #[error("Invalid block range: {0}-{1}")]
-    InvalidBlockRange(u64, u64),
+    #[error("Invalid block range: {}-{}", .0.start(), .0.end())]
+    InvalidBlockRange(BlockRange),
+
+    #[error("Block ranges are not sorted")]
+    UnsortedBlockRanges,
 }
 
 type Result<T, E = BlockRangesError> = std::result::Result<T, E>;
@@ -34,10 +37,7 @@ impl BlockRangeExt for BlockRange {
         if *self.start() > 0 && self.start() <= self.end() {
             Ok(())
         } else {
-            Err(BlockRangesError::InvalidBlockRange(
-                *self.start(),
-                *self.end(),
-            ))
+            Err(BlockRangesError::InvalidBlockRange(self.to_owned()))
         }
     }
 
@@ -112,8 +112,26 @@ impl BlockRangeExt for BlockRange {
 }
 
 /// Represents possibly multiple non-overlapping, sorted ranges of header heights
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize)]
+#[serde(transparent)]
 pub struct BlockRanges(SmallVec<[BlockRange; 2]>);
+
+/// Custom `Deserialize` that validates `BlockRanges`.
+impl<'de> serde::Deserialize<'de> for BlockRanges {
+    fn deserialize<D>(deserializer: D) -> Result<BlockRanges, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let raw_ranges = SmallVec::<[RangeInclusive<u64>; 2]>::deserialize(deserializer)?;
+        let ranges = BlockRanges(raw_ranges);
+
+        ranges
+            .validate()
+            .map_err(|e| serde::de::Error::custom(e.to_string()))?;
+
+        Ok(ranges)
+    }
+}
 
 pub(crate) trait BlockRangesExt {
     /// Check whether provided `to_insert` range can be inserted into the header ranges represented
@@ -224,6 +242,25 @@ enum Strategy {
 }
 
 impl BlockRanges {
+    /// Returns `Ok()` if `BlockRanges` hold valid and sorted ranges
+    pub(crate) fn validate(&self) -> Result<()> {
+        let mut prev: Option<&RangeInclusive<u64>> = None;
+
+        for range in self.0.iter() {
+            range.validate()?;
+
+            if let Some(prev) = prev {
+                if range.start() <= prev.end() {
+                    return Err(BlockRangesError::UnsortedBlockRanges);
+                }
+            }
+
+            prev = Some(range);
+        }
+
+        Ok(())
+    }
+
     /// Return whether `BlockRanges` contains provided height
     pub fn contains(&self, height: u64) -> bool {
         self.0.iter().any(|r| r.contains(&height))
@@ -248,7 +285,7 @@ impl BlockRanges {
     fn find_ranges(
         &self,
         range: impl Borrow<BlockRange>,
-        kind: Strategy,
+        strategy: Strategy,
     ) -> Option<(usize, usize)> {
         let range = range.borrow();
         debug_assert!(range.validate().is_ok());
@@ -257,7 +294,7 @@ impl BlockRanges {
         let mut end_idx = None;
 
         for (i, r) in self.0.iter().enumerate() {
-            let found = match kind {
+            let found = match strategy {
                 Strategy::Overlapping => r.is_overlapping(range),
                 Strategy::Adjacent => r.is_adjacent(range),
                 Strategy::Intersecting => r.is_overlapping(range) || r.is_adjacent(range),
@@ -270,7 +307,7 @@ impl BlockRanges {
 
                 end_idx = Some(i);
             } else if end_idx.is_some() {
-                // We reached from satisfying range to a non-satisfying.
+                // We reached from a satisfying range to a non-satisfying.
                 // That means there nothing else to find.
                 break;
             }
@@ -372,25 +409,9 @@ impl BlockRanges {
 
     /// Crate BlockRanges from correctly pre-sorted, non-overlapping SmallVec of ranges
     pub(crate) fn from_vec(from: SmallVec<[BlockRange; 2]>) -> Self {
-        #[cfg(debug_assertions)]
-        {
-            let mut prev: Option<&RangeInclusive<u64>> = None;
-
-            for range in &from {
-                range.validate().expect("invalid range");
-
-                if let Some(prev) = prev {
-                    assert!(
-                        prev.end() < range.start(),
-                        "header ranges aren't sorted correctly"
-                    );
-                }
-
-                prev = Some(range);
-            }
-        }
-
-        Self(from)
+        let ranges = BlockRanges(from);
+        debug_assert!(ranges.validate().is_ok());
+        ranges
     }
 }
 

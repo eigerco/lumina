@@ -13,10 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::Notify;
 
-use crate::store::header_ranges::{
-    HeaderRange, HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders,
-};
-use crate::store::utils::RangeScanResult;
+use crate::store::header_ranges::{BlockRange, BlockRanges, BlockRangesExt};
+use crate::store::utils::{RangeScanResult, VerifiedExtendedHeaders};
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// indexeddb version, needs to be incremented on every schema schange
@@ -145,13 +143,13 @@ impl IndexedDbStore {
             .map_err(|e| StoreError::CelestiaTypes(e.into()))
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+    async fn get_stored_header_ranges(&self) -> Result<BlockRanges> {
         let tx = self
             .db
             .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)?;
         let store = tx.store(RANGES_STORE_NAME)?;
 
-        let ranges = HeaderRanges::from_vec(
+        let ranges = BlockRanges::from_vec(
             store
                 .get_all(None, None, None, Some(Direction::Next))
                 .await?
@@ -409,7 +407,7 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+    async fn get_stored_header_ranges(&self) -> Result<BlockRanges> {
         let fut = SendWrapper::new(self.get_stored_header_ranges());
         fut.await
     }
@@ -451,9 +449,9 @@ async fn get_head_from_database(db: &Rexie) -> Result<ExtendedHeader> {
 
 async fn try_insert_to_range(
     ranges_store: &rexie::Store,
-    new_range: HeaderRange,
+    new_range: BlockRange,
 ) -> Result<(bool, bool)> {
-    let stored_ranges = HeaderRanges::from_vec(
+    let stored_ranges = BlockRanges::from_vec(
         ranges_store
             .get_all(None, None, None, Some(Direction::Next))
             .await?
