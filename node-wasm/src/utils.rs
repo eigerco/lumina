@@ -1,5 +1,6 @@
 //! Various utilities for interacting with node from wasm.
 use std::fmt::{self, Debug};
+use std::net::{IpAddr, Ipv4Addr};
 
 use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
@@ -212,6 +213,8 @@ async fn fetch(url: &str, opts: &RequestInit, headers: &[(&str, &str)]) -> Resul
 /// Otherwise returns the provided address.
 pub(crate) async fn resolve_dnsaddr_multiaddress(ma: Multiaddr) -> Result<Vec<Multiaddr>> {
     const TXT_TYPE: u16 = 16;
+    // cloudflare dns
+    const DEFAULT_DNS_ADDR: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
 
     #[derive(Debug, Deserialize)]
     struct DohEntry {
@@ -240,7 +243,8 @@ pub(crate) async fn resolve_dnsaddr_multiaddress(ma: Multiaddr) -> Result<Vec<Mu
     opts.method("GET");
     opts.mode(RequestMode::Cors);
 
-    let url = format!("https://1.1.1.1/dns-query?type=txt&name=_dnsaddr.{dnsaddr}");
+    let url =
+        format!("https://{DEFAULT_DNS_ADDR}/dns-query?type={TXT_TYPE}&name=_dnsaddr.{dnsaddr}");
     let response = fetch(&url, &opts, &[("Accept", "application/dns-json")]).await?;
 
     let json_promise = response.json().context("`Response::json()` failed")?;
