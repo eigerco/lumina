@@ -14,7 +14,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub use crate::store::header_ranges::{BlockRangeNew, BlockRanges, BlockRangesError};
+pub use crate::store::header_ranges::{BlockRangeOld, BlockRanges, BlockRangesError};
 pub use crate::store::utils::{ExtendedHeaderGeneratorExt, VerifiedExtendedHeaders};
 
 pub use in_memory_store::InMemoryStore;
