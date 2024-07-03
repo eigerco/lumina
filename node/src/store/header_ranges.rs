@@ -69,6 +69,62 @@ impl BlockRangeNew {
     pub fn is_empty(&self) -> bool {
         self.0.len() == 0
     }
+
+    pub fn is_adjacent(&self, other: &BlockRangeNew) -> bool {
+        // End of `self` touches start of `other`
+        //
+        // self:  |------|
+        // other:         |------|
+        if *self.end() == other.start().saturating_sub(1) {
+            return true;
+        }
+
+        // Start of `self` touches end of `other`
+        //
+        // self:          |------|
+        // other: |------|
+        if self.start().saturating_sub(1) == *other.end() {
+            return true;
+        }
+
+        false
+    }
+
+    pub fn is_overlapping(&self, other: &BlockRangeNew) -> bool {
+        // range1 is partial set of range2, case 1
+        //
+        // self:  |------|
+        // other:     |------|
+        if self.start() < other.start() && other.contains(self.end()) {
+            return true;
+        }
+
+        // range1 is partial set of range2, case 2
+        //
+        // self:      |------|
+        // other: |------|
+        if self.end() > other.end() && other.contains(self.start()) {
+            return true;
+        }
+
+        // range1 is subset of range2
+        //
+        // self:    |--|
+        // other: |------|
+        if self.start() >= other.start() && self.end() <= other.end() {
+            return true;
+        }
+
+        // range1 is superset of range2
+        //
+        // self:  |------|
+        // other:   |--|
+        if self.start() <= other.start() && self.end() >= other.end() {
+            return true;
+        }
+
+        false
+    }
 }
 
 impl AsRef<RangeInclusive<u64>> for BlockRangeNew {
@@ -238,7 +294,7 @@ impl BlockRangesExt for BlockRanges {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum FindKind {
+enum Strategy {
     Overlapping,
     Adjacent,
     OverlappingOrAdjacent,
@@ -273,26 +329,21 @@ impl BlockRanges {
         &self,
         range: impl TryInto<BlockRangeNew>,
     ) -> Option<(usize, usize)> {
-        self.find_ranges(range, FindKind::OverlappingOrAdjacent)
+        self.find_ranges(range, Strategy::OverlappingOrAdjacent)
     }
 
     /// Returns the start index and end index of an intersection.
     ///
     /// Intersection in our case means overlapping or touching of a range.
-    fn find_ranges(
-        &self,
-        range: impl AsRef<RangeInclusive<u64>>,
-        kind: FindKind,
-    ) -> Option<(usize, usize)> {
-        let range = range.as_ref();
+    fn find_ranges(&self, range: &BlockRangeNew, kind: Strategy) -> Option<(usize, usize)> {
         let mut start_idx = None;
         let mut end_idx = None;
 
         for (i, r) in self.0.iter().enumerate() {
             let found = match kind {
-                FindKind::Overlapping => is_overlapping(r, &range),
-                FindKind::Adjacent => is_touching(r, &range),
-                FindKind::OverlappingOrAdjacent => {
+                Strategy::Overlapping => is_overlapping(r, &range),
+                Strategy::Adjacent => is_touching(r, &range),
+                Strategy::OverlappingOrAdjacent => {
                     is_overlapping(r, &range) || is_touching(r, &range)
                 }
             };
@@ -371,7 +422,7 @@ impl BlockRanges {
     pub(crate) fn remove_relaxed(&mut self, range: impl TryInto<BlockRangeNew>) {
         let range = range.try_into().unwrap_or_else(|_| panic!("AA"));
 
-        let Some((start_idx, end_idx)) = self.find_ranges(range.clone(), FindKind::Overlapping)
+        let Some((start_idx, end_idx)) = self.find_ranges(range.clone(), Strategy::Overlapping)
         else {
             // Nothing to remove
             return;
