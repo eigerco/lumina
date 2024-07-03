@@ -166,7 +166,7 @@ pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
         warn!("Error during persistant storage request");
     });
 
-    // don't drop the promise, we'll log the result and hope user clicked the right button
+    // don't drop the promise, we'll log the result and hope the user clicked the right button
     let _promise = get_navigator()?
         .storage()
         .persist()?
