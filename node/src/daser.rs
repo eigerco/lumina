@@ -268,8 +268,8 @@ where
                         .update_sampling_metadata(height, status, Vec::new())
                         .await?;
 
-                    self.ongoing.remove_relaxed(height..=height).expect("invalid range");
-                    self.done.insert_relaxed(height..=height).expect("invalid range");
+                    self.ongoing.remove_relaxed(height..=height).expect("invalid height");
+                    self.done.insert_relaxed(height..=height).expect("invalid height");
                 },
                 _ = &mut wait_new_head => {
                     wait_new_head = store.wait_new_head();
@@ -302,8 +302,10 @@ where
             // window, it means the rest wouldn't be either.
             self.queue
                 .remove_relaxed(1..=height)
-                .expect("invalid range");
-            self.done.insert_relaxed(1..=height).expect("invalid range");
+                .expect("invalid height");
+            self.done
+                .insert_relaxed(1..=height)
+                .expect("invalid height");
             return Ok(());
         }
 
@@ -384,7 +386,7 @@ where
         self.sampling_futs.push(fut);
         self.ongoing
             .insert_relaxed(height..=height)
-            .expect("invalid range");
+            .expect("invalid height");
 
         Ok(())
     }

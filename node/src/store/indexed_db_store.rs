@@ -169,7 +169,7 @@ impl IndexedDbStore {
                 .into_iter()
                 .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(begin, end)| begin..=end))
                 .collect::<Result<_, _>>()?,
-        );
+        )?;
 
         Ok(ranges)
     }
@@ -311,10 +311,10 @@ impl IndexedDbStore {
         match status {
             SamplingStatus::Accepted => accepted_ranges
                 .insert_relaxed(height..=height)
-                .expect("invalid range"),
+                .expect("invalid height"),
             _ => accepted_ranges
                 .remove_relaxed(height..=height)
-                .expect("invalid range"),
+                .expect("invalid height"),
         }
 
         set_ranges(
@@ -526,7 +526,7 @@ async fn try_insert_to_range(
             .into_iter()
             .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(start, end)| start..=end))
             .collect::<Result<_, _>>()?,
-    );
+    )?;
 
     let RangeScanResult {
         range_index,

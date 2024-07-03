@@ -280,11 +280,11 @@ impl InMemoryStoreInner {
             SamplingStatus::Accepted => self
                 .accepted_sampling_ranges
                 .insert_relaxed(height..=height)
-                .expect("invalid range"),
+                .expect("invalid height"),
             _ => self
                 .accepted_sampling_ranges
                 .remove_relaxed(height..=height)
-                .expect("invalid range"),
+                .expect("invalid height"),
         }
 
         Ok(())
@@ -391,7 +391,6 @@ impl Store for InMemoryStore {
 
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         Ok(self.get_accepted_sampling_ranges().await)
-        //Ok(BlockRanges::default())
     }
 }
 
