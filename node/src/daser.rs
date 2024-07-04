@@ -288,12 +288,24 @@ where
     }
 
     async fn schedule_next_sample_block(&mut self) -> Result<()> {
-        let Some(height) = self.queue.pop_head() else {
-            return Ok(());
+        // Schedule the most recent un-sampled block.
+        let header = loop {
+            let Some(height) = self.queue.pop_head() else {
+                return Ok(());
+            };
+
+            match self.store.get_by_height(height).await {
+                Ok(header) => break header,
+                Err(StoreError::NotFound) => {
+                    // Height was pruned and our queue is inconsistent.
+                    // Repopulate queue and try again.
+                    self.populate_queue().await?;
+                }
+                Err(e) => return Err(e.into()),
+            }
         };
 
-        // TODO: what if the height is pruned??
-        let header = self.store.get_by_height(height).await?;
+        let height = header.height().value();
         let square_width = header.dah.square_width();
 
         // Make sure that the block is still in the sampling window.
@@ -318,6 +330,10 @@ where
             .iter()
             .map(|(row, col)| sample_cid(*row, *col, height))
             .collect::<Result<Vec<_>, _>>()?;
+
+        // NOTE: Pruning window is always 1 hour bigger than sampling
+        // window, so after this `in_sampling_window` if statement we
+        // shouldn't care about `StoreError::NotFound` anymore.
         self.store
             .update_sampling_metadata(height, SamplingStatus::Unknown, cids)
             .await?;
