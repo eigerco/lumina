@@ -793,9 +793,7 @@ mod tests {
         let mut cids = Vec::with_capacity(needed_samples_sum);
 
         for _ in 0..needed_samples_sum {
-            println!("B0");
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
-            println!("B1");
             cids.push(cid);
 
             let sample_id: SampleId = cid.try_into().unwrap();
