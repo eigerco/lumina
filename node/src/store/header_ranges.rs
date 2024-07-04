@@ -17,6 +17,9 @@ pub enum BlockRangesError {
 
     #[error("Block ranges are not sorted")]
     UnsortedBlockRanges,
+
+    #[error("Insersion disallowed")]
+    InsertDisallowed(BlockRange),
 }
 
 type Result<T, E = BlockRangesError> = std::result::Result<T, E>;
@@ -283,6 +286,44 @@ impl BlockRanges {
         self.0.first().map(|r| *r.start())
     }
 
+    /// Return `Ok(left_neighbor, right_neighbor)` if `height` passes the header store contrains.
+    pub fn check_header_store_constrains(
+        &self,
+        to_insert: BlockRange,
+    ) -> Result<(Option<u64>, Option<u64>)> {
+        to_insert.validate()?;
+
+        if self.is_empty() {
+            // Allow insersion on empty store.
+            return Ok((None, None));
+        }
+
+        // Get the indexes of the afffected ranges.
+        let Some((start_idx, end_idx)) = self.find_ranges(&to_insert, Strategy::Adjacent) else {
+            return Err(BlockRangesError::InsertDisallowed(to_insert));
+        };
+
+        debug_assert!(end_idx - start_idx <= 1);
+
+        // If only one range is affected.
+        if start_idx == end_idx {
+            let range = &self.0[start_idx];
+
+            // If the `range` is on the left side of `to_insert`.
+            if range.end() < to_insert.start() {
+                Ok((Some(*range.end()), None))
+            } else {
+                // `range` is on the right side of `to_insert`.
+                Ok((None, Some(*range.start())))
+            }
+        } else {
+            let left_range = &self.0[start_idx];
+            let right_range = &self.0[end_idx];
+
+            Ok((Some(*left_range.end()), Some(*right_range.start())))
+        }
+    }
+
     /// Returns the start index and end index of the affected ranges.
     fn find_ranges(
         &self,
@@ -500,90 +541,50 @@ mod tests {
 
     #[test]
     fn check_range_insert_append() {
-        let result = new_block_ranges([]).check_range_insert(&(1..=5)).unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 1..=5,
-                range_to_remove: None,
-            }
-        );
-
-        let result = new_block_ranges([1..=4])
-            .check_range_insert(&(5..=5))
+        let (left, right) = new_block_ranges([])
+            .check_header_store_constrains(1..=5)
             .unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 1..=5,
-                range_to_remove: None,
-            }
-        );
+        assert_eq!(left, None);
+        assert_eq!(right, None);
 
-        let result = new_block_ranges([1..=5])
-            .check_range_insert(&(6..=9))
+        let (left, right) = new_block_ranges([1..=4])
+            .check_header_store_constrains(5..=5)
             .unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 1..=9,
-                range_to_remove: None,
-            }
-        );
+        assert_eq!(left, Some(4));
+        assert_eq!(right, None);
 
-        let result = new_block_ranges([6..=8])
-            .check_range_insert(&(2..=5))
+        let (left, right) = new_block_ranges([1..=5])
+            .check_header_store_constrains(6..=9)
             .unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 2..=8,
-                range_to_remove: None,
-            }
-        );
+        assert_eq!(left, Some(5));
+        assert_eq!(right, None);
+
+        let (left, right) = new_block_ranges([6..=8])
+            .check_header_store_constrains(2..=5)
+            .unwrap();
+        assert_eq!(left, None);
+        assert_eq!(right, Some(6));
     }
 
     #[test]
     fn check_range_insert_with_consolidation() {
-        let result = new_block_ranges([1..=3, 6..=9])
-            .check_range_insert(&(4..=5))
+        let (left, right) = new_block_ranges([1..=3, 6..=9])
+            .check_header_store_constrains(4..=5)
             .unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 1..=9,
-                range_to_remove: Some(1),
-            }
-        );
+        assert_eq!(left, Some(3));
+        assert_eq!(right, Some(6));
 
-        let result = new_block_ranges([1..=2, 5..=5, 8..=9])
-            .check_range_insert(&(3..=4))
+        let (left, right) = new_block_ranges([1..=2, 5..=5, 8..=9])
+            .check_header_store_constrains(3..=4)
             .unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 0,
-                range: 1..=5,
-                range_to_remove: Some(1),
-            }
-        );
+        assert_eq!(left, Some(2));
+        assert_eq!(right, Some(5));
 
-        let result = new_block_ranges([1..=2, 4..=4, 8..=9])
-            .check_range_insert(&(5..=7))
+        let (left, right) = new_block_ranges([1..=2, 4..=4, 8..=9])
+            .check_header_store_constrains(5..=7)
             .unwrap();
-        assert_eq!(
-            result,
-            RangeScanResult {
-                range_index: 1,
-                range: 4..=9,
-                range_to_remove: Some(2),
-            }
-        );
+        assert_eq!(left, Some(4));
+        assert_eq!(right, Some(8));
     }
 
     #[test]
@@ -617,6 +618,30 @@ mod tests {
             .check_range_insert(&(3..=6))
             .unwrap_err();
         assert!(matches!(result, StoreError::HeaderRangeOverlap(3, 3)));
+
+        let result = new_block_ranges([1..=2])
+            .check_header_store_constrains(1..=1)
+            .unwrap_err();
+
+        let result = new_block_ranges([1..=4])
+            .check_header_store_constrains(2..=8)
+            .unwrap_err();
+
+        let result = new_block_ranges([1..=4])
+            .check_header_store_constrains(2..=3)
+            .unwrap_err();
+
+        let result = new_block_ranges([5..=9])
+            .check_header_store_constrains(1..=5)
+            .unwrap_err();
+
+        let result = new_block_ranges([5..=8])
+            .check_header_store_constrains(2..=8)
+            .unwrap_err();
+
+        let result = new_block_ranges([1..=3, 6..=9])
+            .check_header_store_constrains(3..=6)
+            .unwrap_err();
     }
 
     #[test]
@@ -644,6 +669,18 @@ mod tests {
             result,
             StoreError::InsertPlacementDisallowed(1, 2)
         ));
+
+        let result = new_block_ranges([1..=2, 7..=9])
+            .check_header_store_constrains(4..=4)
+            .unwrap_err();
+
+        let result = new_block_ranges([1..=2, 8..=9])
+            .check_header_store_constrains(4..=6)
+            .unwrap_err();
+
+        let result = new_block_ranges([4..=5, 7..=8])
+            .check_header_store_constrains(1..=2)
+            .unwrap_err();
     }
 
     #[test]

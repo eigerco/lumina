@@ -172,6 +172,9 @@ pub enum StoreError {
     #[error("Height {0} already exists in store")]
     HeightExists(u64),
 
+    #[error("Failed to insert header range because not all constrains are met: {0:?}")]
+    InsertDisallowed(BlockRange),
+
     /// Inserted height is not following store's current head.
     #[error("Failed to append header at height {1}")]
     NonContinuousAppend(u64, u64),
