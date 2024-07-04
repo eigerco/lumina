@@ -493,6 +493,7 @@ impl Store for RedbStore {
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         self.get_sampling_ranges().await
     }
+    async fn remove_tail(&self, height: u64) -> Result<()> { todo!()}
 }
 
 fn verify_against_neighbours<R>(

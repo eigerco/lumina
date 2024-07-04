@@ -272,6 +272,10 @@ impl ExtendedHeaderGenerator {
         self.spoofed_time = Some(time);
     }
 
+    /// Change the amount of time generator automatically adds to internal clock used to spoof
+    /// header times
+    pub fn set_time_increment(&mut self, _delta: Duration)  {todo!()}
+
     // private function which also increments time, since we cannot have multiple headers on the
     // exact same timestamp
     fn get_and_increment_time(&mut self) -> Time {
@@ -280,7 +284,7 @@ impl ExtendedHeaderGenerator {
         };
 
         self.spoofed_time =
-            Some((spoofed_time + Duration::from_millis(1)).expect("not to overflow"));
+            Some((spoofed_time + Duration::from_secs(12)).expect("not to overflow")); // XXX
         self.spoofed_time.unwrap()
     }
 }

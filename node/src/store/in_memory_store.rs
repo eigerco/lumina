@@ -7,7 +7,7 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
 use tokio::sync::{Notify, RwLock};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
@@ -125,6 +125,12 @@ impl InMemoryStore {
             inner: RwLock::new(self.inner.read().await.clone()),
             header_added_notifier: Notify::new(),
         }
+    }
+
+    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
+        let inner = self.inner.write().await;
+        inner.remove_tail(cutoff)
+
     }
 }
 
@@ -300,6 +306,29 @@ impl InMemoryStoreInner {
 
         Ok(Some(metadata.clone()))
     }
+
+
+    fn remove_tail(&self, cutoff: u64) -> Result<()> {
+        let to_remove : BlockRanges = self.header_ranges.clone() - (cutoff+1..=u64::MAX).into();
+        self.header_ranges = self.header_ranges -  (1..=cutoff).into();
+
+        // TODO: write iterator?
+        for range in to_remove.as_ref() {
+            for height in range {
+                self.sampling_data.remove(height);
+                let Some(hash) = self.height_to_hash.remove(height) else {
+                    warn!("header present in ranges is missing in height_to_hash");
+                    continue;
+                };
+
+                if self.headers.remove(&hash).is_none() {
+                    warn!("header present in height_to_hash missing");
+                };
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -390,6 +419,10 @@ impl Store for InMemoryStore {
 
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         Ok(self.get_accepted_sampling_ranges().await)
+    }
+
+    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
+        todo!()
     }
 }
 

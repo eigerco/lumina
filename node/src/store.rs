@@ -158,6 +158,9 @@ pub trait Store: Send + Sync + Debug {
 
     /// Returns a list of accepted sampling ranges currently held in store.
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges>;
+
+    /// Remove all the headers from genesis up to and including outoff height
+    async fn remove_tail(&self, cutoff: u64) -> Result<()>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].

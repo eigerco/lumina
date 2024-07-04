@@ -1,5 +1,6 @@
 use std::ops::RangeInclusive;
 
+use celestia_tendermint::Time;
 #[cfg(any(test, feature = "test-utils"))]
 use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
@@ -9,6 +10,7 @@ use crate::executor::yield_now;
 use crate::store::Result;
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
+const BLOCK_PRODUCTION_TIME_ESTIMATE_SECS: u64 = 12;
 
 /// based on the stored headers and current network head height, calculate range of headers that
 /// should be fetched from the network, starting from the front up to a `limit` of headers
@@ -164,9 +166,49 @@ pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_typ
     Ok(())
 }
 
+/// Given a reference_header, estimate height of the block produced at provided time, assuming 12s 
+/// per block. Result needs to be verified against real data in the store and should get more 
+/// accurate the closer the reference_header is to the provided time.
+fn estimate_header_height_at_time(reference_header: &ExtendedHeader, time: Time) -> u64 {
+    let reference_header_after = reference_header.time().after(time);
+
+    let time_delta = if reference_header_after {
+        reference_header.time().duration_since(time)
+    } else {
+        time.duration_since(reference_header.time())
+    }.expect("time between headers should fit Duration");
+
+    println!("time delta: {time_delta:?}");
+
+    let estimated_height_delta = time_delta.as_secs().div_ceil(BLOCK_PRODUCTION_TIME_ESTIMATE_SECS);
+    println!("height delta: {estimated_height_delta:?}");
+
+    if reference_header_after {
+        reference_header.height().value().saturating_sub(estimated_height_delta)
+    } else {
+        reference_header.height().value().saturating_add(estimated_height_delta)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use smallvec::smallvec;
+    use std::time::Duration;
+
+    #[test]
+    fn header_height_estimate() {
+        let mut gen = ExtendedHeaderGenerator::new();
+        gen.set_time((Time::now() - Duration::from_secs(1024 * 12)).unwrap());
+        let headers = gen.next_many(512);
+
+        let estimated_height = estimate_header_height_at_time(&headers[0], headers[511].time());
+        assert_eq!(estimated_height, 512);
+
+        let estimated_height = estimate_header_height_at_time(&headers[511], headers[0].time());
+        assert_eq!(estimated_height, 1);
+    }
 
     #[test]
     fn calculate_range_to_fetch_test_header_limit() {
