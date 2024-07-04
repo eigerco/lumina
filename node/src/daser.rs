@@ -29,11 +29,10 @@
 //! 5. Steps 3 and 4 are repeated concurently, unless we detect that all peers have disconnected.
 //!    At that point Daser cleans the queue and moves back to step 1.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use celestia_tendermint::Time;
-use celestia_types::ExtendedHeader;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
@@ -138,13 +137,6 @@ where
     done: BlockRanges,
     ongoing: BlockRanges,
     prev_head: Option<u64>,
-}
-
-#[derive(Debug)]
-struct SamplingArgs {
-    height: u64,
-    square_width: u16,
-    time: Time,
 }
 
 impl<S> Worker<S>
@@ -423,32 +415,6 @@ where
     }
 }
 
-/// Queue sampling in descending order
-fn queue_sampling(queue: &mut VecDeque<SamplingArgs>, header: &ExtendedHeader) {
-    let args = SamplingArgs {
-        height: header.height().value(),
-        time: header.time(),
-        square_width: header.dah.square_width(),
-    };
-
-    if queue.is_empty() || args.height >= queue.front().unwrap().height {
-        queue.push_front(args);
-        return;
-    }
-
-    if args.height <= queue.back().unwrap().height {
-        queue.push_back(args);
-        return;
-    }
-
-    let pos = match queue.binary_search_by(|x| args.height.cmp(&x.height)) {
-        Ok(pos) => pos,
-        Err(pos) => pos,
-    };
-
-    queue.insert(pos, args);
-}
-
 /// Returns true if `time` is within the sampling window.
 fn in_sampling_window(time: Time) -> bool {
     let now = Time::now();
@@ -463,14 +429,6 @@ fn in_sampling_window(time: Time) -> bool {
     };
 
     age <= SAMPLING_WINDOW
-}
-
-/// Returns true if block has been sampled and accepted.
-async fn is_block_accepted(store: &impl Store, height: u64) -> bool {
-    match store.get_sampling_metadata(height).await {
-        Ok(Some(metadata)) => metadata.status == SamplingStatus::Accepted,
-        _ => false,
-    }
 }
 
 /// Returns unique and random indexes that will be used for sampling.

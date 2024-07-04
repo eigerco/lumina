@@ -12,14 +12,13 @@ use redb::{
     CommitError, Database, ReadTransaction, ReadableTable, StorageError, Table, TableDefinition,
     TableError, TransactionError, WriteTransaction,
 };
-use smallvec::SmallVec;
 use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::warn;
 use tracing::{debug, trace};
 
-use crate::store::header_ranges::{BlockRange, BlockRanges, BlockRangesExt};
-use crate::store::utils::{RangeScanResult, VerifiedExtendedHeaders};
+use crate::store::header_ranges::{BlockRanges, BlockRangesExt};
+use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 const SCHEMA_VERSION: u64 = 2;
@@ -529,19 +528,6 @@ where
     }
 
     Ok(())
-}
-
-fn get_head_range<R>(ranges_table: &R) -> Result<RangeInclusive<u64>>
-where
-    R: ReadableTable<u64, (u64, u64)>,
-{
-    ranges_table
-        .last()?
-        .map(|(_key_guard, value_guard)| {
-            let range = value_guard.value();
-            range.0..=range.1
-        })
-        .ok_or(StoreError::NotFound)
 }
 
 fn get_ranges<R>(ranges_table: &R, name: &str) -> Result<BlockRanges>

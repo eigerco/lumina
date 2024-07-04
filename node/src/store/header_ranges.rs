@@ -1,12 +1,8 @@
 use std::borrow::Borrow;
-use std::fmt::{self, Debug, Display};
-use std::iter;
-use std::mem;
-use std::ops::{RangeBounds, RangeInclusive, Sub};
-use std::vec;
+use std::fmt::{Debug, Display};
+use std::ops::{RangeInclusive, Sub};
 
-use celestia_types::ExtendedHeader;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use smallvec::SmallVec;
 
 use crate::store::utils::{ranges_intersection, try_consolidate_ranges, RangeScanResult};
@@ -242,12 +238,6 @@ enum Strategy {
 }
 
 impl BlockRanges {
-    pub(crate) fn from_slice(slice: &[BlockRange]) -> Result<Self> {
-        let ranges = BlockRanges(slice.into_iter().cloned().collect());
-        ranges.validate()?;
-        Ok(ranges)
-    }
-
     pub(crate) fn from_vec(from: SmallVec<[BlockRange; 2]>) -> Result<Self> {
         let ranges = BlockRanges(from);
         ranges.validate()?;
