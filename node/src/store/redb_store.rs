@@ -89,7 +89,10 @@ impl RedbStore {
                 match schema_version {
                     Some(schema_version) => {
                         if schema_version > SCHEMA_VERSION {
-                            let e = format!("Incompatible database schema; found {schema_version}, expected {SCHEMA_VERSION}.");
+                            let e = format!(
+                                "Incompatible database schema; found {}, expected {}.",
+                                schema_version, SCHEMA_VERSION
+                            );
                             return Err(StoreError::OpenFailed(e));
                         }
 
@@ -102,9 +105,18 @@ impl RedbStore {
                     }
                 }
 
+                // Force us to write migrations!
+                debug_assert_eq!(
+                    schema_version_table.get(())?.map(|guard| guard.value()),
+                    Some(SCHEMA_VERSION),
+                    "Some migrations are missing"
+                );
+
                 // create tables, so that reads later don't complain
                 let _heights_table = tx.open_table(HEIGHTS_TABLE)?;
+                let _headers_table = tx.open_table(HEADERS_TABLE)?;
                 let _ranges_table = tx.open_table(RANGES_TABLE)?;
+                let _sampling_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
 
                 Ok(())
             })

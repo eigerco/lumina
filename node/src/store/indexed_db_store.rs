@@ -12,6 +12,7 @@ use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::{Mutex, Notify};
+use tracing::warn;
 use wasm_bindgen::JsValue;
 
 use crate::store::header_ranges::{BlockRange, BlockRanges, BlockRangesExt};
@@ -19,19 +20,21 @@ use crate::store::utils::{RangeScanResult, VerifiedExtendedHeaders};
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// indexeddb version, needs to be incremented on every schema schange
-const DB_VERSION: u32 = 3;
+const DB_VERSION: u32 = 4;
 
 // Data stores (SQL table analogue) used in IndexedDb
 const HEADER_STORE_NAME: &str = "headers";
 const SAMPLING_STORE_NAME: &str = "sampling";
 const RANGES_STORE_NAME: &str = "ranges";
-const RANGES_GENERIC_STORE_NAME: &str = "ranges_generic";
+const SCHEMA_STORE_NAME: &str = "schema";
 
 // Additional indexes set on HEADER_STORE, for querying by height and hash
 const HASH_INDEX_NAME: &str = "hash";
 const HEIGHT_INDEX_NAME: &str = "height";
 
 const ACCEPTED_SAMPLING_RANGES_KEY: &str = "accepted_sampling_ranges";
+const HEADER_RANGES_KEY: &str = "header_ranges";
+const VERSION_KEY: &str = "version";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ExtendedHeaderEntry {
@@ -65,10 +68,42 @@ impl IndexedDbStore {
             )
             .add_object_store(ObjectStore::new(RANGES_STORE_NAME))
             .add_object_store(ObjectStore::new(SAMPLING_STORE_NAME))
-            .add_object_store(ObjectStore::new(RANGES_GENERIC_STORE_NAME))
+            .add_object_store(ObjectStore::new(SCHEMA_STORE_NAME))
             .build()
             .await
             .map_err(|e| StoreError::OpenFailed(e.to_string()))?;
+
+        // NOTE: Rexie does not expose any migration functionality, so we
+        // write our version in the store in order to handle it properly.
+        match get_schema_version_from_db(&rexie).await? {
+            Some(schema_version) => {
+                if schema_version > DB_VERSION {
+                    let e = format!(
+                        "Incompatible database schema; found {}, expected {}.",
+                        schema_version, DB_VERSION
+                    );
+                    return Err(StoreError::OpenFailed(e));
+                }
+
+                migrate_older_to_v4(&rexie).await?;
+            }
+            None => {
+                // New database
+                let tx = rexie.transaction(&[SCHEMA_STORE_NAME], TransactionMode::ReadWrite)?;
+
+                let schema_store = tx.store(SCHEMA_STORE_NAME)?;
+                set_schema_version(&schema_store, DB_VERSION).await?;
+
+                tx.commit().await?;
+            }
+        }
+
+        // Force us to write migrations!
+        debug_assert_eq!(
+            get_schema_version_from_db(&rexie).await?,
+            Some(DB_VERSION),
+            "Some migrations are missing"
+        );
 
         let db_head = match get_head_from_database(&rexie).await {
             Ok(v) => Some(v),
@@ -76,30 +111,11 @@ impl IndexedDbStore {
             Err(e) => return Err(e),
         };
 
-        let store = Self {
-            head: SendWrapper::new(RefCell::new(db_head.clone())),
+        Ok(IndexedDbStore {
+            head: SendWrapper::new(RefCell::new(db_head)),
             db: SendWrapper::new(rexie),
             header_added_notifier: Notify::new(),
-        };
-
-        if let Some(head) = &db_head {
-            if store.get_stored_header_ranges().await?.is_empty() {
-                let tx = store
-                    .db
-                    .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadWrite)?;
-                let ranges_store = tx.store(RANGES_STORE_NAME)?;
-                let jsvalue_range = to_value(&(1, head.height().value()))?;
-                let jsvalue_key = to_value(&0)?;
-
-                ranges_store.put(&jsvalue_range, Some(&jsvalue_key)).await?;
-
-                tx.commit().await?;
-            }
-        }
-
-        // TODO: migrate ranges
-
-        Ok(store)
+        })
     }
 
     /// Delete the persistent store.
@@ -156,16 +172,7 @@ impl IndexedDbStore {
             .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)?;
         let store = tx.store(RANGES_STORE_NAME)?;
 
-        let ranges = BlockRanges::from_vec(
-            store
-                .get_all(None, None, None, Some(Direction::Next))
-                .await?
-                .into_iter()
-                .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(begin, end)| begin..=end))
-                .collect::<Result<_, _>>()?,
-        )?;
-
-        Ok(ranges)
+        get_ranges(&store, HEADER_RANGES_KEY).await
     }
 
     async fn insert<R>(&self, headers: R) -> Result<()>
@@ -185,8 +192,13 @@ impl IndexedDbStore {
         let header_store = tx.store(HEADER_STORE_NAME)?;
         let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
+        let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+
         let headers_range = head.height().value()..=tail.height().value();
-        let (prev_exists, next_exists) = try_insert_to_range(&ranges_store, headers_range).await?;
+        let range_scan_result = header_ranges.check_range_insert(&headers_range)?;
+
+        let prev_exists = headers_range.start() != range_scan_result.range.start();
+        let next_exists = headers_range.end() != range_scan_result.range.end();
 
         // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
         verify_against_neighbours(
@@ -219,6 +231,11 @@ impl IndexedDbStore {
             header_store.add(&jsvalue_header, None).await?;
         }
 
+        header_ranges.update_range(range_scan_result);
+        set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
+
+        tx.commit().await?;
+
         if tail.height().value()
             > self
                 .head
@@ -229,7 +246,7 @@ impl IndexedDbStore {
         {
             self.head.replace(Some(tail.clone()));
         }
-        tx.commit().await?;
+
         self.header_added_notifier.notify_waiters();
 
         Ok(())
@@ -263,19 +280,21 @@ impl IndexedDbStore {
         status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()> {
-        if !self.contains_height(height).await {
+        let tx = self.db.transaction(
+            &[SAMPLING_STORE_NAME, RANGES_STORE_NAME],
+            TransactionMode::ReadWrite,
+        )?;
+        let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
+        let ranges_store = tx.store(RANGES_STORE_NAME)?;
+
+        let header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+        let mut accepted_ranges = get_ranges(&ranges_store, ACCEPTED_SAMPLING_RANGES_KEY).await?;
+
+        if !header_ranges.contains(height) {
             return Err(StoreError::NotFound);
         }
 
         let height_key = to_value(&height)?;
-
-        let tx = self.db.transaction(
-            &[SAMPLING_STORE_NAME, RANGES_GENERIC_STORE_NAME],
-            TransactionMode::ReadWrite,
-        )?;
-        let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
-        let ranges_store = tx.store(RANGES_GENERIC_STORE_NAME)?;
-
         let previous_entry = sampling_store.get(&height_key).await?;
 
         let new_entry = if previous_entry.is_falsy() {
@@ -295,12 +314,9 @@ impl IndexedDbStore {
         };
 
         let metadata_jsvalue = to_value(&new_entry)?;
-
         sampling_store
             .put(&metadata_jsvalue, Some(&height_key))
             .await?;
-
-        let mut accepted_ranges = get_ranges(&ranges_store, ACCEPTED_SAMPLING_RANGES_KEY).await?;
 
         match status {
             SamplingStatus::Accepted => accepted_ranges
@@ -346,8 +362,8 @@ impl IndexedDbStore {
     async fn get_sampling_ranges(&self) -> Result<BlockRanges> {
         let tx = self
             .db
-            .transaction(&[RANGES_GENERIC_STORE_NAME], TransactionMode::ReadWrite)?;
-        let store = tx.store(RANGES_GENERIC_STORE_NAME)?;
+            .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadWrite)?;
+        let store = tx.store(RANGES_STORE_NAME)?;
 
         get_ranges(&store, ACCEPTED_SAMPLING_RANGES_KEY).await
     }
@@ -492,56 +508,17 @@ async fn set_ranges(store: &rexie::Store, name: &str, ranges: &BlockRanges) -> R
 }
 
 async fn get_head_from_database(db: &Rexie) -> Result<ExtendedHeader> {
-    let tx = db.transaction(&[HEADER_STORE_NAME], TransactionMode::ReadOnly)?;
-    let store = tx.store(HEADER_STORE_NAME)?;
-
-    let store_head = store
-        .get_all(None, Some(1), None, Some(Direction::Prev))
-        .await?
-        .first()
-        .ok_or(StoreError::NotFound)?
-        .1
-        .to_owned();
-
-    let serialized_header = from_value::<ExtendedHeaderEntry>(store_head)?.header;
-
-    ExtendedHeader::decode(serialized_header.as_ref())
-        .map_err(|e| StoreError::CelestiaTypes(e.into()))
-}
-
-async fn try_insert_to_range(
-    ranges_store: &rexie::Store,
-    new_range: BlockRange,
-) -> Result<(bool, bool)> {
-    let stored_ranges = BlockRanges::from_vec(
-        ranges_store
-            .get_all(None, None, None, Some(Direction::Next))
-            .await?
-            .into_iter()
-            .map(|(_k, v)| from_value::<(u64, u64)>(v).map(|(start, end)| start..=end))
-            .collect::<Result<_, _>>()?,
+    let tx = db.transaction(
+        &[HEADER_STORE_NAME, RANGES_STORE_NAME],
+        TransactionMode::ReadOnly,
     )?;
+    let header_store = tx.store(HEADER_STORE_NAME)?;
+    let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
-    let RangeScanResult {
-        range_index,
-        range,
-        range_to_remove,
-    } = stored_ranges.check_range_insert(&new_range)?;
+    let ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+    let head_height = ranges.head().ok_or(StoreError::NotFound)?;
 
-    if let Some(to_remove) = range_to_remove {
-        let jsvalue_key_to_remove = to_value(&to_remove)?;
-        ranges_store.delete(&jsvalue_key_to_remove).await?;
-    }
-
-    let jsvalue_range = to_value(&(*range.start(), *range.end()))?;
-    let jsvalue_key = to_value(&range_index)?;
-
-    ranges_store.put(&jsvalue_range, Some(&jsvalue_key)).await?;
-
-    let prev_exists = new_range.start() != range.start();
-    let next_exists = new_range.end() != range.end();
-
-    Ok((prev_exists, next_exists))
+    get_by_height(&header_store, head_height).await
 }
 
 async fn get_by_height(header_store: &rexie::Store, height: u64) -> Result<ExtendedHeader> {
@@ -594,6 +571,124 @@ async fn verify_against_neighbours(
             })?;
         highest_header.verify(&next)?;
     }
+    Ok(())
+}
+
+/// Similar to `get_schema_version` but detects older schema versions.
+async fn get_schema_version_from_db(db: &Rexie) -> Result<Option<u32>> {
+    let tx = db.transaction(
+        &[HEADER_STORE_NAME, RANGES_STORE_NAME, SCHEMA_STORE_NAME],
+        TransactionMode::ReadOnly,
+    )?;
+    let schema_store = tx.store(SCHEMA_STORE_NAME)?;
+    let ranges_store = tx.store(RANGES_STORE_NAME)?;
+    let header_store = tx.store(HEADER_STORE_NAME)?;
+
+    // Schema version exists from v4 and above.
+    if let Ok(version) = get_schema_version(&schema_store).await {
+        return Ok(Some(version));
+    }
+
+    // If schema version do not exist in db but ranges store
+    // has values then assume we are in version 3.
+    if !store_is_empty(&ranges_store).await? {
+        return Ok(Some(3));
+    }
+
+    // If ranges store do not have any values but header for height 1
+    // exists, then we assume we are in version 2.
+    let height_key = to_value(&1)?;
+    let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
+    if height_index.get(&height_key).await?.is_truthy() {
+        return Ok(Some(2));
+    }
+
+    // Otherwise we assume we have a new db.
+    Ok(None)
+}
+
+async fn store_is_empty(store: &rexie::Store) -> Result<bool> {
+    let vals = store.get_all(None, Some(1), None, None).await?;
+    Ok(vals.is_empty())
+}
+
+async fn get_schema_version(store: &rexie::Store) -> Result<u32> {
+    let key = to_value(VERSION_KEY)?;
+    let val = store.get(&key).await?;
+    Ok(from_value(val)?)
+}
+
+async fn set_schema_version(store: &rexie::Store, version: u32) -> Result<()> {
+    let key = to_value(VERSION_KEY)?;
+    let val = to_value(&version)?;
+    store.put(&val, Some(&key)).await?;
+    Ok(())
+}
+
+async fn get_last_header_v2(store: &rexie::Store) -> Result<ExtendedHeader> {
+    let store_head = store
+        .get_all(None, Some(1), None, Some(Direction::Prev))
+        .await?
+        .first()
+        .ok_or(StoreError::NotFound)?
+        .1
+        .to_owned();
+
+    let serialized_header = from_value::<ExtendedHeaderEntry>(store_head)?.header;
+
+    ExtendedHeader::decode(serialized_header.as_ref())
+        .map_err(|e| StoreError::CelestiaTypes(e.into()))
+}
+
+async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
+    let Some(version) = get_schema_version_from_db(db).await? else {
+        // New database.
+        return Ok(());
+    };
+
+    if version >= 4 {
+        // Nothing to migrate.
+        return Ok(());
+    }
+
+    warn!("Migrating DB schema from v{version} to v4");
+
+    let tx = db.transaction(
+        &[HEADER_STORE_NAME, RANGES_STORE_NAME, SCHEMA_STORE_NAME],
+        TransactionMode::ReadWrite,
+    )?;
+    let header_store = tx.store(HEADER_STORE_NAME)?;
+    let ranges_store = tx.store(RANGES_STORE_NAME)?;
+    let schema_store = tx.store(SCHEMA_STORE_NAME)?;
+
+    let mut ranges = BlockRanges::default();
+
+    if version <= 2 {
+        match get_last_header_v2(&header_store).await {
+            // On v2 there were no gaps between headers.
+            Ok(head) => ranges.insert_relaxed(1..=head.height().value())?,
+            Err(StoreError::NotFound) => {}
+            Err(e) => return Err(e),
+        }
+    } else {
+        // On v3 ranges existed but in different format.
+        for (_, raw_range) in ranges_store
+            .get_all(None, None, None, Some(Direction::Next))
+            .await?
+        {
+            let (start, end) = from_value::<(u64, u64)>(raw_range)?;
+            ranges.insert_relaxed(start..=end)?;
+        }
+    }
+
+    ranges_store.clear();
+    set_ranges(&ranges_store, HEADER_RANGES_KEY, &ranges).await?;
+
+    // Migrated to version 4
+    set_schema_version(&schema_store, 4).await?;
+
+    tx.commit().await?;
+
     Ok(())
 }
 
