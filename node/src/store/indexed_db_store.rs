@@ -11,12 +11,12 @@ use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 use tracing::warn;
 use wasm_bindgen::JsValue;
 
-use crate::store::header_ranges::{BlockRange, BlockRanges, BlockRangesExt};
-use crate::store::utils::{RangeScanResult, VerifiedExtendedHeaders};
+use crate::store::header_ranges::{BlockRanges, BlockRangesExt};
+use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// indexeddb version, needs to be incremented on every schema schange
@@ -681,7 +681,7 @@ async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
         }
     }
 
-    ranges_store.clear();
+    ranges_store.clear().await?;
     set_ranges(&ranges_store, HEADER_RANGES_KEY, &ranges).await?;
 
     // Migrated to version 4
