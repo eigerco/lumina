@@ -5,16 +5,17 @@ use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
+use tracing::error;
 use wasm_bindgen::prelude::*;
 use web_sys::BroadcastChannel;
 
 use lumina_node::blockstore::IndexedDbBlockstore;
-use lumina_node::network::{canonical_network_bootnodes, network_genesis, network_id};
+use lumina_node::network::{canonical_network_bootnodes, network_id};
 use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 
 use crate::error::{Context, Result};
-use crate::utils::{is_chrome, js_value_from_display, Network};
+use crate::utils::{is_chrome, js_value_from_display, request_storage_persistence, Network};
 use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::worker::{AnyWorker, WorkerClient};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -27,9 +28,6 @@ const LUMINA_WORKER_NAME: &str = "lumina";
 pub struct WasmNodeConfig {
     /// A network to connect to.
     pub network: Network,
-    /// Hash of the genesis block in the network.
-    #[wasm_bindgen(getter_with_clone)]
-    pub genesis_hash: Option<String>,
     /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
@@ -92,6 +90,10 @@ impl NodeDriver {
         worker_script_url: &str,
         worker_type: Option<NodeWorkerKind>,
     ) -> Result<NodeDriver> {
+        if let Err(e) = request_storage_persistence().await {
+            error!("Error requesting storage persistence: {e}");
+        }
+
         // For chrome we default to running in a dedicated Worker because:
         // 1. Chrome Android does not support SharedWorkers at all
         // 2. On desktop Chrome, restarting Lumina's worker causes all network connections to fail.
@@ -347,11 +349,10 @@ impl NodeDriver {
 
 #[wasm_bindgen(js_class = NodeConfig)]
 impl WasmNodeConfig {
-    /// Get the configuration with default bootnodes and genesis hash for provided network
+    /// Get the configuration with default bootnodes for provided network
     pub fn default(network: Network) -> WasmNodeConfig {
         WasmNodeConfig {
             network,
-            genesis_hash: network_genesis(network.into()).map(|h| h.to_string()),
             bootnodes: canonical_network_bootnodes(network.into())
                 .filter(|addr| addr.iter().any(|proto| proto == Protocol::WebTransport))
                 .map(|addr| addr.to_string())
@@ -372,12 +373,6 @@ impl WasmNodeConfig {
 
         let p2p_local_keypair = Keypair::generate_ed25519();
 
-        let genesis_hash = self
-            .genesis_hash
-            .map(|h| h.parse())
-            .transpose()
-            .context("genesis hash invalid")?;
-
         let p2p_bootnodes = self
             .bootnodes
             .iter()
@@ -387,7 +382,6 @@ impl WasmNodeConfig {
 
         Ok(NodeConfig {
             network_id: network_id.to_string(),
-            genesis_hash,
             p2p_bootnodes,
             p2p_local_keypair,
             p2p_listen_on: vec![],
