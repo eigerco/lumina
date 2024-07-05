@@ -30,9 +30,9 @@ struct InMemoryStoreInner {
     height_to_hash: HashMap<u64, Hash>,
     /// Source of truth about headers present in the db, used to synchronise inserts
     header_ranges: BlockRanges,
-
     /// Maps header height to the header sampling metadata
     sampling_data: HashMap<u64, SamplingMetadata>,
+    /// Source of truth about accepted sampling ranges present in the db.
     accepted_sampling_ranges: BlockRanges,
 }
 
@@ -42,7 +42,6 @@ impl InMemoryStoreInner {
             headers: HashMap::new(),
             height_to_hash: HashMap::new(),
             header_ranges: BlockRanges::default(),
-
             sampling_data: HashMap::new(),
             accepted_sampling_ranges: BlockRanges::default(),
         }

@@ -208,7 +208,7 @@ pub enum StoreError {
     #[error("Invalid headers range")]
     InvalidHeadersRange,
 
-    /// BlockRanges error.
+    /// An error propagated from [`BlockRanges`] methods.
     #[error(transparent)]
     BlockRangesError(#[from] BlockRangesError),
 }

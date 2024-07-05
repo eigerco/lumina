@@ -324,8 +324,8 @@ where
             .collect::<Result<Vec<_>, _>>()?;
 
         // NOTE: Pruning window is always 1 hour bigger than sampling
-        // window, so after this `in_sampling_window` if statement we
-        // shouldn't care about `StoreError::NotFound` anymore.
+        // window, so after `in_sampling_window` if statement we shouldn't
+        // care about `StoreError::NotFound` anymore.
         self.store
             .update_sampling_metadata(height, SamplingStatus::Unknown, cids)
             .await?;
