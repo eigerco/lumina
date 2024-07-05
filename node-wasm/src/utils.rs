@@ -1,9 +1,10 @@
 //! Various utilities for interacting with node from wasm.
+use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::net::{IpAddr, Ipv4Addr};
 
 use libp2p::multiaddr::Protocol;
-use libp2p::Multiaddr;
+use libp2p::{Multiaddr, PeerId};
 use lumina_node::network;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -228,15 +229,12 @@ pub(crate) async fn resolve_dnsaddr_multiaddress(ma: Multiaddr) -> Result<Vec<Mu
         answer: Vec<DohEntry>,
     }
 
-    let Some(dnsaddr) = ma.iter().find_map(|protocol| {
-        if let Protocol::Dnsaddr(addr) = protocol {
-            Some(addr)
-        } else {
-            None
-        }
-    }) else {
+    let Some(dnsaddr) = get_dnsaddr(&ma) else {
         // not a dnsaddr multiaddr
         return Ok(vec![ma]);
+    };
+    let Some(peer_id) = get_peer_id(&ma) else {
+        return Err(Error::new("Peer id not found"));
     };
 
     let mut opts = RequestInit::new();
@@ -269,9 +267,33 @@ pub(crate) async fn resolve_dnsaddr_multiaddress(ma: Multiaddr) -> Result<Vec<Mu
             let Ok(ma) = ma.parse() else {
                 continue;
             };
-            resolved_addrs.push(ma);
+            // only take results with the same peer id
+            if Some(peer_id) == get_peer_id(&ma) {
+                // TODO: handle recursive dnsaddr queries
+                resolved_addrs.push(ma);
+            }
         }
     }
 
     Ok(resolved_addrs)
+}
+
+fn get_peer_id(ma: &Multiaddr) -> Option<PeerId> {
+    ma.iter().find_map(|protocol| {
+        if let Protocol::P2p(peer_id) = protocol {
+            Some(peer_id)
+        } else {
+            None
+        }
+    })
+}
+
+fn get_dnsaddr(ma: &Multiaddr) -> Option<Cow<'_, str>> {
+    ma.iter().find_map(|protocol| {
+        if let Protocol::Dnsaddr(addr) = protocol {
+            Some(addr)
+        } else {
+            None
+        }
+    })
 }

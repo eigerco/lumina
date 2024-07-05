@@ -9,7 +9,6 @@ use axum::routing::get;
 use axum::{Json, Router};
 use celestia_types::hash::Hash;
 use clap::Args;
-use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
 use lumina_node::network::{canonical_network_bootnodes, network_genesis};
 use rust_embed::RustEmbed;
