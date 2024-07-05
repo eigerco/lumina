@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.2.0...lumina-node-v0.3.0) - 2024-07-05
+
+### Added
+- *(node)* Add syncing window for header sync ([#309](https://github.com/eigerco/lumina/pull/309))
+- *(node)* Generate syncing related events ([#312](https://github.com/eigerco/lumina/pull/312))
+- *(wasm)* Run Lumina in a Shared Worker ([#265](https://github.com/eigerco/lumina/pull/265))
+- *(node)* Always start data sampling of new HEAD immediately ([#306](https://github.com/eigerco/lumina/pull/306))
+- Add `#[track_caller]` on test utils and spawn utils ([#305](https://github.com/eigerco/lumina/pull/305))
+- *(node)* [**breaking**] Make HeaderSession operate on a single header range again ([#303](https://github.com/eigerco/lumina/pull/303))
+- *(node/syncer)* [**breaking**] Implement backwards header sync ([#279](https://github.com/eigerco/lumina/pull/279))
+- *(node)* Close connections that failed on ping ([#289](https://github.com/eigerco/lumina/pull/289))
+- *(node)* [**breaking**] Generate events on peer connection/disconnection ([#291](https://github.com/eigerco/lumina/pull/291))
+- *(node)* Generate events for data sampling that can be used by front-end ([#276](https://github.com/eigerco/lumina/pull/276))
+- *(node/daser)* [**breaking**] Implement backward sampling and sampling window ([#269](https://github.com/eigerco/lumina/pull/269))
+
+### Fixed
+- new lints coming with 1.78 and 1.80-nightly ([#275](https://github.com/eigerco/lumina/pull/275))
+
+### Other
+- remove genesis hash from node configuration ([#316](https://github.com/eigerco/lumina/pull/316))
+- *(node)* Add comments about header validation ([#308](https://github.com/eigerco/lumina/pull/308))
+- [**breaking**] Upgrade dependencies but exclude the ones that are patched by risc0 ([#292](https://github.com/eigerco/lumina/pull/292))
+- *(node)* Replace `instant` crate with `web-time` ([#280](https://github.com/eigerco/lumina/pull/280))
+
 ## [0.2.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.1.1...lumina-node-v0.2.0) - 2024-04-18
 
 ### Added
