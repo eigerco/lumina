@@ -47,7 +47,7 @@ jobs:
     - name: Run rustdoc check
       env:
         RUSTDOCFLAGS: --cfg docsrs -D warnings
-      run: cargo +nightly doc
+      run: cargo +nightly doc --no-deps
 
 
   fmt:
