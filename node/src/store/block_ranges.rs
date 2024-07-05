@@ -249,6 +249,8 @@ impl BlockRanges {
     /// * `Ok(false, true)` if `to_insert` range is going to be merged with the right neighbor.
     /// * `Ok(true, true)` if `to_insert` range is going to be merged with both neighbors.
     /// * `Ok(false, false)` if `to_insert` range is not going to be merged with its neighbors.
+    ///
+    /// [`Store::insert`]: crate::store::Store::insert
     pub fn check_insertion_constrains(
         &self,
         to_insert: impl Borrow<BlockRange>,
