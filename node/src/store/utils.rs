@@ -5,7 +5,7 @@ use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 
 use crate::executor::yield_now;
-use crate::store::header_ranges::{BlockRange, BlockRangeExt};
+use crate::store::block_ranges::{BlockRange, BlockRangeExt};
 use crate::store::Result;
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;

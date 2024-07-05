@@ -484,13 +484,13 @@ mod tests {
     }
 
     #[test]
-    fn header_ranges_empty() {
+    fn block_ranges_empty() {
         assert!(new_block_ranges([]).is_empty());
         assert!(!new_block_ranges([1..=3]).is_empty());
     }
 
     #[test]
-    fn header_ranges_head() {
+    fn block_ranges_head() {
         assert_eq!(new_block_ranges([]).head(), None);
         assert_eq!(new_block_ranges([1..=3]).head(), Some(3));
         assert_eq!(new_block_ranges([1..=3, 6..=9]).head(), Some(9));
@@ -498,7 +498,7 @@ mod tests {
     }
 
     #[test]
-    fn header_ranges_tail() {
+    fn block_ranges_tail() {
         assert_eq!(new_block_ranges([]).tail(), None);
         assert_eq!(new_block_ranges([1..=3]).tail(), Some(1));
         assert_eq!(new_block_ranges([1..=3, 6..=9]).tail(), Some(1));

@@ -9,7 +9,7 @@ use cid::Cid;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
-use crate::store::header_ranges::BlockRanges;
+use crate::store::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 

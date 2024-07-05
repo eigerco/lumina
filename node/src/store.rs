@@ -14,7 +14,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub use crate::store::header_ranges::{BlockRange, BlockRanges, BlockRangesError};
+pub use crate::store::block_ranges::{BlockRange, BlockRanges, BlockRangesError};
 pub use crate::store::utils::{ExtendedHeaderGeneratorExt, VerifiedExtendedHeaders};
 
 pub use in_memory_store::InMemoryStore;
@@ -29,7 +29,7 @@ mod indexed_db_store;
 #[cfg(not(target_arch = "wasm32"))]
 mod redb_store;
 
-pub(crate) mod header_ranges;
+pub(crate) mod block_ranges;
 pub(crate) mod utils;
 
 /// Sampling metadata for a block.

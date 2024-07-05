@@ -28,7 +28,7 @@ use web_time::Instant;
 use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::header_ranges::{BlockRanges, PrintableHeaderRange};
+use crate::store::block_ranges::{BlockRanges, PrintableHeaderRange};
 use crate::store::utils::calculate_range_to_fetch;
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
