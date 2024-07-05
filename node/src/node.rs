@@ -59,8 +59,6 @@ where
 {
     /// An id of the network to connect to.
     pub network_id: String,
-    /// The hash of the genesis block in network.
-    pub genesis_hash: Option<Hash>,
     /// The keypair to be used as [`Node`]s identity.
     pub p2p_local_keypair: Keypair,
     /// List of bootstrap nodes to connect to and trust.
