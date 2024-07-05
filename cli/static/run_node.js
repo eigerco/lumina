@@ -12,9 +12,6 @@ async function fetch_config() {
   if (json.bootnodes.length !== 0) {
     config.bootnodes = json.bootnodes;
   }
-  if (json.genesis) {
-    config.genesis = json.genesis;
-  }
 
   return config;
 }
@@ -53,12 +50,10 @@ async function show_stats(node) {
 
 function bind_config(data) {
   const network_div = document.getElementById("network-id");
-  const genesis_div = document.getElementById("genesis-hash");
   const bootnodes_div = document.getElementById("bootnodes");
 
   const update_config_elements = () => {
     network_div.value = window.config.network;
-    genesis_div.value = window.config.genesis_hash || "";
     bootnodes_div.value = window.config.bootnodes.join("\n");
   }
 
@@ -67,9 +62,8 @@ function bind_config(data) {
       if (prop == "network") {
         const config = NodeConfig.default(Number(value));
         obj.network = config.network;
-        obj.genesis_hash = config.genesis_hash;
         obj.bootnodes = config.bootnodes;
-      } else if (prop == "genesis_hash" || prop == "bootnodes") {
+      } else if (prop == "bootnodes") {
         obj[prop] = value;
       } else {
         return Reflect.set(obj, prop, value);
@@ -86,9 +80,6 @@ function bind_config(data) {
 
   network_div.addEventListener("change", event => {
     window.config.network = Number(event.target.value.trim());
-  });
-  genesis_div.addEventListener("change", event => {
-    window.config.genesis_hash = event.target.value.trim();
   });
   bootnodes_div.addEventListener("change", event => {
     window.config.bootnodes = event.target.value.trim().split("\n").map(multiaddr => multiaddr.trim());

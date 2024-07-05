@@ -7,10 +7,9 @@ use axum::http::{header, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
 use axum::{Json, Router};
-use celestia_types::hash::Hash;
 use clap::Args;
 use libp2p::Multiaddr;
-use lumina_node::network::{canonical_network_bootnodes, network_genesis};
+use lumina_node::network::canonical_network_bootnodes;
 use rust_embed::RustEmbed;
 use serde::Serialize;
 use tokio::net::TcpListener;
@@ -24,7 +23,6 @@ const SERVER_DEFAULT_BIND_ADDR: &str = "127.0.0.1:9876";
 struct WasmNodeArgs {
     pub network: ArgNetwork,
     pub bootnodes: Vec<Multiaddr>,
-    pub genesis_hash: Option<Hash>,
 }
 
 #[derive(RustEmbed)]
@@ -52,7 +50,6 @@ pub(crate) struct Params {
 
 pub(crate) async fn run(args: Params) -> Result<()> {
     let network = args.network.into();
-    let genesis_hash = network_genesis(network);
     let bootnodes = if args.bootnodes.is_empty() {
         canonical_network_bootnodes(network).collect()
     } else {
@@ -62,7 +59,6 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     let state = WasmNodeArgs {
         network: args.network,
         bootnodes,
-        genesis_hash,
     };
 
     let app = Router::new()
