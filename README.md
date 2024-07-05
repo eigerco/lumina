@@ -17,9 +17,9 @@ Supported features:
 
 > [!NOTE]
 > Lumina implements [`shwap`](https://github.com/celestiaorg/CIPs/blob/main/cips/cip-19.md) protocol to perform DASing,
-which is not yet enabled on all networks in the Go implementation. This means that even tho Lumina will be sampling all
-blocks, the network is unlikely to provide requested data yet. Shwap is going to become the main DASing protocol in next
-celestia-node updates.
+which is not yet enabled on all networks in the Go implementation. This means that even though Lumina will be sampling all
+blocks, the network is unlikely to provide the requested data yet. Shwap is going to become the main DASing protocol in 
+the upcoming celestia-node versions.
 
 ## Installing the node
 
