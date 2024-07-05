@@ -20,15 +20,35 @@ pub enum BlockRangesError {
 
     #[error("Insersion disallowed")]
     InsertDisallowed(BlockRange),
+
+    /// Store already contains some of the headers from the range that's being inserted
+    #[error("Failed to insert header range, it overlaps with one already existing in the store: {0}..={1}")]
+    HeaderRangeOverlap(u64, u64),
+
+    /// Store only allows inserts that grow existing header ranges, or starting a new network head,
+    /// ahead of all the existing ranges
+    #[error("Trying to insert new header range at disallowed position: {0}..={1}")]
+    InsertPlacementDisallowed(u64, u64),
 }
 
 type Result<T, E = BlockRangesError> = std::result::Result<T, E>;
 
-pub trait BlockRangeExt {
+impl BlockRangesError {
+    fn insert_placement_disallowed(range: BlockRange) -> BlockRangesError {
+        BlockRangesError::InsertPlacementDisallowed(*range.start(), *range.end())
+    }
+
+    fn header_range_overlap(range: BlockRange) -> BlockRangesError {
+        BlockRangesError::HeaderRangeOverlap(*range.start(), *range.end())
+    }
+}
+
+pub(crate) trait BlockRangeExt {
     fn validate(&self) -> Result<()>;
     fn len(&self) -> u64;
     fn is_adjacent(&self, other: &BlockRange) -> bool;
     fn is_overlapping(&self, other: &BlockRange) -> bool;
+    fn left_of(&self, other: &BlockRange) -> bool;
 }
 
 impl BlockRangeExt for BlockRange {
@@ -107,6 +127,11 @@ impl BlockRangeExt for BlockRange {
         }
 
         false
+    }
+
+    fn left_of(&self, other: &BlockRange) -> bool {
+        debug_assert!(self.is_adjacent(other));
+        self.end() < other.start()
     }
 }
 
@@ -230,16 +255,6 @@ impl BlockRangesExt for BlockRanges {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum Strategy {
-    /// Finds overlapping ranges.
-    Overlapping,
-    /// Finds adjacent ranges.
-    Adjacent,
-    /// Finds overlapping and adjacent ranges.
-    Intersecting,
-}
-
 impl BlockRanges {
     pub(crate) fn from_vec(from: SmallVec<[BlockRange; 2]>) -> Result<Self> {
         let ranges = BlockRanges(from);
@@ -286,8 +301,9 @@ impl BlockRanges {
         self.0.first().map(|r| *r.start())
     }
 
+    /// Check if the `to_insert` range will be neighbor and do not
     /// Return `Ok(left_neighbor, right_neighbor)` if `height` passes the header store contrains.
-    pub fn check_header_store_constrains(
+    pub fn check_neighbors_constrains(
         &self,
         to_insert: BlockRange,
     ) -> Result<(Option<u64>, Option<u64>)> {
@@ -298,38 +314,47 @@ impl BlockRanges {
             return Ok((None, None));
         }
 
-        // Get the indexes of the afffected ranges.
-        let Some((start_idx, end_idx)) = self.find_ranges(&to_insert, Strategy::Adjacent) else {
-            return Err(BlockRangesError::InsertDisallowed(to_insert));
+        let Some((first_idx, last_idx)) = self.find_affected_ranges(&to_insert) else {
+            return Err(BlockRangesError::insert_placement_disallowed(to_insert));
         };
 
-        debug_assert!(end_idx - start_idx <= 1);
+        let first = &self.0[first_idx];
+        let last = &self.0[last_idx];
+        let num_of_ranges = last_idx - first_idx + 1;
 
-        // If only one range is affected.
-        if start_idx == end_idx {
-            let range = &self.0[start_idx];
-
-            // If the `range` is on the left side of `to_insert`.
-            if range.end() < to_insert.start() {
-                Ok((Some(*range.end()), None))
-            } else {
-                // `range` is on the right side of `to_insert`.
-                Ok((None, Some(*range.start())))
+        match num_of_ranges {
+            0 => unreachable!(),
+            1 => {
+                if first.is_overlapping(&to_insert) {
+                    let overlap = calc_overlap(&to_insert, first, last);
+                    Err(BlockRangesError::header_range_overlap(overlap))
+                } else if first.left_of(&to_insert) {
+                    Ok((Some(*first.end()), None))
+                    //Ok((true, false))
+                } else {
+                    Ok((None, Some(*last.start())))
+                    //Ok((false, true))
+                }
             }
-        } else {
-            let left_range = &self.0[start_idx];
-            let right_range = &self.0[end_idx];
-
-            Ok((Some(*left_range.end()), Some(*right_range.start())))
+            2 => {
+                if first.is_adjacent(&to_insert) && last.is_adjacent(&to_insert) {
+                    Ok((Some(*first.end()), Some(*last.start())))
+                } else {
+                    let overlap = calc_overlap(&to_insert, first, last);
+                    Err(BlockRangesError::header_range_overlap(overlap))
+                }
+            }
+            _ => {
+                let overlap = calc_overlap(&to_insert, first, last);
+                Err(BlockRangesError::header_range_overlap(overlap))
+            }
         }
     }
 
     /// Returns the start index and end index of the affected ranges.
-    fn find_ranges(
-        &self,
-        range: impl Borrow<BlockRange>,
-        strategy: Strategy,
-    ) -> Option<(usize, usize)> {
+    ///
+    /// An affected range is the one that overlaps or touches `range`.
+    fn find_affected_ranges(&self, range: impl Borrow<BlockRange>) -> Option<(usize, usize)> {
         let range = range.borrow();
         debug_assert!(range.validate().is_ok());
 
@@ -337,20 +362,14 @@ impl BlockRanges {
         let mut end_idx = None;
 
         for (i, r) in self.0.iter().enumerate() {
-            let found = match strategy {
-                Strategy::Overlapping => r.is_overlapping(range),
-                Strategy::Adjacent => r.is_adjacent(range),
-                Strategy::Intersecting => r.is_overlapping(range) || r.is_adjacent(range),
-            };
-
-            if found {
+            if r.is_overlapping(range) || r.is_adjacent(range) {
                 if start_idx.is_none() {
                     start_idx = Some(i);
                 }
 
                 end_idx = Some(i);
             } else if end_idx.is_some() {
-                // We reached from a satisfying range to a non-satisfying.
+                // We reached from an affected range to a non-affected range.
                 // That means there nothing else to find.
                 break;
             }
@@ -390,7 +409,7 @@ impl BlockRanges {
     pub(crate) fn insert_relaxed(&mut self, range: BlockRange) -> Result<()> {
         range.validate()?;
 
-        match self.find_ranges(&range, Strategy::Intersecting) {
+        match self.find_affected_ranges(&range) {
             // `range` must be merged with other ranges
             Some((start_idx, end_idx)) => {
                 let start = *self.0[start_idx].start().min(range.start());
@@ -418,7 +437,7 @@ impl BlockRanges {
     pub(crate) fn remove_relaxed(&mut self, range: BlockRange) -> Result<()> {
         range.validate()?;
 
-        let Some((start_idx, end_idx)) = self.find_ranges(&range, Strategy::Overlapping) else {
+        let Some((start_idx, end_idx)) = self.find_affected_ranges(&range) else {
             // Nothing to remove
             return Ok(());
         };
@@ -499,6 +518,16 @@ impl Display for PrintableHeaderRange {
     }
 }
 
+fn calc_overlap(
+    to_insert: &BlockRange,
+    first_range: &BlockRange,
+    last_range: &BlockRange,
+) -> BlockRange {
+    let start = first_range.start().max(to_insert.start());
+    let end = last_range.end().min(to_insert.end());
+    *start..=*end
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -542,25 +571,25 @@ mod tests {
     #[test]
     fn check_range_insert_append() {
         let (left, right) = new_block_ranges([])
-            .check_header_store_constrains(1..=5)
+            .check_neighbors_constrains(1..=5)
             .unwrap();
         assert_eq!(left, None);
         assert_eq!(right, None);
 
         let (left, right) = new_block_ranges([1..=4])
-            .check_header_store_constrains(5..=5)
+            .check_neighbors_constrains(5..=5)
             .unwrap();
         assert_eq!(left, Some(4));
         assert_eq!(right, None);
 
         let (left, right) = new_block_ranges([1..=5])
-            .check_header_store_constrains(6..=9)
+            .check_neighbors_constrains(6..=9)
             .unwrap();
         assert_eq!(left, Some(5));
         assert_eq!(right, None);
 
         let (left, right) = new_block_ranges([6..=8])
-            .check_header_store_constrains(2..=5)
+            .check_neighbors_constrains(2..=5)
             .unwrap();
         assert_eq!(left, None);
         assert_eq!(right, Some(6));
@@ -569,19 +598,19 @@ mod tests {
     #[test]
     fn check_range_insert_with_consolidation() {
         let (left, right) = new_block_ranges([1..=3, 6..=9])
-            .check_header_store_constrains(4..=5)
+            .check_neighbors_constrains(4..=5)
             .unwrap();
         assert_eq!(left, Some(3));
         assert_eq!(right, Some(6));
 
         let (left, right) = new_block_ranges([1..=2, 5..=5, 8..=9])
-            .check_header_store_constrains(3..=4)
+            .check_neighbors_constrains(3..=4)
             .unwrap();
         assert_eq!(left, Some(2));
         assert_eq!(right, Some(5));
 
         let (left, right) = new_block_ranges([1..=2, 4..=4, 8..=9])
-            .check_header_store_constrains(5..=7)
+            .check_neighbors_constrains(5..=7)
             .unwrap();
         assert_eq!(left, Some(4));
         assert_eq!(right, Some(8));
@@ -620,28 +649,44 @@ mod tests {
         assert!(matches!(result, StoreError::HeaderRangeOverlap(3, 3)));
 
         let result = new_block_ranges([1..=2])
-            .check_header_store_constrains(1..=1)
+            .check_neighbors_constrains(1..=1)
             .unwrap_err();
+        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(1, 1)));
 
         let result = new_block_ranges([1..=4])
-            .check_header_store_constrains(2..=8)
+            .check_neighbors_constrains(2..=8)
             .unwrap_err();
+        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(2, 4)));
 
         let result = new_block_ranges([1..=4])
-            .check_header_store_constrains(2..=3)
+            .check_neighbors_constrains(2..=3)
             .unwrap_err();
+        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(2, 3)));
 
         let result = new_block_ranges([5..=9])
-            .check_header_store_constrains(1..=5)
+            .check_neighbors_constrains(1..=5)
             .unwrap_err();
+        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(5, 5)));
 
         let result = new_block_ranges([5..=8])
-            .check_header_store_constrains(2..=8)
+            .check_neighbors_constrains(2..=8)
             .unwrap_err();
+        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(5, 8)));
 
         let result = new_block_ranges([1..=3, 6..=9])
-            .check_header_store_constrains(3..=6)
+            .check_neighbors_constrains(3..=6)
             .unwrap_err();
+        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(3, 6)));
+
+        let result = new_block_ranges([1..=3, 5..=6])
+            .check_neighbors_constrains(3..=9)
+            .unwrap_err();
+        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(3, 6)));
+
+        let result = new_block_ranges([2..=3, 5..=6])
+            .check_neighbors_constrains(1..=5)
+            .unwrap_err();
+        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(2, 5)));
     }
 
     #[test]
@@ -671,16 +716,28 @@ mod tests {
         ));
 
         let result = new_block_ranges([1..=2, 7..=9])
-            .check_header_store_constrains(4..=4)
+            .check_neighbors_constrains(4..=4)
             .unwrap_err();
+        assert!(matches!(
+            result,
+            BlockRangesError::InsertPlacementDisallowed(4, 4)
+        ));
 
         let result = new_block_ranges([1..=2, 8..=9])
-            .check_header_store_constrains(4..=6)
+            .check_neighbors_constrains(4..=6)
             .unwrap_err();
+        assert!(matches!(
+            result,
+            BlockRangesError::InsertPlacementDisallowed(4, 6)
+        ));
 
         let result = new_block_ranges([4..=5, 7..=8])
-            .check_header_store_constrains(1..=2)
+            .check_neighbors_constrains(1..=2)
             .unwrap_err();
+        assert!(matches!(
+            result,
+            BlockRangesError::InsertPlacementDisallowed(1, 2)
+        ));
     }
 
     #[test]
@@ -799,177 +856,72 @@ mod tests {
     fn find_intersecting_ranges() {
         let ranges = new_block_ranges([30..=50, 80..=100, 130..=150]);
 
-        assert_eq!(ranges.find_ranges(28..=28, Strategy::Intersecting), None);
-        assert_eq!(ranges.find_ranges(1..=15, Strategy::Intersecting), None);
-        assert_eq!(ranges.find_ranges(1..=28, Strategy::Intersecting), None);
-        assert_eq!(ranges.find_ranges(3..=28, Strategy::Intersecting), None);
-        assert_eq!(
-            ranges.find_ranges(1..=29, Strategy::Intersecting),
-            Some((0, 0))
-        );
-        assert_eq!(
-            ranges.find_ranges(1..=30, Strategy::Intersecting),
-            Some((0, 0))
-        );
-        assert_eq!(
-            ranges.find_ranges(1..=49, Strategy::Intersecting),
-            Some((0, 0))
-        );
-        assert_eq!(
-            ranges.find_ranges(1..=50, Strategy::Intersecting),
-            Some((0, 0))
-        );
-        assert_eq!(
-            ranges.find_ranges(1..=51, Strategy::Intersecting),
-            Some((0, 0))
-        );
+        assert_eq!(ranges.find_affected_ranges(28..=28), None);
+        assert_eq!(ranges.find_affected_ranges(1..=15), None);
+        assert_eq!(ranges.find_affected_ranges(1..=28), None);
+        assert_eq!(ranges.find_affected_ranges(3..=28), None);
+        assert_eq!(ranges.find_affected_ranges(1..=29), Some((0, 0)));
+        assert_eq!(ranges.find_affected_ranges(1..=30), Some((0, 0)));
+        assert_eq!(ranges.find_affected_ranges(1..=49), Some((0, 0)));
+        assert_eq!(ranges.find_affected_ranges(1..=50), Some((0, 0)));
+        assert_eq!(ranges.find_affected_ranges(1..=51), Some((0, 0)));
 
-        assert_eq!(
-            ranges.find_ranges(40..=51, Strategy::Intersecting),
-            Some((0, 0))
-        );
-        assert_eq!(
-            ranges.find_ranges(50..=51, Strategy::Intersecting),
-            Some((0, 0))
-        );
-        assert_eq!(
-            ranges.find_ranges(51..=51, Strategy::Intersecting),
-            Some((0, 0))
-        );
+        assert_eq!(ranges.find_affected_ranges(40..=51), Some((0, 0)));
+        assert_eq!(ranges.find_affected_ranges(50..=51), Some((0, 0)));
+        assert_eq!(ranges.find_affected_ranges(51..=51), Some((0, 0)));
 
-        assert_eq!(
-            ranges.find_ranges(40..=79, Strategy::Intersecting),
-            Some((0, 1))
-        );
-        assert_eq!(
-            ranges.find_ranges(50..=79, Strategy::Intersecting),
-            Some((0, 1))
-        );
-        assert_eq!(
-            ranges.find_ranges(51..=79, Strategy::Intersecting),
-            Some((0, 1))
-        );
-        assert_eq!(
-            ranges.find_ranges(50..=80, Strategy::Intersecting),
-            Some((0, 1))
-        );
+        assert_eq!(ranges.find_affected_ranges(40..=79), Some((0, 1)));
+        assert_eq!(ranges.find_affected_ranges(50..=79), Some((0, 1)));
+        assert_eq!(ranges.find_affected_ranges(51..=79), Some((0, 1)));
+        assert_eq!(ranges.find_affected_ranges(50..=80), Some((0, 1)));
 
-        assert_eq!(ranges.find_ranges(52..=52, Strategy::Intersecting), None);
-        assert_eq!(ranges.find_ranges(52..=78, Strategy::Intersecting), None);
-        assert_eq!(
-            ranges.find_ranges(52..=79, Strategy::Intersecting),
-            Some((1, 1))
-        );
-        assert_eq!(
-            ranges.find_ranges(52..=80, Strategy::Intersecting),
-            Some((1, 1))
-        );
-        assert_eq!(
-            ranges.find_ranges(52..=129, Strategy::Intersecting),
-            Some((1, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(99..=129, Strategy::Intersecting),
-            Some((1, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(100..=129, Strategy::Intersecting),
-            Some((1, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(101..=129, Strategy::Intersecting),
-            Some((1, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(101..=128, Strategy::Intersecting),
-            Some((1, 1))
-        );
-        assert_eq!(
-            ranges.find_ranges(51..=129, Strategy::Intersecting),
-            Some((0, 2))
-        );
+        assert_eq!(ranges.find_affected_ranges(52..=52), None);
+        assert_eq!(ranges.find_affected_ranges(52..=78), None);
+        assert_eq!(ranges.find_affected_ranges(52..=79), Some((1, 1)));
+        assert_eq!(ranges.find_affected_ranges(52..=80), Some((1, 1)));
+        assert_eq!(ranges.find_affected_ranges(52..=129), Some((1, 2)));
+        assert_eq!(ranges.find_affected_ranges(99..=129), Some((1, 2)));
+        assert_eq!(ranges.find_affected_ranges(100..=129), Some((1, 2)));
+        assert_eq!(ranges.find_affected_ranges(101..=129), Some((1, 2)));
+        assert_eq!(ranges.find_affected_ranges(101..=128), Some((1, 1)));
+        assert_eq!(ranges.find_affected_ranges(51..=129), Some((0, 2)));
 
-        assert_eq!(ranges.find_ranges(102..=128, Strategy::Intersecting), None);
-        assert_eq!(ranges.find_ranges(102..=120, Strategy::Intersecting), None);
-        assert_eq!(ranges.find_ranges(120..=128, Strategy::Intersecting), None);
+        assert_eq!(ranges.find_affected_ranges(102..=128), None);
+        assert_eq!(ranges.find_affected_ranges(102..=120), None);
+        assert_eq!(ranges.find_affected_ranges(120..=128), None);
 
-        assert_eq!(
-            ranges.find_ranges(40..=129, Strategy::Intersecting),
-            Some((0, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(40..=140, Strategy::Intersecting),
-            Some((0, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(20..=140, Strategy::Intersecting),
-            Some((0, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(20..=150, Strategy::Intersecting),
-            Some((0, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(20..=151, Strategy::Intersecting),
-            Some((0, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(20..=160, Strategy::Intersecting),
-            Some((0, 2))
-        );
+        assert_eq!(ranges.find_affected_ranges(40..=129), Some((0, 2)));
+        assert_eq!(ranges.find_affected_ranges(40..=140), Some((0, 2)));
+        assert_eq!(ranges.find_affected_ranges(20..=140), Some((0, 2)));
+        assert_eq!(ranges.find_affected_ranges(20..=150), Some((0, 2)));
+        assert_eq!(ranges.find_affected_ranges(20..=151), Some((0, 2)));
+        assert_eq!(ranges.find_affected_ranges(20..=160), Some((0, 2)));
 
-        assert_eq!(
-            ranges.find_ranges(120..=129, Strategy::Intersecting),
-            Some((2, 2))
-        );
-        assert_eq!(ranges.find_ranges(120..=128, Strategy::Intersecting), None);
-        assert_eq!(
-            ranges.find_ranges(120..=130, Strategy::Intersecting),
-            Some((2, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(120..=131, Strategy::Intersecting),
-            Some((2, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(140..=145, Strategy::Intersecting),
-            Some((2, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(140..=150, Strategy::Intersecting),
-            Some((2, 2))
-        );
-        assert_eq!(
-            ranges.find_ranges(140..=155, Strategy::Intersecting),
-            Some((2, 2))
-        );
-        assert_eq!(ranges.find_ranges(152..=155, Strategy::Intersecting), None);
-        assert_eq!(ranges.find_ranges(152..=178, Strategy::Intersecting), None);
-        assert_eq!(ranges.find_ranges(152..=152, Strategy::Intersecting), None);
+        assert_eq!(ranges.find_affected_ranges(120..=129), Some((2, 2)));
+        assert_eq!(ranges.find_affected_ranges(120..=128), None);
+        assert_eq!(ranges.find_affected_ranges(120..=130), Some((2, 2)));
+        assert_eq!(ranges.find_affected_ranges(120..=131), Some((2, 2)));
+        assert_eq!(ranges.find_affected_ranges(140..=145), Some((2, 2)));
+        assert_eq!(ranges.find_affected_ranges(140..=150), Some((2, 2)));
+        assert_eq!(ranges.find_affected_ranges(140..=155), Some((2, 2)));
+        assert_eq!(ranges.find_affected_ranges(152..=155), None);
+        assert_eq!(ranges.find_affected_ranges(152..=178), None);
+        assert_eq!(ranges.find_affected_ranges(152..=152), None);
 
-        assert_eq!(
-            new_block_ranges([]).find_ranges(1..=1, Strategy::Intersecting),
-            None
-        );
+        assert_eq!(new_block_ranges([]).find_affected_ranges(1..=1), None);
 
+        assert_eq!(new_block_ranges([1..=2]).find_affected_ranges(6..=9), None);
+        assert_eq!(new_block_ranges([4..=8]).find_affected_ranges(1..=2), None);
         assert_eq!(
-            new_block_ranges([1..=2]).find_ranges(6..=9, Strategy::Intersecting),
+            new_block_ranges([4..=8, 20..=30]).find_affected_ranges(1..=2),
             None
         );
         assert_eq!(
-            new_block_ranges([4..=8]).find_ranges(1..=2, Strategy::Intersecting),
+            new_block_ranges([4..=8, 20..=30]).find_affected_ranges(10..=12),
             None
         );
         assert_eq!(
-            new_block_ranges([4..=8, 20..=30]).find_ranges(1..=2, Strategy::Intersecting),
-            None
-        );
-        assert_eq!(
-            new_block_ranges([4..=8, 20..=30]).find_ranges(10..=12, Strategy::Intersecting),
-            None
-        );
-        assert_eq!(
-            new_block_ranges([4..=8, 20..=30]).find_ranges(32..=32, Strategy::Intersecting),
+            new_block_ranges([4..=8, 20..=30]).find_affected_ranges(32..=32),
             None
         );
     }
