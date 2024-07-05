@@ -17,7 +17,7 @@ use tokio::task::spawn_blocking;
 use tracing::warn;
 use tracing::{debug, trace};
 
-use crate::store::header_ranges::{BlockRanges, BlockRangesExt};
+use crate::store::header_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
@@ -262,12 +262,10 @@ impl RedbStore {
             let mut ranges_table = tx.open_table(RANGES_TABLE)?;
 
             let mut header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
-
             let headers_range = head.height().value()..=tail.height().value();
-            let range_scan_result = header_ranges.check_range_insert(&headers_range)?;
 
-            let prev_exists = headers_range.start() != range_scan_result.range.start();
-            let next_exists = headers_range.end() != range_scan_result.range.end();
+            let (prev_exists, next_exists) =
+                header_ranges.check_insertion_constrains(&headers_range)?;
 
             verify_against_neighbours(
                 &headers_table,
@@ -298,7 +296,7 @@ impl RedbStore {
                 trace!("Inserted header {hash} with height {height}");
             }
 
-            header_ranges.update_range(range_scan_result);
+            header_ranges.insert_relaxed(&headers_range)?;
             set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
 
             debug!("Inserted header range {headers_range:?}",);

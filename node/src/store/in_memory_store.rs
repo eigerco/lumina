@@ -9,7 +9,7 @@ use cid::Cid;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
-use crate::store::header_ranges::{BlockRanges, BlockRangesExt};
+use crate::store::header_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
@@ -172,10 +172,10 @@ impl InMemoryStoreInner {
         };
 
         let headers_range = head.height().value()..=tail.height().value();
-        let range_scan_result = self.header_ranges.check_range_insert(&headers_range)?;
+        let (prev_exists, next_exists) = self
+            .header_ranges
+            .check_insertion_constrains(&headers_range)?;
 
-        let prev_exists = headers_range.start() != range_scan_result.range.start();
-        let next_exists = headers_range.end() != range_scan_result.range.end();
         // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
         self.verify_against_neighbours(prev_exists.then_some(head), next_exists.then_some(tail))?;
 
@@ -208,7 +208,7 @@ impl InMemoryStoreInner {
             height_entry.insert(hash);
         }
 
-        self.header_ranges.update_range(range_scan_result);
+        self.header_ranges.insert_relaxed(headers_range)?;
 
         Ok(())
     }

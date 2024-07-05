@@ -15,7 +15,7 @@ use tokio::sync::Notify;
 use tracing::warn;
 use wasm_bindgen::JsValue;
 
-use crate::store::header_ranges::{BlockRanges, BlockRangesExt};
+use crate::store::header_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
@@ -195,10 +195,8 @@ impl IndexedDbStore {
         let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
 
         let headers_range = head.height().value()..=tail.height().value();
-        let range_scan_result = header_ranges.check_range_insert(&headers_range)?;
-
-        let prev_exists = headers_range.start() != range_scan_result.range.start();
-        let next_exists = headers_range.end() != range_scan_result.range.end();
+        let (prev_exists, next_exists) =
+            header_ranges.check_insertion_constrains(&headers_range)?;
 
         // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
         verify_against_neighbours(
@@ -231,7 +229,7 @@ impl IndexedDbStore {
             header_store.add(&jsvalue_header, None).await?;
         }
 
-        header_ranges.update_range(range_scan_result);
+        header_ranges.insert_relaxed(headers_range)?;
         set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
 
         tx.commit().await?;

@@ -59,54 +59,6 @@ fn get_most_recent_missing_range(
     penultimate_range_end + 1..=store_head_range.start().saturating_sub(1)
 }
 
-pub(crate) fn try_consolidate_ranges(
-    left: &RangeInclusive<u64>,
-    right: &RangeInclusive<u64>,
-) -> Option<RangeInclusive<u64>> {
-    debug_assert!(left.start() <= left.end());
-    debug_assert!(right.start() <= right.end());
-
-    if left.end() + 1 == *right.start() {
-        return Some(*left.start()..=*right.end());
-    }
-
-    if right.end() + 1 == *left.start() {
-        return Some(*right.start()..=*left.end());
-    }
-
-    None
-}
-
-pub(crate) fn ranges_intersection(
-    left: &RangeInclusive<u64>,
-    right: &RangeInclusive<u64>,
-) -> Option<RangeInclusive<u64>> {
-    debug_assert!(left.start() <= left.end());
-    debug_assert!(right.start() <= right.end());
-
-    if left.start() > right.end() || left.end() < right.start() {
-        return None;
-    }
-
-    match (left.start() >= right.start(), left.end() >= right.end()) {
-        (false, false) => Some(*right.start()..=*left.end()),
-        (false, true) => Some(right.clone()),
-        (true, false) => Some(left.clone()),
-        (true, true) => Some(*left.start()..=*right.end()),
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub(crate) struct RangeScanResult {
-    /// index of the range that header is being inserted into
-    pub range_index: usize,
-    /// updated bounds of the range header is being inserted into
-    pub range: BlockRange,
-    /// index of the range that should be removed from the table, if we're consolidating two
-    /// ranges. None otherwise.
-    pub range_to_remove: Option<usize>,
-}
-
 /// Span of header that's been verified internally
 #[derive(Clone)]
 pub struct VerifiedExtendedHeaders(Vec<ExtendedHeader>);
@@ -231,8 +183,6 @@ pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_typ
 mod tests {
     use super::*;
 
-    use smallvec::smallvec;
-
     #[test]
     fn calculate_range_to_fetch_test_header_limit() {
         let head_height = 1024;
@@ -315,25 +265,5 @@ mod tests {
         let fetch_range =
             calculate_range_to_fetch(head_height, &[1..=2998, 3000..=3800], Some(3900), 500);
         assert_eq!(fetch_range, 3901..=4000);
-    }
-
-    #[test]
-    fn intersection_non_overlapping() {
-        assert_eq!(ranges_intersection(&(1..=2), &(3..=4)), None);
-        assert_eq!(ranges_intersection(&(1..=2), &(6..=9)), None);
-        assert_eq!(ranges_intersection(&(3..=8), &(1..=2)), None);
-        assert_eq!(ranges_intersection(&(1..=2), &(4..=6)), None);
-    }
-
-    #[test]
-    fn intersection_overlapping() {
-        assert_eq!(ranges_intersection(&(1..=2), &(2..=4)), Some(2..=2));
-        assert_eq!(ranges_intersection(&(1..=2), &(2..=2)), Some(2..=2));
-        assert_eq!(ranges_intersection(&(1..=5), &(2..=9)), Some(2..=5));
-        assert_eq!(ranges_intersection(&(4..=6), &(1..=9)), Some(4..=6));
-        assert_eq!(ranges_intersection(&(3..=7), &(5..=5)), Some(5..=5));
-        assert_eq!(ranges_intersection(&(3..=7), &(5..=6)), Some(5..=6));
-        assert_eq!(ranges_intersection(&(3..=5), &(3..=3)), Some(3..=3));
-        assert_eq!(ranges_intersection(&(3..=5), &(1..=4)), Some(3..=4));
     }
 }

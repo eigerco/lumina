@@ -555,7 +555,9 @@ mod tests {
 
         assert!(matches!(
             s.insert(header101).await,
-            Err(StoreError::HeaderRangeOverlap(101, 101))
+            Err(StoreError::BlockRangesError(
+                BlockRangesError::HeaderRangeOverlap(101, 101)
+            ))
         ));
     }
 
@@ -579,7 +581,9 @@ mod tests {
         let insert_existing_result = s.insert(header30).await;
         assert!(matches!(
             insert_existing_result,
-            Err(StoreError::HeaderRangeOverlap(30, 30))
+            Err(StoreError::BlockRangesError(
+                BlockRangesError::HeaderRangeOverlap(30, 30)
+            ))
         ));
     }
 
