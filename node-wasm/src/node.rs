@@ -2,7 +2,6 @@
 
 use js_sys::Array;
 use libp2p::identity::Keypair;
-use libp2p::multiaddr::Protocol;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
 use tracing::error;
@@ -15,7 +14,10 @@ use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 
 use crate::error::{Context, Result};
-use crate::utils::{is_chrome, js_value_from_display, request_storage_persistence, Network};
+use crate::utils::{
+    is_chrome, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
+    Network,
+};
 use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::worker::{AnyWorker, WorkerClient};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -127,7 +129,7 @@ impl NodeDriver {
     pub async fn start(&self, config: WasmNodeConfig) -> Result<()> {
         let command = NodeCommand::StartNode(config);
         let response = self.client.exec(command).await?;
-        let _ = response.into_node_started().check_variant()?;
+        response.into_node_started().check_variant()??;
 
         Ok(())
     }
@@ -354,7 +356,6 @@ impl WasmNodeConfig {
         WasmNodeConfig {
             network,
             bootnodes: canonical_network_bootnodes(network.into())
-                .filter(|addr| addr.iter().any(|proto| proto == Protocol::WebTransport))
                 .map(|addr| addr.to_string())
                 .collect::<Vec<_>>(),
         }
@@ -373,12 +374,14 @@ impl WasmNodeConfig {
 
         let p2p_local_keypair = Keypair::generate_ed25519();
 
-        let p2p_bootnodes = self
-            .bootnodes
-            .iter()
-            .map(|addr| addr.parse())
-            .collect::<std::result::Result<_, _>>()
-            .context("bootstrap multiaddr invalid")?;
+        let mut p2p_bootnodes = Vec::with_capacity(self.bootnodes.len());
+        for addr in self.bootnodes {
+            let addr = addr
+                .parse()
+                .with_context(|| format!("invalid multiaddr: '{addr}"))?;
+            let resolved_addrs = resolve_dnsaddr_multiaddress(addr).await?;
+            p2p_bootnodes.extend(resolved_addrs.into_iter());
+        }
 
         Ok(NodeConfig {
             network_id: network_id.to_string(),
