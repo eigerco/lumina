@@ -1,15 +1,25 @@
 # Lumina
 
-Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in browser-based environments.
+Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in browser-based environments. 
+
+Run Lumina now at [lumina.rs](https://lumina.rs/) and directly verify Celestia.
 
 Supported features:
-- [x] Synchronize and verify `ExtendedHeader`s from genesis to the network head
-- [x] Header exchange (`header-ex`) client and server
-- [x] Listening for, verifying and redistributing extended headers on gossip protocol (`header-sub`)
-- [x] Persistent store for Headers
-- [x] Integration tests with Go implementation
-- [ ] Data Availability Sampling
-- [ ] Creating, distributing, and listening for Fraud proofs
+- Backward and forward synchronization of block headers within syncing window
+- Header exchange (`header-ex`) client and server
+- Listening for, verifying and redistributing extended headers on gossip protocol (`header-sub`)
+- Listening for, verifying and redistributing fraud proofs on gossip protocol (`fraud-sub`)
+- Backward and forward Data Availability Sampling
+- Native and browser persistent storage
+- Streaming events happening on the node
+- Native and wasm library, embed the node anywhere
+- Integration tests with Go implementation
+
+> [!NOTE]
+> Lumina implements [`shwap`](https://github.com/celestiaorg/CIPs/blob/main/cips/cip-19.md) protocol to perform DASing,
+which is not yet enabled on all networks in the Go implementation. This means that even though Lumina will be sampling all
+blocks, the network is unlikely to provide the requested data yet. Shwap is going to become the main DASing protocol in 
+the upcoming celestia-node versions.
 
 ## Installing the node
 
@@ -88,12 +98,12 @@ lumina browser --help
 
 For security reasons, browsers only allow WebTransport to be used in [Secure Context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts). When running Lumina in a browser make sure to access it either locally or over HTTPS.
 
-## Running Go celestia node for integration
+## Running Go Celestia node for integration
 
 Follow [this guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)
 to authorize yourself in github's container registry.
 
-Starting a celestia network with single validator and bridge
+Starting a Celestia network with single validator and bridge
 ```bash
 docker compose -f ci/docker-compose.yml up --build --force-recreate -d
 # and to stop it
@@ -109,17 +119,19 @@ export CELESTIA_NODE_AUTH_TOKEN=$(docker compose -f ci/docker-compose.yml exec b
 
 Accessing json RPC api with Go `celestia` cli:
 ```bash
-celestia rpc blob Submit 0x0c204d39600fddd3 '"Hello world"' --print-request
+docker compose -f ci/docker-compose.yml exec bridge-0 \
+    celestia blob submit 0x0c204d39600fddd3 '"Hello world"' --token "$CELESTIA_NODE_AUTH_TOKEN"
 ```
 
 Extracting blocks for test cases:
 ```bash
-celestia rpc header GetByHeight 27 | jq .result
+docker compose -f ci/docker-compose.yml exec bridge-0 \
+    celestia header get-by-height 27 --token "$CELESTIA_NODE_AUTH_TOKEN" | jq .result
 ```
 
-## Running integration tests with celestia node
+## Running integration tests with Celestia node
 
-Make sure you have the celestia network running inside docker compose from the section above.
+Make sure you have the Celestia network running inside docker compose from the section above.
 
 Generate authentication tokens
 ```bash
@@ -146,3 +158,13 @@ How to upgrade:
 ./tools/upgrade-deps.sh -i  # `-i` upgrades incompatible versions too
 cargo update
 ```
+
+## Frontend
+
+Check out the front end at [eigerco/lumina-front](https://github.com/eigerco/lumina-front) 
+
+## About Eiger
+
+We are engineers. We contribute to various ecosystems by building low level implementations and core components. We built Lumina because we believe in the modular thesis. We wanted to make the Celestia light node available and easy to run for as many users so that everyone can perform sampling to ensure data availability.
+
+Contact us at hello@eiger.co
