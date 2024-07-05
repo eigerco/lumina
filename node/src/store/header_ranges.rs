@@ -302,21 +302,6 @@ impl BlockRanges {
         }
     }
 
-    /// Returns an inverted `BlockRanges` from 1 up to HEAD.
-    pub(crate) fn inverted_up_to_head(&self) -> BlockRanges {
-        let mut next_start = 1;
-        let mut ranges = SmallVec::new();
-
-        for range in self.0.iter() {
-            if next_start < *range.start() {
-                ranges.push(next_start..=*range.start() - 1);
-            }
-            next_start = *range.end() + 1;
-        }
-
-        BlockRanges(ranges)
-    }
-
     /// Returns the head height and removes it from the ranges.
     pub fn pop_head(&mut self) -> Option<u64> {
         let last = self.0.last_mut()?;
@@ -673,31 +658,6 @@ mod tests {
     #[should_panic]
     fn test_header_range_creation_wrong_order() {
         new_block_ranges([10..=15, 1..=5]);
-    }
-
-    #[test]
-    fn inverted() {
-        assert_eq!(
-            BlockRanges::default().inverted_up_to_head(),
-            BlockRanges::default()
-        );
-        assert_eq!(
-            new_block_ranges([1..=100]).inverted_up_to_head(),
-            BlockRanges::default()
-        );
-        assert_eq!(
-            new_block_ranges([2..=100]).inverted_up_to_head(),
-            new_block_ranges([1..=1])
-        );
-        assert_eq!(
-            new_block_ranges([2..=100, 102..=102]).inverted_up_to_head(),
-            new_block_ranges([1..=1, 101..=101])
-        );
-
-        assert_eq!(
-            new_block_ranges([2..=100, 150..=160, 200..=210, 300..=310]).inverted_up_to_head(),
-            new_block_ranges([1..=1, 101..=149, 161..=199, 211..=299])
-        );
     }
 
     #[test]
