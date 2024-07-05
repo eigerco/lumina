@@ -1,11 +1,11 @@
 //! Error type and utilities.
 
-use std::fmt::Display;
+use std::fmt::{self, Display};
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::convert::IntoWasmAbi;
 use wasm_bindgen::describe::WasmDescribe;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsCast, JsValue};
 
 /// Alias for a `Result` with the error type [`Error`].
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -47,6 +47,29 @@ impl Error {
         let e = js_sys::Error::new(&context.to_string());
         e.set_cause(&self.0);
         Error(e.into())
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+        let Some(error) = self.0.dyn_ref::<js_sys::Error>() else {
+            return write!(f, "{:?}", self.0.as_string());
+        };
+
+        write!(f, "{} ({})", error.name(), error.message())?;
+
+        let mut cause = error.cause();
+        loop {
+            if let Some(error) = cause.dyn_ref::<js_sys::Error>() {
+                write!(f, "\n{} ({})", error.name(), error.message())?;
+                cause = error.cause();
+            } else {
+                write!(f, "\n{:?}", cause.as_string())?;
+                break;
+            }
+        }
+
+        Ok(())
     }
 }
 

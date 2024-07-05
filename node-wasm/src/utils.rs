@@ -9,6 +9,7 @@ use lumina_node::network;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use tracing::{info, warn};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::format::Pretty;
 use tracing_subscriber::fmt::time::UtcTime;
@@ -154,6 +155,34 @@ where
             JsResult::Err(e) => Err(e),
         }
     }
+}
+
+/// Request persistent storage from user for us, which has side effect of increasing the quota we
+/// have. This function doesn't `await` on JavaScript promise, as that would block until user
+/// either allows or blocks our request in a prompt (and we cannot do much with the result anyway).
+pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
+    let fullfiled = Closure::once(move |granted: JsValue| {
+        if granted.is_truthy() {
+            info!("Storage persistence acquired: {:?}", granted);
+        } else {
+            warn!("User rejected storage persistance request")
+        }
+    });
+    let rejected = Closure::once(move |_ev: JsValue| {
+        warn!("Error during persistant storage request");
+    });
+
+    // don't drop the promise, we'll log the result and hope the user clicked the right button
+    let _promise = get_navigator()?
+        .storage()
+        .persist()?
+        .then2(&fullfiled, &rejected);
+
+    // stop rust from dropping them
+    fullfiled.forget();
+    rejected.forget();
+
+    Ok(())
 }
 
 const CHROME_USER_AGENT_DETECTION_STR: &str = "Chrome/";
