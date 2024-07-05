@@ -1,36 +1,43 @@
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
-use std::ops::{RangeInclusive, Sub};
+use std::ops::{Add, RangeInclusive, Sub};
 
 use serde::Serialize;
 use smallvec::SmallVec;
 
+/// Type alias to `RangeInclusive<u64>`.
 pub type BlockRange = RangeInclusive<u64>;
 
+/// Errors that can be produced by `BlockRanges`.
 #[derive(Debug, thiserror::Error)]
 pub enum BlockRangesError {
-    #[error("Invalid block range: {}-{}", .0.start(), .0.end())]
-    InvalidBlockRange(BlockRange),
+    /// Not a valid block range.
+    #[error("Invalid block range: {0}-{1}")]
+    InvalidBlockRange(u64, u64),
 
+    /// Block ranges must be sorted.
     #[error("Block ranges are not sorted")]
     UnsortedBlockRanges,
 
-    #[error("Insersion disallowed")]
-    InsertDisallowed(BlockRange),
-
     /// Store already contains some of the headers from the range that's being inserted
-    #[error("Failed to insert header range, it overlaps with one already existing in the store: {0}..={1}")]
+    #[error(
+        "Can not insert header range, it overlaps with one already existing in the store: {0}-{1}"
+    )]
     HeaderRangeOverlap(u64, u64),
 
     /// Store only allows inserts that grow existing header ranges, or starting a new network head,
     /// ahead of all the existing ranges
-    #[error("Trying to insert new header range at disallowed position: {0}..={1}")]
+    #[error("Trying to insert new header range at disallowed position: {0}-{1}")]
     InsertPlacementDisallowed(u64, u64),
 }
 
 type Result<T, E = BlockRangesError> = std::result::Result<T, E>;
 
 impl BlockRangesError {
+    fn invalid_block_range(range: &BlockRange) -> BlockRangesError {
+        BlockRangesError::InvalidBlockRange(*range.start(), *range.end())
+    }
+
     fn insert_placement_disallowed(range: &BlockRange) -> BlockRangesError {
         BlockRangesError::InsertPlacementDisallowed(*range.start(), *range.end())
     }
@@ -53,7 +60,7 @@ impl BlockRangeExt for BlockRange {
         if *self.start() > 0 && self.start() <= self.end() {
             Ok(())
         } else {
-            Err(BlockRangesError::InvalidBlockRange(self.to_owned()))
+            Err(BlockRangesError::invalid_block_range(self))
         }
     }
 
@@ -153,6 +160,7 @@ impl<'de> serde::Deserialize<'de> for BlockRanges {
 }
 
 impl BlockRanges {
+    /// Create and empty `BlockRanges`.
     pub fn new() -> BlockRanges {
         BlockRanges(SmallVec::new())
     }
@@ -270,25 +278,25 @@ impl BlockRanges {
         match num_of_ranges {
             0 => unreachable!(),
             1 => {
-                if first.is_overlapping(&to_insert) {
-                    let overlap = calc_overlap(&to_insert, first, last);
+                if first.is_overlapping(to_insert) {
+                    let overlap = calc_overlap(to_insert, first, last);
                     Err(BlockRangesError::header_range_overlap(&overlap))
-                } else if first.left_of(&to_insert) {
+                } else if first.left_of(to_insert) {
                     Ok((true, false))
                 } else {
                     Ok((false, true))
                 }
             }
             2 => {
-                if first.is_adjacent(&to_insert) && last.is_adjacent(&to_insert) {
+                if first.is_adjacent(to_insert) && last.is_adjacent(to_insert) {
                     Ok((true, true))
                 } else {
-                    let overlap = calc_overlap(&to_insert, first, last);
+                    let overlap = calc_overlap(to_insert, first, last);
                     Err(BlockRangesError::header_range_overlap(&overlap))
                 }
             }
             _ => {
-                let overlap = calc_overlap(&to_insert, first, last);
+                let overlap = calc_overlap(to_insert, first, last);
                 Err(BlockRangesError::header_range_overlap(&overlap))
             }
         }
@@ -309,6 +317,7 @@ impl BlockRanges {
         BlockRanges(ranges)
     }
 
+    /// Returns the head height and removes it from the ranges.
     pub fn pop_head(&mut self) -> Option<u64> {
         let last = self.0.last_mut()?;
         let head = *last.end();
@@ -322,6 +331,9 @@ impl BlockRanges {
         Some(head)
     }
 
+    /// Insert a new range.
+    ///
+    /// This fails only if `range` is not valid. It allows inserting an overlapping range.
     pub fn insert_relaxed(&mut self, range: impl Borrow<BlockRange>) -> Result<()> {
         let range = range.borrow();
         range.validate()?;
@@ -351,6 +363,9 @@ impl BlockRanges {
         Ok(())
     }
 
+    /// Remove a range.
+    ///
+    /// This fails only if `range` is not valid. It allows removing non-existing range.
     pub fn remove_relaxed(&mut self, range: impl Borrow<BlockRange>) -> Result<()> {
         let range = range.borrow();
         range.validate()?;
@@ -394,6 +409,26 @@ impl AsRef<[RangeInclusive<u64>]> for BlockRanges {
     }
 }
 
+impl Add for BlockRanges {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        self.add(&rhs)
+    }
+}
+
+impl Add<&BlockRanges> for BlockRanges {
+    type Output = Self;
+
+    fn add(mut self, rhs: &BlockRanges) -> Self::Output {
+        for range in rhs.0.iter() {
+            self.insert_relaxed(range)
+                .expect("BlockRanges always holds valid ranges");
+        }
+        self
+    }
+}
+
 impl Sub for BlockRanges {
     type Output = Self;
 
@@ -407,7 +442,7 @@ impl Sub<&BlockRanges> for BlockRanges {
 
     fn sub(mut self, rhs: &BlockRanges) -> Self::Output {
         for range in rhs.0.iter() {
-            self.remove_relaxed(range.to_owned())
+            self.remove_relaxed(range)
                 .expect("BlockRanges always holds valid ranges");
         }
         self
@@ -490,33 +525,33 @@ mod tests {
         let (prev_exists, next_exists) = new_block_ranges([])
             .check_insertion_constrains(1..=5)
             .unwrap();
-        assert_eq!(prev_exists, false);
-        assert_eq!(next_exists, false);
+        assert!(!prev_exists);
+        assert!(!next_exists);
 
         let (prev_exists, next_exists) = new_block_ranges([1..=4])
             .check_insertion_constrains(5..=5)
             .unwrap();
-        assert_eq!(prev_exists, true);
-        assert_eq!(next_exists, false);
+        assert!(prev_exists);
+        assert!(!next_exists);
 
         let (prev_exists, next_exists) = new_block_ranges([1..=5])
             .check_insertion_constrains(6..=9)
             .unwrap();
-        assert_eq!(prev_exists, true);
-        assert_eq!(next_exists, false);
+        assert!(prev_exists);
+        assert!(!next_exists);
 
         let (prev_exists, next_exists) = new_block_ranges([6..=8])
             .check_insertion_constrains(2..=5)
             .unwrap();
-        assert_eq!(prev_exists, false);
-        assert_eq!(next_exists, true);
+        assert!(!prev_exists);
+        assert!(next_exists);
 
         // Allow inserting a new HEAD range
         let (prev_exists, next_exists) = new_block_ranges([1..=5])
             .check_insertion_constrains(7..=9)
             .unwrap();
-        assert_eq!(prev_exists, false);
-        assert_eq!(next_exists, false);
+        assert!(!prev_exists);
+        assert!(!next_exists);
     }
 
     #[test]
@@ -524,20 +559,20 @@ mod tests {
         let (prev_exists, next_exists) = new_block_ranges([1..=3, 6..=9])
             .check_insertion_constrains(4..=5)
             .unwrap();
-        assert_eq!(prev_exists, true);
-        assert_eq!(next_exists, true);
+        assert!(prev_exists);
+        assert!(next_exists);
 
         let (prev_exists, next_exists) = new_block_ranges([1..=2, 5..=5, 8..=9])
             .check_insertion_constrains(3..=4)
             .unwrap();
-        assert_eq!(prev_exists, true);
-        assert_eq!(next_exists, true);
+        assert!(prev_exists);
+        assert!(next_exists);
 
         let (prev_exists, next_exists) = new_block_ranges([1..=2, 4..=4, 8..=9])
             .check_insertion_constrains(5..=7)
             .unwrap();
-        assert_eq!(prev_exists, true);
-        assert_eq!(next_exists, true);
+        assert!(prev_exists);
+        assert!(next_exists);
     }
 
     #[test]
@@ -688,6 +723,7 @@ mod tests {
         (1..=2).validate().unwrap();
         (0..=0).validate().unwrap_err();
         (0..=1).validate().unwrap_err();
+        #[allow(clippy::reversed_empty_ranges)]
         (2..=1).validate().unwrap_err();
     }
 

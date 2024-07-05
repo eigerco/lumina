@@ -6,7 +6,7 @@ use celestia_types::ExtendedHeader;
 
 use crate::executor::yield_now;
 use crate::store::header_ranges::{BlockRange, BlockRangeExt};
-use crate::store::{Result, StoreError};
+use crate::store::Result;
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
 
@@ -148,21 +148,6 @@ impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
     fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders {
         unsafe { VerifiedExtendedHeaders::new_unchecked(self.next_many(amount)) }
     }
-}
-
-#[allow(unused)]
-pub(crate) fn verify_range_contiguous(headers: &[ExtendedHeader]) -> Result<()> {
-    let mut prev = None;
-    for h in headers {
-        let current_height = h.height().value();
-        if let Some(prev_height) = prev {
-            if prev_height + 1 != current_height {
-                return Err(StoreError::InsertRangeWithGap(prev_height, current_height));
-            }
-        }
-        prev = Some(current_height);
-    }
-    Ok(())
 }
 
 #[allow(unused)]

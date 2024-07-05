@@ -553,7 +553,7 @@ fn set_ranges(
 ) -> Result<()> {
     let raw_ranges: &[RangeInclusive<u64>] = ranges.as_ref();
     let raw_ranges = raw_ranges
-        .into_iter()
+        .iter()
         .map(|range| (*range.start(), *range.end()))
         .collect::<Vec<_>>();
 

@@ -147,17 +147,17 @@ pub trait Store: Send + Sync + Debug {
 
     /// Insert a range of headers into the store.
     ///
-    /// Inserts are allowed at the front of the store or at the ends of any existing ranges. Edges
-    /// of inserted header ranges are verified against headers present in the store, if they
-    /// exist.
+    /// New insertion should pass all constrains as described on [`BlockRanges::check_insertion_constrains`]
+    /// and the call [`ExtendedHeader::verify`] on its neighbor headers.
     async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
         StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>;
 
-    /// Return a list of header ranges currenty held in store
+    /// Returns a list of header ranges currenty held in store.
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges>;
 
+    /// Returns a list of accepted sampling ranges currently held in store.
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges>;
 }
 
@@ -167,30 +167,6 @@ pub enum StoreError {
     /// Hash already exists in the store.
     #[error("Hash {0} already exists in store")]
     HashExists(Hash),
-
-    /// Height already exists in the store.
-    #[error("Height {0} already exists in store")]
-    HeightExists(u64),
-
-    #[error("Failed to insert header range because not all constrains are met: {0:?}")]
-    InsertDisallowed(BlockRange),
-
-    /// Inserted height is not following store's current head.
-    #[error("Failed to append header at height {1}")]
-    NonContinuousAppend(u64, u64),
-
-    /// Store already contains some of the headers from the range that's being inserted
-    #[error("Failed to insert header range, it overlaps with one already existing in the store: {0}..={1}")]
-    HeaderRangeOverlap(u64, u64),
-
-    /// Store only allows inserts that grow existing header ranges, or starting a new network head,
-    /// ahead of all the existing ranges
-    #[error("Trying to insert new header range at disallowed position: {0}..={1}")]
-    InsertPlacementDisallowed(u64, u64),
-
-    /// Range of headers provided to insert is not contiguous
-    #[error("Provided header range has a gap between heights {0} and {1}")]
-    InsertRangeWithGap(u64, u64),
 
     /// Header validation has failed.
     #[error("Failed to validate header at height {0}")]
