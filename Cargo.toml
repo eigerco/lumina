@@ -27,7 +27,6 @@ celestia-tendermint-proto = "0.32.1"
 
 libp2p = { git = "https://github.com/libp2p/rust-libp2p", rev = "60e32c9d3b4bee42ac698791e917e1587eaa1388" }
 libp2p-core = { git = "https://github.com/libp2p/rust-libp2p", rev = "60e32c9d3b4bee42ac698791e917e1587eaa1388" }
-libp2p-identity = { git = "https://github.com/libp2p/rust-libp2p", rev = "60e32c9d3b4bee42ac698791e917e1587eaa1388" }
 libp2p-swarm = { git = "https://github.com/libp2p/rust-libp2p", rev = "60e32c9d3b4bee42ac698791e917e1587eaa1388" }
 
 [profile.release]
