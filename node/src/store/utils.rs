@@ -4,8 +4,8 @@ use std::ops::RangeInclusive;
 use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 
-use crate::executor::yield_now;
 use crate::block_ranges::{BlockRange, BlockRangeExt};
+use crate::executor::yield_now;
 use crate::store::Result;
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;

@@ -25,10 +25,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, info_span, instrument, warn, Instrument};
 use web_time::Instant;
 
+use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::store::utils::calculate_range_to_fetch;
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
