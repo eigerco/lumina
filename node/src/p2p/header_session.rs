@@ -23,7 +23,7 @@ pub(crate) struct HeaderSession {
 
 impl HeaderSession {
     /// Create a new HeaderSession responsible for fetching provided range of headers.
-    /// `HeaderRange` can be created manually, or more probably using
+    /// `BlockRange` can be created manually, or more probably using
     /// [`Store::get_stored_header_ranges`] to fetch existing header ranges and then using
     /// [`calculate_fetch_range`] to return a first range that should be fetched.
     /// Received headers range is sent over `cmd_tx` as a vector of unverified headers.

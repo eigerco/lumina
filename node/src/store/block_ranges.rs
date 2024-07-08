@@ -23,7 +23,7 @@ pub enum BlockRangesError {
     #[error(
         "Can not insert header range, it overlaps with one already existing in the store: {0}-{1}"
     )]
-    HeaderRangeOverlap(u64, u64),
+    BlockRangeOverlap(u64, u64),
 
     /// Store only allows inserts that grow existing header ranges, or starting a new network head,
     /// ahead of all the existing ranges
@@ -43,7 +43,7 @@ impl BlockRangesError {
     }
 
     fn header_range_overlap(range: &BlockRange) -> BlockRangesError {
-        BlockRangesError::HeaderRangeOverlap(*range.start(), *range.end())
+        BlockRangesError::BlockRangeOverlap(*range.start(), *range.end())
     }
 }
 
@@ -450,9 +450,9 @@ impl Display for BlockRanges {
     }
 }
 
-pub(crate) struct PrintableHeaderRange(pub RangeInclusive<u64>);
+pub(crate) struct PrintableBlockRange(pub(crate) RangeInclusive<u64>);
 
-impl Display for PrintableHeaderRange {
+impl Display for PrintableBlockRange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}-{}", self.0.start(), self.0.end())
     }
@@ -567,47 +567,47 @@ mod tests {
         let result = new_block_ranges([1..=2])
             .check_insertion_constrains(1..=1)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(1, 1)));
+        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(1, 1)));
 
         let result = new_block_ranges([1..=2])
             .check_insertion_constrains(2..=2)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(2, 2)));
+        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(2, 2)));
 
         let result = new_block_ranges([1..=4])
             .check_insertion_constrains(2..=8)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(2, 4)));
+        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(2, 4)));
 
         let result = new_block_ranges([1..=4])
             .check_insertion_constrains(2..=3)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(2, 3)));
+        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(2, 3)));
 
         let result = new_block_ranges([5..=9])
             .check_insertion_constrains(1..=5)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(5, 5)));
+        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(5, 5)));
 
         let result = new_block_ranges([5..=8])
             .check_insertion_constrains(2..=8)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(5, 8)));
+        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(5, 8)));
 
         let result = new_block_ranges([1..=3, 6..=9])
             .check_insertion_constrains(3..=6)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(3, 6)));
+        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(3, 6)));
 
         let result = new_block_ranges([1..=3, 5..=6])
             .check_insertion_constrains(3..=9)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(3, 6)));
+        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(3, 6)));
 
         let result = new_block_ranges([2..=3, 5..=6])
             .check_insertion_constrains(1..=5)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::HeaderRangeOverlap(2, 5)));
+        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(2, 5)));
     }
 
     #[test]

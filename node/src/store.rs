@@ -532,7 +532,7 @@ mod tests {
         assert!(matches!(
             s.insert(header101).await,
             Err(StoreError::BlockRangesError(
-                BlockRangesError::HeaderRangeOverlap(101, 101)
+                BlockRangesError::BlockRangeOverlap(101, 101)
             ))
         ));
     }
@@ -558,7 +558,7 @@ mod tests {
         assert!(matches!(
             insert_existing_result,
             Err(StoreError::BlockRangesError(
-                BlockRangesError::HeaderRangeOverlap(30, 30)
+                BlockRangesError::BlockRangeOverlap(30, 30)
             ))
         ));
     }
