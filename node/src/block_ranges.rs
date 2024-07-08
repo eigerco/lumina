@@ -1,3 +1,5 @@
+//! Ranges utilities
+
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, RangeInclusive, Sub};
