@@ -96,7 +96,7 @@ impl BlockRangeExt for BlockRange {
         debug_assert!(self.validate().is_ok());
         debug_assert!(other.validate().is_ok());
 
-        // `self` is partial set of `other`, case 1
+        // `self` overlaps with start of `other`
         //
         // self:  |------|
         // other:     |------|
@@ -104,7 +104,7 @@ impl BlockRangeExt for BlockRange {
             return true;
         }
 
-        // `self` is partial set of `other`, case 2
+        // `self` overlaps with end of `other`
         //
         // self:      |------|
         // other: |------|
@@ -158,7 +158,7 @@ impl<'de> serde::Deserialize<'de> for BlockRanges {
 }
 
 impl BlockRanges {
-    /// Create and empty `BlockRanges`.
+    /// Create new, empty `BlockRanges`.
     pub fn new() -> BlockRanges {
         BlockRanges(SmallVec::new())
     }
@@ -201,9 +201,7 @@ impl BlockRanges {
         self.0.first().map(|r| *r.start())
     }
 
-    /// Returns the start index and end index of the affected ranges.
-    ///
-    /// An affected range is the one that overlaps or touches `range`.
+    /// Returns first and last index of ranges overlapping or touching provided `range`.
     fn find_affected_ranges(&self, range: impl Borrow<BlockRange>) -> Option<(usize, usize)> {
         let range = range.borrow();
         debug_assert!(range.validate().is_ok());
@@ -219,8 +217,7 @@ impl BlockRanges {
 
                 end_idx = Some(i);
             } else if end_idx.is_some() {
-                // We reached from an affected range to a non-affected range.
-                // That means there nothing else to find.
+                // Ranges are sorted, we can skip checking the rest.
                 break;
             }
         }
@@ -228,17 +225,17 @@ impl BlockRanges {
         Some((start_idx?, end_idx?))
     }
 
-    /// Checks if `to_insert` is allowed to be inserted in the header store.
+    /// Checks if `to_insert` is valid range to be inserted into the header store.
     ///
-    /// This *must* be used implementing [`Store::insert`].
+    /// This *must* be used when implementing [`Store::insert`].
     ///
-    /// The constrains are the follow:
+    /// The constrains are as follows:
     ///
     /// * Insertion range must be valid.
-    /// * Insertion range should not overlap with any existing range.
+    /// * Insertion range must not overlap with any of the existing ranges.
     /// * Insertion range must be appended to the left or to the right of an existing range.
-    /// * Insertion is allow on empty `BlockRanges`.
-    /// * Insertion is allow for new HEAD range if it doesn't overlap with the current one.
+    /// * Insertion is always allowed on empty `BlockRanges`.
+    /// * New HEAD range can be created at the front if it doesn't overlap with existing one.
     ///
     /// Returns:
     ///
@@ -246,7 +243,7 @@ impl BlockRanges {
     /// * `Ok(true, false)` if `to_insert` range is going to be merged with its left neighbor.
     /// * `Ok(false, true)` if `to_insert` range is going to be merged with the right neighbor.
     /// * `Ok(true, true)` if `to_insert` range is going to be merged with both neighbors.
-    /// * `Ok(false, false)` if `to_insert` range is not going to be merged with its neighbors.
+    /// * `Ok(false, false)` if `to_insert` range is going to be inserted as a new HEAD range (without merging).
     ///
     /// [`Store::insert`]: crate::store::Store::insert
     pub fn check_insertion_constrains(

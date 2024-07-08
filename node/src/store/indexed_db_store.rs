@@ -587,13 +587,13 @@ async fn get_schema_version_from_db(db: &Rexie) -> Result<Option<u32>> {
         return Ok(Some(version));
     }
 
-    // If schema version do not exist in db but ranges store
+    // If schema version does not exist in db but ranges store
     // has values then assume we are in version 3.
     if !store_is_empty(&ranges_store).await? {
         return Ok(Some(3));
     }
 
-    // If ranges store do not have any values but header for height 1
+    // If ranges store does not have any values but header for height 1
     // exists, then we assume we are in version 2.
     let height_key = to_value(&1)?;
     let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
