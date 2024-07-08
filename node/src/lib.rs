@@ -1,8 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
-#[cfg(any(test, feature = "test-utils"))]
-#[cfg_attr(docsrs, doc(cfg(feature = "test-utils")))]
 pub mod block_ranges;
 pub mod blockstore;
 pub mod daser;
@@ -14,6 +12,8 @@ pub mod p2p;
 pub mod peer_tracker;
 pub mod store;
 pub mod syncer;
+#[cfg(any(test, feature = "test-utils"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-utils")))]
 pub mod test_utils;
 mod utils;
 
