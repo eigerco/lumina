@@ -146,8 +146,8 @@ pub trait Store: Send + Sync + Debug {
 
     /// Insert a range of headers into the store.
     ///
-    /// New insertion should pass all constrains as described on [`BlockRanges::check_insertion_constrains`]
-    /// and the call [`ExtendedHeader::verify`] on its neighbor headers.
+    /// New insertion should pass all the constrains in [`BlockRanges::check_insertion_constrains`],
+    /// additionaly it should be [`ExtendedHeader::verify`]ed against neighbor headers.
     async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
