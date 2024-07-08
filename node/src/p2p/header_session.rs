@@ -6,7 +6,7 @@ use tracing::debug;
 use crate::executor::spawn;
 use crate::p2p::header_ex::utils::HeaderRequestExt;
 use crate::p2p::{P2pCmd, P2pError};
-use crate::store::block_ranges::{BlockRange, BlockRangeExt};
+use crate::block_ranges::{BlockRange, BlockRangeExt};
 
 const MAX_AMOUNT_PER_REQ: u64 = 64;
 const MAX_CONCURRENT_REQS: usize = 8;
