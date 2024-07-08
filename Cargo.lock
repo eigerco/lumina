@@ -5999,8 +5999,3 @@ dependencies = [
  "quote",
  "syn 2.0.66",
 ]
-
-[[patch.unused]]
-name = "libp2p-identity"
-version = "0.2.8"
-source = "git+https://github.com/libp2p/rust-libp2p?rev=60e32c9d3b4bee42ac698791e917e1587eaa1388#60e32c9d3b4bee42ac698791e917e1587eaa1388"
