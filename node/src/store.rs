@@ -529,12 +529,15 @@ mod tests {
         let header101 = gen.next();
         s.insert(header101.clone()).await.unwrap();
 
-        assert!(matches!(
-            s.insert(header101).await,
-            Err(StoreError::BlockRangesError(
-                BlockRangesError::BlockRangeOverlap(101, 101)
-            ))
-        ));
+        let error = match s.insert(header101).await {
+            Err(StoreError::BlockRangesError(e)) => e,
+            res => panic!("Invalid result: {res:?}"),
+        };
+
+        assert_eq!(
+            error,
+            BlockRangesError::BlockRangeOverlap(101..=101, 101..=101)
+        );
     }
 
     #[rstest]
@@ -554,13 +557,11 @@ mod tests {
         let header29 = s.get_by_height(29).await.unwrap();
         let header30 = gen.next_of(&header29);
 
-        let insert_existing_result = s.insert(header30).await;
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::BlockRangesError(
-                BlockRangesError::BlockRangeOverlap(30, 30)
-            ))
-        ));
+        let error = match s.insert(header30).await {
+            Err(StoreError::BlockRangesError(e)) => e,
+            res => panic!("Invalid result: {res:?}"),
+        };
+        assert_eq!(error, BlockRangesError::BlockRangeOverlap(30..=30, 30..=30));
     }
 
     #[rstest]

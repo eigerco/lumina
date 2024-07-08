@@ -9,45 +9,31 @@ use smallvec::SmallVec;
 pub type BlockRange = RangeInclusive<u64>;
 
 /// Errors that can be produced by `BlockRanges`.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum BlockRangesError {
-    /// Not a valid block range.
-    #[error("Invalid block range: {0}-{1}")]
-    InvalidBlockRange(u64, u64),
-
     /// Block ranges must be sorted.
     #[error("Block ranges are not sorted")]
     UnsortedBlockRanges,
 
-    /// Store already contains some of the headers from the range that's being inserted
-    #[error(
-        "Can not insert header range, it overlaps with one already existing in the store: {0}-{1}"
-    )]
-    BlockRangeOverlap(u64, u64),
+    /// Not a valid block range.
+    #[error("Invalid block range: {}", .0.display())]
+    InvalidBlockRange(BlockRange),
 
-    /// Store only allows inserts that grow existing header ranges, or starting a new network head,
-    /// ahead of all the existing ranges
-    #[error("Trying to insert new header range at disallowed position: {0}-{1}")]
-    InsertPlacementDisallowed(u64, u64),
+    /// Provided range overlaps with another one.
+    #[error("Insertion constrain not satisfied: Provided range ({}) overlaps with {}", .0.display(), .1.display())]
+    BlockRangeOverlap(BlockRange, BlockRange),
+
+    /// Provided range do not have any adjacent neightbors.
+    #[error(
+        "Insertion constrain not satified: Provided range ({}) do not have any adjacent neighbors", .0.display()
+    )]
+    NoAdjacentNeighbors(BlockRange),
 }
 
 type Result<T, E = BlockRangesError> = std::result::Result<T, E>;
 
-impl BlockRangesError {
-    fn invalid_block_range(range: &BlockRange) -> BlockRangesError {
-        BlockRangesError::InvalidBlockRange(*range.start(), *range.end())
-    }
-
-    fn insert_placement_disallowed(range: &BlockRange) -> BlockRangesError {
-        BlockRangesError::InsertPlacementDisallowed(*range.start(), *range.end())
-    }
-
-    fn header_range_overlap(range: &BlockRange) -> BlockRangesError {
-        BlockRangesError::BlockRangeOverlap(*range.start(), *range.end())
-    }
-}
-
 pub(crate) trait BlockRangeExt {
+    fn display(&self) -> BlockRangeDisplay;
     fn validate(&self) -> Result<()>;
     fn len(&self) -> u64;
     fn is_adjacent(&self, other: &BlockRange) -> bool;
@@ -55,12 +41,24 @@ pub(crate) trait BlockRangeExt {
     fn left_of(&self, other: &BlockRange) -> bool;
 }
 
+pub(crate) struct BlockRangeDisplay<'a>(&'a RangeInclusive<u64>);
+
+impl<'a> Display for BlockRangeDisplay<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}", self.0.start(), self.0.end())
+    }
+}
+
 impl BlockRangeExt for BlockRange {
+    fn display(&self) -> BlockRangeDisplay {
+        BlockRangeDisplay(self)
+    }
+
     fn validate(&self) -> Result<()> {
         if *self.start() > 0 && self.start() <= self.end() {
             Ok(())
         } else {
-            Err(BlockRangesError::invalid_block_range(self))
+            Err(BlockRangesError::InvalidBlockRange(self.to_owned()))
         }
     }
 
@@ -270,7 +268,7 @@ impl BlockRanges {
         }
 
         let Some((first_idx, last_idx)) = self.find_affected_ranges(to_insert) else {
-            return Err(BlockRangesError::insert_placement_disallowed(to_insert));
+            return Err(BlockRangesError::NoAdjacentNeighbors(to_insert.to_owned()));
         };
 
         let first = &self.0[first_idx];
@@ -281,8 +279,10 @@ impl BlockRanges {
             0 => unreachable!(),
             1 => {
                 if first.is_overlapping(to_insert) {
-                    let overlap = calc_overlap(to_insert, first, last);
-                    Err(BlockRangesError::header_range_overlap(&overlap))
+                    Err(BlockRangesError::BlockRangeOverlap(
+                        to_insert.to_owned(),
+                        calc_overlap(to_insert, first, last),
+                    ))
                 } else if first.left_of(to_insert) {
                     Ok((true, false))
                 } else {
@@ -293,14 +293,16 @@ impl BlockRanges {
                 if first.is_adjacent(to_insert) && last.is_adjacent(to_insert) {
                     Ok((true, true))
                 } else {
-                    let overlap = calc_overlap(to_insert, first, last);
-                    Err(BlockRangesError::header_range_overlap(&overlap))
+                    Err(BlockRangesError::BlockRangeOverlap(
+                        to_insert.to_owned(),
+                        calc_overlap(to_insert, first, last),
+                    ))
                 }
             }
-            _ => {
-                let overlap = calc_overlap(to_insert, first, last);
-                Err(BlockRangesError::header_range_overlap(&overlap))
-            }
+            _ => Err(BlockRangesError::BlockRangeOverlap(
+                to_insert.to_owned(),
+                calc_overlap(to_insert, first, last),
+            )),
         }
     }
 
@@ -441,20 +443,12 @@ impl Display for BlockRanges {
         write!(f, "[")?;
         for (idx, range) in self.0.iter().enumerate() {
             if idx == 0 {
-                write!(f, "{}-{}", range.start(), range.end())?;
+                write!(f, "{}", range.display())?;
             } else {
-                write!(f, ", {}-{}", range.start(), range.end())?;
+                write!(f, ", {}", range.display())?;
             }
         }
         write!(f, "]")
-    }
-}
-
-pub(crate) struct PrintableBlockRange(pub(crate) RangeInclusive<u64>);
-
-impl Display for PrintableBlockRange {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}", self.0.start(), self.0.end())
     }
 }
 
@@ -567,47 +561,47 @@ mod tests {
         let result = new_block_ranges([1..=2])
             .check_insertion_constrains(1..=1)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(1, 1)));
+        assert_eq!(result, BlockRangesError::BlockRangeOverlap(1..=1, 1..=1));
 
         let result = new_block_ranges([1..=2])
             .check_insertion_constrains(2..=2)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(2, 2)));
+        assert_eq!(result, BlockRangesError::BlockRangeOverlap(2..=2, 2..=2));
 
         let result = new_block_ranges([1..=4])
             .check_insertion_constrains(2..=8)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(2, 4)));
+        assert_eq!(result, BlockRangesError::BlockRangeOverlap(2..=8, 2..=4));
 
         let result = new_block_ranges([1..=4])
             .check_insertion_constrains(2..=3)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(2, 3)));
+        assert_eq!(result, BlockRangesError::BlockRangeOverlap(2..=3, 2..=3));
 
         let result = new_block_ranges([5..=9])
             .check_insertion_constrains(1..=5)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(5, 5)));
+        assert_eq!(result, BlockRangesError::BlockRangeOverlap(1..=5, 5..=5));
 
         let result = new_block_ranges([5..=8])
             .check_insertion_constrains(2..=8)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(5, 8)));
+        assert_eq!(result, BlockRangesError::BlockRangeOverlap(2..=8, 5..=8));
 
         let result = new_block_ranges([1..=3, 6..=9])
             .check_insertion_constrains(3..=6)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(3, 6)));
+        assert_eq!(result, BlockRangesError::BlockRangeOverlap(3..=6, 3..=6));
 
         let result = new_block_ranges([1..=3, 5..=6])
             .check_insertion_constrains(3..=9)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(3, 6)));
+        assert_eq!(result, BlockRangesError::BlockRangeOverlap(3..=9, 3..=6));
 
         let result = new_block_ranges([2..=3, 5..=6])
             .check_insertion_constrains(1..=5)
             .unwrap_err();
-        assert!(matches!(result, BlockRangesError::BlockRangeOverlap(2, 5)));
+        assert_eq!(result, BlockRangesError::BlockRangeOverlap(1..=5, 2..=5));
     }
 
     #[test]
@@ -615,26 +609,17 @@ mod tests {
         let result = new_block_ranges([1..=2, 7..=9])
             .check_insertion_constrains(4..=4)
             .unwrap_err();
-        assert!(matches!(
-            result,
-            BlockRangesError::InsertPlacementDisallowed(4, 4)
-        ));
+        assert_eq!(result, BlockRangesError::NoAdjacentNeighbors(4..=4));
 
         let result = new_block_ranges([1..=2, 8..=9])
             .check_insertion_constrains(4..=6)
             .unwrap_err();
-        assert!(matches!(
-            result,
-            BlockRangesError::InsertPlacementDisallowed(4, 6)
-        ));
+        assert_eq!(result, BlockRangesError::NoAdjacentNeighbors(4..=6));
 
         let result = new_block_ranges([4..=5, 7..=8])
             .check_insertion_constrains(1..=2)
             .unwrap_err();
-        assert!(matches!(
-            result,
-            BlockRangesError::InsertPlacementDisallowed(1, 2)
-        ));
+        assert_eq!(result, BlockRangesError::NoAdjacentNeighbors(1..=2));
     }
 
     #[test]
