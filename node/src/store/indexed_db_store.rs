@@ -75,7 +75,7 @@ impl IndexedDbStore {
 
         // NOTE: Rexie does not expose any migration functionality, so we
         // write our version in the store in order to handle it properly.
-        match get_schema_version_from_db(&rexie).await? {
+        match detect_schema_version(&rexie).await? {
             Some(schema_version) => {
                 if schema_version > DB_VERSION {
                     let e = format!(
@@ -100,7 +100,7 @@ impl IndexedDbStore {
 
         // Force us to write migrations!
         debug_assert_eq!(
-            get_schema_version_from_db(&rexie).await?,
+            detect_schema_version(&rexie).await?,
             Some(DB_VERSION),
             "Some migrations are missing"
         );
@@ -572,8 +572,9 @@ async fn verify_against_neighbours(
     Ok(())
 }
 
-/// Similar to `get_schema_version` but detects older schema versions.
-async fn get_schema_version_from_db(db: &Rexie) -> Result<Option<u32>> {
+/// Get schema version from the db, or perform a heuristic to try to determine
+/// version used (for verisons <4).
+async fn detect_schema_version(db: &Rexie) -> Result<Option<u32>> {
     let tx = db.transaction(
         &[HEADER_STORE_NAME, RANGES_STORE_NAME, SCHEMA_STORE_NAME],
         TransactionMode::ReadOnly,
@@ -639,7 +640,7 @@ async fn get_last_header_v2(store: &rexie::Store) -> Result<ExtendedHeader> {
 }
 
 async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
-    let Some(version) = get_schema_version_from_db(db).await? else {
+    let Some(version) = detect_schema_version(db).await? else {
         // New database.
         return Ok(());
     };
