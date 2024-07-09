@@ -237,7 +237,7 @@ impl BlockRanges {
     ///
     /// This *must* be used when implementing [`Store::insert`].
     ///
-    /// The constrains are as follows:
+    /// The constraints are as follows:
     ///
     /// * Insertion range must be valid.
     /// * Insertion range must not overlap with any of the existing ranges.
@@ -247,14 +247,14 @@ impl BlockRanges {
     ///
     /// Returns:
     ///
-    /// * `Err(_)` if constrains are not met.
+    /// * `Err(_)` if constraints are not met.
     /// * `Ok(true, false)` if `to_insert` range is going to be merged with its left neighbor.
     /// * `Ok(false, true)` if `to_insert` range is going to be merged with the right neighbor.
     /// * `Ok(true, true)` if `to_insert` range is going to be merged with both neighbors.
     /// * `Ok(false, false)` if `to_insert` range is going to be inserted as a new HEAD range (without merging).
     ///
     /// [`Store::insert`]: crate::store::Store::insert
-    pub fn check_insertion_constrains(
+    pub fn check_insertion_constraints(
         &self,
         to_insert: impl Borrow<BlockRange>,
     ) -> Result<(bool, bool)> {
@@ -509,32 +509,32 @@ mod tests {
     #[test]
     fn check_range_insert_append() {
         let (prev_exists, next_exists) = new_block_ranges([])
-            .check_insertion_constrains(1..=5)
+            .check_insertion_constraints(1..=5)
             .unwrap();
         assert!(!prev_exists);
         assert!(!next_exists);
 
         let (prev_exists, next_exists) = new_block_ranges([1..=4])
-            .check_insertion_constrains(5..=5)
+            .check_insertion_constraints(5..=5)
             .unwrap();
         assert!(prev_exists);
         assert!(!next_exists);
 
         let (prev_exists, next_exists) = new_block_ranges([1..=5])
-            .check_insertion_constrains(6..=9)
+            .check_insertion_constraints(6..=9)
             .unwrap();
         assert!(prev_exists);
         assert!(!next_exists);
 
         let (prev_exists, next_exists) = new_block_ranges([6..=8])
-            .check_insertion_constrains(2..=5)
+            .check_insertion_constraints(2..=5)
             .unwrap();
         assert!(!prev_exists);
         assert!(next_exists);
 
         // Allow inserting a new HEAD range
         let (prev_exists, next_exists) = new_block_ranges([1..=5])
-            .check_insertion_constrains(7..=9)
+            .check_insertion_constraints(7..=9)
             .unwrap();
         assert!(!prev_exists);
         assert!(!next_exists);
@@ -543,19 +543,19 @@ mod tests {
     #[test]
     fn check_range_insert_with_consolidation() {
         let (prev_exists, next_exists) = new_block_ranges([1..=3, 6..=9])
-            .check_insertion_constrains(4..=5)
+            .check_insertion_constraints(4..=5)
             .unwrap();
         assert!(prev_exists);
         assert!(next_exists);
 
         let (prev_exists, next_exists) = new_block_ranges([1..=2, 5..=5, 8..=9])
-            .check_insertion_constrains(3..=4)
+            .check_insertion_constraints(3..=4)
             .unwrap();
         assert!(prev_exists);
         assert!(next_exists);
 
         let (prev_exists, next_exists) = new_block_ranges([1..=2, 4..=4, 8..=9])
-            .check_insertion_constrains(5..=7)
+            .check_insertion_constraints(5..=7)
             .unwrap();
         assert!(prev_exists);
         assert!(next_exists);
@@ -564,47 +564,47 @@ mod tests {
     #[test]
     fn check_range_insert_overlapping() {
         let result = new_block_ranges([1..=2])
-            .check_insertion_constrains(1..=1)
+            .check_insertion_constraints(1..=1)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::BlockRangeOverlap(1..=1, 1..=1));
 
         let result = new_block_ranges([1..=2])
-            .check_insertion_constrains(2..=2)
+            .check_insertion_constraints(2..=2)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::BlockRangeOverlap(2..=2, 2..=2));
 
         let result = new_block_ranges([1..=4])
-            .check_insertion_constrains(2..=8)
+            .check_insertion_constraints(2..=8)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::BlockRangeOverlap(2..=8, 2..=4));
 
         let result = new_block_ranges([1..=4])
-            .check_insertion_constrains(2..=3)
+            .check_insertion_constraints(2..=3)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::BlockRangeOverlap(2..=3, 2..=3));
 
         let result = new_block_ranges([5..=9])
-            .check_insertion_constrains(1..=5)
+            .check_insertion_constraints(1..=5)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::BlockRangeOverlap(1..=5, 5..=5));
 
         let result = new_block_ranges([5..=8])
-            .check_insertion_constrains(2..=8)
+            .check_insertion_constraints(2..=8)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::BlockRangeOverlap(2..=8, 5..=8));
 
         let result = new_block_ranges([1..=3, 6..=9])
-            .check_insertion_constrains(3..=6)
+            .check_insertion_constraints(3..=6)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::BlockRangeOverlap(3..=6, 3..=6));
 
         let result = new_block_ranges([1..=3, 5..=6])
-            .check_insertion_constrains(3..=9)
+            .check_insertion_constraints(3..=9)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::BlockRangeOverlap(3..=9, 3..=6));
 
         let result = new_block_ranges([2..=3, 5..=6])
-            .check_insertion_constrains(1..=5)
+            .check_insertion_constraints(1..=5)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::BlockRangeOverlap(1..=5, 2..=5));
     }
@@ -612,17 +612,17 @@ mod tests {
     #[test]
     fn check_range_insert_invalid_placement() {
         let result = new_block_ranges([1..=2, 7..=9])
-            .check_insertion_constrains(4..=4)
+            .check_insertion_constraints(4..=4)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::NoAdjacentNeighbors(4..=4));
 
         let result = new_block_ranges([1..=2, 8..=9])
-            .check_insertion_constrains(4..=6)
+            .check_insertion_constraints(4..=6)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::NoAdjacentNeighbors(4..=6));
 
         let result = new_block_ranges([4..=5, 7..=8])
-            .check_insertion_constrains(1..=2)
+            .check_insertion_constraints(1..=2)
             .unwrap_err();
         assert_eq!(result, BlockRangesError::NoAdjacentNeighbors(1..=2));
     }

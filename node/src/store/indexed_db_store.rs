@@ -197,7 +197,7 @@ impl IndexedDbStore {
 
         let headers_range = head.height().value()..=tail.height().value();
         let (prev_exists, next_exists) =
-            header_ranges.check_insertion_constrains(&headers_range)?;
+            header_ranges.check_insertion_constraints(&headers_range)?;
 
         // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
         verify_against_neighbours(

@@ -265,7 +265,7 @@ impl RedbStore {
             let headers_range = head.height().value()..=tail.height().value();
 
             let (prev_exists, next_exists) =
-                header_ranges.check_insertion_constrains(&headers_range)?;
+                header_ranges.check_insertion_constraints(&headers_range)?;
 
             verify_against_neighbours(
                 &headers_table,
