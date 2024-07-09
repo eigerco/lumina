@@ -225,7 +225,7 @@ impl From<tokio::task::JoinError> for StoreError {
 // Needed for `Into<VerifiedExtendedHeaders>`
 impl From<Infallible> for StoreError {
     fn from(_: Infallible) -> Self {
-        // Infallable should not be possible to construct
+        // Infalliable should not be possible to construct
         unreachable!("Infallible failed")
     }
 }
@@ -1005,6 +1005,84 @@ mod tests {
         store.insert(fork.next()).await.unwrap_err();
     }
 
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn tail_removal_full_range<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let mut store = s;
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        store.insert(gen.next_many(32)).await.unwrap();
+        gen.skip(32);
+        store.insert(gen.next_many(64)).await.unwrap();
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        assert_eq!(stored_ranges, new_block_ranges([1..=32, 65..=128]));
+
+        store.remove_tail(32).await.unwrap();
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        assert_eq!(stored_ranges, new_block_ranges([65..=128]));
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn tail_removal_partial_range<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let mut store = s;
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        store.insert(gen.next_many(32)).await.unwrap();
+        gen.skip(32);
+        store.insert(gen.next_many(64)).await.unwrap();
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        assert_eq!(stored_ranges, new_block_ranges([1..=32, 65..=128]));
+
+        store.remove_tail(100).await.unwrap();
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        assert_eq!(stored_ranges, new_block_ranges([101..=128]));
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn tail_removal_everything<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let mut store = s;
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        store.insert(gen.next_many(32)).await.unwrap();
+        gen.skip(32);
+        store.insert(gen.next_many(64)).await.unwrap();
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        assert_eq!(stored_ranges, new_block_ranges([1..=32, 65..=128]));
+
+        store.remove_tail(256).await.unwrap();
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        assert!(stored_ranges.is_empty());
+    }
+
     /// Fills an empty store
     async fn fill_store<S: Store>(store: &mut S, amount: u64) -> ExtendedHeaderGenerator {
         assert!(!store.has_at(1).await, "Store is not empty");
@@ -1017,6 +1095,11 @@ mod tests {
             .expect("inserting test data failed");
 
         gen
+    }
+
+    // TODO: put it in a common place, duplicated from header_ranges.rs
+    fn new_block_ranges<const N: usize>(ranges: [BlockRange; N]) -> BlockRanges {
+        BlockRanges::from_vec(ranges.into_iter().collect()).expect("invalid BlockRanges")
     }
 
     async fn new_in_memory_store() -> InMemoryStore {

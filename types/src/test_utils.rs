@@ -274,7 +274,9 @@ impl ExtendedHeaderGenerator {
 
     /// Change the amount of time generator automatically adds to internal clock used to spoof
     /// header times
-    pub fn set_time_increment(&mut self, _delta: Duration)  {todo!()}
+    pub fn set_time_increment(&mut self, _delta: Duration) {
+        todo!()
+    }
 
     // private function which also increments time, since we cannot have multiple headers on the
     // exact same timestamp

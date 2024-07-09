@@ -3,6 +3,8 @@
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, RangeInclusive, Sub};
+use std::ops::{RangeBounds, RangeInclusive, Sub, SubAssign};
+use std::sync::mpsc::Iter;
 
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -443,6 +445,57 @@ impl Sub<&BlockRanges> for BlockRanges {
     }
 }
 
+impl Sub<RangeInclusive<u64>> for BlockRanges {
+    type Output = Self;
+
+    fn sub(mut self, range: RangeInclusive<u64>) -> Self::Output {
+        self.remove_relaxed(range).expect("shouldn't panic");
+        self
+    }
+}
+
+impl SubAssign<RangeInclusive<u64>> for BlockRanges {
+    fn sub_assign(&mut self, range: RangeInclusive<u64>) {
+        self.remove_relaxed(range).expect("shouldn't panic");
+    }
+}
+
+impl IntoIterator for BlockRanges {
+    type Item = u64;
+
+    type IntoIter = BlockRangesIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut ranges = self.0.into_iter();
+        let current_range = ranges.next();
+
+        BlockRangesIterator {
+            ranges,
+            current_range,
+        }
+    }
+}
+
+pub struct BlockRangesIterator {
+    ranges: smallvec::IntoIter<[RangeInclusive<u64>; 2]>,
+    current_range: Option<RangeInclusive<u64>>,
+}
+
+impl Iterator for BlockRangesIterator {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.current_range.as_mut()?.next();
+
+        if next.is_none() {
+            self.current_range = self.ranges.next();
+            return self.current_range.as_mut()?.next();
+        }
+
+        next
+    }
+}
+
 impl Display for BlockRanges {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[")?;
@@ -470,6 +523,16 @@ fn calc_overlap(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn block_ranges_iterator() {
+        let ranges = new_block_ranges([1..=5, 10..=15]);
+        let heights: Vec<_> = ranges.into_iter().collect();
+        assert_eq!(heights, vec![1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15]);
+
+        let empty_heights: Vec<u64> = new_block_ranges([]).into_iter().collect();
+        assert_eq!(empty_heights, Vec::<u64>::new())
+    }
 
     fn new_block_ranges<const N: usize>(ranges: [BlockRange; N]) -> BlockRanges {
         BlockRanges::from_vec(ranges.into_iter().collect()).expect("invalid BlockRanges")

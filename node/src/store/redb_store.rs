@@ -385,14 +385,11 @@ impl RedbStore {
     }
 
     async fn get_stored_ranges(&self) -> Result<BlockRanges> {
-        let ranges = self
-            .read_tx(|tx| {
-                let table = tx.open_table(RANGES_TABLE)?;
-                get_ranges(&table, HEADER_RANGES_KEY)
-            })
-            .await?;
-
-        Ok(ranges)
+        self.read_tx(|tx| {
+            let table = tx.open_table(RANGES_TABLE)?;
+            get_ranges(&table, HEADER_RANGES_KEY)
+        })
+        .await
     }
 
     async fn get_sampling_ranges(&self) -> Result<BlockRanges> {
@@ -401,6 +398,39 @@ impl RedbStore {
             get_ranges(&table, ACCEPTED_SAMPING_RANGES_KEY)
         })
         .await
+    }
+
+    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
+        self.write_tx(move |tx| {
+            let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
+            let mut headers_table = tx.open_table(HEADERS_TABLE)?;
+            let mut ranges_table = tx.open_table(RANGES_TABLE)?;
+
+            let mut header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
+
+            let to_remove = header_ranges.clone() - (cutoff+1..=u64::MAX);
+            header_ranges -= 1..=cutoff;
+            set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
+
+            for height in to_remove.into_iter() {
+                // TODO: remove sampling
+                let Some(header) = headers_table.remove(height)? else {
+                    warn!("header {height} present in ranges, missing in headers table");
+                    continue;
+                };
+
+                let Ok(header) = ExtendedHeader::decode(header.value()) else {
+                    warn!("header {height} present, but malformed");
+                    continue;
+                };
+
+                // TODO: is there _ANY_ value in keeping historical hashes?
+                if heights_table.remove(header.hash().as_bytes())?.is_none() {
+                    warn!("header {height} present, missing in heights table");
+                };
+            }
+            Ok(())
+        }).await
     }
 }
 
@@ -493,7 +523,9 @@ impl Store for RedbStore {
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         self.get_sampling_ranges().await
     }
-    async fn remove_tail(&self, height: u64) -> Result<()> { todo!()}
+    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
+        self.remove_tail(cutoff).await
+    }
 }
 
 fn verify_against_neighbours<R>(

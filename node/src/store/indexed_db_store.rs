@@ -366,6 +366,38 @@ impl IndexedDbStore {
 
         get_ranges(&store, ACCEPTED_SAMPLING_RANGES_KEY).await
     }
+
+    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
+        let tx = self.db.transaction(
+            &[HEADER_STORE_NAME, RANGES_STORE_NAME],
+            TransactionMode::ReadWrite,
+        )?;
+
+        let header_store = tx.store(HEADER_STORE_NAME)?;
+        let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
+        let ranges_store = tx.store(RANGES_STORE_NAME)?;
+
+        let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+
+        let to_remove = header_ranges.clone() - (cutoff+1..=u64::MAX);
+        header_ranges -= 1..=cutoff;
+        set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
+
+        for height in to_remove.into_iter() {
+            let jsvalue_height = to_value(&height)?;
+            let header = height_index.get(&jsvalue_height).await?;
+            // TODO:
+            /*
+            else {
+                warn!("header {height} present in ranges, missing in headers table");
+                continue;
+            };
+            */
+            let id = js_sys::Reflect::get(&header, "id")?;
+            web_sys::console::log_1(&header);
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -465,6 +497,11 @@ impl Store for IndexedDbStore {
 
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         let fut = SendWrapper::new(self.get_sampling_ranges());
+        fut.await
+    }
+
+    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
+        let fut = SendWrapper::new(self.remove_tail(cutoff));
         fut.await
     }
 }

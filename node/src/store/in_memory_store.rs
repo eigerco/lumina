@@ -127,10 +127,9 @@ impl InMemoryStore {
         }
     }
 
-    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
-        let inner = self.inner.write().await;
+    async fn remove_tail(&self, cutoff: u64) {
+        let mut inner = self.inner.write().await;
         inner.remove_tail(cutoff)
-
     }
 }
 
@@ -307,27 +306,22 @@ impl InMemoryStoreInner {
         Ok(Some(metadata.clone()))
     }
 
+    fn remove_tail(&mut self, cutoff: u64) {
+        // TODO: Some kind of split function?
+        let to_remove: BlockRanges = self.header_ranges.clone() - (cutoff + 1..=u64::MAX);
+        self.header_ranges -= 1..=cutoff;
 
-    fn remove_tail(&self, cutoff: u64) -> Result<()> {
-        let to_remove : BlockRanges = self.header_ranges.clone() - (cutoff+1..=u64::MAX).into();
-        self.header_ranges = self.header_ranges -  (1..=cutoff).into();
+        for height in to_remove.into_iter() {
+            self.sampling_data.remove(&height);
+            let Some(hash) = self.height_to_hash.remove(&height) else {
+                warn!("header {height} present in ranges is missing in height_to_hash");
+                continue;
+            };
 
-        // TODO: write iterator?
-        for range in to_remove.as_ref() {
-            for height in range {
-                self.sampling_data.remove(height);
-                let Some(hash) = self.height_to_hash.remove(height) else {
-                    warn!("header present in ranges is missing in height_to_hash");
-                    continue;
-                };
-
-                if self.headers.remove(&hash).is_none() {
-                    warn!("header present in height_to_hash missing");
-                };
-            }
+            if self.headers.remove(&hash).is_none() {
+                warn!("header {hash} present in height_to_hash missing");
+            };
         }
-
-        Ok(())
     }
 }
 
@@ -422,7 +416,7 @@ impl Store for InMemoryStore {
     }
 
     async fn remove_tail(&self, cutoff: u64) -> Result<()> {
-        todo!()
+        Ok(self.remove_tail(cutoff).await)
     }
 }
 

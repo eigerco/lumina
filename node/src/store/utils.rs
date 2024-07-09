@@ -166,8 +166,8 @@ pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_typ
     Ok(())
 }
 
-/// Given a reference_header, estimate height of the block produced at provided time, assuming 12s 
-/// per block. Result needs to be verified against real data in the store and should get more 
+/// Given a reference_header, estimate height of the block produced at provided time, assuming 12s
+/// per block. Result needs to be verified against real data in the store and should get more
 /// accurate the closer the reference_header is to the provided time.
 fn estimate_header_height_at_time(reference_header: &ExtendedHeader, time: Time) -> u64 {
     let reference_header_after = reference_header.time().after(time);
@@ -176,17 +176,26 @@ fn estimate_header_height_at_time(reference_header: &ExtendedHeader, time: Time)
         reference_header.time().duration_since(time)
     } else {
         time.duration_since(reference_header.time())
-    }.expect("time between headers should fit Duration");
+    }
+    .expect("time between headers should fit Duration");
 
     println!("time delta: {time_delta:?}");
 
-    let estimated_height_delta = time_delta.as_secs().div_ceil(BLOCK_PRODUCTION_TIME_ESTIMATE_SECS);
+    let estimated_height_delta = time_delta
+        .as_secs()
+        .div_ceil(BLOCK_PRODUCTION_TIME_ESTIMATE_SECS);
     println!("height delta: {estimated_height_delta:?}");
 
     if reference_header_after {
-        reference_header.height().value().saturating_sub(estimated_height_delta)
+        reference_header
+            .height()
+            .value()
+            .saturating_sub(estimated_height_delta)
     } else {
-        reference_header.height().value().saturating_add(estimated_height_delta)
+        reference_header
+            .height()
+            .value()
+            .saturating_add(estimated_height_delta)
     }
 }
 
