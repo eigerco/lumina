@@ -11,6 +11,7 @@ use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
+use smallvec::smallvec;
 use tokio::sync::Notify;
 use tracing::warn;
 use wasm_bindgen::JsValue;
@@ -624,21 +625,6 @@ async fn set_schema_version(store: &rexie::Store, version: u32) -> Result<()> {
     Ok(())
 }
 
-async fn get_last_header_v2(store: &rexie::Store) -> Result<ExtendedHeader> {
-    let store_head = store
-        .get_all(None, Some(1), None, Some(Direction::Prev))
-        .await?
-        .first()
-        .ok_or(StoreError::NotFound)?
-        .1
-        .to_owned();
-
-    let serialized_header = from_value::<ExtendedHeaderEntry>(store_head)?.header;
-
-    ExtendedHeader::decode(serialized_header.as_ref())
-        .map_err(|e| StoreError::CelestiaTypes(e.into()))
-}
-
 async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
     let Some(version) = detect_schema_version(db).await? else {
         // New database.
@@ -660,25 +646,17 @@ async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
     let schema_store = tx.store(SCHEMA_STORE_NAME)?;
 
-    let mut ranges = BlockRanges::default();
-
-    if version <= 2 {
-        match get_last_header_v2(&header_store).await {
+    let ranges = if version <= 2 {
+        match v2::get_head_header(&header_store).await {
             // On v2 there were no gaps between headers.
-            Ok(head) => ranges.insert_relaxed(1..=head.height().value())?,
-            Err(StoreError::NotFound) => {}
+            Ok(head) => BlockRanges::from_vec(smallvec![1..=head.height().value()])?,
+            Err(StoreError::NotFound) => BlockRanges::new(),
             Err(e) => return Err(e),
         }
     } else {
         // On v3 ranges existed but in different format.
-        for (_, raw_range) in ranges_store
-            .get_all(None, None, None, Some(Direction::Next))
-            .await?
-        {
-            let (start, end) = from_value::<(u64, u64)>(raw_range)?;
-            ranges.insert_relaxed(start..=end)?;
-        }
-    }
+        v3::get_header_ranges(&ranges_store).await?
+    };
 
     ranges_store.clear().await?;
     set_ranges(&ranges_store, HEADER_RANGES_KEY, &ranges).await?;
@@ -689,6 +667,43 @@ async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
     tx.commit().await?;
 
     Ok(())
+}
+
+mod v2 {
+    use super::*;
+
+    pub(super) async fn get_head_header(store: &rexie::Store) -> Result<ExtendedHeader> {
+        let store_head = store
+            .get_all(None, Some(1), None, Some(Direction::Prev))
+            .await?
+            .first()
+            .ok_or(StoreError::NotFound)?
+            .1
+            .to_owned();
+
+        let serialized_header = from_value::<ExtendedHeaderEntry>(store_head)?.header;
+
+        ExtendedHeader::decode(serialized_header.as_ref())
+            .map_err(|e| StoreError::CelestiaTypes(e.into()))
+    }
+}
+
+mod v3 {
+    use super::*;
+
+    pub(super) async fn get_header_ranges(store: &rexie::Store) -> Result<BlockRanges> {
+        let mut ranges = BlockRanges::default();
+
+        for (_, raw_range) in store
+            .get_all(None, None, None, Some(Direction::Next))
+            .await?
+        {
+            let (start, end) = from_value::<(u64, u64)>(raw_range)?;
+            ranges.insert_relaxed(start..=end)?;
+        }
+
+        Ok(ranges)
+    }
 }
 
 #[cfg(test)]

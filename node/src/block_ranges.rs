@@ -165,7 +165,7 @@ impl BlockRanges {
         BlockRanges(SmallVec::new())
     }
 
-    pub(crate) fn from_vec(ranges: SmallVec<[BlockRange; 2]>) -> Result<Self> {
+    pub fn from_vec(ranges: SmallVec<[BlockRange; 2]>) -> Result<Self> {
         let mut prev: Option<&RangeInclusive<u64>> = None;
 
         for range in &ranges {
@@ -181,6 +181,10 @@ impl BlockRanges {
         }
 
         Ok(BlockRanges(ranges))
+    }
+
+    pub fn into_inner(self) -> SmallVec<[BlockRange; 2]> {
+        self.0
     }
 
     /// Return whether `BlockRanges` contains provided height
