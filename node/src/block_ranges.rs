@@ -189,22 +189,22 @@ impl BlockRanges {
         self.0
     }
 
-    /// Return whether `BlockRanges` contains provided height
+    /// Return whether `BlockRanges` contains provided height.
     pub fn contains(&self, height: u64) -> bool {
         self.0.iter().any(|r| r.contains(&height))
     }
 
-    /// Return whether range is empty
+    /// Return whether range is empty.
     pub fn is_empty(&self) -> bool {
         self.0.iter().all(|r| r.is_empty())
     }
 
-    /// Return highest height in the range
+    /// Return highest height in the range.
     pub fn head(&self) -> Option<u64> {
         self.0.last().map(|r| *r.end())
     }
 
-    /// Return lowest height in the range
+    /// Return lowest height in the range.
     pub fn tail(&self) -> Option<u64> {
         self.0.first().map(|r| *r.start())
     }
