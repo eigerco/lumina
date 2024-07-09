@@ -49,6 +49,7 @@ pub fn test_node_config() -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
         p2p_local_keypair: node_keypair,
         p2p_bootnodes: vec![],
         p2p_listen_on: vec![],
+        sync_batch_size: 512,
         blockstore: InMemoryBlockstore::new(),
         store: InMemoryStore::new(),
     }

@@ -65,6 +65,8 @@ where
     pub p2p_bootnodes: Vec<Multiaddr>,
     /// List of the addresses where [`Node`] will listen for incoming connections.
     pub p2p_listen_on: Vec<Multiaddr>,
+    /// Maximum size of batches in which headers will be synced.
+    pub sync_batch_size: u64,
     /// The blockstore for bitswap.
     pub blockstore: B,
     /// The store for headers.
@@ -123,6 +125,7 @@ where
             store: store.clone(),
             p2p: p2p.clone(),
             event_pub: event_channel.publisher(),
+            batch_size: config.sync_batch_size,
         })?);
 
         let daser = Arc::new(Daser::start(DaserArgs {

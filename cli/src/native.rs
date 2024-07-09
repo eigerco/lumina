@@ -72,6 +72,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         p2p_local_keypair,
         p2p_bootnodes,
         p2p_listen_on: args.listen_addrs,
+        sync_batch_size: 512,
         blockstore,
         store,
     })
