@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
+pub mod block_ranges;
 pub mod blockstore;
 pub mod daser;
 pub mod events;

@@ -6,12 +6,11 @@ use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
-use dashmap::mapref::entry::Entry as DashMapEntry;
-use dashmap::DashMap;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
-use crate::store::header_ranges::{HeaderRanges, HeaderRangesExt, VerifiedExtendedHeaders};
+use crate::block_ranges::BlockRanges;
+use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 
 /// A non-persistent in memory [`Store`] implementation.
@@ -19,8 +18,6 @@ use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
 pub struct InMemoryStore {
     /// Mutable part
     inner: RwLock<InMemoryStoreInner>,
-    /// Maps header height to the header sampling metadata, used by DAS
-    sampling_data: DashMap<u64, SamplingMetadata>,
     /// Notify when a new header is added
     header_added_notifier: Notify,
 }
@@ -32,7 +29,11 @@ struct InMemoryStoreInner {
     /// Maps header height to its hash, in case we need to do lookup by height
     height_to_hash: HashMap<u64, Hash>,
     /// Source of truth about headers present in the db, used to synchronise inserts
-    stored_ranges: HeaderRanges,
+    header_ranges: BlockRanges,
+    /// Maps header height to the header sampling metadata
+    sampling_data: HashMap<u64, SamplingMetadata>,
+    /// Source of truth about accepted sampling ranges present in the db.
+    accepted_sampling_ranges: BlockRanges,
 }
 
 impl InMemoryStoreInner {
@@ -40,7 +41,9 @@ impl InMemoryStoreInner {
         Self {
             headers: HashMap::new(),
             height_to_hash: HashMap::new(),
-            stored_ranges: HeaderRanges::default(),
+            header_ranges: BlockRanges::default(),
+            sampling_data: HashMap::new(),
+            accepted_sampling_ranges: BlockRanges::default(),
         }
     }
 }
@@ -50,7 +53,6 @@ impl InMemoryStore {
     pub fn new() -> Self {
         InMemoryStore {
             inner: RwLock::new(InMemoryStoreInner::new()),
-            sampling_data: DashMap::new(),
             header_added_notifier: Notify::new(),
         }
     }
@@ -98,63 +100,46 @@ impl InMemoryStore {
         status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()> {
-        if !self.contains_height(height).await {
-            return Err(StoreError::NotFound);
-        }
-
-        match self.sampling_data.entry(height) {
-            DashMapEntry::Vacant(entry) => {
-                entry.insert(SamplingMetadata { status, cids });
-            }
-            DashMapEntry::Occupied(mut entry) => {
-                let metadata = entry.get_mut();
-                metadata.status = status;
-
-                for cid in cids {
-                    if !metadata.cids.contains(&cid) {
-                        metadata.cids.push(cid);
-                    }
-                }
-            }
-        }
-
-        Ok(())
+        self.inner
+            .write()
+            .await
+            .update_sampling_metadata(height, status, cids)
+            .await
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
-        if !self.contains_height(height).await {
-            return Err(StoreError::NotFound);
-        }
-
-        let Some(metadata) = self.sampling_data.get(&height) else {
-            return Ok(None);
-        };
-
-        Ok(Some(metadata.clone()))
+        self.inner.read().await.get_sampling_metadata(height).await
     }
 
-    async fn get_stored_ranges(&self) -> HeaderRanges {
+    async fn get_stored_ranges(&self) -> BlockRanges {
         self.inner.read().await.get_stored_ranges()
+    }
+
+    async fn get_accepted_sampling_ranges(&self) -> BlockRanges {
+        self.inner.read().await.get_accepted_sampling_ranges()
     }
 
     /// Clone the store and all its contents. Async fn due to internal use of async mutex.
     pub async fn async_clone(&self) -> Self {
         InMemoryStore {
             inner: RwLock::new(self.inner.read().await.clone()),
-            sampling_data: self.sampling_data.clone(),
             header_added_notifier: Notify::new(),
         }
     }
 }
 
 impl InMemoryStoreInner {
-    fn get_stored_ranges(&self) -> HeaderRanges {
-        self.stored_ranges.clone()
+    fn get_stored_ranges(&self) -> BlockRanges {
+        self.header_ranges.clone()
+    }
+
+    fn get_accepted_sampling_ranges(&self) -> BlockRanges {
+        self.accepted_sampling_ranges.clone()
     }
 
     #[inline]
     fn get_head_height(&self) -> Result<u64> {
-        self.stored_ranges.head().ok_or(StoreError::NotFound)
+        self.header_ranges.head().ok_or(StoreError::NotFound)
     }
 
     fn contains_hash(&self, hash: &Hash) -> bool {
@@ -166,7 +151,7 @@ impl InMemoryStoreInner {
     }
 
     fn contains_height(&self, height: u64) -> bool {
-        self.stored_ranges.contains(height)
+        self.header_ranges.contains(height)
     }
 
     fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
@@ -186,10 +171,10 @@ impl InMemoryStoreInner {
         };
 
         let headers_range = head.height().value()..=tail.height().value();
-        let range_scan_result = self.stored_ranges.check_range_insert(&headers_range)?;
+        let (prev_exists, next_exists) = self
+            .header_ranges
+            .check_insertion_constraints(&headers_range)?;
 
-        let prev_exists = headers_range.start() != range_scan_result.range.start();
-        let next_exists = headers_range.end() != range_scan_result.range.end();
         // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
         self.verify_against_neighbours(prev_exists.then_some(head), next_exists.then_some(tail))?;
 
@@ -222,7 +207,7 @@ impl InMemoryStoreInner {
             height_entry.insert(hash);
         }
 
-        self.stored_ranges.update_range(range_scan_result);
+        self.header_ranges.insert_relaxed(headers_range)?;
 
         Ok(())
     }
@@ -262,6 +247,58 @@ impl InMemoryStoreInner {
             highest_header.verify(&next)?;
         }
         Ok(())
+    }
+
+    async fn update_sampling_metadata(
+        &mut self,
+        height: u64,
+        status: SamplingStatus,
+        cids: Vec<Cid>,
+    ) -> Result<()> {
+        if !self.contains_height(height) {
+            return Err(StoreError::NotFound);
+        }
+
+        match self.sampling_data.entry(height) {
+            HashMapEntry::Vacant(entry) => {
+                entry.insert(SamplingMetadata { status, cids });
+            }
+            HashMapEntry::Occupied(mut entry) => {
+                let metadata = entry.get_mut();
+                metadata.status = status;
+
+                for cid in cids {
+                    if !metadata.cids.contains(&cid) {
+                        metadata.cids.push(cid);
+                    }
+                }
+            }
+        }
+
+        match status {
+            SamplingStatus::Accepted => self
+                .accepted_sampling_ranges
+                .insert_relaxed(height..=height)
+                .expect("invalid height"),
+            _ => self
+                .accepted_sampling_ranges
+                .remove_relaxed(height..=height)
+                .expect("invalid height"),
+        }
+
+        Ok(())
+    }
+
+    async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
+        if !self.contains_height(height) {
+            return Err(StoreError::NotFound);
+        }
+
+        let Some(metadata) = self.sampling_data.get(&height) else {
+            return Ok(None);
+        };
+
+        Ok(Some(metadata.clone()))
     }
 }
 
@@ -347,8 +384,12 @@ impl Store for InMemoryStore {
         self.get_sampling_metadata(height).await
     }
 
-    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges> {
+    async fn get_stored_header_ranges(&self) -> Result<BlockRanges> {
         Ok(self.get_stored_ranges().await)
+    }
+
+    async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
+        Ok(self.get_accepted_sampling_ranges().await)
     }
 }
 

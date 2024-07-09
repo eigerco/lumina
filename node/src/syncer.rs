@@ -25,10 +25,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, info_span, instrument, warn, Instrument};
 use web_time::Instant;
 
+use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::header_ranges::{HeaderRanges, PrintableHeaderRange};
 use crate::store::utils::calculate_range_to_fetch;
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
@@ -104,7 +104,7 @@ enum SyncerCmd {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SyncingInfo {
     /// Ranges of headers that are already synchronised
-    pub stored_headers: HeaderRanges,
+    pub stored_headers: BlockRanges,
     /// Syncing target. The latest height seen in the network that was successfully verified.
     pub subjective_head: u64,
 }
@@ -186,7 +186,7 @@ where
 }
 
 struct Ongoing {
-    batch: PrintableHeaderRange,
+    batch: BlockRange,
     cancellation_token: CancellationToken,
 }
 
@@ -315,7 +315,7 @@ where
         }
 
         if let Some(ongoing) = self.ongoing_batch.take() {
-            warn!("Cancelling fetching of {}", ongoing.batch);
+            warn!("Cancelling fetching of {}", ongoing.batch.display());
             ongoing.cancellation_token.cancel();
         }
     }
@@ -341,7 +341,7 @@ where
         let ongoing_batch = self
             .ongoing_batch
             .as_ref()
-            .map(|ongoing| format!("{}", ongoing.batch))
+            .map(|ongoing| format!("{}", ongoing.batch.display()))
             .unwrap_or_else(|| "None".to_string());
 
         info!("syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}");
@@ -495,7 +495,7 @@ where
         let cancellation_token = self.cancellation_token.child_token();
 
         self.ongoing_batch = Some(Ongoing {
-            batch: PrintableHeaderRange(next_batch.clone()),
+            batch: next_batch.clone(),
             cancellation_token: cancellation_token.clone(),
         });
 
@@ -520,8 +520,8 @@ where
             return;
         };
 
-        let from_height = *ongoing.batch.0.start();
-        let to_height = *ongoing.batch.0.end();
+        let from_height = *ongoing.batch.start();
+        let to_height = *ongoing.batch.end();
 
         let headers = match res {
             Ok(headers) => headers,

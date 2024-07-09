@@ -1,10 +1,12 @@
 use std::ops::RangeInclusive;
 
+#[cfg(any(test, feature = "test-utils"))]
+use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 
+use crate::block_ranges::{BlockRange, BlockRangeExt};
 use crate::executor::yield_now;
-use crate::store::header_ranges::{HeaderRange, RangeLengthExt};
-use crate::store::{Result, StoreError};
+use crate::store::Result;
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
 
@@ -15,7 +17,7 @@ pub(crate) fn calculate_range_to_fetch(
     store_headers: &[RangeInclusive<u64>],
     syncing_window_edge: Option<u64>,
     limit: u64,
-) -> HeaderRange {
+) -> BlockRange {
     let mut missing_range = get_most_recent_missing_range(head_height, store_headers);
 
     // truncate to syncing window, if height is known
@@ -38,7 +40,7 @@ pub(crate) fn calculate_range_to_fetch(
 fn get_most_recent_missing_range(
     head_height: u64,
     store_headers: &[RangeInclusive<u64>],
-) -> HeaderRange {
+) -> BlockRange {
     let mut store_headers_iter = store_headers.iter().rev();
 
     let Some(store_head_range) = store_headers_iter.next() else {
@@ -57,67 +59,95 @@ fn get_most_recent_missing_range(
     penultimate_range_end + 1..=store_head_range.start().saturating_sub(1)
 }
 
-pub(crate) fn try_consolidate_ranges(
-    left: &RangeInclusive<u64>,
-    right: &RangeInclusive<u64>,
-) -> Option<RangeInclusive<u64>> {
-    debug_assert!(left.start() <= left.end());
-    debug_assert!(right.start() <= right.end());
+/// Span of header that's been verified internally
+#[derive(Clone)]
+pub struct VerifiedExtendedHeaders(Vec<ExtendedHeader>);
 
-    if left.end() + 1 == *right.start() {
-        return Some(*left.start()..=*right.end());
-    }
+impl IntoIterator for VerifiedExtendedHeaders {
+    type Item = ExtendedHeader;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
 
-    if right.end() + 1 == *left.start() {
-        return Some(*right.start()..=*left.end());
-    }
-
-    None
-}
-
-pub(crate) fn ranges_intersection(
-    left: &RangeInclusive<u64>,
-    right: &RangeInclusive<u64>,
-) -> Option<RangeInclusive<u64>> {
-    debug_assert!(left.start() <= left.end());
-    debug_assert!(right.start() <= right.end());
-
-    if left.start() > right.end() || left.end() < right.start() {
-        return None;
-    }
-
-    match (left.start() >= right.start(), left.end() >= right.end()) {
-        (false, false) => Some(*right.start()..=*left.end()),
-        (false, true) => Some(right.clone()),
-        (true, false) => Some(left.clone()),
-        (true, true) => Some(*left.start()..=*right.end()),
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub(crate) struct RangeScanResult {
-    /// index of the range that header is being inserted into
-    pub range_index: usize,
-    /// updated bounds of the range header is being inserted into
-    pub range: HeaderRange,
-    /// index of the range that should be removed from the table, if we're consolidating two
-    /// ranges. None otherwise.
-    pub range_to_remove: Option<usize>,
+impl<'a> TryFrom<&'a [ExtendedHeader]> for VerifiedExtendedHeaders {
+    type Error = celestia_types::Error;
+
+    fn try_from(value: &'a [ExtendedHeader]) -> Result<Self, Self::Error> {
+        value.to_vec().try_into()
+    }
 }
 
-#[allow(unused)]
-pub(crate) fn verify_range_contiguous(headers: &[ExtendedHeader]) -> Result<()> {
-    let mut prev = None;
-    for h in headers {
-        let current_height = h.height().value();
-        if let Some(prev_height) = prev {
-            if prev_height + 1 != current_height {
-                return Err(StoreError::InsertRangeWithGap(prev_height, current_height));
-            }
-        }
-        prev = Some(current_height);
+impl From<VerifiedExtendedHeaders> for Vec<ExtendedHeader> {
+    fn from(value: VerifiedExtendedHeaders) -> Self {
+        value.0
     }
-    Ok(())
+}
+
+impl AsRef<[ExtendedHeader]> for VerifiedExtendedHeaders {
+    fn as_ref(&self) -> &[ExtendedHeader] {
+        &self.0
+    }
+}
+
+/// 1-length hedaer span is internally verified, this is valid
+impl From<[ExtendedHeader; 1]> for VerifiedExtendedHeaders {
+    fn from(value: [ExtendedHeader; 1]) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<ExtendedHeader> for VerifiedExtendedHeaders {
+    fn from(value: ExtendedHeader) -> Self {
+        Self(vec![value])
+    }
+}
+
+impl<'a> From<&'a ExtendedHeader> for VerifiedExtendedHeaders {
+    fn from(value: &ExtendedHeader) -> Self {
+        Self(vec![value.to_owned()])
+    }
+}
+
+impl TryFrom<Vec<ExtendedHeader>> for VerifiedExtendedHeaders {
+    type Error = celestia_types::Error;
+
+    fn try_from(headers: Vec<ExtendedHeader>) -> Result<Self, Self::Error> {
+        let Some(head) = headers.first() else {
+            return Ok(VerifiedExtendedHeaders(Vec::default()));
+        };
+
+        head.verify_adjacent_range(&headers[1..])?;
+
+        Ok(Self(headers))
+    }
+}
+
+impl VerifiedExtendedHeaders {
+    /// Create a new instance out of pre-checked vec of headers
+    ///
+    /// # Safety
+    ///
+    /// This function may produce invalid `VerifiedExtendedHeaders`, if passed range is not
+    /// validated manually
+    pub unsafe fn new_unchecked(headers: Vec<ExtendedHeader>) -> Self {
+        Self(headers)
+    }
+}
+
+/// Extends test header generator for easier insertion into the store
+pub trait ExtendedHeaderGeneratorExt {
+    /// Generate next amount verified headers
+    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders;
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
+    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders {
+        unsafe { VerifiedExtendedHeaders::new_unchecked(self.next_many(amount)) }
+    }
 }
 
 #[allow(unused)]
@@ -220,25 +250,5 @@ mod tests {
         let fetch_range =
             calculate_range_to_fetch(head_height, &[1..=2998, 3000..=3800], Some(3900), 500);
         assert_eq!(fetch_range, 3901..=4000);
-    }
-
-    #[test]
-    fn intersection_non_overlapping() {
-        assert_eq!(ranges_intersection(&(1..=2), &(3..=4)), None);
-        assert_eq!(ranges_intersection(&(1..=2), &(6..=9)), None);
-        assert_eq!(ranges_intersection(&(3..=8), &(1..=2)), None);
-        assert_eq!(ranges_intersection(&(1..=2), &(4..=6)), None);
-    }
-
-    #[test]
-    fn intersection_overlapping() {
-        assert_eq!(ranges_intersection(&(1..=2), &(2..=4)), Some(2..=2));
-        assert_eq!(ranges_intersection(&(1..=2), &(2..=2)), Some(2..=2));
-        assert_eq!(ranges_intersection(&(1..=5), &(2..=9)), Some(2..=5));
-        assert_eq!(ranges_intersection(&(4..=6), &(1..=9)), Some(4..=6));
-        assert_eq!(ranges_intersection(&(3..=7), &(5..=5)), Some(5..=5));
-        assert_eq!(ranges_intersection(&(3..=7), &(5..=6)), Some(5..=6));
-        assert_eq!(ranges_intersection(&(3..=5), &(3..=3)), Some(3..=3));
-        assert_eq!(ranges_intersection(&(3..=5), &(1..=4)), Some(3..=4));
     }
 }

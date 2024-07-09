@@ -14,7 +14,8 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub use crate::store::header_ranges::{HeaderRanges, VerifiedExtendedHeaders};
+pub use crate::block_ranges::{BlockRange, BlockRanges, BlockRangesError};
+pub use crate::store::utils::{ExtendedHeaderGeneratorExt, VerifiedExtendedHeaders};
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
@@ -28,9 +29,6 @@ mod indexed_db_store;
 #[cfg(not(target_arch = "wasm32"))]
 mod redb_store;
 
-pub use header_ranges::ExtendedHeaderGeneratorExt;
-
-pub(crate) mod header_ranges;
 pub(crate) mod utils;
 
 /// Sampling metadata for a block.
@@ -148,16 +146,18 @@ pub trait Store: Send + Sync + Debug {
 
     /// Insert a range of headers into the store.
     ///
-    /// Inserts are allowed at the front of the store or at the ends of any existing ranges. Edges
-    /// of inserted header ranges are verified against headers present in the store, if they
-    /// exist.
+    /// New insertion should pass all the constraints in [`BlockRanges::check_insertion_constraints`],
+    /// additionaly it should be [`ExtendedHeader::verify`]ed against neighbor headers.
     async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
         StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>;
 
-    /// Return a list of header ranges currenty held in store
-    async fn get_stored_header_ranges(&self) -> Result<HeaderRanges>;
+    /// Returns a list of header ranges currenty held in store.
+    async fn get_stored_header_ranges(&self) -> Result<BlockRanges>;
+
+    /// Returns a list of accepted sampling ranges currently held in store.
+    async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].
@@ -166,27 +166,6 @@ pub enum StoreError {
     /// Hash already exists in the store.
     #[error("Hash {0} already exists in store")]
     HashExists(Hash),
-
-    /// Height already exists in the store.
-    #[error("Height {0} already exists in store")]
-    HeightExists(u64),
-
-    /// Inserted height is not following store's current head.
-    #[error("Failed to append header at height {1}")]
-    NonContinuousAppend(u64, u64),
-
-    /// Store already contains some of the headers from the range that's being inserted
-    #[error("Failed to insert header range, it overlaps with one already existing in the store: {0}..={1}")]
-    HeaderRangeOverlap(u64, u64),
-
-    /// Store only allows inserts that grow existing header ranges, or starting a new network head,
-    /// ahead of all the existing ranges
-    #[error("Trying to insert new header range at disallowed position: {0}..={1}")]
-    InsertPlacementDisallowed(u64, u64),
-
-    /// Range of headers provided to insert is not contiguous
-    #[error("Provided header range has a gap between heights {0} and {1}")]
-    InsertRangeWithGap(u64, u64),
 
     /// Header validation has failed.
     #[error("Failed to validate header at height {0}")]
@@ -227,6 +206,10 @@ pub enum StoreError {
     /// Invalid range of headers provided.
     #[error("Invalid headers range")]
     InvalidHeadersRange,
+
+    /// An error propagated from [`BlockRanges`] methods.
+    #[error(transparent)]
+    BlockRangesError(#[from] BlockRangesError),
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -331,8 +314,6 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 
 #[cfg(test)]
 mod tests {
-    use self::header_ranges::ExtendedHeaderGeneratorExt;
-
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::{Error, Height};
@@ -547,10 +528,15 @@ mod tests {
         let header101 = gen.next();
         s.insert(header101.clone()).await.unwrap();
 
-        assert!(matches!(
-            s.insert(header101).await,
-            Err(StoreError::HeaderRangeOverlap(101, 101))
-        ));
+        let error = match s.insert(header101).await {
+            Err(StoreError::BlockRangesError(e)) => e,
+            res => panic!("Invalid result: {res:?}"),
+        };
+
+        assert_eq!(
+            error,
+            BlockRangesError::BlockRangeOverlap(101..=101, 101..=101)
+        );
     }
 
     #[rstest]
@@ -570,11 +556,11 @@ mod tests {
         let header29 = s.get_by_height(29).await.unwrap();
         let header30 = gen.next_of(&header29);
 
-        let insert_existing_result = s.insert(header30).await;
-        assert!(matches!(
-            insert_existing_result,
-            Err(StoreError::HeaderRangeOverlap(30, 30))
-        ));
+        let error = match s.insert(header30).await {
+            Err(StoreError::BlockRangesError(e)) => e,
+            res => panic!("Invalid result: {res:?}"),
+        };
+        assert_eq!(error, BlockRangesError::BlockRangeOverlap(30..=30, 30..=30));
     }
 
     #[rstest]

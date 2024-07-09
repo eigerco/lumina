@@ -29,11 +29,10 @@
 //! 5. Steps 3 and 4 are repeated concurently, unless we detect that all peers have disconnected.
 //!    At that point Daser cleans the queue and moves back to step 1.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use celestia_tendermint::Time;
-use celestia_types::ExtendedHeader;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
@@ -47,7 +46,7 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::spawn;
 use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pError};
-use crate::store::{HeaderRanges, SamplingStatus, Store, StoreError};
+use crate::store::{BlockRanges, SamplingStatus, Store, StoreError};
 
 const MAX_SAMPLES_NEEDED: usize = 16;
 
@@ -134,16 +133,10 @@ where
     store: Arc<S>,
     max_samples_needed: usize,
     sampling_futs: FuturesUnordered<BoxFuture<'static, Result<(u64, bool)>>>,
-    queue: VecDeque<SamplingArgs>,
-    prev_stored_blocks: HeaderRanges,
+    queue: BlockRanges,
+    done: BlockRanges,
+    ongoing: BlockRanges,
     prev_head: Option<u64>,
-}
-
-#[derive(Debug)]
-struct SamplingArgs {
-    height: u64,
-    square_width: u16,
-    time: Time,
 }
 
 impl<S> Worker<S>
@@ -158,8 +151,9 @@ where
             store: args.store,
             max_samples_needed: MAX_SAMPLES_NEEDED,
             sampling_futs: FuturesUnordered::new(),
-            queue: VecDeque::new(),
-            prev_stored_blocks: HeaderRanges::default(),
+            queue: BlockRanges::default(),
+            done: BlockRanges::default(),
+            ongoing: BlockRanges::default(),
             prev_head: None,
         })
     }
@@ -229,10 +223,10 @@ where
 
         loop {
             // If we have a new HEAD queued, schedule it now!
-            if let Some(queue_front) = self.queue.front().map(|args| args.height) {
-                if queue_front > self.prev_head.unwrap_or(0) {
+            if let Some(queue_head) = self.queue.head() {
+                if queue_head > self.prev_head.unwrap_or(0) {
                     self.schedule_next_sample_block().await?;
-                    self.prev_head = Some(queue_front);
+                    self.prev_head = Some(queue_head);
                 }
             }
 
@@ -265,6 +259,9 @@ where
                     self.store
                         .update_sampling_metadata(height, status, Vec::new())
                         .await?;
+
+                    self.ongoing.remove_relaxed(height..=height).expect("invalid height");
+                    self.done.insert_relaxed(height..=height).expect("invalid height");
                 },
                 _ = &mut wait_new_head => {
                     wait_new_head = store.wait_new_head();
@@ -274,38 +271,63 @@ where
         }
 
         self.sampling_futs.clear();
-        self.queue.clear();
-        self.prev_stored_blocks = HeaderRanges::default();
+        self.queue = BlockRanges::default();
+        self.ongoing = BlockRanges::default();
+        self.done = BlockRanges::default();
         self.prev_head = None;
 
         Ok(())
     }
 
     async fn schedule_next_sample_block(&mut self) -> Result<()> {
-        let Some(args) = self.queue.pop_front() else {
-            return Ok(());
+        // Schedule the most recent un-sampled block.
+        let header = loop {
+            let Some(height) = self.queue.pop_head() else {
+                return Ok(());
+            };
+
+            match self.store.get_by_height(height).await {
+                Ok(header) => break header,
+                Err(StoreError::NotFound) => {
+                    // Height was pruned and our queue is inconsistent.
+                    // Repopulate queue and try again.
+                    self.populate_queue().await?;
+                }
+                Err(e) => return Err(e.into()),
+            }
         };
 
+        let height = header.height().value();
+        let square_width = header.dah.square_width();
+
         // Make sure that the block is still in the sampling window.
-        if !in_sampling_window(args.time) {
-            // Queue is sorted by block height in descending order,
-            // so as soon as we reach a block that is not in the sampling
+        if !in_sampling_window(header.time()) {
+            // As soon as we reach a block that is not in the sampling
             // window, it means the rest wouldn't be either.
-            self.queue.clear();
+            self.queue
+                .remove_relaxed(1..=height)
+                .expect("invalid height");
+            self.done
+                .insert_relaxed(1..=height)
+                .expect("invalid height");
             return Ok(());
         }
 
         // Select random shares to be sampled
-        let share_indexes = random_indexes(args.square_width, self.max_samples_needed);
+        let share_indexes = random_indexes(square_width, self.max_samples_needed);
 
         // Update the CID list before we start sampling, otherwise it's possible for us
         // to leak CIDs causing associated blocks to never get cleaned from blockstore.
         let cids = share_indexes
             .iter()
-            .map(|(row, col)| sample_cid(*row, *col, args.height))
+            .map(|(row, col)| sample_cid(*row, *col, height))
             .collect::<Result<Vec<_>, _>>()?;
+
+        // NOTE: Pruning window is always 1 hour bigger than sampling
+        // window, so after `in_sampling_window` if statement we shouldn't
+        // care about `StoreError::NotFound` anymore.
         self.store
-            .update_sampling_metadata(args.height, SamplingStatus::Unknown, cids)
+            .update_sampling_metadata(height, SamplingStatus::Unknown, cids)
             .await?;
 
         let p2p = self.p2p.clone();
@@ -316,8 +338,8 @@ where
             let now = Instant::now();
 
             event_pub.send(NodeEvent::SamplingStarted {
-                height: args.height,
-                square_width: args.square_width,
+                height,
+                square_width,
                 shares: share_indexes.iter().copied().collect(),
             });
 
@@ -328,7 +350,7 @@ where
                     let p2p = p2p.clone();
 
                     async move {
-                        let res = p2p.get_sample(row, col, args.height).await;
+                        let res = p2p.get_sample(row, col, height).await;
                         (row, col, res)
                     }
                 })
@@ -351,8 +373,8 @@ where
                 block_accepted &= share_accepted;
 
                 event_pub.send(NodeEvent::ShareSamplingResult {
-                    height: args.height,
-                    square_width: args.square_width,
+                    height,
+                    square_width,
                     row,
                     column,
                     accepted: share_accepted,
@@ -360,16 +382,19 @@ where
             }
 
             event_pub.send(NodeEvent::SamplingFinished {
-                height: args.height,
+                height,
                 accepted: block_accepted,
                 took: now.elapsed(),
             });
 
-            Ok((args.height, block_accepted))
+            Ok((height, block_accepted))
         }
         .boxed();
 
         self.sampling_futs.push(fut);
+        self.ongoing
+            .insert_relaxed(height..=height)
+            .expect("invalid height");
 
         Ok(())
     }
@@ -381,68 +406,13 @@ where
     /// limitation that's coming from bitswap: only way for us to know if sampling
     /// failed is via timeout.
     async fn populate_queue(&mut self) -> Result<()> {
-        let stored_blocks = self.store.get_stored_header_ranges().await?;
-        let first_check = self.prev_stored_blocks.is_empty();
+        let stored = self.store.get_stored_header_ranges().await?;
+        let accepted = self.store.get_accepted_sampling_ranges().await?;
 
-        'outer: for block_range in stored_blocks.clone().into_inner().into_iter().rev() {
-            for height in block_range.rev() {
-                if self.prev_stored_blocks.contains(height) {
-                    // Skip blocks that were checked before
-                    continue;
-                }
-
-                // Optimization: We check if the block was accepted only if this is
-                // the first time we check the store (i.e. prev_stored_blocks is empty),
-                // otherwise we can safely assume that block needs sampling.
-                if first_check && is_block_accepted(&*self.store, height).await {
-                    // Skip already sampled blocks
-                    continue;
-                }
-
-                let Ok(header) = self.store.get_by_height(height).await else {
-                    // We reached the tail of the known heights
-                    break 'outer;
-                };
-
-                if !in_sampling_window(header.time()) {
-                    // We've reached the tail of the sampling window
-                    break 'outer;
-                }
-
-                queue_sampling(&mut self.queue, &header);
-            }
-        }
-
-        self.prev_stored_blocks = stored_blocks;
+        self.queue = stored - accepted - &self.done - &self.ongoing;
 
         Ok(())
     }
-}
-
-/// Queue sampling in descending order
-fn queue_sampling(queue: &mut VecDeque<SamplingArgs>, header: &ExtendedHeader) {
-    let args = SamplingArgs {
-        height: header.height().value(),
-        time: header.time(),
-        square_width: header.dah.square_width(),
-    };
-
-    if queue.is_empty() || args.height >= queue.front().unwrap().height {
-        queue.push_front(args);
-        return;
-    }
-
-    if args.height <= queue.back().unwrap().height {
-        queue.push_back(args);
-        return;
-    }
-
-    let pos = match queue.binary_search_by(|x| args.height.cmp(&x.height)) {
-        Ok(pos) => pos,
-        Err(pos) => pos,
-    };
-
-    queue.insert(pos, args);
 }
 
 /// Returns true if `time` is within the sampling window.
@@ -459,14 +429,6 @@ fn in_sampling_window(time: Time) -> bool {
     };
 
     age <= SAMPLING_WINDOW
-}
-
-/// Returns true if block has been sampled and accepted.
-async fn is_block_accepted(store: &impl Store, height: u64) -> bool {
-    match store.get_sampling_metadata(height).await {
-        Ok(Some(metadata)) => metadata.status == SamplingStatus::Accepted,
-        _ => false,
-    }
 }
 
 /// Returns unique and random indexes that will be used for sampling.

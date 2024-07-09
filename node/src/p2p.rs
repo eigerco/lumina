@@ -54,6 +54,7 @@ mod header_session;
 pub(crate) mod shwap;
 mod swarm;
 
+use crate::block_ranges::BlockRange;
 use crate::events::EventPublisher;
 use crate::executor::{self, spawn, Interval};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
@@ -62,7 +63,6 @@ use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihash
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::store::header_ranges::HeaderRange;
 use crate::store::Store;
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
@@ -416,7 +416,7 @@ impl P2p {
     /// responsibility to verify range edges against headers existing in the store.
     pub(crate) async fn get_unverified_header_range(
         &self,
-        range: HeaderRange,
+        range: BlockRange,
     ) -> Result<Vec<ExtendedHeader>> {
         if range.is_empty() {
             return Err(HeaderExError::InvalidRequest.into());
