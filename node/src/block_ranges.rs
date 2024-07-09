@@ -160,7 +160,7 @@ impl<'de> serde::Deserialize<'de> for BlockRanges {
 }
 
 impl BlockRanges {
-    /// Create new, empty `BlockRanges`.
+    /// Create a new, empty `BlockRanges`.
     pub fn new() -> BlockRanges {
         BlockRanges(SmallVec::new())
     }
