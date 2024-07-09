@@ -165,6 +165,7 @@ impl BlockRanges {
         BlockRanges(SmallVec::new())
     }
 
+    /// Create a `BlockRanges` from a [`SmallVec`].
     pub fn from_vec(ranges: SmallVec<[BlockRange; 2]>) -> Result<Self> {
         let mut prev: Option<&RangeInclusive<u64>> = None;
 
@@ -183,6 +184,7 @@ impl BlockRanges {
         Ok(BlockRanges(ranges))
     }
 
+    /// Returns internal representation.
     pub fn into_inner(self) -> SmallVec<[BlockRange; 2]> {
         self.0
     }
