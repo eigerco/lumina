@@ -65,7 +65,7 @@ where
     pub p2p_bootnodes: Vec<Multiaddr>,
     /// List of the addresses where [`Node`] will listen for incoming connections.
     pub p2p_listen_on: Vec<Multiaddr>,
-    /// Maximum size of batches in which headers will be synced.
+    /// Maximum number of headers in batch while syncing.
     pub sync_batch_size: u64,
     /// The blockstore for bitswap.
     pub blockstore: B,
