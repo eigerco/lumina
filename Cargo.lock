@@ -3125,6 +3125,7 @@ dependencies = [
  "getrandom",
  "gloo-timers 0.3.0",
  "instant",
+ "js-sys",
  "libp2p",
  "lumina-node",
  "pin-project",

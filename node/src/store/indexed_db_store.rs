@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use smallvec::smallvec;
 use tokio::sync::Notify;
-use tracing::warn;
+use tracing::{error, warn};
 use wasm_bindgen::JsValue;
 
 use crate::block_ranges::BlockRanges;
@@ -379,22 +379,22 @@ impl IndexedDbStore {
 
         let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
 
-        let to_remove = header_ranges.clone() - (cutoff+1..=u64::MAX);
+        let to_remove = header_ranges.clone() - (cutoff + 1..=u64::MAX);
         header_ranges -= 1..=cutoff;
         set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
 
         for height in to_remove.into_iter() {
-            let jsvalue_height = to_value(&height)?;
-            let header = height_index.get(&jsvalue_height).await?;
-            // TODO:
-            /*
-            else {
-                warn!("header {height} present in ranges, missing in headers table");
-                continue;
+            let jsvalue_height = to_value(&height).expect("to create jsvalue");
+            let id = match height_index.get(&jsvalue_height).await {
+                Ok(header) => js_sys::Reflect::get(&header, &to_value("id")?).expect("to reflect"),
+                Err(e) => {
+                    error!("error removing {height}: {e}");
+                    continue;
+                }
             };
-            */
-            let id = js_sys::Reflect::get(&header, "id")?;
-            web_sys::console::log_1(&header);
+            if let Err(e) = header_store.delete(&id).await {
+                error!("error removing {id:?}: {e}");
+            }
         }
         Ok(())
     }
@@ -782,6 +782,12 @@ pub mod tests {
             .expect("re-opening large test store failed");
 
         assert_eq!(s.get_head().unwrap().height().value(), expected_height);
+    }
+
+    #[named]
+    #[wasm_bindgen_test]
+    async fn test_removal() {
+        let (original_store, mut gen) = gen_filled_store(0, function_name!()).await;
     }
 
     #[named]

@@ -201,9 +201,10 @@ fn estimate_header_height_at_time(reference_header: &ExtendedHeader, time: Time)
 
 #[cfg(test)]
 mod tests {
+    use crate::store::Store;
+
     use super::*;
 
-    use smallvec::smallvec;
     use std::time::Duration;
 
     #[test]

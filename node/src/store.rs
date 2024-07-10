@@ -1010,25 +1010,20 @@ mod tests {
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
-    async fn tail_removal_full_range<S: Store>(
+    async fn tail_removal_partial_range<S: Store>(
         #[case]
         #[future(awt)]
         s: S,
     ) {
-        let mut store = s;
-        let mut gen = ExtendedHeaderGenerator::new();
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(128);
 
-        store.insert(gen.next_many(32)).await.unwrap();
-        gen.skip(32);
-        store.insert(gen.next_many(64)).await.unwrap();
-
-        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
-        assert_eq!(stored_ranges, new_block_ranges([1..=32, 65..=128]));
+        store.insert(&headers[0..64]).await.unwrap();
+        store.insert(&headers[96..128]).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=64, 97..=128])).await;
 
         store.remove_tail(32).await.unwrap();
-
-        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
-        assert_eq!(stored_ranges, new_block_ranges([65..=128]));
+        assert_store(&store, &headers, new_block_ranges([33..=64, 97..=128])).await;
     }
 
     #[rstest]
@@ -1036,25 +1031,20 @@ mod tests {
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
-    async fn tail_removal_partial_range<S: Store>(
+    async fn tail_removal_full_range<S: Store>(
         #[case]
         #[future(awt)]
         s: S,
     ) {
-        let mut store = s;
-        let mut gen = ExtendedHeaderGenerator::new();
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(128);
 
-        store.insert(gen.next_many(32)).await.unwrap();
-        gen.skip(32);
-        store.insert(gen.next_many(64)).await.unwrap();
-
-        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
-        assert_eq!(stored_ranges, new_block_ranges([1..=32, 65..=128]));
+        store.insert(&headers[0..32]).await.unwrap();
+        store.insert(&headers[65..128]).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=32, 65..=128])).await;
 
         store.remove_tail(100).await.unwrap();
-
-        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
-        assert_eq!(stored_ranges, new_block_ranges([101..=128]));
+        assert_store(&store, &headers, new_block_ranges([101..=128])).await;
     }
 
     #[rstest]
@@ -1067,20 +1057,21 @@ mod tests {
         #[future(awt)]
         s: S,
     ) {
-        let mut store = s;
-        let mut gen = ExtendedHeaderGenerator::new();
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(128);
 
-        store.insert(gen.next_many(32)).await.unwrap();
-        gen.skip(32);
-        store.insert(gen.next_many(64)).await.unwrap();
-
-        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
-        assert_eq!(stored_ranges, new_block_ranges([1..=32, 65..=128]));
+        store.insert(&headers[0..32]).await.unwrap();
+        store.insert(&headers[65..128]).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=32, 65..=128])).await;
 
         store.remove_tail(256).await.unwrap();
 
         let stored_ranges = store.get_stored_header_ranges().await.unwrap();
         assert!(stored_ranges.is_empty());
+
+        for h in 1..=200 {
+            assert!(!store.has_at(h).await);
+        }
     }
 
     /// Fills an empty store
@@ -1104,6 +1095,33 @@ mod tests {
 
     async fn new_in_memory_store() -> InMemoryStore {
         InMemoryStore::new()
+    }
+
+    pub(crate) async fn assert_store<S: Store>(
+        store: &S,
+        headers: &[ExtendedHeader],
+        expected_ranges: BlockRanges,
+    ) {
+        assert_eq!(
+            store.get_stored_header_ranges().await.unwrap(),
+            expected_ranges
+        );
+        for header in headers {
+            let height = header.height().value();
+            if expected_ranges.contains(height) {
+                assert_eq!(&store.get_by_height(height).await.unwrap(), header);
+                assert_eq!(&store.get_by_hash(&header.hash()).await.unwrap(), header);
+            } else {
+                assert!(matches!(
+                    store.get_by_height(height).await.unwrap_err(),
+                    StoreError::NotFound
+                ));
+                assert!(matches!(
+                    store.get_by_hash(&header.hash()).await.unwrap_err(),
+                    StoreError::NotFound
+                ));
+            }
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]

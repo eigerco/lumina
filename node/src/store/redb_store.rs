@@ -408,7 +408,7 @@ impl RedbStore {
 
             let mut header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
 
-            let to_remove = header_ranges.clone() - (cutoff+1..=u64::MAX);
+            let to_remove = header_ranges.clone() - (cutoff + 1..=u64::MAX);
             header_ranges -= 1..=cutoff;
             set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
 
@@ -430,7 +430,8 @@ impl RedbStore {
                 };
             }
             Ok(())
-        }).await
+        })
+        .await
     }
 }
 
