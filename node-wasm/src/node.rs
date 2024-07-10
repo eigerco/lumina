@@ -388,6 +388,7 @@ impl WasmNodeConfig {
             p2p_bootnodes,
             p2p_local_keypair,
             p2p_listen_on: vec![],
+            sync_batch_size: 128,
             blockstore,
             store,
         })

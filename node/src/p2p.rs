@@ -50,7 +50,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, instrument, trace, warn};
 
 mod header_ex;
-mod header_session;
+pub(crate) mod header_session;
 pub(crate) mod shwap;
 mod swarm;
 
