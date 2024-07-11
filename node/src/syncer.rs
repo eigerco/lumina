@@ -30,7 +30,7 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
 use crate::store::utils::calculate_range_to_fetch;
-use crate::store::{Store, StoreError};
+use crate::store::{Store, StoreError, ValidExtendedHeadersChain, ValidatedExtendedHeaders};
 use crate::utils::OneshotSenderExt;
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
@@ -415,8 +415,9 @@ where
         if let Ok(store_head_height) = self.store.head_height().await {
             // If our new header is adjacent to the HEAD of the store
             if store_head_height + 1 == new_head_height {
-                // Header is already verified by HeaderSub and will be validated against previous
-                // head on insert
+                // HeaderSub already validated the header.
+                let new_head = unsafe { ValidatedExtendedHeaders::new_unchecked(vec![new_head]) };
+
                 if self.store.insert(new_head).await.is_ok() {
                     self.event_pub.send(NodeEvent::AddedHeaderFromHeaderSub {
                         height: new_head_height,
@@ -537,6 +538,9 @@ where
                 return;
             }
         };
+
+        // HeaderEx already validated the headers (but not verified them).
+        let headers = unsafe { ValidatedExtendedHeaders::new_unchecked(headers) };
 
         if let Err(e) = self.store.insert(headers).await {
             self.event_pub.send(NodeEvent::FetchingHeadersFailed {

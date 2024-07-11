@@ -15,7 +15,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use crate::block_ranges::{BlockRange, BlockRanges, BlockRangesError};
-pub use crate::store::utils::{ExtendedHeaderGeneratorExt, VerifiedExtendedHeaders};
+pub use crate::store::utils::{
+    IntoValidExtendedHeadersChain, ValidExtendedHeadersChain, ValidatedExtendedHeaders,
+    VerifiedExtendedHeaders,
+};
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
@@ -144,14 +147,11 @@ pub trait Store: Send + Sync + Debug {
     /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 
-    /// Insert a range of headers into the store.
+    /// Insert a chain of headers into the store.
     ///
     /// New insertion should pass all the constraints in [`BlockRanges::check_insertion_constraints`],
     /// additionaly it should be [`ExtendedHeader::verify`]ed against neighbor headers.
-    async fn insert<R>(&self, headers: R) -> Result<()>
-    where
-        R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>;
+    async fn insert(&self, headers: impl IntoValidExtendedHeadersChain) -> Result<()>;
 
     /// Returns a list of header ranges currenty held in store.
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges>;
@@ -315,6 +315,7 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::ExtendedHeaderGeneratorExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::{Error, Height};
     use rstest::rstest;

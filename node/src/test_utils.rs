@@ -16,7 +16,7 @@ use crate::{
     node::NodeConfig,
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
-    store::{ExtendedHeaderGeneratorExt, InMemoryStore},
+    store::{InMemoryStore, ValidExtendedHeadersChain},
     utils::OneshotResultSender,
 };
 
@@ -26,6 +26,18 @@ pub(crate) use tokio::test as async_test;
 #[cfg(test)]
 #[cfg(target_arch = "wasm32")]
 pub(crate) use wasm_bindgen_test::wasm_bindgen_test as async_test;
+
+/// Extends test header generator for easier insertion into the store
+pub trait ExtendedHeaderGeneratorExt {
+    /// Generate next amount verified headers
+    fn next_many_verified(&mut self, amount: u64) -> ValidExtendedHeadersChain;
+}
+
+impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
+    fn next_many_verified(&mut self, amount: u64) -> ValidExtendedHeadersChain {
+        unsafe { ValidExtendedHeadersChain::new_unchecked(self.next_many(amount)) }
+    }
+}
 
 /// Generate a store pre-filled with headers.
 pub async fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
