@@ -1,6 +1,8 @@
 use std::future::Future;
-use std::ops::RangeInclusive;
+use std::mem;
+use std::ops::{Deref, RangeInclusive};
 
+use celestia_proto::header::pb::ExtendedHeader;
 use celestia_types::ExtendedHeader;
 
 use crate::block_ranges::{BlockRange, BlockRangeExt};
@@ -58,71 +60,219 @@ fn get_most_recent_missing_range(
     penultimate_range_end + 1..=store_head_range.start().saturating_sub(1)
 }
 
+#[repr(transparent)]
+pub struct ValidatedExtendedHeader(ExtendedHeader);
 pub struct ValidatedExtendedHeaders(Vec<ExtendedHeader>);
 pub struct VerifiedExtendedHeaders(Vec<ExtendedHeader>);
 
-/// Holds a validated and verified chain of ExtendedHeader.
-pub struct ValidExtendedHeadersChain(Vec<ExtendedHeader>);
-
-pub trait IntoValidExtendedHeadersChain: Send {
-    fn into_valid_chain(
+pub trait IntoVerifiedExtendedHeaders: Send {
+    fn into_verified(
         self,
-    ) -> impl Future<Output = Result<ValidExtendedHeadersChain, celestia_types::Error>> + Send;
+    ) -> impl Future<Output = Result<VerifiedExtendedHeaders, celestia_types::Error>> + Send;
 }
 
-impl ValidatedExtendedHeaders {
-    pub async fn new(headers: Vec<ExtendedHeader>) -> Result<Self, celestia_types::Error> {
-        validate_headers(&headers).await?;
-        Ok(ValidatedExtendedHeaders(headers))
-    }
-
-    pub unsafe fn new_unchecked(headers: Vec<ExtendedHeader>) -> Self {
-        ValidatedExtendedHeaders(headers)
-    }
-}
-
-impl VerifiedExtendedHeaders {
-    pub fn new(headers: Vec<ExtendedHeader>) -> Result<Self, celestia_types::Error> {
-        verify_headers(&headers)?;
-        Ok(VerifiedExtendedHeaders(headers))
-    }
-
-    pub unsafe fn new_unchecked(headers: Vec<ExtendedHeader>) -> Self {
-        VerifiedExtendedHeaders(headers)
-    }
-}
-
-impl ValidExtendedHeadersChain {
-    pub async fn new(headers: Vec<ExtendedHeader>) -> Result<Self, celestia_types::Error> {
-        verify_headers(&headers)?;
-        validate_headers(&headers).await?;
-        Ok(ValidExtendedHeadersChain(headers))
+impl ValidatedExtendedHeader {
+    pub fn new(header: ExtendedHeader) -> celestia_types::Result<Self> {
+        header.validate()?;
+        Ok(ValidatedExtendedHeader(header))
     }
 
     /// Create a new instance out of pre-checked vec of headers
     ///
     /// # Safety
     ///
-    /// This function may produce invalid `ValidExtendedHeadersChain`, if passed range
-    /// is not validated manually
-    pub unsafe fn new_unchecked(headers: Vec<ExtendedHeader>) -> Self {
-        ValidExtendedHeadersChain(headers)
+    /// This function may produce invalid `ValidatedExtendedHeader`, if passed range
+    /// is not validated manually.
+    pub unsafe fn new_unchecked(header: ExtendedHeader) -> Self {
+        ValidatedExtendedHeader(header)
     }
 
-    pub async fn from_verified(
-        headers: VerifiedExtendedHeaders,
-    ) -> Result<Self, celestia_types::Error> {
-        // Headers are already verified but not validated.
-        validate_headers(&headers.0).await?;
-        Ok(ValidExtendedHeadersChain(headers.0))
+    pub fn into_inner(self) -> Self {
+        self.0
+    }
+}
+
+impl ValidatedExtendedHeaders {
+    pub async fn new(headers: Vec<ExtendedHeader>) -> celestia_types::Result<Self> {
+        validate_headers(&headers)?;
+        Ok(ValidatedExtendedHeaders(headers))
+    }
+
+    /// Create a new instance out of pre-checked vec of headers
+    ///
+    /// # Safety
+    ///
+    /// This function may produce invalid `ValidatedExtendedHeaders`, if passed range
+    /// is not validated manually.
+    pub unsafe fn new_unchecked(headers: Vec<ExtendedHeader>) -> Self {
+        ValidatedExtendedHeaders(headers)
+    }
+
+    pub fn into_inner(self) -> Self {
+        self.0
+    }
+}
+
+impl VerifiedExtendedHeaders {
+    pub async fn new(headers: Vec<ExtendedHeader>) -> celestia_types::Result<Self> {
+        let headers = ValidatedExtendedHeaders::new(headers).await?;
+        ValidatedExtendedHeaders::from_validated(headers)
     }
 
     pub fn from_validated(
-        headers: ValidatedExtendedHeaders,
-    ) -> Result<Self, celestia_types::Error> {
-        // Headers are already validated but not verified.
-        verify_headers(&headers.0)?;
-        Ok(ValidExtendedHeadersChain(headers.0))
+        headers: impl Into<ValidatedExtendedHeaders>,
+    ) -> celestia_types::Result<Self> {
+        let headers = headers.into().0;
+        verify_headers(&headers)?;
+        Ok(VerifiedExtendedHeaders(headers))
+    }
+
+    /// Create a new instance out of pre-checked vec of headers
+    ///
+    /// # Safety
+    ///
+    /// This function may produce invalid `VerifiedExtendedHeaders`, if passed range
+    /// is not validated and verified manually.
+    pub unsafe fn new_unchecked(headers: Vec<ExtendedHeader>) -> Self {
+        VerifiedExtendedHeaders(headers)
+    }
+
+    pub fn into_inner(self) -> Self {
+        self.0
+    }
+}
+
+impl IntoIterator for ValidatedExtendedHeader {
+    type Item = ExtendedHeader;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl IntoIterator for VerifiedExtendedHeaders {
+    type Item = ExtendedHeader;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl Deref for ValidatedExtendedHeader {
+    type Target = ExtendedHeader;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Deref for ValidatedExtendedHeaders {
+    type Target = [ExtendedHeader];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0[..]
+    }
+}
+
+impl Deref for VerifiedExtendedHeaders {
+    type Target = [ExtendedHeader];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0[..]
+    }
+}
+
+impl AsRef<ExtendedHeader> for ValidatedExtendedHeader {
+    fn as_ref(&self) -> &ExtendedHeader {
+        &self.0
+    }
+}
+
+impl AsRef<[ExtendedHeader]> for ValidatedExtendedHeaders {
+    fn as_ref(&self) -> &ExtendedHeader {
+        &self.0[..]
+    }
+}
+
+impl AsRef<[ExtendedHeader]> for VerifiedExtendedHeaders {
+    fn as_ref(&self) -> &ExtendedHeader {
+        &self.0[..]
+    }
+}
+
+impl From<VerifiedExtendedHeader> for ExtendedHeader {
+    fn from(header: VerifiedExtendedHeader) -> Self {
+        header.0
+    }
+}
+
+impl From<ValidatedExtendedHeaders> for Vec<ExtendedHeader> {
+    fn from(headers: ValidatedExtendedHeaders) -> Self {
+        headers.0
+    }
+}
+
+impl From<VerifiedExtendedHeaders> for Vec<ExtendedHeader> {
+    fn from(headers: ValidatedExtendedHeaders) -> Self {
+        headers.0
+    }
+}
+
+impl From<ValidatedExtendedHeader> for ValidatedExtendedHeaders {
+    fn from(header: ValidatedExtendedHeader) -> Self {
+        ValidatedExtendedHeaders(vec![header.0])
+    }
+}
+
+impl<'a> From<&'a ValidatedExtendedHeader> for ValidatedExtendedHeaders {
+    fn from(header: &'a ValidatedExtendedHeader) -> Self {
+        self.to_owned().into()
+    }
+}
+
+impl<'a> From<&'a mut ValidatedExtendedHeader> for ValidatedExtendedHeaders {
+    fn from(header: &'a mut ValidatedExtendedHeader) -> Self {
+        self.to_owned().into()
+    }
+}
+
+impl From<Vec<ValidatedExtendedHeader>> for ValidatedExtendedHeaders {
+    fn from(headers: Vec<ValidatedExtendedHeader>) -> Self {
+        // SAFETY: It is safe to transmute because of `repr(transparent)`.
+        let headers = unsafe { mem::transmute(headers) };
+        ValidatedExtendedHeaders(headers)
+    }
+}
+
+impl<'a> From<&'a [ValidatedExtendedHeader]> for ValidatedExtendedHeaders {
+    fn from(headers: &'a [ValidatedExtendedHeader]) -> Self {
+        Vec::from(headers).into()
+    }
+}
+
+impl<'a> From<&'a mut [ValidatedExtendedHeader]> for ValidatedExtendedHeaders {
+    fn from(headers: &'a mut [ValidatedExtendedHeader]) -> Self {
+        Vec::from(headers).into()
+    }
+}
+
+impl<'a, const N: usize> From<[ValidatedExtendedHeader; N]> for ValidatedExtendedHeaders {
+    fn from(headers: [ValidatedExtendedHeader; N]) -> Self {
+        Vec::from(headers).into()
+    }
+}
+
+impl<'a, const N: usize> From<&'a [ValidatedExtendedHeader; N]> for ValidatedExtendedHeaders {
+    fn from(headers: [ValidatedExtendedHeader; N]) -> Self {
+        Vec::from(headers).into()
+    }
+}
+
+impl<'a, const N: usize> From<&'a mut [ValidatedExtendedHeader; N]> for ValidatedExtendedHeaders {
+    fn from(headers: [ValidatedExtendedHeader; N]) -> Self {
+        Vec::from(headers).into()
     }
 }
 
@@ -135,9 +285,8 @@ impl IntoIterator for ValidExtendedHeadersChain {
         self.0.into_iter()
     }
 }
-*/
 
-impl IntoIterator for ValidExtendedHeadersChain {
+impl IntoIterator for VerifiedExtendedHeaders {
     type Item = ExtendedHeader;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
@@ -148,62 +297,92 @@ impl IntoIterator for ValidExtendedHeadersChain {
 
 impl AsRef<[ExtendedHeader]> for ValidExtendedHeadersChain {
     fn as_ref(&self) -> &[ExtendedHeader] {
-        &self.0
+        unsafe { mem::transmute(self.0.as_ref()) }
+    }
+}
+*/
+
+impl IntoVerifiedExtendedHeaders for VerifiedExtendedHeaders {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        self
     }
 }
 
-impl IntoValidExtendedHeadersChain for ValidatedExtendedHeaders {
-    async fn into_valid_chain(self) -> Result<ValidExtendedHeadersChain, celestia_types::Error> {
-        ValidExtendedHeadersChain::from_validated(self)
+impl IntoVerifiedExtendedHeaders for T
+where
+    T: Into<ValidatedExtendedHeader>,
+{
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        VerifiedExtendedHeaders::from_validated(self.into())
     }
 }
 
-impl IntoValidExtendedHeadersChain for VerifiedExtendedHeaders {
-    async fn into_valid_chain(self) -> Result<ValidExtendedHeadersChain, celestia_types::Error> {
-        ValidExtendedHeadersChain::from_verified(self).await
+impl IntoVerifiedExtendedHeaders for ExtendedHeader {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        VerifiedExtendedHeaders::new(vec![self]).await
     }
 }
 
-impl IntoValidExtendedHeadersChain for ValidExtendedHeadersChain {
-    async fn into_valid_chain(self) -> Result<ValidExtendedHeadersChain, celestia_types::Error> {
-        // Headers are already verified and validated.
-        Ok(self)
+impl<'a> IntoVerifiedExtendedHeaders for &'a ExtendedHeader {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        self.to_owned().into()
     }
 }
 
-impl IntoValidExtendedHeadersChain for ExtendedHeader {
-    async fn into_valid_chain(self) -> Result<ValidExtendedHeadersChain, celestia_types::Error> {
-        ValidExtendedHeadersChain::new(vec![self]).await
+impl<'a> IntoVerifiedExtendedHeaders for &'a mut ExtendedHeader {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        self.to_owned().into()
     }
 }
 
-impl<'a> IntoValidExtendedHeadersChain for &'a ExtendedHeader {
-    async fn into_valid_chain(self) -> Result<ValidExtendedHeadersChain, celestia_types::Error> {
-        ValidExtendedHeadersChain::new(vec![self.to_owned()]).await
+impl IntoVerifiedExtendedHeaders for Vec<ExtendedHeader> {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        VerifiedExtendedHeaders::new(self).await
     }
 }
 
-impl IntoValidExtendedHeadersChain for Vec<ExtendedHeader> {
-    async fn into_valid_chain(self) -> Result<ValidExtendedHeadersChain, celestia_types::Error> {
-        ValidExtendedHeadersChain::new(self).await
+impl<'a> IntoVerifiedExtendedHeaders for &'a [ExtendedHeader] {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        // Validate and verify before we convert it to `Vec`
+        validate_headers(self).await?;
+        verify_headers(self)?;
+        VerifiedExtendedHeaders(Vec::from(self))
     }
 }
 
-impl<'a> IntoValidExtendedHeadersChain for &'a [ExtendedHeader] {
-    async fn into_valid_chain(self) -> Result<ValidExtendedHeadersChain, celestia_types::Error> {
-        ValidExtendedHeadersChain::new(self.into()).await
+impl<'a> IntoVerifiedExtendedHeaders for &'a mut [ExtendedHeader] {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        // Validate and verify before we convert it to `Vec`
+        validate_headers(self).await?;
+        verify_headers(self)?;
+        VerifiedExtendedHeaders(Vec::from(self))
     }
 }
 
-impl<const N: usize> IntoValidExtendedHeadersChain for [ExtendedHeader; N] {
-    async fn into_valid_chain(self) -> Result<ValidExtendedHeadersChain, celestia_types::Error> {
-        ValidExtendedHeadersChain::new(self.into()).await
+impl<const N: usize> IntoVerifiedExtendedHeaders for [ExtendedHeader; N] {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        // Validate and verify before we convert it to `Vec`
+        validate_headers(&self).await?;
+        verify_headers(&self)?;
+        VerifiedExtendedHeaders(Vec::from(self))
     }
 }
 
-impl<'a, const N: usize> IntoValidExtendedHeadersChain for &'a [ExtendedHeader; N] {
-    async fn into_valid_chain(self) -> Result<ValidExtendedHeadersChain, celestia_types::Error> {
-        ValidExtendedHeadersChain::new(self.into()).await
+impl<'a, const N: usize> IntoVerifiedExtendedHeaders for &'a [ExtendedHeader; N] {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        // Validate and verify before we convert it to `Vec`
+        validate_headers(&self).await?;
+        verify_headers(&self)?;
+        VerifiedExtendedHeaders(Vec::from(self))
+    }
+}
+
+impl<'a, const N: usize> IntoVerifiedExtendedHeaders for &'a mut [ExtendedHeader; N] {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        // Validate and verify before we convert it to `Vec`
+        validate_headers(&self).await?;
+        verify_headers(&self)?;
+        VerifiedExtendedHeaders(Vec::from(self))
     }
 }
 
@@ -226,6 +405,14 @@ pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_typ
     }
 
     Ok(())
+}
+
+pub(crate) async fn validate_headers_vec(
+    headers: Vec<ExtendedHeader>,
+) -> celestia_types::Result<Vec<ValidatedExtendedHeader>> {
+    validate_headers_slice(&headers).await?;
+    // SAFETY: It is safe to transmute because of `repr(transparent)`.
+    Ok(unsafe { mem::transmute(headers) })
 }
 
 #[cfg(test)]

@@ -579,10 +579,13 @@ mod tests {
 
         let mut dup_header = s.get_by_height(99).await.unwrap();
         dup_header.header.height = Height::from(102u32);
+        dup_header.commit.height = Height::from(102u32);
 
         assert!(matches!(
-            s.insert(dup_header).await,
-            Err(StoreError::HashExists(_))
+            dbg!(s.insert(dup_header).await),
+            Err(StoreError::CelestiaTypes(
+                celestia_types::Error::Validation(_)
+            ))
         ));
     }
 

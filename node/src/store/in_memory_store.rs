@@ -87,7 +87,7 @@ impl InMemoryStore {
     }
 
     pub(crate) async fn insert(&self, headers: impl IntoValidExtendedHeadersChain) -> Result<()> {
-        let headers = headers.into_valid_chain().await?;
+        let headers = headers.into_valid_chain().await.map_err(|e| dbg!(e))?;
         self.inner.write().await.insert(headers).await?;
         self.header_added_notifier.notify_waiters();
         Ok(())

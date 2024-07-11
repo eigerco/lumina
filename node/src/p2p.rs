@@ -63,7 +63,7 @@ use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihash
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::store::Store;
+use crate::store::{Store, ValidatedExtendedHeaders};
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
     OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt,
@@ -191,7 +191,7 @@ pub(crate) enum P2pCmd {
     },
     HeaderExRequest {
         request: HeaderRequest,
-        respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+        respond_to: OneshotResultSender<ValidatedExtendedHeaders, P2pError>,
     },
     Listeners {
         respond_to: oneshot::Sender<Vec<Multiaddr>>,
@@ -340,7 +340,10 @@ impl P2p {
     }
 
     /// Send a request on the `header-ex` protocol.
-    pub async fn header_ex_request(&self, request: HeaderRequest) -> Result<Vec<ExtendedHeader>> {
+    pub async fn header_ex_request(
+        &self,
+        request: HeaderRequest,
+    ) -> Result<ValidatedExtendedHeaders> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::HeaderExRequest {

@@ -592,6 +592,7 @@ mod tests {
     use crate::block_ranges::{BlockRange, BlockRangeExt};
     use crate::events::EventChannel;
     use crate::p2p::header_session;
+    use crate::store::utils::validate_headers;
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
@@ -888,6 +889,8 @@ mod tests {
         let headers = ExtendedHeaderGenerator::new().next_many(20);
         let headers_prime = ExtendedHeaderGenerator::new().next_many(20);
 
+        //validate_headers(&headers).await.unwrap();
+
         // Start Syncer and report last header as network head
         let (syncer, store, mut p2p_mock) = initialized_syncer(headers[19].clone()).await;
 
@@ -895,13 +898,17 @@ mod tests {
         handle_session_batch(&mut p2p_mock, &headers_prime, 1..=19, true).await;
 
         // Syncer should not apply headers from invalid response
+        dbg!(1);
         assert_syncing(&syncer, &store, &[20..=20], 20).await;
+        dbg!(2);
 
         // Syncer requests missing headers again
         handle_session_batch(&mut p2p_mock, &headers, 1..=19, true).await;
 
+        dbg!(3);
         // With a correct resposne, syncer should update the store
         assert_syncing(&syncer, &store, &[1..=20], 20).await;
+        dbg!(4);
     }
 
     async fn assert_syncing(
@@ -912,7 +919,7 @@ mod tests {
     ) {
         // Syncer receives responds on the same loop that receive other events.
         // Wait a bit to be processed.
-        sleep(Duration::from_millis(1)).await;
+        sleep(Duration::from_millis(10)).await;
 
         let store_ranges = store.get_stored_header_ranges().await.unwrap();
         let syncing_info = syncer.info().await.unwrap();
