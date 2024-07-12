@@ -1,5 +1,4 @@
 use celestia_proto::p2p::pb::HeaderRequest;
-use celestia_types::ExtendedHeader;
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 
@@ -7,6 +6,7 @@ use crate::block_ranges::{BlockRange, BlockRangeExt};
 use crate::executor::spawn;
 use crate::p2p::header_ex::utils::HeaderRequestExt;
 use crate::p2p::{P2pCmd, P2pError};
+use crate::store::utils::ValidatedExtendedHeaders;
 
 pub(crate) const MIN_AMOUNT_PER_REQ: u64 = 8;
 pub(crate) const MAX_AMOUNT_PER_REQ: u64 = 64;
@@ -17,8 +17,8 @@ type Result<T, E = P2pError> = std::result::Result<T, E>;
 pub(crate) struct HeaderSession {
     to_fetch: Option<BlockRange>,
     cmd_tx: mpsc::Sender<P2pCmd>,
-    response_tx: mpsc::Sender<(u64, u64, Result<Vec<ExtendedHeader>>)>,
-    response_rx: mpsc::Receiver<(u64, u64, Result<Vec<ExtendedHeader>>)>,
+    response_tx: mpsc::Sender<(u64, u64, Result<ValidatedExtendedHeaders>)>,
+    response_rx: mpsc::Receiver<(u64, u64, Result<ValidatedExtendedHeaders>)>,
     ongoing: usize,
     batch_size: u64,
 }
@@ -49,7 +49,7 @@ impl HeaderSession {
         }
     }
 
-    pub(crate) async fn run(&mut self) -> Result<Vec<ExtendedHeader>> {
+    pub(crate) async fn run(&mut self) -> Result<ValidatedExtendedHeaders> {
         let mut responses = Vec::new();
 
         for _ in 0..MAX_CONCURRENT_REQS {
@@ -61,6 +61,7 @@ impl HeaderSession {
 
             match res {
                 Ok(headers) => {
+                    let headers = headers.into_validated_vec();
                     let headers_len = headers.len() as u64;
 
                     if headers_len > 0 {
@@ -97,7 +98,7 @@ impl HeaderSession {
         Ok(responses.into_iter().flatten().collect())
     }
 
-    async fn recv_response(&mut self) -> (u64, u64, Result<Vec<ExtendedHeader>>) {
+    async fn recv_response(&mut self) -> (u64, u64, Result<ValidatedExtendedHeaders>) {
         let (height, requested_amount, res) =
             self.response_rx.recv().await.expect("channel never closes");
 

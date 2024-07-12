@@ -16,7 +16,8 @@ use thiserror::Error;
 
 pub use crate::block_ranges::{BlockRange, BlockRanges, BlockRangesError};
 pub use crate::store::utils::{
-    IntoVerifiedExtendedHeaders, ValidatedExtendedHeaders, VerifiedExtendedHeaders,
+    IntoVerifiedExtendedHeaders, ValidatedExtendedHeader, ValidatedExtendedHeaders,
+    VerifiedExtendedHeaders,
 };
 
 pub use in_memory_store::InMemoryStore;

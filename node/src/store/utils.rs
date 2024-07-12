@@ -1,3 +1,4 @@
+use std::fmt::{self, Display};
 use std::future::Future;
 use std::mem;
 use std::ops::{Deref, RangeInclusive};
@@ -145,6 +146,27 @@ impl VerifiedExtendedHeaders {
 
     pub fn into_inner(self) -> Vec<ExtendedHeader> {
         self.0
+    }
+
+    pub fn into_validated_vec(self) -> Vec<ValidatedExtendedHeader> {
+        // SAFETY: It is safe to transmute because of `repr(transparent)`.
+        unsafe { mem::transmute(self.0) }
+    }
+}
+
+impl Display for ValidatedExtendedHeader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl FromIterator<ValidatedExtendedHeader> for ValidatedExtendedHeaders {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = ValidatedExtendedHeader>,
+    {
+        let headers = iter.into_iter().map(|h| h.0).collect();
+        ValidatedExtendedHeaders(headers)
     }
 }
 
@@ -311,6 +333,27 @@ impl AsRef<[ExtendedHeader]> for ValidExtendedHeadersChain {
 impl IntoVerifiedExtendedHeaders for VerifiedExtendedHeaders {
     async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
         Ok(self)
+    }
+}
+
+impl IntoVerifiedExtendedHeaders for ValidatedExtendedHeader {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        // A single validated header has no neighbors so there nothing to verify.
+        Ok(VerifiedExtendedHeaders(vec![self.0]))
+    }
+}
+
+impl<'a> IntoVerifiedExtendedHeaders for &'a ValidatedExtendedHeader {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        // A single validated header has no neighbors so there nothing to verify.
+        Ok(VerifiedExtendedHeaders(vec![self.0.to_owned()]))
+    }
+}
+
+impl<'a> IntoVerifiedExtendedHeaders for &'a mut ValidatedExtendedHeader {
+    async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
+        // A single validated header has no neighbors so there nothing to verify.
+        Ok(VerifiedExtendedHeaders(vec![self.0.to_owned()]))
     }
 }
 

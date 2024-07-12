@@ -63,7 +63,8 @@ use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihash
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::store::{Store, ValidatedExtendedHeaders};
+use crate::store::utils::ValidatedExtendedHeader;
+use crate::store::{Store, ValidatedExtendedHeaders, VerifiedExtendedHeaders};
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
     OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt,
@@ -157,7 +158,7 @@ impl From<oneshot::error::RecvError> for P2pError {
 #[derive(Debug)]
 pub struct P2p {
     cmd_tx: mpsc::Sender<P2pCmd>,
-    header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
+    header_sub_watcher: watch::Receiver<Option<ValidatedExtendedHeader>>,
     peer_tracker_info_watcher: watch::Receiver<PeerTrackerInfo>,
     local_peer_id: PeerId,
 }
@@ -191,7 +192,7 @@ pub(crate) enum P2pCmd {
     },
     HeaderExRequest {
         request: HeaderRequest,
-        respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+        respond_to: OneshotResultSender<ValidatedExtendedHeaders, P2pError>,
     },
     Listeners {
         respond_to: oneshot::Sender<Vec<Multiaddr>>,
@@ -200,7 +201,7 @@ pub(crate) enum P2pCmd {
         respond_to: oneshot::Sender<Vec<PeerId>>,
     },
     InitHeaderSub {
-        head: Box<ExtendedHeader>,
+        head: Box<ValidatedExtendedHeader>,
     },
     SetPeerTrust {
         peer_id: PeerId,
@@ -289,7 +290,7 @@ impl P2p {
     }
 
     /// Watcher for the latest verified network head headers announced on `header-sub`.
-    pub fn header_sub_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
+    pub fn header_sub_watcher(&self) -> watch::Receiver<Option<ValidatedExtendedHeader>> {
         self.header_sub_watcher.clone()
     }
 
@@ -304,7 +305,7 @@ impl P2p {
     }
 
     /// Initializes `header-sub` protocol with a given `subjective_head`.
-    pub async fn init_header_sub(&self, head: ExtendedHeader) -> Result<()> {
+    pub async fn init_header_sub(&self, head: ValidatedExtendedHeader) -> Result<()> {
         self.send_command(P2pCmd::InitHeaderSub {
             head: Box::new(head),
         })
@@ -340,7 +341,10 @@ impl P2p {
     }
 
     /// Send a request on the `header-ex` protocol.
-    pub async fn header_ex_request(&self, request: HeaderRequest) -> Result<Vec<ExtendedHeader>> {
+    pub async fn header_ex_request(
+        &self,
+        request: HeaderRequest,
+    ) -> Result<ValidatedExtendedHeaders> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::HeaderExRequest {
@@ -353,35 +357,37 @@ impl P2p {
     }
 
     /// Request the head header on the `header-ex` protocol.
-    pub async fn get_head_header(&self) -> Result<ExtendedHeader> {
+    pub async fn get_head_header(&self) -> Result<ValidatedExtendedHeader> {
         self.get_header_by_height(0).await
     }
 
     /// Request the header by hash on the `header-ex` protocol.
-    pub async fn get_header(&self, hash: Hash) -> Result<ExtendedHeader> {
+    pub async fn get_header(&self, hash: Hash) -> Result<ValidatedExtendedHeader> {
         self.header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Hash(hash.as_bytes().to_vec())),
             amount: 1,
         })
         .await?
+        .into_validated_vec()
         .into_iter()
         .next()
         .ok_or(HeaderExError::HeaderNotFound.into())
     }
 
     /// Request the header by height on the `header-ex` protocol.
-    pub async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
+    pub async fn get_header_by_height(&self, height: u64) -> Result<ValidatedExtendedHeader> {
         self.header_ex_request(HeaderRequest {
             data: Some(header_request::Data::Origin(height)),
             amount: 1,
         })
         .await?
+        .into_validated_vec()
         .into_iter()
         .next()
         .ok_or(HeaderExError::HeaderNotFound.into())
     }
 
-    /// Request the headers following the one given with the `header-ex` protocol.
+    /// Request the headers followingValidatedExtendedHeader the one given with the `header-ex` protocol.
     ///
     /// First header from the requested range will be verified against the provided one,
     /// then each subsequent is verified against the previous one.
@@ -389,22 +395,26 @@ impl P2p {
         &self,
         from: &ExtendedHeader,
         amount: u64,
-    ) -> Result<Vec<ExtendedHeader>> {
+    ) -> Result<VerifiedExtendedHeaders> {
+        if amount == 0 {
+            return Err(HeaderExError::InvalidRequest.into());
+        }
+
         // User can give us a bad header, so validate it.
         from.validate().map_err(|_| HeaderExError::InvalidRequest)?;
 
         let height = from.height().value() + 1;
-
         let range = height..=height + amount - 1;
 
         let mut session = HeaderSession::new(range, self.cmd_tx.clone());
         let headers = session.run().await?;
 
-        // `.validate()` is called on each header separately by `HeaderExClientHandler`.
-        //
-        // The last step is to verify that all headers are from the same chain
-        // and indeed connected with the next one.
-        from.verify_adjacent_range(&headers)
+        // Verify the first header, the rest will be verified
+        // in `VerifiedExtendedHeaders::from_validated`.
+        from.verify_adjacent(&headers[0])
+            .map_err(|_| HeaderExError::InvalidResponse)?;
+
+        let headers = VerifiedExtendedHeaders::from_validated(headers)
             .map_err(|_| HeaderExError::InvalidResponse)?;
 
         Ok(headers)
@@ -417,20 +427,13 @@ impl P2p {
     pub(crate) async fn get_unverified_header_range(
         &self,
         range: BlockRange,
-    ) -> Result<Vec<ExtendedHeader>> {
+    ) -> Result<ValidatedExtendedHeaders> {
         if range.is_empty() {
             return Err(HeaderExError::InvalidRequest.into());
         }
 
         let mut session = HeaderSession::new(range, self.cmd_tx.clone());
         let headers = session.run().await?;
-
-        let Some(head) = headers.first() else {
-            return Err(HeaderExError::InvalidResponse.into());
-        };
-
-        head.verify_adjacent_range(&headers[1..])
-            .map_err(|_| HeaderExError::InvalidResponse)?;
 
         Ok(headers)
     }
@@ -565,7 +568,7 @@ where
     bad_encoding_fraud_sub_topic: TopicHash,
     cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
-    header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
+    header_sub_watcher: watch::Sender<Option<ValidatedExtendedHeader>>,
     bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, P2pError>>,
     network_compromised_token: CancellationToken,
     store: Arc<S>,
@@ -579,7 +582,7 @@ where
     fn new(
         args: P2pArgs<B, S>,
         cmd_rx: mpsc::Receiver<P2pCmd>,
-        header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
+        header_sub_watcher: watch::Sender<Option<ValidatedExtendedHeader>>,
         peer_tracker: Arc<PeerTracker>,
     ) -> Result<Self, P2pError> {
         let local_peer_id = PeerId::from(args.local_keypair.public());
@@ -948,15 +951,20 @@ where
     }
 
     #[instrument(skip_all, fields(header = %head))]
-    fn on_init_header_sub(&mut self, head: ExtendedHeader) {
+    fn on_init_header_sub(&mut self, head: ValidatedExtendedHeader) {
         self.header_sub_watcher.send_replace(Some(head));
         trace!("HeaderSub initialized");
     }
 
     #[instrument(skip_all)]
     async fn on_header_sub_message(&mut self, data: &[u8]) -> gossipsub::MessageAcceptance {
-        let Ok(header) = ExtendedHeader::decode_and_validate(data) else {
-            trace!("Malformed or invalid header from header-sub");
+        let Ok(header) = ExtendedHeader::decode(data) else {
+            trace!("Malformed header from header-sub");
+            return gossipsub::MessageAcceptance::Reject;
+        };
+
+        let Ok(header) = ValidatedExtendedHeader::new(header) else {
+            trace!("Invalid header from header-sub");
             return gossipsub::MessageAcceptance::Reject;
         };
 
@@ -1142,6 +1150,6 @@ where
         .build())
 }
 
-fn network_head_height(watcher: &watch::Sender<Option<ExtendedHeader>>) -> Option<Height> {
+fn network_head_height(watcher: &watch::Sender<Option<ValidatedExtendedHeader>>) -> Option<Height> {
     watcher.borrow().as_ref().map(|header| header.height())
 }

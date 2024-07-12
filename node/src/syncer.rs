@@ -30,7 +30,7 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
 use crate::store::utils::calculate_range_to_fetch;
-use crate::store::{Store, StoreError, ValidatedExtendedHeaders};
+use crate::store::{Store, StoreError, ValidatedExtendedHeader, ValidatedExtendedHeaders};
 use crate::utils::OneshotSenderExt;
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
@@ -178,7 +178,7 @@ where
     event_pub: EventPublisher,
     p2p: Arc<P2p>,
     store: Arc<S>,
-    header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
+    header_sub_watcher: watch::Receiver<Option<ValidatedExtendedHeader>>,
     subjective_head_height: Option<u64>,
     batch_size: u64,
     ongoing_batch: Option<Ongoing>,
@@ -415,9 +415,6 @@ where
         if let Ok(store_head_height) = self.store.head_height().await {
             // If our new header is adjacent to the HEAD of the store
             if store_head_height + 1 == new_head_height {
-                // HeaderSub already validated the header.
-                let new_head = unsafe { ValidatedExtendedHeaders::new_unchecked(vec![new_head]) };
-
                 if self.store.insert(new_head).await.is_ok() {
                     self.event_pub.send(NodeEvent::AddedHeaderFromHeaderSub {
                         height: new_head_height,
@@ -440,7 +437,7 @@ where
     #[instrument(skip_all)]
     async fn fetch_next_batch(
         &mut self,
-        headers_tx: &mpsc::Sender<(Result<Vec<ExtendedHeader>, P2pError>, Duration)>,
+        headers_tx: &mpsc::Sender<(Result<ValidatedExtendedHeaders, P2pError>, Duration)>,
     ) {
         if self.ongoing_batch.is_some() {
             // Another batch is ongoing. We do not parallelize `Syncer`
@@ -515,7 +512,7 @@ where
     #[instrument(skip_all)]
     async fn on_fetch_next_batch_result(
         &mut self,
-        res: Result<Vec<ExtendedHeader>, P2pError>,
+        res: Result<ValidatedExtendedHeaders, P2pError>,
         took: Duration,
     ) {
         let Some(ongoing) = self.ongoing_batch.take() else {
@@ -538,9 +535,6 @@ where
                 return;
             }
         };
-
-        // HeaderEx already validated the headers (but not verified them).
-        let headers = unsafe { ValidatedExtendedHeaders::new_unchecked(headers) };
 
         if let Err(e) = self.store.insert(headers).await {
             self.event_pub.send(NodeEvent::FetchingHeadersFailed {
