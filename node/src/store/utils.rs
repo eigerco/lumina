@@ -115,6 +115,11 @@ impl ValidatedExtendedHeaders {
     pub fn into_inner(self) -> Vec<ExtendedHeader> {
         self.0
     }
+
+    pub fn into_validated_vec(self) -> Vec<ValidatedExtendedHeader> {
+        // SAFETY: It is safe to transmute because of `repr(transparent)`.
+        unsafe { mem::transmute(self.0) }
+    }
 }
 
 impl VerifiedExtendedHeaders {
