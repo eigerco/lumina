@@ -61,13 +61,13 @@ fn get_most_recent_missing_range(
 }
 
 #[repr(transparent)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValidatedExtendedHeader(ExtendedHeader);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValidatedExtendedHeaders(Vec<ExtendedHeader>);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifiedExtendedHeaders(Vec<ExtendedHeader>);
 
 pub trait IntoVerifiedExtendedHeaders: Send {
