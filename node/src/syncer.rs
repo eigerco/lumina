@@ -393,7 +393,7 @@ where
                         break;
                     }
                     Err(e) if e.is_fatal() => {
-                        tx.maybe_send(Err(e.into()));
+                        tx.maybe_send(Err(e));
                         break;
                     }
                     Err(e) => {

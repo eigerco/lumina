@@ -192,7 +192,7 @@ impl InMemoryStoreInner {
             let height = header.height().value();
 
             debug_assert!(
-                self.height_to_hash.get(&height).is_none(),
+                !self.height_to_hash.contains_key(&height),
                 "inconsistency between headers table and ranges table"
             );
 

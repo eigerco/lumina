@@ -163,6 +163,7 @@ pub enum StoreError {
     #[error("Header not found in store")]
     NotFound,
 
+    /// Non-fatal error during insertion.
     #[error("Insertion failed: {0}")]
     InsertionFailed(#[from] StoreInsertionError),
 
@@ -186,17 +187,21 @@ pub enum StoreError {
 /// Store insersion non-fatal errors.
 #[derive(Error, Debug)]
 pub enum StoreInsertionError {
+    /// Provided headers failed verification.
     #[error("Provided headers failed verification: {0}")]
     HeadersVerificationFailed(String),
+
+    /// Provided headers cannot be appended on existing headers of the store.
     #[error("Provided headers failed to be verified with existing neighbors: {0}")]
     NeighborsVerificationFailed(String),
+
+    /// Store containts are not met.
     #[error("Contraints not met: {0}")]
     ContraintsNotMet(BlockRangesError),
 
     // TODO: Same hash for two different heights is not really possible
     // and `ExtendedHeader::validate` would return an error.
-    // Instead of having this error we should have a type safe convertion
-    // from non-validated header to validated ones.
+    // Remove this when a type-safe validation is implemented.
     /// Hash already exists in the store.
     #[error("Hash {0} already exists in store")]
     HashExists(Hash),
