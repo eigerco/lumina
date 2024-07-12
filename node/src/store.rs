@@ -16,8 +16,7 @@ use thiserror::Error;
 
 pub use crate::block_ranges::{BlockRange, BlockRanges, BlockRangesError};
 pub use crate::store::utils::{
-    IntoValidExtendedHeadersChain, ValidExtendedHeadersChain, ValidatedExtendedHeaders,
-    VerifiedExtendedHeaders,
+    IntoVerifiedExtendedHeaders, ValidatedExtendedHeaders, VerifiedExtendedHeaders,
 };
 
 pub use in_memory_store::InMemoryStore;
@@ -151,7 +150,7 @@ pub trait Store: Send + Sync + Debug {
     ///
     /// New insertion should pass all the constraints in [`BlockRanges::check_insertion_constraints`],
     /// additionaly it should be [`ExtendedHeader::verify`]ed against neighbor headers.
-    async fn insert(&self, headers: impl IntoValidExtendedHeadersChain) -> Result<()>;
+    async fn insert(&self, headers: impl IntoVerifiedExtendedHeaders) -> Result<()>;
 
     /// Returns a list of header ranges currenty held in store.
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges>;

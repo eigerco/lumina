@@ -19,7 +19,7 @@ use tracing::{debug, trace};
 
 use crate::block_ranges::BlockRanges;
 use crate::store::{
-    IntoValidExtendedHeadersChain, Result, SamplingMetadata, SamplingStatus, Store, StoreError,
+    IntoVerifiedExtendedHeaders, Result, SamplingMetadata, SamplingStatus, Store, StoreError,
 };
 
 const SCHEMA_VERSION: u64 = 2;
@@ -244,8 +244,8 @@ impl RedbStore {
         .unwrap_or(false)
     }
 
-    async fn insert(&self, headers: impl IntoValidExtendedHeadersChain) -> Result<()> {
-        let headers = headers.into_valid_chain().await?;
+    async fn insert(&self, headers: impl IntoVerifiedExtendedHeaders) -> Result<()> {
+        let headers = headers.into_verified().await?;
 
         self.write_tx(move |tx| {
             let headers = headers.as_ref();
@@ -462,7 +462,7 @@ impl Store for RedbStore {
         self.contains_height(height).await
     }
 
-    async fn insert(&self, headers: impl IntoValidExtendedHeadersChain) -> Result<()> {
+    async fn insert(&self, headers: impl IntoVerifiedExtendedHeaders) -> Result<()> {
         self.insert(headers).await
     }
 

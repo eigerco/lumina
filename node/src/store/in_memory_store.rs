@@ -11,10 +11,10 @@ use tracing::debug;
 
 use crate::block_ranges::BlockRanges;
 use crate::store::{
-    IntoValidExtendedHeadersChain, Result, SamplingMetadata, SamplingStatus, Store, StoreError,
+    IntoVerifiedExtendedHeaders, Result, SamplingMetadata, SamplingStatus, Store, StoreError,
 };
 
-use super::utils::ValidExtendedHeadersChain;
+use super::VerifiedExtendedHeaders;
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -86,8 +86,8 @@ impl InMemoryStore {
         self.inner.read().await.get_by_height(height)
     }
 
-    pub(crate) async fn insert(&self, headers: impl IntoValidExtendedHeadersChain) -> Result<()> {
-        let headers = headers.into_valid_chain().await.map_err(|e| dbg!(e))?;
+    pub(crate) async fn insert(&self, headers: impl IntoVerifiedExtendedHeaders) -> Result<()> {
+        let headers = headers.into_verified().await?;
         self.inner.write().await.insert(headers).await?;
         self.header_added_notifier.notify_waiters();
         Ok(())
@@ -164,7 +164,7 @@ impl InMemoryStoreInner {
             .ok_or(StoreError::LostHash(hash))
     }
 
-    async fn insert(&mut self, headers: ValidExtendedHeadersChain) -> Result<()> {
+    async fn insert(&mut self, headers: VerifiedExtendedHeaders) -> Result<()> {
         let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
             return Ok(());
         };
@@ -362,7 +362,7 @@ impl Store for InMemoryStore {
         self.contains_height(height).await
     }
 
-    async fn insert(&self, headers: impl IntoValidExtendedHeadersChain) -> Result<()> {
+    async fn insert(&self, headers: impl IntoVerifiedExtendedHeaders) -> Result<()> {
         self.insert(headers).await
     }
 

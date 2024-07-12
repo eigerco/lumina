@@ -191,7 +191,7 @@ pub(crate) enum P2pCmd {
     },
     HeaderExRequest {
         request: HeaderRequest,
-        respond_to: OneshotResultSender<ValidatedExtendedHeaders, P2pError>,
+        respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     },
     Listeners {
         respond_to: oneshot::Sender<Vec<Multiaddr>>,
@@ -340,10 +340,7 @@ impl P2p {
     }
 
     /// Send a request on the `header-ex` protocol.
-    pub async fn header_ex_request(
-        &self,
-        request: HeaderRequest,
-    ) -> Result<ValidatedExtendedHeaders> {
+    pub async fn header_ex_request(&self, request: HeaderRequest) -> Result<Vec<ExtendedHeader>> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::HeaderExRequest {

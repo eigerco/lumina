@@ -30,7 +30,7 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
 use crate::store::utils::calculate_range_to_fetch;
-use crate::store::{Store, StoreError, ValidExtendedHeadersChain, ValidatedExtendedHeaders};
+use crate::store::{Store, StoreError, ValidatedExtendedHeaders};
 use crate::utils::OneshotSenderExt;
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
