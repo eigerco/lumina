@@ -1,5 +1,7 @@
 use std::ops::RangeInclusive;
 
+#[cfg(not(target_arch = "wasm32"))]
+use celestia_tendermint_proto::Protobuf;
 #[cfg(any(test, feature = "test-utils"))]
 use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
@@ -7,6 +9,8 @@ use celestia_types::ExtendedHeader;
 use crate::block_ranges::{BlockRange, BlockRangeExt};
 use crate::executor::yield_now;
 use crate::store::Result;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::store::{SamplingMetadata, StoreError};
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
 
@@ -162,6 +166,24 @@ pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_typ
     }
 
     Ok(())
+}
+
+/// Deserializes [`SamplingMetadata`] and returns [`StoreError::StoredDataError`] on failure.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn deserialize_sampling_metadata(bytes: &[u8]) -> Result<SamplingMetadata> {
+    SamplingMetadata::decode(bytes).map_err(|e| {
+        let s = format!("Stored SamplingMetadata cannot be deserialized: {e}");
+        StoreError::StoredDataError(s)
+    })
+}
+
+/// Deserializes [`ExtendedHeader`] and returns [`StoreError::StoredDataError`] on failure.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn deserialize_extended_header(bytes: &[u8]) -> Result<ExtendedHeader> {
+    ExtendedHeader::decode(bytes).map_err(|e| {
+        let s = format!("Stored ExtendedHeader cannot be deserialized: {e}");
+        StoreError::StoredDataError(s)
+    })
 }
 
 #[cfg(test)]

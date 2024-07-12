@@ -1,7 +1,7 @@
 //! Primitives related to the [`ExtendedHeader`] storage.
 
 use std::convert::Infallible;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::io::Cursor;
 use std::ops::{Bound, RangeBounds, RangeInclusive};
 
@@ -102,11 +102,7 @@ pub trait Store: Send + Sync + Debug {
             range.end() - range.start() + 1 // add one as it's inclusive
         };
 
-        let mut headers = Vec::with_capacity(
-            amount
-                .try_into()
-                .map_err(|_| StoreError::InvalidHeadersRange)?,
-        );
+        let mut headers = Vec::with_capacity(amount.try_into().unwrap_or(usize::MAX));
 
         for height in range {
             let header = self.get_by_height(height).await?;
@@ -151,7 +147,7 @@ pub trait Store: Send + Sync + Debug {
     async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>;
+        <R as TryInto<VerifiedExtendedHeaders>>::Error: Display;
 
     /// Returns a list of header ranges currenty held in store.
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges>;
@@ -163,32 +159,15 @@ pub trait Store: Send + Sync + Debug {
 /// Representation of all the errors that can occur when interacting with the [`Store`].
 #[derive(Error, Debug)]
 pub enum StoreError {
-    /// Hash already exists in the store.
-    #[error("Hash {0} already exists in store")]
-    HashExists(Hash),
-
-    /// Header validation has failed.
-    #[error("Failed to validate header at height {0}")]
-    HeaderChecksError(u64),
-
     /// Header not found.
     #[error("Header not found in store")]
     NotFound,
 
-    /// Header not found but it should be present. Store is invalid.
-    #[error("Store in inconsistent state; height {0} within known range, but missing header")]
-    LostHeight(u64),
-
-    /// Hash not found but it should be present. Store is invalid.
-    #[error("Store in inconsistent state; height->hash mapping exists, {0} missing")]
-    LostHash(Hash),
-
-    /// An error propagated from the [`celestia_types`].
-    #[error(transparent)]
-    CelestiaTypes(#[from] celestia_types::Error),
+    #[error("Insertion failed: {0}")]
+    InsertionFailed(#[from] StoreInsertionError),
 
     /// Storage corrupted.
-    #[error("Stored data in inconsistent state, try reseting the store: {0}")]
+    #[error("Stored data are inconsistent or invalid, try reseting the store: {0}")]
     StoredDataError(String),
 
     /// Unrecoverable error reported by the database.
@@ -202,14 +181,38 @@ pub enum StoreError {
     /// Failed to open the store.
     #[error("Error opening store: {0}")]
     OpenFailed(String),
+}
 
-    /// Invalid range of headers provided.
-    #[error("Invalid headers range")]
-    InvalidHeadersRange,
+/// Store insersion non-fatal errors.
+#[derive(Error, Debug)]
+pub enum StoreInsertionError {
+    #[error("Provided headers failed verification: {0}")]
+    HeadersVerificationFailed(String),
+    #[error("Provided headers failed to be verified with existing neighbors: {0}")]
+    NeighborsVerificationFailed(String),
+    #[error("Contraints not met: {0}")]
+    ContraintsNotMet(BlockRangesError),
 
-    /// An error propagated from [`BlockRanges`] methods.
-    #[error(transparent)]
-    BlockRangesError(#[from] BlockRangesError),
+    // TODO: Same hash for two different heights is not really possible
+    // and `ExtendedHeader::validate` would return an error.
+    // Instead of having this error we should have a type safe convertion
+    // from non-validated header to validated ones.
+    /// Hash already exists in the store.
+    #[error("Hash {0} already exists in store")]
+    HashExists(Hash),
+}
+
+impl StoreError {
+    /// Returns `true` if an error is fatal.
+    pub(crate) fn is_fatal(&self) -> bool {
+        match self {
+            StoreError::StoredDataError(_)
+            | StoreError::FatalDatabaseError(_)
+            | StoreError::ExecutorError(_)
+            | StoreError::OpenFailed(_) => true,
+            StoreError::NotFound | StoreError::InsertionFailed(_) => false,
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -316,7 +319,7 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 mod tests {
     use super::*;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use celestia_types::{Error, Height};
+    use celestia_types::Height;
     use rstest::rstest;
 
     // rstest only supports attributes which last segment is `test`
@@ -529,7 +532,7 @@ mod tests {
         s.insert(header101.clone()).await.unwrap();
 
         let error = match s.insert(header101).await {
-            Err(StoreError::BlockRangesError(e)) => e,
+            Err(StoreError::InsertionFailed(StoreInsertionError::ContraintsNotMet(e))) => e,
             res => panic!("Invalid result: {res:?}"),
         };
 
@@ -557,7 +560,7 @@ mod tests {
         let header30 = gen.next_of(&header29);
 
         let error = match s.insert(header30).await {
-            Err(StoreError::BlockRangesError(e)) => e,
+            Err(StoreError::InsertionFailed(StoreInsertionError::ContraintsNotMet(e))) => e,
             res => panic!("Invalid result: {res:?}"),
         };
         assert_eq!(error, BlockRangesError::BlockRangeOverlap(30..=30, 30..=30));
@@ -581,7 +584,9 @@ mod tests {
 
         assert!(matches!(
             s.insert(dup_header).await,
-            Err(StoreError::HashExists(_))
+            Err(StoreError::InsertionFailed(
+                StoreInsertionError::HashExists(_)
+            ))
         ));
     }
 
@@ -647,7 +652,9 @@ mod tests {
         s.insert(upcoming_head).await.unwrap();
         assert!(matches!(
             s.insert(another_chain).await,
-            Err(StoreError::CelestiaTypes(Error::Verification(_)))
+            Err(StoreError::InsertionFailed(
+                StoreInsertionError::NeighborsVerificationFailed(_)
+            ))
         ));
     }
 

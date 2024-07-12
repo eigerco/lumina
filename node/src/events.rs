@@ -276,6 +276,12 @@ pub enum NodeEvent {
         took: Duration,
     },
 
+    /// Header syncing fatal error.
+    FatalSyncerError {
+        /// A human readable error.
+        error: String,
+    },
+
     /// Network was compromised.
     ///
     /// This happens when a valid bad encoding fraud proof is received.
@@ -290,6 +296,7 @@ impl NodeEvent {
     pub fn is_error(&self) -> bool {
         match self {
             NodeEvent::FatalDaserError { .. }
+            | NodeEvent::FatalSyncerError { .. }
             | NodeEvent::FetchingHeadersFailed { .. }
             | NodeEvent::NetworkCompromised => true,
             NodeEvent::PeerConnected { .. }
@@ -399,6 +406,9 @@ impl fmt::Display for NodeEvent {
                 } else {
                     write!(f, "Fetching headers of blocks {from_height}-{to_height} failed. Took: {took:?}, Error: {error}")
                 }
+            }
+            NodeEvent::FatalSyncerError { error } => {
+                write!(f, "Syncer stopped because of a fatal error: {error}")
             }
             NodeEvent::NetworkCompromised => {
                 write!(f, "The network is compromised and should not be trusted. ")?;
