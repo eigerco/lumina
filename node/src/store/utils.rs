@@ -304,32 +304,6 @@ impl<'a, const N: usize> From<&'a mut [ValidatedExtendedHeader; N]> for Validate
     }
 }
 
-/*
-impl IntoIterator for ValidExtendedHeadersChain {
-    type Item = &ExtendedHeader;
-    type IntoIter<'a> = std::slice::Iter<'a, ExtendedHeader>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
-    }
-}
-
-impl IntoIterator for VerifiedExtendedHeaders {
-    type Item = ExtendedHeader;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
-    }
-}
-
-impl AsRef<[ExtendedHeader]> for ValidExtendedHeadersChain {
-    fn as_ref(&self) -> &[ExtendedHeader] {
-        unsafe { mem::transmute(self.0.as_ref()) }
-    }
-}
-*/
-
 impl IntoVerifiedExtendedHeaders for VerifiedExtendedHeaders {
     async fn into_verified(self) -> celestia_types::Result<VerifiedExtendedHeaders> {
         Ok(self)
