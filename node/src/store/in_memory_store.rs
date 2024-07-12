@@ -12,9 +12,9 @@ use tracing::debug;
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
-use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
-
-use super::StoreInsertionError;
+use crate::store::{
+    Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
+};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
