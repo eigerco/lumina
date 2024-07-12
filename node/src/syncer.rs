@@ -229,8 +229,6 @@ where
     }
 
     async fn run(&mut self) -> Result<()> {
-        self.report().await?;
-
         loop {
             if self.cancellation_token.is_cancelled() {
                 break;
@@ -270,7 +268,7 @@ where
                     self.report().await?;
                 }
                 res = &mut try_init_result => {
-                    // `try_init` propagates only fatal errors
+                    // try_init task propagates only fatal errors
                     let (network_head, took) = res??;
                     let network_head_height = network_head.height().value();
 
