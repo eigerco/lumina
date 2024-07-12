@@ -10,8 +10,11 @@ use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
 use crate::block_ranges::BlockRanges;
-use crate::store::utils::VerifiedExtendedHeaders;
-use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
+use crate::store::{
+    IntoVerifiedExtendedHeaders, Result, SamplingMetadata, SamplingStatus, Store, StoreError,
+};
+
+use super::VerifiedExtendedHeaders;
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -83,12 +86,8 @@ impl InMemoryStore {
         self.inner.read().await.get_by_height(height)
     }
 
-    pub(crate) async fn insert<R>(&self, headers: R) -> Result<()>
-    where
-        R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
-    {
-        let headers = headers.try_into()?;
+    pub(crate) async fn insert(&self, headers: impl IntoVerifiedExtendedHeaders) -> Result<()> {
+        let headers = headers.into_verified().await?;
         self.inner.write().await.insert(headers).await?;
         self.header_added_notifier.notify_waiters();
         Ok(())
@@ -363,12 +362,8 @@ impl Store for InMemoryStore {
         self.contains_height(height).await
     }
 
-    async fn insert<R>(&self, header: R) -> Result<()>
-    where
-        R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
-    {
-        self.insert(header).await
+    async fn insert(&self, headers: impl IntoVerifiedExtendedHeaders) -> Result<()> {
+        self.insert(headers).await
     }
 
     async fn update_sampling_metadata(

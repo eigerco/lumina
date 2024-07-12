@@ -264,6 +264,18 @@ impl ExtendedHeader {
         Ok(())
     }
 
+    pub fn verify_adjacent(&self, untrusted: &ExtendedHeader) -> Result<()> {
+        if self.height().increment() != untrusted.height() {
+            bail_verification!(
+                "untrusted header height ({}) not adjacent to the current trusted ({})",
+                untrusted.height(),
+                self.height(),
+            );
+        }
+
+        self.verify(untrusted)
+    }
+
     /// Verify a chain of adjacent untrusted headers.
     ///
     /// # Note

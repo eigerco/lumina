@@ -16,7 +16,9 @@ use crate::{
     node::NodeConfig,
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
-    store::{ExtendedHeaderGeneratorExt, InMemoryStore},
+    store::{
+        InMemoryStore, ValidatedExtendedHeader, ValidatedExtendedHeaders, VerifiedExtendedHeaders,
+    },
     utils::OneshotResultSender,
 };
 
@@ -26,6 +28,25 @@ pub(crate) use tokio::test as async_test;
 #[cfg(test)]
 #[cfg(target_arch = "wasm32")]
 pub(crate) use wasm_bindgen_test::wasm_bindgen_test as async_test;
+
+/// Extends test header generator for easier insertion into the store
+pub trait ExtendedHeaderGeneratorExt {
+    /// Generate next amount verified headers
+    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders;
+
+    /// Generate next amount validated headers
+    fn next_many_validated(&mut self, amount: u64) -> ValidatedExtendedHeaders;
+}
+
+impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
+    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders {
+        unsafe { VerifiedExtendedHeaders::new_unchecked(self.next_many(amount)) }
+    }
+
+    fn next_many_validated(&mut self, amount: u64) -> ValidatedExtendedHeaders {
+        unsafe { ValidatedExtendedHeaders::new_unchecked(self.next_many(amount)) }
+    }
+}
 
 /// Generate a store pre-filled with headers.
 pub async fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
@@ -80,7 +101,7 @@ pub struct MockP2pHandle {
     #[allow(dead_code)]
     pub(crate) cmd_tx: mpsc::Sender<P2pCmd>,
     pub(crate) cmd_rx: mpsc::Receiver<P2pCmd>,
-    pub(crate) header_sub_tx: watch::Sender<Option<ExtendedHeader>>,
+    pub(crate) header_sub_tx: watch::Sender<Option<ValidatedExtendedHeader>>,
     pub(crate) peer_tracker_tx: watch::Sender<PeerTrackerInfo>,
 }
 
@@ -109,7 +130,7 @@ impl MockP2pHandle {
     }
 
     /// Simulate a new header announced in the network.
-    pub fn announce_new_head(&self, header: ExtendedHeader) {
+    pub fn announce_new_head(&self, header: ValidatedExtendedHeader) {
         self.header_sub_tx.send_replace(Some(header));
     }
 
@@ -146,7 +167,7 @@ impl MockP2pHandle {
         &mut self,
     ) -> (
         HeaderRequest,
-        OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+        OneshotResultSender<ValidatedExtendedHeaders, P2pError>,
     ) {
         match self.expect_cmd().await {
             P2pCmd::HeaderExRequest {
@@ -162,7 +183,11 @@ impl MockP2pHandle {
     /// [`P2p`]: crate::p2p::P2p
     pub async fn expect_header_request_for_height_cmd(
         &mut self,
-    ) -> (u64, u64, OneshotResultSender<Vec<ExtendedHeader>, P2pError>) {
+    ) -> (
+        u64,
+        u64,
+        OneshotResultSender<ValidatedExtendedHeaders, P2pError>,
+    ) {
         let (req, respond_to) = self.expect_header_request_cmd().await;
 
         match req.data {
@@ -176,7 +201,10 @@ impl MockP2pHandle {
     /// [`P2p`]: crate::p2p::P2p
     pub async fn expect_header_request_for_hash_cmd(
         &mut self,
-    ) -> (Hash, OneshotResultSender<Vec<ExtendedHeader>, P2pError>) {
+    ) -> (
+        Hash,
+        OneshotResultSender<ValidatedExtendedHeaders, P2pError>,
+    ) {
         let (req, respond_to) = self.expect_header_request_cmd().await;
 
         match req.data {
@@ -192,7 +220,7 @@ impl MockP2pHandle {
     /// Assert that a header-sub initialization command was sent to the [`P2p`] worker.
     ///
     /// [`P2p`]: crate::p2p::P2p
-    pub async fn expect_init_header_sub(&mut self) -> ExtendedHeader {
+    pub async fn expect_init_header_sub(&mut self) -> ValidatedExtendedHeader {
         match self.expect_cmd().await {
             P2pCmd::InitHeaderSub { head } => *head,
             cmd => panic!("Expecting InitHeaderSub, but received: {cmd:?}"),

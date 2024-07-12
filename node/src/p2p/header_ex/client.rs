@@ -7,7 +7,6 @@ use std::task::{Context, Poll};
 
 use celestia_proto::p2p::pb::header_request::Data;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
-use celestia_types::ExtendedHeader;
 use futures::future::join_all;
 use libp2p::request_response::{OutboundFailure, OutboundRequestId};
 use libp2p::PeerId;
@@ -19,7 +18,7 @@ use crate::p2p::header_ex::utils::{HeaderRequestExt, HeaderResponseExt};
 use crate::p2p::header_ex::{HeaderExError, ReqRespBehaviour};
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
-use crate::store::utils::VALIDATIONS_PER_YIELD;
+use crate::store::utils::{ValidatedExtendedHeaders, VALIDATIONS_PER_YIELD};
 use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
 
 const MAX_PEERS: usize = 10;
@@ -34,7 +33,7 @@ where
 
 struct State {
     request: HeaderRequest,
-    respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+    respond_to: OneshotResultSender<ValidatedExtendedHeaders, P2pError>,
 }
 
 pub(super) trait RequestSender {
@@ -67,7 +66,7 @@ where
         &mut self,
         sender: &mut S,
         request: HeaderRequest,
-        respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+        respond_to: OneshotResultSender<ValidatedExtendedHeaders, P2pError>,
     ) {
         if !request.is_valid() {
             respond_to.maybe_send_err(HeaderExError::InvalidRequest);
@@ -87,7 +86,7 @@ where
         &mut self,
         sender: &mut S,
         request: HeaderRequest,
-        respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+        respond_to: OneshotResultSender<ValidatedExtendedHeaders, P2pError>,
     ) {
         // Validate amount
         if usize::try_from(request.amount).is_err() {
@@ -113,7 +112,7 @@ where
         &mut self,
         sender: &mut S,
         request: HeaderRequest,
-        respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+        respond_to: OneshotResultSender<ValidatedExtendedHeaders, P2pError>,
     ) {
         const MIN_HEAD_RESPONSES: usize = 2;
 
@@ -149,7 +148,7 @@ where
                 .into_iter()
                 // In case of HEAD all responses have only 1 header.
                 // This was already enforced by `decode_and_verify_responses`.
-                .filter_map(|v| v.ok()?.ok()?.into_iter().next())
+                .filter_map(|v| v.ok()?.ok()?.into_validated_vec().into_iter().next())
                 .collect();
             let mut counter: HashMap<_, usize> = HashMap::new();
 
@@ -173,14 +172,14 @@ where
             // Return the header with the highest height that was received by at least 2 peers
             for resp in &resps {
                 if counter[&resp.hash()] >= MIN_HEAD_RESPONSES {
-                    respond_to.maybe_send_ok(vec![resp.to_owned()]);
+                    respond_to.maybe_send_ok(resp.into());
                     return;
                 }
             }
 
             // Otherwise return the header with the maximum height
             let resp = resps.into_iter().next().expect("no reposnes");
-            respond_to.maybe_send_ok(vec![resp]);
+            respond_to.maybe_send_ok(resp.into());
         });
     }
 
@@ -238,7 +237,7 @@ where
 async fn decode_and_verify_responses(
     request: &HeaderRequest,
     responses: &[HeaderResponse],
-) -> Result<Vec<ExtendedHeader>, HeaderExError> {
+) -> Result<ValidatedExtendedHeaders, HeaderExError> {
     if responses.is_empty() {
         return Err(HeaderExError::InvalidResponse);
     }
@@ -298,7 +297,7 @@ async fn decode_and_verify_responses(
         _ => return Err(HeaderExError::InvalidResponse),
     }
 
-    Ok(headers)
+    Ok(headers.into())
 }
 
 #[cfg(test)]

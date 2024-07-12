@@ -4,7 +4,6 @@ use std::task::{Context, Poll};
 
 use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
-use celestia_types::ExtendedHeader;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::{
     core::Endpoint,
@@ -29,7 +28,7 @@ use crate::p2p::header_ex::client::HeaderExClientHandler;
 use crate::p2p::header_ex::server::HeaderExServerHandler;
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
-use crate::store::Store;
+use crate::store::{Store, ValidatedExtendedHeaders};
 use crate::utils::{protocol_id, OneshotResultSender};
 
 /// Size limit of a request in bytes
@@ -111,7 +110,7 @@ where
     pub(crate) fn send_request(
         &mut self,
         request: HeaderRequest,
-        respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+        respond_to: OneshotResultSender<ValidatedExtendedHeaders, P2pError>,
     ) {
         self.client_handler
             .on_send_request(&mut self.req_resp, request, respond_to);

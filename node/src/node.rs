@@ -224,17 +224,17 @@ where
 
     /// Request the head header from the network.
     pub async fn request_head_header(&self) -> Result<ExtendedHeader> {
-        Ok(self.p2p.get_head_header().await?)
+        Ok(self.p2p.get_head_header().await?.into())
     }
 
     /// Request a header for the block with a given hash from the network.
     pub async fn request_header_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
-        Ok(self.p2p.get_header(*hash).await?)
+        Ok(self.p2p.get_header(*hash).await?.into())
     }
 
     /// Request a header for the block with a given height from the network.
     pub async fn request_header_by_height(&self, hash: u64) -> Result<ExtendedHeader> {
-        Ok(self.p2p.get_header_by_height(hash).await?)
+        Ok(self.p2p.get_header_by_height(hash).await?.into())
     }
 
     /// Request headers in range (from, from + amount] from the network.
@@ -245,7 +245,11 @@ where
         from: &ExtendedHeader,
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
-        Ok(self.p2p.get_verified_headers_range(from, amount).await?)
+        Ok(self
+            .p2p
+            .get_verified_headers_range(from, amount)
+            .await?
+            .into())
     }
 
     /// Request a verified [`Row`] from the network.
@@ -301,7 +305,11 @@ where
 
     /// Get the latest header announced in the network.
     pub fn get_network_head_header(&self) -> Option<ExtendedHeader> {
-        self.p2p.header_sub_watcher().borrow().clone()
+        self.p2p
+            .header_sub_watcher()
+            .borrow()
+            .clone()
+            .map(|h| h.into())
     }
 
     /// Get the latest locally synced header.

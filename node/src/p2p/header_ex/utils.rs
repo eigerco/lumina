@@ -6,6 +6,7 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 
 use crate::p2p::header_ex::HeaderExError;
+use crate::store::utils::ValidatedExtendedHeader;
 
 pub(crate) trait HeaderRequestExt {
     fn with_origin(origin: u64, amount: u64) -> HeaderRequest;
@@ -51,18 +52,21 @@ impl HeaderRequestExt for HeaderRequest {
 }
 
 pub(super) trait HeaderResponseExt {
-    fn to_validated_extented_header(&self) -> Result<ExtendedHeader, HeaderExError>;
+    fn to_validated_extented_header(&self) -> Result<ValidatedExtendedHeader, HeaderExError>;
     fn not_found() -> HeaderResponse;
     fn invalid() -> HeaderResponse;
 }
 
 impl HeaderResponseExt for HeaderResponse {
-    fn to_validated_extented_header(&self) -> Result<ExtendedHeader, HeaderExError> {
+    fn to_validated_extented_header(&self) -> Result<ValidatedExtendedHeader, HeaderExError> {
         match self.status_code() {
             StatusCode::Invalid => Err(HeaderExError::InvalidResponse),
             StatusCode::NotFound => Err(HeaderExError::HeaderNotFound),
-            StatusCode::Ok => ExtendedHeader::decode_and_validate(&self.body[..])
-                .map_err(|_| HeaderExError::InvalidResponse),
+            StatusCode::Ok => {
+                let header = ExtendedHeader::decode(&self.body[..])
+                    .map_err(|_| HeaderExError::InvalidResponse)?;
+                ValidatedExtendedHeader::new(header).map_err(|_| HeaderExError::InvalidResponse)
+            }
         }
     }
 

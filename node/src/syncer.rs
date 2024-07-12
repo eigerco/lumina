@@ -30,7 +30,7 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
 use crate::store::utils::calculate_range_to_fetch;
-use crate::store::{Store, StoreError};
+use crate::store::{Store, StoreError, ValidatedExtendedHeader, ValidatedExtendedHeaders};
 use crate::utils::OneshotSenderExt;
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
@@ -178,7 +178,7 @@ where
     event_pub: EventPublisher,
     p2p: Arc<P2p>,
     store: Arc<S>,
-    header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
+    header_sub_watcher: watch::Receiver<Option<ValidatedExtendedHeader>>,
     subjective_head_height: Option<u64>,
     batch_size: u64,
     ongoing_batch: Option<Ongoing>,
@@ -415,8 +415,6 @@ where
         if let Ok(store_head_height) = self.store.head_height().await {
             // If our new header is adjacent to the HEAD of the store
             if store_head_height + 1 == new_head_height {
-                // Header is already verified by HeaderSub and will be validated against previous
-                // head on insert
                 if self.store.insert(new_head).await.is_ok() {
                     self.event_pub.send(NodeEvent::AddedHeaderFromHeaderSub {
                         height: new_head_height,
@@ -439,7 +437,7 @@ where
     #[instrument(skip_all)]
     async fn fetch_next_batch(
         &mut self,
-        headers_tx: &mpsc::Sender<(Result<Vec<ExtendedHeader>, P2pError>, Duration)>,
+        headers_tx: &mpsc::Sender<(Result<ValidatedExtendedHeaders, P2pError>, Duration)>,
     ) {
         if self.ongoing_batch.is_some() {
             // Another batch is ongoing. We do not parallelize `Syncer`
@@ -514,7 +512,7 @@ where
     #[instrument(skip_all)]
     async fn on_fetch_next_batch_result(
         &mut self,
-        res: Result<Vec<ExtendedHeader>, P2pError>,
+        res: Result<ValidatedExtendedHeaders, P2pError>,
         took: Duration,
     ) {
         let Some(ongoing) = self.ongoing_batch.take() else {
@@ -588,6 +586,7 @@ mod tests {
     use crate::block_ranges::{BlockRange, BlockRangeExt};
     use crate::events::EventChannel;
     use crate::p2p::header_session;
+    use crate::store::utils::validate_headers;
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
@@ -884,6 +883,8 @@ mod tests {
         let headers = ExtendedHeaderGenerator::new().next_many(20);
         let headers_prime = ExtendedHeaderGenerator::new().next_many(20);
 
+        //validate_headers(&headers).await.unwrap();
+
         // Start Syncer and report last header as network head
         let (syncer, store, mut p2p_mock) = initialized_syncer(headers[19].clone()).await;
 
@@ -891,13 +892,17 @@ mod tests {
         handle_session_batch(&mut p2p_mock, &headers_prime, 1..=19, true).await;
 
         // Syncer should not apply headers from invalid response
+        dbg!(1);
         assert_syncing(&syncer, &store, &[20..=20], 20).await;
+        dbg!(2);
 
         // Syncer requests missing headers again
         handle_session_batch(&mut p2p_mock, &headers, 1..=19, true).await;
 
+        dbg!(3);
         // With a correct resposne, syncer should update the store
         assert_syncing(&syncer, &store, &[1..=20], 20).await;
+        dbg!(4);
     }
 
     async fn assert_syncing(
@@ -908,7 +913,7 @@ mod tests {
     ) {
         // Syncer receives responds on the same loop that receive other events.
         // Wait a bit to be processed.
-        sleep(Duration::from_millis(1)).await;
+        sleep(Duration::from_millis(10)).await;
 
         let store_ranges = store.get_stored_header_ranges().await.unwrap();
         let syncing_info = syncer.info().await.unwrap();

@@ -18,8 +18,9 @@ use tracing::warn;
 use tracing::{debug, trace};
 
 use crate::block_ranges::BlockRanges;
-use crate::store::utils::VerifiedExtendedHeaders;
-use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
+use crate::store::{
+    IntoVerifiedExtendedHeaders, Result, SamplingMetadata, SamplingStatus, Store, StoreError,
+};
 
 const SCHEMA_VERSION: u64 = 2;
 
@@ -243,12 +244,8 @@ impl RedbStore {
         .unwrap_or(false)
     }
 
-    async fn insert<R>(&self, headers: R) -> Result<()>
-    where
-        R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
-    {
-        let headers = headers.try_into()?;
+    async fn insert(&self, headers: impl IntoVerifiedExtendedHeaders) -> Result<()> {
+        let headers = headers.into_verified().await?;
 
         self.write_tx(move |tx| {
             let headers = headers.as_ref();
@@ -465,11 +462,7 @@ impl Store for RedbStore {
         self.contains_height(height).await
     }
 
-    async fn insert<R>(&self, headers: R) -> Result<()>
-    where
-        R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
-    {
+    async fn insert(&self, headers: impl IntoVerifiedExtendedHeaders) -> Result<()> {
         self.insert(headers).await
     }
 
@@ -678,13 +671,10 @@ fn migrate_v1_to_v2(
 
 #[cfg(test)]
 pub mod tests {
-    use crate::store::ExtendedHeaderGeneratorExt;
-
     use super::*;
-
-    use std::path::Path;
-
+    use crate::test_utils::ExtendedHeaderGeneratorExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
+    use std::path::Path;
     use tempfile::TempDir;
 
     #[tokio::test]
