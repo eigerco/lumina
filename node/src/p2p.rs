@@ -628,7 +628,7 @@ where
 
         for addr in args.listen_on {
             if let Err(e) = swarm.listen_on(addr.clone()) {
-                error!("Listen to listen on {addr}: {e}");
+                error!("Failed to listen on {addr}: {e}");
             }
         }
 
