@@ -29,12 +29,12 @@ mod native {
 
     use crate::Error;
 
-    const MAX_SHARES_SIZE_IN_EDS: usize =
+    const MAX_EDS_SIZE_BYTES: usize =
         MAX_EXTENDED_SQUARE_WIDTH * MAX_EXTENDED_SQUARE_WIDTH * SHARE_SIZE;
 
     // The biggest response we might get is for requesting an EDS.
     // Also, we allow 1 MB extra for any metadata they come with it.
-    const MAX_RESPONSE_SIZE: usize = MAX_SHARES_SIZE_IN_EDS + 1024 * 1024;
+    const MAX_RESPONSE_SIZE: usize = MAX_EDS_SIZE_BYTES + 1024 * 1024;
 
     /// Json RPC client.
     pub enum Client {
