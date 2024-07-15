@@ -9,8 +9,10 @@
 //! headers announced on the `header-sub` p2p protocol to keep the `subjective_head` as close
 //! to the `network_head` as possible.
 
+use std::future::poll_fn;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::task::Poll;
 use std::time::Duration;
 
 use backoff::backoff::Backoff;
@@ -20,7 +22,7 @@ use celestia_types::ExtendedHeader;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use tokio::select;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, info_span, instrument, warn, Instrument};
 use web_time::Instant;
@@ -191,7 +193,7 @@ where
     event_pub: EventPublisher,
     p2p: Arc<P2p>,
     store: Arc<S>,
-    header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
+    header_sub_rx: Option<mpsc::Receiver<ExtendedHeader>>,
     subjective_head_height: Option<u64>,
     batch_size: u64,
     ongoing_batch: Option<Ongoing>,
@@ -212,15 +214,13 @@ where
         cancellation_token: CancellationToken,
         cmd_rx: mpsc::Receiver<SyncerCmd>,
     ) -> Result<Self> {
-        let header_sub_watcher = args.p2p.header_sub_watcher();
-
         Ok(Worker {
             cancellation_token,
             cmd_rx,
             event_pub: args.event_pub,
             p2p: args.p2p,
             store: args.store,
-            header_sub_watcher,
+            header_sub_rx: None,
             subjective_head_height: None,
             batch_size: args.batch_size,
             ongoing_batch: None,
@@ -274,7 +274,10 @@ where
 
                     info!("Setting initial subjective head to {network_head_height}");
                     self.set_subjective_head_height(network_head_height);
-                    self.p2p.init_header_sub(network_head).await?;
+
+                    let (header_sub_tx, header_sub_rx) = mpsc::channel(16);
+                    self.p2p.init_header_sub(network_head, header_sub_tx).await?;
+                    self.header_sub_rx = Some(header_sub_rx);
 
                     self.event_pub.send(NodeEvent::FetchingHeadHeaderFinished {
                         height: network_head_height,
@@ -326,8 +329,9 @@ where
                 _ = report_interval.tick() => {
                     self.report().await?;
                 }
-                _ = self.header_sub_watcher.changed() => {
-                    self.on_header_sub_message().await?;
+                res = header_sub_recv(&mut self.header_sub_rx) => {
+                    let header = res?;
+                    self.on_header_sub_message(header).await?;
                     self.fetch_next_batch(&headers_tx).await?;
                 }
                 Some(cmd) = self.cmd_rx.recv() => {
@@ -344,6 +348,8 @@ where
             warn!("Cancelling fetching of {}", ongoing.batch.display());
             ongoing.cancellation_token.cancel();
         }
+
+        self.header_sub_rx.take();
 
         Ok(())
     }
@@ -428,18 +434,7 @@ where
     }
 
     #[instrument(skip_all)]
-    async fn on_header_sub_message(&mut self) -> Result<()> {
-        // If subjective head isn't set, do nothing.
-        // We do this to avoid some edge cases.
-        if self.subjective_head_height.is_none() {
-            return Ok(());
-        }
-
-        let Some(new_head) = self.header_sub_watcher.borrow().to_owned() else {
-            // Nothing to do
-            return Ok(());
-        };
-
+    async fn on_header_sub_message(&mut self, new_head: ExtendedHeader) -> Result<()> {
         let new_head_height = new_head.height().value();
 
         self.set_subjective_head_height(new_head_height);
@@ -618,10 +613,26 @@ where
 
     let network_head = p2p.get_head_header().await?;
 
-    // Insert HEAD to the store and initialize header-sub
+    // Insert HEAD to the store and initialize header-sub.
+    // This will apply insertion restrictions.
     store.insert(network_head.clone()).await?;
 
     Ok(network_head)
+}
+
+async fn header_sub_recv(
+    rx: &mut Option<mpsc::Receiver<ExtendedHeader>>,
+) -> Result<ExtendedHeader> {
+    poll_fn(|cx| {
+        let rx = rx.as_mut().expect("header-sub not initialized");
+
+        match rx.poll_recv(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Some(header)) => Poll::Ready(Ok(header)),
+            Poll::Ready(None) => Poll::Ready(Err(SyncerError::P2p(P2pError::WorkerDied))),
+        }
+    })
+    .await
 }
 
 #[cfg(test)]

@@ -80,7 +80,7 @@ pub struct MockP2pHandle {
     #[allow(dead_code)]
     pub(crate) cmd_tx: mpsc::Sender<P2pCmd>,
     pub(crate) cmd_rx: mpsc::Receiver<P2pCmd>,
-    pub(crate) header_sub_tx: watch::Sender<Option<ExtendedHeader>>,
+    pub(crate) header_sub_tx: Option<mpsc::Sender<ExtendedHeader>>,
     pub(crate) peer_tracker_tx: watch::Sender<PeerTrackerInfo>,
 }
 
@@ -110,7 +110,9 @@ impl MockP2pHandle {
 
     /// Simulate a new header announced in the network.
     pub fn announce_new_head(&self, header: ExtendedHeader) {
-        self.header_sub_tx.send_replace(Some(header));
+        if let Some(ref tx) = self.header_sub_tx {
+            let _ = tx.try_send(header);
+        }
     }
 
     /// Assert that a command was sent to the [`P2p`] worker.
@@ -194,7 +196,10 @@ impl MockP2pHandle {
     /// [`P2p`]: crate::p2p::P2p
     pub async fn expect_init_header_sub(&mut self) -> ExtendedHeader {
         match self.expect_cmd().await {
-            P2pCmd::InitHeaderSub { head } => *head,
+            P2pCmd::InitHeaderSub { head, channel } => {
+                self.header_sub_tx = Some(channel);
+                *head
+            }
             cmd => panic!("Expecting InitHeaderSub, but received: {cmd:?}"),
         }
     }

@@ -300,8 +300,8 @@ where
     }
 
     /// Get the latest header announced in the network.
-    pub fn get_network_head_header(&self) -> Option<ExtendedHeader> {
-        self.p2p.header_sub_watcher().borrow().clone()
+    pub async fn get_network_head_header(&self) -> Result<Option<ExtendedHeader>> {
+        Ok(self.p2p.get_network_head().await?)
     }
 
     /// Get the latest locally synced header.

@@ -164,9 +164,11 @@ impl NodeWorker {
             .context("could not serialise fetched headers")
     }
 
-    async fn get_last_seen_network_head(&mut self) -> JsValue {
-        // JS interface returns `undefined`, if node haven't received any headers from HeaderSub yet
-        to_value(&self.node.get_network_head_header()).unwrap_or(JsValue::UNDEFINED)
+    async fn get_last_seen_network_head(&mut self) -> Result<JsValue> {
+        match self.node.get_network_head_header().await? {
+            Some(header) => to_value(&header).context("could not serialise head header"),
+            None => Ok(JsValue::UNDEFINED),
+        }
     }
 
     async fn get_sampling_metadata(&mut self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -222,7 +224,7 @@ impl NodeWorker {
                     .into(),
             ),
             NodeCommand::LastSeenNetworkHead => {
-                WorkerResponse::LastSeenNetworkHead(self.get_last_seen_network_head().await)
+                WorkerResponse::LastSeenNetworkHead(self.get_last_seen_network_head().await.into())
             }
             NodeCommand::GetSamplingMetadata { height } => {
                 WorkerResponse::SamplingMetadata(self.get_sampling_metadata(height).await)
