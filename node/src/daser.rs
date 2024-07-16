@@ -60,11 +60,11 @@ type Result<T, E = DaserError> = std::result::Result<T, E>;
 #[derive(Debug, thiserror::Error)]
 pub enum DaserError {
     /// An error propagated from the [`P2p`] module.
-    #[error(transparent)]
+    #[error("P2p: {0}")]
     P2p(#[from] P2pError),
 
     /// An error propagated from the [`Store`] module.
-    #[error(transparent)]
+    #[error("Store: {0}")]
     Store(#[from] StoreError),
 }
 

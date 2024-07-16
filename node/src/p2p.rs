@@ -15,7 +15,6 @@
 
 use std::collections::HashMap;
 use std::future::poll_fn;
-use std::io;
 use std::sync::Arc;
 use std::task::Poll;
 use std::time::Duration;
@@ -34,20 +33,20 @@ use futures::StreamExt;
 use libp2p::{
     autonat,
     core::{ConnectedPoint, Endpoint},
-    gossipsub::{self, SubscriptionError, TopicHash},
+    gossipsub::{self, TopicHash},
     identify,
     identity::Keypair,
     kad,
     multiaddr::Protocol,
     ping,
-    swarm::{ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent},
-    Multiaddr, PeerId, TransportError,
+    swarm::{ConnectionId, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent},
+    Multiaddr, PeerId,
 };
 use smallvec::SmallVec;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 mod header_ex;
 pub(crate) mod header_session;
@@ -94,21 +93,9 @@ pub enum P2pError {
     #[error("Failed to initialize gossipsub behaviour: {0}")]
     GossipsubInit(String),
 
-    /// Failed to subscribe to a topic on gossibsub.
-    #[error("Failed to on gossipsub subscribe: {0}")]
-    GossipsubSubscribe(#[from] SubscriptionError),
-
-    /// An error propagated from the libp2p transport.
-    #[error("Transport error: {0}")]
-    Transport(#[from] TransportError<io::Error>),
-
     /// Failed to initialize noise protocol.
     #[error("Failed to initialize noise: {0}")]
-    InitNoise(String),
-
-    /// Error occured when trying to establish or upgrade an outbound connection.
-    #[error("Dial error: {0}")]
-    Dial(#[from] DialError),
+    NoiseInit(String),
 
     /// The worker has died.
     #[error("Worker died")]
@@ -145,6 +132,27 @@ pub enum P2pError {
     /// Bitswap query timed out.
     #[error("Bitswap query timed out")]
     BitswapQueryTimeout,
+}
+
+impl P2pError {
+    /// Returns `true` if an error is fatal in all possible scenarios.
+    ///
+    /// If unsure mark it as non-fatal error.
+    pub(crate) fn is_fatal(&self) -> bool {
+        match self {
+            P2pError::GossipsubInit(_)
+            | P2pError::NoiseInit(_)
+            | P2pError::WorkerDied
+            | P2pError::ChannelClosedUnexpectedly
+            | P2pError::BootnodeAddrsWithoutPeerId(_) => true,
+            P2pError::NoConnectedPeers
+            | P2pError::HeaderEx(_)
+            | P2pError::Bitswap(_)
+            | P2pError::ProtoDecodeFailed(_)
+            | P2pError::Cid(_)
+            | P2pError::BitswapQueryTimeout => false,
+        }
+    }
 }
 
 impl From<oneshot::error::RecvError> for P2pError {
@@ -619,7 +627,9 @@ where
         let mut swarm = new_swarm(args.local_keypair, behaviour)?;
 
         for addr in args.listen_on {
-            swarm.listen_on(addr)?;
+            if let Err(e) = swarm.listen_on(addr.clone()) {
+                error!("Failed to listen on {addr}: {e}");
+            }
         }
 
         for addr in args.bootnodes {
@@ -627,7 +637,10 @@ where
             if let Some(peer_id) = addr.peer_id() {
                 peer_tracker.set_trusted(peer_id, true);
             }
-            swarm.dial(addr)?;
+
+            if let Err(e) = swarm.dial(addr.clone()) {
+                error!("Failed to dial on {addr}: {e}");
+            }
         }
 
         Ok(Worker {
@@ -1092,7 +1105,9 @@ where
             .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
 
     for topic in topics {
-        gossipsub.subscribe(topic)?;
+        gossipsub
+            .subscribe(topic)
+            .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
     }
 
     Ok(gossipsub)
