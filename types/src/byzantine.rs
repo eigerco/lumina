@@ -359,10 +359,10 @@ pub(crate) mod test_utils {
 
         // collect the shares for fraud proof
         for share_idx in 0..square_width {
-            let proof_axis = match rng.gen_range(0..=1) {
-                0 => AxisType::Row,
-                1 => AxisType::Col,
-                _ => unreachable!(),
+            let proof_axis = if rand::random() {
+                AxisType::Row
+            } else {
+                AxisType::Col
             };
 
             let mut nmt = match (axis, proof_axis) {
