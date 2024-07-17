@@ -352,8 +352,6 @@ pub(crate) mod test_utils {
         axis_idx: u16,
         axis: AxisType,
     ) -> BadEncodingFraudProof {
-        let mut rng = rand::thread_rng();
-
         let square_width = eds.square_width();
         let mut shares_with_proof: Vec<_> = Vec::with_capacity(square_width.into());
 
