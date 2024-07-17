@@ -94,7 +94,7 @@ impl FraudProof for BadEncodingFraudProof {
         let shares_count = self.shares.iter().filter(|s| s.is_some()).count();
         if shares_count < ods_width {
             bail_validation!(
-                "fraud proof non-nil shares count ({shares_count}) < dah ods width ({ods_width})"
+                "fraud proof present shares count ({shares_count}) < dah ods width ({ods_width})"
             );
         }
 
