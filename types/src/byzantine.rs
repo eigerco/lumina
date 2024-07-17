@@ -2,21 +2,14 @@ use celestia_proto::share::eds::byzantine::pb::BadEncoding as RawBadEncodingFrau
 use celestia_proto::share::eds::byzantine::pb::Share as RawShareWithProof;
 use celestia_tendermint::{block::Height, Hash};
 use celestia_tendermint_proto::Protobuf;
-use cid::CidGeneric;
 use serde::{Deserialize, Serialize};
 
 use crate::bail_validation;
 use crate::consts::appconsts;
 use crate::fraud_proof::FraudProof;
-use crate::nmt::{
-    Namespace, NamespaceProof, NamespacedHash, NamespacedHashExt, Nmt, NmtExt, NMT_CODEC,
-    NMT_ID_SIZE, NMT_MULTIHASH_CODE, NS_SIZE,
-};
+use crate::nmt::{Namespace, NamespaceProof, Nmt, NmtExt, NS_SIZE};
 use crate::rsmt2d::AxisType;
 use crate::{Error, ExtendedHeader, Result};
-
-type Cid = CidGeneric<NMT_ID_SIZE>;
-type Multihash = multihash::Multihash<NMT_ID_SIZE>;
 
 /// A proof that the block producer incorrectly encoded [`ExtendedDataSquare`].
 ///
@@ -70,53 +63,61 @@ impl FraudProof for BadEncodingFraudProof {
             );
         }
 
-        let merkle_row_roots = header.dah.row_roots();
-        let merkle_col_roots = header.dah.column_roots();
-
         // NOTE: shouldn't ever happen as header should be validated before
-        if merkle_row_roots.len() != merkle_col_roots.len() {
+        if header.dah.row_roots().len() != header.dah.column_roots().len() {
             bail_validation!(
                 "dah rows len ({}) != dah columns len ({})",
-                merkle_row_roots.len(),
-                merkle_col_roots.len(),
+                header.dah.row_roots().len(),
+                header.dah.column_roots().len(),
             );
         }
 
-        if usize::from(self.index) >= merkle_row_roots.len() {
+        let square_width = usize::from(header.dah.square_width());
+        let ods_width = square_width / 2;
+
+        if usize::from(self.index) >= square_width {
             bail_validation!(
-                "fraud proof index ({}) >= dah rows len ({})",
+                "fraud proof index ({}) >= dah square width ({})",
                 self.index,
-                merkle_row_roots.len()
+                square_width,
             );
         }
 
-        if self.shares.len() != merkle_row_roots.len() {
+        if self.shares.len() != square_width {
             bail_validation!(
-                "fraud proof shares len ({}) != dah rows len ({})",
+                "fraud proof shares len ({}) != dah square width ({})",
                 self.shares.len(),
-                merkle_row_roots.len()
+                square_width,
             );
         }
 
-        let root = match self.axis {
-            AxisType::Row => merkle_row_roots[usize::from(self.index)].clone(),
-            AxisType::Col => merkle_col_roots[usize::from(self.index)].clone(),
-        };
-
-        // verify if the root can be converted to a cid and back
-        let mh = Multihash::wrap(NMT_MULTIHASH_CODE, &root.to_array())?;
-        let cid = Cid::new_v1(NMT_CODEC, mh);
-        let root = NamespacedHash::try_from(cid.hash().digest())?;
+        let shares_count = self.shares.iter().filter(|s| s.is_some()).count();
+        if shares_count < ods_width {
+            bail_validation!(
+                "fraud proof present shares count ({shares_count}) < dah ods width ({ods_width})"
+            );
+        }
 
         // verify that Merkle proofs correspond to particular shares.
-        for maybe_share in &self.shares {
+        for (share_idx, maybe_share) in self.shares.iter().enumerate() {
             let Some(share_with_proof) = maybe_share else {
                 continue;
             };
+
             let ShareWithProof {
                 leaf: NmtLeaf { namespace, share },
                 proof,
+                proof_axis,
             } = share_with_proof;
+
+            // unwraps are safe because we validated that index is in range
+            let root = match (self.axis, proof_axis) {
+                (AxisType::Row, AxisType::Row) => header.dah.row_root(self.index).unwrap(),
+                (AxisType::Row, AxisType::Col) => header.dah.column_root(share_idx as u16).unwrap(),
+                (AxisType::Col, AxisType::Row) => header.dah.row_root(share_idx as u16).unwrap(),
+                (AxisType::Col, AxisType::Col) => header.dah.column_root(self.index).unwrap(),
+            };
+
             proof
                 .verify_range(&root, &[&share], **namespace)
                 .map_err(Error::RangeProofError)?;
@@ -133,7 +134,6 @@ impl FraudProof for BadEncodingFraudProof {
                     .unwrap_or_default()
             })
             .collect();
-        let ods_width = rebuilt_shares.len() / 2;
         if leopard_codec::reconstruct(&mut rebuilt_shares, ods_width).is_err() {
             // we couldn't reconstruct the data even tho we had enough *proven* shares
             // befp is legit
@@ -185,6 +185,7 @@ impl FraudProof for BadEncodingFraudProof {
 struct ShareWithProof {
     leaf: NmtLeaf,
     proof: NamespaceProof,
+    proof_axis: AxisType,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -227,7 +228,13 @@ impl TryFrom<RawShareWithProof> for ShareWithProof {
             return Err(Error::WrongProofType);
         }
 
-        Ok(Self { leaf, proof })
+        let proof_axis = value.proof_axis.try_into()?;
+
+        Ok(Self {
+            leaf,
+            proof,
+            proof_axis,
+        })
     }
 }
 
@@ -236,6 +243,7 @@ impl From<ShareWithProof> for RawShareWithProof {
         RawShareWithProof {
             data: value.leaf.to_vec(),
             proof: Some(value.proof.into()),
+            proof_axis: value.proof_axis as i32,
         }
     }
 }
@@ -246,9 +254,7 @@ impl TryFrom<RawBadEncodingFraudProof> for BadEncodingFraudProof {
     type Error = Error;
 
     fn try_from(value: RawBadEncodingFraudProof) -> Result<Self, Self::Error> {
-        let axis = u8::try_from(value.axis)
-            .map_err(|_| Error::InvalidAxis(value.axis))?
-            .try_into()?;
+        let axis = value.axis.try_into()?;
 
         let index = u16::try_from(value.index).map_err(|_| Error::EdsInvalidDimentions)?;
 
@@ -347,12 +353,32 @@ pub(crate) mod test_utils {
         axis: AxisType,
     ) -> BadEncodingFraudProof {
         let square_width = eds.square_width();
-        let mut nmt = eds.axis_nmt(axis, axis_idx).unwrap();
         let mut shares_with_proof: Vec<_> = Vec::with_capacity(square_width.into());
 
         // collect the shares for fraud proof
         for share_idx in 0..square_width {
-            let (share, proof) = nmt.get_index_with_proof(share_idx.into());
+            let proof_axis = if rand::random() {
+                AxisType::Row
+            } else {
+                AxisType::Col
+            };
+
+            let mut nmt = match (axis, proof_axis) {
+                (AxisType::Row, AxisType::Row) => eds.row_nmt(axis_idx).unwrap(),
+                (AxisType::Row, AxisType::Col) => eds.column_nmt(share_idx).unwrap(),
+                (AxisType::Col, AxisType::Row) => eds.row_nmt(share_idx).unwrap(),
+                (AxisType::Col, AxisType::Col) => eds.column_nmt(axis_idx).unwrap(),
+            };
+
+            // The index of the share in the `nmt`.
+            let idx = match (axis, proof_axis) {
+                (AxisType::Row, AxisType::Row) => share_idx,
+                (AxisType::Row, AxisType::Col) => axis_idx,
+                (AxisType::Col, AxisType::Row) => axis_idx,
+                (AxisType::Col, AxisType::Col) => share_idx,
+            };
+
+            let (share, proof) = nmt.get_index_with_proof(idx.into());
 
             // it doesn't matter which is row and which is column as ods is first quadrant
             let ns = if is_ods_square(axis_idx, share_idx, square_width) {
@@ -371,6 +397,7 @@ pub(crate) mod test_utils {
                     ignore_max_ns: true,
                 }
                 .into(),
+                proof_axis,
             };
 
             shares_with_proof.push(Some(share_with_proof));
