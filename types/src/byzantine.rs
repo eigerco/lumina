@@ -125,11 +125,6 @@ impl FraudProof for BadEncodingFraudProof {
                 (AxisType::Col, AxisType::Col) => header.dah.column_root(self.index).unwrap(),
             };
 
-            // verify if the root can be converted to a cid and back
-            let mh = Multihash::wrap(NMT_MULTIHASH_CODE, &root.to_array())?;
-            let cid = Cid::new_v1(NMT_CODEC, mh);
-            let root = NamespacedHash::try_from(cid.hash().digest())?;
-
             proof
                 .verify_range(&root, &[&share], **namespace)
                 .map_err(Error::RangeProofError)?;
