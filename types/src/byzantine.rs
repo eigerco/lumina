@@ -2,21 +2,14 @@ use celestia_proto::share::eds::byzantine::pb::BadEncoding as RawBadEncodingFrau
 use celestia_proto::share::eds::byzantine::pb::Share as RawShareWithProof;
 use celestia_tendermint::{block::Height, Hash};
 use celestia_tendermint_proto::Protobuf;
-use cid::CidGeneric;
 use serde::{Deserialize, Serialize};
 
 use crate::bail_validation;
 use crate::consts::appconsts;
 use crate::fraud_proof::FraudProof;
-use crate::nmt::{
-    Namespace, NamespaceProof, NamespacedHash, NamespacedHashExt, Nmt, NmtExt, NMT_CODEC,
-    NMT_ID_SIZE, NMT_MULTIHASH_CODE, NS_SIZE,
-};
+use crate::nmt::{Namespace, NamespaceProof, Nmt, NmtExt, NS_SIZE};
 use crate::rsmt2d::AxisType;
 use crate::{Error, ExtendedHeader, Result};
-
-type Cid = CidGeneric<NMT_ID_SIZE>;
-type Multihash = multihash::Multihash<NMT_ID_SIZE>;
 
 /// A proof that the block producer incorrectly encoded [`ExtendedDataSquare`].
 ///
@@ -235,9 +228,7 @@ impl TryFrom<RawShareWithProof> for ShareWithProof {
             return Err(Error::WrongProofType);
         }
 
-        let proof_axis = u8::try_from(value.proof_axis)
-            .map_err(|_| Error::InvalidAxis(value.proof_axis))?
-            .try_into()?;
+        let proof_axis = value.proof_axis.try_into()?;
 
         Ok(Self {
             leaf,
@@ -263,9 +254,7 @@ impl TryFrom<RawBadEncodingFraudProof> for BadEncodingFraudProof {
     type Error = Error;
 
     fn try_from(value: RawBadEncodingFraudProof) -> Result<Self, Self::Error> {
-        let axis = u8::try_from(value.axis)
-            .map_err(|_| Error::InvalidAxis(value.axis))?
-            .try_into()?;
+        let axis = value.axis.try_into()?;
 
         let index = u16::try_from(value.index).map_err(|_| Error::EdsInvalidDimentions)?;
 
