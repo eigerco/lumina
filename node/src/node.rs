@@ -111,15 +111,18 @@ where
         let event_sub = event_channel.subscribe();
         let store = Arc::new(config.store);
 
-        let p2p = Arc::new(P2p::start(P2pArgs {
-            network_id: config.network_id,
-            local_keypair: config.p2p_local_keypair,
-            bootnodes: config.p2p_bootnodes,
-            listen_on: config.p2p_listen_on,
-            blockstore: config.blockstore,
-            store: store.clone(),
-            event_pub: event_channel.publisher(),
-        })?);
+        let p2p = Arc::new(
+            P2p::start(P2pArgs {
+                network_id: config.network_id,
+                local_keypair: config.p2p_local_keypair,
+                bootnodes: config.p2p_bootnodes,
+                listen_on: config.p2p_listen_on,
+                blockstore: config.blockstore,
+                store: store.clone(),
+                event_pub: event_channel.publisher(),
+            })
+            .await?,
+        );
 
         let syncer = Arc::new(Syncer::start(SyncerArgs {
             store: store.clone(),

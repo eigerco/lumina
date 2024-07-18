@@ -42,7 +42,11 @@ instant = "0.1.13"
 prost = "0.12.6"
 rand = "0.8.5"
 serde = { version = "1.0.203", features = ["derive"] }
-smallvec = { version = "1.13.2", features = ["union", "const_generics", "serde"] }
+smallvec = { version = "1.13.2", features = [
+  "union",
+  "const_generics",
+  "serde",
+] }
 thiserror = "1.0.61"
 tokio = { version = "1.38.0", features = ["macros", "sync"] }
 tokio-util = "0.7.11"
@@ -71,8 +75,11 @@ celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { version = "0.2.15", features = ["js"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 libp2p = { workspace = true, features = [
+  "noise",
   "wasm-bindgen",
   "webtransport-websys",
+  "websocket-websys",
+  "yamux",
 ] }
 pin-project = "1.1.5"
 rexie = "0.5.0"

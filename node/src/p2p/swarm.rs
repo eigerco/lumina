@@ -60,7 +60,8 @@ mod imp {
 #[cfg(target_arch = "wasm32")]
 mod imp {
     use super::*;
-    use libp2p::webtransport_websys;
+    use libp2p::core::upgrade::Version;
+    use libp2p::{noise, websocket_websys, webtransport_websys, yamux, Transport};
 
     pub(crate) fn new_swarm<B>(keypair: Keypair, behaviour: B) -> Result<Swarm<B>, P2pError>
     where
@@ -73,6 +74,14 @@ mod imp {
                 webtransport_websys::Transport::new(config)
             })
             .expect("webtransport_websys::Transport is infallible")
+            .with_other_transport(|local_keypair| {
+                let noise_config = noise::Config::new(local_keypair)?;
+                Ok(websocket_websys::Transport::default()
+                    .upgrade(Version::V1)
+                    .authenticate(noise_config)
+                    .multiplex(yamux::Config::default()))
+            })
+            .map_err(|_| P2pError::InitNoise("websocket-websys".to_string()))?
             .with_behaviour(|_| behaviour)
             .expect("Moving behaviour doesn't fail")
             .with_swarm_config(|config| {

@@ -186,15 +186,24 @@ pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
 }
 
 const CHROME_USER_AGENT_DETECTION_STR: &str = "Chrome/";
+const SAFARI_USER_AGENT_DETECTION_STR: &str = "Safari/";
+
+pub(crate) fn user_agent_contains(pattern: &str) -> Result<bool, Error> {
+    get_navigator()?
+        .user_agent()
+        .context("could not get UserAgent from Navigator")
+        .map(|user_agent| user_agent.contains(pattern))
+}
 
 // Currently, there's an issue with SharedWorkers on Chrome where restarting Lumina's worker
 // causes all network connections to fail. Until that's resolved detect chrome and apply
 // a workaround.
 pub(crate) fn is_chrome() -> Result<bool, Error> {
-    get_navigator()?
-        .user_agent()
-        .context("could not get UserAgent from Navigator")
-        .map(|user_agent| user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
+    user_agent_contains(CHROME_USER_AGENT_DETECTION_STR)
+}
+
+pub(crate) fn is_safari() -> Result<bool, Error> {
+    user_agent_contains(SAFARI_USER_AGENT_DETECTION_STR)
 }
 
 pub(crate) fn get_navigator() -> Result<Navigator, Error> {

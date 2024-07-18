@@ -217,7 +217,7 @@ pub(crate) enum P2pCmd {
 
 impl P2p {
     /// Creates and starts a new p2p handler.
-    pub fn start<B, S>(args: P2pArgs<B, S>) -> Result<Self>
+    pub async fn start<B, S>(args: P2pArgs<B, S>) -> Result<Self>
     where
         B: Blockstore + 'static,
         S: Store + 'static,
@@ -232,7 +232,7 @@ impl P2p {
         let peer_tracker = Arc::new(PeerTracker::new(args.event_pub.clone()));
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
 
-        let mut worker = Worker::new(args, cmd_rx, header_sub_tx, peer_tracker)?;
+        let mut worker = Worker::new(args, cmd_rx, header_sub_tx, peer_tracker).await?;
 
         spawn(async move {
             worker.run().await;
@@ -576,7 +576,7 @@ where
     B: Blockstore,
     S: Store,
 {
-    fn new(
+    async fn new(
         args: P2pArgs<B, S>,
         cmd_rx: mpsc::Receiver<P2pCmd>,
         header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,

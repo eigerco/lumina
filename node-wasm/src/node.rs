@@ -15,8 +15,8 @@ use lumina_node::store::IndexedDbStore;
 
 use crate::error::{Context, Result};
 use crate::utils::{
-    is_chrome, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
-    Network,
+    is_chrome, is_safari, js_value_from_display, request_storage_persistence,
+    resolve_dnsaddr_multiaddress, Network,
 };
 use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::worker::{AnyWorker, WorkerClient};
@@ -92,8 +92,11 @@ impl NodeDriver {
         worker_script_url: &str,
         worker_type: Option<NodeWorkerKind>,
     ) -> Result<NodeDriver> {
-        if let Err(e) = request_storage_persistence().await {
-            error!("Error requesting storage persistence: {e}");
+        // Safari doesn't have the `navigator.storage()` api
+        if !is_safari() {
+            if let Err(e) = request_storage_persistence().await {
+                error!("Error requesting storage persistence: {e}");
+            }
         }
 
         // For chrome we default to running in a dedicated Worker because:
