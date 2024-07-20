@@ -9,10 +9,8 @@
 //! headers announced on the `header-sub` p2p protocol to keep the `subjective_head` as close
 //! to the `network_head` as possible.
 
-use std::future::poll_fn;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::task::Poll;
 use std::time::Duration;
 
 use backoff::backoff::Backoff;
@@ -329,7 +327,7 @@ where
                 _ = report_interval.tick() => {
                     self.report().await?;
                 }
-                res = header_sub_recv(&mut self.header_sub_rx) => {
+                res = header_sub_recv(self.header_sub_rx.as_mut()) => {
                     let header = res?;
                     self.on_header_sub_message(header).await?;
                     self.fetch_next_batch(&headers_tx).await?;
@@ -621,18 +619,12 @@ where
 }
 
 async fn header_sub_recv(
-    rx: &mut Option<mpsc::Receiver<ExtendedHeader>>,
+    rx: Option<&mut mpsc::Receiver<ExtendedHeader>>,
 ) -> Result<ExtendedHeader> {
-    poll_fn(|cx| {
-        let rx = rx.as_mut().expect("header-sub not initialized");
-
-        match rx.poll_recv(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Some(header)) => Poll::Ready(Ok(header)),
-            Poll::Ready(None) => Poll::Ready(Err(SyncerError::P2p(P2pError::WorkerDied))),
-        }
-    })
-    .await
+    rx.expect("header-sub not initialized")
+        .recv()
+        .await
+        .ok_or(SyncerError::P2p(P2pError::WorkerDied))
 }
 
 #[cfg(test)]
