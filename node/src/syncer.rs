@@ -38,14 +38,14 @@ type Result<T, E = SyncerError> = std::result::Result<T, E>;
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
 const SYNCING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
-/// Representation of all the errors that can occur when interacting with the [`Syncer`].
+/// Representation of all the errors that can occur from `Syncer` component.
 #[derive(Debug, thiserror::Error)]
 pub enum SyncerError {
-    /// An error propagated from the [`P2p`] module.
+    /// An error propagated from the `P2p` component.
     #[error("P2p: {0}")]
     P2p(#[from] P2pError),
 
-    /// An error propagated from the [`Store`] module.
+    /// An error propagated from the [`Store`] component.
     #[error("Store: {0}")]
     Store(#[from] StoreError),
 
@@ -53,7 +53,7 @@ pub enum SyncerError {
     #[error("Worker died")]
     WorkerDied,
 
-    /// Channel has been closed unexpectedly.
+    /// Channel closed unexpectedly.
     #[error("Channel closed unexpectedly")]
     ChannelClosedUnexpectedly,
 }
@@ -76,7 +76,7 @@ impl From<oneshot::error::RecvError> for SyncerError {
 
 /// Component responsible for synchronizing block headers from the network.
 #[derive(Debug)]
-pub struct Syncer<S>
+pub(crate) struct Syncer<S>
 where
     S: Store + 'static,
 {
@@ -86,18 +86,18 @@ where
 }
 
 /// Arguments used to configure the [`Syncer`].
-pub struct SyncerArgs<S>
+pub(crate) struct SyncerArgs<S>
 where
     S: Store + 'static,
 {
     /// Handler for the peer to peer messaging.
-    pub p2p: Arc<P2p>,
+    pub(crate) p2p: Arc<P2p>,
     /// Headers storage.
-    pub store: Arc<S>,
+    pub(crate) store: Arc<S>,
     /// Event publisher.
-    pub event_pub: EventPublisher,
+    pub(crate) event_pub: EventPublisher,
     /// Batch size.
-    pub batch_size: u64,
+    pub(crate) batch_size: u64,
 }
 
 #[derive(Debug)]
@@ -121,7 +121,7 @@ where
     S: Store,
 {
     /// Create and start the [`Syncer`].
-    pub fn start(args: SyncerArgs<S>) -> Result<Self> {
+    pub(crate) fn start(args: SyncerArgs<S>) -> Result<Self> {
         let cancellation_token = CancellationToken::new();
         let event_pub = args.event_pub.clone();
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
@@ -144,8 +144,8 @@ where
         })
     }
 
-    /// Stop the [`Syncer`].
-    pub fn stop(&self) {
+    /// Stop the worker.
+    pub(crate) fn stop(&self) {
         // Singal the Worker to stop.
         // TODO: Should we wait for the Worker to stop?
         self.cancellation_token.cancel();
@@ -163,7 +163,7 @@ where
     /// # Errors
     ///
     /// This function will return an error if the [`Syncer`] has been stopped.
-    pub async fn info(&self) -> Result<SyncingInfo> {
+    pub(crate) async fn info(&self) -> Result<SyncingInfo> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(SyncerCmd::GetInfo { respond_to: tx })

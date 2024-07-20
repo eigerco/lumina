@@ -1,8 +1,7 @@
-//! High-level integration of [`P2p`], [`Store`], [`Syncer`].
+//! Node that connects to Celestia's P2P network.
 //!
-//! [`P2p`]: crate::p2p::P2p
-//! [`Store`]: crate::store::Store
-//! [`Syncer`]: crate::syncer::Syncer
+//! Node will connect to Celestia's P2P network then will proceed
+//! with synchronization and data sampling of the blocks.
 
 use std::ops::RangeBounds;
 use std::sync::Arc;
@@ -18,36 +17,44 @@ use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
 use tokio::select;
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
-use crate::daser::{Daser, DaserArgs, DaserError};
+use crate::daser::{Daser, DaserArgs};
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
 use crate::executor::spawn;
-use crate::p2p::{P2p, P2pArgs, P2pError};
-use crate::peer_tracker::PeerTrackerInfo;
+use crate::p2p::{P2p, P2pArgs};
 use crate::store::{SamplingMetadata, Store, StoreError};
-use crate::syncer::{Syncer, SyncerArgs, SyncerError, SyncingInfo};
+use crate::syncer::{Syncer, SyncerArgs};
 
-type Result<T, E = NodeError> = std::result::Result<T, E>;
+pub use crate::daser::DaserError;
+pub use crate::p2p::{HeaderExError, P2pError};
+pub use crate::peer_tracker::PeerTrackerInfo;
+pub use crate::syncer::{SyncerError, SyncingInfo};
+
+/// Alias for a [`Result`] with the error type [`NodeError`]
+///
+/// [`Result`]: std::result::Result
+pub type Result<T, E = NodeError> = std::result::Result<T, E>;
 
 /// Representation of all the errors that can occur when interacting with the [`Node`].
 #[derive(Debug, thiserror::Error)]
 pub enum NodeError {
-    /// An error propagated from the [`P2p`] module.
-    #[error(transparent)]
+    /// An error propagated from the `P2p` component.
+    #[error("P2p: {0}")]
     P2p(#[from] P2pError),
 
-    /// An error propagated from the [`Syncer`] module.
-    #[error(transparent)]
+    /// An error propagated from the `Syncer` component.
+    #[error("Syncer: {0}")]
     Syncer(#[from] SyncerError),
 
-    /// An error propagated from the [`Store`] module.
-    #[error(transparent)]
+    /// An error propagated from the [`Store`] component.
+    #[error("Store: {0}")]
     Store(#[from] StoreError),
 
-    /// An error propagated from the [`Daser`] module.
-    #[error(transparent)]
+    /// An error propagated from the `Daser` component.
+    #[error("Daser: {0}")]
     Daser(#[from] DaserError),
 }
 
@@ -185,11 +192,14 @@ where
         self.p2p.local_peer_id()
     }
 
-    /// Get current [`PeerTracker`] info.
-    ///
-    /// [`PeerTracker`]: crate::peer_tracker::PeerTracker
+    /// Get current [`PeerTrackerInfo`].
     pub fn peer_tracker_info(&self) -> PeerTrackerInfo {
         self.p2p.peer_tracker_info().clone()
+    }
+
+    /// Get [`PeerTrackerInfo`] watcher.
+    pub fn peer_tracker_info_watcher(&self) -> watch::Receiver<PeerTrackerInfo> {
+        self.p2p.peer_tracker_info_watcher()
     }
 
     /// Wait until the node is connected to at least 1 peer.
