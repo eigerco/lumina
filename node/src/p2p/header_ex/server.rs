@@ -112,6 +112,7 @@ where
         let store = self.store.clone();
         let tx = self.tx.clone();
 
+        // TODO: make it cancellable
         spawn(async move {
             let response = store
                 .get_head()
@@ -132,6 +133,7 @@ where
         let store = self.store.clone();
         let tx = self.tx.clone();
 
+        // TODO: make it cancellable
         spawn(async move {
             let response = store
                 .get_by_hash(&hash)
@@ -147,6 +149,7 @@ where
         let store = self.store.clone();
         let tx = self.tx.clone();
 
+        // TODO: make it cancellable
         spawn(async move {
             let amount = amount.min(MAX_HEADERS_AMOUNT_RESPONSE);
             let mut responses = vec![];
@@ -179,6 +182,7 @@ where
         {
             let tx = self.tx.clone();
 
+            // TODO: make it cancellable
             spawn(async move {
                 let _ = tx.send(response).await;
             });

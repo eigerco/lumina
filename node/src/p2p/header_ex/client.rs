@@ -143,6 +143,7 @@ where
         // Choose the best HEAD.
         //
         // Algorithm: https://github.com/celestiaorg/go-header/blob/e50090545cc7e049d2f965d2b5c773eaa4a2c0b2/p2p/exchange.go#L357-L381
+        // TODO: make it cancellable
         spawn(async move {
             let mut resps: Vec<_> = join_all(rxs)
                 .await
@@ -200,6 +201,7 @@ where
             state.request.amount
         );
 
+        // TODO: make it cancellable. return err to the user on cancel.
         spawn(async move {
             match decode_and_verify_responses(&state.request, &responses).await {
                 Ok(headers) => {
