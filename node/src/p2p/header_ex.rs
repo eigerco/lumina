@@ -87,6 +87,10 @@ pub enum HeaderExError {
     /// Error when handling connection to the server.
     #[error("Outbound failure: {0}")]
     OutboundFailure(OutboundFailure),
+
+    /// Request cancelled because [`Node`] is stopping.
+    #[error("Request cancelled because `Node` is stopping")]
+    RequestCancelled,
 }
 
 impl<S> HeaderExBehaviour<S>
@@ -338,6 +342,7 @@ impl ConnectionHandler for ConnHandler {
     }
 }
 
+// TODO: Make it cancellable
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct HeaderCodec;
 
