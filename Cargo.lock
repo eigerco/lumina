@@ -2581,6 +2581,7 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-tcp",
  "libp2p-upnp",
+ "libp2p-websocket",
  "libp2p-websocket-websys",
  "libp2p-webtransport-websys",
  "libp2p-yamux",
@@ -2981,6 +2982,25 @@ dependencies = [
  "tokio",
  "tracing",
  "void",
+]
+
+[[package]]
+name = "libp2p-websocket"
+version = "0.43.1"
+source = "git+https://github.com/libp2p/rust-libp2p?rev=60e32c9d3b4bee42ac698791e917e1587eaa1388#60e32c9d3b4bee42ac698791e917e1587eaa1388"
+dependencies = [
+ "either",
+ "futures",
+ "futures-rustls",
+ "libp2p-core",
+ "libp2p-identity",
+ "parking_lot",
+ "pin-project-lite",
+ "rw-stream-sink",
+ "soketto",
+ "tracing",
+ "url",
+ "webpki-roots 0.25.4",
 ]
 
 [[package]]
@@ -4467,7 +4487,7 @@ dependencies = [
  "rustls-webpki 0.102.4",
  "security-framework",
  "security-framework-sys",
- "webpki-roots",
+ "webpki-roots 0.26.2",
  "winapi",
 ]
 
@@ -5582,6 +5602,12 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "webpki-roots"
+version = "0.25.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
 name = "webpki-roots"

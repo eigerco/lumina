@@ -616,7 +616,7 @@ where
             kademlia,
         };
 
-        let mut swarm = new_swarm(args.local_keypair, behaviour)?;
+        let mut swarm = new_swarm(args.local_keypair, behaviour).await?;
 
         for addr in args.listen_on {
             swarm.listen_on(addr)?;

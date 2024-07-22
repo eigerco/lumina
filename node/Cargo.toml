@@ -56,13 +56,14 @@ web-time = "1.1.0"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 backoff = { version = "0.4.0", features = ["tokio"] }
 blockstore = { workspace = true, features = ["redb"] }
-tokio = { version = "1.38.0", features = ["rt-multi-thread", "time"] }
+tokio = { version = "1.38.0", features = ["fs", "rt-multi-thread", "time"] }
 libp2p = { workspace = true, features = [
   "noise",
   "dns",
   "tcp",
   "tokio",
   "yamux",
+  "websocket",
   "quic",
 ] }
 redb = "2.1.1"
