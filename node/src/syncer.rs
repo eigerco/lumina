@@ -612,7 +612,7 @@ where
     let network_head = p2p.get_head_header().await?;
 
     // Insert HEAD to the store and initialize header-sub.
-    // This will apply insertion restrictions.
+    // Normal insertion checks still apply here.
     store.insert(network_head.clone()).await?;
 
     Ok(network_head)
