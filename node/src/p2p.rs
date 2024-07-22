@@ -545,7 +545,7 @@ impl P2p {
         Ok(rx.await?)
     }
 
-    /// Get the latest header announced in the network.
+    /// Get the latest header announced on the network.
     pub async fn get_network_head(&self) -> Result<Option<ExtendedHeader>> {
         let (tx, rx) = oneshot::channel();
 
