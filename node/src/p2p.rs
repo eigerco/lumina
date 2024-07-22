@@ -86,7 +86,7 @@ const FRAUD_PROOF_HEAD_HEIGHT_THRESHOLD: u64 = 20;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
-/// Representation of all the errors that can occur from `P2p` component.
+/// Representation of all the errors that can occur in `P2p` component.
 #[derive(Debug, thiserror::Error)]
 pub enum P2pError {
     /// Failed to initialize gossipsub behaviour.

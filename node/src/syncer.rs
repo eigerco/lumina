@@ -38,7 +38,7 @@ type Result<T, E = SyncerError> = std::result::Result<T, E>;
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
 const SYNCING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
-/// Representation of all the errors that can occur from `Syncer` component.
+/// Representation of all the errors that can occur in `Syncer` component.
 #[derive(Debug, thiserror::Error)]
 pub enum SyncerError {
     /// An error propagated from the `P2p` component.
