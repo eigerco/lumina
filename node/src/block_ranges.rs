@@ -7,7 +7,7 @@ use std::ops::{Add, RangeInclusive, Sub};
 use serde::Serialize;
 use smallvec::SmallVec;
 
-/// Type alias to [`RangeInclusive<u64>`].
+/// Type alias of [`RangeInclusive<u64>`].
 ///
 /// [`RangeInclusive<u64>`]: std::ops::RangeInclusive
 pub type BlockRange = RangeInclusive<u64>;
