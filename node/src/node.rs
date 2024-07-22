@@ -1,7 +1,7 @@
 //! Node that connects to Celestia's P2P network.
 //!
-//! Node will connect to Celestia's P2P network then will proceed
-//! with synchronization and data sampling of the blocks.
+//! Upon creation, `Node` will try to connect to Celestia's P2P network
+//! and then proceed with synchronization and data sampling of the blocks.
 
 use std::ops::RangeBounds;
 use std::sync::Arc;
