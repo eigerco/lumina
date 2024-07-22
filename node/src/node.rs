@@ -33,7 +33,7 @@ pub use crate::p2p::{HeaderExError, P2pError};
 pub use crate::peer_tracker::PeerTrackerInfo;
 pub use crate::syncer::{SyncerError, SyncingInfo};
 
-/// Alias for a [`Result`] with the error type [`NodeError`]
+/// Alias of [`Result`] with [`NodeError`] error type
 ///
 /// [`Result`]: std::result::Result
 pub type Result<T, E = NodeError> = std::result::Result<T, E>;
