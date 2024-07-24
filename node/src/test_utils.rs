@@ -11,13 +11,7 @@ use libp2p::identity::{self, Keypair};
 use tokio::sync::{mpsc, watch};
 
 use crate::{
-    blockstore::InMemoryBlockstore,
-    executor::timeout,
-    node::NodeConfig,
-    p2p::{P2pCmd, P2pError},
-    peer_tracker::PeerTrackerInfo,
-    store::{ExtendedHeaderGeneratorExt, InMemoryStore},
-    utils::OneshotResultSender,
+    block_ranges::{BlockRange, BlockRanges}, blockstore::InMemoryBlockstore, executor::timeout, node::NodeConfig, p2p::{P2pCmd, P2pError}, peer_tracker::PeerTrackerInfo, store::{ExtendedHeaderGeneratorExt, InMemoryStore}, utils::OneshotResultSender
 };
 
 #[cfg(test)]
@@ -37,6 +31,10 @@ pub async fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGene
         .expect("inserting test data failed");
 
     (s, gen)
+}
+
+pub fn new_block_ranges<const N: usize>(ranges: [BlockRange; N]) -> BlockRanges {
+    BlockRanges::from_vec(ranges.into_iter().collect()).expect("invalid BlockRanges")
 }
 
 /// [`NodeConfig`] with default values for the usage in tests.

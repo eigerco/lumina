@@ -159,7 +159,7 @@ pub trait Store: Send + Sync + Debug {
     /// Returns a list of accepted sampling ranges currently held in store.
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges>;
 
-    /// Remove all the headers from genesis up to and including outoff height
+    /// Remove header with lowest height from the store.
     async fn remove_last(&self) -> Result<u64>;
 }
 
@@ -325,6 +325,7 @@ mod tests {
     // rstest only supports attributes which last segment is `test`
     // https://docs.rs/rstest/0.18.2/rstest/attr.rstest.html#inject-test-attribute
     use crate::test_utils::async_test as test;
+    use crate::test_utils::new_block_ranges;
 
     #[test]
     async fn converts_bounded_ranges() {
@@ -1085,11 +1086,6 @@ mod tests {
             .expect("inserting test data failed");
 
         gen
-    }
-
-    // TODO: put it in a common place, duplicated from header_ranges.rs
-    fn new_block_ranges<const N: usize>(ranges: [BlockRange; N]) -> BlockRanges {
-        BlockRanges::from_vec(ranges.into_iter().collect()).expect("invalid BlockRanges")
     }
 
     async fn new_in_memory_store() -> InMemoryStore {

@@ -70,6 +70,7 @@ blockstore = { workspace = true, features = ["indexeddb"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { version = "0.2.15", features = ["js"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
+js-sys = "0.3.69"
 libp2p = { workspace = true, features = [
   "wasm-bindgen",
   "webtransport-websys",
@@ -80,11 +81,6 @@ send_wrapper = { version = "0.6.0", features = ["futures"] }
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.92"
 wasm-bindgen-futures = "0.4.42"
-
-web-sys = { version = "0.3.69", features = [
-"console"
-]}
-js-sys = "0.3.69"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 function_name = "0.3.0"

@@ -328,7 +328,7 @@ impl InMemoryStoreInner {
         height_to_hash.remove_entry();
         header.remove_entry();
 
-        self.header_ranges -= height..=height;
+        self.header_ranges.pop_tail();
 
         Ok(height)
     }

@@ -408,11 +408,9 @@ impl RedbStore {
 
             let mut header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
 
-            let Some(height) = header_ranges.tail() else {
+            let Some(height) = header_ranges.pop_tail() else {
                 return Err(StoreError::NotFound);
             };
-
-            header_ranges -= height..=height;
             set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
 
             let Some(header) = headers_table.remove(height)? else {

@@ -379,10 +379,9 @@ impl IndexedDbStore {
 
         let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
 
-        let Some(height) = header_ranges.tail() else {
+        let Some(height) = header_ranges.pop_tail() else {
             return Err(StoreError::NotFound);
         };
-        header_ranges -= height..=height;
         set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
 
         let jsvalue_height = to_value(&height).expect("to create jsvalue");
