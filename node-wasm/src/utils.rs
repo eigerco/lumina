@@ -229,7 +229,7 @@ pub(crate) fn shared_workers_supported() -> Result<bool, Error> {
     // For chrome we default to running in a dedicated Worker because:
     // 1. Chrome Android does not support SharedWorkers at all
     // 2. On desktop Chrome, restarting Lumina's worker causes all network connections to fail.
-    is_firefox()
+    is_firefox() || is_safari()
 }
 
 pub(crate) fn get_crypto() -> Result<Crypto, Error> {
