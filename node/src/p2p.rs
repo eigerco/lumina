@@ -95,12 +95,9 @@ pub enum P2pError {
     #[error("Failed to initialize gossipsub behaviour: {0}")]
     GossipsubInit(String),
 
+    /// Failed to initialize TLS.
     #[error("Failed to initialize TLS: {0}")]
     TlsInit(String),
-
-    /// An error propagated from the libp2p transport.
-    #[error("Transport error: {0}")]
-    Transport(#[from] TransportError<io::Error>),
 
     /// Failed to initialize noise protocol.
     #[error("Failed to initialize noise: {0}")]
@@ -151,6 +148,7 @@ impl P2pError {
         match self {
             P2pError::GossipsubInit(_)
             | P2pError::NoiseInit(_)
+            | P2pError::TlsInit(_)
             | P2pError::WorkerDied
             | P2pError::ChannelClosedUnexpectedly
             | P2pError::BootnodeAddrsWithoutPeerId(_) => true,
@@ -659,10 +657,8 @@ where
                 .extend_addresses_through_behaviour()
                 .build();
 
-            swarm.dial(dial_opts)?;
-
-            if let Err(e) = swarm.dial(addr.clone()) {
-                error!("Failed to dial on {addrs}: {e}");
+            if let Err(e) = swarm.dial(dial_opts) {
+                error!("Failed to dial on {addrs:?}: {e}");
             }
         }
 

@@ -51,7 +51,7 @@ mod imp {
         let dns_config = dns::ResolverConfig::cloudflare();
 
         let noise_config =
-            noise::Config::new(&keypair).map_err(|e| P2pError::InitNoise(e.to_string()))?;
+            noise::Config::new(&keypair).map_err(|e| P2pError::NoiseInit(e.to_string()))?;
 
         let wss_transport = {
             let config = if let (Some(key), Some(certs)) = (tls_key, tls_certs) {
@@ -174,7 +174,7 @@ mod imp {
         B: NetworkBehaviour,
     {
         let noise_config =
-            noise::Config::new(&keypair).map_err(|e| P2pError::InitNoise(e.to_string()))?;
+            noise::Config::new(&keypair).map_err(|e| P2pError::NoiseInit(e.to_string()))?;
 
         Ok(SwarmBuilder::with_existing_identity(keypair)
             .with_wasm_bindgen()
