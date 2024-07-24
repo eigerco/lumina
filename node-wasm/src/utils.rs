@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::net::{IpAddr, Ipv4Addr};
 
+use js_sys::Math;
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
 use lumina_node::network;
@@ -18,7 +19,7 @@ use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    Crypto, DedicatedWorkerGlobalScope, Request, RequestInit, RequestMode, Response, SharedWorker,
+    DedicatedWorkerGlobalScope, Request, RequestInit, RequestMode, Response, SharedWorker,
     SharedWorkerGlobalScope, Worker,
 };
 
@@ -196,33 +197,36 @@ const CHROME_USER_AGENT_DETECTION_STR: &str = "Chrome/";
 const FIREFOX_USER_AGENT_DETECTION_STR: &str = "Firefox/";
 const SAFARI_USER_AGENT_DETECTION_STR: &str = "Safari/";
 
-pub(crate) fn user_agent_contains(pattern: &str) -> Result<bool, Error> {
-    let user_agent = if let Some(window) = web_sys::window() {
-        window.navigator().user_agent()?
+pub(crate) fn get_user_agent() -> Result<String, Error> {
+    if let Some(window) = web_sys::window() {
+        Ok(window.navigator().user_agent()?)
     } else if Worker::is_worker_type() {
-        Worker::worker_self().navigator().user_agent()?
+        Ok(Worker::worker_self().navigator().user_agent()?)
     } else if SharedWorker::is_worker_type() {
-        SharedWorker::worker_self().navigator().user_agent()?
+        Ok(SharedWorker::worker_self().navigator().user_agent()?)
     } else {
-        return Err(Error::new(
+        Err(Error::new(
             "`navigator.user_agent` not found in global scope",
-        ));
-    };
-
-    Ok(user_agent.contains(pattern))
+        ))
+    }
 }
 
 #[allow(dead_code)]
 pub(crate) fn is_chrome() -> Result<bool, Error> {
-    user_agent_contains(CHROME_USER_AGENT_DETECTION_STR)
+    let user_agent = get_user_agent()?;
+    Ok(user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
 }
 
 pub(crate) fn is_firefox() -> Result<bool, Error> {
-    user_agent_contains(FIREFOX_USER_AGENT_DETECTION_STR)
+    let user_agent = get_user_agent()?;
+    Ok(user_agent.contains(FIREFOX_USER_AGENT_DETECTION_STR))
 }
 
 pub(crate) fn is_safari() -> Result<bool, Error> {
-    user_agent_contains(SAFARI_USER_AGENT_DETECTION_STR)
+    let user_agent = get_user_agent()?;
+    // Chrome contains `Safari/`, so make sure user agent doesn't contain `Chrome/`
+    Ok(user_agent.contains(SAFARI_USER_AGENT_DETECTION_STR)
+        && !user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
 }
 
 pub(crate) fn shared_workers_supported() -> Result<bool, Error> {
@@ -232,11 +236,8 @@ pub(crate) fn shared_workers_supported() -> Result<bool, Error> {
     Ok(is_firefox()? || is_safari()?)
 }
 
-pub(crate) fn get_crypto() -> Result<Crypto, Error> {
-    js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("crypto"))
-        .context("failed to get `crypto` from global object")?
-        .dyn_into::<web_sys::Crypto>()
-        .context("`crypto` is not `Crypto` type")
+pub(crate) fn random_id() -> u32 {
+    (Math::random() * f64::from(u32::MAX)).floor() as u32
 }
 
 async fn fetch(url: &str, opts: &RequestInit, headers: &[(&str, &str)]) -> Result<Response, Error> {

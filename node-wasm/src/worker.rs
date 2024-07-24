@@ -18,7 +18,7 @@ use lumina_node::syncer::SyncingInfo;
 
 use crate::error::{Context, Error, Result};
 use crate::node::WasmNodeConfig;
-use crate::utils::{get_crypto, is_safari, WorkerSelf};
+use crate::utils::{random_id, WorkerSelf};
 use crate::worker::channel::{
     DedicatedWorkerMessageServer, MessageServer, SharedWorkerMessageServer, WorkerMessage,
 };
@@ -239,14 +239,7 @@ impl NodeWorker {
 pub async fn run_worker(queued_events: Vec<MessageEvent>) -> Result<()> {
     info!("Entered run_worker");
     let (tx, mut rx) = mpsc::channel(WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH);
-    let events_channel_name = if !is_safari()? {
-        format!("NodeEventChannel-{}", get_crypto()?.random_uuid())
-    } else {
-        // TODO: handle uniqueness in Safari
-        // it doesn't have `crypto` module in global scope
-        // should not be an issue as long as we run shared worker there
-        "NodeEventChannel-1".to_string()
-    };
+    let events_channel_name = format!("NodeEventChannel-{}", random_id());
 
     let mut message_server: Box<dyn MessageServer> = if SharedWorker::is_worker_type() {
         Box::new(SharedWorkerMessageServer::new(tx.clone(), queued_events))
