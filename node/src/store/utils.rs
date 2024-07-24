@@ -166,12 +166,7 @@ pub(crate) async fn validate_headers(headers: &[ExtendedHeader]) -> celestia_typ
 
 #[cfg(test)]
 mod tests {
-    use crate::store::Store;
-
     use super::*;
-
-    use celestia_tendermint::Time;
-    use std::time::Duration;
 
     #[test]
     fn calculate_range_to_fetch_test_header_limit() {
