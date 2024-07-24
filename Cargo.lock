@@ -3171,6 +3171,8 @@ dependencies = [
  "redb",
  "rexie",
  "rstest",
+ "rustls-pemfile",
+ "rustls-pki-types",
  "send_wrapper 0.6.0",
  "serde",
  "serde-wasm-bindgen",

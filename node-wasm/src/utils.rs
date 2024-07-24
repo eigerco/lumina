@@ -18,8 +18,8 @@ use tracing_web::{performance_layer, MakeConsoleWriter};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    Crypto, DedicatedWorkerGlobalScope, Navigator, Request, RequestInit, RequestMode, Response,
-    SharedWorker, SharedWorkerGlobalScope, Worker,
+    Crypto, DedicatedWorkerGlobalScope, Request, RequestInit, RequestMode, Response, SharedWorker,
+    SharedWorkerGlobalScope, Worker,
 };
 
 use crate::error::{Context, Error, Result};
@@ -161,6 +161,16 @@ where
 /// have. This function doesn't `await` on JavaScript promise, as that would block until user
 /// either allows or blocks our request in a prompt (and we cannot do much with the result anyway).
 pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
+    let storage_manager = if let Some(window) = web_sys::window() {
+        window.navigator().storage()
+    } else if Worker::is_worker_type() {
+        Worker::worker_self().navigator().storage()
+    } else if SharedWorker::is_worker_type() {
+        SharedWorker::worker_self().navigator().storage()
+    } else {
+        return Err(Error::new("`navigator.storage` not found in global scope"));
+    };
+
     let fullfiled = Closure::once(move |granted: JsValue| {
         if granted.is_truthy() {
             info!("Storage persistence acquired: {:?}", granted);
@@ -173,10 +183,7 @@ pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
     });
 
     // don't drop the promise, we'll log the result and hope the user clicked the right button
-    let _promise = get_navigator()?
-        .storage()
-        .persist()?
-        .then2(&fullfiled, &rejected);
+    let _promise = storage_manager.persist()?.then2(&fullfiled, &rejected);
 
     // stop rust from dropping them
     fullfiled.forget();
@@ -186,31 +193,43 @@ pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
 }
 
 const CHROME_USER_AGENT_DETECTION_STR: &str = "Chrome/";
+const FIREFOX_USER_AGENT_DETECTION_STR: &str = "Firefox/";
 const SAFARI_USER_AGENT_DETECTION_STR: &str = "Safari/";
 
 pub(crate) fn user_agent_contains(pattern: &str) -> Result<bool, Error> {
-    get_navigator()?
-        .user_agent()
-        .context("could not get UserAgent from Navigator")
-        .map(|user_agent| user_agent.contains(pattern))
+    let user_agent = if let Some(window) = web_sys::window() {
+        window.navigator().user_agent()?
+    } else if Worker::is_worker_type() {
+        Worker::worker_self().navigator().user_agent()?
+    } else if SharedWorker::is_worker_type() {
+        SharedWorker::worker_self().navigator().user_agent()?
+    } else {
+        return Err(Error::new(
+            "`navigator.user_agent` not found in global scope",
+        ));
+    };
+
+    Ok(user_agent.contains(pattern))
 }
 
-// Currently, there's an issue with SharedWorkers on Chrome where restarting Lumina's worker
-// causes all network connections to fail. Until that's resolved detect chrome and apply
-// a workaround.
+#[allow(dead_code)]
 pub(crate) fn is_chrome() -> Result<bool, Error> {
     user_agent_contains(CHROME_USER_AGENT_DETECTION_STR)
+}
+
+pub(crate) fn is_firefox() -> Result<bool, Error> {
+    user_agent_contains(FIREFOX_USER_AGENT_DETECTION_STR)
 }
 
 pub(crate) fn is_safari() -> Result<bool, Error> {
     user_agent_contains(SAFARI_USER_AGENT_DETECTION_STR)
 }
 
-pub(crate) fn get_navigator() -> Result<Navigator, Error> {
-    js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("navigator"))
-        .context("failed to get `navigator` from global object")?
-        .dyn_into::<Navigator>()
-        .context("`navigator` is not instanceof `Navigator`")
+pub(crate) fn shared_workers_supported() -> Result<bool, Error> {
+    // For chrome we default to running in a dedicated Worker because:
+    // 1. Chrome Android does not support SharedWorkers at all
+    // 2. On desktop Chrome, restarting Lumina's worker causes all network connections to fail.
+    is_firefox()
 }
 
 pub(crate) fn get_crypto() -> Result<Crypto, Error> {

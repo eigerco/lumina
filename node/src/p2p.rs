@@ -13,7 +13,7 @@
 //! - bitswap 1.2.0
 //! - shwap - celestia's data availability protocol on top of bitswap
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::poll_fn;
 use std::io;
 use std::sync::Arc;
@@ -31,6 +31,7 @@ use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
 use celestia_types::{ExtendedHeader, FraudProof, Height};
 use cid::Cid;
 use futures::StreamExt;
+use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::{
     autonat,
     core::{ConnectedPoint, Endpoint},
@@ -51,6 +52,7 @@ use tracing::{debug, info, instrument, trace, warn};
 
 mod header_ex;
 pub(crate) mod header_session;
+mod kademlia;
 pub(crate) mod shwap;
 mod swarm;
 
@@ -85,7 +87,7 @@ pub(crate) const GET_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
 // will be ignored
 const FRAUD_PROOF_HEAD_HEIGHT_THRESHOLD: u64 = 20;
 
-type Result<T, E = P2pError> = std::result::Result<T, E>;
+pub(crate) type Result<T, E = P2pError> = std::result::Result<T, E>;
 
 /// Representation of all the errors that can occur when interacting with [`P2p`].
 #[derive(Debug, thiserror::Error)]
@@ -93,6 +95,9 @@ pub enum P2pError {
     /// Failed to initialize gossipsub behaviour.
     #[error("Failed to initialize gossipsub behaviour: {0}")]
     GossipsubInit(String),
+
+    #[error("Failed to initialize TLS: {0}")]
+    TlsInit(String),
 
     /// Failed to subscribe to a topic on gossibsub.
     #[error("Failed to on gossipsub subscribe: {0}")]
@@ -552,7 +557,7 @@ where
     identify: identify::Behaviour,
     header_ex: HeaderExBehaviour<S>,
     gossipsub: gossipsub::Behaviour,
-    kademlia: kad::Behaviour<kad::store::MemoryStore>,
+    kademlia: kademlia::Behaviour,
 }
 
 struct Worker<B, S>
@@ -622,12 +627,23 @@ where
             swarm.listen_on(addr)?;
         }
 
+        let mut peer_addrs = HashMap::<_, HashSet<_>>::new();
+
         for addr in args.bootnodes {
+            let peer_id = addr.peer_id().expect("multiaddr already validated");
+            peer_addrs.entry(peer_id).or_default().insert(addr);
+        }
+
+        for (peer_id, addrs) in peer_addrs {
             // Bootstrap peers are always trusted
-            if let Some(peer_id) = addr.peer_id() {
-                peer_tracker.set_trusted(peer_id, true);
-            }
-            swarm.dial(addr)?;
+            peer_tracker.set_trusted(peer_id, true);
+
+            let dial_opts = DialOpts::peer_id(peer_id)
+                .addresses(addrs.into_iter().collect())
+                .extend_addresses_through_behaviour()
+                .build();
+
+            swarm.dial(dial_opts)?;
         }
 
         Ok(Worker {
@@ -1098,7 +1114,7 @@ where
     Ok(gossipsub)
 }
 
-fn init_kademlia<B, S>(args: &P2pArgs<B, S>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
+fn init_kademlia<B, S>(args: &P2pArgs<B, S>) -> Result<kademlia::Behaviour>
 where
     B: Blockstore,
     S: Store,
@@ -1121,7 +1137,7 @@ where
         kademlia.set_mode(Some(kad::Mode::Server));
     }
 
-    Ok(kademlia)
+    Ok(kademlia::Behaviour::new(kademlia))
 }
 
 fn init_bitswap<B, S>(
