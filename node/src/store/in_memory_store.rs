@@ -1,5 +1,6 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::pin::pin;
 
 use async_trait::async_trait;
@@ -11,7 +12,9 @@ use tracing::{debug, warn};
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
-use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
+use crate::store::{
+    Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
+};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -86,11 +89,15 @@ impl InMemoryStore {
     pub(crate) async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+        <R as TryInto<VerifiedExtendedHeaders>>::Error: Display,
     {
-        let headers = headers.try_into()?;
+        let headers = headers
+            .try_into()
+            .map_err(|e| StoreInsertionError::HeadersVerificationFailed(e.to_string()))?;
+
         self.inner.write().await.insert(headers).await?;
         self.header_added_notifier.notify_waiters();
+
         Ok(())
     }
 
@@ -164,10 +171,11 @@ impl InMemoryStoreInner {
             return Err(StoreError::NotFound);
         };
 
-        self.headers
+        Ok(self
+            .headers
             .get(&hash)
-            .cloned()
-            .ok_or(StoreError::LostHash(hash))
+            .expect("inconsistent between header hash and header heights")
+            .to_owned())
     }
 
     async fn insert(&mut self, headers: VerifiedExtendedHeaders) -> Result<()> {
@@ -178,41 +186,34 @@ impl InMemoryStoreInner {
         let headers_range = head.height().value()..=tail.height().value();
         let (prev_exists, next_exists) = self
             .header_ranges
-            .check_insertion_constraints(&headers_range)?;
+            .check_insertion_constraints(&headers_range)
+            .map_err(StoreInsertionError::ContraintsNotMet)?;
 
         // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
         self.verify_against_neighbours(prev_exists.then_some(head), next_exists.then_some(tail))?;
-
-        // make sure we don't already have any of the provided hashes before doing any inserts to
-        // avoid having to do a rollback
-        for header in headers.as_ref() {
-            let hash = header.hash();
-            if self.headers.contains_key(&hash) {
-                return Err(StoreError::HashExists(hash));
-            }
-        }
 
         for header in headers.into_iter() {
             let hash = header.hash();
             let height = header.height().value();
 
-            let Entry::Vacant(hash_entry) = self.headers.entry(hash) else {
-                panic!(
-                    "hash present in store right after we checked its absence, should not happen"
-                );
-            };
-            let Entry::Vacant(height_entry) = self.height_to_hash.entry(height) else {
-                return Err(StoreError::StoredDataError(
-                    "inconsistency between headers and ranges table".into(),
-                ));
+            debug_assert!(
+                !self.height_to_hash.contains_key(&height),
+                "inconsistency between headers table and ranges table"
+            );
+
+            let Entry::Vacant(headers_entry) = self.headers.entry(hash) else {
+                // TODO: Remove this when we implement type-safe validation on insertion.
+                return Err(StoreInsertionError::HashExists(hash).into());
             };
 
             debug!("Inserting header {hash} with height {height}");
-            hash_entry.insert(header);
-            height_entry.insert(hash);
+            headers_entry.insert(header);
+            self.height_to_hash.insert(height, hash);
         }
 
-        self.header_ranges.insert_relaxed(headers_range)?;
+        self.header_ranges
+            .insert_relaxed(headers_range)
+            .expect("invalid range");
 
         Ok(())
     }
@@ -225,32 +226,32 @@ impl InMemoryStoreInner {
         if let Some(lowest_header) = lowest_header {
             let prev = self
                 .get_by_height(lowest_header.height().value() - 1)
-                .map_err(|e| {
-                    if let StoreError::NotFound = e {
-                        StoreError::StoredDataError(
-                            "inconsistency between headers and ranges table".into(),
-                        )
-                    } else {
-                        e
+                .map_err(|e| match e {
+                    StoreError::NotFound => {
+                        panic!("inconsistency between headers and ranges table")
                     }
+                    e => e,
                 })?;
-            prev.verify(lowest_header)?;
+
+            prev.verify(lowest_header)
+                .map_err(|e| StoreInsertionError::NeighborsVerificationFailed(e.to_string()))?;
         }
 
         if let Some(highest_header) = highest_header {
             let next = self
                 .get_by_height(highest_header.height().value() + 1)
-                .map_err(|e| {
-                    if let StoreError::NotFound = e {
-                        StoreError::StoredDataError(
-                            "inconsistency between headers and ranges table".into(),
-                        )
-                    } else {
-                        e
+                .map_err(|e| match e {
+                    StoreError::NotFound => {
+                        panic!("inconsistency between headers and ranges table")
                     }
+                    e => e,
                 })?;
-            highest_header.verify(&next)?;
+
+            highest_header
+                .verify(&next)
+                .map_err(|e| StoreInsertionError::NeighborsVerificationFailed(e.to_string()))?;
         }
+
         Ok(())
     }
 
@@ -398,7 +399,7 @@ impl Store for InMemoryStore {
     async fn insert<R>(&self, header: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+        <R as TryInto<VerifiedExtendedHeaders>>::Error: Display,
     {
         self.insert(header).await
     }

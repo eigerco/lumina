@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::convert::Infallible;
+use std::fmt::Display;
 use std::pin::pin;
 
 use async_trait::async_trait;
@@ -18,7 +19,9 @@ use wasm_bindgen::JsValue;
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
-use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
+use crate::store::{
+    Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
+};
 
 /// indexeddb version, needs to be incremented on every schema schange
 const DB_VERSION: u32 = 4;
@@ -164,7 +167,7 @@ impl IndexedDbStore {
 
         let serialized_header = from_value::<ExtendedHeaderEntry>(header_entry)?.header;
         ExtendedHeader::decode(serialized_header.as_ref())
-            .map_err(|e| StoreError::CelestiaTypes(e.into()))
+            .map_err(|e| StoreError::StoredDataError(e.to_string()))
     }
 
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges> {
@@ -179,9 +182,12 @@ impl IndexedDbStore {
     async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+        <R as TryInto<VerifiedExtendedHeaders>>::Error: Display,
     {
-        let headers = headers.try_into()?;
+        let headers = headers
+            .try_into()
+            .map_err(|e| StoreInsertionError::HeadersVerificationFailed(e.to_string()))?;
+
         let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
             return Ok(());
         };
@@ -196,8 +202,9 @@ impl IndexedDbStore {
         let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
 
         let headers_range = head.height().value()..=tail.height().value();
-        let (prev_exists, next_exists) =
-            header_ranges.check_insertion_constraints(&headers_range)?;
+        let (prev_exists, next_exists) = header_ranges
+            .check_insertion_constraints(&headers_range)
+            .map_err(StoreInsertionError::ContraintsNotMet)?;
 
         // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
         verify_against_neighbours(
@@ -211,8 +218,11 @@ impl IndexedDbStore {
             let hash = header.hash();
             let hash_index = header_store.index(HASH_INDEX_NAME)?;
             let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?)?;
+
             if hash_index.count(Some(&jsvalue_hash_key)).await.unwrap_or(0) != 0 {
-                return Err(StoreError::HashExists(hash));
+                // TODO: Replace this with `StoredDataError` when we implement
+                // type-safe validation on insertion.
+                return Err(StoreInsertionError::HashExists(hash).into());
             }
 
             // make sure Result is Infallible, we unwrap it later
@@ -230,7 +240,9 @@ impl IndexedDbStore {
             header_store.add(&jsvalue_header, None).await?;
         }
 
-        header_ranges.insert_relaxed(headers_range)?;
+        header_ranges
+            .insert_relaxed(headers_range)
+            .expect("invalid range");
         set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
 
         tx.commit().await?;
@@ -480,7 +492,7 @@ impl Store for IndexedDbStore {
     async fn insert<R>(&self, header: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+        <R as TryInto<VerifiedExtendedHeaders>>::Error: Display,
     {
         let fut = SendWrapper::new(self.insert(header));
         fut.await
@@ -566,7 +578,7 @@ async fn get_by_height(header_store: &rexie::Store, height: u64) -> Result<Exten
 
     let serialized_header = from_value::<ExtendedHeaderEntry>(header_entry)?.header;
     ExtendedHeader::decode(serialized_header.as_ref())
-        .map_err(|e| StoreError::CelestiaTypes(e.into()))
+        .map_err(|e| StoreError::StoredDataError(e.to_string()))
 }
 
 async fn verify_against_neighbours(
@@ -586,7 +598,9 @@ async fn verify_against_neighbours(
                     e
                 }
             })?;
-        prev.verify(lowest_header)?;
+
+        prev.verify(lowest_header)
+            .map_err(|e| StoreInsertionError::NeighborsVerificationFailed(e.to_string()))?;
     }
 
     if let Some(highest_header) = highest_header {
@@ -601,8 +615,12 @@ async fn verify_against_neighbours(
                     e
                 }
             })?;
-        highest_header.verify(&next)?;
+
+        highest_header
+            .verify(&next)
+            .map_err(|e| StoreInsertionError::NeighborsVerificationFailed(e.to_string()))?;
     }
+
     Ok(())
 }
 
@@ -682,7 +700,8 @@ async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
     let ranges = if version <= 2 {
         match v2::get_head_header(&header_store).await {
             // On v2 there were no gaps between headers.
-            Ok(head) => BlockRanges::from_vec(smallvec![1..=head.height().value()])?,
+            Ok(head) => BlockRanges::from_vec(smallvec![1..=head.height().value()])
+                .map_err(|e| StoreError::StoredDataError(e.to_string()))?,
             Err(StoreError::NotFound) => BlockRanges::new(),
             Err(e) => return Err(e),
         }
@@ -717,7 +736,7 @@ mod v2 {
         let serialized_header = from_value::<ExtendedHeaderEntry>(store_head)?.header;
 
         ExtendedHeader::decode(serialized_header.as_ref())
-            .map_err(|e| StoreError::CelestiaTypes(e.into()))
+            .map_err(|e| StoreError::StoredDataError(e.to_string()))
     }
 }
 
@@ -732,7 +751,9 @@ mod v3 {
             .await?
         {
             let (start, end) = from_value::<(u64, u64)>(raw_range)?;
-            ranges.insert_relaxed(start..=end)?;
+            ranges
+                .insert_relaxed(start..=end)
+                .map_err(|e| StoreError::StoredDataError(e.to_string()))?;
         }
 
         Ok(ranges)

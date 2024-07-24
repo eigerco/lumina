@@ -276,6 +276,12 @@ pub enum NodeEvent {
         took: Duration,
     },
 
+    /// Header syncing fatal error.
+    FatalSyncerError {
+        /// A human readable error.
+        error: String,
+    },
+
     /// Network was compromised.
     ///
     /// This happens when a valid bad encoding fraud proof is received.
@@ -290,6 +296,7 @@ impl NodeEvent {
     pub fn is_error(&self) -> bool {
         match self {
             NodeEvent::FatalDaserError { .. }
+            | NodeEvent::FatalSyncerError { .. }
             | NodeEvent::FetchingHeadersFailed { .. }
             | NodeEvent::NetworkCompromised => true,
             NodeEvent::PeerConnected { .. }
@@ -328,7 +335,7 @@ impl fmt::Display for NodeEvent {
                 square_width,
                 shares,
             } => {
-                write!(f, "Sampling for {height} block started. Square: {square_width}x{square_width}, Shares: {shares:?}")
+                write!(f, "Sampling of block {height} started. Square: {square_width}x{square_width}, Shares: {shares:?}")
             }
             NodeEvent::ShareSamplingResult {
                 height,
@@ -340,19 +347,11 @@ impl fmt::Display for NodeEvent {
                 let acc = if *accepted { "accepted" } else { "rejected" };
                 write!(
                     f,
-                    "Sampling for share [{row}, {column}] of {height} block was {acc}"
+                    "Sampling for share [{row}, {column}] of block {height} was {acc}"
                 )
             }
-            NodeEvent::SamplingFinished {
-                height,
-                accepted,
-                took,
-            } => {
-                let acc = if *accepted { "accepted" } else { "rejected" };
-                write!(
-                    f,
-                    "Sampling for {height} block finished and {acc}. Took: {took:?}"
-                )
+            NodeEvent::SamplingFinished { height, took, .. } => {
+                write!(f, "Sampling of block {height} finished. Took: {took:?}")
             }
             NodeEvent::FatalDaserError { error } => {
                 write!(f, "Daser stopped because of a fatal error: {error}")
@@ -371,11 +370,11 @@ impl fmt::Display for NodeEvent {
                 to_height,
             } => {
                 if from_height == to_height {
-                    write!(f, "Fetching header of {from_height} block started")
+                    write!(f, "Fetching header of block {from_height} started")
                 } else {
                     write!(
                         f,
-                        "Fetching headers of {from_height}-{to_height} blocks started"
+                        "Fetching headers of blocks {from_height}-{to_height} started"
                     )
                 }
             }
@@ -387,10 +386,10 @@ impl fmt::Display for NodeEvent {
                 if from_height == to_height {
                     write!(
                         f,
-                        "Fetching header of {from_height} block finished. Took: {took:?}"
+                        "Fetching header of block {from_height} finished. Took: {took:?}"
                     )
                 } else {
-                    write!(f, "Fetching headers of {from_height}-{to_height} blocks finished. Took: {took:?}")
+                    write!(f, "Fetching headers of blocks {from_height}-{to_height} finished. Took: {took:?}")
                 }
             }
             NodeEvent::FetchingHeadersFailed {
@@ -402,11 +401,14 @@ impl fmt::Display for NodeEvent {
                 if from_height == to_height {
                     write!(
                         f,
-                        "Fetching header of {from_height} block failed. Took: {took:?}, Error: {error}"
+                        "Fetching header of block {from_height} failed. Took: {took:?}, Error: {error}"
                     )
                 } else {
-                    write!(f, "Fetching headers of {from_height}-{to_height} blocks failed. Took: {took:?}, Error: {error}")
+                    write!(f, "Fetching headers of blocks {from_height}-{to_height} failed. Took: {took:?}, Error: {error}")
                 }
+            }
+            NodeEvent::FatalSyncerError { error } => {
+                write!(f, "Syncer stopped because of a fatal error: {error}")
             }
             NodeEvent::NetworkCompromised => {
                 write!(f, "The network is compromised and should not be trusted. ")?;

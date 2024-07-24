@@ -23,21 +23,21 @@ rm -rf ../target/proto-vendor-src
 mkdir -p ../target/proto-vendor-src
 
 extract_urls ../target/proto-vendor-src \
-    https://github.com/celestiaorg/celestia-app/archive/refs/tags/v1.4.0.tar.gz \
+    https://github.com/celestiaorg/celestia-app/archive/refs/tags/v1.12.0.tar.gz \
     https://github.com/celestiaorg/celestia-core/archive/refs/heads/v0.34.x-celestia.tar.gz \
     https://github.com/celestiaorg/celestia-node/archive/refs/heads/main.tar.gz \
     https://github.com/celestiaorg/cosmos-sdk/archive/refs/heads/release/v0.46.x-celestia.tar.gz \
-    https://github.com/celestiaorg/nmt/archive/refs/heads/master.tar.gz \
-    https://github.com/cosmos/cosmos-proto/archive/refs/tags/v1.0.0-alpha4.tar.gz \
+    https://github.com/celestiaorg/nmt/archive/refs/heads/main.tar.gz \
+    https://github.com/cosmos/cosmos-proto/archive/refs/tags/v1.0.0-alpha7.tar.gz \
     https://github.com/cosmos/gogoproto/archive/refs/tags/v1.4.11.tar.gz \
     https://github.com/celestiaorg/go-header/archive/refs/heads/main.tar.gz \
     https://github.com/googleapis/googleapis/archive/refs/heads/master.tar.gz \
-    https://codeload.github.com/celestiaorg/celestia-node/zip/refs/heads/hlib/v2-prototype
+    https://github.com/celestiaorg/celestia-node/archive/refs/heads/shwap-prototype.tar.gz
 
 mkdir -p vendor
 
 rm -rf vendor/celestia
-cp -r ../target/proto-vendor-src/celestia-app-1.4.0/proto/celestia vendor
+cp -r ../target/proto-vendor-src/celestia-app-1.12.0/proto/celestia vendor
 
 rm -rf vendor/go-header
 mkdir -p vendor/go-header/p2p
@@ -48,7 +48,7 @@ mkdir -p vendor/cosmos
 cp -r ../target/proto-vendor-src/cosmos-sdk-release-v0.46.x-celestia/proto/cosmos/{base,staking,crypto,tx} vendor/cosmos
 
 rm -rf vendor/cosmos_proto
-cp -r ../target/proto-vendor-src/cosmos-proto-1.0.0-alpha4/proto/cosmos_proto vendor
+cp -r ../target/proto-vendor-src/cosmos-proto-1.0.0-alpha7/proto/cosmos_proto vendor
 
 rm -rf vendor/gogoproto
 mkdir -p vendor/gogoproto
@@ -72,10 +72,10 @@ for pb_dir in ../target/proto-vendor-src/celestia-node-main/share/*/*/pb; do
 done
 
 # TODO: replace with version from main, once it is merged
-# https://github.com/celestiaorg/celestia-node/pull/2675
+# https://github.com/celestiaorg/celestia-node/pull/3184
 rm -rf vendor/share/p2p/shwap
 mkdir -p vendor/share/p2p/shwap/pb
-cp ../target/proto-vendor-src/celestia-node-hlib-v2-prototype/share/shwap/pb/shwap_pb.proto \
+cp ../target/proto-vendor-src/celestia-node-shwap-prototype/share/shwap/pb/shwap_pb.proto \
     vendor/share/p2p/shwap/pb/shwap.proto
 
 rm -rf vendor/tendermint
@@ -83,6 +83,6 @@ cp -r ../target/proto-vendor-src/celestia-core-0.34.x-celestia/proto/tendermint 
 
 rm -rf vendor/nmt
 mkdir -p vendor/nmt
-cp -r ../target/proto-vendor-src/nmt-master/pb vendor/nmt
+cp -r ../target/proto-vendor-src/nmt-main/pb vendor/nmt
 
 find vendor -name '*.go' -delete

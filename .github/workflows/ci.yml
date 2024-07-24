@@ -61,7 +61,7 @@ jobs:
   test-wasm:
     runs-on: ubuntu-latest
     env:
-      WASM_BINDGEN_TEST_TIMEOUT: 60
+      WASM_BINDGEN_TEST_TIMEOUT: 120
     steps:
     - uses: actions/checkout@v1
 

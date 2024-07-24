@@ -16,6 +16,8 @@ mod native {
     use std::result::Result;
 
     use async_trait::async_trait;
+    use celestia_types::consts::appconsts::SHARE_SIZE;
+    use celestia_types::consts::data_availability_header::MAX_EXTENDED_SQUARE_WIDTH;
     use http::{header, HeaderValue};
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
@@ -26,6 +28,13 @@ mod native {
     use serde::de::DeserializeOwned;
 
     use crate::Error;
+
+    const MAX_EDS_SIZE_BYTES: usize =
+        MAX_EXTENDED_SQUARE_WIDTH * MAX_EXTENDED_SQUARE_WIDTH * SHARE_SIZE;
+
+    // The biggest response we might get is for requesting an EDS.
+    // Also, we allow 1 MB extra for any metadata they come with it.
+    const MAX_RESPONSE_SIZE: usize = MAX_EDS_SIZE_BYTES + 1024 * 1024;
 
     /// Json RPC client.
     pub enum Client {
@@ -56,11 +65,13 @@ mod native {
             let client = match protocol {
                 Some("http") | Some("https") => Client::Http(
                     HttpClientBuilder::default()
+                        .max_response_size(MAX_RESPONSE_SIZE as u32)
                         .set_headers(headers)
                         .build(conn_str)?,
                 ),
                 Some("ws") | Some("wss") => Client::Ws(
                     WsClientBuilder::default()
+                        .max_response_size(MAX_RESPONSE_SIZE as u32)
                         .set_headers(headers)
                         .build(conn_str)
                         .await?,
