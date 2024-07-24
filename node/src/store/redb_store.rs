@@ -400,7 +400,7 @@ impl RedbStore {
         .await
     }
 
-    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
+    async fn remove_last(&self) -> Result<u64> {
         self.write_tx(move |tx| {
             let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let mut headers_table = tx.open_table(HEADERS_TABLE)?;
@@ -408,28 +408,27 @@ impl RedbStore {
 
             let mut header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
 
-            let to_remove = header_ranges.clone() - (cutoff + 1..=u64::MAX);
-            header_ranges -= 1..=cutoff;
+            let Some(height) = header_ranges.tail() else {
+                return Err(StoreError::NotFound);
+            };
+
+            header_ranges -= height..=height;
             set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
 
-            for height in to_remove.into_iter() {
-                // TODO: remove sampling
-                let Some(header) = headers_table.remove(height)? else {
-                    warn!("header {height} present in ranges, missing in headers table");
-                    continue;
-                };
+            let Some(header) = headers_table.remove(height)? else {
+                warn!("header {height} present in ranges, missing in headers table");
+                return Err(StoreError::LostHeight(height));
+            };
 
-                let Ok(header) = ExtendedHeader::decode(header.value()) else {
-                    warn!("header {height} present, but malformed");
-                    continue;
-                };
+            let header = ExtendedHeader::decode(header.value())
+                .map_err(|e| StoreError::CelestiaTypes(e.into()))?;
 
-                // TODO: is there _ANY_ value in keeping historical hashes?
-                if heights_table.remove(header.hash().as_bytes())?.is_none() {
-                    warn!("header {height} present, missing in heights table");
-                };
-            }
-            Ok(())
+            if heights_table.remove(header.hash().as_bytes())?.is_none() {
+                warn!("header {height} present, missing in heights table");
+                return Err(StoreError::LostHash(header.hash()));
+            };
+
+            Ok(height)
         })
         .await
     }
@@ -524,8 +523,8 @@ impl Store for RedbStore {
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         self.get_sampling_ranges().await
     }
-    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
-        self.remove_tail(cutoff).await
+    async fn remove_last(&self) -> Result<u64> {
+        self.remove_last().await
     }
 }
 

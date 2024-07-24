@@ -1,4 +1,4 @@
-use std::collections::hash_map::Entry as HashMapEntry;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::pin::pin;
 
@@ -127,9 +127,9 @@ impl InMemoryStore {
         }
     }
 
-    async fn remove_tail(&self, cutoff: u64) {
+    async fn remove_last(&self) -> Result<u64> {
         let mut inner = self.inner.write().await;
-        inner.remove_tail(cutoff)
+        inner.remove_last()
     }
 }
 
@@ -196,12 +196,12 @@ impl InMemoryStoreInner {
             let hash = header.hash();
             let height = header.height().value();
 
-            let HashMapEntry::Vacant(hash_entry) = self.headers.entry(hash) else {
+            let Entry::Vacant(hash_entry) = self.headers.entry(hash) else {
                 panic!(
                     "hash present in store right after we checked its absence, should not happen"
                 );
             };
-            let HashMapEntry::Vacant(height_entry) = self.height_to_hash.entry(height) else {
+            let Entry::Vacant(height_entry) = self.height_to_hash.entry(height) else {
                 return Err(StoreError::StoredDataError(
                     "inconsistency between headers and ranges table".into(),
                 ));
@@ -265,10 +265,10 @@ impl InMemoryStoreInner {
         }
 
         match self.sampling_data.entry(height) {
-            HashMapEntry::Vacant(entry) => {
+            Entry::Vacant(entry) => {
                 entry.insert(SamplingMetadata { status, cids });
             }
-            HashMapEntry::Occupied(mut entry) => {
+            Entry::Occupied(mut entry) => {
                 let metadata = entry.get_mut();
                 metadata.status = status;
 
@@ -306,22 +306,31 @@ impl InMemoryStoreInner {
         Ok(Some(metadata.clone()))
     }
 
-    fn remove_tail(&mut self, cutoff: u64) {
-        // TODO: Some kind of split function?
-        let to_remove: BlockRanges = self.header_ranges.clone() - (cutoff + 1..=u64::MAX);
-        self.header_ranges -= 1..=cutoff;
+    fn remove_last(&mut self) -> Result<u64> {
+        let Some(height) = self.header_ranges.tail() else {
+            return Err(StoreError::NotFound);
+        };
 
-        for height in to_remove.into_iter() {
-            self.sampling_data.remove(&height);
-            let Some(hash) = self.height_to_hash.remove(&height) else {
-                warn!("header {height} present in ranges is missing in height_to_hash");
-                continue;
-            };
+        let Entry::Occupied(height_to_hash) = self.height_to_hash.entry(height) else {
+            warn!("header {height} present in ranges is missing in height_to_hash");
+            return Err(StoreError::LostHeight(height));
+        };
 
-            if self.headers.remove(&hash).is_none() {
-                warn!("header {hash} present in height_to_hash missing");
-            };
-        }
+        let hash = height_to_hash.get();
+        let Entry::Occupied(header) = self.headers.entry(*hash) else {
+            warn!("header {hash} present in height_to_hash missing");
+            return Err(StoreError::LostHash(*hash));
+        };
+
+        // sampling data may or may not be there
+        self.sampling_data.remove(&height);
+
+        height_to_hash.remove_entry();
+        header.remove_entry();
+
+        self.header_ranges -= height..=height;
+
+        Ok(height)
     }
 }
 
@@ -415,8 +424,8 @@ impl Store for InMemoryStore {
         Ok(self.get_accepted_sampling_ranges().await)
     }
 
-    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
-        Ok(self.remove_tail(cutoff).await)
+    async fn remove_last(&self) -> Result<u64> {
+        self.remove_last().await
     }
 }
 

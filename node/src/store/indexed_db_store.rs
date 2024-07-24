@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use smallvec::smallvec;
 use tokio::sync::Notify;
-use tracing::{error, warn};
+use tracing::warn;
 use wasm_bindgen::JsValue;
 
 use crate::block_ranges::BlockRanges;
@@ -367,7 +367,7 @@ impl IndexedDbStore {
         get_ranges(&store, ACCEPTED_SAMPLING_RANGES_KEY).await
     }
 
-    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
+    async fn remove_last(&self) -> Result<u64> {
         let tx = self.db.transaction(
             &[HEADER_STORE_NAME, RANGES_STORE_NAME],
             TransactionMode::ReadWrite,
@@ -379,24 +379,21 @@ impl IndexedDbStore {
 
         let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
 
-        let to_remove = header_ranges.clone() - (cutoff + 1..=u64::MAX);
-        header_ranges -= 1..=cutoff;
+        let Some(height) = header_ranges.tail() else {
+            return Err(StoreError::NotFound);
+        };
+        header_ranges -= height..=height;
         set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
 
-        for height in to_remove.into_iter() {
-            let jsvalue_height = to_value(&height).expect("to create jsvalue");
-            let id = match height_index.get(&jsvalue_height).await {
-                Ok(header) => js_sys::Reflect::get(&header, &to_value("id")?).expect("to reflect"),
-                Err(e) => {
-                    error!("error removing {height}: {e}");
-                    continue;
-                }
-            };
-            if let Err(e) = header_store.delete(&id).await {
-                error!("error removing {id:?}: {e}");
-            }
-        }
-        Ok(())
+        let jsvalue_height = to_value(&height).expect("to create jsvalue");
+        let header = height_index.get(&jsvalue_height).await?;
+
+        let id = js_sys::Reflect::get(&header, &to_value("id")?)
+            .map_err(|_| StoreError::StoredDataError(format!("could not get header's DB id")))?;
+
+        header_store.delete(&id).await?;
+
+        Ok(height)
     }
 }
 
@@ -500,8 +497,8 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn remove_tail(&self, cutoff: u64) -> Result<()> {
-        let fut = SendWrapper::new(self.remove_tail(cutoff));
+    async fn remove_last(&self) -> Result<u64> {
+        let fut = SendWrapper::new(self.remove_last());
         fut.await
     }
 }
