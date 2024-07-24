@@ -8,7 +8,7 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
 use tokio::sync::{Notify, RwLock};
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
@@ -313,14 +313,16 @@ impl InMemoryStoreInner {
         };
 
         let Entry::Occupied(height_to_hash) = self.height_to_hash.entry(height) else {
-            warn!("header {height} present in ranges is missing in height_to_hash");
-            return Err(StoreError::LostHeight(height));
+            return Err(StoreError::StoredDataError(format!(
+                "inconsistency between ranges and height_to_hash tables, height {height}"
+            )));
         };
 
         let hash = height_to_hash.get();
         let Entry::Occupied(header) = self.headers.entry(*hash) else {
-            warn!("header {hash} present in height_to_hash missing");
-            return Err(StoreError::LostHash(*hash));
+            return Err(StoreError::StoredDataError(format!(
+                "inconsistency between header and height_to_hash tables, hash {hash}"
+            )));
         };
 
         // sampling data may or may not be there

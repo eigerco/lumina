@@ -735,7 +735,6 @@ mod tests {
         assert_eq!(empty_heights, Vec::<u64>::new())
     }
 
-
     #[test]
     fn validate_check() {
         (1..=1).validate().unwrap();
@@ -1061,7 +1060,10 @@ mod tests {
         assert_eq!(&difference.0[..], &[41..=50, 80..=100, 130..=150][..]);
 
         let difference = minuend.clone() - (35..=40);
-        assert_eq!(&difference.0[..], &[30..=34, 41..=50, 80..=100, 130..=150][..]);
+        assert_eq!(
+            &difference.0[..],
+            &[30..=34, 41..=50, 80..=100, 130..=150][..]
+        );
 
         let difference = minuend.clone() - (51..=129);
         assert_eq!(&difference.0[..], &[30..=50, 130..=150][..]);
@@ -1070,7 +1072,10 @@ mod tests {
         assert_eq!(&difference.0[..], &[30..=49, 131..=150][..]);
 
         let difference = minuend.clone() - (35..=49);
-        assert_eq!(&difference.0[..], &[30..=34, 50..=50, 80..=100, 130..=150][..]);
+        assert_eq!(
+            &difference.0[..],
+            &[30..=34, 50..=50, 80..=100, 130..=150][..]
+        );
 
         let difference = minuend.clone() - (35..=50);
         assert_eq!(&difference.0[..], &[30..=34, 80..=100, 130..=150][..]);
@@ -1128,7 +1133,10 @@ mod tests {
 
         let mut difference = minuend.clone();
         difference -= 35..=40;
-        assert_eq!(&difference.0[..], &[30..=34, 41..=50, 80..=100, 130..=150][..]);
+        assert_eq!(
+            &difference.0[..],
+            &[30..=34, 41..=50, 80..=100, 130..=150][..]
+        );
 
         let mut difference = minuend.clone();
         difference -= 51..=129;
@@ -1140,7 +1148,10 @@ mod tests {
 
         let mut difference = minuend.clone();
         difference -= 35..=49;
-        assert_eq!(&difference.0[..], &[30..=34, 50..=50, 80..=100, 130..=150][..]);
+        assert_eq!(
+            &difference.0[..],
+            &[30..=34, 50..=50, 80..=100, 130..=150][..]
+        );
 
         let mut difference = minuend.clone();
         difference -= 35..=50;
@@ -1185,6 +1196,5 @@ mod tests {
         let mut difference = new_block_ranges([1..=u64::MAX]);
         difference -= u64::MAX..=u64::MAX;
         assert_eq!(&difference.0[..], &[1..=u64::MAX - 1][..]);
-
     }
 }

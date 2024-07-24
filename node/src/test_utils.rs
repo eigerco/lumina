@@ -11,7 +11,14 @@ use libp2p::identity::{self, Keypair};
 use tokio::sync::{mpsc, watch};
 
 use crate::{
-    block_ranges::{BlockRange, BlockRanges}, blockstore::InMemoryBlockstore, executor::timeout, node::NodeConfig, p2p::{P2pCmd, P2pError}, peer_tracker::PeerTrackerInfo, store::{ExtendedHeaderGeneratorExt, InMemoryStore}, utils::OneshotResultSender
+    block_ranges::{BlockRange, BlockRanges},
+    blockstore::InMemoryBlockstore,
+    executor::timeout,
+    node::NodeConfig,
+    p2p::{P2pCmd, P2pError},
+    peer_tracker::PeerTrackerInfo,
+    store::{ExtendedHeaderGeneratorExt, InMemoryStore},
+    utils::OneshotResultSender,
 };
 
 #[cfg(test)]

@@ -400,7 +400,7 @@ impl IndexedDbStore {
         let header = height_index.get(&jsvalue_height).await?;
 
         let id = js_sys::Reflect::get(&header, &to_value("id")?)
-            .map_err(|_| StoreError::StoredDataError(format!("could not get header's DB id")))?;
+            .map_err(|_| StoreError::StoredDataError("could not get header's DB id".into()))?;
 
         header_store.delete(&id).await?;
 

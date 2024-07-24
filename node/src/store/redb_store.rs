@@ -425,16 +425,19 @@ impl RedbStore {
             set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
 
             let Some(header) = headers_table.remove(height)? else {
-                warn!("header {height} present in ranges, missing in headers table");
-                return Err(StoreError::LostHeight(height));
+                return Err(StoreError::StoredDataError(format!(
+                    "inconsistency between ranges and height_to_hash tables, height {height}"
+                )));
             };
 
-            let header = ExtendedHeader::decode(header.value())
-                .map_err(|e| StoreError::CelestiaTypes(e.into()))?;
+            let hash = ExtendedHeader::decode(header.value())
+                .map_err(|e| StoreError::StoredDataError(e.to_string()))?
+                .hash();
 
-            if heights_table.remove(header.hash().as_bytes())?.is_none() {
-                warn!("header {height} present, missing in heights table");
-                return Err(StoreError::LostHash(header.hash()));
+            if heights_table.remove(hash.as_bytes())?.is_none() {
+                return Err(StoreError::StoredDataError(format!(
+                    "inconsistency between header and height_to_hash tables, hash {hash}"
+                )));
             };
 
             Ok(height)
