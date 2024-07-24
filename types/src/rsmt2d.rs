@@ -23,14 +23,14 @@ pub enum AxisType {
     Col,
 }
 
-impl TryFrom<u8> for AxisType {
+impl TryFrom<i32> for AxisType {
     type Error = Error;
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(AxisType::Row),
             1 => Ok(AxisType::Col),
-            n => Err(Error::InvalidAxis(n.into())),
+            n => Err(Error::InvalidAxis(n)),
         }
     }
 }

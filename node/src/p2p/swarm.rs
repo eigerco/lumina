@@ -121,7 +121,7 @@ mod imp {
 
     impl From<noise::Error> for P2pError {
         fn from(e: noise::Error) -> Self {
-            P2pError::InitNoise(e.to_string())
+            P2pError::NoiseInit(e.to_string())
         }
     }
 

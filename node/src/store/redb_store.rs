@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::pin::pin;
 use std::sync::Arc;
@@ -19,7 +20,11 @@ use tracing::{debug, trace};
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
-use crate::store::{Result, SamplingMetadata, SamplingStatus, Store, StoreError};
+use crate::store::{
+    Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
+};
+
+use super::utils::{deserialize_extended_header, deserialize_sampling_metadata};
 
 const SCHEMA_VERSION: u64 = 2;
 
@@ -29,7 +34,6 @@ const SAMPLING_METADATA_TABLE: TableDefinition<'static, u64, &[u8]> =
     TableDefinition::new("STORE.SAMPLING_METADATA");
 const SCHEMA_VERSION_TABLE: TableDefinition<'static, (), u64> =
     TableDefinition::new("STORE.SCHEMA_VERSION");
-
 const RANGES_TABLE: TableDefinition<'static, &str, Vec<(u64, u64)>> =
     TableDefinition::new("STORE.RANGES");
 
@@ -246,9 +250,11 @@ impl RedbStore {
     async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+        <R as TryInto<VerifiedExtendedHeaders>>::Error: Display,
     {
-        let headers = headers.try_into()?;
+        let headers = headers
+            .try_into()
+            .map_err(|e| StoreInsertionError::HeadersVerificationFailed(e.to_string()))?;
 
         self.write_tx(move |tx| {
             let headers = headers.as_ref();
@@ -264,8 +270,9 @@ impl RedbStore {
             let mut header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
             let headers_range = head.height().value()..=tail.height().value();
 
-            let (prev_exists, next_exists) =
-                header_ranges.check_insertion_constraints(&headers_range)?;
+            let (prev_exists, next_exists) = header_ranges
+                .check_insertion_constraints(&headers_range)
+                .map_err(StoreInsertionError::ContraintsNotMet)?;
 
             verify_against_neighbours(
                 &headers_table,
@@ -275,6 +282,7 @@ impl RedbStore {
 
             for header in headers {
                 let height = header.height().value();
+                let hash = header.hash();
                 // until unwrap_infallible is stabilised, make sure Result is Infallible manually
                 let serialized_header: Result<_, Infallible> = header.encode_vec();
                 let serialized_header = serialized_header.unwrap();
@@ -284,19 +292,22 @@ impl RedbStore {
                     .is_some()
                 {
                     return Err(StoreError::StoredDataError(
-                        "inconsistency between headers and ranges table".into(),
+                        "inconsistency between headers table and ranges table".into(),
                     ));
                 }
 
-                let hash = header.hash();
                 if heights_table.insert(hash.as_bytes(), height)?.is_some() {
-                    return Err(StoreError::HashExists(hash));
+                    // TODO: Replace this with `StoredDataError` when we implement
+                    // type-safe validation on insertion.
+                    return Err(StoreInsertionError::HashExists(hash).into());
                 }
 
                 trace!("Inserted header {hash} with height {height}");
             }
 
-            header_ranges.insert_relaxed(&headers_range)?;
+            header_ranges
+                .insert_relaxed(&headers_range)
+                .expect("invalid range");
             set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
 
             debug!("Inserted header range {headers_range:?}",);
@@ -468,7 +479,7 @@ impl Store for RedbStore {
     async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
-        StoreError: From<<R as TryInto<VerifiedExtendedHeaders>>::Error>,
+        <R as TryInto<VerifiedExtendedHeaders>>::Error: Display,
     {
         self.insert(headers).await
     }
@@ -511,7 +522,9 @@ where
                 e
             }
         })?;
-        prev.verify(lowest_header)?;
+
+        prev.verify(lowest_header)
+            .map_err(|e| StoreInsertionError::NeighborsVerificationFailed(e.to_string()))?;
     }
 
     if let Some(highest_header) = highest_header {
@@ -522,7 +535,10 @@ where
                 e
             }
         })?;
-        highest_header.verify(&next)?;
+
+        highest_header
+            .verify(&next)
+            .map_err(|e| StoreInsertionError::NeighborsVerificationFailed(e.to_string()))?;
     }
 
     Ok(())
@@ -543,7 +559,10 @@ where
         })
         .unwrap_or_default();
 
-    Ok(BlockRanges::from_vec(raw_ranges)?)
+    BlockRanges::from_vec(raw_ranges).map_err(|e| {
+        let s = format!("Stored BlockRanges for {name} are invalid: {e}");
+        StoreError::StoredDataError(s)
+    })
 }
 
 fn set_ranges(
@@ -579,7 +598,7 @@ where
     R: ReadableTable<u64, &'static [u8]>,
 {
     let serialized = headers_table.get(key)?.ok_or(StoreError::NotFound)?;
-    ExtendedHeader::decode(serialized.value()).map_err(|e| StoreError::CelestiaTypes(e.into()))
+    deserialize_extended_header(serialized.value())
 }
 
 #[inline]
@@ -592,10 +611,7 @@ where
 {
     sampling_metadata_table
         .get(key)?
-        .map(|guard| {
-            SamplingMetadata::decode(guard.value())
-                .map_err(|e| StoreError::StoredDataError(e.to_string()))
-        })
+        .map(|guard| deserialize_sampling_metadata(guard.value()))
         .transpose()
 }
 
@@ -605,7 +621,7 @@ impl From<TransactionError> for StoreError {
             TransactionError::ReadTransactionStillInUse(_) => {
                 unreachable!("redb::ReadTransaction::close is never used")
             }
-            e => StoreError::FatalDatabaseError(e.to_string()),
+            e => StoreError::FatalDatabaseError(format!("TransactionError: {e}")),
         }
     }
 }
@@ -617,8 +633,10 @@ impl From<TableError> for StoreError {
             TableError::TableAlreadyOpen(table, location) => {
                 panic!("Table {table} already opened from: {location}")
             }
-            TableError::TableDoesNotExist(_) => StoreError::NotFound,
-            e => StoreError::StoredDataError(e.to_string()),
+            TableError::TableDoesNotExist(table) => {
+                panic!("Table {table} was not created on initialization")
+            }
+            e => StoreError::StoredDataError(format!("TableError: {e}")),
         }
     }
 }
@@ -629,14 +647,14 @@ impl From<StorageError> for StoreError {
             StorageError::ValueTooLarge(_) => {
                 unreachable!("redb::Table::insert_reserve is never used")
             }
-            e => StoreError::FatalDatabaseError(e.to_string()),
+            e => StoreError::FatalDatabaseError(format!("StorageError: {e}")),
         }
     }
 }
 
 impl From<CommitError> for StoreError {
     fn from(e: CommitError) -> Self {
-        StoreError::FatalDatabaseError(e.to_string())
+        StoreError::FatalDatabaseError(format!("CommitError: {e}"))
     }
 }
 
