@@ -731,7 +731,7 @@ mod tests {
         let heights: Vec<_> = ranges.into_iter().collect();
         assert_eq!(heights, vec![1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15]);
 
-        let empty_heights: Vec<u64> = new_block_ranges([]).into_iter().collect();
+        let empty_heights: Vec<u64> = new_block_ranges([]).collect();
         assert_eq!(empty_heights, Vec::<u64>::new())
     }
 
@@ -1095,7 +1095,7 @@ mod tests {
         let difference = minuend.clone() - (10..=170);
         assert!(difference.0.is_empty());
 
-        let difference = minuend.clone() - (170..=10);
+        let difference = minuend.clone() - RangeInclusive::new(170, 10);
         assert_eq!(&difference.0[..], &minuend.0[..]);
 
         let minuend = new_block_ranges([1..=10, 12..=12, 14..=14]);
@@ -1178,7 +1178,7 @@ mod tests {
         assert!(difference.0.is_empty());
 
         let mut difference = minuend.clone();
-        difference -= 170..=10;
+        difference -= RangeInclusive::new(170, 10);
         assert_eq!(&difference.0[..], &minuend.0[..]);
 
         let mut difference = new_block_ranges([1..=10, 12..=12, 14..=14]);

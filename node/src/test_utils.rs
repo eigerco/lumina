@@ -40,6 +40,7 @@ pub async fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGene
     (s, gen)
 }
 
+/// Convenience function for creating a `BlockRange` out of a list of `N..=M` ranges
 pub fn new_block_ranges<const N: usize>(ranges: [BlockRange; N]) -> BlockRanges {
     BlockRanges::from_vec(ranges.into_iter().collect()).expect("invalid BlockRanges")
 }

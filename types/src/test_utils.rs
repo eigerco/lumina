@@ -24,7 +24,7 @@ pub struct ExtendedHeaderGenerator {
     chain_id: chain::Id,
     key: SigningKey,
     current_header: Option<ExtendedHeader>,
-    spoofed_block_time: Option<(Time, Duration)>,
+    spoofed_time: Option<Time>,
 }
 
 impl ExtendedHeaderGenerator {
@@ -37,7 +37,7 @@ impl ExtendedHeaderGenerator {
             chain_id,
             key,
             current_header: None,
-            spoofed_block_time: None,
+            spoofed_time: None,
         }
     }
 
@@ -139,10 +139,7 @@ impl ExtendedHeaderGenerator {
     ///
     /// This method does not change the state of `ExtendedHeaderGenerator`.
     pub fn next_of(&self, header: &ExtendedHeader) -> ExtendedHeader {
-        let time = self
-            .spoofed_block_time
-            .map(|t| t.0)
-            .unwrap_or_else(Time::now);
+        let time = self.spoofed_time.unwrap_or_else(Time::now);
         generate_next(1, header, time, &self.key, None)
     }
 
@@ -170,10 +167,7 @@ impl ExtendedHeaderGenerator {
         header: &ExtendedHeader,
         dah: DataAvailabilityHeader,
     ) -> ExtendedHeader {
-        let time = self
-            .spoofed_block_time
-            .map(|t| t.0)
-            .unwrap_or_else(Time::now);
+        let time = self.spoofed_time.unwrap_or_else(Time::now);
         generate_next(1, header, time, &self.key, Some(dah))
     }
 
@@ -274,26 +268,20 @@ impl ExtendedHeaderGenerator {
 
     /// Change header generator time. Headers generated from now on will have `time` as creation
     /// time.
-    pub fn set_time(&mut self, time: Time, block_time: Duration) {
-        self.spoofed_block_time = Some((time, block_time));
+    pub fn set_time(&mut self, time: Time) {
+        self.spoofed_time = Some(time);
     }
 
-    /// Reset header generator time, so that it produces headers with current timestamp
-    pub fn reset_time(&mut self) {
-        self.spoofed_block_time = None;
-    }
-
-    // private function which gets and increments generator time, since we cannot have multiple headers on the
+    // private function which also increments time, since we cannot have multiple headers on the
     // exact same timestamp
     fn get_and_increment_time(&mut self) -> Time {
-        let Some((spoofed_time, block_time)) = self.spoofed_block_time.take() else {
+        let Some(spoofed_time) = self.spoofed_time.take() else {
             return Time::now();
         };
 
-        let timestamp = (spoofed_time + block_time).expect("not to overflow");
-        self.spoofed_block_time = Some((timestamp, block_time));
-
-        timestamp
+        self.spoofed_time =
+            Some((spoofed_time + Duration::from_millis(1)).expect("not to overflow"));
+        self.spoofed_time.unwrap()
     }
 }
 

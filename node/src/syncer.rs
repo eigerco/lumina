@@ -36,7 +36,7 @@ use crate::utils::OneshotSenderExt;
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
-pub const SYNCING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
+const SYNCING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
 /// Representation of all the errors that can occur when interacting with the [`Syncer`].
 #[derive(Debug, thiserror::Error)]
@@ -744,12 +744,9 @@ mod tests {
     async fn syncing_window_edge() {
         let month_and_day_ago = Duration::from_secs(31 * 24 * 60 * 60);
         let mut gen = ExtendedHeaderGenerator::new();
-        gen.set_time(
-            (Time::now() - month_and_day_ago).expect("to not underflow"),
-            Duration::from_secs(1),
-        );
+        gen.set_time((Time::now() - month_and_day_ago).expect("to not underflow"));
         let mut headers = gen.next_many(1200);
-        gen.reset_time();
+        gen.set_time(Time::now());
         headers.append(&mut gen.next_many(2049 - 1200));
 
         let (syncer, store, mut p2p_mock) = initialized_syncer(headers[2048].clone()).await;
