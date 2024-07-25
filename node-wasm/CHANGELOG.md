@@ -6,6 +6,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.1.1...lumina-node-wasm-v0.2.0) - 2024-07-25
+
+### Added
+- feat!(node): make syncer batch sizes configurable ([#327](https://github.com/eigerco/lumina/pull/327))
+- add support for dnsaddr resolving in browser ([#319](https://github.com/eigerco/lumina/pull/319))
+- Add requesting storage persistence for more quota ([#318](https://github.com/eigerco/lumina/pull/318))
+- *(node)* Generate syncing related events ([#312](https://github.com/eigerco/lumina/pull/312))
+- *(wasm)* Run Lumina in a Shared Worker ([#265](https://github.com/eigerco/lumina/pull/265))
+- *(node)* [**breaking**] Make HeaderSession operate on a single header range again ([#303](https://github.com/eigerco/lumina/pull/303))
+- *(node/syncer)* [**breaking**] Implement backwards header sync ([#279](https://github.com/eigerco/lumina/pull/279))
+- *(node-wasm)* Add human readable message on node events ([#294](https://github.com/eigerco/lumina/pull/294))
+- *(node-wasm)* Implement easier way for handling JS errors. ([#284](https://github.com/eigerco/lumina/pull/284))
+- *(node)* Generate events for data sampling that can be used by front-end ([#276](https://github.com/eigerco/lumina/pull/276))
+- *(node/daser)* [**breaking**] Implement backward sampling and sampling window ([#269](https://github.com/eigerco/lumina/pull/269))
+
+### Fixed
+- *(node)* [**breaking**] Do not skip header-sub reports when store writes are slow ([#333](https://github.com/eigerco/lumina/pull/333))
+- *(node)* Patch unreleased libp2p version to include syncing bug fixes ([#290](https://github.com/eigerco/lumina/pull/290))
+- *(node-wasm)* require serving and providing worker script ([#313](https://github.com/eigerco/lumina/pull/313))
+- new lints coming with 1.78 and 1.80-nightly ([#275](https://github.com/eigerco/lumina/pull/275))
+
+### Other
+- *(node)* [**breaking**] Hide internal components ([#342](https://github.com/eigerco/lumina/pull/342))
+- remove genesis hash from node configuration ([#316](https://github.com/eigerco/lumina/pull/316))
+- [**breaking**] Upgrade dependencies but exclude the ones that are patched by risc0 ([#292](https://github.com/eigerco/lumina/pull/292))
+
 ## [0.1.1](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.1.0...lumina-node-wasm-v0.1.1) - 2024-04-18
 
 ### Added

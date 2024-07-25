@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.2.0...celestia-types-v0.3.0) - 2024-07-25
+
+### Added
+- *(node)* Add syncing window for header sync ([#309](https://github.com/eigerco/lumina/pull/309))
+- *(node/syncer)* [**breaking**] Implement backwards header sync ([#279](https://github.com/eigerco/lumina/pull/279))
+- feat!(types): Add Blob::index field introduced in celestia 0.13 ([#274](https://github.com/eigerco/lumina/pull/274))
+
+### Fixed
+- *(types)* [**breaking**] Align byzantine fraud proofs with Go's implementation ([#338](https://github.com/eigerco/lumina/pull/338))
+- Upgrade `time` crate to fix rust-lang/rust[#125319](https://github.com/eigerco/lumina/pull/125319) ([#285](https://github.com/eigerco/lumina/pull/285))
+- PAY_FOR_BLOB namespace ([#278](https://github.com/eigerco/lumina/pull/278))
+- new lints coming with 1.78 and 1.80-nightly ([#275](https://github.com/eigerco/lumina/pull/275))
+
+### Other
+- [**breaking**] Upgrade dependencies but exclude the ones that are patched by risc0 ([#292](https://github.com/eigerco/lumina/pull/292))
+
 ## [0.2.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.1.1...celestia-types-v0.2.0) - 2024-04-18
 
 ### Added
