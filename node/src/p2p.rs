@@ -722,7 +722,7 @@ where
                 // This is needed when addresses are provided otherwise
                 // our `kademlia::Behaviour` wrapper will not cononicalize them.
                 .extend_addresses_through_behaviour()
-                // Tell to Swarm to not dial if peer is already connected or there
+                // Tell Swarm not to dial if peer is already connected or there
                 // is an ongoing dialing.
                 .condition(PeerCondition::DisconnectedAndNotDialing)
                 .build();
