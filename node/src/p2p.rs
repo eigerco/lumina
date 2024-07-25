@@ -719,8 +719,8 @@ where
         for (peer_id, addrs) in &self.bootnodes {
             let dial_opts = DialOpts::peer_id(*peer_id)
                 .addresses(addrs.clone())
-                // This is needed when addresses are provided otherwise
-                // our `kademlia::Behaviour` wrapper will not cononicalize them.
+                // This is needed when addresses are provided in  otherwise
+                // our `kademlia::Behaviour` wrapper will not canonicalize them.
                 .extend_addresses_through_behaviour()
                 // Tell Swarm not to dial if peer is already connected or there
                 // is an ongoing dialing.
