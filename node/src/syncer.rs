@@ -611,9 +611,23 @@ where
 
     let network_head = p2p.get_head_header().await?;
 
-    // Insert HEAD to the store and initialize header-sub.
-    // Normal insertion checks still apply here.
-    store.insert(network_head.clone()).await?;
+    // If the network head and the store head have the same height,
+    // then `insert` will error because of insertion contraints.
+    // However, if both headers are the exactly the same, we
+    // can skip inserting, as the header is already there.
+    //
+    // This can happen in case of fast node restart.
+    let try_insert = match store.get_head().await {
+        Ok(store_head) => store_head != network_head,
+        Err(StoreError::NotFound) => true,
+        Err(e) => return Err(e.into()),
+    };
+
+    if try_insert {
+        // Insert HEAD to the store and initialize header-sub.
+        // Normal insertion checks still apply here.
+        store.insert(network_head.clone()).await?;
+    }
 
     Ok(network_head)
 }
@@ -893,6 +907,50 @@ mod tests {
         let (height, amount, _respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
         assert_eq!(height, 31);
         assert_eq!(amount, 4);
+
+        p2p_mock.announce_all_peers_disconnected();
+        p2p_mock.expect_no_cmd().await;
+    }
+
+    #[async_test]
+    async fn all_peers_disconnected_and_no_network_head_progress() {
+        let mut gen = ExtendedHeaderGenerator::new_from_height(30);
+
+        let header30 = gen.next();
+
+        // Start Syncer and report height 30 as HEAD
+        let (syncer, store, mut p2p_mock) = initialized_syncer(header30.clone()).await;
+
+        // Wait for the request but do not reply to it.
+        handle_session_batch(&mut p2p_mock, &[], 1..=29, false).await;
+
+        p2p_mock.announce_all_peers_disconnected();
+        // Syncer is now back to `connecting_event_loop`.
+        p2p_mock.expect_no_cmd().await;
+
+        // Accounce a non-trusted peer. Syncer in `connecting_event_loop` can progress only
+        // if a trusted peer is connected.
+        p2p_mock.announce_peer_connected();
+        p2p_mock.expect_no_cmd().await;
+
+        // Accounce a trusted peer.
+        p2p_mock.announce_trusted_peer_connected();
+
+        // Now syncer will send request for HEAD.
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!(height, 0);
+        assert_eq!(amount, 1);
+
+        // Report the same HEAD as before.
+        respond_to.send(Ok(vec![header30.clone()])).unwrap();
+        assert_syncing(&syncer, &store, &[30..=30], 30).await;
+
+        // Syncer initializes HeaderSub with the latest HEAD.
+        let head_from_syncer = p2p_mock.expect_init_header_sub().await;
+        assert_eq!(head_from_syncer, header30);
+
+        // Syncer now is in `connected_event_loop` and will try to sync the gap
+        handle_session_batch(&mut p2p_mock, &[], 1..=29, false).await;
 
         p2p_mock.announce_all_peers_disconnected();
         p2p_mock.expect_no_cmd().await;
