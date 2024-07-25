@@ -517,9 +517,9 @@ checksum = "d965446196e3b7decd44aa7ee49e31d630118f90ef12f97900f262eb915c951d"
 
 [[package]]
 name = "beetswap"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "defcc80a305e89c8fb185e4ce9d068ea48f03baebf1dbc8549fb36131dbc61ce"
+checksum = "949cfbb87edeb344ac2e2699a10040c93c9dee4b9442490143c129374adba05f"
 dependencies = [
  "asynchronous-codec",
  "blockstore",
@@ -631,9 +631,9 @@ dependencies = [
 
 [[package]]
 name = "blockstore"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "358358b19add120a5afc3dd1c8e9161d6d06c44dfec2ef8da58b7fe5c369c90d"
+checksum = "65439a69f3edc14658a7e1e14336b7e5668741c7eb54a79234686a10727a9be1"
 dependencies = [
  "cid",
  "dashmap",
