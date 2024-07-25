@@ -611,10 +611,10 @@ where
 
     let network_head = p2p.get_head_header().await?;
 
-    // If network head and store head have the same height, then
-    // `insert` will error because of insertion contraints.
+    // If the network head and the store head have the same height,
+    // then `insert` will error because of insertion contraints.
     // However, if both headers are the exactly the same, we
-    // relax this by avoiding insertion.
+    // can skip inserting, as the header is already there.
     //
     // This can happen of fast node restart.
     let try_insert = match store.get_head().await {
