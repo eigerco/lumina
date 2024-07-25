@@ -167,6 +167,7 @@ pub struct NodeEventInfo {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum NodeEvent {
+    /// Node is connecting to bootnodes
     ConnectingToBootnodes,
 
     /// Peer just connected
