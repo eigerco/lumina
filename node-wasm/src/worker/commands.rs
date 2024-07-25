@@ -77,8 +77,7 @@ pub(crate) enum WorkerResponse {
     Listeners(Result<Vec<Multiaddr>>),
     Header(JsResult<JsValue, Error>),
     Headers(JsResult<Array, Error>),
-    #[serde(with = "serde_wasm_bindgen::preserve")]
-    LastSeenNetworkHead(JsValue),
+    LastSeenNetworkHead(JsResult<JsValue, Error>),
     SamplingMetadata(Result<Option<SamplingMetadata>>),
     WorkerClosed(()),
 }
