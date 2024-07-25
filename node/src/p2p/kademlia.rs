@@ -175,17 +175,8 @@ mod tests {
         let addr = "/dns4/dev.lumina.eiger.co/tcp/2121/tls/ws/p2p/12D3KooWJF4tkwBrycYhriE4nuYAo3Y8DESQzdN2tPWwndWe4KUd".parse().unwrap();
         let expected_addr = "/dns4/dev.lumina.eiger.co/tcp/2121/wss/p2p/12D3KooWJF4tkwBrycYhriE4nuYAo3Y8DESQzdN2tPWwndWe4KUd".parse().unwrap();
 
-        let new_addrs = behaviour
-            .handle_pending_outbound_connection(
-                ConnectionId::new_unchecked(1),
-                None,
-                &[addr],
-                Endpoint::Dialer,
-            )
-            .unwrap();
-
-        assert_eq!(new_addrs.len(), 1);
-        assert_eq!(new_addrs[0], expected_addr);
+        let new_addr = tls_ws_to_wss(&addr);
+        assert_eq!(new_addr, expected_addr);
     }
 
     #[async_test]
@@ -200,17 +191,7 @@ mod tests {
 
         for addr in addrs {
             let addr = addr.parse().unwrap();
-
-            let new_addrs = behaviour
-                .handle_pending_outbound_connection(
-                    ConnectionId::new_unchecked(1),
-                    None,
-                    &[addr],
-                    Endpoint::Dialer,
-                )
-                .unwrap();
-
-            assert!(new_addrs.is_empty())
+            assert!(tls_ws_to_wss(&addr).is_none());
         }
     }
 }
