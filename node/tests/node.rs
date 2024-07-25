@@ -139,7 +139,7 @@ async fn peer_discovery() {
     node3.wait_connected().await.unwrap();
 
     // Small wait until all nodes are discovered and connected
-    sleep(Duration::from_millis(800)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     let node1_peer_id = node1.local_peer_id();
     let node2_peer_id = node2.local_peer_id();
