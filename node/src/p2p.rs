@@ -278,12 +278,6 @@ impl P2p {
         (p2p, handle)
     }
 
-    /// Stop the [`P2p`].
-    pub async fn stop(&self) -> Result<()> {
-        // TODO
-        Ok(())
-    }
-
     /// Local peer ID on the p2p network.
     pub fn local_peer_id(&self) -> &PeerId {
         &self.local_peer_id
