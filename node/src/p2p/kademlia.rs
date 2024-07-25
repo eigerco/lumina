@@ -165,24 +165,18 @@ fn tls_ws_to_wss(addr: &Multiaddr) -> Option<Multiaddr> {
 mod tests {
     use super::*;
     use crate::test_utils::async_test;
-    use libp2p::core::Endpoint;
-    use libp2p::swarm::ConnectionId;
 
     #[async_test]
     async fn tls_ws() {
-        let mut behaviour = Behaviour;
-
         let addr = "/dns4/dev.lumina.eiger.co/tcp/2121/tls/ws/p2p/12D3KooWJF4tkwBrycYhriE4nuYAo3Y8DESQzdN2tPWwndWe4KUd".parse().unwrap();
         let expected_addr = "/dns4/dev.lumina.eiger.co/tcp/2121/wss/p2p/12D3KooWJF4tkwBrycYhriE4nuYAo3Y8DESQzdN2tPWwndWe4KUd".parse().unwrap();
 
-        let new_addr = tls_ws_to_wss(&addr);
+        let new_addr = tls_ws_to_wss(&addr).unwrap();
         assert_eq!(new_addr, expected_addr);
     }
 
     #[async_test]
     async fn non_translatable() {
-        let mut behaviour = Behaviour;
-
         let addrs = [
             "/dns4/dev.lumina.eiger.co/tcp/2121/tls/p2p/12D3KooWJF4tkwBrycYhriE4nuYAo3Y8DESQzdN2tPWwndWe4KUd",
             "/dns4/dev.lumina.eiger.co/tcp/2121/wss/p2p/12D3KooWJF4tkwBrycYhriE4nuYAo3Y8DESQzdN2tPWwndWe4KUd",
