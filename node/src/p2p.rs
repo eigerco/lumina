@@ -13,7 +13,7 @@
 //! - bitswap 1.2.0
 //! - shwap - celestia's data availability protocol on top of bitswap
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::future::poll_fn;
 use std::sync::Arc;
 use std::task::Poll;
@@ -30,7 +30,6 @@ use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
 use celestia_types::{ExtendedHeader, FraudProof};
 use cid::Cid;
 use futures::StreamExt;
-use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::{
     autonat,
     core::{ConnectedPoint, Endpoint},
@@ -40,7 +39,10 @@ use libp2p::{
     kad,
     multiaddr::Protocol,
     ping,
-    swarm::{ConnectionId, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent},
+    swarm::{
+        dial_opts::{DialOpts, PeerCondition},
+        ConnectionId, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent,
+    },
     Multiaddr, PeerId,
 };
 use smallvec::SmallVec;
@@ -56,7 +58,7 @@ pub(crate) mod shwap;
 mod swarm;
 
 use crate::block_ranges::BlockRange;
-use crate::events::EventPublisher;
+use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{self, spawn, Interval};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
@@ -587,6 +589,8 @@ where
     bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, P2pError>>,
     network_compromised_token: CancellationToken,
     store: Arc<S>,
+    event_pub: EventPublisher,
+    bootnodes: HashMap<PeerId, Vec<Multiaddr>>,
 }
 
 struct HeaderSubState {
@@ -646,29 +650,20 @@ where
             }
         }
 
-        let mut peer_addrs = HashMap::<_, HashSet<_>>::new();
+        let mut bootnodes = HashMap::<_, Vec<_>>::new();
 
         for addr in args.bootnodes {
             let peer_id = addr.peer_id().expect("multiaddr already validated");
-            peer_addrs.entry(peer_id).or_default().insert(addr);
+            bootnodes.entry(peer_id).or_default().push(addr);
         }
 
-        for (peer_id, addrs) in peer_addrs {
-            let addrs = addrs.into_iter().collect::<Vec<_>>();
+        for (peer_id, addrs) in bootnodes.iter_mut() {
+            addrs.sort();
+            addrs.dedup();
+            addrs.shrink_to_fit();
 
             // Bootstrap peers are always trusted
-            peer_tracker.set_trusted(peer_id, true);
-
-            let dial_opts = DialOpts::peer_id(peer_id)
-                .addresses(addrs.clone())
-                // This is needed when addresses are provided otherwise
-                // our `kademlia::Behaviour` wrapper will not cononicalize them.
-                .extend_addresses_through_behaviour()
-                .build();
-
-            if let Err(e) = swarm.dial(dial_opts) {
-                error!("Failed to dial on {addrs:?}: {e}");
-            }
+            peer_tracker.set_trusted(*peer_id, true);
         }
 
         Ok(Worker {
@@ -681,12 +676,16 @@ where
             bitswap_queries: HashMap::new(),
             network_compromised_token: CancellationToken::new(),
             store: args.store,
+            event_pub: args.event_pub,
+            bootnodes,
         })
     }
 
     async fn run(&mut self) {
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
         let mut kademlia_interval = Interval::new(Duration::from_secs(30)).await;
+
+        self.dial_bootnodes();
 
         // Initiate discovery
         let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
@@ -716,6 +715,26 @@ where
                         warn!("Failure while handling command. (error: {e})");
                     }
                 }
+            }
+        }
+    }
+
+    fn dial_bootnodes(&mut self) {
+        self.event_pub.send(NodeEvent::ConnectingToBootnodes);
+
+        for (peer_id, addrs) in &self.bootnodes {
+            let dial_opts = DialOpts::peer_id(*peer_id)
+                .addresses(addrs.clone())
+                // This is needed when addresses are provided otherwise
+                // our `kademlia::Behaviour` wrapper will not cononicalize them.
+                .extend_addresses_through_behaviour()
+                // Tell to Swarm to not dial if peer is already connected or there
+                // is an ongoing dialing.
+                .condition(PeerCondition::DisconnectedAndNotDialing)
+                .build();
+
+            if let Err(e) = self.swarm.dial(dial_opts) {
+                error!("Failed to dial on {addrs:?}: {e}");
             }
         }
     }
