@@ -65,7 +65,7 @@ impl Sample {
     ///
     /// - `row_index`/`column_index` falls outside the provided [`ExtendedDataSquare`].
     /// - [`ExtendedDataSquare`] is incorrect (either data shares don't have their namespace
-    /// prefixed, or [`Share`]s aren't namespace ordered)
+    ///   prefixed, or [`Share`]s aren't namespace ordered)
     /// - Block height is zero
     ///
     /// # Example
