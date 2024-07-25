@@ -1,7 +1,5 @@
-use std::{
-    ops::{Deref, DerefMut},
-    task::{Context, Poll},
-};
+use std::ops::{Deref, DerefMut};
+use std::task::{Context, Poll};
 
 use libp2p::{
     core::Endpoint,
@@ -35,6 +33,16 @@ impl NetworkBehaviour for Behaviour {
         addresses: &[Multiaddr],
         effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        // The that `libp2p::kad::Behaviour` uses to flow of dialing to a peer is as follows:
+        //
+        // 1. Kad's Behaviour discovers a new peer and its addresses.
+        // 2. Kad's Behaviour dials with `DialOpts::peer_id()` without setting the addresses.
+        // 3. `Swarm` calls `Behaviour::handle_pending_outbound_connection` to resolve the addresses.
+        // 4. Kad's Behaviour returns a vector of the discovered addresses.
+        // 5. The addresses returned from the above step are NOT passed to any other Behaviour's.
+        //
+        // Here we intercept the return of Kad's Behaviour and cononicalize all `/tls/ws`
+        // addresses to `/wss` addresses.
         let mut new_addrs = self.0.handle_pending_outbound_connection(
             connection_id,
             maybe_peer,

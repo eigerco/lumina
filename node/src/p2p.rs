@@ -661,6 +661,8 @@ where
 
             let dial_opts = DialOpts::peer_id(peer_id)
                 .addresses(addrs.clone())
+                // This is needed when addresses are provided otherwise
+                // our `kademlia::Behaviour` wrapper will not cononicalize them.
                 .extend_addresses_through_behaviour()
                 .build();
 
