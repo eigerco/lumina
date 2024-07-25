@@ -167,7 +167,7 @@ pub struct NodeEventInfo {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum NodeEvent {
-    ConnectingOnBootnodes,
+    ConnectingToBootnodes,
 
     /// Peer just connected
     PeerConnected {
@@ -297,7 +297,7 @@ impl NodeEvent {
             | NodeEvent::FatalSyncerError { .. }
             | NodeEvent::FetchingHeadersFailed { .. }
             | NodeEvent::NetworkCompromised => true,
-            NodeEvent::ConnectingOnBootnodes
+            NodeEvent::ConnectingToBootnodes
             | NodeEvent::PeerConnected { .. }
             | NodeEvent::PeerDisconnected { .. }
             | NodeEvent::SamplingStarted { .. }
@@ -315,8 +315,8 @@ impl NodeEvent {
 impl fmt::Display for NodeEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            NodeEvent::ConnectingOnBootnodes => {
-                write!(f, "Connecting on bootnodes")
+            NodeEvent::ConnectingToBootnodes => {
+                write!(f, "Connecting to bootnodes")
             }
             NodeEvent::PeerConnected { id, trusted } => {
                 if *trusted {

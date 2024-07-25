@@ -712,7 +712,7 @@ where
     }
 
     fn dial_bootnodes(&mut self) {
-        self.event_pub.send(NodeEvent::ConnectingOnBootnodes);
+        self.event_pub.send(NodeEvent::ConnectingToBootnodes);
 
         for (peer_id, addrs) in &self.bootnodes {
             let dial_opts = DialOpts::peer_id(*peer_id)
