@@ -20,7 +20,7 @@ use celestia_types::ExtendedHeader;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use tokio::select;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, info_span, instrument, warn, Instrument};
 use web_time::Instant;
@@ -38,14 +38,14 @@ type Result<T, E = SyncerError> = std::result::Result<T, E>;
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
 const SYNCING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
-/// Representation of all the errors that can occur when interacting with the [`Syncer`].
+/// Representation of all the errors that can occur in `Syncer` component.
 #[derive(Debug, thiserror::Error)]
 pub enum SyncerError {
-    /// An error propagated from the [`P2p`] module.
+    /// An error propagated from the `P2p` component.
     #[error("P2p: {0}")]
     P2p(#[from] P2pError),
 
-    /// An error propagated from the [`Store`] module.
+    /// An error propagated from the [`Store`] component.
     #[error("Store: {0}")]
     Store(#[from] StoreError),
 
@@ -53,7 +53,7 @@ pub enum SyncerError {
     #[error("Worker died")]
     WorkerDied,
 
-    /// Channel has been closed unexpectedly.
+    /// Channel closed unexpectedly.
     #[error("Channel closed unexpectedly")]
     ChannelClosedUnexpectedly,
 }
@@ -76,7 +76,7 @@ impl From<oneshot::error::RecvError> for SyncerError {
 
 /// Component responsible for synchronizing block headers from the network.
 #[derive(Debug)]
-pub struct Syncer<S>
+pub(crate) struct Syncer<S>
 where
     S: Store + 'static,
 {
@@ -86,18 +86,18 @@ where
 }
 
 /// Arguments used to configure the [`Syncer`].
-pub struct SyncerArgs<S>
+pub(crate) struct SyncerArgs<S>
 where
     S: Store + 'static,
 {
     /// Handler for the peer to peer messaging.
-    pub p2p: Arc<P2p>,
+    pub(crate) p2p: Arc<P2p>,
     /// Headers storage.
-    pub store: Arc<S>,
+    pub(crate) store: Arc<S>,
     /// Event publisher.
-    pub event_pub: EventPublisher,
+    pub(crate) event_pub: EventPublisher,
     /// Batch size.
-    pub batch_size: u64,
+    pub(crate) batch_size: u64,
 }
 
 #[derive(Debug)]
@@ -121,7 +121,7 @@ where
     S: Store,
 {
     /// Create and start the [`Syncer`].
-    pub fn start(args: SyncerArgs<S>) -> Result<Self> {
+    pub(crate) fn start(args: SyncerArgs<S>) -> Result<Self> {
         let cancellation_token = CancellationToken::new();
         let event_pub = args.event_pub.clone();
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
@@ -144,8 +144,8 @@ where
         })
     }
 
-    /// Stop the [`Syncer`].
-    pub fn stop(&self) {
+    /// Stop the worker.
+    pub(crate) fn stop(&self) {
         // Singal the Worker to stop.
         // TODO: Should we wait for the Worker to stop?
         self.cancellation_token.cancel();
@@ -163,7 +163,7 @@ where
     /// # Errors
     ///
     /// This function will return an error if the [`Syncer`] has been stopped.
-    pub async fn info(&self) -> Result<SyncingInfo> {
+    pub(crate) async fn info(&self) -> Result<SyncingInfo> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(SyncerCmd::GetInfo { respond_to: tx })
@@ -191,7 +191,7 @@ where
     event_pub: EventPublisher,
     p2p: Arc<P2p>,
     store: Arc<S>,
-    header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
+    header_sub_rx: Option<mpsc::Receiver<ExtendedHeader>>,
     subjective_head_height: Option<u64>,
     batch_size: u64,
     ongoing_batch: Option<Ongoing>,
@@ -212,15 +212,13 @@ where
         cancellation_token: CancellationToken,
         cmd_rx: mpsc::Receiver<SyncerCmd>,
     ) -> Result<Self> {
-        let header_sub_watcher = args.p2p.header_sub_watcher();
-
         Ok(Worker {
             cancellation_token,
             cmd_rx,
             event_pub: args.event_pub,
             p2p: args.p2p,
             store: args.store,
-            header_sub_watcher,
+            header_sub_rx: None,
             subjective_head_height: None,
             batch_size: args.batch_size,
             ongoing_batch: None,
@@ -274,7 +272,10 @@ where
 
                     info!("Setting initial subjective head to {network_head_height}");
                     self.set_subjective_head_height(network_head_height);
-                    self.p2p.init_header_sub(network_head).await?;
+
+                    let (header_sub_tx, header_sub_rx) = mpsc::channel(16);
+                    self.p2p.init_header_sub(network_head, header_sub_tx).await?;
+                    self.header_sub_rx = Some(header_sub_rx);
 
                     self.event_pub.send(NodeEvent::FetchingHeadHeaderFinished {
                         height: network_head_height,
@@ -326,8 +327,9 @@ where
                 _ = report_interval.tick() => {
                     self.report().await?;
                 }
-                _ = self.header_sub_watcher.changed() => {
-                    self.on_header_sub_message().await?;
+                res = header_sub_recv(self.header_sub_rx.as_mut()) => {
+                    let header = res?;
+                    self.on_header_sub_message(header).await?;
                     self.fetch_next_batch(&headers_tx).await?;
                 }
                 Some(cmd) = self.cmd_rx.recv() => {
@@ -344,6 +346,8 @@ where
             warn!("Cancelling fetching of {}", ongoing.batch.display());
             ongoing.cancellation_token.cancel();
         }
+
+        self.header_sub_rx.take();
 
         Ok(())
     }
@@ -428,18 +432,7 @@ where
     }
 
     #[instrument(skip_all)]
-    async fn on_header_sub_message(&mut self) -> Result<()> {
-        // If subjective head isn't set, do nothing.
-        // We do this to avoid some edge cases.
-        if self.subjective_head_height.is_none() {
-            return Ok(());
-        }
-
-        let Some(new_head) = self.header_sub_watcher.borrow().to_owned() else {
-            // Nothing to do
-            return Ok(());
-        };
-
+    async fn on_header_sub_message(&mut self, new_head: ExtendedHeader) -> Result<()> {
         let new_head_height = new_head.height().value();
 
         self.set_subjective_head_height(new_head_height);
@@ -618,10 +611,20 @@ where
 
     let network_head = p2p.get_head_header().await?;
 
-    // Insert HEAD to the store and initialize header-sub
+    // Insert HEAD to the store and initialize header-sub.
+    // Normal insertion checks still apply here.
     store.insert(network_head.clone()).await?;
 
     Ok(network_head)
+}
+
+async fn header_sub_recv(
+    rx: Option<&mut mpsc::Receiver<ExtendedHeader>>,
+) -> Result<ExtendedHeader> {
+    rx.expect("header-sub not initialized")
+        .recv()
+        .await
+        .ok_or(SyncerError::P2p(P2pError::WorkerDied))
 }
 
 #[cfg(test)]

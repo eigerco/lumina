@@ -266,7 +266,7 @@ impl NodeDriver {
         let response = self.client.exec(command).await?;
         let header = response.into_last_seen_network_head().check_variant()?;
 
-        Ok(header)
+        header.into()
     }
 
     /// Get the latest locally synced header.

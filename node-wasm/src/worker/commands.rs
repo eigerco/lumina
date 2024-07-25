@@ -9,9 +9,8 @@ use tracing::error;
 use wasm_bindgen::{JsError, JsValue};
 
 use celestia_types::hash::Hash;
-use lumina_node::peer_tracker::PeerTrackerInfo;
+use lumina_node::node::{PeerTrackerInfo, SyncingInfo};
 use lumina_node::store::SamplingMetadata;
-use lumina_node::syncer::SyncingInfo;
 
 use crate::error::Error;
 use crate::error::Result;
@@ -77,8 +76,7 @@ pub(crate) enum WorkerResponse {
     Listeners(Result<Vec<Multiaddr>>),
     Header(JsResult<JsValue, Error>),
     Headers(JsResult<Array, Error>),
-    #[serde(with = "serde_wasm_bindgen::preserve")]
-    LastSeenNetworkHead(JsValue),
+    LastSeenNetworkHead(JsResult<JsValue, Error>),
     SamplingMetadata(Result<Option<SamplingMetadata>>),
     WorkerClosed(()),
 }

@@ -11,9 +11,10 @@ use futures::StreamExt;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::{gossipsub, identity, noise, ping, tcp, yamux, Multiaddr, SwarmBuilder};
 use lumina_node::node::{Node, NodeConfig};
-use lumina_node::store::{ExtendedHeaderGeneratorExt, InMemoryStore, Store};
+use lumina_node::store::{InMemoryStore, Store};
 use lumina_node::test_utils::{
     gen_filled_store, listening_test_node_config, test_node_config, test_node_config_with_keypair,
+    ExtendedHeaderGeneratorExt,
 };
 use rand::Rng;
 use tokio::{select, spawn, sync::mpsc, time::sleep};
@@ -138,7 +139,7 @@ async fn peer_discovery() {
     node3.wait_connected().await.unwrap();
 
     // Small wait until all nodes are discovered and connected
-    sleep(Duration::from_millis(800)).await;
+    sleep(Duration::from_millis(2000)).await;
 
     let node1_peer_id = node1.local_peer_id();
     let node2_peer_id = node2.local_peer_id();

@@ -27,7 +27,7 @@ use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
 use celestia_types::sample::Sample;
 use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
-use celestia_types::{ExtendedHeader, FraudProof, Height};
+use celestia_types::{ExtendedHeader, FraudProof};
 use cid::Cid;
 use futures::StreamExt;
 use libp2p::swarm::dial_opts::DialOpts;
@@ -88,7 +88,7 @@ const FRAUD_PROOF_HEAD_HEIGHT_THRESHOLD: u64 = 20;
 
 pub(crate) type Result<T, E = P2pError> = std::result::Result<T, E>;
 
-/// Representation of all the errors that can occur when interacting with [`P2p`].
+/// Representation of all the errors that can occur in `P2p` component.
 #[derive(Debug, thiserror::Error)]
 pub enum P2pError {
     /// Failed to initialize gossipsub behaviour.
@@ -170,9 +170,8 @@ impl From<oneshot::error::RecvError> for P2pError {
 
 /// Component responsible for the peer to peer networking handling.
 #[derive(Debug)]
-pub struct P2p {
+pub(crate) struct P2p {
     cmd_tx: mpsc::Sender<P2pCmd>,
-    header_sub_watcher: watch::Receiver<Option<ExtendedHeader>>,
     peer_tracker_info_watcher: watch::Receiver<PeerTrackerInfo>,
     local_peer_id: PeerId,
 }
@@ -216,6 +215,8 @@ pub(crate) enum P2pCmd {
     },
     InitHeaderSub {
         head: Box<ExtendedHeader>,
+        /// Any valid headers received by header-sub will be send to this channel.
+        channel: mpsc::Sender<ExtendedHeader>,
     },
     SetPeerTrust {
         peer_id: PeerId,
@@ -227,6 +228,9 @@ pub(crate) enum P2pCmd {
     },
     GetNetworkCompromisedToken {
         respond_to: oneshot::Sender<CancellationToken>,
+    },
+    GetNetworkHead {
+        respond_to: oneshot::Sender<Option<ExtendedHeader>>,
     },
 }
 
@@ -241,13 +245,11 @@ impl P2p {
 
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
-        let (cmd_tx, cmd_rx) = mpsc::channel(16);
-        let (header_sub_tx, header_sub_rx) = watch::channel(None);
-
         let peer_tracker = Arc::new(PeerTracker::new(args.event_pub.clone()));
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
 
-        let mut worker = Worker::new(args, cmd_rx, header_sub_tx, peer_tracker).await?;
+        let (cmd_tx, cmd_rx) = mpsc::channel(16);
+        let mut worker = Worker::new(args, cmd_rx, peer_tracker)?;
 
         spawn(async move {
             worker.run().await;
@@ -255,22 +257,19 @@ impl P2p {
 
         Ok(P2p {
             cmd_tx,
-            header_sub_watcher: header_sub_rx,
             peer_tracker_info_watcher,
             local_peer_id,
         })
     }
 
     /// Creates and starts a new mocked p2p handler.
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn mocked() -> (Self, crate::test_utils::MockP2pHandle) {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
-        let (header_sub_tx, header_sub_rx) = watch::channel(None);
         let (peer_tracker_tx, peer_tracker_rx) = watch::channel(PeerTrackerInfo::default());
 
         let p2p = P2p {
             cmd_tx: cmd_tx.clone(),
-            header_sub_watcher: header_sub_rx,
             peer_tracker_info_watcher: peer_tracker_rx,
             local_peer_id: PeerId::random(),
         };
@@ -278,17 +277,11 @@ impl P2p {
         let handle = crate::test_utils::MockP2pHandle {
             cmd_tx,
             cmd_rx,
-            header_sub_tx,
+            header_sub_tx: None,
             peer_tracker_tx,
         };
 
         (p2p, handle)
-    }
-
-    /// Stop the [`P2p`].
-    pub async fn stop(&self) -> Result<()> {
-        // TODO
-        Ok(())
     }
 
     /// Local peer ID on the p2p network.
@@ -303,11 +296,6 @@ impl P2p {
             .map_err(|_| P2pError::WorkerDied)
     }
 
-    /// Watcher for the latest verified network head headers announced on `header-sub`.
-    pub fn header_sub_watcher(&self) -> watch::Receiver<Option<ExtendedHeader>> {
-        self.header_sub_watcher.clone()
-    }
-
     /// Watcher for the current [`PeerTrackerInfo`].
     pub fn peer_tracker_info_watcher(&self) -> watch::Receiver<PeerTrackerInfo> {
         self.peer_tracker_info_watcher.clone()
@@ -319,9 +307,14 @@ impl P2p {
     }
 
     /// Initializes `header-sub` protocol with a given `subjective_head`.
-    pub async fn init_header_sub(&self, head: ExtendedHeader) -> Result<()> {
+    pub async fn init_header_sub(
+        &self,
+        head: ExtendedHeader,
+        channel: mpsc::Sender<ExtendedHeader>,
+    ) -> Result<()> {
         self.send_command(P2pCmd::InitHeaderSub {
             head: Box::new(head),
+            channel,
         })
         .await
     }
@@ -552,6 +545,16 @@ impl P2p {
 
         Ok(rx.await?)
     }
+
+    /// Get the latest header announced on the network.
+    pub async fn get_network_head(&self) -> Result<Option<ExtendedHeader>> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(P2pCmd::GetNetworkHead { respond_to: tx })
+            .await?;
+
+        Ok(rx.await?)
+    }
 }
 
 /// Our network behaviour.
@@ -580,10 +583,15 @@ where
     bad_encoding_fraud_sub_topic: TopicHash,
     cmd_rx: mpsc::Receiver<P2pCmd>,
     peer_tracker: Arc<PeerTracker>,
-    header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
+    header_sub_state: Option<HeaderSubState>,
     bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, P2pError>>,
     network_compromised_token: CancellationToken,
     store: Arc<S>,
+}
+
+struct HeaderSubState {
+    known_head: ExtendedHeader,
+    channel: mpsc::Sender<ExtendedHeader>,
 }
 
 impl<B, S> Worker<B, S>
@@ -594,7 +602,6 @@ where
     async fn new(
         args: P2pArgs<B, S>,
         cmd_rx: mpsc::Receiver<P2pCmd>,
-        header_sub_watcher: watch::Sender<Option<ExtendedHeader>>,
         peer_tracker: Arc<PeerTracker>,
     ) -> Result<Self, P2pError> {
         let local_peer_id = PeerId::from(args.local_keypair.public());
@@ -668,7 +675,7 @@ where
             bad_encoding_fraud_sub_topic: bad_encoding_fraud_sub_topic.hash(),
             header_sub_topic_hash: header_sub_topic.hash(),
             peer_tracker,
-            header_sub_watcher,
+            header_sub_state: None,
             bitswap_queries: HashMap::new(),
             network_compromised_token: CancellationToken::new(),
             store: args.store,
@@ -790,8 +797,8 @@ where
             P2pCmd::ConnectedPeers { respond_to } => {
                 respond_to.maybe_send(self.peer_tracker.connected_peers());
             }
-            P2pCmd::InitHeaderSub { head } => {
-                self.on_init_header_sub(*head);
+            P2pCmd::InitHeaderSub { head, channel } => {
+                self.on_init_header_sub(*head, channel);
             }
             P2pCmd::SetPeerTrust {
                 peer_id,
@@ -805,7 +812,14 @@ where
                 self.on_get_shwap_cid(cid, respond_to);
             }
             P2pCmd::GetNetworkCompromisedToken { respond_to } => {
-                respond_to.maybe_send(self.network_compromised_token.child_token())
+                respond_to.maybe_send(self.network_compromised_token.child_token());
+            }
+            P2pCmd::GetNetworkHead { respond_to } => {
+                let head = self
+                    .header_sub_state
+                    .as_ref()
+                    .map(|state| state.known_head.clone());
+                respond_to.maybe_send(head);
             }
         }
 
@@ -855,7 +869,7 @@ where
                 };
 
                 let acceptance = if message.topic == self.header_sub_topic_hash {
-                    self.on_header_sub_message(&message.data[..]).await
+                    self.on_header_sub_message(&message.data[..])
                 } else if message.topic == self.bad_encoding_fraud_sub_topic {
                     self.on_bad_encoding_fraud_sub_message(&message.data[..], &peer)
                         .await
@@ -980,13 +994,16 @@ where
     }
 
     #[instrument(skip_all, fields(header = %head))]
-    fn on_init_header_sub(&mut self, head: ExtendedHeader) {
-        self.header_sub_watcher.send_replace(Some(head));
+    fn on_init_header_sub(&mut self, head: ExtendedHeader, channel: mpsc::Sender<ExtendedHeader>) {
+        self.header_sub_state = Some(HeaderSubState {
+            known_head: head,
+            channel,
+        });
         trace!("HeaderSub initialized");
     }
 
     #[instrument(skip_all)]
-    async fn on_header_sub_message(&mut self, data: &[u8]) -> gossipsub::MessageAcceptance {
+    fn on_header_sub_message(&mut self, data: &[u8]) -> gossipsub::MessageAcceptance {
         let Ok(header) = ExtendedHeader::decode_and_validate(data) else {
             trace!("Malformed or invalid header from header-sub");
             return gossipsub::MessageAcceptance::Reject;
@@ -994,27 +1011,24 @@ where
 
         trace!("Received header from header-sub ({header})");
 
-        let updated = self.header_sub_watcher.send_if_modified(move |state| {
-            let Some(known_header) = state else {
-                debug!("HeaderSub not initialized yet");
-                return false;
-            };
+        let Some(ref mut state) = self.header_sub_state else {
+            debug!("header-sub not initialized yet");
+            return gossipsub::MessageAcceptance::Ignore;
+        };
 
-            if known_header.verify(&header).is_err() {
-                trace!("Failed to verify HeaderSub header. Ignoring {header}");
-                return false;
-            }
-
-            debug!("New header from header-sub ({header})");
-            *state = Some(header);
-            true
-        });
-
-        if updated {
-            gossipsub::MessageAcceptance::Accept
-        } else {
-            gossipsub::MessageAcceptance::Ignore
+        if state.known_head.verify(&header).is_err() {
+            trace!("Failed to verify HeaderSub header. Ignoring {header}");
+            return gossipsub::MessageAcceptance::Ignore;
         }
+
+        trace!("New header from header-sub ({header})");
+
+        state.known_head = header.clone();
+        // We intentionally do not `send().await` to avoid blocking `P2p`
+        // in case `Syncer` enters some weird state.
+        let _ = state.channel.try_send(header);
+
+        gossipsub::MessageAcceptance::Accept
     }
 
     #[instrument(skip_all)]
@@ -1030,15 +1044,15 @@ where
         };
 
         let height = befp.height().value();
-        let current_height =
-            if let Some(network_height) = network_head_height(&self.header_sub_watcher) {
-                network_height.value()
-            } else if let Ok(local_head) = self.store.get_head().await {
-                local_head.height().value()
-            } else {
-                // we aren't tracking the network and have uninitialized store
-                return gossipsub::MessageAcceptance::Ignore;
-            };
+
+        let current_height = if let Some(ref header_sub_state) = self.header_sub_state {
+            header_sub_state.known_head.height().value()
+        } else if let Ok(local_head) = self.store.get_head().await {
+            local_head.height().value()
+        } else {
+            // we aren't tracking the network and have uninitialized store
+            return gossipsub::MessageAcceptance::Ignore;
+        };
 
         if height > current_height + FRAUD_PROOF_HEAD_HEIGHT_THRESHOLD {
             // does this threshold make any sense if we're gonna ignore it anyway
@@ -1174,8 +1188,4 @@ where
         .register_multihasher(ShwapMultihasher::new(store))
         .client_set_send_dont_have(false)
         .build())
-}
-
-fn network_head_height(watcher: &watch::Sender<Option<ExtendedHeader>>) -> Option<Height> {
-    watcher.borrow().as_ref().map(|header| header.height())
 }
