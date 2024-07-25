@@ -30,7 +30,6 @@ use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
 use celestia_types::{ExtendedHeader, FraudProof};
 use cid::Cid;
 use futures::StreamExt;
-use libp2p::swarm::dial_opts::PeerCondition;
 use libp2p::{
     autonat,
     core::{ConnectedPoint, Endpoint},
@@ -40,7 +39,10 @@ use libp2p::{
     kad,
     multiaddr::Protocol,
     ping,
-    swarm::{dial_opts::DialOpts, ConnectionId, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent},
+    swarm::{
+        dial_opts::{DialOpts, PeerCondition},
+        ConnectionId, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent,
+    },
     Multiaddr, PeerId,
 };
 use smallvec::SmallVec;
