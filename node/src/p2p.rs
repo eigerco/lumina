@@ -249,7 +249,7 @@ impl P2p {
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
 
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
-        let mut worker = Worker::new(args, cmd_rx, peer_tracker)?;
+        let mut worker = Worker::new(args, cmd_rx, peer_tracker).await?;
 
         spawn(async move {
             worker.run().await;
