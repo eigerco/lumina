@@ -86,7 +86,7 @@ const FRAUD_PROOF_HEAD_HEIGHT_THRESHOLD: u64 = 20;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
 
-/// Representation of all the errors that can occur when interacting with [`P2p`].
+/// Representation of all the errors that can occur in `P2p` component.
 #[derive(Debug, thiserror::Error)]
 pub enum P2pError {
     /// Failed to initialize gossipsub behaviour.
@@ -163,7 +163,7 @@ impl From<oneshot::error::RecvError> for P2pError {
 
 /// Component responsible for the peer to peer networking handling.
 #[derive(Debug)]
-pub struct P2p {
+pub(crate) struct P2p {
     cmd_tx: mpsc::Sender<P2pCmd>,
     peer_tracker_info_watcher: watch::Receiver<PeerTrackerInfo>,
     local_peer_id: PeerId,
@@ -256,7 +256,7 @@ impl P2p {
     }
 
     /// Creates and starts a new mocked p2p handler.
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     pub fn mocked() -> (Self, crate::test_utils::MockP2pHandle) {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (peer_tracker_tx, peer_tracker_rx) = watch::channel(PeerTrackerInfo::default());
@@ -275,12 +275,6 @@ impl P2p {
         };
 
         (p2p, handle)
-    }
-
-    /// Stop the [`P2p`].
-    pub async fn stop(&self) -> Result<()> {
-        // TODO
-        Ok(())
     }
 
     /// Local peer ID on the p2p network.

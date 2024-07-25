@@ -11,7 +11,7 @@ use tokio::sync::broadcast;
 
 const EVENT_CHANNEL_CAPACITY: usize = 1024;
 
-/// An error returned from the `EventReceiver::recv`.
+/// An error returned from the [`EventSubscriber::recv`].
 #[derive(Debug, thiserror::Error)]
 pub enum RecvError {
     /// Node and all its event senders are closed.
@@ -19,7 +19,7 @@ pub enum RecvError {
     Closed,
 }
 
-/// An error returned from the `EventReceiver::try_recv`.
+/// An error returned from the [`EventSubscriber::try_recv`].
 #[derive(Debug, thiserror::Error)]
 pub enum TryRecvError {
     /// The event channel is currently empty.
@@ -32,7 +32,7 @@ pub enum TryRecvError {
 
 /// A channel which users can subscribe for events.
 #[derive(Debug)]
-pub struct EventChannel {
+pub(crate) struct EventChannel {
     tx: broadcast::Sender<NodeEventInfo>,
 }
 
@@ -40,7 +40,7 @@ pub struct EventChannel {
 ///
 /// [`Node`]: crate::node::Node
 #[derive(Debug, Clone)]
-pub struct EventPublisher {
+pub(crate) struct EventPublisher {
     tx: broadcast::Sender<NodeEventInfo>,
 }
 
@@ -54,28 +54,23 @@ pub struct EventSubscriber {
 
 impl EventChannel {
     /// Create a new `EventChannel`.
-    pub fn new() -> EventChannel {
+    pub(crate) fn new() -> EventChannel {
         let (tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         EventChannel { tx }
     }
 
     /// Creates a new [`EventPublisher`].
-    pub fn publisher(&self) -> EventPublisher {
+    pub(crate) fn publisher(&self) -> EventPublisher {
         EventPublisher {
             tx: self.tx.clone(),
         }
     }
 
     /// Creates a new [`EventSubscriber`].
-    pub fn subscribe(&self) -> EventSubscriber {
+    pub(crate) fn subscribe(&self) -> EventSubscriber {
         EventSubscriber {
             rx: self.tx.subscribe(),
         }
-    }
-
-    /// Returns if there are any active subscribers or not.
-    pub fn has_subscribers(&self) -> bool {
-        self.tx.receiver_count() > 0
     }
 }
 
@@ -100,6 +95,7 @@ impl EventPublisher {
         });
     }
 
+    /// Returns if there are any active subscribers or not.
     pub(crate) fn has_subscribers(&self) -> bool {
         self.tx.receiver_count() > 0
     }

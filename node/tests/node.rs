@@ -11,9 +11,10 @@ use futures::StreamExt;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::{gossipsub, identity, noise, ping, tcp, yamux, Multiaddr, SwarmBuilder};
 use lumina_node::node::{Node, NodeConfig};
-use lumina_node::store::{ExtendedHeaderGeneratorExt, InMemoryStore, Store};
+use lumina_node::store::{InMemoryStore, Store};
 use lumina_node::test_utils::{
     gen_filled_store, listening_test_node_config, test_node_config, test_node_config_with_keypair,
+    ExtendedHeaderGeneratorExt,
 };
 use rand::Rng;
 use tokio::{select, spawn, sync::mpsc, time::sleep};

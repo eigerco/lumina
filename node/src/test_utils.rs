@@ -16,7 +16,7 @@ use crate::{
     node::NodeConfig,
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
-    store::{ExtendedHeaderGeneratorExt, InMemoryStore},
+    store::{InMemoryStore, VerifiedExtendedHeaders},
     utils::OneshotResultSender,
 };
 
@@ -70,6 +70,18 @@ pub fn test_node_config_with_keypair(
     NodeConfig {
         p2p_local_keypair: keypair,
         ..test_node_config()
+    }
+}
+
+/// Extends test header generator for easier insertion into the store
+pub trait ExtendedHeaderGeneratorExt {
+    /// Generate next amount verified headers
+    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders;
+}
+
+impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
+    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders {
+        unsafe { VerifiedExtendedHeaders::new_unchecked(self.next_many(amount)) }
     }
 }
 

@@ -12,9 +12,8 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{BroadcastChannel, MessageEvent, SharedWorker};
 
-use lumina_node::node::Node;
+use lumina_node::node::{Node, SyncingInfo};
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
-use lumina_node::syncer::SyncingInfo;
 
 use crate::error::{Context, Error, Result};
 use crate::node::WasmNodeConfig;
