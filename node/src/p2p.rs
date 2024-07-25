@@ -263,7 +263,7 @@ impl P2p {
     }
 
     /// Creates and starts a new mocked p2p handler.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn mocked() -> (Self, crate::test_utils::MockP2pHandle) {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (peer_tracker_tx, peer_tracker_rx) = watch::channel(PeerTrackerInfo::default());
