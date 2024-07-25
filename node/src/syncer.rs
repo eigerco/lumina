@@ -616,7 +616,7 @@ where
     // However, if both headers are the exactly the same, we
     // can skip inserting, as the header is already there.
     //
-    // This can happen of fast node restart.
+    // This can happen in case of fast node restart.
     let try_insert = match store.get_head().await {
         Ok(store_head) => store_head != network_head,
         Err(StoreError::NotFound) => true,
