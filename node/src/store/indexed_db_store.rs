@@ -803,12 +803,6 @@ pub mod tests {
 
     #[named]
     #[wasm_bindgen_test]
-    async fn test_removal() {
-        let (original_store, mut gen) = gen_filled_store(0, function_name!()).await;
-    }
-
-    #[named]
-    #[wasm_bindgen_test]
     async fn test_persistence() {
         let (original_store, mut gen) = gen_filled_store(0, function_name!()).await;
         let original_headers = gen.next_many_verified(20);
