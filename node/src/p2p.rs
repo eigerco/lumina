@@ -678,6 +678,7 @@ where
     async fn run(&mut self) {
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
         let mut kademlia_interval = Interval::new(Duration::from_secs(30)).await;
+        let mut peer_tracker_info_watcher = self.peer_tracker.info_watcher();
 
         self.dial_bootnodes();
 
@@ -686,6 +687,11 @@ where
 
         loop {
             select! {
+                _ = peer_tracker_info_watcher.changed() => {
+                    if peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
+                        self.dial_bootnodes();
+                    }
+                }
                 _ = report_interval.tick() => {
                     self.report();
                 }
