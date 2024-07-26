@@ -178,11 +178,6 @@ mod imp {
 
         Ok(SwarmBuilder::with_existing_identity(keypair)
             .with_wasm_bindgen()
-            .with_other_transport(|local_keypair| {
-                let config = webtransport_websys::Config::new(local_keypair);
-                webtransport_websys::Transport::new(config)
-            })
-            .expect("webtransport_websys::Transport is infallible")
             .with_other_transport(move |_| {
                 Ok(websocket_websys::Transport::default()
                     .upgrade(Version::V1Lazy)
@@ -190,6 +185,11 @@ mod imp {
                     .multiplex(yamux::Config::default()))
             })
             .expect("websocket_websys::Transport is infallible")
+            .with_other_transport(|local_keypair| {
+                let config = webtransport_websys::Config::new(local_keypair);
+                webtransport_websys::Transport::new(config)
+            })
+            .expect("webtransport_websys::Transport is infallible")
             .with_behaviour(|_| behaviour)
             .expect("Moving behaviour doesn't fail")
             .with_swarm_config(|config| {
