@@ -688,8 +688,6 @@ where
 
         self.dial_bootnodes();
 
-        self.dial_bootnodes();
-
         // Initiate discovery
         let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
 
