@@ -484,6 +484,12 @@ impl Iterator for BlockRanges {
     }
 }
 
+impl DoubleEndedIterator for BlockRanges {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.pop_head()
+    }
+}
+
 impl Display for BlockRanges {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[")?;
@@ -730,6 +736,16 @@ mod tests {
         let ranges = new_block_ranges([1..=5, 10..=15]);
         let heights: Vec<_> = ranges.into_iter().collect();
         assert_eq!(heights, vec![1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15]);
+
+        let empty_heights: Vec<u64> = new_block_ranges([]).collect();
+        assert_eq!(empty_heights, Vec::<u64>::new())
+    }
+
+    #[test]
+    fn block_ranges_double_ended_iterator() {
+        let ranges = new_block_ranges([1..=5, 10..=15]);
+        let heights: Vec<_> = ranges.into_iter().rev().collect();
+        assert_eq!(heights, vec![15, 14, 13, 12, 11, 10, 5, 4, 3, 2, 1]);
 
         let empty_heights: Vec<u64> = new_block_ranges([]).collect();
         assert_eq!(empty_heights, Vec::<u64>::new())
