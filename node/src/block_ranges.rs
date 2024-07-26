@@ -2,7 +2,7 @@
 
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
-use std::ops::{Add, RangeInclusive, Sub, SubAssign};
+use std::ops::{Add, RangeInclusive, Sub};
 
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -457,25 +457,6 @@ impl Sub<&BlockRanges> for BlockRanges {
     }
 }
 
-impl Sub<RangeInclusive<u64>> for BlockRanges {
-    type Output = Self;
-
-    fn sub(mut self, range: RangeInclusive<u64>) -> Self::Output {
-        if !range.is_empty() {
-            self.remove_relaxed(range).expect("shouldn't panic");
-        }
-        self
-    }
-}
-
-impl SubAssign<RangeInclusive<u64>> for BlockRanges {
-    fn sub_assign(&mut self, range: RangeInclusive<u64>) {
-        if !range.is_empty() {
-            self.remove_relaxed(range).expect("shouldn't panic");
-        }
-    }
-}
-
 impl Iterator for BlockRanges {
     type Item = u64;
 
@@ -734,7 +715,7 @@ mod tests {
     #[test]
     fn block_ranges_iterator() {
         let ranges = new_block_ranges([1..=5, 10..=15]);
-        let heights: Vec<_> = ranges.into_iter().collect();
+        let heights: Vec<_> = ranges.collect();
         assert_eq!(heights, vec![1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15]);
 
         let empty_heights: Vec<u64> = new_block_ranges([]).collect();
@@ -744,7 +725,7 @@ mod tests {
     #[test]
     fn block_ranges_double_ended_iterator() {
         let ranges = new_block_ranges([1..=5, 10..=15]);
-        let heights: Vec<_> = ranges.into_iter().rev().collect();
+        let heights: Vec<_> = ranges.rev().collect();
         assert_eq!(heights, vec![15, 14, 13, 12, 11, 10, 5, 4, 3, 2, 1]);
 
         let empty_heights: Vec<u64> = new_block_ranges([]).collect();
@@ -1060,157 +1041,5 @@ mod tests {
         let mut r = new_block_ranges([1..=u64::MAX]);
         r.remove_relaxed(u64::MAX..=u64::MAX).unwrap();
         assert_eq!(&r.0[..], &[1..=u64::MAX - 1][..]);
-    }
-
-    #[test]
-    fn sub() {
-        let minuend = new_block_ranges([30..=50, 80..=100, 130..=150]);
-
-        let difference = minuend.clone() - (29..=29);
-        assert_eq!(&difference.0[..], &[30..=50, 80..=100, 130..=150][..]);
-
-        let difference = minuend.clone() - (30..=30);
-        assert_eq!(&difference.0[..], &[31..=50, 80..=100, 130..=150][..]);
-
-        let difference = minuend.clone() - (20..=40);
-        assert_eq!(&difference.0[..], &[41..=50, 80..=100, 130..=150][..]);
-
-        let difference = minuend.clone() - (35..=40);
-        assert_eq!(
-            &difference.0[..],
-            &[30..=34, 41..=50, 80..=100, 130..=150][..]
-        );
-
-        let difference = minuend.clone() - (51..=129);
-        assert_eq!(&difference.0[..], &[30..=50, 130..=150][..]);
-
-        let difference = minuend.clone() - (50..=130);
-        assert_eq!(&difference.0[..], &[30..=49, 131..=150][..]);
-
-        let difference = minuend.clone() - (35..=49);
-        assert_eq!(
-            &difference.0[..],
-            &[30..=34, 50..=50, 80..=100, 130..=150][..]
-        );
-
-        let difference = minuend.clone() - (35..=50);
-        assert_eq!(&difference.0[..], &[30..=34, 80..=100, 130..=150][..]);
-
-        let difference = minuend.clone() - (35..=55);
-        assert_eq!(&difference.0[..], &[30..=34, 80..=100, 130..=150][..]);
-
-        let difference = minuend.clone() - (35..=135);
-        assert_eq!(&difference.0[..], &[30..=34, 136..=150][..]);
-
-        let difference = minuend.clone() - (35..=170);
-        assert_eq!(&difference.0[..], &[30..=34][..]);
-
-        let difference = minuend.clone() - (10..=135);
-        assert_eq!(&difference.0[..], &[136..=150][..]);
-
-        let difference = minuend.clone() - (10..=170);
-        assert!(difference.0.is_empty());
-
-        let difference = minuend.clone() - RangeInclusive::new(170, 10);
-        assert_eq!(&difference.0[..], &minuend.0[..]);
-
-        let minuend = new_block_ranges([1..=10, 12..=12, 14..=14]);
-        let difference = minuend - (12..=12);
-        assert_eq!(&difference.0[..], &[1..=10, 14..=14][..]);
-
-        let minuend = new_block_ranges([1..=u64::MAX]);
-        let difference = minuend - (12..=12);
-        assert_eq!(&difference.0[..], &[1..=11, 13..=u64::MAX][..]);
-
-        let minuend = new_block_ranges([1..=u64::MAX]);
-        let difference = minuend - (1..=1);
-        assert_eq!(&difference.0[..], &[2..=u64::MAX][..]);
-
-        let minuend = new_block_ranges([1..=u64::MAX]);
-        let difference = minuend - (u64::MAX..=u64::MAX);
-        assert_eq!(&difference.0[..], &[1..=u64::MAX - 1][..]);
-    }
-
-    #[test]
-    fn sub_assign() {
-        let minuend = new_block_ranges([30..=50, 80..=100, 130..=150]);
-
-        let mut difference = minuend.clone();
-        difference -= 29..=29;
-        assert_eq!(&difference.0[..], &[30..=50, 80..=100, 130..=150][..]);
-
-        let mut difference = minuend.clone();
-        difference -= 30..=30;
-        assert_eq!(&difference.0[..], &[31..=50, 80..=100, 130..=150][..]);
-
-        let mut difference = minuend.clone();
-        difference -= 20..=40;
-        assert_eq!(&difference.0[..], &[41..=50, 80..=100, 130..=150][..]);
-
-        let mut difference = minuend.clone();
-        difference -= 35..=40;
-        assert_eq!(
-            &difference.0[..],
-            &[30..=34, 41..=50, 80..=100, 130..=150][..]
-        );
-
-        let mut difference = minuend.clone();
-        difference -= 51..=129;
-        assert_eq!(&difference.0[..], &[30..=50, 130..=150][..]);
-
-        let mut difference = minuend.clone();
-        difference -= 50..=130;
-        assert_eq!(&difference.0[..], &[30..=49, 131..=150][..]);
-
-        let mut difference = minuend.clone();
-        difference -= 35..=49;
-        assert_eq!(
-            &difference.0[..],
-            &[30..=34, 50..=50, 80..=100, 130..=150][..]
-        );
-
-        let mut difference = minuend.clone();
-        difference -= 35..=50;
-        assert_eq!(&difference.0[..], &[30..=34, 80..=100, 130..=150][..]);
-
-        let mut difference = minuend.clone();
-        difference -= 35..=55;
-        assert_eq!(&difference.0[..], &[30..=34, 80..=100, 130..=150][..]);
-
-        let mut difference = minuend.clone();
-        difference -= 35..=135;
-        assert_eq!(&difference.0[..], &[30..=34, 136..=150][..]);
-
-        let mut difference = minuend.clone();
-        difference -= 35..=170;
-        assert_eq!(&difference.0[..], &[30..=34][..]);
-
-        let mut difference = minuend.clone();
-        difference -= 10..=135;
-        assert_eq!(&difference.0[..], &[136..=150][..]);
-
-        let mut difference = minuend.clone();
-        difference -= 10..=170;
-        assert!(difference.0.is_empty());
-
-        let mut difference = minuend.clone();
-        difference -= RangeInclusive::new(170, 10);
-        assert_eq!(&difference.0[..], &minuend.0[..]);
-
-        let mut difference = new_block_ranges([1..=10, 12..=12, 14..=14]);
-        difference -= 12..=12;
-        assert_eq!(&difference.0[..], &[1..=10, 14..=14][..]);
-
-        let mut difference = new_block_ranges([1..=u64::MAX]);
-        difference -= 12..=12;
-        assert_eq!(&difference.0[..], &[1..=11, 13..=u64::MAX][..]);
-
-        let mut difference = new_block_ranges([1..=u64::MAX]);
-        difference -= 1..=1;
-        assert_eq!(&difference.0[..], &[2..=u64::MAX][..]);
-
-        let mut difference = new_block_ranges([1..=u64::MAX]);
-        difference -= u64::MAX..=u64::MAX;
-        assert_eq!(&difference.0[..], &[1..=u64::MAX - 1][..]);
     }
 }
