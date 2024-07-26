@@ -688,6 +688,8 @@ where
 
         self.dial_bootnodes();
 
+        self.dial_bootnodes();
+
         // Initiate discovery
         let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
 
@@ -731,10 +733,10 @@ where
         for (peer_id, addrs) in &self.bootnodes {
             let dial_opts = DialOpts::peer_id(*peer_id)
                 .addresses(addrs.clone())
-                // This is needed when addresses are provided otherwise
-                // our `kademlia::Behaviour` wrapper will not cononicalize them.
+                // Without this set, `kademlia::Behaviour` won't be able to canonicalize
+                // `/tls/ws` to `/wss`.
                 .extend_addresses_through_behaviour()
-                // Tell to Swarm to not dial if peer is already connected or there
+                // Tell Swarm not to dial if peer is already connected or there
                 // is an ongoing dialing.
                 .condition(PeerCondition::DisconnectedAndNotDialing)
                 .build();
