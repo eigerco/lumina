@@ -233,7 +233,7 @@ impl From<tokio::task::JoinError> for StoreError {
 // Needed for `Into<VerifiedExtendedHeaders>`
 impl From<Infallible> for StoreError {
     fn from(_: Infallible) -> Self {
-        // Infalliable should not be possible to construct
+        // Infallible should not be possible to construct
         unreachable!("Infallible failed")
     }
 }
