@@ -52,14 +52,12 @@ impl NetworkBehaviour for Behaviour {
 
         for addr in new_addrs.iter_mut() {
             if let Some(new_addr) = tls_ws_to_wss(addr) {
-                dbg!(&new_addr);
                 *addr = new_addr;
             }
         }
 
         for addr in addresses {
             if let Some(new_addr) = tls_ws_to_wss(addr) {
-                dbg!(&new_addr);
                 new_addrs.push(new_addr);
             }
         }
