@@ -379,9 +379,11 @@ where
     fn spawn_try_init(&self) -> oneshot::Receiver<Result<(ExtendedHeader, Duration)>> {
         let p2p = self.p2p.clone();
         let store = self.store.clone();
+        let event_pub = self.event_pub.clone();
         let (tx, rx) = oneshot::channel();
 
         let fut = async move {
+            let mut event_reported = false;
             let now = Instant::now();
             let mut backoff = ExponentialBackoffBuilder::default()
                 .with_max_interval(TRY_INIT_BACKOFF_MAX_INTERVAL)
@@ -389,7 +391,7 @@ where
                 .build();
 
             loop {
-                match try_init(&p2p, &*store).await {
+                match try_init(&p2p, &*store, &event_pub, &mut event_reported).await {
                     Ok(network_head) => {
                         tx.maybe_send(Ok((network_head, now.elapsed())));
                         break;
@@ -409,8 +411,6 @@ where
                 }
             }
         };
-
-        self.event_pub.send(NodeEvent::FetchingHeadHeaderStarted);
 
         spawn_cancellable(
             self.cancellation_token.child_token(),
@@ -603,11 +603,21 @@ fn in_syncing_window(header: &ExtendedHeader) -> bool {
     header.time().after(syncing_window_start)
 }
 
-async fn try_init<S>(p2p: &P2p, store: &S) -> Result<ExtendedHeader>
+async fn try_init<S>(
+    p2p: &P2p,
+    store: &S,
+    event_pub: &EventPublisher,
+    event_reported: &mut bool,
+) -> Result<ExtendedHeader>
 where
     S: Store,
 {
     p2p.wait_connected_trusted().await?;
+
+    if !*event_reported {
+        event_pub.send(NodeEvent::FetchingHeadHeaderStarted);
+        *event_reported = true;
+    }
 
     let network_head = p2p.get_head_header().await?;
 

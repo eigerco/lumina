@@ -39,7 +39,10 @@ use libp2p::{
     kad,
     multiaddr::Protocol,
     ping,
-    swarm::{ConnectionId, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent},
+    swarm::{
+        dial_opts::{DialOpts, PeerCondition},
+        ConnectionId, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent,
+    },
     Multiaddr, PeerId,
 };
 use smallvec::SmallVec;
@@ -54,7 +57,7 @@ pub(crate) mod shwap;
 mod swarm;
 
 use crate::block_ranges::BlockRange;
-use crate::events::EventPublisher;
+use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{self, spawn, Interval};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
@@ -580,6 +583,8 @@ where
     bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, P2pError>>,
     network_compromised_token: CancellationToken,
     store: Arc<S>,
+    event_pub: EventPublisher,
+    bootnodes: HashMap<PeerId, Vec<Multiaddr>>,
 }
 
 struct HeaderSubState {
@@ -639,15 +644,20 @@ where
             }
         }
 
-        for addr in args.bootnodes {
-            // Bootstrap peers are always trusted
-            if let Some(peer_id) = addr.peer_id() {
-                peer_tracker.set_trusted(peer_id, true);
-            }
+        let mut bootnodes = HashMap::<_, Vec<_>>::new();
 
-            if let Err(e) = swarm.dial(addr.clone()) {
-                error!("Failed to dial on {addr}: {e}");
-            }
+        for addr in args.bootnodes {
+            let peer_id = addr.peer_id().expect("multiaddr already validated");
+            bootnodes.entry(peer_id).or_default().push(addr);
+        }
+
+        for (peer_id, addrs) in bootnodes.iter_mut() {
+            addrs.sort();
+            addrs.dedup();
+            addrs.shrink_to_fit();
+
+            // Bootstrap peers are always trusted
+            peer_tracker.set_trusted(*peer_id, true);
         }
 
         Ok(Worker {
@@ -660,12 +670,16 @@ where
             bitswap_queries: HashMap::new(),
             network_compromised_token: CancellationToken::new(),
             store: args.store,
+            event_pub: args.event_pub,
+            bootnodes,
         })
     }
 
     async fn run(&mut self) {
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
         let mut kademlia_interval = Interval::new(Duration::from_secs(30)).await;
+
+        self.dial_bootnodes();
 
         // Initiate discovery
         let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
@@ -695,6 +709,26 @@ where
                         warn!("Failure while handling command. (error: {e})");
                     }
                 }
+            }
+        }
+    }
+
+    fn dial_bootnodes(&mut self) {
+        self.event_pub.send(NodeEvent::ConnectingToBootnodes);
+
+        for (peer_id, addrs) in &self.bootnodes {
+            let dial_opts = DialOpts::peer_id(*peer_id)
+                .addresses(addrs.clone())
+                // Without this set, `kademlia::Behaviour` won't be able to canonicalize
+                // `/tls/ws` to `/wss`.
+                .extend_addresses_through_behaviour()
+                // Tell Swarm not to dial if peer is already connected or there
+                // is an ongoing dialing.
+                .condition(PeerCondition::DisconnectedAndNotDialing)
+                .build();
+
+            if let Err(e) = self.swarm.dial(dial_opts) {
+                error!("Failed to dial on {addrs:?}: {e}");
             }
         }
     }
