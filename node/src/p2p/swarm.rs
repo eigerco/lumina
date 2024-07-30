@@ -35,12 +35,14 @@ mod imp {
             Err(_) => None,
         };
 
-        // We do not use system's DNS because libp2p caches system DNS servers when
-        // `Swarm` get constructed, and doesn't update them later. This can be a problem,
-        // if device roams between networks (and old DNS addresses may not be reachable from 
-        // the new network). Similarly, if node is started when there's no Internet connection,
-        // it won't use the DNS servers offered when Internet connectivity is restored.
-        // Instead we per-define globally-accessible public DNS servers.
+        // We do not use system's DNS because libp2p caches system DNS
+        // servers when `Swarm` get constructed, and doesn't update them
+        // later. This can be a problem, if device roams between networks
+        // (and old DNS addresses may not be reachable from the new network).
+        //
+        // Similarly, if node is started when there's no Internet connection,
+        // it won't use the DNS servers offered when Internet connectivity
+        // is restored. Instead we per-define globally-accessible public DNS servers.
         let dns_config = dns::ResolverConfig::cloudflare();
 
         let noise_config =
