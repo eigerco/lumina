@@ -38,7 +38,7 @@ impl NetworkBehaviour for Behaviour {
         // 1. Kad's Behaviour discovers a new peer and its addresses.
         // 2. Kad's Behaviour dials with `DialOpts::peer_id()` without setting the addresses.
         // 3. `Swarm` calls `Behaviour::handle_pending_outbound_connection` to resolve the addresses.
-        // 4. Kad's Behaviour returns a vector of the discovered addresses.
+        // 4. Kad's Behaviour returns the vector of discovered addresses.
         // 5. The addresses returned from the above step are NOT passed to any other Behaviour's.
         //
         // Here we intercept the return of Kad's Behaviour and cononicalize all `/tls/ws`
