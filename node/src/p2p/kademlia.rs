@@ -33,7 +33,7 @@ impl NetworkBehaviour for Behaviour {
         addresses: &[Multiaddr],
         effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        // The that `libp2p::kad::Behaviour` uses to flow of dialing to a peer is as follows:
+        // `libp2p::kad::Behaviour` uses the following flow to dial a peer:
         //
         // 1. Kad's Behaviour discovers a new peer and its addresses.
         // 2. Kad's Behaviour dials with `DialOpts::peer_id()` without setting the addresses.
