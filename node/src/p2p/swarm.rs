@@ -35,19 +35,12 @@ mod imp {
             Err(_) => None,
         };
 
-        // We do not use system's DNS because libp2p loads DNS servers only when
-        // `Swarm` get constructed. This is not a problem for server machines, but
-        // it is for movable machines such as laptops and smart phones. Because of
-        // that, the following edge cases can happen:
-        //
-        // 1. Machine connects to WiFi A. Our node starts and uses DNS that
-        //    WiFi A announced. Then machine moves to WiFi B, the old DNS servers
-        //    become unreachable, but libp2p still uses the old ones.
-        // 2. Machine is not connected to the Internet. Our node starts and does not
-        //    find any DNS servers defined. Then machine connects to the Internet, but
-        //    libp2p still does not have any DNS nameservers defined.
-        //
-        // By having a pre-defined public servers, these edge cases solved.
+        // We do not use system's DNS because libp2p caches system DNS servers when
+        // `Swarm` get constructed, and doesn't update them later. This can be a problem,
+        // if device roams between networks (and old DNS addresses may not be reachable from 
+        // the new network). Similarly, if node is started when there's no Internet connection,
+        // it won't use the DNS servers offered when Internet connectivity is restored.
+        // Instead we per-define globally-accessible public DNS servers.
         let dns_config = dns::ResolverConfig::cloudflare();
 
         let noise_config =
