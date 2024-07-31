@@ -274,6 +274,7 @@ where
 
                     info!("Setting initial subjective head to {network_head_height}");
                     self.set_subjective_head_height(network_head_height);
+                    // TODO: insert from trusted 
                     self.p2p.init_header_sub(network_head).await?;
 
                     self.event_pub.send(NodeEvent::FetchingHeadHeaderFinished {
@@ -714,26 +715,26 @@ mod tests {
         handle_session_batch(&mut p2p_mock, &header_28_30, 28..=30, true).await;
         assert_syncing(&syncer, &store, &[1..=30], 30).await;
 
-        // New HEAD was received by HeaderSub (height 1058), it SHOULD be appended as it's adjacent
+        // New HEAD was received by HeaderSub (height 1058), it should NOT be appended
         let mut headers = gen.next_many(1028);
         p2p_mock.announce_new_head(headers.last().cloned().unwrap());
         assert_syncing(&syncer, &store, &[1..=30], 1058).await;
 
-        // Syncer requested the first batch
-        handle_session_batch(&mut p2p_mock, &headers, 547..=1058, true).await;
-        assert_syncing(&syncer, &store, &[1..=30, 547..=1058], 1058).await;
+        // Syncer requested the first batch, anchored on already existing range
+        handle_session_batch(&mut p2p_mock, &headers, 31..=543, true).await;
+        assert_syncing(&syncer, &store, &[1..=543], 1058).await;
 
         // New head from header sub added
         headers.push(gen.next());
         p2p_mock.announce_new_head(headers.last().cloned().unwrap());
-        assert_syncing(&syncer, &store, &[1..=30, 547..=1059], 1059).await;
+        assert_syncing(&syncer, &store, &[1..=543], 1059).await;
 
         // Syncer requested the second batch
-        handle_session_batch(&mut p2p_mock, &headers, 35..=546, true).await;
-        assert_syncing(&syncer, &store, &[1..=30, 35..=1059], 1059).await;
+        handle_session_batch(&mut p2p_mock, &headers, 544..=1055, true).await;
+        assert_syncing(&syncer, &store, &[1..=1055], 1059).await;
 
         // Syncer requested the last batch
-        handle_session_batch(&mut p2p_mock, &headers, 31..=34, true).await;
+        handle_session_batch(&mut p2p_mock, &headers, 1056..=1059, true).await;
         assert_syncing(&syncer, &store, &[1..=1059], 1059).await;
 
         // Syncer is fulling synced and awaiting for events
