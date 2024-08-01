@@ -65,15 +65,20 @@ mod imp {
 
 #[cfg(target_arch = "wasm32")]
 mod imp {
-    use super::*;
+    use std::cell::{Cell, RefCell};
+    use std::future::poll_fn;
+    use std::pin::Pin;
+    use std::rc::Rc;
+    use std::task::{Context, Poll, Waker};
+    use std::time::Duration;
+
     use futures::StreamExt;
     use gloo_timers::future::{IntervalStream, TimeoutFuture};
     use pin_project::pin_project;
     use send_wrapper::SendWrapper;
-    use std::future::poll_fn;
-    use std::pin::Pin;
-    use std::task::{Context, Poll};
-    use std::time::Duration;
+    use wasm_bindgen::prelude::*;
+
+    use super::*;
 
     pub(crate) fn spawn<F>(future: F)
     where
@@ -166,17 +171,48 @@ mod imp {
         }
     }
 
+    /// Yields execution back to JavaScript's event loop
     pub(crate) async fn yield_now() {
-        let mut yielded = false;
+        #[wasm_bindgen]
+        extern "C" {
+            #[wasm_bindgen]
+            fn setTimeout(closure: &Closure<dyn FnMut()>, timeout: u32);
+        }
+
+        let yielded = Rc::new(Cell::new(false));
+        let waker = Rc::new(RefCell::new(None::<Waker>));
+
+        let wake_closure = {
+            let yielded = yielded.clone();
+            let waker = waker.clone();
+
+            Closure::new(move || {
+                yielded.set(true);
+                waker.borrow_mut().take().unwrap().wake();
+            })
+        };
+
+        // Unlike `queueMicrotask` or a naive yield_now implementation (i.e. `wake()`
+        // and return `Poll::Pending` once), `setTimeout` closure will be executed by
+        // JavaScript's event loop.
+        //
+        // This has two main benefits:
+        //
+        // * Garbage collector will be executed.
+        // * We give time to JavaScript's tasks too.
+        //
+        // Ref: https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html
+        setTimeout(&wake_closure, 0);
+
+        debug_assert!(!yielded.get(), "Closure called before reaching event loop");
 
         poll_fn(|cx| {
-            if yielded {
-                return Poll::Ready(());
+            if yielded.get() {
+                Poll::Ready(())
+            } else {
+                *waker.borrow_mut() = Some(cx.waker().to_owned());
+                Poll::Pending
             }
-
-            cx.waker().wake_by_ref();
-            yielded = true;
-            Poll::Pending
         })
         .await;
     }
