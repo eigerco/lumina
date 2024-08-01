@@ -12,10 +12,9 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use tracing::{info, warn};
 use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::fmt::format::Pretty;
 use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::prelude::*;
-use tracing_web::{performance_layer, MakeConsoleWriter};
+use tracing_web::MakeConsoleWriter;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
@@ -50,12 +49,8 @@ pub fn setup_logging() {
         .with_timer(UtcTime::rfc_3339()) // std::time is not available in browsers
         .with_writer(MakeConsoleWriter) // write events to the console
         .with_filter(LevelFilter::INFO); // TODO: allow customizing the log level
-    let perf_layer = performance_layer().with_details_from_fields(Pretty::default());
 
-    tracing_subscriber::registry()
-        .with(fmt_layer)
-        .with(perf_layer)
-        .init();
+    tracing_subscriber::registry().with(fmt_layer).init();
 }
 
 impl From<Network> for network::Network {
