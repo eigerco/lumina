@@ -53,6 +53,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 
 mod header_ex;
 pub(crate) mod header_session;
+mod kademlia;
 pub(crate) mod shwap;
 mod swarm;
 
@@ -87,7 +88,7 @@ pub(crate) const GET_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
 // will be ignored
 const FRAUD_PROOF_HEAD_HEIGHT_THRESHOLD: u64 = 20;
 
-type Result<T, E = P2pError> = std::result::Result<T, E>;
+pub(crate) type Result<T, E = P2pError> = std::result::Result<T, E>;
 
 /// Representation of all the errors that can occur in `P2p` component.
 #[derive(Debug, thiserror::Error)]
@@ -95,6 +96,10 @@ pub enum P2pError {
     /// Failed to initialize gossipsub behaviour.
     #[error("Failed to initialize gossipsub behaviour: {0}")]
     GossipsubInit(String),
+
+    /// Failed to initialize TLS.
+    #[error("Failed to initialize TLS: {0}")]
+    TlsInit(String),
 
     /// Failed to initialize noise protocol.
     #[error("Failed to initialize noise: {0}")]
@@ -145,6 +150,7 @@ impl P2pError {
         match self {
             P2pError::GossipsubInit(_)
             | P2pError::NoiseInit(_)
+            | P2pError::TlsInit(_)
             | P2pError::WorkerDied
             | P2pError::ChannelClosedUnexpectedly
             | P2pError::BootnodeAddrsWithoutPeerId(_) => true,
@@ -232,7 +238,7 @@ pub(crate) enum P2pCmd {
 
 impl P2p {
     /// Creates and starts a new p2p handler.
-    pub fn start<B, S>(args: P2pArgs<B, S>) -> Result<Self>
+    pub async fn start<B, S>(args: P2pArgs<B, S>) -> Result<Self>
     where
         B: Blockstore + 'static,
         S: Store + 'static,
@@ -245,7 +251,7 @@ impl P2p {
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
 
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
-        let mut worker = Worker::new(args, cmd_rx, peer_tracker)?;
+        let mut worker = Worker::new(args, cmd_rx, peer_tracker).await?;
 
         spawn(async move {
             worker.run().await;
@@ -566,7 +572,7 @@ where
     identify: identify::Behaviour,
     header_ex: HeaderExBehaviour<S>,
     gossipsub: gossipsub::Behaviour,
-    kademlia: kad::Behaviour<kad::store::MemoryStore>,
+    kademlia: kademlia::Behaviour,
 }
 
 struct Worker<B, S>
@@ -597,7 +603,7 @@ where
     B: Blockstore,
     S: Store,
 {
-    fn new(
+    async fn new(
         args: P2pArgs<B, S>,
         cmd_rx: mpsc::Receiver<P2pCmd>,
         peer_tracker: Arc<PeerTracker>,
@@ -636,7 +642,7 @@ where
             kademlia,
         };
 
-        let mut swarm = new_swarm(args.local_keypair, behaviour)?;
+        let mut swarm = new_swarm(args.local_keypair, behaviour).await?;
 
         for addr in args.listen_on {
             if let Err(e) = swarm.listen_on(addr.clone()) {
@@ -1167,7 +1173,7 @@ where
     Ok(gossipsub)
 }
 
-fn init_kademlia<B, S>(args: &P2pArgs<B, S>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
+fn init_kademlia<B, S>(args: &P2pArgs<B, S>) -> Result<kademlia::Behaviour>
 where
     B: Blockstore,
     S: Store,
@@ -1190,7 +1196,7 @@ where
         kademlia.set_mode(Some(kad::Mode::Server));
     }
 
-    Ok(kademlia)
+    Ok(kademlia::Behaviour::new(kademlia))
 }
 
 fn init_bitswap<B, S>(

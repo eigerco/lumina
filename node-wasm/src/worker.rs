@@ -17,7 +17,7 @@ use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 
 use crate::error::{Context, Error, Result};
 use crate::node::WasmNodeConfig;
-use crate::utils::{get_crypto, WorkerSelf};
+use crate::utils::{random_id, WorkerSelf};
 use crate::worker::channel::{
     DedicatedWorkerMessageServer, MessageServer, SharedWorkerMessageServer, WorkerMessage,
 };
@@ -240,7 +240,7 @@ impl NodeWorker {
 pub async fn run_worker(queued_events: Vec<MessageEvent>) -> Result<()> {
     info!("Entered run_worker");
     let (tx, mut rx) = mpsc::channel(WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH);
-    let events_channel_name = format!("NodeEventChannel-{}", get_crypto()?.random_uuid());
+    let events_channel_name = format!("NodeEventChannel-{}", random_id());
 
     let mut message_server: Box<dyn MessageServer> = if SharedWorker::is_worker_type() {
         Box::new(SharedWorkerMessageServer::new(tx.clone(), queued_events))
