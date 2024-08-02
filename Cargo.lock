@@ -2582,7 +2582,6 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-upnp",
  "libp2p-websocket",
- "libp2p-websocket-websys",
  "libp2p-webtransport-websys",
  "libp2p-yamux",
  "multiaddr",
@@ -3005,8 +3004,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket-websys"
-version = "0.3.2"
-source = "git+https://github.com/libp2p/rust-libp2p?rev=60e32c9d3b4bee42ac698791e917e1587eaa1388#60e32c9d3b4bee42ac698791e917e1587eaa1388"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f95cd8a32fcf94ad1e5c2de37c2a05a5a4188d8358b005859a0fc9e63b6953bc"
 dependencies = [
  "bytes",
  "futures",
@@ -3164,6 +3164,7 @@ dependencies = [
  "gloo-timers 0.3.0",
  "instant",
  "libp2p",
+ "libp2p-websocket-websys",
  "lumina-node",
  "pin-project",
  "prost",
