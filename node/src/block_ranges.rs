@@ -7,10 +7,12 @@ use std::ops::{Add, RangeInclusive, Sub};
 use serde::Serialize;
 use smallvec::SmallVec;
 
-/// Type alias to `RangeInclusive<u64>`.
+/// Type alias of [`RangeInclusive<u64>`].
+///
+/// [`RangeInclusive<u64>`]: std::ops::RangeInclusive
 pub type BlockRange = RangeInclusive<u64>;
 
-/// Errors that can be produced by `BlockRanges`.
+/// Errors that can be produced by [`BlockRanges`].
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum BlockRangesError {
     /// Block ranges must be sorted.

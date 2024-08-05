@@ -2,8 +2,6 @@ use std::ops::RangeInclusive;
 
 #[cfg(not(target_arch = "wasm32"))]
 use celestia_tendermint_proto::Protobuf;
-#[cfg(any(test, feature = "test-utils"))]
-use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 use either::Either;
 
@@ -142,19 +140,6 @@ impl VerifiedExtendedHeaders {
     /// validated manually
     pub unsafe fn new_unchecked(headers: Vec<ExtendedHeader>) -> Self {
         Self(headers)
-    }
-}
-
-/// Extends test header generator for easier insertion into the store
-pub trait ExtendedHeaderGeneratorExt {
-    /// Generate next amount verified headers
-    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders;
-}
-
-#[cfg(any(test, feature = "test-utils"))]
-impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
-    fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders {
-        unsafe { VerifiedExtendedHeaders::new_unchecked(self.next_many(amount)) }
     }
 }
 

@@ -77,17 +77,19 @@ pub type Proof = nmt_rs::simple_merkle::proof::Proof<NamespacedSha2Hasher>;
 /// followed by 28 bytes specifying concrete ID of the namespace.
 ///
 /// Currently there are two versions of namespaces:
+///
 ///  - version `0` - the one allowing for the custom namespace ids. It requires an id to start
-///  with 18 `0x00` bytes followed by a user specified suffix (except reserved ones, see below).
+///    with 18 `0x00` bytes followed by a user specified suffix (except reserved ones, see below).
 ///  - version `255` - for secondary reserved namespaces. It requires an id to start with 27
-///  `0xff` bytes followed by a single byte indicating the id.
+///    `0xff` bytes followed by a single byte indicating the id.
 ///
 /// Some namespaces are reserved for the block creation purposes and cannot be used
 /// when submitting the blobs to celestia. Those fall into one of the two categories:
+///
 ///  - primary reserved namespaces - those use version `0` and have id lower or equal to `0xff`
-///  so they are always placed in blocks before user-submitted data.
+///    so they are always placed in blocks before user-submitted data.
 ///  - secondary reserved namespaces - those use version `0xff` so they are always placed after
-///  user-submitted data.
+///    user-submitted data.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
