@@ -144,7 +144,7 @@ impl BlockRangeExt for BlockRange {
         self.end() < other.start()
     }
 
-    /// Truncate range so that it contains at most `limit` elements, removing from the left
+    /// Truncate the range so that it contains at most `limit` elements, removing from the left
     fn truncate_left(&self, limit: u64) -> Self {
         if self.is_empty() {
             return RangeInclusive::new(1, 0);
@@ -160,6 +160,7 @@ impl BlockRangeExt for BlockRange {
         u64::max(start, adjusted_start)..=end
     }
 
+    /// Truncate the range so that it contains at most `limit` elements, removing from the right
     fn truncate_right(&self, limit: u64) -> Self {
         if self.is_empty() {
             return RangeInclusive::new(1, 0);
@@ -787,9 +788,9 @@ mod tests {
         assert_eq!((1..=10).truncate_right(1), 1..=1);
         assert!((1..=10).truncate_right(0).is_empty());
 
-        assert_eq!((0..=u64::MAX).truncate_left(u64::MAX), 1..=u64::MAX);
-        assert_eq!((0..=u64::MAX).truncate_left(1), u64::MAX..=u64::MAX);
-        assert!((0..=u64::MAX).truncate_left(0).is_empty());
+        assert_eq!((0..=u64::MAX).truncate_right(u64::MAX), 0..=(u64::MAX - 1));
+        assert_eq!((0..=u64::MAX).truncate_right(1), 0..=0);
+        assert!((0..=u64::MAX).truncate_right(0).is_empty());
     }
 
     #[test]
