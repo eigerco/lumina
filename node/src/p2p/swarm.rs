@@ -162,7 +162,8 @@ mod imp {
 mod imp {
     use super::*;
     use libp2p::core::upgrade::Version;
-    use libp2p::{noise, websocket_websys, webtransport_websys, yamux, SwarmBuilder, Transport};
+    use libp2p::{noise, webtransport_websys, yamux, SwarmBuilder, Transport};
+    use libp2p_websocket_websys as websocket_websys;
 
     pub(crate) async fn new_swarm<B>(keypair: Keypair, behaviour: B) -> Result<Swarm<B>>
     where
