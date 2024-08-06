@@ -272,7 +272,7 @@ where
 
                     info!("Setting initial subjective head to {network_head_height}");
                     self.set_subjective_head_height(network_head_height);
-                    // TODO: insert from trusted
+
 
                     let (header_sub_tx, header_sub_rx) = mpsc::channel(16);
                     self.p2p.init_header_sub(network_head, header_sub_tx).await?;
@@ -340,12 +340,6 @@ where
                     self.on_fetch_next_batch_result(res, took).await?;
                     self.fetch_next_batch(&headers_tx).await?;
                 }
-            }
-
-            if self.subjective_head_height.is_none() {
-                // subjective head height has been cleared, we need to re-request a trusted network
-                // head
-                break;
             }
         }
 
@@ -496,15 +490,6 @@ where
         };
 
         let store_ranges = self.store.get_stored_header_ranges().await?;
-
-        let store_head = self.store.get_head().await?;
-        if !in_syncing_window(&store_head) {
-            println!("CLEAR");
-            // Pretty unlikely, all known headers fall outside the syncing window. We should re-start
-            // syncing by fetching current network head.
-            self.subjective_head_height = None;
-            return Ok(());
-        }
 
         let next_batch = calculate_range_to_fetch(
             subjective_head_height,
@@ -752,7 +737,6 @@ mod tests {
         p2p_mock.announce_new_head(header_28_30[2].clone());
         assert_syncing(&syncer, &store, &[1..=27], 30).await;
 
-        println!("foo1");
         // New HEAD is not adjacent to store, so Syncer requests a range
         handle_session_batch(&mut p2p_mock, &header_28_30, 28..=30, true).await;
         assert_syncing(&syncer, &store, &[1..=30], 30).await;
@@ -762,10 +746,8 @@ mod tests {
         p2p_mock.announce_new_head(headers.last().cloned().unwrap());
         assert_syncing(&syncer, &store, &[1..=30], 1058).await;
 
-        println!("foo2");
         // Syncer requested the first batch, anchored on already existing range
         handle_session_batch(&mut p2p_mock, &headers, 31..=542, true).await;
-        println!("foo2-");
         assert_syncing(&syncer, &store, &[1..=542], 1058).await;
 
         // New head from header sub added
@@ -773,12 +755,10 @@ mod tests {
         p2p_mock.announce_new_head(headers.last().cloned().unwrap());
         assert_syncing(&syncer, &store, &[1..=542], 1059).await;
 
-        println!("foo3");
         // Syncer requested the second batch
         handle_session_batch(&mut p2p_mock, &headers, 543..=1054, true).await;
         assert_syncing(&syncer, &store, &[1..=1054], 1059).await;
 
-        println!("foo4");
         // Syncer requested the last batch
         handle_session_batch(&mut p2p_mock, &headers, 1055..=1059, true).await;
         assert_syncing(&syncer, &store, &[1..=1059], 1059).await;
@@ -1106,7 +1086,6 @@ mod tests {
                 p2p_mock.expect_header_request_for_height_cmd().await;
 
             let requested_range = height..=height + amount - 1;
-            println!("requested: {requested_range:?}");
             ranges_to_request.remove_strict(requested_range);
 
             if respond {
