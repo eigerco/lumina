@@ -591,10 +591,9 @@ where
 
 /// based on the stored headers and current network head height, calculate range of headers that
 /// should be fetched from the network, anchored on already existing header range in store
-pub(crate) fn calculate_range_to_fetch(
+fn calculate_range_to_fetch(
     subjective_head_height: u64,
     store_headers: &[BlockRange],
-    //syncing_window_edge: Option<u64>,
     limit: u64,
 ) -> BlockRange {
     let mut store_headers_iter = store_headers.iter().rev();
