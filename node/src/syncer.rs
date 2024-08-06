@@ -270,7 +270,6 @@ where
                     info!("Setting initial subjective head to {network_head_height}");
                     self.set_subjective_head_height(network_head_height);
 
-
                     let (header_sub_tx, header_sub_rx) = mpsc::channel(16);
                     self.p2p.init_header_sub(network_head, header_sub_tx).await?;
                     self.header_sub_rx = Some(header_sub_rx);
