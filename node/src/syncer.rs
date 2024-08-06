@@ -29,7 +29,6 @@ use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::utils::calculate_range_to_fetch;
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
 
@@ -195,7 +194,6 @@ where
     subjective_head_height: Option<u64>,
     batch_size: u64,
     ongoing_batch: Option<Ongoing>,
-    estimated_syncing_window_end: Option<u64>,
 }
 
 struct Ongoing {
@@ -222,7 +220,6 @@ where
             subjective_head_height: None,
             batch_size: args.batch_size,
             ongoing_batch: None,
-            estimated_syncing_window_end: None,
         })
     }
 
@@ -506,7 +503,6 @@ where
         match self.store.get_by_height(next_batch.end() + 1).await {
             Ok(known_header) => {
                 if !in_syncing_window(&known_header) {
-                    self.estimated_syncing_window_end = Some(known_header.height().value());
                     return Ok(());
                 }
             }
@@ -592,6 +588,35 @@ where
 
         Ok(())
     }
+}
+
+/// based on the stored headers and current network head height, calculate range of headers that
+/// should be fetched from the network, anchored on already existing header range in store
+pub(crate) fn calculate_range_to_fetch(
+    subjective_head_height: u64,
+    store_headers: &[BlockRange],
+    //syncing_window_edge: Option<u64>,
+    limit: u64,
+) -> BlockRange {
+    let mut store_headers_iter = store_headers.iter().rev();
+
+    let Some(store_head_range) = store_headers_iter.next() else {
+        // empty store, we're missing everything
+        let range = 1..=subjective_head_height;
+        return range.truncate_right(limit);
+    };
+
+    if store_head_range.end() < &subjective_head_height {
+        // if we haven't caught up with the network head, start from there
+        let range = store_head_range.end() + 1..=subjective_head_height;
+        return range.truncate_right(limit);
+    }
+
+    // there exists a range contiguous with network head. inspect previous range end
+    let penultimate_range_end = store_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
+
+    let range = penultimate_range_end + 1..=store_head_range.start().saturating_sub(1);
+    range.truncate_left(limit)
 }
 
 fn in_syncing_window(header: &ExtendedHeader) -> bool {

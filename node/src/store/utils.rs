@@ -1,56 +1,13 @@
-use std::ops::RangeInclusive;
-
 #[cfg(not(target_arch = "wasm32"))]
 use celestia_tendermint_proto::Protobuf;
 use celestia_types::ExtendedHeader;
-use either::Either;
 
-use crate::block_ranges::{BlockRange, BlockRangeExt};
 use crate::executor::yield_now;
 use crate::store::Result;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::store::{SamplingMetadata, StoreError};
 
 pub(crate) const VALIDATIONS_PER_YIELD: usize = 4;
-
-/// based on the stored headers and current network head height, calculate range of headers that
-/// should be fetched from the network, anchored on already existing header range in store
-pub(crate) fn calculate_range_to_fetch(
-    subjective_head_height: u64,
-    store_headers: &[RangeInclusive<u64>],
-    //syncing_window_edge: Option<u64>,
-    limit: u64,
-) -> BlockRange {
-    match get_most_recent_missing_range(subjective_head_height, store_headers) {
-        Either::Left(range) => range.truncate_left(limit),
-        Either::Right(range) => range.truncate_right(limit),
-    }
-}
-
-/// Return next range that should be downloaded, `Either::Left` of existing range
-/// (syncing backwards, should be trimmed from the left to extend existing range correctly)
-/// or `Either::Right` of stored ranges (syncing forward, trimming from the right)
-fn get_most_recent_missing_range(
-    head_height: u64,
-    store_headers: &[RangeInclusive<u64>],
-) -> Either<BlockRange, BlockRange> {
-    let mut store_headers_iter = store_headers.iter().rev();
-
-    let Some(store_head_range) = store_headers_iter.next() else {
-        // empty store, we're missing everything
-        return Either::Right(1..=head_height);
-    };
-
-    if store_head_range.end() < &head_height {
-        // if we haven't caught up with the network head, start from there
-        return Either::Right(store_head_range.end() + 1..=head_height);
-    }
-
-    // there exists a range contiguous with network head. inspect previous range end
-    let penultimate_range_end = store_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
-
-    Either::Left(penultimate_range_end + 1..=store_head_range.start().saturating_sub(1))
-}
 
 /// Span of header that's been verified internally
 #[derive(Clone)]
