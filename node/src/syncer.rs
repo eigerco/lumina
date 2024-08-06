@@ -1221,7 +1221,7 @@ mod tests {
             }
         }
 
-        // Real libp2p implementation will craete a timeout error if the peer does not
+        // Real libp2p implementation will create a timeout error if the peer does not
         // respond. We need to simulate that, otherwise we end up with some undesirable
         // behaviours in Syncer.
         if !respond {
