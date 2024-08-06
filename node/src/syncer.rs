@@ -807,63 +807,76 @@ mod tests {
     #[async_test]
     async fn syncing() {
         let mut gen = ExtendedHeaderGenerator::new();
-        let headers = gen.next_many(26);
+        let headers = gen.next_many(1500);
 
-        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[25].clone()).await;
-        assert_syncing(&syncer, &store, &[26..=26], 26).await;
+        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[1499].clone()).await;
+        assert_syncing(&syncer, &store, &[1500..=1500], 1500).await;
 
-        // Syncer will sync all headers up to the head
-        handle_session_batch(&mut p2p_mock, &headers, 1..=25, true).await;
-        assert_syncing(&syncer, &store, &[1..=26], 26).await;
+        // Syncer is syncing backwards from the network head (batch 1)
+        handle_session_batch(&mut p2p_mock, &headers, 988..=1499, true).await;
+        assert_syncing(&syncer, &store, &[988..=1500], 1500).await;
+
+        // Syncer is syncing backwards from the network head (batch 2)
+        handle_session_batch(&mut p2p_mock, &headers, 476..=987, true).await;
+        assert_syncing(&syncer, &store, &[476..=1500], 1500).await;
+
+        // New HEAD was received by HeaderSub (height 1501)
+        let header1501 = gen.next();
+        p2p_mock.announce_new_head(header1501.clone());
+        // Height 1501 is adjacent to the last header of Store, so it is appended
+        // immediately
+        assert_syncing(&syncer, &store, &[476..=1501], 1501).await;
+
+        // Syncer is syncing backwards from the network head (batch 3, partial)
+        handle_session_batch(&mut p2p_mock, &headers, 1..=475, true).await;
+        assert_syncing(&syncer, &store, &[1..=1501], 1501).await;
 
         // Syncer is fulling synced and awaiting for events
         p2p_mock.expect_no_cmd().await;
 
-        // New HEAD was received by HeaderSub (height 27)
-        let header27 = gen.next();
-        p2p_mock.announce_new_head(header27.clone());
-        // Height 27 is adjacent to the last header of Store, so it is appended
-        // immediately
-        assert_syncing(&syncer, &store, &[1..=27], 27).await;
+        // New HEAD was received by HeaderSub (height 1502), it should be appended immediately
+        let header1502 = gen.next();
+        p2p_mock.announce_new_head(header1502.clone());
+        assert_syncing(&syncer, &store, &[1..=1502], 1502).await;
         p2p_mock.expect_no_cmd().await;
 
-        // New HEAD was received by HeaderSub (height 30), it should NOT be appended
-        let header_28_30 = gen.next_many(3);
-        p2p_mock.announce_new_head(header_28_30[2].clone());
-        assert_syncing(&syncer, &store, &[1..=27], 30).await;
+        // New HEAD was received by HeaderSub (height 1506), it should NOT be appended
+        let headers_1503_1506 = gen.next_many(3);
+        p2p_mock.announce_new_head(headers_1503_1506[2].clone());
+        assert_syncing(&syncer, &store, &[1..=1502], 1505).await;
 
         // New HEAD is not adjacent to store, so Syncer requests a range
-        handle_session_batch(&mut p2p_mock, &header_28_30, 28..=30, true).await;
-        assert_syncing(&syncer, &store, &[1..=30], 30).await;
+        handle_session_batch(&mut p2p_mock, &headers_1503_1506, 1503..=1505, true).await;
+        assert_syncing(&syncer, &store, &[1..=1505], 1505).await;
 
-        // New HEAD was received by HeaderSub (height 1058), it should NOT be appended
-        let mut headers = gen.next_many(1028);
-        p2p_mock.announce_new_head(headers.last().cloned().unwrap());
-        assert_syncing(&syncer, &store, &[1..=30], 1058).await;
+        // New HEAD was received by HeaderSub (height 3000), it should NOT be appended
+        let mut headers = gen.next_many(1495);
+        p2p_mock.announce_new_head(headers[1494].clone());
+        assert_syncing(&syncer, &store, &[1..=1505], 3000).await;
 
-        // Syncer requested the first batch, anchored on already existing range
-        handle_session_batch(&mut p2p_mock, &headers, 31..=542, true).await;
-        assert_syncing(&syncer, &store, &[1..=542], 1058).await;
+        // Syncer is syncing forwards, anchored on a range already in store (batch 1)
+        handle_session_batch(&mut p2p_mock, &headers, 1506..=2017, true).await;
+        assert_syncing(&syncer, &store, &[1..=2017], 3000).await;
 
-        // New head from header sub added
+        // New head from header sub added, should NOT be appended
         headers.push(gen.next());
-        p2p_mock.announce_new_head(headers.last().cloned().unwrap());
-        assert_syncing(&syncer, &store, &[1..=542], 1059).await;
+        p2p_mock.announce_new_head(headers.last().unwrap().clone());
+        assert_syncing(&syncer, &store, &[1..=2017], 3001).await;
 
-        // Syncer requested the second batch
-        handle_session_batch(&mut p2p_mock, &headers, 543..=1054, true).await;
-        assert_syncing(&syncer, &store, &[1..=1054], 1059).await;
+        // Syncer continues syncing forwads (batch 2)
+        handle_session_batch(&mut p2p_mock, &headers, 2018..=2529, true).await;
+        assert_syncing(&syncer, &store, &[1..=2529], 3001).await;
 
-        // Syncer requested the last batch
-        handle_session_batch(&mut p2p_mock, &headers, 1055..=1059, true).await;
-        assert_syncing(&syncer, &store, &[1..=1059], 1059).await;
+        // Syncer continues syncing forwards, should include the new head received via HeaderSub (batch 3)
+        handle_session_batch(&mut p2p_mock, &headers, 2530..=3001, true).await;
+        assert_syncing(&syncer, &store, &[1..=3001], 3001).await;
 
         // Syncer is fulling synced and awaiting for events
         p2p_mock.expect_no_cmd().await;
     }
 
     #[async_test]
-    async fn syncing_window_edge() {
+    async fn window_edge() {
         let month_and_day_ago = Duration::from_secs(31 * 24 * 60 * 60);
         let mut gen = ExtendedHeaderGenerator::new();
         gen.set_time((Time::now() - month_and_day_ago).expect("to not underflow"));
