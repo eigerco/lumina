@@ -839,13 +839,13 @@ mod tests {
         assert_syncing(&syncer, &store, &[1..=1502], 1502).await;
         p2p_mock.expect_no_cmd().await;
 
-        // New HEAD was received by HeaderSub (height 1506), it should NOT be appended
+        // New HEAD was received by HeaderSub (height 1505), it should NOT be appended
         let headers_1503_1506 = gen.next_many(3);
-        p2p_mock.announce_new_head(headers_1503_1506[2].clone());
+        p2p_mock.announce_new_head(headers_1503_1505[2].clone());
         assert_syncing(&syncer, &store, &[1..=1502], 1505).await;
 
         // New HEAD is not adjacent to store, so Syncer requests a range
-        handle_session_batch(&mut p2p_mock, &headers_1503_1506, 1503..=1505, true).await;
+        handle_session_batch(&mut p2p_mock, &headers_1503_1505, 1503..=1505, true).await;
         assert_syncing(&syncer, &store, &[1..=1505], 1505).await;
 
         // New HEAD was received by HeaderSub (height 3000), it should NOT be appended
