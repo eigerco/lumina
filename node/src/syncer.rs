@@ -840,7 +840,7 @@ mod tests {
         p2p_mock.expect_no_cmd().await;
 
         // New HEAD was received by HeaderSub (height 1505), it should NOT be appended
-        let headers_1503_1506 = gen.next_many(3);
+        let headers_1503_1505 = gen.next_many(3);
         p2p_mock.announce_new_head(headers_1503_1505[2].clone());
         assert_syncing(&syncer, &store, &[1..=1502], 1505).await;
 
