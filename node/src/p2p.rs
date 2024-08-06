@@ -255,7 +255,8 @@ impl P2p {
         let cancellation_token = CancellationToken::new();
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
 
-        let mut worker = Worker::new(args, cancellation_token.child_token(), cmd_rx, peer_tracker)?;
+        let mut worker =
+            Worker::new(args, cancellation_token.child_token(), cmd_rx, peer_tracker).await?;
 
         let join_handle = spawn(async move {
             worker.run().await;

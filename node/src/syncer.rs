@@ -339,7 +339,7 @@ where
                 res = header_sub_recv(self.header_sub_rx.as_mut()) => {
                     let header = res?;
                     self.on_header_sub_message(header).await?;
-                    self.fetch_next_batch(&headers_tx).await?;
+                    self.fetch_next_batch().await?;
                 }
                 Some(cmd) = self.cmd_rx.recv() => {
                     self.on_cmd(cmd).await?;
