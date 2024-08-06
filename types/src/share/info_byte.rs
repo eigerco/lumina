@@ -4,9 +4,10 @@ use crate::{Error, Result};
 /// The part of [`Share`] containing the `version` and `sequence_start` information.
 ///
 /// [`InfoByte`] is a single byte with the following structure:
+///
 ///  - the first 7 bits are reserved for version information in big endian form
 ///  - last bit is a `sequence_start` flag. If it's set then this [`Share`] is
-///  a first of a sequence, otherwise it's a continuation share.
+///    a first of a sequence, otherwise it's a continuation share.
 ///
 ///  [`Share`]: crate::Share
 #[repr(transparent)]

@@ -50,7 +50,6 @@ wasm-bindgen = "0.2.92"
 wasm-bindgen-futures = "0.4.42"
 web-sys = { version = "0.3.69", features = [
   "BroadcastChannel",
-  "Crypto",
   "DedicatedWorkerGlobalScope",
   "Headers",
   "MessageEvent",
@@ -66,6 +65,7 @@ web-sys = { version = "0.3.69", features = [
   "Window",
   "Worker",
   "WorkerGlobalScope",
+  "WorkerNavigator",
   "WorkerOptions",
   "WorkerType",
 ] }

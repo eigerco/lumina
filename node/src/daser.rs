@@ -56,7 +56,7 @@ const SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
 
-/// Representation of all the errors that can occur from `Daser` component.
+/// Representation of all the errors that can occur in `Daser` component.
 #[derive(Debug, thiserror::Error)]
 pub enum DaserError {
     /// An error propagated from the `P2p` component.

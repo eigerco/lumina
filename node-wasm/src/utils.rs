@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::net::{IpAddr, Ipv4Addr};
 
+use js_sys::Math;
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
 use lumina_node::network;
@@ -11,15 +12,14 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use tracing::{info, warn};
 use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::fmt::format::Pretty;
 use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::prelude::*;
-use tracing_web::{performance_layer, MakeConsoleWriter};
+use tracing_web::MakeConsoleWriter;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    Crypto, DedicatedWorkerGlobalScope, Navigator, Request, RequestInit, RequestMode, Response,
-    SharedWorker, SharedWorkerGlobalScope, Worker,
+    DedicatedWorkerGlobalScope, Request, RequestInit, RequestMode, Response, SharedWorker,
+    SharedWorkerGlobalScope, Worker,
 };
 
 use crate::error::{Context, Error, Result};
@@ -49,12 +49,8 @@ pub fn setup_logging() {
         .with_timer(UtcTime::rfc_3339()) // std::time is not available in browsers
         .with_writer(MakeConsoleWriter) // write events to the console
         .with_filter(LevelFilter::INFO); // TODO: allow customizing the log level
-    let perf_layer = performance_layer().with_details_from_fields(Pretty::default());
 
-    tracing_subscriber::registry()
-        .with(fmt_layer)
-        .with(perf_layer)
-        .init();
+    tracing_subscriber::registry().with(fmt_layer).init();
 }
 
 impl From<Network> for network::Network {
@@ -161,6 +157,16 @@ where
 /// have. This function doesn't `await` on JavaScript promise, as that would block until user
 /// either allows or blocks our request in a prompt (and we cannot do much with the result anyway).
 pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
+    let storage_manager = if let Some(window) = web_sys::window() {
+        window.navigator().storage()
+    } else if Worker::is_worker_type() {
+        Worker::worker_self().navigator().storage()
+    } else if SharedWorker::is_worker_type() {
+        SharedWorker::worker_self().navigator().storage()
+    } else {
+        return Err(Error::new("`navigator.storage` not found in global scope"));
+    };
+
     let fullfiled = Closure::once(move |granted: JsValue| {
         if granted.is_truthy() {
             info!("Storage persistence acquired: {:?}", granted);
@@ -173,10 +179,7 @@ pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
     });
 
     // don't drop the promise, we'll log the result and hope the user clicked the right button
-    let _promise = get_navigator()?
-        .storage()
-        .persist()?
-        .then2(&fullfiled, &rejected);
+    let _promise = storage_manager.persist()?.then2(&fullfiled, &rejected);
 
     // stop rust from dropping them
     fullfiled.forget();
@@ -186,29 +189,50 @@ pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
 }
 
 const CHROME_USER_AGENT_DETECTION_STR: &str = "Chrome/";
+const FIREFOX_USER_AGENT_DETECTION_STR: &str = "Firefox/";
+const SAFARI_USER_AGENT_DETECTION_STR: &str = "Safari/";
 
-// Currently, there's an issue with SharedWorkers on Chrome where restarting Lumina's worker
-// causes all network connections to fail. Until that's resolved detect chrome and apply
-// a workaround.
+pub(crate) fn get_user_agent() -> Result<String, Error> {
+    if let Some(window) = web_sys::window() {
+        Ok(window.navigator().user_agent()?)
+    } else if Worker::is_worker_type() {
+        Ok(Worker::worker_self().navigator().user_agent()?)
+    } else if SharedWorker::is_worker_type() {
+        Ok(SharedWorker::worker_self().navigator().user_agent()?)
+    } else {
+        Err(Error::new(
+            "`navigator.user_agent` not found in global scope",
+        ))
+    }
+}
+
+#[allow(dead_code)]
 pub(crate) fn is_chrome() -> Result<bool, Error> {
-    get_navigator()?
-        .user_agent()
-        .context("could not get UserAgent from Navigator")
-        .map(|user_agent| user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
+    let user_agent = get_user_agent()?;
+    Ok(user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
 }
 
-pub(crate) fn get_navigator() -> Result<Navigator, Error> {
-    js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("navigator"))
-        .context("failed to get `navigator` from global object")?
-        .dyn_into::<Navigator>()
-        .context("`navigator` is not instanceof `Navigator`")
+pub(crate) fn is_firefox() -> Result<bool, Error> {
+    let user_agent = get_user_agent()?;
+    Ok(user_agent.contains(FIREFOX_USER_AGENT_DETECTION_STR))
 }
 
-pub(crate) fn get_crypto() -> Result<Crypto, Error> {
-    js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("crypto"))
-        .context("failed to get `crypto` from global object")?
-        .dyn_into::<web_sys::Crypto>()
-        .context("`crypto` is not `Crypto` type")
+pub(crate) fn is_safari() -> Result<bool, Error> {
+    let user_agent = get_user_agent()?;
+    // Chrome contains `Safari/`, so make sure user agent doesn't contain `Chrome/`
+    Ok(user_agent.contains(SAFARI_USER_AGENT_DETECTION_STR)
+        && !user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
+}
+
+pub(crate) fn shared_workers_supported() -> Result<bool, Error> {
+    // For chrome we default to running in a dedicated Worker because:
+    // 1. Chrome Android does not support SharedWorkers at all
+    // 2. On desktop Chrome, restarting Lumina's worker causes all network connections to fail.
+    Ok(is_firefox()? || is_safari()?)
+}
+
+pub(crate) fn random_id() -> u32 {
+    (Math::random() * f64::from(u32::MAX)).floor() as u32
 }
 
 async fn fetch(url: &str, opts: &RequestInit, headers: &[(&str, &str)]) -> Result<Response, Error> {

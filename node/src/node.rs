@@ -1,7 +1,7 @@
 //! Node that connects to Celestia's P2P network.
 //!
-//! Node will connect to Celestia's P2P network then will proceed
-//! with synchronization and data sampling of the blocks.
+//! Upon creation, `Node` will try to connect to Celestia's P2P network
+//! and then proceed with synchronization and data sampling of the blocks.
 
 use std::ops::RangeBounds;
 use std::sync::Arc;
@@ -16,12 +16,14 @@ use celestia_types::ExtendedHeader;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
+use tokio::select;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::daser::{Daser, DaserArgs};
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
+use crate::executor::spawn;
 use crate::executor::spawn_cancellable;
 use crate::p2p::{P2p, P2pArgs};
 use crate::store::{SamplingMetadata, Store, StoreError};
@@ -32,7 +34,7 @@ pub use crate::p2p::{HeaderExError, P2pError};
 pub use crate::peer_tracker::PeerTrackerInfo;
 pub use crate::syncer::{SyncerError, SyncingInfo};
 
-/// Alias for a [`Result`] with the error type [`NodeError`]
+/// Alias of [`Result`] with [`NodeError`] error type
 ///
 /// [`Result`]: std::result::Result
 pub type Result<T, E = NodeError> = std::result::Result<T, E>;
@@ -117,15 +119,18 @@ where
         let event_sub = event_channel.subscribe();
         let store = Arc::new(config.store);
 
-        let p2p = Arc::new(P2p::start(P2pArgs {
-            network_id: config.network_id,
-            local_keypair: config.p2p_local_keypair,
-            bootnodes: config.p2p_bootnodes,
-            listen_on: config.p2p_listen_on,
-            blockstore: config.blockstore,
-            store: store.clone(),
-            event_pub: event_channel.publisher(),
-        })?);
+        let p2p = Arc::new(
+            P2p::start(P2pArgs {
+                network_id: config.network_id,
+                local_keypair: config.p2p_local_keypair,
+                bootnodes: config.p2p_bootnodes,
+                listen_on: config.p2p_listen_on,
+                blockstore: config.blockstore,
+                store: store.clone(),
+                event_pub: event_channel.publisher(),
+            })
+            .await?,
+        );
 
         let syncer = Arc::new(Syncer::start(SyncerArgs {
             store: store.clone(),
@@ -320,8 +325,8 @@ where
     }
 
     /// Get the latest header announced in the network.
-    pub fn get_network_head_header(&self) -> Option<ExtendedHeader> {
-        self.p2p.header_sub_watcher().borrow().clone()
+    pub async fn get_network_head_header(&self) -> Result<Option<ExtendedHeader>> {
+        Ok(self.p2p.get_network_head().await?)
     }
 
     /// Get the latest locally synced header.
