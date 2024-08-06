@@ -89,6 +89,8 @@ pub enum HeaderExError {
     OutboundFailure(OutboundFailure),
 
     /// Request cancelled because [`Node`] is stopping.
+    ///
+    /// [`Node`]: crate::node::Node
     #[error("Request cancelled because `Node` is stopping")]
     RequestCancelled,
 }
