@@ -273,7 +273,7 @@ impl P2p {
 
     /// Creates and starts a new mocked p2p handler.
     #[cfg(test)]
-    pub fn mocked() -> (Self, crate::test_utils::MockP2pHandle) {
+    pub(crate) fn mocked() -> (Self, crate::test_utils::MockP2pHandle) {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (peer_tracker_tx, peer_tracker_rx) = watch::channel(PeerTrackerInfo::default());
         let cancellation_token = CancellationToken::new();

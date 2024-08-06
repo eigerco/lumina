@@ -88,14 +88,15 @@ impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
 /// A handle to the mocked [`P2p`] component.
 ///
 /// [`P2p`]: crate::p2p::P2p
-pub struct MockP2pHandle {
-    #[allow(dead_code)]
+#[allow(dead_code)]
+pub(crate) struct MockP2pHandle {
     pub(crate) cmd_tx: mpsc::Sender<P2pCmd>,
     pub(crate) cmd_rx: mpsc::Receiver<P2pCmd>,
     pub(crate) header_sub_tx: Option<mpsc::Sender<ExtendedHeader>>,
     pub(crate) peer_tracker_tx: watch::Sender<PeerTrackerInfo>,
 }
 
+#[allow(dead_code)]
 impl MockP2pHandle {
     /// Simulate a new connected peer.
     pub fn announce_peer_connected(&self) {
