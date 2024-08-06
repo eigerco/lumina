@@ -29,7 +29,6 @@ use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
 use crate::p2p::{P2p, P2pError};
-use crate::store::utils::calculate_range_to_fetch;
 use crate::store::{Store, StoreError};
 use crate::utils::OneshotSenderExt;
 
@@ -195,7 +194,6 @@ where
     subjective_head_height: Option<u64>,
     batch_size: u64,
     ongoing_batch: Option<Ongoing>,
-    estimated_syncing_window_end: Option<u64>,
 }
 
 struct Ongoing {
@@ -222,7 +220,6 @@ where
             subjective_head_height: None,
             batch_size: args.batch_size,
             ongoing_batch: None,
-            estimated_syncing_window_end: None,
         })
     }
 
@@ -493,7 +490,6 @@ where
         let next_batch = calculate_range_to_fetch(
             subjective_head_height,
             store_ranges.as_ref(),
-            self.estimated_syncing_window_end,
             self.batch_size,
         );
 
@@ -506,7 +502,6 @@ where
         match self.store.get_by_height(next_batch.end() + 1).await {
             Ok(known_header) => {
                 if !in_syncing_window(&known_header) {
-                    self.estimated_syncing_window_end = Some(known_header.height().value());
                     return Ok(());
                 }
             }
@@ -594,6 +589,34 @@ where
     }
 }
 
+/// based on the stored headers and current network head height, calculate range of headers that
+/// should be fetched from the network, anchored on already existing header range in store
+fn calculate_range_to_fetch(
+    subjective_head_height: u64,
+    store_headers: &[BlockRange],
+    limit: u64,
+) -> BlockRange {
+    let mut store_headers_iter = store_headers.iter().rev();
+
+    let Some(store_head_range) = store_headers_iter.next() else {
+        // empty store, we're missing everything
+        let range = 1..=subjective_head_height;
+        return range.truncate_right(limit);
+    };
+
+    if store_head_range.end() < &subjective_head_height {
+        // if we haven't caught up with the network head, start from there
+        let range = store_head_range.end() + 1..=subjective_head_height;
+        return range.truncate_right(limit);
+    }
+
+    // there exists a range contiguous with network head. inspect previous range end
+    let penultimate_range_end = store_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
+
+    let range = penultimate_range_end + 1..=store_head_range.start().saturating_sub(1);
+    range.truncate_left(limit)
+}
+
 fn in_syncing_window(header: &ExtendedHeader) -> bool {
     let syncing_window_start = Time::now().checked_sub(SYNCING_WINDOW).unwrap_or_else(|| {
         warn!("underflow when computing syncing window start, defaulting to unix epoch");
@@ -663,6 +686,77 @@ mod tests {
     use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
 
+    #[test]
+    fn calculate_range_to_fetch_test_header_limit() {
+        let head_height = 1024;
+        let ranges = [256..=512];
+
+        let fetch_range = calculate_range_to_fetch(head_height, &ranges, 16);
+        assert_eq!(fetch_range, 513..=528);
+
+        let fetch_range = calculate_range_to_fetch(head_height, &ranges, 511);
+        assert_eq!(fetch_range, 513..=1023);
+        let fetch_range = calculate_range_to_fetch(head_height, &ranges, 512);
+        assert_eq!(fetch_range, 513..=1024);
+        let fetch_range = calculate_range_to_fetch(head_height, &ranges, 513);
+        assert_eq!(fetch_range, 513..=1024);
+
+        let fetch_range = calculate_range_to_fetch(head_height, &ranges, 1024);
+        assert_eq!(fetch_range, 513..=1024);
+    }
+
+    #[test]
+    fn calculate_range_to_fetch_empty_store() {
+        let fetch_range = calculate_range_to_fetch(1, &[], 100);
+        assert_eq!(fetch_range, 1..=1);
+
+        let fetch_range = calculate_range_to_fetch(100, &[], 10);
+        assert_eq!(fetch_range, 1..=10);
+
+        let fetch_range = calculate_range_to_fetch(100, &[], 50);
+        assert_eq!(fetch_range, 1..=50);
+    }
+
+    #[test]
+    fn calculate_range_to_fetch_fully_synced() {
+        let fetch_range = calculate_range_to_fetch(1, &[1..=1], 100);
+        assert!(fetch_range.is_empty());
+
+        let fetch_range = calculate_range_to_fetch(100, &[1..=100], 10);
+        assert!(fetch_range.is_empty());
+
+        let fetch_range = calculate_range_to_fetch(100, &[1..=100], 10);
+        assert!(fetch_range.is_empty());
+    }
+
+    #[test]
+    fn calculate_range_to_fetch_caught_up() {
+        let head_height = 4000;
+
+        let fetch_range = calculate_range_to_fetch(head_height, &[3000..=4000], 500);
+        assert_eq!(fetch_range, 2500..=2999);
+        let fetch_range = calculate_range_to_fetch(head_height, &[500..=1000, 3000..=4000], 500);
+        assert_eq!(fetch_range, 2500..=2999);
+        let fetch_range = calculate_range_to_fetch(head_height, &[2500..=2800, 3000..=4000], 500);
+        assert_eq!(fetch_range, 2801..=2999);
+        let fetch_range = calculate_range_to_fetch(head_height, &[2500..=2800, 3000..=4000], 500);
+        assert_eq!(fetch_range, 2801..=2999);
+        let fetch_range = calculate_range_to_fetch(head_height, &[300..=4000], 500);
+        assert_eq!(fetch_range, 1..=299);
+    }
+
+    #[test]
+    fn calculate_range_to_fetch_catching_up() {
+        let head_height = 4000;
+
+        let fetch_range = calculate_range_to_fetch(head_height, &[2000..=3000], 500);
+        assert_eq!(fetch_range, 3001..=3500);
+        let fetch_range = calculate_range_to_fetch(head_height, &[2000..=3500], 500);
+        assert_eq!(fetch_range, 3501..=4000);
+        let fetch_range = calculate_range_to_fetch(head_height, &[1..=2998, 3000..=3800], 500);
+        assert_eq!(fetch_range, 3801..=4000);
+    }
+
     #[async_test]
     async fn init_without_genesis_hash() {
         let events = EventChannel::new();
@@ -712,63 +806,76 @@ mod tests {
     #[async_test]
     async fn syncing() {
         let mut gen = ExtendedHeaderGenerator::new();
-        let headers = gen.next_many(26);
+        let headers = gen.next_many(1500);
 
-        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[25].clone()).await;
-        assert_syncing(&syncer, &store, &[26..=26], 26).await;
+        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[1499].clone()).await;
+        assert_syncing(&syncer, &store, &[1500..=1500], 1500).await;
 
-        // Syncer will sync all headers up to the head
-        handle_session_batch(&mut p2p_mock, &headers, 1..=25, true).await;
-        assert_syncing(&syncer, &store, &[1..=26], 26).await;
+        // Syncer is syncing backwards from the network head (batch 1)
+        handle_session_batch(&mut p2p_mock, &headers, 988..=1499, true).await;
+        assert_syncing(&syncer, &store, &[988..=1500], 1500).await;
+
+        // Syncer is syncing backwards from the network head (batch 2)
+        handle_session_batch(&mut p2p_mock, &headers, 476..=987, true).await;
+        assert_syncing(&syncer, &store, &[476..=1500], 1500).await;
+
+        // New HEAD was received by HeaderSub (height 1501)
+        let header1501 = gen.next();
+        p2p_mock.announce_new_head(header1501.clone());
+        // Height 1501 is adjacent to the last header of Store, so it is appended
+        // immediately
+        assert_syncing(&syncer, &store, &[476..=1501], 1501).await;
+
+        // Syncer is syncing backwards from the network head (batch 3, partial)
+        handle_session_batch(&mut p2p_mock, &headers, 1..=475, true).await;
+        assert_syncing(&syncer, &store, &[1..=1501], 1501).await;
 
         // Syncer is fulling synced and awaiting for events
         p2p_mock.expect_no_cmd().await;
 
-        // New HEAD was received by HeaderSub (height 27)
-        let header27 = gen.next();
-        p2p_mock.announce_new_head(header27.clone());
-        // Height 27 is adjacent to the last header of Store, so it is appended
-        // immediately
-        assert_syncing(&syncer, &store, &[1..=27], 27).await;
+        // New HEAD was received by HeaderSub (height 1502), it should be appended immediately
+        let header1502 = gen.next();
+        p2p_mock.announce_new_head(header1502.clone());
+        assert_syncing(&syncer, &store, &[1..=1502], 1502).await;
         p2p_mock.expect_no_cmd().await;
 
-        // New HEAD was received by HeaderSub (height 30), it should NOT be appended
-        let header_28_30 = gen.next_many(3);
-        p2p_mock.announce_new_head(header_28_30[2].clone());
-        assert_syncing(&syncer, &store, &[1..=27], 30).await;
+        // New HEAD was received by HeaderSub (height 1505), it should NOT be appended
+        let headers_1503_1505 = gen.next_many(3);
+        p2p_mock.announce_new_head(headers_1503_1505[2].clone());
+        assert_syncing(&syncer, &store, &[1..=1502], 1505).await;
 
         // New HEAD is not adjacent to store, so Syncer requests a range
-        handle_session_batch(&mut p2p_mock, &header_28_30, 28..=30, true).await;
-        assert_syncing(&syncer, &store, &[1..=30], 30).await;
+        handle_session_batch(&mut p2p_mock, &headers_1503_1505, 1503..=1505, true).await;
+        assert_syncing(&syncer, &store, &[1..=1505], 1505).await;
 
-        // New HEAD was received by HeaderSub (height 1058), it SHOULD be appended as it's adjacent
-        let mut headers = gen.next_many(1028);
-        p2p_mock.announce_new_head(headers.last().cloned().unwrap());
-        assert_syncing(&syncer, &store, &[1..=30], 1058).await;
+        // New HEAD was received by HeaderSub (height 3000), it should NOT be appended
+        let mut headers = gen.next_many(1495);
+        p2p_mock.announce_new_head(headers[1494].clone());
+        assert_syncing(&syncer, &store, &[1..=1505], 3000).await;
 
-        // Syncer requested the first batch
-        handle_session_batch(&mut p2p_mock, &headers, 547..=1058, true).await;
-        assert_syncing(&syncer, &store, &[1..=30, 547..=1058], 1058).await;
+        // Syncer is syncing forwards, anchored on a range already in store (batch 1)
+        handle_session_batch(&mut p2p_mock, &headers, 1506..=2017, true).await;
+        assert_syncing(&syncer, &store, &[1..=2017], 3000).await;
 
-        // New head from header sub added
+        // New head from header sub added, should NOT be appended
         headers.push(gen.next());
-        p2p_mock.announce_new_head(headers.last().cloned().unwrap());
-        assert_syncing(&syncer, &store, &[1..=30, 547..=1059], 1059).await;
+        p2p_mock.announce_new_head(headers.last().unwrap().clone());
+        assert_syncing(&syncer, &store, &[1..=2017], 3001).await;
 
-        // Syncer requested the second batch
-        handle_session_batch(&mut p2p_mock, &headers, 35..=546, true).await;
-        assert_syncing(&syncer, &store, &[1..=30, 35..=1059], 1059).await;
+        // Syncer continues syncing forwads (batch 2)
+        handle_session_batch(&mut p2p_mock, &headers, 2018..=2529, true).await;
+        assert_syncing(&syncer, &store, &[1..=2529], 3001).await;
 
-        // Syncer requested the last batch
-        handle_session_batch(&mut p2p_mock, &headers, 31..=34, true).await;
-        assert_syncing(&syncer, &store, &[1..=1059], 1059).await;
+        // Syncer continues syncing forwards, should include the new head received via HeaderSub (batch 3)
+        handle_session_batch(&mut p2p_mock, &headers, 2530..=3001, true).await;
+        assert_syncing(&syncer, &store, &[1..=3001], 3001).await;
 
         // Syncer is fulling synced and awaiting for events
         p2p_mock.expect_no_cmd().await;
     }
 
     #[async_test]
-    async fn syncing_window_edge() {
+    async fn window_edge() {
         let month_and_day_ago = Duration::from_secs(31 * 24 * 60 * 60);
         let mut gen = ExtendedHeaderGenerator::new();
         gen.set_time((Time::now() - month_and_day_ago).expect("to not underflow"));
