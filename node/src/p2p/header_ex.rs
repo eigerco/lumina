@@ -123,6 +123,10 @@ where
             .on_send_request(&mut self.req_resp, request, respond_to);
     }
 
+    pub(crate) fn stop(&mut self) {
+        self.client_handler.on_stop();
+    }
+
     fn on_to_swarm(
         &mut self,
         ev: ToSwarm<ReqRespEvent, THandlerInEvent<ReqRespBehaviour>>,

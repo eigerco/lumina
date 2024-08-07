@@ -757,6 +757,8 @@ where
                 }
             }
         }
+
+        self.swarm.behaviour_mut().header_ex.stop();
     }
 
     fn dial_bootnodes(&mut self) {
