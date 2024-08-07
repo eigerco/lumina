@@ -87,6 +87,12 @@ pub enum HeaderExError {
     /// Error when handling connection to the server.
     #[error("Outbound failure: {0}")]
     OutboundFailure(OutboundFailure),
+
+    /// Request cancelled because [`Node`] is stopping.
+    ///
+    /// [`Node`]: crate::node::Node
+    #[error("Request cancelled because `Node` is stopping")]
+    RequestCancelled,
 }
 
 impl<S> HeaderExBehaviour<S>
@@ -115,6 +121,10 @@ where
     ) {
         self.client_handler
             .on_send_request(&mut self.req_resp, request, respond_to);
+    }
+
+    pub(crate) fn stop(&mut self) {
+        self.client_handler.on_stop();
     }
 
     fn on_to_swarm(
@@ -338,6 +348,7 @@ impl ConnectionHandler for ConnHandler {
     }
 }
 
+// TODO: Make it cancellable
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct HeaderCodec;
 

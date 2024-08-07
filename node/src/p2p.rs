@@ -59,7 +59,7 @@ mod swarm;
 
 use crate::block_ranges::BlockRange;
 use crate::events::{EventPublisher, NodeEvent};
-use crate::executor::{self, spawn, Interval};
+use crate::executor::{self, spawn, Interval, JoinHandle};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
 use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihasher};
@@ -69,7 +69,7 @@ use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::Store;
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
-    OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt,
+    OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt, Token,
 };
 
 pub use crate::p2p::header_ex::HeaderExError;
@@ -173,7 +173,9 @@ impl From<oneshot::error::RecvError> for P2pError {
 /// Component responsible for the peer to peer networking handling.
 #[derive(Debug)]
 pub(crate) struct P2p {
+    cancellation_token: CancellationToken,
     cmd_tx: mpsc::Sender<P2pCmd>,
+    join_handle: JoinHandle,
     peer_tracker_info_watcher: watch::Receiver<PeerTrackerInfo>,
     local_peer_id: PeerId,
 }
@@ -229,7 +231,7 @@ pub(crate) enum P2pCmd {
         respond_to: OneshotResultSender<Vec<u8>, P2pError>,
     },
     GetNetworkCompromisedToken {
-        respond_to: oneshot::Sender<CancellationToken>,
+        respond_to: oneshot::Sender<Token>,
     },
     GetNetworkHead {
         respond_to: oneshot::Sender<Option<ExtendedHeader>>,
@@ -250,28 +252,39 @@ impl P2p {
         let peer_tracker = Arc::new(PeerTracker::new(args.event_pub.clone()));
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
 
+        let cancellation_token = CancellationToken::new();
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
-        let mut worker = Worker::new(args, cmd_rx, peer_tracker).await?;
 
-        spawn(async move {
+        let mut worker =
+            Worker::new(args, cancellation_token.child_token(), cmd_rx, peer_tracker).await?;
+
+        let join_handle = spawn(async move {
             worker.run().await;
         });
 
         Ok(P2p {
+            cancellation_token,
             cmd_tx,
+            join_handle,
             peer_tracker_info_watcher,
             local_peer_id,
         })
     }
 
     /// Creates and starts a new mocked p2p handler.
-    #[cfg(any(test, feature = "test-utils"))]
-    pub fn mocked() -> (Self, crate::test_utils::MockP2pHandle) {
+    #[cfg(test)]
+    pub(crate) fn mocked() -> (Self, crate::test_utils::MockP2pHandle) {
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let (peer_tracker_tx, peer_tracker_rx) = watch::channel(PeerTrackerInfo::default());
+        let cancellation_token = CancellationToken::new();
+
+        // Just a fake join_handle
+        let join_handle = spawn(async {});
 
         let p2p = P2p {
             cmd_tx: cmd_tx.clone(),
+            cancellation_token,
+            join_handle,
             peer_tracker_info_watcher: peer_tracker_rx,
             local_peer_id: PeerId::random(),
         };
@@ -284,6 +297,17 @@ impl P2p {
         };
 
         (p2p, handle)
+    }
+
+    /// Stop the worker.
+    pub fn stop(&self) {
+        // Singal the Worker to stop.
+        self.cancellation_token.cancel();
+    }
+
+    /// Wait until worker is completely stopped.
+    pub async fn join(&self) {
+        self.join_handle.join().await;
     }
 
     /// Local peer ID on the p2p network.
@@ -539,7 +563,7 @@ impl P2p {
     ///
     /// After this token is cancelled, the network should be treated as insincere
     /// and should not be trusted.
-    pub(crate) async fn get_network_compromised_token(&self) -> Result<CancellationToken> {
+    pub(crate) async fn get_network_compromised_token(&self) -> Result<Token> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::GetNetworkCompromisedToken { respond_to: tx })
@@ -556,6 +580,12 @@ impl P2p {
             .await?;
 
         Ok(rx.await?)
+    }
+}
+
+impl Drop for P2p {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
@@ -580,6 +610,7 @@ where
     B: Blockstore + 'static,
     S: Store + 'static,
 {
+    cancellation_token: CancellationToken,
     swarm: Swarm<Behaviour<B, S>>,
     header_sub_topic_hash: TopicHash,
     bad_encoding_fraud_sub_topic: TopicHash,
@@ -587,7 +618,7 @@ where
     peer_tracker: Arc<PeerTracker>,
     header_sub_state: Option<HeaderSubState>,
     bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, P2pError>>,
-    network_compromised_token: CancellationToken,
+    network_compromised_token: Token,
     store: Arc<S>,
     event_pub: EventPublisher,
     bootnodes: HashMap<PeerId, Vec<Multiaddr>>,
@@ -605,6 +636,7 @@ where
 {
     async fn new(
         args: P2pArgs<B, S>,
+        cancellation_token: CancellationToken,
         cmd_rx: mpsc::Receiver<P2pCmd>,
         peer_tracker: Arc<PeerTracker>,
     ) -> Result<Self, P2pError> {
@@ -667,6 +699,7 @@ where
         }
 
         Ok(Worker {
+            cancellation_token,
             cmd_rx,
             swarm,
             bad_encoding_fraud_sub_topic: bad_encoding_fraud_sub_topic.hash(),
@@ -674,7 +707,7 @@ where
             peer_tracker,
             header_sub_state: None,
             bitswap_queries: HashMap::new(),
-            network_compromised_token: CancellationToken::new(),
+            network_compromised_token: Token::new(),
             store: args.store,
             event_pub: args.event_pub,
             bootnodes,
@@ -693,6 +726,7 @@ where
 
         loop {
             select! {
+                _ = self.cancellation_token.cancelled() => break,
                 _ = peer_tracker_info_watcher.changed() => {
                     if peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
                         self.dial_bootnodes();
@@ -723,6 +757,8 @@ where
                 }
             }
         }
+
+        self.swarm.behaviour_mut().header_ex.stop();
     }
 
     fn dial_bootnodes(&mut self) {
@@ -839,7 +875,7 @@ where
                 self.on_get_shwap_cid(cid, respond_to);
             }
             P2pCmd::GetNetworkCompromisedToken { respond_to } => {
-                respond_to.maybe_send(self.network_compromised_token.child_token());
+                respond_to.maybe_send(self.network_compromised_token.clone())
             }
             P2pCmd::GetNetworkHead { respond_to } => {
                 let head = self
@@ -1102,7 +1138,7 @@ where
 
         warn!("Received a valid bad encoding fraud proof");
         // trigger cancellation for all services
-        self.network_compromised_token.cancel();
+        self.network_compromised_token.trigger();
 
         gossipsub::MessageAcceptance::Accept
     }
