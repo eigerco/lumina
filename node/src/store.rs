@@ -1035,7 +1035,7 @@ mod tests {
         store.insert(&headers[96..128]).await.unwrap();
         assert_store(&store, &headers, new_block_ranges([1..=64, 97..=128])).await;
 
-        store.remove_last().await.unwrap();
+        assert_eq!(store.remove_last().await.unwrap(), 1);
         assert_store(&store, &headers, new_block_ranges([2..=64, 97..=128])).await;
     }
 
@@ -1056,7 +1056,7 @@ mod tests {
         store.insert(&headers[65..128]).await.unwrap();
         assert_store(&store, &headers, new_block_ranges([1..=1, 66..=128])).await;
 
-        store.remove_last().await.unwrap();
+        assert_eq!(store.remove_last().await.unwrap(), 1);
         assert_store(&store, &headers, new_block_ranges([66..=128])).await;
     }
 
@@ -1065,7 +1065,7 @@ mod tests {
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
-    async fn tail_removal_last_one<S: Store>(
+    async fn tail_removal_remove_all<S: Store>(
         #[case]
         #[future(awt)]
         s: S,
@@ -1073,10 +1073,14 @@ mod tests {
         let store = s;
         let headers = ExtendedHeaderGenerator::new().next_many(66);
 
-        store.insert(&headers[65..=65]).await.unwrap();
-        assert_store(&store, &headers, new_block_ranges([66..=66])).await;
+        store.insert(&headers[..]).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=66])).await;
 
-        store.remove_last().await.unwrap();
+        for i in 1..=66 {
+            assert_eq!(store.remove_last().await.unwrap(), i);
+        }
+        
+        assert!(matches!(store.remove_last().await.unwrap_err(), StoreError::NotFound));
 
         let stored_ranges = store.get_stored_header_ranges().await.unwrap();
         assert!(stored_ranges.is_empty());
