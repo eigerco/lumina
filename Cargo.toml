@@ -10,7 +10,7 @@ celestia-proto = { version = "0.2.0", path = "proto" }
 celestia-rpc = { version = "0.2.0", path = "rpc", default-features = false }
 celestia-types = { version = "0.2.0", path = "types", default-features = false }
 libp2p = "0.54"
-nmt-rs = "0.2.1"
+nmt-rs = "0.2.2"
 celestia-tendermint = { version = "0.32.1", default-features = false }
 celestia-tendermint-proto = "0.32.1"
 
