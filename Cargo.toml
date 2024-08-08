@@ -28,6 +28,9 @@ libp2p = { git = "https://github.com/libp2p/rust-libp2p", rev = "60e32c9d3b4bee4
 libp2p-core = { git = "https://github.com/libp2p/rust-libp2p", rev = "60e32c9d3b4bee42ac698791e917e1587eaa1388" }
 libp2p-swarm = { git = "https://github.com/libp2p/rust-libp2p", rev = "60e32c9d3b4bee42ac698791e917e1587eaa1388" }
 
+# TODO: waiting for upstream to merge
+idb = { git = "https://github.com/fl0rek/idb", branch = "fix/db-reopen" }
+
 # Uncomment this if you need debug symbols in release.
 # Also check node-wasm's `Cargo.toml`.
 #[profile.release]
