@@ -645,11 +645,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "358358b19add120a5afc3dd1c8e9161d6d06c44dfec2ef8da58b7fe5c369c90d"
 dependencies = [
  "cid",
- "dashmap",
+ "dashmap 5.5.3",
  "js-sys",
  "multihash",
  "redb",
- "rexie",
+ "rexie 0.5.0",
  "thiserror",
  "tokio",
  "wasm-bindgen",
@@ -1134,6 +1134,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
 dependencies = [
  "cfg-if",
+ "hashbrown",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
+name = "dashmap"
+version = "6.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "804c8821570c3f8b70230c2ba75ffa5c0f9a4189b9a432b6656c536712acae28"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
  "hashbrown",
  "lock_api",
  "once_cell",
@@ -2164,6 +2178,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "idb"
+version = "0.6.2"
+source = "git+https://github.com/fl0rek/idb?branch=fix/db-reopen#69d6e7535a289a782bde640b178521c132614d44"
+dependencies = [
+ "js-sys",
+ "num-traits",
+ "thiserror",
+ "tokio",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "idna"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3156,12 +3183,13 @@ dependencies = [
  "celestia-tendermint-proto",
  "celestia-types",
  "cid",
- "dashmap",
+ "dashmap 6.0.1",
  "dotenvy",
  "function_name",
  "futures",
  "getrandom",
  "gloo-timers 0.3.0",
+ "idb",
  "instant",
  "libp2p",
  "libp2p-websocket-websys",
@@ -3170,7 +3198,7 @@ dependencies = [
  "prost",
  "rand",
  "redb",
- "rexie",
+ "rexie 0.6.1",
  "rstest",
  "rustls-pemfile",
  "rustls-pki-types",
@@ -4213,6 +4241,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rexie"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1dc7b9e833b7e246d7f88952c666336eb57f7c7e715b1e4756cbfbcddd3a5816"
+dependencies = [
+ "idb",
+ "thiserror",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "ring"
 version = "0.16.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4263,9 +4302,9 @@ dependencies = [
 
 [[package]]
 name = "rstest"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9afd55a67069d6e434a95161415f5beeada95a01c7b815508a82dcb0e1593682"
+checksum = "7b423f0e62bdd61734b67cd21ff50871dfaeb9cc74f869dcd6af974fbcb19936"
 dependencies = [
  "futures",
  "futures-timer",
@@ -4275,9 +4314,9 @@ dependencies = [
 
 [[package]]
 name = "rstest_macros"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4165dfae59a39dd41d8dec720d3cbfbc71f69744efb480a3920f5d4e0cc6798d"
+checksum = "c5e1711e7d14f74b12a58411c542185ef7fb7f2e7f8ee6e2940a883628522b42"
 dependencies = [
  "cfg-if",
  "glob",
