@@ -71,7 +71,7 @@ main() {
     --rpc.skip-auth=$SKIP_AUTH \
     --rpc.addr 0.0.0.0 \
     --core.ip validator \
-    --keyring.accname "$NODE_NAME" \
+    --keyring.keyname "$NODE_NAME" \
     --p2p.network "$P2P_NETWORK"
 }
 

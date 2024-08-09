@@ -1,5 +1,6 @@
 use celestia_types::nmt::{Namespace, NamespaceProof};
-use celestia_types::{blob::GasPrice, Blob, Commitment};
+use celestia_types::tx_config::TxConfig;
+use celestia_types::{Blob, Commitment};
 use jsonrpsee::proc_macros::rpc;
 
 #[rpc(client)]
@@ -39,5 +40,5 @@ pub trait Blob {
 
     /// Submit sends Blobs and reports the height in which they were included. Allows sending multiple Blobs atomically synchronously. Uses default wallet registered on the Node.
     #[method(name = "blob.Submit")]
-    async fn blob_submit(&self, blobs: &[Blob], gas_price: GasPrice) -> Result<u64, Error>;
+    async fn blob_submit(&self, blobs: &[Blob], opts: TxConfig) -> Result<u64, Error>;
 }

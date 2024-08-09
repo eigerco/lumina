@@ -1,7 +1,8 @@
 use celestia_types::state::{
     AccAddress, Address, Balance, QueryDelegationResponse, QueryRedelegationsResponse,
-    QueryUnbondingDelegationResponse, RawTx, TxResponse, Uint, ValAddress,
+    QueryUnbondingDelegationResponse, TxResponse, Uint, ValAddress,
 };
+use celestia_types::tx_config::TxConfig;
 use celestia_types::Blob;
 use jsonrpsee::proc_macros::rpc;
 
@@ -30,8 +31,7 @@ pub trait State {
         src: &ValAddress,
         dest: &ValAddress,
         amount: Uint,
-        fee: Uint,
-        gas_limit: u64,
+        config: TxConfig,
     ) -> Result<TxResponse, Error>;
 
     /// CancelUnbondingDelegation cancels a user's pending undelegation from a validator.
@@ -41,8 +41,7 @@ pub trait State {
         addr: &ValAddress,
         amount: Uint,
         height: Uint,
-        fee: Uint,
-        gas_limit: u64,
+        config: TxConfig,
     ) -> Result<TxResponse, Error>;
 
     /// Delegate sends a user's liquid tokens to a validator for delegation.
@@ -51,8 +50,7 @@ pub trait State {
         &self,
         addr: &ValAddress,
         amount: Uint,
-        fee: Uint,
-        gas_limit: u64,
+        config: TxConfig,
     ) -> Result<TxResponse, Error>;
 
     /// IsStopped checks if the Module's context has been stopped.
@@ -85,14 +83,9 @@ pub trait State {
     #[method(name = "state.SubmitPayForBlob")]
     async fn state_submit_pay_for_blob(
         &self,
-        fee: Uint,
-        gas_limit: u64,
         blobs: &[Blob],
+        config: TxConfig,
     ) -> Result<TxResponse, Error>;
-
-    /// SubmitTx submits the given transaction/message to the Celestia network and blocks until the tx is included in a block.
-    #[method(name = "state.SubmitTx")]
-    async fn state_submit_tx(&self, tx: &RawTx) -> Result<TxResponse, Error>;
 
     /// Transfer sends the given amount of coins from default wallet of the node to the given account address.
     #[method(name = "state.Transfer")]
@@ -100,8 +93,7 @@ pub trait State {
         &self,
         to: &AccAddress,
         amount: Uint,
-        fee: Uint,
-        gas_limit: u64,
+        config: TxConfig,
     ) -> Result<TxResponse, Error>;
 
     /// Undelegate undelegates a user's delegated tokens, unbonding them from the current validator.
@@ -110,7 +102,6 @@ pub trait State {
         &self,
         addr: &ValAddress,
         amount: Uint,
-        fee: Uint,
-        gas_limit: u64,
+        config: TxConfig,
     ) -> Result<TxResponse, Error>;
 }
