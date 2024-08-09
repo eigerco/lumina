@@ -8,7 +8,8 @@ use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
-use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
+use futures::Future;
+use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, Transaction, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
@@ -122,6 +123,28 @@ impl IndexedDbStore {
         })
     }
 
+    async fn write_tx<F, T, Args>(&self, stores: &[&str], args: Args, f: F) -> Result<T>
+        where
+        //for<'a> F: ManualClosure<'a, T>
+        //for<'a> F: ManualClosure<'a, T>
+        for<'a> F: AsyncSingleArgFnOnce<'a, Args, Output=Result<T>>
+        //F: FnOnce(&Transaction) -> Fut,
+        //Fut: Future<Output = Result<T>>,
+        //for<'a> T: 'a
+        //T: 'static
+    {
+        let tx = self.db.transaction(stores, TransactionMode::ReadWrite)?;
+        let res = f(&tx, args).await;
+
+        if res.is_ok() {
+            tx.commit().await?;
+        } else {
+            tx.abort().await?;
+        }
+
+        res
+    }
+
     /// Delete the persistent store.
     pub async fn delete_db(self) -> rexie::Result<()> {
         let name = self.db.name();
@@ -188,64 +211,79 @@ impl IndexedDbStore {
             .try_into()
             .map_err(|e| StoreInsertionError::HeadersVerificationFailed(e.to_string()))?;
 
-        let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
-            return Ok(());
-        };
-
-        let tx = self.db.transaction(
-            &[HEADER_STORE_NAME, RANGES_STORE_NAME],
-            TransactionMode::ReadWrite,
-        )?;
-        let header_store = tx.store(HEADER_STORE_NAME)?;
-        let ranges_store = tx.store(RANGES_STORE_NAME)?;
-
-        let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
-
-        let headers_range = head.height().value()..=tail.height().value();
-        let (prev_exists, next_exists) = header_ranges
-            .check_insertion_constraints(&headers_range)
-            .map_err(StoreInsertionError::ContraintsNotMet)?;
-
-        // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
-        verify_against_neighbours(
-            &header_store,
-            prev_exists.then_some(head),
-            next_exists.then_some(tail),
-        )
-        .await?;
-
-        for header in headers.as_ref() {
-            let hash = header.hash();
-            let hash_index = header_store.index(HASH_INDEX_NAME)?;
-            let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?)?;
-
-            if hash_index.count(Some(&jsvalue_hash_key)).await.unwrap_or(0) != 0 {
-                // TODO: Replace this with `StoredDataError` when we implement
-                // type-safe validation on insertion.
-                return Err(StoreInsertionError::HashExists(hash).into());
-            }
-
-            // make sure Result is Infallible, we unwrap it later
-            let serialized_header: std::result::Result<_, Infallible> = header.encode_vec();
-
-            let height = header.height().value();
-            let header_entry = ExtendedHeaderEntry {
-                height,
-                hash,
-                header: serialized_header.unwrap(),
-            };
-
-            let jsvalue_header = to_value(&header_entry)?;
-
-            header_store.add(&jsvalue_header, None).await?;
+        if headers.as_ref().is_empty() {
+            return Ok(())
         }
 
-        header_ranges
-            .insert_relaxed(headers_range)
-            .expect("invalid range");
-        set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
+        async fn inner(tx: &Transaction, headers: VerifiedExtendedHeaders) -> Result<ExtendedHeader> {
+            let head = headers.as_ref().first().expect("headers to not be empty");
+            let tail = headers.as_ref().last().expect("headers to not be empty");
+            /*
+            let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
+                return Ok(());
+            };
+            */
 
-        tx.commit().await?;
+        //async fn inner(tx: &Transaction) -> Result<()> {
+        /*
+            let tx = self.db.transaction(
+                &[HEADER_STORE_NAME, RANGES_STORE_NAME],
+                TransactionMode::ReadWrite,
+                )?;
+                */
+            let header_store = tx.store(HEADER_STORE_NAME)?;
+            let ranges_store = tx.store(RANGES_STORE_NAME)?;
+
+            let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+
+            let headers_range = head.height().value()..=tail.height().value();
+            let (prev_exists, next_exists) = header_ranges
+                .check_insertion_constraints(&headers_range)
+                .map_err(StoreInsertionError::ContraintsNotMet)?;
+
+            // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
+            verify_against_neighbours(
+                &header_store,
+                prev_exists.then_some(head),
+                next_exists.then_some(tail),
+                )
+                .await?;
+
+            for header in headers.as_ref() {
+                let hash = header.hash();
+                let hash_index = header_store.index(HASH_INDEX_NAME)?;
+                let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?)?;
+
+                if hash_index.count(Some(&jsvalue_hash_key)).await.unwrap_or(0) != 0 {
+                    // TODO: Replace this with `StoredDataError` when we implement
+                    // type-safe validation on insertion.
+                    return Err(StoreInsertionError::HashExists(hash).into());
+                }
+
+                // make sure Result is Infallible, we unwrap it later
+                let serialized_header: std::result::Result<_, Infallible> = header.encode_vec();
+
+                let height = header.height().value();
+                let header_entry = ExtendedHeaderEntry {
+                    height,
+                    hash,
+                    header: serialized_header.unwrap(),
+                };
+
+                let jsvalue_header = to_value(&header_entry)?;
+
+                header_store.add(&jsvalue_header, None).await?;
+            }
+
+            header_ranges
+                .insert_relaxed(headers_range)
+                .expect("invalid range");
+            set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
+
+            Ok(tail.clone())
+        }
+
+        let tail = self.write_tx( &[HEADER_STORE_NAME, RANGES_STORE_NAME], headers, inner).await?;
 
         if tail.height().value()
             > self
@@ -255,7 +293,7 @@ impl IndexedDbStore {
                 .map(|h| h.height().value())
                 .unwrap_or(0)
         {
-            self.head.replace(Some(tail.clone()));
+            self.head.replace(Some(tail));
         }
 
         self.header_added_notifier.notify_waiters();
@@ -291,61 +329,61 @@ impl IndexedDbStore {
         status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()> {
-        let tx = self.db.transaction(
-            &[SAMPLING_STORE_NAME, RANGES_STORE_NAME],
-            TransactionMode::ReadWrite,
-        )?;
-        let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
-        let ranges_store = tx.store(RANGES_STORE_NAME)?;
+        async fn inner(tx: &Transaction, (height, status, cids): (u64, SamplingStatus, Vec<Cid>)) -> Result<()> {
+            let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
+            let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
-        let header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
-        let mut accepted_ranges = get_ranges(&ranges_store, ACCEPTED_SAMPLING_RANGES_KEY).await?;
+            let header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+            let mut accepted_ranges = get_ranges(&ranges_store, ACCEPTED_SAMPLING_RANGES_KEY).await?;
 
-        if !header_ranges.contains(height) {
-            return Err(StoreError::NotFound);
-        }
-
-        let height_key = to_value(&height)?;
-        let previous_entry = sampling_store.get(&height_key).await?;
-
-        let new_entry = if previous_entry.is_falsy() {
-            SamplingMetadata { status, cids }
-        } else {
-            let mut value: SamplingMetadata = from_value(previous_entry)?;
-
-            value.status = status;
-
-            for cid in cids {
-                if !value.cids.contains(&cid) {
-                    value.cids.push(cid);
-                }
+            if !header_ranges.contains(height) {
+                return Err(StoreError::NotFound);
             }
 
-            value
-        };
+            let height_key = to_value(&height)?;
+            let previous_entry = sampling_store.get(&height_key).await?;
 
-        let metadata_jsvalue = to_value(&new_entry)?;
-        sampling_store
-            .put(&metadata_jsvalue, Some(&height_key))
-            .await?;
+            let new_entry = if previous_entry.is_falsy() {
+                SamplingMetadata { status, cids }
+            } else {
+                let mut value: SamplingMetadata = from_value(previous_entry)?;
 
-        match status {
-            SamplingStatus::Accepted => accepted_ranges
-                .insert_relaxed(height..=height)
-                .expect("invalid height"),
-            _ => accepted_ranges
-                .remove_relaxed(height..=height)
-                .expect("invalid height"),
+                value.status = status;
+
+                for cid in cids {
+                    if !value.cids.contains(&cid) {
+                        value.cids.push(cid);
+                    }
+                }
+
+                value
+            };
+
+            let metadata_jsvalue = to_value(&new_entry)?;
+            sampling_store
+                .put(&metadata_jsvalue, Some(&height_key))
+                .await?;
+
+            match status {
+                SamplingStatus::Accepted => accepted_ranges
+                    .insert_relaxed(height..=height)
+                    .expect("invalid height"),
+                _ => accepted_ranges
+                    .remove_relaxed(height..=height)
+                    .expect("invalid height"),
+            }
+
+            set_ranges(
+                &ranges_store,
+                ACCEPTED_SAMPLING_RANGES_KEY,
+                &accepted_ranges,
+                )
+                .await?;
+
+            Ok(())
         }
 
-        set_ranges(
-            &ranges_store,
-            ACCEPTED_SAMPLING_RANGES_KEY,
-            &accepted_ranges,
-        )
-        .await?;
-
-        tx.commit().await?;
+        self.write_tx(&[SAMPLING_STORE_NAME, RANGES_STORE_NAME], (height, status, cids), inner).await?;
 
         Ok(())
     }
@@ -380,33 +418,113 @@ impl IndexedDbStore {
     }
 
     async fn remove_last(&self) -> Result<u64> {
-        let tx = self.db.transaction(
-            &[HEADER_STORE_NAME, RANGES_STORE_NAME],
-            TransactionMode::ReadWrite,
-        )?;
+        async fn inner(tx: &Transaction, _: ()) -> Result<u64> {
+            let header_store = tx.store(HEADER_STORE_NAME)?;
+            let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
+            let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
-        let header_store = tx.store(HEADER_STORE_NAME)?;
-        let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
-        let ranges_store = tx.store(RANGES_STORE_NAME)?;
+            let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
 
-        let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+            let Some(height) = header_ranges.pop_tail() else {
+                return Err(StoreError::NotFound);
+            };
+            set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
 
-        let Some(height) = header_ranges.pop_tail() else {
-            return Err(StoreError::NotFound);
-        };
-        set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
+            let jsvalue_height = to_value(&height).expect("to create jsvalue");
+            let header = height_index.get(&jsvalue_height).await?;
 
-        let jsvalue_height = to_value(&height).expect("to create jsvalue");
-        let header = height_index.get(&jsvalue_height).await?;
+            let id = js_sys::Reflect::get(&header, &to_value("id")?)
+                .map_err(|_| StoreError::StoredDataError("could not get header's DB id".into()))?;
 
-        let id = js_sys::Reflect::get(&header, &to_value("id")?)
-            .map_err(|_| StoreError::StoredDataError("could not get header's DB id".into()))?;
+            header_store.delete(&id).await?;
 
-        header_store.delete(&id).await?;
-
-        Ok(height)
+            Ok(height)
+        }
+        self.write_tx(&[HEADER_STORE_NAME, RANGES_STORE_NAME], (), inner).await
     }
 }
+
+/*
+trait ManualClosure<'a, T> {
+    type Output: 'a + Future<Output=Result<T>> + Sized;
+
+    fn call(self, arg: &'a Transaction) -> Self::Output;
+}
+
+impl<'a, T, F, Fut> ManualClosure<'a, T> for F
+where
+    //T: 'a,
+    Fut: 'a + Future<Output=Result<T>>,
+    F: FnOnce(&'a Transaction) -> Fut
+{
+    type Output = Fut;
+
+    fn call(self, arg: &'a Transaction) -> Fut {
+        self(arg)
+    }
+}
+
+struct ConcreteManualClosure<'a, T, Args, F, Fut>
+    where 
+    Fut: 'a + Future<Output = Result<T>>,
+    F: FnOnce(&'a Transaction, Args) -> Fut
+{
+    function: F,
+    args: Args,
+    _fut: std::marker::PhantomData<&'a Fut>,
+}
+
+impl<'a, T, Args, F, Fut> ConcreteManualClosure<'a, T, Args, F, Fut> 
+    where 
+    Fut: 'a + Future<Output = Result<T>>,
+    F: FnOnce(&'a Transaction, Args) -> Fut
+{
+    fn new(f: F, args: Args) -> Self {
+        Self {
+            function: f,
+            args,
+            _fut: std::marker::PhantomData::default(),
+        }
+    }
+}
+
+impl<'a, T, Args, F, Fut> ManualClosure<'a, T> for ConcreteManualClosure<'a, T, Args, F, Fut>  
+where 
+Fut: 'a + Future<Output = Result<T>>,
+F: FnOnce(&'a Transaction, Args) -> Fut
+{
+    type Output = Fut;
+
+    fn call(self, arg: &'a Transaction) -> Self::Output {
+        (self.function)(arg, self.args)
+    }
+}
+*/
+
+trait AsyncSingleArgFnOnce<'a, Arg>: FnOnce(&'a Transaction, Arg) -> <Self as AsyncSingleArgFnOnce<Arg>>::Fut {
+    type Fut: Future<Output=<Self as AsyncSingleArgFnOnce<'a, Arg>>::Output>;
+    type Output;
+}
+
+impl<'a, Arg, F, Fut> AsyncSingleArgFnOnce<'a, Arg> for F
+where
+    F: FnOnce(&'a Transaction, Arg) -> Fut,
+    Fut: Future,
+{
+    type Fut = Fut;
+    type Output = Fut::Output;
+}
+
+/*
+impl <Arg, F, Fut, Closed> AsyncSingleArgFnOnce<Arg> for (Closed, F)
+    where 
+    F: FnOnce(Closed, Arg) -> Fut,
+    Fut: Future,
+{
+    type Fut = Fut;
+    type Output = Fut::Output;
+}
+*/
 
 #[async_trait]
 impl Store for IndexedDbStore {
