@@ -65,7 +65,7 @@ pub(crate) struct HeaderExConfig<'a, S> {
     pub header_store: Arc<S>,
 }
 
-/// Representation of all the errors that can occur when interacting with the header-ex.
+/// Representation of all the errors that can occur in `HeaderEx` component.
 #[derive(Debug, thiserror::Error)]
 pub enum HeaderExError {
     /// Header not found.
