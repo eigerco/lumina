@@ -43,7 +43,7 @@ use tracing::{debug, error, warn};
 use web_time::{Duration, Instant};
 
 use crate::events::{EventPublisher, NodeEvent};
-use crate::executor::spawn;
+use crate::executor::{spawn, JoinHandle};
 use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pError};
 use crate::store::{BlockRanges, SamplingStatus, Store, StoreError};
@@ -71,6 +71,7 @@ pub enum DaserError {
 /// Component responsible for data availability sampling of blocks from the network.
 pub(crate) struct Daser {
     cancellation_token: CancellationToken,
+    join_handle: JoinHandle,
 }
 
 /// Arguments used to configure the [`Daser`].
@@ -96,7 +97,7 @@ impl Daser {
         let event_pub = args.event_pub.clone();
         let mut worker = Worker::new(args, cancellation_token.child_token())?;
 
-        spawn(async move {
+        let join_handle = spawn(async move {
             if let Err(e) = worker.run().await {
                 error!("Daser stopped because of a fatal error: {e}");
 
@@ -106,20 +107,27 @@ impl Daser {
             }
         });
 
-        Ok(Daser { cancellation_token })
+        Ok(Daser {
+            cancellation_token,
+            join_handle,
+        })
     }
 
     /// Stop the worker.
     pub(crate) fn stop(&self) {
         // Singal the Worker to stop.
-        // TODO: Should we wait for the Worker to stop?
         self.cancellation_token.cancel();
+    }
+
+    /// Wait until worker is completely stopped.
+    pub(crate) async fn join(&self) {
+        self.join_handle.join().await;
     }
 }
 
 impl Drop for Daser {
     fn drop(&mut self) {
-        self.cancellation_token.cancel();
+        self.stop();
     }
 }
 

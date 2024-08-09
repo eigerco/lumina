@@ -3,6 +3,13 @@ use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::{PeerId, StreamProtocol};
 use tokio::sync::oneshot;
 
+mod fused_reusable_future;
+mod token;
+
+pub(crate) use fused_reusable_future::FusedReusableFuture;
+#[allow(unused_imports)]
+pub(crate) use token::{Token, TokenTriggerDropGuard};
+
 pub(crate) fn protocol_id(network: &str, protocol: &str) -> StreamProtocol {
     let network = network.trim_matches('/');
     let protocol = protocol.trim_matches('/');

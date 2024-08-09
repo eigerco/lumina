@@ -94,11 +94,6 @@ impl EventPublisher {
             file_line: location.line(),
         });
     }
-
-    /// Returns if there are any active subscribers or not.
-    pub(crate) fn has_subscribers(&self) -> bool {
-        self.tx.receiver_count() > 0
-    }
 }
 
 impl EventSubscriber {

@@ -1,10 +1,12 @@
 use celestia_proto::p2p::pb::HeaderRequest;
 use celestia_types::ExtendedHeader;
+use futures::future::BoxFuture;
+use futures::stream::{FuturesUnordered, StreamExt};
+use futures::FutureExt;
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 
 use crate::block_ranges::{BlockRange, BlockRangeExt};
-use crate::executor::spawn;
 use crate::p2p::header_ex::utils::HeaderRequestExt;
 use crate::p2p::{P2pCmd, P2pError};
 
@@ -13,13 +15,12 @@ pub(crate) const MAX_AMOUNT_PER_REQ: u64 = 64;
 pub(crate) const MAX_CONCURRENT_REQS: usize = 8;
 
 type Result<T, E = P2pError> = std::result::Result<T, E>;
+type TaskResult = (u64, u64, Result<Vec<ExtendedHeader>>);
 
 pub(crate) struct HeaderSession {
     to_fetch: Option<BlockRange>,
     cmd_tx: mpsc::Sender<P2pCmd>,
-    response_tx: mpsc::Sender<(u64, u64, Result<Vec<ExtendedHeader>>)>,
-    response_rx: mpsc::Receiver<(u64, u64, Result<Vec<ExtendedHeader>>)>,
-    ongoing: usize,
+    tasks: FuturesUnordered<BoxFuture<'static, TaskResult>>,
     batch_size: u64,
 }
 
@@ -33,7 +34,6 @@ impl HeaderSession {
     /// [`calculate_fetch_range`] crate::store::utils::calculate_fetch_range
     /// [`Store::get_stored_header_ranges`]: crate::store::Store::get_stored_header_ranges
     pub(crate) fn new(range: BlockRange, cmd_tx: mpsc::Sender<P2pCmd>) -> Self {
-        let (response_tx, response_rx) = mpsc::channel(MAX_CONCURRENT_REQS);
         let batch_size = range
             .len()
             .div_ceil(MAX_CONCURRENT_REQS as u64)
@@ -42,9 +42,7 @@ impl HeaderSession {
         HeaderSession {
             to_fetch: Some(range),
             cmd_tx,
-            response_tx,
-            response_rx,
-            ongoing: 0,
+            tasks: FuturesUnordered::new(),
             batch_size,
         }
     }
@@ -53,12 +51,10 @@ impl HeaderSession {
         let mut responses = Vec::new();
 
         for _ in 0..MAX_CONCURRENT_REQS {
-            self.send_next_request().await?;
+            self.send_next_request().await;
         }
 
-        while self.ongoing > 0 {
-            let (height, requested_amount, res) = self.recv_response().await;
-
+        while let Some((height, requested_amount, res)) = self.tasks.next().await {
             match res {
                 Ok(headers) => {
                     let headers_len = headers.len() as u64;
@@ -71,17 +67,17 @@ impl HeaderSession {
                         // Reschedule the missing sub-range
                         let height = height + headers_len;
                         let amount = requested_amount - headers_len;
-                        self.send_request(height, amount).await?;
+                        self.send_request(height, amount).await;
 
                         debug!("requested {requested_amount}, got {headers_len}: retrying {height} +{amount}");
                     } else {
                         // Schedule next request
-                        self.send_next_request().await?;
+                        self.send_next_request().await;
                     }
                 }
                 Err(P2pError::HeaderEx(e)) => {
                     debug!("HeaderEx error: {e}");
-                    self.send_request(height, requested_amount).await?;
+                    self.send_request(height, requested_amount).await;
                 }
                 Err(e) => return Err(e),
             }
@@ -97,52 +93,39 @@ impl HeaderSession {
         Ok(responses.into_iter().flatten().collect())
     }
 
-    async fn recv_response(&mut self) -> (u64, u64, Result<Vec<ExtendedHeader>>) {
-        let (height, requested_amount, res) =
-            self.response_rx.recv().await.expect("channel never closes");
-
-        self.ongoing -= 1;
-
-        (height, requested_amount, res)
+    pub(crate) async fn send_next_request(&mut self) {
+        if let Some(range) = take_next_batch(&mut self.to_fetch, self.batch_size) {
+            self.send_request(*range.start(), range.len()).await;
+        }
     }
 
-    pub(crate) async fn send_next_request(&mut self) -> Result<()> {
-        let Some(range) = take_next_batch(&mut self.to_fetch, self.batch_size) else {
-            return Ok(());
-        };
-
-        self.send_request(*range.start(), range.len()).await?;
-
-        Ok(())
-    }
-
-    pub(crate) async fn send_request(&mut self, height: u64, amount: u64) -> Result<()> {
+    pub(crate) async fn send_request(&mut self, height: u64, amount: u64) {
         debug!("Fetching batch {} until {}", height, height + amount - 1);
 
+        let p2p_cmd_rx = self.cmd_tx.clone();
         let request = HeaderRequest::with_origin(height, amount);
-        let (tx, rx) = oneshot::channel();
 
-        self.cmd_tx
-            .send(P2pCmd::HeaderExRequest {
-                request,
-                respond_to: tx,
-            })
-            .await
-            .map_err(|_| P2pError::WorkerDied)?;
+        self.tasks.push(
+            async move {
+                let result = async move {
+                    let (tx, rx) = oneshot::channel();
 
-        let response_tx = self.response_tx.clone();
+                    p2p_cmd_rx
+                        .send(P2pCmd::HeaderExRequest {
+                            request,
+                            respond_to: tx,
+                        })
+                        .await
+                        .map_err(|_| P2pError::WorkerDied)?;
 
-        spawn(async move {
-            let result = match rx.await {
-                Ok(result) => result,
-                Err(_) => Err(P2pError::WorkerDied),
-            };
-            let _ = response_tx.send((height, amount, result)).await;
-        });
+                    rx.await?
+                }
+                .await;
 
-        self.ongoing += 1;
-
-        Ok(())
+                (height, amount, result)
+            }
+            .boxed(),
+        );
     }
 }
 
@@ -164,6 +147,7 @@ fn take_next_batch(range_to_fetch: &mut Option<BlockRange>, limit: u64) -> Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::executor::spawn;
     use crate::p2p::{HeaderExError, P2p};
     use crate::test_utils::async_test;
     use celestia_types::test_utils::ExtendedHeaderGenerator;

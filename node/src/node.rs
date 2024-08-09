@@ -16,14 +16,13 @@ use celestia_types::ExtendedHeader;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
-use tokio::select;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::daser::{Daser, DaserArgs};
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
-use crate::executor::spawn;
+use crate::executor::spawn_cancellable;
 use crate::p2p::{P2p, P2pArgs};
 use crate::store::{SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs};
@@ -89,7 +88,7 @@ where
     p2p: Arc<P2p>,
     store: Arc<S>,
     syncer: Arc<Syncer<S>>,
-    _daser: Arc<Daser>,
+    daser: Arc<Daser>,
     tasks_cancellation_token: CancellationToken,
 }
 
@@ -144,32 +143,26 @@ where
             event_pub: event_channel.publisher(),
         })?);
 
-        // spawn the task that will stop the services when the fraud is detected
-        let network_compromised_token = p2p.get_network_compromised_token().await?;
         let tasks_cancellation_token = CancellationToken::new();
 
-        spawn({
+        // spawn the task that will stop the services when the fraud is detected
+        spawn_cancellable(tasks_cancellation_token.child_token(), {
+            let network_compromised_token = p2p.get_network_compromised_token().await?;
             let syncer = syncer.clone();
             let daser = daser.clone();
-            let tasks_cancellation_token = tasks_cancellation_token.child_token();
             let event_pub = event_channel.publisher();
 
             async move {
-                select! {
-                    _ = tasks_cancellation_token.cancelled() => (),
-                    _ = network_compromised_token.cancelled() => {
-                        syncer.stop();
-                        daser.stop();
+                network_compromised_token.triggered().await;
 
-                        if event_pub.has_subscribers() {
-                            event_pub.send(NodeEvent::NetworkCompromised);
-                        } else {
-                            // This is a very important message and we want to log it if user
-                            // does not consume our events.
-                            warn!("{}", NodeEvent::NetworkCompromised);
-                        }
-                    }
-                }
+                // Network compromised! Stop Syncer and Daser.
+                syncer.stop();
+                daser.stop();
+
+                event_pub.send(NodeEvent::NetworkCompromised);
+                // This is a very important message and we want to log it even
+                // if user consumes our events.
+                warn!("{}", NodeEvent::NetworkCompromised);
             }
         });
 
@@ -178,11 +171,28 @@ where
             p2p,
             store,
             syncer,
-            _daser: daser,
+            daser,
             tasks_cancellation_token,
         };
 
         Ok((node, event_sub))
+    }
+
+    /// Stop the node.
+    pub async fn stop(&self) {
+        // Cancel Node's tasks
+        self.tasks_cancellation_token.cancel();
+
+        // Stop all components that use P2p.
+        self.daser.stop();
+        self.syncer.stop();
+
+        self.daser.join().await;
+        self.syncer.join().await;
+
+        // Now stop P2p component.
+        self.p2p.stop();
+        self.p2p.join().await;
     }
 
     /// Returns a new `EventSubscriber`.
@@ -366,7 +376,10 @@ where
     S: Store,
 {
     fn drop(&mut self) {
-        // we have to cancel the task to drop the Arc's passed to it
+        // Stop everything, but don't join them.
         self.tasks_cancellation_token.cancel();
+        self.daser.stop();
+        self.syncer.stop();
+        self.p2p.stop();
     }
 }

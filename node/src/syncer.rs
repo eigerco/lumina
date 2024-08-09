@@ -10,6 +10,7 @@
 //! to the `network_head` as possible.
 
 use std::marker::PhantomData;
+use std::pin::pin;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,20 +18,19 @@ use backoff::backoff::Backoff;
 use backoff::ExponentialBackoffBuilder;
 use celestia_tendermint::Time;
 use celestia_types::ExtendedHeader;
-use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, info_span, instrument, warn, Instrument};
+use tracing::{debug, error, info, instrument, warn};
 use web_time::Instant;
 
 use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
-use crate::executor::{sleep, spawn, spawn_cancellable, Interval};
+use crate::executor::{sleep, spawn, Interval, JoinHandle};
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
-use crate::utils::OneshotSenderExt;
+use crate::utils::{FusedReusableFuture, OneshotSenderExt};
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
@@ -81,6 +81,7 @@ where
 {
     cmd_tx: mpsc::Sender<SyncerCmd>,
     cancellation_token: CancellationToken,
+    join_handle: JoinHandle,
     _store: PhantomData<S>,
 }
 
@@ -126,7 +127,7 @@ where
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let mut worker = Worker::new(args, cancellation_token.child_token(), cmd_rx)?;
 
-        spawn(async move {
+        let join_handle = spawn(async move {
             if let Err(e) = worker.run().await {
                 error!("Syncer stopped because of a fatal error: {e}");
 
@@ -139,6 +140,7 @@ where
         Ok(Syncer {
             cancellation_token,
             cmd_tx,
+            join_handle,
             _store: PhantomData,
         })
     }
@@ -146,8 +148,12 @@ where
     /// Stop the worker.
     pub(crate) fn stop(&self) {
         // Singal the Worker to stop.
-        // TODO: Should we wait for the Worker to stop?
         self.cancellation_token.cancel();
+    }
+
+    /// Wait until worker is completely stopped.
+    pub(crate) async fn join(&self) {
+        self.join_handle.join().await;
     }
 
     async fn send_command(&self, cmd: SyncerCmd) -> Result<()> {
@@ -177,7 +183,7 @@ where
     S: Store,
 {
     fn drop(&mut self) {
-        self.cancellation_token.cancel();
+        self.stop();
     }
 }
 
@@ -193,12 +199,12 @@ where
     header_sub_rx: Option<mpsc::Receiver<ExtendedHeader>>,
     subjective_head_height: Option<u64>,
     batch_size: u64,
-    ongoing_batch: Option<Ongoing>,
+    ongoing_batch: Ongoing,
 }
 
 struct Ongoing {
-    batch: BlockRange,
-    cancellation_token: CancellationToken,
+    range: Option<BlockRange>,
+    task: FusedReusableFuture<(Result<Vec<ExtendedHeader>, P2pError>, Duration)>,
 }
 
 impl<S> Worker<S>
@@ -219,7 +225,10 @@ where
             header_sub_rx: None,
             subjective_head_height: None,
             batch_size: args.batch_size,
-            ongoing_batch: None,
+            ongoing_batch: Ongoing {
+                range: None,
+                task: FusedReusableFuture::terminated(),
+            },
         })
     }
 
@@ -250,9 +259,13 @@ where
         debug!("Entering connecting_event_loop");
 
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
-        let mut try_init_result = self.spawn_try_init().fuse();
-
         self.report().await?;
+
+        let mut try_init_fut = pin!(try_init_task(
+            self.p2p.clone(),
+            self.store.clone(),
+            self.event_pub.clone()
+        ));
 
         loop {
             select! {
@@ -262,9 +275,9 @@ where
                 _ = report_interval.tick() => {
                     self.report().await?;
                 }
-                res = &mut try_init_result => {
-                    // try_init task propagates only fatal errors
-                    let (network_head, took) = res??;
+                res = &mut try_init_fut => {
+                    // `try_init_task` propagates only fatal errors
+                    let (network_head, took) = res?;
                     let network_head_height = network_head.height().value();
 
                     info!("Setting initial subjective head to {network_head_height}");
@@ -297,7 +310,6 @@ where
     async fn connected_event_loop(&mut self) -> Result<()> {
         debug!("Entering connected_event_loop");
 
-        let (headers_tx, mut headers_rx) = mpsc::channel(1);
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
         let mut peer_tracker_info_watcher = self.p2p.peer_tracker_info_watcher();
 
@@ -307,7 +319,7 @@ where
             return Ok(());
         }
 
-        self.fetch_next_batch(&headers_tx).await?;
+        self.fetch_next_batch().await?;
         self.report().await?;
 
         loop {
@@ -327,21 +339,21 @@ where
                 res = header_sub_recv(self.header_sub_rx.as_mut()) => {
                     let header = res?;
                     self.on_header_sub_message(header).await?;
-                    self.fetch_next_batch(&headers_tx).await?;
+                    self.fetch_next_batch().await?;
                 }
                 Some(cmd) = self.cmd_rx.recv() => {
                     self.on_cmd(cmd).await?;
                 }
-                Some((res, took)) = headers_rx.recv() => {
+                (res, took) = &mut self.ongoing_batch.task => {
                     self.on_fetch_next_batch_result(res, took).await?;
-                    self.fetch_next_batch(&headers_tx).await?;
+                    self.fetch_next_batch().await?;
                 }
             }
         }
 
-        if let Some(ongoing) = self.ongoing_batch.take() {
-            warn!("Cancelling fetching of {}", ongoing.batch.display());
-            ongoing.cancellation_token.cancel();
+        if let Some(ongoing) = self.ongoing_batch.range.take() {
+            warn!("Cancelling fetching of {}", ongoing.display());
+            self.ongoing_batch.task.terminate();
         }
 
         self.header_sub_rx.take();
@@ -365,56 +377,13 @@ where
 
         let ongoing_batch = self
             .ongoing_batch
+            .range
             .as_ref()
-            .map(|ongoing| format!("{}", ongoing.batch.display()))
+            .map(|range| format!("{}", range.display()))
             .unwrap_or_else(|| "None".to_string());
 
         info!("syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}");
         Ok(())
-    }
-
-    fn spawn_try_init(&self) -> oneshot::Receiver<Result<(ExtendedHeader, Duration)>> {
-        let p2p = self.p2p.clone();
-        let store = self.store.clone();
-        let event_pub = self.event_pub.clone();
-        let (tx, rx) = oneshot::channel();
-
-        let fut = async move {
-            let mut event_reported = false;
-            let now = Instant::now();
-            let mut backoff = ExponentialBackoffBuilder::default()
-                .with_max_interval(TRY_INIT_BACKOFF_MAX_INTERVAL)
-                .with_max_elapsed_time(None)
-                .build();
-
-            loop {
-                match try_init(&p2p, &*store, &event_pub, &mut event_reported).await {
-                    Ok(network_head) => {
-                        tx.maybe_send(Ok((network_head, now.elapsed())));
-                        break;
-                    }
-                    Err(e) if e.is_fatal() => {
-                        tx.maybe_send(Err(e));
-                        break;
-                    }
-                    Err(e) => {
-                        let sleep_dur = backoff
-                            .next_backoff()
-                            .expect("backoff never stops retrying");
-
-                        warn!("Initialization of subjective head failed: {e}. Trying again in {sleep_dur:?}.");
-                        sleep(sleep_dur).await;
-                    }
-                }
-            }
-        };
-
-        spawn_cancellable(
-            self.cancellation_token.child_token(),
-            fut.instrument(info_span!("try_init")),
-        );
-
-        rx
     }
 
     async fn on_cmd(&mut self, cmd: SyncerCmd) -> Result<()> {
@@ -461,11 +430,13 @@ where
     }
 
     #[instrument(skip_all)]
-    async fn fetch_next_batch(
-        &mut self,
-        headers_tx: &mpsc::Sender<(Result<Vec<ExtendedHeader>, P2pError>, Duration)>,
-    ) -> Result<()> {
-        if self.ongoing_batch.is_some() {
+    async fn fetch_next_batch(&mut self) -> Result<()> {
+        debug_assert_eq!(
+            self.ongoing_batch.range.is_none(),
+            self.ongoing_batch.task.is_terminated()
+        );
+
+        if !self.ongoing_batch.task.is_terminated() {
             // Another batch is ongoing. We do not parallelize `Syncer`
             // by design. Any parallel requests are done in the
             // HeaderEx client through `Session`.
@@ -514,20 +485,14 @@ where
             to_height: *next_batch.end(),
         });
 
-        let cancellation_token = self.cancellation_token.child_token();
-
-        self.ongoing_batch = Some(Ongoing {
-            batch: next_batch.clone(),
-            cancellation_token: cancellation_token.clone(),
-        });
-
-        let tx = headers_tx.clone();
         let p2p = self.p2p.clone();
 
-        spawn_cancellable(cancellation_token, async move {
+        self.ongoing_batch.range = Some(next_batch.clone());
+
+        self.ongoing_batch.task.set(async move {
             let now = Instant::now();
             let res = p2p.get_unverified_header_range(next_batch).await;
-            let _ = tx.send((res, now.elapsed())).await;
+            (res, now.elapsed())
         });
 
         Ok(())
@@ -540,13 +505,14 @@ where
         res: Result<Vec<ExtendedHeader>, P2pError>,
         took: Duration,
     ) -> Result<()> {
-        let Some(ongoing) = self.ongoing_batch.take() else {
-            warn!("No batch was scheduled, however result was received. Discarding it.");
-            return Ok(());
-        };
+        let range = self
+            .ongoing_batch
+            .range
+            .take()
+            .expect("ongoing_batch not initialized correctly");
 
-        let from_height = *ongoing.batch.start();
-        let to_height = *ongoing.batch.end();
+        let from_height = *range.start();
+        let to_height = *range.end();
 
         let headers = match res {
             Ok(headers) => headers,
@@ -626,6 +592,44 @@ fn in_syncing_window(header: &ExtendedHeader) -> bool {
     header.time().after(syncing_window_start)
 }
 
+#[instrument(skip_all)]
+async fn try_init_task<S>(
+    p2p: Arc<P2p>,
+    store: Arc<S>,
+    event_pub: EventPublisher,
+) -> Result<(ExtendedHeader, Duration)>
+where
+    S: Store + 'static,
+{
+    let now = Instant::now();
+    let mut event_reported = false;
+    let mut backoff = ExponentialBackoffBuilder::default()
+        .with_max_interval(TRY_INIT_BACKOFF_MAX_INTERVAL)
+        .with_max_elapsed_time(None)
+        .build();
+
+    loop {
+        match try_init(&p2p, &*store, &event_pub, &mut event_reported).await {
+            Ok(network_head) => {
+                return Ok((network_head, now.elapsed()));
+            }
+            Err(e) if e.is_fatal() => {
+                return Err(e);
+            }
+            Err(e) => {
+                let sleep_dur = backoff
+                    .next_backoff()
+                    .expect("backoff never stops retrying");
+
+                warn!(
+                    "Initialization of subjective head failed: {e}. Trying again in {sleep_dur:?}."
+                );
+                sleep(sleep_dur).await;
+            }
+        }
+    }
+}
+
 async fn try_init<S>(
     p2p: &P2p,
     store: &S,
@@ -681,10 +685,13 @@ mod tests {
     use super::*;
     use crate::block_ranges::{BlockRange, BlockRangeExt};
     use crate::events::EventChannel;
+    use crate::node::HeaderExError;
     use crate::p2p::header_session;
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
+    use crate::utils::OneshotResultSenderExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
+    use libp2p::request_response::OutboundFailure;
 
     #[test]
     fn calculate_range_to_fetch_test_header_limit() {
@@ -1188,6 +1195,8 @@ mod tests {
         let mut ranges_to_request = BlockRanges::new();
         ranges_to_request.insert_relaxed(&range).unwrap();
 
+        let mut no_respond_chans = Vec::new();
+
         for _ in 0..requests_in_session(range.len()) {
             let (height, amount, respond_to) =
                 p2p_mock.expect_header_request_for_height_cmd().await;
@@ -1207,7 +1216,24 @@ mod tests {
                     .send(Ok(response_range))
                     .map_err(|_| format!("headers [{}, {}]", height, height + amount - 1))
                     .unwrap();
+            } else {
+                no_respond_chans.push(respond_to);
             }
+        }
+
+        // Real libp2p implementation will create a timeout error if the peer does not
+        // respond. We need to simulate that, otherwise we end up with some undesirable
+        // behaviours in Syncer.
+        if !respond {
+            spawn(async move {
+                sleep(Duration::from_secs(10)).await;
+
+                for respond_chan in no_respond_chans {
+                    respond_chan.maybe_send_err(P2pError::HeaderEx(
+                        HeaderExError::OutboundFailure(OutboundFailure::Timeout),
+                    ));
+                }
+            });
         }
 
         assert!(

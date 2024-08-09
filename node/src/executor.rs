@@ -1,12 +1,30 @@
+use std::fmt::{self, Debug};
 use std::future::Future;
 
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
+use crate::utils::Token;
+
 #[allow(unused_imports)]
 pub(crate) use self::imp::{
     sleep, spawn, spawn_cancellable, timeout, yield_now, Elapsed, Interval,
 };
+
+/// Naive `JoinHandle` implementation.
+pub(crate) struct JoinHandle(Token);
+
+impl JoinHandle {
+    pub(crate) async fn join(&self) {
+        self.0.triggered().await;
+    }
+}
+
+impl Debug for JoinHandle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("JoinHandle { .. }")
+    }
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
@@ -17,11 +35,19 @@ mod imp {
     pub(crate) use tokio::time::{sleep, timeout};
 
     #[track_caller]
-    pub(crate) fn spawn<F>(future: F)
+    pub(crate) fn spawn<F>(future: F) -> JoinHandle
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        tokio::spawn(future);
+        let token = Token::new();
+        let guard = token.trigger_drop_guard();
+
+        tokio::spawn(async move {
+            let _guard = guard;
+            future.await;
+        });
+
+        JoinHandle(token)
     }
 
     /// Spawn a cancellable task.
@@ -29,16 +55,28 @@ mod imp {
     /// This will cancel the task in the highest layer and should not be used
     /// if cancellation must happen in a point.
     #[track_caller]
-    pub(crate) fn spawn_cancellable<F>(cancelation_token: CancellationToken, future: F)
+    pub(crate) fn spawn_cancellable<F>(
+        cancelation_token: CancellationToken,
+        future: F,
+    ) -> JoinHandle
     where
         F: Future<Output = ()> + Send + 'static,
     {
+        let token = Token::new();
+        let guard = token.trigger_drop_guard();
+
         tokio::spawn(async move {
+            let _guard = guard;
             select! {
+                // Run branches in order.
+                biased;
+
                 _ = cancelation_token.cancelled() => {}
                 _ = future => {}
             }
         });
+
+        JoinHandle(token)
     }
 
     pub(crate) struct Interval(tokio::time::Interval);
@@ -80,27 +118,47 @@ mod imp {
 
     use super::*;
 
-    pub(crate) fn spawn<F>(future: F)
+    pub(crate) fn spawn<F>(future: F) -> JoinHandle
     where
         F: Future<Output = ()> + 'static,
     {
-        wasm_bindgen_futures::spawn_local(future);
+        let token = Token::new();
+        let guard = token.trigger_drop_guard();
+
+        wasm_bindgen_futures::spawn_local(async move {
+            let _guard = guard;
+            future.await;
+        });
+
+        JoinHandle(token)
     }
 
     /// Spawn a cancellable task.
     ///
     /// This will cancel the task in the highest layer and should not be used
     /// if cancellation must happen in a point.
-    pub(crate) fn spawn_cancellable<F>(cancelation_token: CancellationToken, future: F)
+    pub(crate) fn spawn_cancellable<F>(
+        cancelation_token: CancellationToken,
+        future: F,
+    ) -> JoinHandle
     where
         F: Future<Output = ()> + 'static,
     {
+        let token = Token::new();
+        let guard = token.trigger_drop_guard();
+
         wasm_bindgen_futures::spawn_local(async move {
+            let _guard = guard;
             select! {
+                // Run branches in order.
+                biased;
+
                 _ = cancelation_token.cancelled() => {}
                 _ = future => {}
             }
         });
+
+        JoinHandle(token)
     }
 
     pub(crate) struct Interval(SendWrapper<IntervalStream>);
@@ -215,5 +273,28 @@ mod imp {
             }
         })
         .await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::async_test;
+    use std::time::Duration;
+    use web_time::Instant;
+
+    #[async_test]
+    async fn join_handle() {
+        let now = Instant::now();
+
+        let join_handle = spawn(async {
+            sleep(Duration::from_millis(10)).await;
+        });
+
+        join_handle.join().await;
+        assert!(now.elapsed() >= Duration::from_millis(10));
+
+        // This must return immediately.
+        join_handle.join().await;
     }
 }
