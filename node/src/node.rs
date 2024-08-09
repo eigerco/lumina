@@ -1,8 +1,7 @@
-//! High-level integration of [`P2p`], [`Store`], [`Syncer`].
+//! Node that connects to Celestia's P2P network.
 //!
-//! [`P2p`]: crate::p2p::P2p
-//! [`Store`]: crate::store::Store
-//! [`Syncer`]: crate::syncer::Syncer
+//! Upon creation, `Node` will try to connect to Celestia's P2P network
+//! and then proceed with synchronization and data sampling of the blocks.
 
 use std::ops::RangeBounds;
 use std::sync::Arc;
@@ -18,36 +17,44 @@ use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
 use tokio::select;
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
-use crate::daser::{Daser, DaserArgs, DaserError};
+use crate::daser::{Daser, DaserArgs};
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
 use crate::executor::spawn;
-use crate::p2p::{P2p, P2pArgs, P2pError};
-use crate::peer_tracker::PeerTrackerInfo;
+use crate::p2p::{P2p, P2pArgs};
 use crate::store::{SamplingMetadata, Store, StoreError};
-use crate::syncer::{Syncer, SyncerArgs, SyncerError, SyncingInfo};
+use crate::syncer::{Syncer, SyncerArgs};
 
-type Result<T, E = NodeError> = std::result::Result<T, E>;
+pub use crate::daser::DaserError;
+pub use crate::p2p::{HeaderExError, P2pError};
+pub use crate::peer_tracker::PeerTrackerInfo;
+pub use crate::syncer::{SyncerError, SyncingInfo};
+
+/// Alias of [`Result`] with [`NodeError`] error type
+///
+/// [`Result`]: std::result::Result
+pub type Result<T, E = NodeError> = std::result::Result<T, E>;
 
 /// Representation of all the errors that can occur when interacting with the [`Node`].
 #[derive(Debug, thiserror::Error)]
 pub enum NodeError {
-    /// An error propagated from the [`P2p`] module.
-    #[error(transparent)]
+    /// An error propagated from the `P2p` component.
+    #[error("P2p: {0}")]
     P2p(#[from] P2pError),
 
-    /// An error propagated from the [`Syncer`] module.
-    #[error(transparent)]
+    /// An error propagated from the `Syncer` component.
+    #[error("Syncer: {0}")]
     Syncer(#[from] SyncerError),
 
-    /// An error propagated from the [`Store`] module.
-    #[error(transparent)]
+    /// An error propagated from the [`Store`] component.
+    #[error("Store: {0}")]
     Store(#[from] StoreError),
 
-    /// An error propagated from the [`Daser`] module.
-    #[error(transparent)]
+    /// An error propagated from the `Daser` component.
+    #[error("Daser: {0}")]
     Daser(#[from] DaserError),
 }
 
@@ -111,15 +118,18 @@ where
         let event_sub = event_channel.subscribe();
         let store = Arc::new(config.store);
 
-        let p2p = Arc::new(P2p::start(P2pArgs {
-            network_id: config.network_id,
-            local_keypair: config.p2p_local_keypair,
-            bootnodes: config.p2p_bootnodes,
-            listen_on: config.p2p_listen_on,
-            blockstore: config.blockstore,
-            store: store.clone(),
-            event_pub: event_channel.publisher(),
-        })?);
+        let p2p = Arc::new(
+            P2p::start(P2pArgs {
+                network_id: config.network_id,
+                local_keypair: config.p2p_local_keypair,
+                bootnodes: config.p2p_bootnodes,
+                listen_on: config.p2p_listen_on,
+                blockstore: config.blockstore,
+                store: store.clone(),
+                event_pub: event_channel.publisher(),
+            })
+            .await?,
+        );
 
         let syncer = Arc::new(Syncer::start(SyncerArgs {
             store: store.clone(),
@@ -185,11 +195,14 @@ where
         self.p2p.local_peer_id()
     }
 
-    /// Get current [`PeerTracker`] info.
-    ///
-    /// [`PeerTracker`]: crate::peer_tracker::PeerTracker
+    /// Get current [`PeerTrackerInfo`].
     pub fn peer_tracker_info(&self) -> PeerTrackerInfo {
         self.p2p.peer_tracker_info().clone()
+    }
+
+    /// Get [`PeerTrackerInfo`] watcher.
+    pub fn peer_tracker_info_watcher(&self) -> watch::Receiver<PeerTrackerInfo> {
+        self.p2p.peer_tracker_info_watcher()
     }
 
     /// Wait until the node is connected to at least 1 peer.
@@ -300,8 +313,8 @@ where
     }
 
     /// Get the latest header announced in the network.
-    pub fn get_network_head_header(&self) -> Option<ExtendedHeader> {
-        self.p2p.header_sub_watcher().borrow().clone()
+    pub async fn get_network_head_header(&self) -> Result<Option<ExtendedHeader>> {
+        Ok(self.p2p.get_network_head().await?)
     }
 
     /// Get the latest locally synced header.

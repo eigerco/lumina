@@ -4,8 +4,7 @@ use std::time::Duration;
 
 use celestia_types::test_utils::{invalidate, unverify};
 use lumina_node::{
-    node::{Node, NodeConfig, NodeError},
-    p2p::{HeaderExError, P2pError},
+    node::{HeaderExError, Node, NodeConfig, NodeError, P2pError},
     store::{Store, VerifiedExtendedHeaders},
     test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
 };

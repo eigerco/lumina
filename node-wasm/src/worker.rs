@@ -12,13 +12,12 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{BroadcastChannel, MessageEvent, SharedWorker};
 
-use lumina_node::node::Node;
+use lumina_node::node::{Node, SyncingInfo};
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
-use lumina_node::syncer::SyncingInfo;
 
 use crate::error::{Context, Error, Result};
 use crate::node::WasmNodeConfig;
-use crate::utils::{get_crypto, WorkerSelf};
+use crate::utils::{random_id, WorkerSelf};
 use crate::worker::channel::{
     DedicatedWorkerMessageServer, MessageServer, SharedWorkerMessageServer, WorkerMessage,
 };
@@ -164,9 +163,11 @@ impl NodeWorker {
             .context("could not serialise fetched headers")
     }
 
-    async fn get_last_seen_network_head(&mut self) -> JsValue {
-        // JS interface returns `undefined`, if node haven't received any headers from HeaderSub yet
-        to_value(&self.node.get_network_head_header()).unwrap_or(JsValue::UNDEFINED)
+    async fn get_last_seen_network_head(&mut self) -> Result<JsValue> {
+        match self.node.get_network_head_header().await? {
+            Some(header) => to_value(&header).context("could not serialise head header"),
+            None => Ok(JsValue::UNDEFINED),
+        }
     }
 
     async fn get_sampling_metadata(&mut self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -222,7 +223,7 @@ impl NodeWorker {
                     .into(),
             ),
             NodeCommand::LastSeenNetworkHead => {
-                WorkerResponse::LastSeenNetworkHead(self.get_last_seen_network_head().await)
+                WorkerResponse::LastSeenNetworkHead(self.get_last_seen_network_head().await.into())
             }
             NodeCommand::GetSamplingMetadata { height } => {
                 WorkerResponse::SamplingMetadata(self.get_sampling_metadata(height).await)
@@ -239,7 +240,7 @@ impl NodeWorker {
 pub async fn run_worker(queued_events: Vec<MessageEvent>) -> Result<()> {
     info!("Entered run_worker");
     let (tx, mut rx) = mpsc::channel(WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH);
-    let events_channel_name = format!("NodeEventChannel-{}", get_crypto()?.random_uuid());
+    let events_channel_name = format!("NodeEventChannel-{}", random_id());
 
     let mut message_server: Box<dyn MessageServer> = if SharedWorker::is_worker_type() {
         Box::new(SharedWorkerMessageServer::new(tx.clone(), queued_events))

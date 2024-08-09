@@ -763,7 +763,7 @@ mod v3 {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::store::utils::ExtendedHeaderGeneratorExt;
+    use crate::test_utils::ExtendedHeaderGeneratorExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use function_name::named;
     use wasm_bindgen_test::wasm_bindgen_test;

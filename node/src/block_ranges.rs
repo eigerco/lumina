@@ -7,10 +7,12 @@ use std::ops::{Add, RangeInclusive, Sub};
 use serde::Serialize;
 use smallvec::SmallVec;
 
-/// Type alias to `RangeInclusive<u64>`.
+/// Type alias of [`RangeInclusive<u64>`].
+///
+/// [`RangeInclusive<u64>`]: std::ops::RangeInclusive
 pub type BlockRange = RangeInclusive<u64>;
 
-/// Errors that can be produced by `BlockRanges`.
+/// Errors that can be produced by [`BlockRanges`].
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum BlockRangesError {
     /// Block ranges must be sorted.
@@ -41,6 +43,8 @@ pub(crate) trait BlockRangeExt {
     fn is_adjacent(&self, other: &BlockRange) -> bool;
     fn is_overlapping(&self, other: &BlockRange) -> bool;
     fn left_of(&self, other: &BlockRange) -> bool;
+    fn truncate_left(&self, limit: u64) -> Self;
+    fn truncate_right(&self, limit: u64) -> Self;
 }
 
 pub(crate) struct BlockRangeDisplay<'a>(&'a RangeInclusive<u64>);
@@ -138,6 +142,37 @@ impl BlockRangeExt for BlockRange {
         debug_assert!(self.validate().is_ok());
         debug_assert!(other.validate().is_ok());
         self.end() < other.start()
+    }
+
+    /// Truncate the range so that it contains at most `limit` elements, removing from the left
+    fn truncate_left(&self, limit: u64) -> Self {
+        if self.is_empty() {
+            return RangeInclusive::new(1, 0);
+        }
+        let start = *self.start();
+        let end = *self.end();
+
+        let Some(adjusted_start) = end.saturating_sub(limit).checked_add(1) else {
+            // overflow can happen only if limit == 0, which is an empty range anyway
+            return RangeInclusive::new(1, 0);
+        };
+
+        u64::max(start, adjusted_start)..=end
+    }
+
+    /// Truncate the range so that it contains at most `limit` elements, removing from the right
+    fn truncate_right(&self, limit: u64) -> Self {
+        if self.is_empty() {
+            return RangeInclusive::new(1, 0);
+        }
+        let start = *self.start();
+        let end = *self.end();
+
+        let Some(adjusted_end) = start.saturating_add(limit).checked_sub(1) else {
+            return RangeInclusive::new(1, 0);
+        };
+
+        start..=u64::min(end, adjusted_end)
     }
 }
 
@@ -792,6 +827,33 @@ mod tests {
         assert!(!(1..=3).left_of(&(3..=4)));
         assert!(!(1..=5).left_of(&(3..=4)));
         assert!(!(3..=4).left_of(&(1..=3)));
+    }
+
+    #[test]
+    fn truncate_left() {
+        assert_eq!((1..=10).truncate_left(u64::MAX), 1..=10);
+        assert_eq!((1..=10).truncate_left(20), 1..=10);
+        assert_eq!((1..=10).truncate_left(10), 1..=10);
+        assert_eq!((1..=10).truncate_left(5), 6..=10);
+        assert_eq!((1..=10).truncate_left(1), 10..=10);
+        assert!((1..=10).truncate_left(0).is_empty());
+
+        assert_eq!((0..=u64::MAX).truncate_left(u64::MAX), 1..=u64::MAX);
+        assert_eq!((0..=u64::MAX).truncate_left(1), u64::MAX..=u64::MAX);
+        assert!((0..=u64::MAX).truncate_left(0).is_empty());
+    }
+
+    #[test]
+    fn truncate_right() {
+        assert_eq!((1..=10).truncate_right(20), 1..=10);
+        assert_eq!((1..=10).truncate_right(10), 1..=10);
+        assert_eq!((1..=10).truncate_right(5), 1..=5);
+        assert_eq!((1..=10).truncate_right(1), 1..=1);
+        assert!((1..=10).truncate_right(0).is_empty());
+
+        assert_eq!((0..=u64::MAX).truncate_right(u64::MAX), 0..=(u64::MAX - 1));
+        assert_eq!((0..=u64::MAX).truncate_right(1), 0..=0);
+        assert!((0..=u64::MAX).truncate_right(0).is_empty());
     }
 
     #[test]

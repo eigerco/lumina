@@ -730,13 +730,10 @@ fn migrate_v1_to_v2(
 
 #[cfg(test)]
 pub mod tests {
-    use crate::store::ExtendedHeaderGeneratorExt;
-
     use super::*;
-
-    use std::path::Path;
-
+    use crate::test_utils::ExtendedHeaderGeneratorExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
+    use std::path::Path;
     use tempfile::TempDir;
 
     #[tokio::test]

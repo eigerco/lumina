@@ -5,7 +5,7 @@ use std::borrow::Borrow;
 use dashmap::mapref::entry::Entry;
 use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
-use libp2p::{identify, swarm::ConnectionId, Multiaddr, PeerId};
+use libp2p::{swarm::ConnectionId, Multiaddr, PeerId};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -43,12 +43,11 @@ enum PeerState {
     Discovered,
     AddressesFound,
     Connected,
-    Identified,
 }
 
 impl PeerInfo {
     fn is_connected(&self) -> bool {
-        matches!(self.state, PeerState::Connected | PeerState::Identified)
+        matches!(self.state, PeerState::Connected)
     }
 }
 
@@ -207,30 +206,20 @@ impl PeerTracker {
         }
     }
 
-    /// Sets peer as identified.
-    pub fn set_identified(&self, peer: PeerId, info: &identify::Info) {
-        let mut peer_info = self.get(peer);
-
-        for addr in &info.listen_addrs {
-            if !peer_info.addrs.contains(addr) {
-                peer_info.addrs.push(addr.to_owned());
-            }
-        }
-
-        peer_info.state = PeerState::Identified;
-    }
-
     /// Returns true if peer is connected.
+    #[allow(dead_code)]
     pub fn is_connected(&self, peer: PeerId) -> bool {
         self.get(peer).is_connected()
     }
 
     /// Returns the addresses of the peer.
+    #[allow(dead_code)]
     pub fn addresses(&self, peer: PeerId) -> SmallVec<[Multiaddr; 4]> {
         self.get(peer).addrs.clone()
     }
 
     /// Removes a peer.
+    #[allow(dead_code)]
     pub fn remove(&self, peer: PeerId) {
         self.peers.remove(&peer);
     }
@@ -263,6 +252,7 @@ impl PeerTracker {
     }
 
     /// Returns up to N amount of best peers.
+    #[allow(dead_code)]
     pub fn best_n_peers(&self, limit: usize) -> Vec<PeerId> {
         // TODO: Implement peer score and return the best N peers.
         self.peers

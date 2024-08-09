@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use crate::block_ranges::{BlockRange, BlockRanges, BlockRangesError};
-pub use crate::store::utils::{ExtendedHeaderGeneratorExt, VerifiedExtendedHeaders};
+pub use crate::store::utils::VerifiedExtendedHeaders;
 
 pub use in_memory_store::InMemoryStore;
 #[cfg(target_arch = "wasm32")]
@@ -326,6 +326,7 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::ExtendedHeaderGeneratorExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::Height;
     use rstest::rstest;

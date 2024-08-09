@@ -1325,9 +1325,9 @@ dependencies = [
 
 [[package]]
 name = "either"
-version = "1.12.0"
+version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3dca9240753cf90908d7e4aac30f630662b02aebaa1b58a3cadabdb23385b58b"
+checksum = "60b1af1c220855b6ceac025d3f6ecdd2b7c4894bfe9cd9bda4fbb4bc7c0d4cf0"
 
 [[package]]
 name = "enum-as-inner"
@@ -2581,6 +2581,7 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-tcp",
  "libp2p-upnp",
+ "libp2p-websocket",
  "libp2p-webtransport-websys",
  "libp2p-yamux",
  "multiaddr",
@@ -2983,6 +2984,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-websocket"
+version = "0.43.1"
+source = "git+https://github.com/libp2p/rust-libp2p?rev=60e32c9d3b4bee42ac698791e917e1587eaa1388#60e32c9d3b4bee42ac698791e917e1587eaa1388"
+dependencies = [
+ "either",
+ "futures",
+ "futures-rustls",
+ "libp2p-core",
+ "libp2p-identity",
+ "parking_lot",
+ "pin-project-lite",
+ "rw-stream-sink",
+ "soketto",
+ "tracing",
+ "url",
+ "webpki-roots 0.25.4",
+]
+
+[[package]]
+name = "libp2p-websocket-websys"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f95cd8a32fcf94ad1e5c2de37c2a05a5a4188d8358b005859a0fc9e63b6953bc"
+dependencies = [
+ "bytes",
+ "futures",
+ "js-sys",
+ "libp2p-core",
+ "parking_lot",
+ "send_wrapper 0.6.0",
+ "thiserror",
+ "tracing",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "libp2p-webtransport-websys"
 version = "0.3.0"
 source = "git+https://github.com/libp2p/rust-libp2p?rev=60e32c9d3b4bee42ac698791e917e1587eaa1388#60e32c9d3b4bee42ac698791e917e1587eaa1388"
@@ -3127,6 +3165,7 @@ dependencies = [
  "instant",
  "js-sys",
  "libp2p",
+ "libp2p-websocket-websys",
  "lumina-node",
  "pin-project",
  "prost",
@@ -3134,6 +3173,8 @@ dependencies = [
  "redb",
  "rexie",
  "rstest",
+ "rustls-pemfile",
+ "rustls-pki-types",
  "send_wrapper 0.6.0",
  "serde",
  "serde-wasm-bindgen",
@@ -4450,7 +4491,7 @@ dependencies = [
  "rustls-webpki 0.102.4",
  "security-framework",
  "security-framework-sys",
- "webpki-roots",
+ "webpki-roots 0.26.2",
  "winapi",
 ]
 
@@ -5565,6 +5606,12 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "webpki-roots"
+version = "0.25.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
 name = "webpki-roots"
