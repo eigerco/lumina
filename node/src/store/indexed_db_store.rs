@@ -123,15 +123,9 @@ impl IndexedDbStore {
         })
     }
 
-    async fn write_tx<F, T, Args>(&self, stores: &[&str], args: Args, f: F) -> Result<T>
-        where
-        //for<'a> F: ManualClosure<'a, T>
-        //for<'a> F: ManualClosure<'a, T>
-        for<'a> F: AsyncSingleArgFnOnce<'a, Args, Output=Result<T>>
-        //F: FnOnce(&Transaction) -> Fut,
-        //Fut: Future<Output = Result<T>>,
-        //for<'a> T: 'a
-        //T: 'static
+    async fn write_tx<F, T, Args>(&self, stores: &[&str], f: F, args: Args) -> Result<T>
+    where
+        for<'a> F: TransactionOperationFn<'a, Args, Output = Result<T>>,
     {
         let tx = self.db.transaction(stores, TransactionMode::ReadWrite)?;
         let res = f(&tx, args).await;
@@ -212,25 +206,16 @@ impl IndexedDbStore {
             .map_err(|e| StoreInsertionError::HeadersVerificationFailed(e.to_string()))?;
 
         if headers.as_ref().is_empty() {
-            return Ok(())
+            return Ok(());
         }
 
-        async fn inner(tx: &Transaction, headers: VerifiedExtendedHeaders) -> Result<ExtendedHeader> {
+        async fn inner(
+            tx: &Transaction,
+            headers: VerifiedExtendedHeaders,
+        ) -> Result<ExtendedHeader> {
             let head = headers.as_ref().first().expect("headers to not be empty");
             let tail = headers.as_ref().last().expect("headers to not be empty");
-            /*
-            let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
-                return Ok(());
-            };
-            */
 
-        //async fn inner(tx: &Transaction) -> Result<()> {
-        /*
-            let tx = self.db.transaction(
-                &[HEADER_STORE_NAME, RANGES_STORE_NAME],
-                TransactionMode::ReadWrite,
-                )?;
-                */
             let header_store = tx.store(HEADER_STORE_NAME)?;
             let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
@@ -246,8 +231,8 @@ impl IndexedDbStore {
                 &header_store,
                 prev_exists.then_some(head),
                 next_exists.then_some(tail),
-                )
-                .await?;
+            )
+            .await?;
 
             for header in headers.as_ref() {
                 let hash = header.hash();
@@ -283,7 +268,9 @@ impl IndexedDbStore {
             Ok(tail.clone())
         }
 
-        let tail = self.write_tx( &[HEADER_STORE_NAME, RANGES_STORE_NAME], headers, inner).await?;
+        let tail = self
+            .write_tx(&[HEADER_STORE_NAME, RANGES_STORE_NAME], inner, headers)
+            .await?;
 
         if tail.height().value()
             > self
@@ -329,12 +316,16 @@ impl IndexedDbStore {
         status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()> {
-        async fn inner(tx: &Transaction, (height, status, cids): (u64, SamplingStatus, Vec<Cid>)) -> Result<()> {
+        async fn inner(
+            tx: &Transaction,
+            (height, status, cids): (u64, SamplingStatus, Vec<Cid>),
+        ) -> Result<()> {
             let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
             let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
             let header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
-            let mut accepted_ranges = get_ranges(&ranges_store, ACCEPTED_SAMPLING_RANGES_KEY).await?;
+            let mut accepted_ranges =
+                get_ranges(&ranges_store, ACCEPTED_SAMPLING_RANGES_KEY).await?;
 
             if !header_ranges.contains(height) {
                 return Err(StoreError::NotFound);
@@ -377,13 +368,18 @@ impl IndexedDbStore {
                 &ranges_store,
                 ACCEPTED_SAMPLING_RANGES_KEY,
                 &accepted_ranges,
-                )
-                .await?;
+            )
+            .await?;
 
             Ok(())
         }
 
-        self.write_tx(&[SAMPLING_STORE_NAME, RANGES_STORE_NAME], (height, status, cids), inner).await?;
+        self.write_tx(
+            &[SAMPLING_STORE_NAME, RANGES_STORE_NAME],
+            inner,
+            (height, status, cids),
+        )
+        .await?;
 
         Ok(())
     }
@@ -440,73 +436,18 @@ impl IndexedDbStore {
 
             Ok(height)
         }
-        self.write_tx(&[HEADER_STORE_NAME, RANGES_STORE_NAME], (), inner).await
+        self.write_tx(&[HEADER_STORE_NAME, RANGES_STORE_NAME], inner, ())
+            .await
     }
 }
-
-/*
-trait ManualClosure<'a, T> {
-    type Output: 'a + Future<Output=Result<T>> + Sized;
-
-    fn call(self, arg: &'a Transaction) -> Self::Output;
-}
-
-impl<'a, T, F, Fut> ManualClosure<'a, T> for F
-where
-    //T: 'a,
-    Fut: 'a + Future<Output=Result<T>>,
-    F: FnOnce(&'a Transaction) -> Fut
+trait TransactionOperationFn<'a, Arg>:
+    FnOnce(&'a Transaction, Arg) -> <Self as TransactionOperationFn<Arg>>::Fut
 {
-    type Output = Fut;
-
-    fn call(self, arg: &'a Transaction) -> Fut {
-        self(arg)
-    }
-}
-
-struct ConcreteManualClosure<'a, T, Args, F, Fut>
-    where 
-    Fut: 'a + Future<Output = Result<T>>,
-    F: FnOnce(&'a Transaction, Args) -> Fut
-{
-    function: F,
-    args: Args,
-    _fut: std::marker::PhantomData<&'a Fut>,
-}
-
-impl<'a, T, Args, F, Fut> ConcreteManualClosure<'a, T, Args, F, Fut> 
-    where 
-    Fut: 'a + Future<Output = Result<T>>,
-    F: FnOnce(&'a Transaction, Args) -> Fut
-{
-    fn new(f: F, args: Args) -> Self {
-        Self {
-            function: f,
-            args,
-            _fut: std::marker::PhantomData::default(),
-        }
-    }
-}
-
-impl<'a, T, Args, F, Fut> ManualClosure<'a, T> for ConcreteManualClosure<'a, T, Args, F, Fut>  
-where 
-Fut: 'a + Future<Output = Result<T>>,
-F: FnOnce(&'a Transaction, Args) -> Fut
-{
-    type Output = Fut;
-
-    fn call(self, arg: &'a Transaction) -> Self::Output {
-        (self.function)(arg, self.args)
-    }
-}
-*/
-
-trait AsyncSingleArgFnOnce<'a, Arg>: FnOnce(&'a Transaction, Arg) -> <Self as AsyncSingleArgFnOnce<Arg>>::Fut {
-    type Fut: Future<Output=<Self as AsyncSingleArgFnOnce<'a, Arg>>::Output>;
+    type Fut: Future<Output = <Self as TransactionOperationFn<'a, Arg>>::Output>;
     type Output;
 }
 
-impl<'a, Arg, F, Fut> AsyncSingleArgFnOnce<'a, Arg> for F
+impl<'a, Arg, F, Fut> TransactionOperationFn<'a, Arg> for F
 where
     F: FnOnce(&'a Transaction, Arg) -> Fut,
     Fut: Future,
@@ -514,17 +455,6 @@ where
     type Fut = Fut;
     type Output = Fut::Output;
 }
-
-/*
-impl <Arg, F, Fut, Closed> AsyncSingleArgFnOnce<Arg> for (Closed, F)
-    where 
-    F: FnOnce(Closed, Arg) -> Fut,
-    Fut: Future,
-{
-    type Fut = Fut;
-    type Output = Fut::Output;
-}
-*/
 
 #[async_trait]
 impl Store for IndexedDbStore {

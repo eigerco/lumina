@@ -1080,8 +1080,11 @@ mod tests {
         for i in 1..=66 {
             assert_eq!(store.remove_last().await.unwrap(), i);
         }
-        
-        assert!(matches!(store.remove_last().await.unwrap_err(), StoreError::NotFound));
+
+        assert!(matches!(
+            store.remove_last().await.unwrap_err(),
+            StoreError::NotFound
+        ));
 
         let stored_ranges = store.get_stored_header_ranges().await.unwrap();
         assert!(stored_ranges.is_empty());
