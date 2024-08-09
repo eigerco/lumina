@@ -1,4 +1,4 @@
-use std::collections::hash_map::Entry as HashMapEntry;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::pin::pin;
@@ -133,6 +133,11 @@ impl InMemoryStore {
             header_added_notifier: Notify::new(),
         }
     }
+
+    async fn remove_last(&self) -> Result<u64> {
+        let mut inner = self.inner.write().await;
+        inner.remove_last()
+    }
 }
 
 impl InMemoryStoreInner {
@@ -196,7 +201,7 @@ impl InMemoryStoreInner {
                 "inconsistency between headers table and ranges table"
             );
 
-            let HashMapEntry::Vacant(headers_entry) = self.headers.entry(hash) else {
+            let Entry::Vacant(headers_entry) = self.headers.entry(hash) else {
                 // TODO: Remove this when we implement type-safe validation on insertion.
                 return Err(StoreInsertionError::HashExists(hash).into());
             };
@@ -261,10 +266,10 @@ impl InMemoryStoreInner {
         }
 
         match self.sampling_data.entry(height) {
-            HashMapEntry::Vacant(entry) => {
+            Entry::Vacant(entry) => {
                 entry.insert(SamplingMetadata { status, cids });
             }
-            HashMapEntry::Occupied(mut entry) => {
+            Entry::Occupied(mut entry) => {
                 let metadata = entry.get_mut();
                 metadata.status = status;
 
@@ -300,6 +305,35 @@ impl InMemoryStoreInner {
         };
 
         Ok(Some(metadata.clone()))
+    }
+
+    fn remove_last(&mut self) -> Result<u64> {
+        let Some(height) = self.header_ranges.tail() else {
+            return Err(StoreError::NotFound);
+        };
+
+        let Entry::Occupied(height_to_hash) = self.height_to_hash.entry(height) else {
+            return Err(StoreError::StoredDataError(format!(
+                "inconsistency between ranges and height_to_hash tables, height {height}"
+            )));
+        };
+
+        let hash = height_to_hash.get();
+        let Entry::Occupied(header) = self.headers.entry(*hash) else {
+            return Err(StoreError::StoredDataError(format!(
+                "inconsistency between header and height_to_hash tables, hash {hash}"
+            )));
+        };
+
+        // sampling data may or may not be there
+        self.sampling_data.remove(&height);
+
+        height_to_hash.remove_entry();
+        header.remove_entry();
+
+        self.header_ranges.pop_tail();
+
+        Ok(height)
     }
 }
 
@@ -391,6 +425,10 @@ impl Store for InMemoryStore {
 
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         Ok(self.get_accepted_sampling_ranges().await)
+    }
+
+    async fn remove_last(&self) -> Result<u64> {
+        self.remove_last().await
     }
 }
 

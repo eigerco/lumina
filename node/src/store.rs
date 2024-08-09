@@ -154,6 +154,9 @@ pub trait Store: Send + Sync + Debug {
 
     /// Returns a list of accepted sampling ranges currently held in store.
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges>;
+
+    /// Remove header with lowest height from the store.
+    async fn remove_last(&self) -> Result<u64>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].
@@ -230,7 +233,7 @@ impl From<tokio::task::JoinError> for StoreError {
 // Needed for `Into<VerifiedExtendedHeaders>`
 impl From<Infallible> for StoreError {
     fn from(_: Infallible) -> Self {
-        // Infallable should not be possible to construct
+        // Infallible should not be possible to construct
         unreachable!("Infallible failed")
     }
 }
@@ -331,6 +334,7 @@ mod tests {
     // rstest only supports attributes which last segment is `test`
     // https://docs.rs/rstest/0.18.2/rstest/attr.rstest.html#inject-test-attribute
     use crate::test_utils::async_test as test;
+    use crate::test_utils::new_block_ranges;
 
     #[test]
     async fn converts_bounded_ranges() {
@@ -1015,6 +1019,81 @@ mod tests {
         store.insert(fork.next()).await.unwrap_err();
     }
 
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn tail_removal_partial_range<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(128);
+
+        store.insert(&headers[0..64]).await.unwrap();
+        store.insert(&headers[96..128]).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=64, 97..=128])).await;
+
+        assert_eq!(store.remove_last().await.unwrap(), 1);
+        assert_store(&store, &headers, new_block_ranges([2..=64, 97..=128])).await;
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn tail_removal_full_range<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(128);
+
+        store.insert(&headers[0..1]).await.unwrap();
+        store.insert(&headers[65..128]).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=1, 66..=128])).await;
+
+        assert_eq!(store.remove_last().await.unwrap(), 1);
+        assert_store(&store, &headers, new_block_ranges([66..=128])).await;
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn tail_removal_remove_all<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(66);
+
+        store.insert(&headers[..]).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=66])).await;
+
+        for i in 1..=66 {
+            assert_eq!(store.remove_last().await.unwrap(), i);
+        }
+
+        assert!(matches!(
+            store.remove_last().await.unwrap_err(),
+            StoreError::NotFound
+        ));
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        assert!(stored_ranges.is_empty());
+
+        for h in 1..=66 {
+            assert!(!store.has_at(h).await);
+        }
+    }
+
     /// Fills an empty store
     async fn fill_store<S: Store>(store: &mut S, amount: u64) -> ExtendedHeaderGenerator {
         assert!(!store.has_at(1).await, "Store is not empty");
@@ -1031,6 +1110,33 @@ mod tests {
 
     async fn new_in_memory_store() -> InMemoryStore {
         InMemoryStore::new()
+    }
+
+    pub(crate) async fn assert_store<S: Store>(
+        store: &S,
+        headers: &[ExtendedHeader],
+        expected_ranges: BlockRanges,
+    ) {
+        assert_eq!(
+            store.get_stored_header_ranges().await.unwrap(),
+            expected_ranges
+        );
+        for header in headers {
+            let height = header.height().value();
+            if expected_ranges.contains(height) {
+                assert_eq!(&store.get_by_height(height).await.unwrap(), header);
+                assert_eq!(&store.get_by_hash(&header.hash()).await.unwrap(), header);
+            } else {
+                assert!(matches!(
+                    store.get_by_height(height).await.unwrap_err(),
+                    StoreError::NotFound
+                ));
+                assert!(matches!(
+                    store.get_by_hash(&header.hash()).await.unwrap_err(),
+                    StoreError::NotFound
+                ));
+            }
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
