@@ -3163,6 +3163,7 @@ dependencies = [
  "getrandom",
  "gloo-timers 0.3.0",
  "instant",
+ "js-sys",
  "libp2p",
  "libp2p-websocket-websys",
  "lumina-node",
