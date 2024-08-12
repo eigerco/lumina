@@ -438,7 +438,7 @@ impl RedbStore {
                 return Err(StoreError::StoredDataError(format!(
                     "inconsistency between header and height_to_hash tables, hash {hash}"
                 )));
-            };
+            }
 
             Ok(height)
         })
@@ -535,6 +535,7 @@ impl Store for RedbStore {
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         self.get_sampling_ranges().await
     }
+
     async fn remove_last(&self) -> Result<u64> {
         self.remove_last().await
     }

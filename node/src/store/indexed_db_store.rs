@@ -309,6 +309,7 @@ impl IndexedDbStore {
         .await
     }
 }
+
 trait TransactionOperationFn<'a, Arg>:
     FnOnce(&'a Transaction, Arg) -> <Self as TransactionOperationFn<Arg>>::Fut
 {
