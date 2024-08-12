@@ -709,7 +709,7 @@ async fn update_sampling_metadata_tx_op(
     Ok(())
 }
 
-async fn remove_last_tx_op(tx: &Transaction, _:()) -> Result<u64> {
+async fn remove_last_tx_op(tx: &Transaction, _: ()) -> Result<u64> {
     let header_store = tx.store(HEADER_STORE_NAME)?;
     let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
