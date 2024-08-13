@@ -396,20 +396,51 @@ impl RedbStore {
     }
 
     async fn get_stored_ranges(&self) -> Result<BlockRanges> {
-        let ranges = self
-            .read_tx(|tx| {
-                let table = tx.open_table(RANGES_TABLE)?;
-                get_ranges(&table, HEADER_RANGES_KEY)
-            })
-            .await?;
-
-        Ok(ranges)
+        self.read_tx(|tx| {
+            let table = tx.open_table(RANGES_TABLE)?;
+            get_ranges(&table, HEADER_RANGES_KEY)
+        })
+        .await
     }
 
     async fn get_sampling_ranges(&self) -> Result<BlockRanges> {
         self.read_tx(|tx| {
             let table = tx.open_table(RANGES_TABLE)?;
             get_ranges(&table, ACCEPTED_SAMPING_RANGES_KEY)
+        })
+        .await
+    }
+
+    async fn remove_last(&self) -> Result<u64> {
+        self.write_tx(move |tx| {
+            let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
+            let mut headers_table = tx.open_table(HEADERS_TABLE)?;
+            let mut ranges_table = tx.open_table(RANGES_TABLE)?;
+
+            let mut header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
+
+            let Some(height) = header_ranges.pop_tail() else {
+                return Err(StoreError::NotFound);
+            };
+            set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
+
+            let Some(header) = headers_table.remove(height)? else {
+                return Err(StoreError::StoredDataError(format!(
+                    "inconsistency between ranges and height_to_hash tables, height {height}"
+                )));
+            };
+
+            let hash = ExtendedHeader::decode(header.value())
+                .map_err(|e| StoreError::StoredDataError(e.to_string()))?
+                .hash();
+
+            if heights_table.remove(hash.as_bytes())?.is_none() {
+                return Err(StoreError::StoredDataError(format!(
+                    "inconsistency between header and height_to_hash tables, hash {hash}"
+                )));
+            }
+
+            Ok(height)
         })
         .await
     }
@@ -503,6 +534,10 @@ impl Store for RedbStore {
 
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         self.get_sampling_ranges().await
+    }
+
+    async fn remove_last(&self) -> Result<u64> {
+        self.remove_last().await
     }
 }
 

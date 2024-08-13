@@ -360,6 +360,20 @@ impl BlockRanges {
         Some(head)
     }
 
+    /// Returns the tail (lowest) height and removes it from the ranges.
+    pub fn pop_tail(&mut self) -> Option<u64> {
+        let first = self.0.first_mut()?;
+        let tail = *first.start();
+
+        if first.len() == 1 {
+            self.0.remove(0);
+        } else {
+            *first = *first.start() + 1..=*first.end();
+        }
+
+        Some(tail)
+    }
+
     /// Insert a new range.
     ///
     /// This fails only if `range` is not valid. It allows inserting an overlapping range.
@@ -478,6 +492,20 @@ impl Sub<&BlockRanges> for BlockRanges {
     }
 }
 
+impl Iterator for BlockRanges {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pop_tail()
+    }
+}
+
+impl DoubleEndedIterator for BlockRanges {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.pop_head()
+    }
+}
+
 impl Display for BlockRanges {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[")?;
@@ -506,9 +534,7 @@ fn calc_overlap(
 mod tests {
     use super::*;
 
-    fn new_block_ranges<const N: usize>(ranges: [BlockRange; N]) -> BlockRanges {
-        BlockRanges::from_vec(ranges.into_iter().collect()).expect("invalid BlockRanges")
-    }
+    use crate::test_utils::new_block_ranges;
 
     #[test]
     fn range_len() {
@@ -702,6 +728,43 @@ mod tests {
         assert_eq!(ranges.pop_head(), Some(2));
         assert_eq!(ranges.pop_head(), Some(1));
         assert_eq!(ranges.pop_head(), None);
+    }
+
+    #[test]
+    fn pop_tail() {
+        let mut ranges = new_block_ranges([]);
+        assert_eq!(ranges.pop_tail(), None);
+
+        let mut ranges = new_block_ranges([1..=4, 6..=8, 10..=10]);
+        assert_eq!(ranges.pop_tail(), Some(1));
+        assert_eq!(ranges.pop_tail(), Some(2));
+        assert_eq!(ranges.pop_tail(), Some(3));
+        assert_eq!(ranges.pop_tail(), Some(4));
+        assert_eq!(ranges.pop_tail(), Some(6));
+        assert_eq!(ranges.pop_tail(), Some(7));
+        assert_eq!(ranges.pop_tail(), Some(8));
+        assert_eq!(ranges.pop_tail(), Some(10));
+        assert_eq!(ranges.pop_tail(), None);
+    }
+
+    #[test]
+    fn block_ranges_iterator() {
+        let ranges = new_block_ranges([1..=5, 10..=15]);
+        let heights: Vec<_> = ranges.collect();
+        assert_eq!(heights, vec![1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15]);
+
+        let empty_heights: Vec<u64> = new_block_ranges([]).collect();
+        assert_eq!(empty_heights, Vec::<u64>::new())
+    }
+
+    #[test]
+    fn block_ranges_double_ended_iterator() {
+        let ranges = new_block_ranges([1..=5, 10..=15]);
+        let heights: Vec<_> = ranges.rev().collect();
+        assert_eq!(heights, vec![15, 14, 13, 12, 11, 10, 5, 4, 3, 2, 1]);
+
+        let empty_heights: Vec<u64> = new_block_ranges([]).collect();
+        assert_eq!(empty_heights, Vec::<u64>::new())
     }
 
     #[test]
