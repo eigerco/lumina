@@ -76,6 +76,7 @@ blockstore = { workspace = true, features = ["indexeddb"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { version = "0.2.15", features = ["js"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
+js-sys = "0.3.69"
 libp2p = { workspace = true, features = [
   "noise",
   "wasm-bindgen",

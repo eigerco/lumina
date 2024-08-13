@@ -8,7 +8,8 @@ use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
-use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, TransactionMode};
+use futures::Future;
+use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, Transaction, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
@@ -122,6 +123,22 @@ impl IndexedDbStore {
         })
     }
 
+    async fn write_tx<F, T, Args>(&self, stores: &[&str], f: F, args: Args) -> Result<T>
+    where
+        for<'a> F: TransactionOperationFn<'a, Args, Output = Result<T>>,
+    {
+        let tx = self.db.transaction(stores, TransactionMode::ReadWrite)?;
+        let res = f(&tx, args).await;
+
+        if res.is_ok() {
+            tx.commit().await?;
+        } else {
+            tx.abort().await?;
+        }
+
+        res
+    }
+
     /// Delete the persistent store.
     pub async fn delete_db(self) -> rexie::Result<()> {
         let name = self.db.name();
@@ -188,64 +205,17 @@ impl IndexedDbStore {
             .try_into()
             .map_err(|e| StoreInsertionError::HeadersVerificationFailed(e.to_string()))?;
 
-        let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last()) else {
+        if headers.as_ref().is_empty() {
             return Ok(());
-        };
-
-        let tx = self.db.transaction(
-            &[HEADER_STORE_NAME, RANGES_STORE_NAME],
-            TransactionMode::ReadWrite,
-        )?;
-        let header_store = tx.store(HEADER_STORE_NAME)?;
-        let ranges_store = tx.store(RANGES_STORE_NAME)?;
-
-        let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
-
-        let headers_range = head.height().value()..=tail.height().value();
-        let (prev_exists, next_exists) = header_ranges
-            .check_insertion_constraints(&headers_range)
-            .map_err(StoreInsertionError::ContraintsNotMet)?;
-
-        // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
-        verify_against_neighbours(
-            &header_store,
-            prev_exists.then_some(head),
-            next_exists.then_some(tail),
-        )
-        .await?;
-
-        for header in headers.as_ref() {
-            let hash = header.hash();
-            let hash_index = header_store.index(HASH_INDEX_NAME)?;
-            let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?)?;
-
-            if hash_index.count(Some(&jsvalue_hash_key)).await.unwrap_or(0) != 0 {
-                // TODO: Replace this with `StoredDataError` when we implement
-                // type-safe validation on insertion.
-                return Err(StoreInsertionError::HashExists(hash).into());
-            }
-
-            // make sure Result is Infallible, we unwrap it later
-            let serialized_header: std::result::Result<_, Infallible> = header.encode_vec();
-
-            let height = header.height().value();
-            let header_entry = ExtendedHeaderEntry {
-                height,
-                hash,
-                header: serialized_header.unwrap(),
-            };
-
-            let jsvalue_header = to_value(&header_entry)?;
-
-            header_store.add(&jsvalue_header, None).await?;
         }
 
-        header_ranges
-            .insert_relaxed(headers_range)
-            .expect("invalid range");
-        set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
-
-        tx.commit().await?;
+        let tail = self
+            .write_tx(
+                &[HEADER_STORE_NAME, RANGES_STORE_NAME],
+                insert_tx_op,
+                headers,
+            )
+            .await?;
 
         if tail.height().value()
             > self
@@ -255,7 +225,7 @@ impl IndexedDbStore {
                 .map(|h| h.height().value())
                 .unwrap_or(0)
         {
-            self.head.replace(Some(tail.clone()));
+            self.head.replace(Some(tail));
         }
 
         self.header_added_notifier.notify_waiters();
@@ -291,61 +261,12 @@ impl IndexedDbStore {
         status: SamplingStatus,
         cids: Vec<Cid>,
     ) -> Result<()> {
-        let tx = self.db.transaction(
+        self.write_tx(
             &[SAMPLING_STORE_NAME, RANGES_STORE_NAME],
-            TransactionMode::ReadWrite,
-        )?;
-        let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
-        let ranges_store = tx.store(RANGES_STORE_NAME)?;
-
-        let header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
-        let mut accepted_ranges = get_ranges(&ranges_store, ACCEPTED_SAMPLING_RANGES_KEY).await?;
-
-        if !header_ranges.contains(height) {
-            return Err(StoreError::NotFound);
-        }
-
-        let height_key = to_value(&height)?;
-        let previous_entry = sampling_store.get(&height_key).await?;
-
-        let new_entry = if previous_entry.is_falsy() {
-            SamplingMetadata { status, cids }
-        } else {
-            let mut value: SamplingMetadata = from_value(previous_entry)?;
-
-            value.status = status;
-
-            for cid in cids {
-                if !value.cids.contains(&cid) {
-                    value.cids.push(cid);
-                }
-            }
-
-            value
-        };
-
-        let metadata_jsvalue = to_value(&new_entry)?;
-        sampling_store
-            .put(&metadata_jsvalue, Some(&height_key))
-            .await?;
-
-        match status {
-            SamplingStatus::Accepted => accepted_ranges
-                .insert_relaxed(height..=height)
-                .expect("invalid height"),
-            _ => accepted_ranges
-                .remove_relaxed(height..=height)
-                .expect("invalid height"),
-        }
-
-        set_ranges(
-            &ranges_store,
-            ACCEPTED_SAMPLING_RANGES_KEY,
-            &accepted_ranges,
+            update_sampling_metadata_tx_op,
+            (height, status, cids),
         )
         .await?;
-
-        tx.commit().await?;
 
         Ok(())
     }
@@ -378,6 +299,31 @@ impl IndexedDbStore {
 
         get_ranges(&store, ACCEPTED_SAMPLING_RANGES_KEY).await
     }
+
+    async fn remove_last(&self) -> Result<u64> {
+        self.write_tx(
+            &[HEADER_STORE_NAME, RANGES_STORE_NAME],
+            remove_last_tx_op,
+            (),
+        )
+        .await
+    }
+}
+
+trait TransactionOperationFn<'a, Arg>:
+    FnOnce(&'a Transaction, Arg) -> <Self as TransactionOperationFn<Arg>>::Fut
+{
+    type Fut: Future<Output = <Self as TransactionOperationFn<'a, Arg>>::Output>;
+    type Output;
+}
+
+impl<'a, Arg, F, Fut> TransactionOperationFn<'a, Arg> for F
+where
+    F: FnOnce(&'a Transaction, Arg) -> Fut,
+    Fut: Future,
+{
+    type Fut = Fut;
+    type Output = Fut::Output;
 }
 
 #[async_trait]
@@ -477,6 +423,11 @@ impl Store for IndexedDbStore {
 
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         let fut = SendWrapper::new(self.get_sampling_ranges());
+        fut.await
+    }
+
+    async fn remove_last(&self) -> Result<u64> {
+        let fut = SendWrapper::new(self.remove_last());
         fut.await
     }
 }
@@ -641,6 +592,145 @@ async fn set_schema_version(store: &rexie::Store, version: u32) -> Result<()> {
     let val = to_value(&version)?;
     store.put(&val, Some(&key)).await?;
     Ok(())
+}
+
+async fn insert_tx_op(
+    tx: &Transaction,
+    headers: VerifiedExtendedHeaders,
+) -> Result<ExtendedHeader> {
+    let head = headers.as_ref().first().expect("headers to not be empty");
+    let tail = headers.as_ref().last().expect("headers to not be empty");
+
+    let header_store = tx.store(HEADER_STORE_NAME)?;
+    let ranges_store = tx.store(RANGES_STORE_NAME)?;
+
+    let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+
+    let headers_range = head.height().value()..=tail.height().value();
+    let (prev_exists, next_exists) = header_ranges
+        .check_insertion_constraints(&headers_range)
+        .map_err(StoreInsertionError::ContraintsNotMet)?;
+
+    // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
+    verify_against_neighbours(
+        &header_store,
+        prev_exists.then_some(head),
+        next_exists.then_some(tail),
+    )
+    .await?;
+
+    for header in headers.as_ref() {
+        let hash = header.hash();
+        let hash_index = header_store.index(HASH_INDEX_NAME)?;
+        let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?)?;
+
+        if hash_index.count(Some(&jsvalue_hash_key)).await.unwrap_or(0) != 0 {
+            // TODO: Replace this with `StoredDataError` when we implement
+            // type-safe validation on insertion.
+            return Err(StoreInsertionError::HashExists(hash).into());
+        }
+
+        // make sure Result is Infallible, we unwrap it later
+        let serialized_header: std::result::Result<_, Infallible> = header.encode_vec();
+
+        let height = header.height().value();
+        let header_entry = ExtendedHeaderEntry {
+            height,
+            hash,
+            header: serialized_header.unwrap(),
+        };
+
+        let jsvalue_header = to_value(&header_entry)?;
+
+        header_store.add(&jsvalue_header, None).await?;
+    }
+
+    header_ranges
+        .insert_relaxed(headers_range)
+        .expect("invalid range");
+    set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
+
+    Ok(tail.clone())
+}
+
+async fn update_sampling_metadata_tx_op(
+    tx: &Transaction,
+    (height, status, cids): (u64, SamplingStatus, Vec<Cid>),
+) -> Result<()> {
+    let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
+    let ranges_store = tx.store(RANGES_STORE_NAME)?;
+
+    let header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+    let mut accepted_ranges = get_ranges(&ranges_store, ACCEPTED_SAMPLING_RANGES_KEY).await?;
+
+    if !header_ranges.contains(height) {
+        return Err(StoreError::NotFound);
+    }
+
+    let height_key = to_value(&height)?;
+    let previous_entry = sampling_store.get(&height_key).await?;
+
+    let new_entry = if previous_entry.is_falsy() {
+        SamplingMetadata { status, cids }
+    } else {
+        let mut value: SamplingMetadata = from_value(previous_entry)?;
+
+        value.status = status;
+
+        for cid in cids {
+            if !value.cids.contains(&cid) {
+                value.cids.push(cid);
+            }
+        }
+
+        value
+    };
+
+    let metadata_jsvalue = to_value(&new_entry)?;
+    sampling_store
+        .put(&metadata_jsvalue, Some(&height_key))
+        .await?;
+
+    match status {
+        SamplingStatus::Accepted => accepted_ranges
+            .insert_relaxed(height..=height)
+            .expect("invalid height"),
+        _ => accepted_ranges
+            .remove_relaxed(height..=height)
+            .expect("invalid height"),
+    }
+
+    set_ranges(
+        &ranges_store,
+        ACCEPTED_SAMPLING_RANGES_KEY,
+        &accepted_ranges,
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn remove_last_tx_op(tx: &Transaction, _: ()) -> Result<u64> {
+    let header_store = tx.store(HEADER_STORE_NAME)?;
+    let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
+    let ranges_store = tx.store(RANGES_STORE_NAME)?;
+
+    let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+
+    let Some(height) = header_ranges.pop_tail() else {
+        return Err(StoreError::NotFound);
+    };
+    set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
+
+    let jsvalue_height = to_value(&height).expect("to create jsvalue");
+    let header = height_index.get(&jsvalue_height).await?;
+
+    let id = js_sys::Reflect::get(&header, &to_value("id")?)
+        .map_err(|_| StoreError::StoredDataError("could not get header's DB id".into()))?;
+
+    header_store.delete(&id).await?;
+
+    Ok(height)
 }
 
 async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
