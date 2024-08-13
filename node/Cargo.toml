@@ -34,7 +34,7 @@ libp2p = { workspace = true, features = [
 ] }
 
 async-trait = "0.1.80"
-beetswap = "0.3.0"
+beetswap = "0.3.1"
 cid = { version = "0.11.1", features = ["serde-codec"] }
 dashmap = "5.5.3"
 futures = "0.3.30"

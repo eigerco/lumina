@@ -517,9 +517,9 @@ checksum = "d965446196e3b7decd44aa7ee49e31d630118f90ef12f97900f262eb915c951d"
 
 [[package]]
 name = "beetswap"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2da05aa1387f4da9cad05246dcf5a4e8940815f76558af2588a0163e0d17a619"
+checksum = "e41ccdd7bc2a1162380eb2657100fba24739c4b600344187d1b5a411afd326b2"
 dependencies = [
  "asynchronous-codec",
  "blockstore",
@@ -631,16 +631,17 @@ dependencies = [
 
 [[package]]
 name = "blockstore"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65439a69f3edc14658a7e1e14336b7e5668741c7eb54a79234686a10727a9be1"
+checksum = "dc99329facbb960effbe7ed707c753a718877c1878eb8ca08704fa391c494020"
 dependencies = [
  "cid",
- "dashmap",
+ "dashmap 6.0.1",
+ "idb",
  "js-sys",
  "multihash",
  "redb",
- "rexie",
+ "rexie 0.6.2",
  "thiserror",
  "tokio",
  "wasm-bindgen",
@@ -1125,6 +1126,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
 dependencies = [
  "cfg-if",
+ "hashbrown",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
+name = "dashmap"
+version = "6.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "804c8821570c3f8b70230c2ba75ffa5c0f9a4189b9a432b6656c536712acae28"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
  "hashbrown",
  "lock_api",
  "once_cell",
@@ -2155,6 +2170,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "idb"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2764bba4203538c2ef2d733d5bad8fdb4622b1ebc5560831279db7b3be1332e8"
+dependencies = [
+ "js-sys",
+ "num-traits",
+ "thiserror",
+ "tokio",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "idna"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3175,7 +3204,7 @@ dependencies = [
  "celestia-tendermint-proto",
  "celestia-types",
  "cid",
- "dashmap",
+ "dashmap 5.5.3",
  "dotenvy",
  "function_name",
  "futures",
@@ -3188,7 +3217,7 @@ dependencies = [
  "prost",
  "rand",
  "redb",
- "rexie",
+ "rexie 0.5.0",
  "rstest",
  "rustls-pemfile",
  "rustls-pki-types",
@@ -4230,6 +4259,17 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "rexie"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "887466cfa8a12c08ee4b174998135cea8ff0fd84858627cd793e56535a045bc9"
+dependencies = [
+ "idb",
+ "thiserror",
+ "wasm-bindgen",
 ]
 
 [[package]]
