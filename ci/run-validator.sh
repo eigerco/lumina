@@ -120,6 +120,7 @@ setup_private_validator() {
   celestia-appd add-genesis-account "$validator_addr" "$VALIDATOR_COINS"
   # Generate a genesis transaction that creates a validator with a self-delegation
   celestia-appd gentx "$NODE_NAME" 5000000000utia \
+    --fees 500utia \
     --keyring-backend="test" \
     --chain-id "$P2P_NETWORK"
   # Collect the genesis transactions and form a genesis.json
@@ -135,22 +136,8 @@ setup_private_validator() {
   # bringing this value too low results in errors
   sed -i'.bak' 's|^timeout_commit.*|timeout_commit = "1s"|g' "$CONFIG_DIR/config/config.toml"
 
-  # Register the validator EVM address
-  {
-    # wait for the genesis
-    wait_for_block 1
-
-    # private key: da6ed55cb2894ac2c9c10209c09de8e8b9d109b910338d5bf3d747a7e1fc9eb9
-    celestia-appd tx qgb register \
-      "$(celestia-appd keys show "$NODE_NAME" --bech val -a)" \
-      0x966e6f22781EF6a6A82BBB4DB3df8E225DfD9488 \
-      --from "$NODE_NAME" \
-      --fees 30000utia \
-      -b block \
-      -y
-
-    echo "Registered validator's EVM address"
-  } &
+  # Set app version to 1
+  sed -i'.bak' 's|"app_version": "2"|"app_version": "1"|g' "$CONFIG_DIR/config/genesis.json"
 }
 
 main() {
