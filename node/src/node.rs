@@ -116,6 +116,7 @@ where
         let event_channel = EventChannel::new();
         let event_sub = event_channel.subscribe();
         let store = Arc::new(config.store);
+        let blockstore = Arc::new(config.blockstore);
 
         let p2p = Arc::new(
             P2p::start(P2pArgs {
@@ -123,7 +124,7 @@ where
                 local_keypair: config.p2p_local_keypair,
                 bootnodes: config.p2p_bootnodes,
                 listen_on: config.p2p_listen_on,
-                blockstore: config.blockstore,
+                blockstore,
                 store: store.clone(),
                 event_pub: event_channel.publisher(),
             })

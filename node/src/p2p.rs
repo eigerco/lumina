@@ -54,7 +54,6 @@ use tracing::{debug, error, info, instrument, trace, warn};
 
 mod header_ex;
 pub(crate) mod header_session;
-mod kademlia;
 pub(crate) mod shwap;
 mod swarm;
 
@@ -196,7 +195,7 @@ where
     /// List of the addresses on which to listen for incoming connections.
     pub listen_on: Vec<Multiaddr>,
     /// The store for headers.
-    pub blockstore: B,
+    pub blockstore: Arc<B>,
     /// The store for headers.
     pub store: Arc<S>,
     /// Event publisher.
@@ -603,7 +602,7 @@ where
     identify: identify::Behaviour,
     header_ex: HeaderExBehaviour<S>,
     gossipsub: gossipsub::Behaviour,
-    kademlia: kademlia::Behaviour,
+    kademlia: kad::Behaviour<kad::store::MemoryStore>,
 }
 
 struct Worker<B, S>
@@ -658,7 +657,11 @@ where
         let gossipsub = init_gossipsub(&args, [&header_sub_topic, &bad_encoding_fraud_sub_topic])?;
 
         let kademlia = init_kademlia(&args)?;
-        let bitswap = init_bitswap(args.blockstore, args.store.clone(), &args.network_id)?;
+        let bitswap = init_bitswap(
+            args.blockstore.clone(),
+            args.store.clone(),
+            &args.network_id,
+        )?;
 
         let header_ex = HeaderExBehaviour::new(HeaderExConfig {
             network_id: &args.network_id,
@@ -772,9 +775,6 @@ where
         for (peer_id, addrs) in &self.bootnodes {
             let dial_opts = DialOpts::peer_id(*peer_id)
                 .addresses(addrs.clone())
-                // Without this set, `kademlia::Behaviour` won't be able to canonicalize
-                // `/tls/ws` to `/wss`.
-                .extend_addresses_through_behaviour()
                 // Tell Swarm not to dial if peer is already connected or there
                 // is an ongoing dialing.
                 .condition(PeerCondition::DisconnectedAndNotDialing)
@@ -915,9 +915,9 @@ where
     #[instrument(level = "trace", skip(self))]
     async fn on_identify_event(&mut self, ev: identify::Event) -> Result<()> {
         match ev {
-            identify::Event::Received { peer_id, info } => {
+            identify::Event::Received { peer_id, info, .. } => {
                 // Inform Kademlia about the listening addresses
-                // TODO: Remove this when rust-libp2p#4302 is implemented
+                // TODO: Remove this when rust-libp2p#5103 is implemented
                 for addr in info.listen_addrs {
                     self.swarm
                         .behaviour_mut()
@@ -1051,6 +1051,7 @@ where
             ConnectedPoint::Dialer {
                 address,
                 role_override: Endpoint::Dialer,
+                ..
             } => Some(address),
             _ => None,
         };
@@ -1222,7 +1223,7 @@ where
     Ok(gossipsub)
 }
 
-fn init_kademlia<B, S>(args: &P2pArgs<B, S>) -> Result<kademlia::Behaviour>
+fn init_kademlia<B, S>(args: &P2pArgs<B, S>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
 where
     B: Blockstore,
     S: Store,
@@ -1245,11 +1246,11 @@ where
         kademlia.set_mode(Some(kad::Mode::Server));
     }
 
-    Ok(kademlia::Behaviour::new(kademlia))
+    Ok(kademlia)
 }
 
 fn init_bitswap<B, S>(
-    blockstore: B,
+    blockstore: Arc<B>,
     store: Arc<S>,
     network_id: &str,
 ) -> Result<beetswap::Behaviour<MAX_MH_SIZE, B>>

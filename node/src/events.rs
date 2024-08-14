@@ -4,10 +4,10 @@ use std::fmt;
 use std::panic::Location;
 use std::time::Duration;
 
-use instant::SystemTime;
 use libp2p::PeerId;
 use serde::Serialize;
 use tokio::sync::broadcast;
+use web_time::SystemTime;
 
 const EVENT_CHANNEL_CAPACITY: usize = 1024;
 

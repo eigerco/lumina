@@ -655,7 +655,9 @@ where
     //
     // This can happen in case of fast node restart.
     let try_insert = match store.get_head().await {
-        Ok(store_head) => store_head != network_head,
+        // `ExtendedHeader.commit.signatures` can be different set on each fetch
+        // so we compare only hashes.
+        Ok(store_head) => store_head.hash() != network_head.hash(),
         Err(StoreError::NotFound) => true,
         Err(e) => return Err(e.into()),
     };
