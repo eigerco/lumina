@@ -138,6 +138,10 @@ where
                 debug_assert_eq!(header.height().value(), removed);
 
                 last_removed = Some(height);
+
+                if self.cancellation_token.is_cancelled() {
+                    break;
+                }
             }
 
             if last_reported != last_removed {
