@@ -976,6 +976,8 @@ pub mod tests {
                     .await
                     .unwrap();
             }
+
+            rexie.close();
         }
 
         #[named]
