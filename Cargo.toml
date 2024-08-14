@@ -3,13 +3,13 @@ resolver = "2"
 members = ["cli", "node", "node-wasm", "proto", "rpc", "types"]
 
 [workspace.dependencies]
-blockstore = "0.6.0"
+blockstore = "0.6.1"
 lumina-node = { version = "0.2.0", path = "node" }
 lumina-node-wasm = { version = "0.1.1", path = "node-wasm" }
 celestia-proto = { version = "0.2.0", path = "proto" }
 celestia-rpc = { version = "0.2.0", path = "rpc", default-features = false }
 celestia-types = { version = "0.2.0", path = "types", default-features = false }
-libp2p = "0.54"
+libp2p = "0.54.0"
 nmt-rs = "0.2.1"
 celestia-tendermint = { version = "0.32.1", default-features = false }
 celestia-tendermint-proto = "0.32.1"
@@ -24,10 +24,6 @@ celestia-tendermint-proto = "0.32.1"
 #libp2p = { path = "../../rust-libp2p/libp2p" }
 #libp2p-core = { path = "../../rust-libp2p/core" }
 #libp2p-swarm = { path = "../../rust-libp2p/swarm" }
-
-libp2p = { git = "https://github.com/libp2p/rust-libp2p", rev = "60e32c9d3b4bee42ac698791e917e1587eaa1388" }
-libp2p-core = { git = "https://github.com/libp2p/rust-libp2p", rev = "60e32c9d3b4bee42ac698791e917e1587eaa1388" }
-libp2p-swarm = { git = "https://github.com/libp2p/rust-libp2p", rev = "60e32c9d3b4bee42ac698791e917e1587eaa1388" }
 
 # Uncomment this if you need debug symbols in release.
 # Also check node-wasm's `Cargo.toml`.
