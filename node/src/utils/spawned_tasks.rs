@@ -1,3 +1,4 @@
+use std::fmt::{self, Debug};
 use std::future::Future;
 
 use tokio::{sync::watch, task::spawn_blocking};
@@ -11,9 +12,11 @@ pub(crate) struct SpawnedTasks {
     counter_rx: watch::Receiver<usize>,
 }
 
+// We don't know if spawned tasks will ever be scheduled, so we need
+// to decrease the counter with a drop guard.
 struct DecreaseGuard(watch::Sender<usize>);
 
-impl DecreaseGuard {
+impl Drop for DecreaseGuard {
     fn drop(&mut self) {
         self.0.send_modify(|counter| *counter -= 1);
     }
@@ -31,7 +34,10 @@ impl SpawnedTasks {
     }
 
     pub(crate) async fn wait_all(&mut self) {
-        self.counter_rx.wait_for(|counter| *counter == 0).await;
+        self.counter_rx
+            .wait_for(|counter| *counter == 0)
+            .await
+            .expect("Channel is never closed");
     }
 
     pub(crate) fn cancel_all(&mut self) {
@@ -85,5 +91,11 @@ impl SpawnedTasks {
             let _decrease_guard = decrease_guard;
             f()
         })
+    }
+}
+
+impl Debug for SpawnedTasks {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("SpawnedTasks { .. }")
     }
 }

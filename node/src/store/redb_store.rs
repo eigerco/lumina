@@ -1,7 +1,6 @@
 use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::pin::pin;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::{convert::Infallible, path::Path};
 
@@ -14,7 +13,7 @@ use redb::{
     CommitError, Database, ReadTransaction, ReadableTable, StorageError, Table, TableDefinition,
     TableError, TransactionError, WriteTransaction,
 };
-use tokio::sync::{watch, Notify};
+use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::warn;
 use tracing::{debug, trace};
@@ -24,6 +23,7 @@ use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{
     Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
 };
+use crate::utils::SpawnedTasks;
 
 use super::utils::{deserialize_extended_header, deserialize_sampling_metadata};
 
@@ -45,9 +45,7 @@ const HEADER_RANGES_KEY: &str = "KEY.HEADER_RANGES";
 #[derive(Debug)]
 pub struct RedbStore {
     inner: Arc<Inner>,
-
-    task_counter_tx: watch::Sender<usize>,
-    task_counter_rx: watch::Receiver<usize>,
+    tasks: SpawnedTasks,
 }
 
 #[derive(Debug)]
@@ -56,8 +54,6 @@ struct Inner {
     db: Arc<Database>,
     /// Notify when a new header is added
     header_added_notifier: Notify,
-
-    closing: AtomicBool,
 }
 
 impl RedbStore {
@@ -83,16 +79,12 @@ impl RedbStore {
 
     /// Create new `RedbStore` with an already opened [`redb::Database`].
     pub async fn new(db: Arc<Database>) -> Result<Self> {
-        let (task_counter_tx, task_counter_rx) = watch::channel(0);
-
         let store = RedbStore {
             inner: Arc::new(Inner {
                 db,
                 header_added_notifier: Notify::new(),
-                closing: AtomicBool::new(false),
             }),
-            task_counter_tx,
-            task_counter_rx,
+            tasks: SpawnedTasks::new(),
         };
 
         store
@@ -151,32 +143,6 @@ impl RedbStore {
         self.inner.db.clone()
     }
 
-    #[track_caller]
-    pub fn counted_spawn_blocking<F, R>(&self, f: F) -> tokio::task::JoinHandle<R>
-    where
-        F: FnOnce() -> R + Send + 'static,
-        R: Send + 'static,
-    {
-        self.task_counter_tx.send_modify(|counter| *counter += 1);
-
-        // We don't know if `spawn_blocking` task will ever be scheduled, so we need
-        // to decrease the counter with a drop guard.
-        struct DecreaseCounterGuard(watch::Sender<usize>);
-
-        impl Drop for DecreaseCounterGuard {
-            fn drop(&mut self) {
-                self.0.send_modify(|counter| *counter -= 1);
-            }
-        }
-
-        let decrease_counter_guard = DecreaseCounterGuard(self.task_counter_tx.clone());
-
-        spawn_blocking(move || {
-            let decrease_counter_guard = decrease_counter_guard;
-            f()
-        })
-    }
-
     /// Execute a read transaction.
     async fn read_tx<F, T>(&self, f: F) -> Result<T>
     where
@@ -185,11 +151,12 @@ impl RedbStore {
     {
         let inner = self.inner.clone();
 
-        self.counted_spawn_blocking(move || {
-            let mut tx = inner.db.begin_read()?;
-            f(&mut tx)
-        })
-        .await?
+        self.tasks
+            .spawn_blocking(move || {
+                let mut tx = inner.db.begin_read()?;
+                f(&mut tx)
+            })
+            .await?
     }
 
     /// Execute a write transaction.
@@ -202,19 +169,20 @@ impl RedbStore {
     {
         let inner = self.inner.clone();
 
-        self.counted_spawn_blocking(move || {
-            let mut tx = inner.db.begin_write()?;
-            let res = f(&mut tx);
+        self.tasks
+            .spawn_blocking(move || {
+                let mut tx = inner.db.begin_write()?;
+                let res = f(&mut tx);
 
-            if res.is_ok() {
-                tx.commit()?;
-            } else {
-                tx.abort()?;
-            }
+                if res.is_ok() {
+                    tx.commit()?;
+                } else {
+                    tx.abort()?;
+                }
 
-            res
-        })
-        .await?
+                res
+            })
+            .await?
     }
 
     async fn head_height(&self) -> Result<u64> {
@@ -578,16 +546,13 @@ impl Store for RedbStore {
     }
 
     async fn close(self) -> Result<()> {
-        let RedbStore {
-            inner,
-            mut task_counter_rx,
-            ..
-        } = self;
+        let RedbStore { inner, mut tasks } = self;
 
-        // Wait our ongoing `spawn_blocking` tasks to exit.
-        let _ = task_counter_rx.wait_for(|counter| *counter == 0).await;
+        tasks.cancel_all();
+        tasks.wait_all().await;
 
-        // Make sure `Inner` gets destructed.
+        // Now `inner` should be the only refernce to `Arc<Inner>`, make
+        // sure we can destruct it.
         Arc::into_inner(inner).expect("Not all redb_store::Inner were stopped");
 
         Ok(())
