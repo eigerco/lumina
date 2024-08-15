@@ -3221,6 +3221,7 @@ dependencies = [
  "rstest",
  "rustls-pemfile",
  "rustls-pki-types",
+ "scopeguard",
  "send_wrapper 0.6.0",
  "serde",
  "serde-wasm-bindgen",

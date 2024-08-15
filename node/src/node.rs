@@ -22,7 +22,7 @@ use tracing::warn;
 
 use crate::daser::{Daser, DaserArgs};
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
-use crate::executor::spawn_cancellable;
+use crate::executor::{spawn_cancellable, JoinHandle};
 use crate::p2p::{P2p, P2pArgs};
 use crate::store::{SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs};
@@ -85,11 +85,12 @@ where
     S: Store + 'static,
 {
     event_channel: EventChannel,
-    p2p: Arc<P2p>,
-    store: Arc<S>,
-    syncer: Arc<Syncer<S>>,
-    daser: Arc<Daser>,
+    p2p: Option<Arc<P2p>>,
+    store: Option<Arc<S>>,
+    syncer: Option<Arc<Syncer<S>>>,
+    daser: Option<Arc<Daser>>,
     tasks_cancellation_token: CancellationToken,
+    network_compromised_task: JoinHandle,
 }
 
 impl<S> Node<S>
@@ -147,7 +148,7 @@ where
         let tasks_cancellation_token = CancellationToken::new();
 
         // spawn the task that will stop the services when the fraud is detected
-        spawn_cancellable(tasks_cancellation_token.child_token(), {
+        let network_compromised_task = spawn_cancellable(tasks_cancellation_token.child_token(), {
             let network_compromised_token = p2p.get_network_compromised_token().await?;
             let syncer = syncer.clone();
             let daser = daser.clone();
@@ -169,31 +170,62 @@ where
 
         let node = Node {
             event_channel,
-            p2p,
-            store,
-            syncer,
-            daser,
+            p2p: Some(p2p),
+            store: Some(store),
+            syncer: Some(syncer),
+            daser: Some(daser),
             tasks_cancellation_token,
+            network_compromised_task,
         };
 
         Ok((node, event_sub))
     }
 
     /// Stop the node.
-    pub async fn stop(&self) {
-        // Cancel Node's tasks
-        self.tasks_cancellation_token.cancel();
+    pub async fn stop(mut self) {
+        {
+            let daser = self.daser.take().expect("Daser not initialized");
+            let syncer = self.syncer.take().expect("Syncer not initialized");
+            let p2p = self.p2p.take().expect("P2p not initialized");
 
-        // Stop all components that use P2p.
-        self.daser.stop();
-        self.syncer.stop();
+            // Cancel Node's tasks
+            self.tasks_cancellation_token.cancel();
+            self.network_compromised_task.join().await;
 
-        self.daser.join().await;
-        self.syncer.join().await;
+            // Stop all components that use P2p.
+            daser.stop();
+            syncer.stop();
 
-        // Now stop P2p component.
-        self.p2p.stop();
-        self.p2p.join().await;
+            daser.join().await;
+            syncer.join().await;
+
+            // Now stop P2p component.
+            p2p.stop();
+            p2p.join().await;
+        }
+
+        // Everything that was holding Store is now dropped.
+        let store = self.store.take().expect("Store not initialized");
+        let store = Arc::into_inner(store).expect("Not all Arc<Store> were dropped");
+        if let Err(e) = store.close().await {
+            warn!("Store failed to close: {e}");
+        }
+    }
+
+    fn daser(&self) -> &Daser {
+        self.daser.as_ref().expect("Daser not initialized")
+    }
+
+    fn syncer(&self) -> &Syncer<S> {
+        self.syncer.as_ref().expect("Syncer not initialized")
+    }
+
+    fn p2p(&self) -> &P2p {
+        self.p2p.as_ref().expect("P2p not initialized")
+    }
+
+    fn store(&self) -> &S {
+        self.store.as_ref().expect("Store not initialized")
     }
 
     /// Returns a new `EventSubscriber`.
@@ -203,62 +235,62 @@ where
 
     /// Get node's local peer ID.
     pub fn local_peer_id(&self) -> &PeerId {
-        self.p2p.local_peer_id()
+        self.p2p().local_peer_id()
     }
 
     /// Get current [`PeerTrackerInfo`].
     pub fn peer_tracker_info(&self) -> PeerTrackerInfo {
-        self.p2p.peer_tracker_info().clone()
+        self.p2p().peer_tracker_info().clone()
     }
 
     /// Get [`PeerTrackerInfo`] watcher.
     pub fn peer_tracker_info_watcher(&self) -> watch::Receiver<PeerTrackerInfo> {
-        self.p2p.peer_tracker_info_watcher()
+        self.p2p().peer_tracker_info_watcher()
     }
 
     /// Wait until the node is connected to at least 1 peer.
     pub async fn wait_connected(&self) -> Result<()> {
-        Ok(self.p2p.wait_connected().await?)
+        Ok(self.p2p().wait_connected().await?)
     }
 
     /// Wait until the node is connected to at least 1 trusted peer.
     pub async fn wait_connected_trusted(&self) -> Result<()> {
-        Ok(self.p2p.wait_connected_trusted().await?)
+        Ok(self.p2p().wait_connected_trusted().await?)
     }
 
     /// Get current network info.
     pub async fn network_info(&self) -> Result<NetworkInfo> {
-        Ok(self.p2p.network_info().await?)
+        Ok(self.p2p().network_info().await?)
     }
 
     /// Get all the multiaddresses on which the node listens.
     pub async fn listeners(&self) -> Result<Vec<Multiaddr>> {
-        Ok(self.p2p.listeners().await?)
+        Ok(self.p2p().listeners().await?)
     }
 
     /// Get all the peers that node is connected to.
     pub async fn connected_peers(&self) -> Result<Vec<PeerId>> {
-        Ok(self.p2p.connected_peers().await?)
+        Ok(self.p2p().connected_peers().await?)
     }
 
     /// Trust or untrust the peer with a given ID.
     pub async fn set_peer_trust(&self, peer_id: PeerId, is_trusted: bool) -> Result<()> {
-        Ok(self.p2p.set_peer_trust(peer_id, is_trusted).await?)
+        Ok(self.p2p().set_peer_trust(peer_id, is_trusted).await?)
     }
 
     /// Request the head header from the network.
     pub async fn request_head_header(&self) -> Result<ExtendedHeader> {
-        Ok(self.p2p.get_head_header().await?)
+        Ok(self.p2p().get_head_header().await?)
     }
 
     /// Request a header for the block with a given hash from the network.
     pub async fn request_header_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
-        Ok(self.p2p.get_header(*hash).await?)
+        Ok(self.p2p().get_header(*hash).await?)
     }
 
     /// Request a header for the block with a given height from the network.
     pub async fn request_header_by_height(&self, hash: u64) -> Result<ExtendedHeader> {
-        Ok(self.p2p.get_header_by_height(hash).await?)
+        Ok(self.p2p().get_header_by_height(hash).await?)
     }
 
     /// Request headers in range (from, from + amount] from the network.
@@ -269,7 +301,7 @@ where
         from: &ExtendedHeader,
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
-        Ok(self.p2p.get_verified_headers_range(from, amount).await?)
+        Ok(self.p2p().get_verified_headers_range(from, amount).await?)
     }
 
     /// Request a verified [`Row`] from the network.
@@ -279,7 +311,7 @@ where
     /// On failure to receive a verified [`Row`] within a certain time, the
     /// `NodeError::P2p(P2pError::BitswapQueryTimeout)` error will be returned.
     pub async fn request_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
-        Ok(self.p2p.get_row(row_index, block_height).await?)
+        Ok(self.p2p().get_row(row_index, block_height).await?)
     }
 
     /// Request a verified [`Sample`] from the network.
@@ -295,7 +327,7 @@ where
         block_height: u64,
     ) -> Result<Sample> {
         Ok(self
-            .p2p
+            .p2p()
             .get_sample(row_index, column_index, block_height)
             .await?)
     }
@@ -313,34 +345,34 @@ where
         block_height: u64,
     ) -> Result<NamespacedData> {
         Ok(self
-            .p2p
+            .p2p()
             .get_namespaced_data(namespace, row_index, block_height)
             .await?)
     }
 
     /// Get current header syncing info.
     pub async fn syncer_info(&self) -> Result<SyncingInfo> {
-        Ok(self.syncer.info().await?)
+        Ok(self.syncer().info().await?)
     }
 
     /// Get the latest header announced in the network.
     pub async fn get_network_head_header(&self) -> Result<Option<ExtendedHeader>> {
-        Ok(self.p2p.get_network_head().await?)
+        Ok(self.p2p().get_network_head().await?)
     }
 
     /// Get the latest locally synced header.
     pub async fn get_local_head_header(&self) -> Result<ExtendedHeader> {
-        Ok(self.store.get_head().await?)
+        Ok(self.store().get_head().await?)
     }
 
     /// Get a synced header for the block with a given hash.
     pub async fn get_header_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
-        Ok(self.store.get_by_hash(hash).await?)
+        Ok(self.store().get_by_hash(hash).await?)
     }
 
     /// Get a synced header for the block with a given height.
     pub async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
-        Ok(self.store.get_by_height(height).await?)
+        Ok(self.store().get_by_height(height).await?)
     }
 
     /// Get synced headers from the given heights range.
@@ -357,14 +389,14 @@ where
     where
         R: RangeBounds<u64> + Send,
     {
-        Ok(self.store.get_range(range).await?)
+        Ok(self.store().get_range(range).await?)
     }
 
     /// Get data sampling metadata of an already sampled height.
     ///
     /// Returns `Ok(None)` if metadata for the given height does not exists.
     pub async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
-        match self.store.get_sampling_metadata(height).await {
+        match self.store().get_sampling_metadata(height).await {
             Ok(val) => Ok(val),
             Err(StoreError::NotFound) => Ok(None),
             Err(e) => Err(e.into()),
@@ -379,8 +411,17 @@ where
     fn drop(&mut self) {
         // Stop everything, but don't join them.
         self.tasks_cancellation_token.cancel();
-        self.daser.stop();
-        self.syncer.stop();
-        self.p2p.stop();
+
+        if let Some(daser) = self.daser.take() {
+            daser.stop();
+        }
+
+        if let Some(syncer) = self.syncer.take() {
+            syncer.stop();
+        }
+
+        if let Some(p2p) = self.p2p.take() {
+            p2p.stop();
+        }
     }
 }

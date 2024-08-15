@@ -430,6 +430,10 @@ impl Store for InMemoryStore {
     async fn remove_last(&self) -> Result<u64> {
         self.remove_last().await
     }
+
+    async fn close(self) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl Default for InMemoryStore {
