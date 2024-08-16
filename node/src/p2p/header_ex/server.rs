@@ -12,10 +12,10 @@ use tokio::sync::mpsc::{self, error::TrySendError};
 use tokio_util::sync::CancellationToken;
 use tracing::{instrument, trace};
 
-use crate::executor::spawn_cancellable;
 use crate::p2p::header_ex::utils::{ExtendedHeaderExt, HeaderRequestExt, HeaderResponseExt};
 use crate::p2p::header_ex::{ReqRespBehaviour, ResponseType};
 use crate::store::Store;
+use crate::utils::SpawnedTasks;
 
 const MAX_HEADERS_AMOUNT_RESPONSE: u64 = 512;
 
@@ -27,7 +27,8 @@ where
     store: Arc<S>,
     rx: mpsc::Receiver<(R::Channel, ResponseType)>,
     tx: mpsc::Sender<(R::Channel, ResponseType)>,
-    cancellation_token: CancellationToken,
+    spawned_tasks: SpawnedTasks,
+    stopping: bool,
 }
 
 pub(super) trait ResponseSender {
@@ -57,7 +58,8 @@ where
             store,
             tx,
             rx,
-            cancellation_token: CancellationToken::new(),
+            spawned_tasks: SpawnedTasks::new(),
+            stopping: false,
         }
     }
 
@@ -71,7 +73,7 @@ where
     ) where
         Id: Display + Debug,
     {
-        if self.cancellation_token.is_cancelled() {
+        if self.stopping {
             return;
         }
 
@@ -118,15 +120,17 @@ where
         }
     }
 
-    pub(super) fn on_stop(&mut self) {
-        self.cancellation_token.cancel();
+    pub(super) async fn on_stop(&mut self) {
+        self.stopping = true;
+        self.spawned_tasks.cancel_all();
+        self.spawned_tasks.wait_all().await;
     }
 
     fn handle_request_current_head(&mut self, channel: R::Channel) {
         let store = self.store.clone();
         let tx = self.tx.clone();
 
-        spawn_cancellable(self.cancellation_token.child_token(), async move {
+        self.spawned_tasks.spawn_cancellable(async move {
             let response = store
                 .get_head()
                 .await
@@ -146,7 +150,7 @@ where
         let store = self.store.clone();
         let tx = self.tx.clone();
 
-        spawn_cancellable(self.cancellation_token.child_token(), async move {
+        self.spawned_tasks.spawn_cancellable(async move {
             let response = store
                 .get_by_hash(&hash)
                 .await
@@ -161,7 +165,7 @@ where
         let store = self.store.clone();
         let tx = self.tx.clone();
 
-        spawn_cancellable(self.cancellation_token.child_token(), async move {
+        self.spawned_tasks.spawn_cancellable(async move {
             let amount = amount.min(MAX_HEADERS_AMOUNT_RESPONSE);
             let mut responses = vec![];
 
@@ -193,7 +197,7 @@ where
         {
             let tx = self.tx.clone();
 
-            spawn_cancellable(self.cancellation_token.child_token(), async move {
+            self.spawned_tasks.spawn_cancellable(async move {
                 let _ = tx.send(response).await;
             });
         }

@@ -240,6 +240,8 @@ where
 
         let cancellation_token = self.cancellation_token.child_token();
 
+        // TODO: Should we use `SpawnedTasks` here? If yes, we should provide a way
+        // for tasks to be able to use `CancellationToken` embedded to their flow.
         spawn(async move {
             select! {
                 // Run branches in order to avoid decoding as soon as it is cancelled.

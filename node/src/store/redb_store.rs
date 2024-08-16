@@ -157,6 +157,7 @@ impl RedbStore {
                 f(&mut tx)
             })
             .await?
+            .unwrap()
     }
 
     /// Execute a write transaction.
@@ -183,6 +184,7 @@ impl RedbStore {
                 res
             })
             .await?
+            .unwrap()
     }
 
     async fn head_height(&self) -> Result<u64> {

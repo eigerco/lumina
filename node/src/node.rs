@@ -206,6 +206,7 @@ where
 
         // Everything that was holding Store is now dropped.
         let store = self.store.take().expect("Store not initialized");
+        println!("{}", Arc::strong_count(&store));
         let store = Arc::into_inner(store).expect("Not all Arc<Store> were dropped");
         if let Err(e) = store.close().await {
             warn!("Store failed to close: {e}");
@@ -423,5 +424,18 @@ where
         if let Some(p2p) = self.p2p.take() {
             p2p.stop();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::async_test;
+
+    #[async_test]
+    async fn graceful_stop_then_start() {
+        // TODO: We need to start a Node with redb stores, then start a connection,
+        // wait few seconds (maybe just 2), and then stop Node. After the stop we
+        // need to be able to start a new Node with the same redb stores immediately.
     }
 }

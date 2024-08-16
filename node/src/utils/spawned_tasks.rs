@@ -49,7 +49,7 @@ impl SpawnedTasks {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[track_caller]
-    pub(crate) fn spawn<F>(&self, fut: F) -> JoinHandle
+    pub(crate) fn spawn_cancellable<F>(&self, fut: F) -> JoinHandle
     where
         F: Future<Output = ()> + Send + 'static,
     {
@@ -64,7 +64,7 @@ impl SpawnedTasks {
 
     #[cfg(target_arch = "wasm32")]
     #[track_caller]
-    pub(crate) fn spawn<F>(&self, fut: F) -> JoinHandle
+    pub(crate) fn spawn_cancellable<F>(&self, fut: F) -> JoinHandle
     where
         F: Future<Output = ()> + 'static,
     {
@@ -79,7 +79,7 @@ impl SpawnedTasks {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[track_caller]
-    pub(crate) fn spawn_blocking<F, R>(&self, f: F) -> tokio::task::JoinHandle<R>
+    pub(crate) fn spawn_blocking<F, R>(&self, f: F) -> tokio::task::JoinHandle<Option<R>>
     where
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
@@ -87,9 +87,16 @@ impl SpawnedTasks {
         self.counter_tx.send_modify(|counter| *counter += 1);
         let decrease_guard = DecreaseGuard(self.counter_tx.clone());
 
+        let cancellation_token = self.cancellation_token.child_token();
+
         spawn_blocking(move || {
             let _decrease_guard = decrease_guard;
-            f()
+
+            if cancellation_token.is_cancelled() {
+                return None;
+            }
+
+            Some(f())
         })
     }
 }

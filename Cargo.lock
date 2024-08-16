@@ -632,8 +632,7 @@ dependencies = [
 [[package]]
 name = "blockstore"
 version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc99329facbb960effbe7ed707c753a718877c1878eb8ca08704fa391c494020"
+source = "git+https://github.com/oblique/blockstore?branch=feat/close-method#009575b0d0096d878e2547423acdc1e1bb519852"
 dependencies = [
  "cid",
  "dashmap 6.0.1",
@@ -644,6 +643,7 @@ dependencies = [
  "rexie 0.6.2",
  "thiserror",
  "tokio",
+ "tokio-util",
  "wasm-bindgen",
 ]
 
@@ -3221,7 +3221,6 @@ dependencies = [
  "rstest",
  "rustls-pemfile",
  "rustls-pki-types",
- "scopeguard",
  "send_wrapper 0.6.0",
  "serde",
  "serde-wasm-bindgen",

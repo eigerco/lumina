@@ -124,9 +124,9 @@ where
             .on_send_request(&mut self.req_resp, request, respond_to);
     }
 
-    pub(crate) fn stop(&mut self) {
+    pub(crate) async fn stop(&mut self) {
         self.client_handler.on_stop();
-        self.server_handler.on_stop();
+        self.server_handler.on_stop().await;
     }
 
     fn on_to_swarm(

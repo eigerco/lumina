@@ -53,9 +53,53 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         args.bootnodes
     };
 
-    let network_id = network_id(network).to_owned();
+    {
+        let network_id = network_id(network).to_owned();
+        info!("Initializing store");
+        let db = open_db(args.store.clone(), &network_id).await?;
+        let store = RedbStore::new(db.clone()).await?;
+        let blockstore = RedbBlockstore::new(db);
 
+        let stored_ranges = store.get_stored_header_ranges().await?;
+        if stored_ranges.is_empty() {
+            info!("Initialised new store");
+        } else {
+            info!("Initialised store, present headers: {stored_ranges}");
+        }
+
+        let (_node, mut events) = Node::new_subscribed(NodeConfig {
+            network_id,
+            p2p_local_keypair: p2p_local_keypair.clone(),
+            p2p_bootnodes: p2p_bootnodes.clone(),
+            p2p_listen_on: args.listen_addrs.clone(),
+            sync_batch_size: 512,
+            blockstore,
+            store,
+        })
+        .await
+        .context("Failed to start node")?;
+
+        let now = std::time::Instant::now();
+
+        while let Ok(ev) = events.recv().await {
+            if now.elapsed() >= std::time::Duration::from_secs(30) {
+                break;
+            }
+
+            match ev.event {
+                // Skip noisy events
+                NodeEvent::ShareSamplingResult { .. } => continue,
+                event if event.is_error() => warn!("{event}"),
+                event => info!("{event}"),
+            }
+        }
+
+        _node.stop().await;
+    }
+
+    warn!("RESTARTING");
     info!("Initializing store");
+    let network_id = network_id(network).to_owned();
     let db = open_db(args.store, &network_id).await?;
     let store = RedbStore::new(db.clone()).await?;
     let blockstore = RedbBlockstore::new(db);

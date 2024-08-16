@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use beetswap::multihasher::{Multihasher, MultihasherError};
 use blockstore::block::CidError;
@@ -20,7 +20,12 @@ pub(super) struct ShwapMultihasher<S>
 where
     S: Store + 'static,
 {
-    header_store: Arc<S>,
+    // `ShwapMultihasher` became part on ConnectionHandler in beetswap, which means
+    // in order to drop it, the actual connection needs to close.
+    //
+    // For the sake of simplicity we use `Weak` pointer to make it dropped with `P2p`
+    // is droped, without waiting for the peer connections to close.
+    header_store: Weak<S>,
 }
 
 impl<S> ShwapMultihasher<S>
@@ -28,7 +33,9 @@ where
     S: Store + 'static,
 {
     pub(super) fn new(header_store: Arc<S>) -> Self {
-        ShwapMultihasher { header_store }
+        ShwapMultihasher {
+            header_store: Arc::downgrade(&header_store),
+        }
     }
 }
 
@@ -51,8 +58,12 @@ where
                     .hash()
                     .to_owned();
 
-                let header = self
+                let header_store = self
                     .header_store
+                    .upgrade()
+                    .ok_or_else(|| MultihasherError::custom_fatal("header_store closed"))?;
+
+                let header = header_store
                     .get_by_height(ns_data.id.block_height())
                     .await
                     .map_err(MultihasherError::custom_fatal)?;
@@ -71,8 +82,12 @@ where
                     .hash()
                     .to_owned();
 
-                let header = self
+                let header_store = self
                     .header_store
+                    .upgrade()
+                    .ok_or_else(|| MultihasherError::custom_fatal("header_store closed"))?;
+
+                let header = header_store
                     .get_by_height(row.id.block_height())
                     .await
                     .map_err(MultihasherError::custom_fatal)?;
@@ -90,8 +105,12 @@ where
                     .hash()
                     .to_owned();
 
-                let header = self
+                let header_store = self
                     .header_store
+                    .upgrade()
+                    .ok_or_else(|| MultihasherError::custom_fatal("header_store closed"))?;
+
+                let header = header_store
                     .get_by_height(sample.id.block_height())
                     .await
                     .map_err(MultihasherError::custom_fatal)?;

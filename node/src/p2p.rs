@@ -766,7 +766,7 @@ where
             }
         }
 
-        self.on_stop();
+        self.on_stop().await;
     }
 
     fn dial_bootnodes(&mut self) {
@@ -801,8 +801,8 @@ where
         }
     }
 
-    fn on_stop(&mut self) {
-        self.swarm.behaviour_mut().header_ex.stop();
+    async fn on_stop(&mut self) {
+        self.swarm.behaviour_mut().header_ex.stop().await;
 
         for listener in self.listeners.drain(..) {
             self.swarm.remove_listener(listener);
