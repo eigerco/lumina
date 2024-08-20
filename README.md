@@ -1,6 +1,6 @@
 # Lumina
 
-Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in browser-based environments. 
+Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) is able to run natively and in browser-based environments. 
 
 Run Lumina now at [lumina.rs](https://lumina.rs/) and directly verify Celestia.
 
