@@ -131,7 +131,7 @@ setup_private_validator() {
   sed -i'.bak' 's|"tcp://127.0.0.1:26657"|"tcp://0.0.0.0:26657"|g' "$CONFIG_DIR/config/config.toml"
   sed -i'.bak' 's|"null"|"kv"|g' "$CONFIG_DIR/config/config.toml"
 
-  # reduce the time of commiting the proposed block
+  # reduce the time of committing the proposed block
   # bringing this value too low results in errors
   sed -i'.bak' 's|^timeout_commit.*|timeout_commit = "1s"|g' "$CONFIG_DIR/config/config.toml"
 
