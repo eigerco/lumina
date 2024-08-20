@@ -17,7 +17,7 @@ cargo install lumina-cli --locked
 lumina node --network mocha
 ```
 
-For all configuration options see `lumina node -h`. By default node will run on mainnet, connecting to official bootstrap nodes, with persistent header store in user's home directory.
+For all configuration options see `lumina node -h`. By default node will run on mainnet, connecting to official bootstrap nodes, with persistent header stored in user's home directory.
 
 
 #### WebTransport and Secure Contexts
