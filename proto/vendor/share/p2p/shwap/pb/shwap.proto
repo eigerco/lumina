@@ -1,28 +1,36 @@
+// Defined in CIP-19 https://github.com/celestiaorg/CIPs/blob/82aeb7dfc472105a11babffd548c730c899a3d24/cips/cip-19.md
 syntax = "proto3";
+package shwap;
+option go_package = "github.com/celestiaorg/celestia-node/share/shwap/pb";
 
-// TODO: current celestia-node PR doesn't specify the package, we might want to align on it
-package share.p2p.shwap;
 import "pb/proof.proto"; // celestiaorg/nmt/pb/proof.proto
 
 message Row {
-    bytes row_id = 1;
-    repeated bytes row_half = 2;
-}
+    repeated Share shares_half = 1;
+    HalfSide half_side= 2;
 
-enum ProofType {
-    RowProofType = 0;
-    ColProofType = 1;
+    enum HalfSide {
+        LEFT = 0;
+        RIGHT = 1;
+    }
 }
 
 message Sample {
-    bytes sample_id = 1;
-    bytes sample_share = 2;
-    proof.pb.Proof sample_proof = 3;
-    ProofType proof_type = 4;
+    Share share = 1;
+    proof.pb.Proof proof = 2;
+    AxisType proof_type = 3;
 }
 
-message Data {
-    bytes data_id = 1;
-    repeated bytes data_shares = 2;
-    proof.pb.Proof data_proof = 3;
+message RowNamespaceData {
+    repeated Share shares = 1;
+    proof.pb.Proof proof = 2;
+}
+
+message Share {
+    bytes data = 1;
+}
+
+enum AxisType {
+    ROW = 0;
+    COL = 1;
 }

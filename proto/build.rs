@@ -2,7 +2,9 @@
 
 use anyhow::Result;
 
-const SERIALIZED: &str = r#"#[derive(::serde::Deserialize, ::serde::Serialize)] #[serde(default)]"#;
+const SERIALIZED: &str = r#"#[derive(::serde::Deserialize, ::serde::Serialize)]"#;
+const SERIALIZED_DEFAULT: &str =
+    r#"#[derive(::serde::Deserialize, ::serde::Serialize)] #[serde(default)]"#;
 const BASE64STRING: &str =
     r#"#[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]"#;
 const QUOTED: &str = r#"#[serde(with = "celestia_tendermint_proto::serializers::from_str")]"#;
@@ -13,33 +15,35 @@ const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_tim
 
 #[rustfmt::skip]
 static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
-    (".celestia.da.DataAvailabilityHeader", SERIALIZED),
-    (".celestia.blob.v1.MsgPayForBlobs", SERIALIZED),
-    (".cosmos.base.abci.v1beta1.ABCIMessageLog", SERIALIZED),
-    (".cosmos.base.abci.v1beta1.Attribute", SERIALIZED),
-    (".cosmos.base.abci.v1beta1.StringEvent", SERIALIZED),
-    (".cosmos.base.abci.v1beta1.TxResponse", SERIALIZED),
-    (".cosmos.base.v1beta1.Coin", SERIALIZED),
-    (".cosmos.base.query.v1beta1.PageResponse", SERIALIZED),
-    (".cosmos.staking.v1beta1.QueryDelegationResponse", SERIALIZED),
-    (".cosmos.staking.v1beta1.DelegationResponse", SERIALIZED),
-    (".cosmos.staking.v1beta1.Delegation", SERIALIZED),
-    (".cosmos.staking.v1beta1.QueryRedelegationsResponse", SERIALIZED),
-    (".cosmos.staking.v1beta1.RedelegationResponse", SERIALIZED),
-    (".cosmos.staking.v1beta1.Redelegation", SERIALIZED),
-    (".cosmos.staking.v1beta1.RedelegationEntryResponse", SERIALIZED),
-    (".cosmos.staking.v1beta1.RedelegationEntry", SERIALIZED),
-    (".cosmos.staking.v1beta1.QueryUnbondingDelegationResponse", SERIALIZED),
-    (".cosmos.staking.v1beta1.UnbondingDelegation", SERIALIZED),
-    (".cosmos.staking.v1beta1.UnbondingDelegationEntry", SERIALIZED),
-    (".header.pb.ExtendedHeader", SERIALIZED),
-    (".share.eds.byzantine.pb.BadEncoding", SERIALIZED),
-    (".share.eds.byzantine.pb.Share", SERIALIZED),
-    (".proof.pb.Proof", SERIALIZED),
-    (".share.p2p.shrex.nd.NamespaceRowResponse", SERIALIZED),
-    (".share.p2p.shwap.Row", SERIALIZED),
-    (".share.p2p.shwap.Sample", SERIALIZED),
-    (".share.p2p.shwap.Data", SERIALIZED),
+    (".celestia.da.DataAvailabilityHeader", SERIALIZED_DEFAULT),
+    (".celestia.blob.v1.MsgPayForBlobs", SERIALIZED_DEFAULT),
+    (".cosmos.base.abci.v1beta1.ABCIMessageLog", SERIALIZED_DEFAULT),
+    (".cosmos.base.abci.v1beta1.Attribute", SERIALIZED_DEFAULT),
+    (".cosmos.base.abci.v1beta1.StringEvent", SERIALIZED_DEFAULT),
+    (".cosmos.base.abci.v1beta1.TxResponse", SERIALIZED_DEFAULT),
+    (".cosmos.base.v1beta1.Coin", SERIALIZED_DEFAULT),
+    (".cosmos.base.query.v1beta1.PageResponse", SERIALIZED_DEFAULT),
+    (".cosmos.staking.v1beta1.QueryDelegationResponse", SERIALIZED_DEFAULT),
+    (".cosmos.staking.v1beta1.DelegationResponse", SERIALIZED_DEFAULT),
+    (".cosmos.staking.v1beta1.Delegation", SERIALIZED_DEFAULT),
+    (".cosmos.staking.v1beta1.QueryRedelegationsResponse", SERIALIZED_DEFAULT),
+    (".cosmos.staking.v1beta1.RedelegationResponse", SERIALIZED_DEFAULT),
+    (".cosmos.staking.v1beta1.Redelegation", SERIALIZED_DEFAULT),
+    (".cosmos.staking.v1beta1.RedelegationEntryResponse", SERIALIZED_DEFAULT),
+    (".cosmos.staking.v1beta1.RedelegationEntry", SERIALIZED_DEFAULT),
+    (".cosmos.staking.v1beta1.QueryUnbondingDelegationResponse", SERIALIZED_DEFAULT),
+    (".cosmos.staking.v1beta1.UnbondingDelegation", SERIALIZED_DEFAULT),
+    (".cosmos.staking.v1beta1.UnbondingDelegationEntry", SERIALIZED_DEFAULT),
+    (".header.pb.ExtendedHeader", SERIALIZED_DEFAULT),
+    (".share.eds.byzantine.pb.BadEncoding", SERIALIZED_DEFAULT),
+    (".share.eds.byzantine.pb.Share", SERIALIZED_DEFAULT),
+    (".proof.pb.Proof", SERIALIZED_DEFAULT),
+    (".share.p2p.shrex.nd.NamespaceRowResponse", SERIALIZED_DEFAULT),
+    (".shwap.AxisType", SERIALIZED),
+    (".shwap.Row", SERIALIZED),
+    (".shwap.RowNamespaceData", SERIALIZED_DEFAULT),
+    (".shwap.Sample", SERIALIZED_DEFAULT),
+    (".shwap.Share", SERIALIZED_DEFAULT),
 ];
 
 #[rustfmt::skip]
@@ -54,6 +58,7 @@ static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".proof.pb.Proof.nodes", VEC_BASE64STRING),
     (".proof.pb.Proof.leaf_hash", BASE64STRING),
     (".share.p2p.shrex.nd.NamespaceRowResponse.shares", VEC_BASE64STRING),
+    (".shwap.Share", BASE64STRING),
 ];
 
 fn main() -> Result<()> {
