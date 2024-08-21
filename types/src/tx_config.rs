@@ -17,7 +17,7 @@ pub struct TxConfig {
     ///
     /// # NOTE
     ///
-    /// Only [`signer_address`] or [`key_name`] should be passed. [`signer_address`] is a primary cfg.
+    /// Only `signer_address` or `key_name` should be passed. `signer_address` is a primary cfg.
     /// This means If both the address and the key are specified, the address field will take priority.
     pub signer_address: Option<AccAddress>,
     /// Specifies the key from the keystore associated with an account that will be used to sign transactions.
@@ -28,11 +28,11 @@ pub struct TxConfig {
     pub key_name: Option<String>,
     /// Represents the amount to be paid per gas unit.
     ///
-    /// Negative or missing [`gas_price`] means user want us to use the minGasPrice defined in the node.
+    /// Negative or missing `gas_price` means user want us to use the minGasPrice defined in the node.
     pub gas_price: Option<f64>,
     /// Calculated amount of gas to be used by transaction.
     ///
-    /// `0` or missing [`gas`] means that the node should calculate it itself.
+    /// `0` or missing `gas` means that the node should calculate it itself.
     pub gas: Option<u64>,
     /// Specifies the account that will pay for the transaction.
     pub fee_granter_address: Option<AccAddress>,
