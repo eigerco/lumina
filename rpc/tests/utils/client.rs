@@ -6,7 +6,7 @@ use celestia_rpc::prelude::*;
 use celestia_rpc::Client;
 use celestia_types::Blob;
 use celestia_types::TxConfig;
-use jsonrpsee::core::client::ClientT;
+use jsonrpsee::core::client::SubscriptionClientT;
 use jsonrpsee::core::ClientError;
 use tokio::sync::{Mutex, MutexGuard};
 
@@ -53,7 +53,7 @@ pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
 
 pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, ClientError>
 where
-    C: ClientT + Sync,
+    C: SubscriptionClientT + Sync,
 {
     let _guard = write_lock().await;
     client.blob_submit(blobs, TxConfig::default()).await

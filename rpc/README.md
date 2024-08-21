@@ -7,7 +7,7 @@ This crate builds on top of the [`jsonrpsee`](https://docs.rs/jsonrpsee) clients
 ```rust,no_run
 use celestia_rpc::{BlobClient, Client};
 use celestia_types::{Blob, nmt::Namespace};
-use celestia_types::TxOptions;
+use celestia_types::TxConfig;
 
 async fn submit_blob() {
     // create a client to the celestia node
@@ -22,7 +22,7 @@ async fn submit_blob() {
         .expect("Failed to create a blob");
 
     // submit it
-    client.blob_submit(&[blob], TxOptions::default())
+    client.blob_submit(&[blob], TxConfig::default())
         .await
         .expect("Failed submitting the blob");
 }
