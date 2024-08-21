@@ -32,7 +32,7 @@ extract_urls ../target/proto-vendor-src \
     https://github.com/cosmos/gogoproto/archive/refs/tags/v1.4.11.tar.gz \
     https://github.com/celestiaorg/go-header/archive/refs/heads/main.tar.gz \
     https://github.com/googleapis/googleapis/archive/refs/heads/master.tar.gz \
-    https://github.com/celestiaorg/celestia-node/archive/refs/heads/shwap-prototype.tar.gz
+    https://github.com/celestiaorg/celestia-node/archive/refs/heads/shwap.tar.gz
 
 mkdir -p vendor
 
@@ -75,7 +75,7 @@ done
 # https://github.com/celestiaorg/celestia-node/pull/3184
 rm -rf vendor/share/p2p/shwap
 mkdir -p vendor/share/p2p/shwap/pb
-cp ../target/proto-vendor-src/celestia-node-shwap-prototype/share/shwap/pb/shwap_pb.proto \
+cp ../target/proto-vendor-src/celestia-node-shwap/share/shwap/pb/shwap.proto \
     vendor/share/p2p/shwap/pb/shwap.proto
 
 rm -rf vendor/tendermint
