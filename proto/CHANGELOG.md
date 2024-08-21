@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.2.0...celestia-proto-v0.3.0) - 2024-08-13
+
+### Fixed
+- *(types)* [**breaking**] Align byzantine fraud proofs with Go's implementation ([#338](https://github.com/eigerco/lumina/pull/338))
+
+### Other
+- [**breaking**] Upgrade dependencies but exclude the ones that are patched by risc0 ([#292](https://github.com/eigerco/lumina/pull/292))
+
 ## [0.2.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.1.1...celestia-proto-v0.2.0) - 2024-04-18
 
 ### Added

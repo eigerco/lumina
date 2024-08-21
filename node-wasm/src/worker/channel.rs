@@ -103,9 +103,9 @@ impl From<Worker> for AnyWorker {
 
 impl AnyWorker {
     pub(crate) fn new(kind: NodeWorkerKind, url: &str, name: &str) -> Result<Self> {
-        let mut opts = WorkerOptions::new();
-        opts.type_(WorkerType::Module);
-        opts.name(name);
+        let opts = WorkerOptions::new();
+        opts.set_type(WorkerType::Module);
+        opts.set_name(name);
 
         Ok(match kind {
             NodeWorkerKind::Shared => {

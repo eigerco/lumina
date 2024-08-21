@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.2.0...celestia-rpc-v0.3.0) - 2024-08-13
+
+### Added
+- Add `#[track_caller]` on test utils and spawn utils ([#305](https://github.com/eigerco/lumina/pull/305))
+- *(node/syncer)* [**breaking**] Implement backwards header sync ([#279](https://github.com/eigerco/lumina/pull/279))
+- *(rpc)* Implement WASM Client ([#210](https://github.com/eigerco/lumina/pull/210))
+- feat!(types): Add Blob::index field introduced in celestia 0.13 ([#274](https://github.com/eigerco/lumina/pull/274))
+
+### Fixed
+- *(rpc)* Increase max response size ([#336](https://github.com/eigerco/lumina/pull/336))
+- new lints coming with 1.78 and 1.80-nightly ([#275](https://github.com/eigerco/lumina/pull/275))
+
+### Other
+- Upgrade jsonprsee to 0.24.2 ([#360](https://github.com/eigerco/lumina/pull/360))
+- [**breaking**] Upgrade to nmt-rs 0.2.0 ([#322](https://github.com/eigerco/lumina/pull/322))
+- [**breaking**] Upgrade dependencies but exclude the ones that are patched by risc0 ([#292](https://github.com/eigerco/lumina/pull/292))
+
 ## [0.2.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.1.1...celestia-rpc-v0.2.0) - 2024-04-18
 
 ### Added

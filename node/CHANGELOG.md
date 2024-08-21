@@ -6,6 +6,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.2.0...lumina-node-v0.3.0) - 2024-08-13
+
+### Added
+- *(node)* Add tail header removal from store  ([#328](https://github.com/eigerco/lumina/pull/328))
+- *(node-wasm)* [**breaking**] Add websocket support ([#341](https://github.com/eigerco/lumina/pull/341))
+- *(node)* Trigger dial on bootnodes when all peers disconnect ([#349](https://github.com/eigerco/lumina/pull/349))
+- *(node)* Add `ConnectingToBootnodes` event ([#348](https://github.com/eigerco/lumina/pull/348))
+- *(node)* [**breaking**] Refactor errors and stop Syncer on fatal ones ([#332](https://github.com/eigerco/lumina/pull/332))
+- feat!(node): make syncer batch sizes configurable ([#327](https://github.com/eigerco/lumina/pull/327))
+- *(node)* [**breaking**] Refactor `BlockRanges` and optimize data sampling queue population ([#320](https://github.com/eigerco/lumina/pull/320))
+- add support for dnsaddr resolving in browser ([#319](https://github.com/eigerco/lumina/pull/319))
+- *(node)* Add syncing window for header sync ([#309](https://github.com/eigerco/lumina/pull/309))
+- *(node)* Generate syncing related events ([#312](https://github.com/eigerco/lumina/pull/312))
+- *(wasm)* Run Lumina in a Shared Worker ([#265](https://github.com/eigerco/lumina/pull/265))
+- *(node)* Always start data sampling of new HEAD immediately ([#306](https://github.com/eigerco/lumina/pull/306))
+- Add `#[track_caller]` on test utils and spawn utils ([#305](https://github.com/eigerco/lumina/pull/305))
+- *(node)* [**breaking**] Make HeaderSession operate on a single header range again ([#303](https://github.com/eigerco/lumina/pull/303))
+- *(node/syncer)* [**breaking**] Implement backwards header sync ([#279](https://github.com/eigerco/lumina/pull/279))
+- *(node)* Close connections that failed on ping ([#289](https://github.com/eigerco/lumina/pull/289))
+- *(node)* [**breaking**] Generate events on peer connection/disconnection ([#291](https://github.com/eigerco/lumina/pull/291))
+- *(node)* Generate events for data sampling that can be used by front-end ([#276](https://github.com/eigerco/lumina/pull/276))
+- *(node/daser)* [**breaking**] Implement backward sampling and sampling window ([#269](https://github.com/eigerco/lumina/pull/269))
+
+### Fixed
+- *(node)* Compare only header hashes on syncer init ([#363](https://github.com/eigerco/lumina/pull/363))
+- *(node)* Anchor syncing on already existing header ranges ([#355](https://github.com/eigerco/lumina/pull/355))
+- *(node)* Make `yield_now` to yield execution back to JavaScript's event loop ([#354](https://github.com/eigerco/lumina/pull/354))
+- Fix clippy issues ([#350](https://github.com/eigerco/lumina/pull/350))
+- *(node)* [**breaking**] Relax initialization if HEAD is the same as the stored one ([#347](https://github.com/eigerco/lumina/pull/347))
+- Increase waiting of peers in peer_discovery test case ([#345](https://github.com/eigerco/lumina/pull/345))
+- *(node)* [**breaking**] Do not skip header-sub reports when store writes are slow ([#333](https://github.com/eigerco/lumina/pull/333))
+- *(node)* Allow syncing from header-sub as soon as node is connected ([#324](https://github.com/eigerco/lumina/pull/324))
+- *(node)* Patch unreleased libp2p version to include syncing bug fixes ([#290](https://github.com/eigerco/lumina/pull/290))
+- new lints coming with 1.78 and 1.80-nightly ([#275](https://github.com/eigerco/lumina/pull/275))
+
+### Other
+- *(node)* [**breaking**] Upgrade libp2p to 0.54.0 ([#362](https://github.com/eigerco/lumina/pull/362))
+- *(node)* Fix unused `mocked` clippy ([#359](https://github.com/eigerco/lumina/pull/359))
+- *(node-wasm)* Upgrade libp2p-websocket-websys ([#357](https://github.com/eigerco/lumina/pull/357))
+- *(node)* [**breaking**] Hide internal components ([#342](https://github.com/eigerco/lumina/pull/342))
+- *(node)* rewording of the events display ([#329](https://github.com/eigerco/lumina/pull/329))
+- remove genesis hash from node configuration ([#316](https://github.com/eigerco/lumina/pull/316))
+- *(node)* Add comments about header validation ([#308](https://github.com/eigerco/lumina/pull/308))
+- [**breaking**] Upgrade dependencies but exclude the ones that are patched by risc0 ([#292](https://github.com/eigerco/lumina/pull/292))
+- *(node)* Replace `instant` crate with `web-time` ([#280](https://github.com/eigerco/lumina/pull/280))
+
 ## [0.2.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.1.1...lumina-node-v0.2.0) - 2024-04-18
 
 ### Added

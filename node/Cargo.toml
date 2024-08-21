@@ -1,6 +1,6 @@
 [package]
 name = "lumina-node"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Celestia data availability node implementation in Rust"
@@ -34,11 +34,10 @@ libp2p = { workspace = true, features = [
 ] }
 
 async-trait = "0.1.80"
-beetswap = "0.1.1"
+beetswap = "0.3.1"
 cid = { version = "0.11.1", features = ["serde-codec"] }
 dashmap = "5.5.3"
 futures = "0.3.30"
-instant = "0.1.13"
 prost = "0.12.6"
 rand = "0.8.5"
 serde = { version = "1.0.203", features = ["derive"] }
@@ -72,28 +71,31 @@ rustls-pki-types = "1.7.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 backoff = { version = "0.4.0", features = ["wasm-bindgen"] }
-beetswap = { version = "0.1.1", features = ["wasm-bindgen"] }
+beetswap = { version = "0.3.1", features = ["wasm-bindgen"] }
 blockstore = { workspace = true, features = ["indexeddb"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { version = "0.2.15", features = ["js"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
+idb = "0.6.3"
+js-sys = "0.3.69"
 libp2p = { workspace = true, features = [
   "noise",
   "wasm-bindgen",
+  "websocket-websys",
   "webtransport-websys",
   "yamux",
 ] }
 pin-project = "1.1.5"
-rexie = "0.5.0"
+rexie = "0.6.2"
 send_wrapper = { version = "0.6.0", features = ["futures"] }
 serde-wasm-bindgen = "0.6.5"
-wasm-bindgen = "0.2.92"
-wasm-bindgen-futures = "0.4.42"
+wasm-bindgen = "0.2.93"
+wasm-bindgen-futures = "0.4.43"
 libp2p-websocket-websys = "0.3.3"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 function_name = "0.3.0"
-wasm-bindgen-test = "0.3.42"
+wasm-bindgen-test = "0.3.43"
 
 [dev-dependencies]
 bytes = "1.6.0"
