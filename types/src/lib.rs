@@ -25,7 +25,7 @@ mod sync;
 #[cfg_attr(docsrs, doc(cfg(feature = "test-utils")))]
 pub mod test_utils;
 pub mod trust_level;
-pub mod tx_config;
+mod tx_config;
 mod validate;
 mod validator_set;
 
@@ -38,4 +38,5 @@ pub use crate::fraud_proof::FraudProof;
 pub use crate::rsmt2d::{AxisType, ExtendedDataSquare};
 pub use crate::share::*;
 pub use crate::sync::*;
+pub use crate::tx_config::TxConfig;
 pub use crate::validate::*;

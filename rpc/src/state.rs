@@ -2,8 +2,7 @@ use celestia_types::state::{
     AccAddress, Address, Balance, QueryDelegationResponse, QueryRedelegationsResponse,
     QueryUnbondingDelegationResponse, TxResponse, Uint, ValAddress,
 };
-use celestia_types::tx_config::TxConfig;
-use celestia_types::Blob;
+use celestia_types::{Blob, TxConfig};
 use jsonrpsee::proc_macros::rpc;
 
 #[rpc(client)]

@@ -1,6 +1,5 @@
 use celestia_types::nmt::{Namespace, NamespaceProof};
-use celestia_types::tx_config::TxConfig;
-use celestia_types::{Blob, Commitment};
+use celestia_types::{Blob, Commitment, TxConfig};
 use jsonrpsee::proc_macros::rpc;
 
 #[rpc(client)]
