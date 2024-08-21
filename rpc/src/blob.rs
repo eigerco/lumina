@@ -15,8 +15,11 @@ pub trait Blob {
 
     /// GetAll returns all blobs under the given namespaces and height.
     #[method(name = "blob.GetAll")]
-    async fn blob_get_all(&self, height: u64, namespaces: &[Namespace])
-        -> Result<Vec<Blob>, Error>;
+    async fn blob_get_all(
+        &self,
+        height: u64,
+        namespaces: &[Namespace],
+    ) -> Result<Option<Vec<Blob>>, Error>;
 
     /// GetProof retrieves proofs in the given namespaces at the given height by commitment.
     #[method(name = "blob.GetProof")]

@@ -63,6 +63,7 @@ async fn blob_submit_and_get_all() {
     let received_blobs = client
         .blob_get_all(submitted_height, namespaces)
         .await
+        .unwrap()
         .unwrap();
 
     assert_eq!(received_blobs.len(), 2);
@@ -162,6 +163,15 @@ async fn blob_get_get_proof_wrong_commitment() {
         .blob_get_proof(submitted_height, namespace, commitment)
         .await
         .unwrap_err();
+}
+
+#[tokio::test]
+async fn blob_get_all_with_no_blobs() {
+    let client = new_test_client(AuthLevel::Read).await.unwrap();
+
+    let blobs = client.blob_get_all(3, &[random_ns()]).await.unwrap();
+
+    assert!(blobs.is_none());
 }
 
 /// Blobs received from chain have index field set, so to
