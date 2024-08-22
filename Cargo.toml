@@ -16,6 +16,7 @@ celestia-tendermint-proto = "0.32.1"
 
 [patch.crates-io]
 # Uncomment to apply local changes
+#beetswap = { path = "../beetswap" }
 #blockstore = { path = "../blockstore" }
 #celestia-tendermint = { path = "../celestia-tendermint-rs/tendermint" }
 #celestia-tendermint-proto = { path = "../celestia-tendermint-rs/proto" }
