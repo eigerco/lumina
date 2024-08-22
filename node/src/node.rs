@@ -25,7 +25,7 @@ use crate::daser::{Daser, DaserArgs};
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
 use crate::executor::spawn;
 use crate::p2p::{P2p, P2pArgs};
-use crate::pruner::{Pruner, PrunerArgs};
+use crate::pruner::{Pruner, PrunerArgs, DEFAULT_PRUNING_INTERVAL};
 use crate::store::{SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs};
 
@@ -151,6 +151,7 @@ where
             store: store.clone(),
             blockstore,
             event_pub: event_channel.publisher(),
+            pruning_interval: DEFAULT_PRUNING_INTERVAL,
         }));
 
         // spawn the task that will stop the services when the fraud is detected

@@ -16,7 +16,7 @@ use crate::syncer::SYNCING_WINDOW;
 
 // pruning window is 1 hour behind syncing window
 const PRUNING_WINDOW: Duration = SYNCING_WINDOW.saturating_add(Duration::from_secs(60 * 60));
-const PRUNING_INTERVAL: Duration = Duration::from_secs(12);
+pub const DEFAULT_PRUNING_INTERVAL: Duration = Duration::from_secs(60);
 
 type Result<T, E = PrunerError> = std::result::Result<T, E>;
 
@@ -50,6 +50,8 @@ where
     pub blockstore: Arc<B>,
     /// Event publisher.
     pub event_pub: EventPublisher,
+    /// interval at which pruner will run
+    pub pruning_interval: Duration,
 }
 
 impl Pruner {
@@ -96,6 +98,7 @@ where
     event_pub: EventPublisher,
     store: Arc<S>,
     blockstore: Arc<B>,
+    pruning_interval: Duration,
 }
 
 impl<S, B> Worker<S, B>
@@ -109,6 +112,7 @@ where
             event_pub: args.event_pub,
             store: args.store,
             blockstore: args.blockstore,
+            pruning_interval: args.pruning_interval,
         }
     }
 
@@ -122,6 +126,9 @@ where
             });
 
             while let Some(header) = self.get_tail_header_to_prune(&pruning_window_end).await? {
+                if self.cancellation_token.is_cancelled() {
+                    break;
+                }
                 let height = header.height().value();
 
                 let cids = self
@@ -138,10 +145,6 @@ where
                 debug_assert_eq!(header.height().value(), removed);
 
                 last_removed = Some(height);
-
-                if self.cancellation_token.is_cancelled() {
-                    break;
-                }
             }
 
             if last_reported != last_removed {
@@ -153,7 +156,7 @@ where
 
             select! {
                 _ = self.cancellation_token.cancelled() => break,
-                _ = sleep(PRUNING_INTERVAL) => ()
+                _ = sleep(self.pruning_interval) => ()
             }
         }
 
@@ -207,6 +210,7 @@ mod test {
             store,
             blockstore,
             event_pub: events.publisher(),
+            pruning_interval: Duration::from_secs(1),
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -233,6 +237,7 @@ mod test {
             store: store.clone(),
             blockstore,
             event_pub: events.publisher(),
+            pruning_interval: Duration::from_secs(1),
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -291,6 +296,7 @@ mod test {
             store: store.clone(),
             blockstore: blockstore.clone(),
             event_pub: events.publisher(),
+            pruning_interval: Duration::from_secs(1),
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -325,7 +331,6 @@ mod test {
         let events = EventChannel::new();
         let store = Arc::new(InMemoryStore::new());
         let mut gen = ExtendedHeaderGenerator::new();
-        // TODO: insert cids
         let blockstore = Arc::new(InMemoryBlockstore::new());
         let mut event_subscriber = events.subscribe();
 
@@ -347,6 +352,7 @@ mod test {
             store: store.clone(),
             blockstore,
             event_pub: events.publisher(),
+            pruning_interval: Duration::from_secs(1),
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -361,8 +367,7 @@ mod test {
             new_block_ranges([51..=70])
         );
 
-        // sleep needs to be longer than PRUNING_INTERVAL for pruner to wake up
-        sleep(Duration::from_secs(12)).await;
+        sleep(Duration::from_secs(2)).await;
 
         let pruner_event = event_subscriber.try_recv().unwrap().event;
         assert!(matches!(
