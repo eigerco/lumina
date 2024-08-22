@@ -1,9 +1,12 @@
 #![cfg(not(target_arch = "wasm32"))]
 
+use std::cmp::Ordering;
 use std::time::Duration;
 
+use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::prelude::*;
 use celestia_types::{Blob, Commitment};
+use jsonrpsee::core::client::Subscription;
 
 pub mod utils;
 
@@ -63,6 +66,7 @@ async fn blob_submit_and_get_all() {
     let received_blobs = client
         .blob_get_all(submitted_height, namespaces)
         .await
+        .unwrap()
         .unwrap();
 
     assert_eq!(received_blobs.len(), 2);
@@ -114,6 +118,46 @@ async fn blob_submit_and_get_large() {
 }
 
 #[tokio::test]
+async fn blob_subscribe() {
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let namespace = random_ns();
+
+    let mut incoming_blobs = client.blob_subscribe(namespace).await.unwrap();
+
+    // nothing was submitted
+    let received_blobs = incoming_blobs.next().await.unwrap().unwrap();
+    assert!(received_blobs.blobs.is_none());
+
+    // submit and receive blob
+    let blob = Blob::new(namespace, random_bytes(10)).unwrap();
+    let current_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
+
+    let received = blobs_at_height(current_height, &mut incoming_blobs).await;
+    assert_eq!(received.len(), 1);
+    assert_blob_equal_to_sent(&received[0], &blob);
+
+    // submit blob to another ns
+    let blob_another_ns = Blob::new(random_ns(), random_bytes(10)).unwrap();
+    let current_height = blob_submit(&client, &[blob_another_ns]).await.unwrap();
+
+    let received = blobs_at_height(current_height, &mut incoming_blobs).await;
+    assert!(received.is_empty());
+
+    // submit and receive few blobs
+    let blob1 = Blob::new(namespace, random_bytes(10)).unwrap();
+    let blob2 = Blob::new(random_ns(), random_bytes(10)).unwrap(); // different ns
+    let blob3 = Blob::new(namespace, random_bytes(10)).unwrap();
+    let current_height = blob_submit(&client, &[blob1.clone(), blob2, blob3.clone()])
+        .await
+        .unwrap();
+
+    let received = blobs_at_height(current_height, &mut incoming_blobs).await;
+    assert_eq!(received.len(), 2);
+    assert_blob_equal_to_sent(&received[0], &blob1);
+    assert_blob_equal_to_sent(&received[1], &blob3);
+}
+
+#[tokio::test]
 async fn blob_submit_too_large() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
@@ -162,6 +206,28 @@ async fn blob_get_get_proof_wrong_commitment() {
         .blob_get_proof(submitted_height, namespace, commitment)
         .await
         .unwrap_err();
+}
+
+#[tokio::test]
+async fn blob_get_all_with_no_blobs() {
+    let client = new_test_client(AuthLevel::Read).await.unwrap();
+
+    let blobs = client.blob_get_all(3, &[random_ns()]).await.unwrap();
+
+    assert!(blobs.is_none());
+}
+
+// Skips blobs at height subscription until provided height is reached, then return blobs for the height
+async fn blobs_at_height(height: u64, sub: &mut Subscription<BlobsAtHeight>) -> Vec<Blob> {
+    while let Some(received) = sub.next().await {
+        let received = received.unwrap();
+        match received.height.cmp(&height) {
+            Ordering::Less => continue,
+            Ordering::Equal => return received.blobs.unwrap_or_default(),
+            Ordering::Greater => panic!("height {height} missed"),
+        }
+    }
+    panic!("subscription error");
 }
 
 /// Blobs received from chain have index field set, so to
