@@ -217,9 +217,7 @@ async fn blob_get_all_with_no_blobs() {
     assert!(blobs.is_none());
 }
 
-// helps asserting certain block heights with blob subscription. as we drastically
-// reduce celestia block time to speed up tests, we need to drain unwanted events
-// from the subscription.
+// Skips blobs at height subscription until provided height is reached, then return blobs for the height
 async fn blobs_at_height(height: u64, sub: &mut Subscription<BlobsAtHeight>) -> Vec<Blob> {
     while let Some(received) = sub.next().await {
         let received = received.unwrap();
