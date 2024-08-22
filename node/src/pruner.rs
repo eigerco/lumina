@@ -16,7 +16,7 @@ use crate::syncer::SYNCING_WINDOW;
 
 // pruning window is 1 hour behind syncing window
 const PRUNING_WINDOW: Duration = SYNCING_WINDOW.saturating_add(Duration::from_secs(60 * 60));
-pub const DEFAULT_PRUNING_INTERVAL: Duration = Duration::from_secs(60);
+pub const DEFAULT_PRUNING_INTERVAL: Duration = Duration::from_secs(12);
 
 type Result<T, E = PrunerError> = std::result::Result<T, E>;
 
