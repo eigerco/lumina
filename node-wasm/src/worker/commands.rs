@@ -19,7 +19,7 @@ use crate::utils::JsResult;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) enum NodeCommand {
+pub enum NodeCommand {
     IsRunning,
     StartNode(WasmNodeConfig),
     GetEventsChannelName,
@@ -55,14 +55,14 @@ pub(crate) enum NodeCommand {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub(crate) enum SingleHeaderQuery {
+pub enum SingleHeaderQuery {
     Head,
     ByHash(Hash),
     ByHeight(u64),
 }
 
 #[derive(Serialize, Deserialize, Debug, EnumAsInner)]
-pub(crate) enum WorkerResponse {
+pub enum WorkerResponse {
     IsRunning(bool),
     NodeStarted(Result<()>),
     EventsChannelName(String),

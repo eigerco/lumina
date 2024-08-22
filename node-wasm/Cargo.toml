@@ -34,6 +34,7 @@ console_error_panic_hook = "0.1.7"
 enum-as-inner = "0.6.0"
 futures = "0.3.30"
 gloo-timers = "0.3.0"
+gloo-worker = { version = "0.5.0", features = ["futures"]}
 instant = "0.1.13"
 js-sys = "0.3.69"
 serde = { version = "1.0.203", features = ["derive"] }
