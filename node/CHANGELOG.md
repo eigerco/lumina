@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/eigerco/lumina/compare/lumina-node-v0.3.0...lumina-node-v0.3.1) - 2024-08-22
+
+### Added
+- Header pruning ([#351](https://github.com/eigerco/lumina/pull/351))
+
 ## [0.3.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.2.0...lumina-node-v0.3.0) - 2024-08-13
 
 ### Added
