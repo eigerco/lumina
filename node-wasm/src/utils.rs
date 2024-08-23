@@ -19,10 +19,11 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     DedicatedWorkerGlobalScope, Request, RequestInit, RequestMode, Response, SharedWorker,
-    SharedWorkerGlobalScope, Worker,
+    SharedWorkerGlobalScope, Worker, WorkerGlobalScope,
 };
 
 use crate::error::{Context, Error, Result};
+use crate::worker::AnyWorker;
 
 /// Supported Celestia networks.
 #[wasm_bindgen]
@@ -80,34 +81,27 @@ pub(crate) fn js_value_from_display<D: fmt::Display>(value: D) -> JsValue {
 }
 
 pub(crate) trait WorkerSelf {
-    type GlobalScope;
+    type GlobalScope: From<JsValue> + JsCast;
 
-    fn worker_self() -> Self::GlobalScope;
-    fn is_worker_type() -> bool;
+    fn worker_self() -> Self::GlobalScope {
+        JsValue::from(js_sys::global()).into()
+    }
+
+    fn is_worker_type() -> bool {
+        js_sys::global().has_type::<Self::GlobalScope>()
+    }
+}
+
+impl WorkerSelf for AnyWorker {
+    type GlobalScope = WorkerGlobalScope;
 }
 
 impl WorkerSelf for SharedWorker {
     type GlobalScope = SharedWorkerGlobalScope;
-
-    fn worker_self() -> Self::GlobalScope {
-        JsValue::from(js_sys::global()).into()
-    }
-
-    fn is_worker_type() -> bool {
-        js_sys::global().has_type::<Self::GlobalScope>()
-    }
 }
 
 impl WorkerSelf for Worker {
     type GlobalScope = DedicatedWorkerGlobalScope;
-
-    fn worker_self() -> Self::GlobalScope {
-        JsValue::from(js_sys::global()).into()
-    }
-
-    fn is_worker_type() -> bool {
-        js_sys::global().has_type::<Self::GlobalScope>()
-    }
 }
 
 /// This type is useful in cases where we want to deal with de/serialising `Result<T, E>`, with
@@ -159,10 +153,8 @@ where
 pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
     let storage_manager = if let Some(window) = web_sys::window() {
         window.navigator().storage()
-    } else if Worker::is_worker_type() {
-        Worker::worker_self().navigator().storage()
-    } else if SharedWorker::is_worker_type() {
-        SharedWorker::worker_self().navigator().storage()
+    } else if AnyWorker::is_worker_type() {
+        AnyWorker::worker_self().navigator().storage()
     } else {
         return Err(Error::new("`navigator.storage` not found in global scope"));
     };
@@ -192,14 +184,13 @@ const CHROME_USER_AGENT_DETECTION_STR: &str = "Chrome/";
 const FIREFOX_USER_AGENT_DETECTION_STR: &str = "Firefox/";
 const SAFARI_USER_AGENT_DETECTION_STR: &str = "Safari/";
 
-pub(crate) fn get_user_agent() -> Result<String, Error> {
+pub(crate) fn get_user_agent() -> Result<String> {
     if let Some(window) = web_sys::window() {
         Ok(window.navigator().user_agent()?)
-    } else if Worker::is_worker_type() {
-        Ok(Worker::worker_self().navigator().user_agent()?)
-    } else if SharedWorker::is_worker_type() {
-        Ok(SharedWorker::worker_self().navigator().user_agent()?)
+    } else if AnyWorker::is_worker_type() {
+        Ok(AnyWorker::worker_self().navigator().user_agent()?)
     } else {
+        // we may be in service worker
         Err(Error::new(
             "`navigator.user_agent` not found in global scope",
         ))
@@ -248,10 +239,8 @@ async fn fetch(url: &str, opts: &RequestInit, headers: &[(&str, &str)]) -> Resul
 
     let fetch_promise = if let Some(window) = web_sys::window() {
         window.fetch_with_request(&request)
-    } else if Worker::is_worker_type() {
-        Worker::worker_self().fetch_with_request(&request)
-    } else if SharedWorker::is_worker_type() {
-        SharedWorker::worker_self().fetch_with_request(&request)
+    } else if AnyWorker::is_worker_type() {
+        AnyWorker::worker_self().fetch_with_request(&request)
     } else {
         return Err(Error::new("`fetch` not found in global scope"));
     };
