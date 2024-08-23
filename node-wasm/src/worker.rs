@@ -18,16 +18,10 @@ use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 use crate::error::{Context, Error, Result};
 use crate::node::WasmNodeConfig;
 use crate::utils::{random_id, WorkerSelf};
-use crate::worker::channel::{
-    DedicatedWorkerMessageServer, MessageServer, SharedWorkerMessageServer, WorkerMessage,
-};
 use crate::worker::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
-mod channel;
 pub(crate) mod commands;
-
-pub(crate) use channel::{AnyWorker, WorkerClient};
 
 const WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH: usize = 64;
 
@@ -236,6 +230,7 @@ impl NodeWorker {
     }
 }
 
+/*
 #[wasm_bindgen]
 pub async fn run_worker(queued_events: Vec<MessageEvent>) -> Result<()> {
     info!("Entered run_worker");
@@ -302,6 +297,7 @@ pub async fn run_worker(queued_events: Vec<MessageEvent>) -> Result<()> {
 
     Ok(())
 }
+*/
 
 async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: BroadcastChannel) {
     #[derive(Serialize)]

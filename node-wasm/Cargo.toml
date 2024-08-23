@@ -52,6 +52,7 @@ web-sys = { version = "0.3.69", features = [
   "BroadcastChannel",
   "DedicatedWorkerGlobalScope",
   "Headers",
+  "MessageChannel",
   "MessageEvent",
   "MessagePort",
   "Navigator",
@@ -69,6 +70,9 @@ web-sys = { version = "0.3.69", features = [
   "WorkerOptions",
   "WorkerType",
 ] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3.42"
 
 [package.metadata.docs.rs]
 targets = ["wasm32-unknown-unknown"]

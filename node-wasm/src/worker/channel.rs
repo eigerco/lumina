@@ -102,6 +102,7 @@ impl From<Worker> for AnyWorker {
 }
 
 impl AnyWorker {
+    #[allow(dead_code)]
     pub(crate) fn new(kind: NodeWorkerKind, url: &str, name: &str) -> Result<Self> {
         let mut opts = WorkerOptions::new();
         opts.type_(WorkerType::Module);
@@ -162,6 +163,7 @@ impl AnyWorker {
     fn setup_on_error_callback(&self) -> Closure<dyn Fn(MessageEvent)> {
         let onerror = Closure::new(|ev: MessageEvent| {
             error!("received error from Worker: {:?}", ev);
+            web_sys::console::log_1(&ev);
         });
         match self {
             AnyWorker::SharedWorker(worker) => {

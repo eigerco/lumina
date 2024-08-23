@@ -1,4 +1,4 @@
-import init, { run_worker } from '/wasm/lumina_node_wasm.js';
+import init, { run_worker } from './pkg/lumina_node_wasm.js';
 
 Error.stackTraceLimit = 99;
 

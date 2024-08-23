@@ -212,6 +212,7 @@ pub(crate) fn is_chrome() -> Result<bool, Error> {
     Ok(user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
 }
 
+#[allow(dead_code)]
 pub(crate) fn is_firefox() -> Result<bool, Error> {
     let user_agent = get_user_agent()?;
     Ok(user_agent.contains(FIREFOX_USER_AGENT_DETECTION_STR))
@@ -224,6 +225,7 @@ pub(crate) fn is_safari() -> Result<bool, Error> {
         && !user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
 }
 
+#[allow(dead_code)]
 pub(crate) fn shared_workers_supported() -> Result<bool, Error> {
     // For chrome we default to running in a dedicated Worker because:
     // 1. Chrome Android does not support SharedWorkers at all

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
 use tracing::error;
 use wasm_bindgen::prelude::*;
-use web_sys::BroadcastChannel;
+use web_sys::{BroadcastChannel, MessagePort, Worker};
 
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_id};
@@ -14,15 +14,13 @@ use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 
 use crate::error::{Context, Result};
+use crate::ports::RequestResponse;
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
-    shared_workers_supported, Network,
+    Network,
 };
-use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
-use crate::worker::{AnyWorker, WorkerClient};
+use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
-
-const LUMINA_WORKER_NAME: &str = "lumina";
 
 /// Config for the lumina wasm node.
 #[wasm_bindgen(js_name = NodeConfig)]
@@ -37,9 +35,9 @@ pub struct WasmNodeConfig {
 
 /// `NodeDriver` represents lumina node running in a dedicated Worker/SharedWorker.
 /// It's responsible for sending commands and receiving responses from the node.
-#[wasm_bindgen(js_name = NodeClient)]
-struct NodeDriver {
-    client: WorkerClient,
+#[wasm_bindgen]
+struct NodeClient {
+    worker: RequestResponse<NodeCommand, WorkerResponse>,
 }
 
 /// Type of worker to run lumina in. Allows overriding automatically detected worker kind
@@ -56,8 +54,8 @@ pub enum NodeWorkerKind {
     Dedicated,
 }
 
-#[wasm_bindgen(js_class = NodeClient)]
-impl NodeDriver {
+#[wasm_bindgen]
+impl NodeClient {
     /// Create a new connection to a Lumina node running in a Shared Worker.
     /// Note that single Shared Worker can be accessed from multiple tabs, so Lumina may
     /// already have been started. Otherwise it needs to be started with [`NodeDriver::start`].
@@ -89,9 +87,8 @@ impl NodeDriver {
     /// ```
     #[wasm_bindgen(constructor)]
     pub async fn new(
-        worker_script_url: &str,
-        worker_type: Option<NodeWorkerKind>,
-    ) -> Result<NodeDriver> {
+        port: MessagePort
+    ) -> Result<NodeClient> {
         // Safari doesn't have the `navigator.storage()` api
         if !is_safari()? {
             if let Err(e) = request_storage_persistence().await {
@@ -99,27 +96,15 @@ impl NodeDriver {
             }
         }
 
-        let default_worker_type = if shared_workers_supported().unwrap_or(false) {
-            NodeWorkerKind::Shared
-        } else {
-            NodeWorkerKind::Dedicated
-        };
-
-        let worker = AnyWorker::new(
-            worker_type.unwrap_or(default_worker_type),
-            worker_script_url,
-            LUMINA_WORKER_NAME,
-        )?;
-
         Ok(Self {
-            client: WorkerClient::new(worker),
+            worker: RequestResponse::new(port)
         })
     }
 
     /// Check whether Lumina is currently running
     pub async fn is_running(&self) -> Result<bool> {
         let command = NodeCommand::IsRunning;
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let running = response.into_is_running().check_variant()?;
 
         Ok(running)
@@ -128,7 +113,7 @@ impl NodeDriver {
     /// Start a node with the provided config, if it's not running
     pub async fn start(&self, config: WasmNodeConfig) -> Result<()> {
         let command = NodeCommand::StartNode(config);
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         response.into_node_started().check_variant()??;
 
         Ok(())
@@ -137,7 +122,7 @@ impl NodeDriver {
     /// Get node's local peer ID.
     pub async fn local_peer_id(&self) -> Result<String> {
         let command = NodeCommand::GetLocalPeerId;
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let peer_id = response.into_local_peer_id().check_variant()?;
 
         Ok(peer_id)
@@ -146,7 +131,7 @@ impl NodeDriver {
     /// Get current [`PeerTracker`] info.
     pub async fn peer_tracker_info(&self) -> Result<JsValue> {
         let command = NodeCommand::GetPeerTrackerInfo;
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let peer_info = response.into_peer_tracker_info().check_variant()?;
 
         Ok(to_value(&peer_info)?)
@@ -155,7 +140,7 @@ impl NodeDriver {
     /// Wait until the node is connected to at least 1 peer.
     pub async fn wait_connected(&self) -> Result<()> {
         let command = NodeCommand::WaitConnected { trusted: false };
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let _ = response.into_connected().check_variant()?;
 
         Ok(())
@@ -164,14 +149,14 @@ impl NodeDriver {
     /// Wait until the node is connected to at least 1 trusted peer.
     pub async fn wait_connected_trusted(&self) -> Result<()> {
         let command = NodeCommand::WaitConnected { trusted: true };
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         response.into_connected().check_variant()?
     }
 
     /// Get current network info.
     pub async fn network_info(&self) -> Result<NetworkInfoSnapshot> {
         let command = NodeCommand::GetNetworkInfo;
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
 
         response.into_network_info().check_variant()?
     }
@@ -179,7 +164,7 @@ impl NodeDriver {
     /// Get all the multiaddresses on which the node listens.
     pub async fn listeners(&self) -> Result<Array> {
         let command = NodeCommand::GetListeners;
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let listeners = response.into_listeners().check_variant()?;
         let result = listeners?.iter().map(js_value_from_display).collect();
 
@@ -189,7 +174,7 @@ impl NodeDriver {
     /// Get all the peers that node is connected to.
     pub async fn connected_peers(&self) -> Result<Array> {
         let command = NodeCommand::GetConnectedPeers;
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let peers = response.into_connected_peers().check_variant()?;
         let result = peers?.iter().map(js_value_from_display).collect();
 
@@ -202,14 +187,14 @@ impl NodeDriver {
             peer_id: peer_id.parse()?,
             is_trusted,
         };
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         response.into_set_peer_trust().check_variant()?
     }
 
     /// Request the head header from the network.
     pub async fn request_head_header(&self) -> Result<JsValue> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::Head);
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
         header.into()
@@ -218,7 +203,7 @@ impl NodeDriver {
     /// Request a header for the block with a given hash from the network.
     pub async fn request_header_by_hash(&self, hash: &str) -> Result<JsValue> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHash(hash.parse()?));
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
         header.into()
@@ -227,7 +212,7 @@ impl NodeDriver {
     /// Request a header for the block with a given height from the network.
     pub async fn request_header_by_height(&self, height: u64) -> Result<JsValue> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHeight(height));
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
         header.into()
@@ -245,7 +230,7 @@ impl NodeDriver {
             from: from_header,
             amount,
         };
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let headers = response.into_headers().check_variant()?;
 
         headers.into()
@@ -254,7 +239,7 @@ impl NodeDriver {
     /// Get current header syncing info.
     pub async fn syncer_info(&self) -> Result<JsValue> {
         let command = NodeCommand::GetSyncerInfo;
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let syncer_info = response.into_syncer_info().check_variant()?;
 
         Ok(to_value(&syncer_info?)?)
@@ -263,7 +248,7 @@ impl NodeDriver {
     /// Get the latest header announced in the network.
     pub async fn get_network_head_header(&self) -> Result<JsValue> {
         let command = NodeCommand::LastSeenNetworkHead;
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let header = response.into_last_seen_network_head().check_variant()?;
 
         header.into()
@@ -272,7 +257,7 @@ impl NodeDriver {
     /// Get the latest locally synced header.
     pub async fn get_local_head_header(&self) -> Result<JsValue> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::Head);
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
         header.into()
@@ -281,7 +266,7 @@ impl NodeDriver {
     /// Get a synced header for the block with a given hash.
     pub async fn get_header_by_hash(&self, hash: &str) -> Result<JsValue> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHash(hash.parse()?));
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
         header.into()
@@ -290,7 +275,7 @@ impl NodeDriver {
     /// Get a synced header for the block with a given height.
     pub async fn get_header_by_height(&self, height: u64) -> Result<JsValue> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHeight(height));
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
         header.into()
@@ -314,7 +299,7 @@ impl NodeDriver {
             start_height,
             end_height,
         };
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let headers = response.into_headers().check_variant()?;
 
         headers.into()
@@ -323,7 +308,7 @@ impl NodeDriver {
     /// Get data sampling metadata of an already sampled height.
     pub async fn get_sampling_metadata(&self, height: u64) -> Result<JsValue> {
         let command = NodeCommand::GetSamplingMetadata { height };
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let metadata = response.into_sampling_metadata().check_variant()?;
 
         Ok(to_value(&metadata?)?)
@@ -333,7 +318,7 @@ impl NodeDriver {
     /// be processed and new NodeClient needs to be created to restart a node.
     pub async fn close(&self) -> Result<()> {
         let command = NodeCommand::CloseWorker;
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         response.into_worker_closed().check_variant()?;
 
         Ok(())
@@ -342,7 +327,7 @@ impl NodeDriver {
     /// Returns a [`BroadcastChannel`] for events generated by [`Node`].
     pub async fn events_channel(&self) -> Result<BroadcastChannel> {
         let command = NodeCommand::GetEventsChannelName;
-        let response = self.client.exec(command).await?;
+        let response = self.worker.exec(command).await?;
         let name = response.into_events_channel_name().check_variant()?;
 
         Ok(BroadcastChannel::new(&name).unwrap())
