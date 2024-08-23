@@ -190,7 +190,6 @@ pub(crate) fn get_user_agent() -> Result<String> {
     } else if AnyWorker::is_worker_type() {
         Ok(AnyWorker::worker_self().navigator().user_agent()?)
     } else {
-        // we may be in service worker
         Err(Error::new(
             "`navigator.user_agent` not found in global scope",
         ))
