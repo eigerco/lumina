@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.3.0...celestia-rpc-v0.4.0) - 2024-08-22
+
+### Added
+- updating API for parity with celestia-node v0.15.0 ([#340](https://github.com/eigerco/lumina/pull/340))
+
 ## [0.3.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.2.0...celestia-rpc-v0.3.0) - 2024-08-13
 
 ### Added
