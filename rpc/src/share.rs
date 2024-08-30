@@ -8,6 +8,15 @@ pub trait Share {
     #[method(name = "share.GetEDS")]
     async fn share_get_eds(&self, root: &ExtendedHeader) -> Result<ExtendedDataSquare, Error>;
 
+    /// GetRange gets a list of shares and their corresponding proof.
+    #[method(name = "share.GetRange")]
+    async fn share_get_range(
+        &self,
+        height: u64,
+        start: usize,
+        end: usize,
+    ) -> Result<serde_json::Value, Error>;
+
     /// GetShare gets a Share by coordinates in EDS.
     #[method(name = "share.GetShare")]
     async fn share_get_share(

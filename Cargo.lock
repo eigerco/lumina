@@ -743,6 +743,7 @@ dependencies = [
  "nmt-rs",
  "rand",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",
@@ -752,8 +753,6 @@ dependencies = [
 [[package]]
 name = "celestia-tendermint"
 version = "0.32.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95f93b5cbbd62b6cfde961889bf05d5fe19e70d8500c4465694306ed2695ac23"
 dependencies = [
  "bytes",
  "celestia-tendermint-proto",
@@ -782,8 +781,6 @@ dependencies = [
 [[package]]
 name = "celestia-tendermint-proto"
 version = "0.32.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8f7d49c1ececa30a4587c5fe8a4035b786b78a3253ed0f9636de591b3dc2b37"
 dependencies = [
  "bytes",
  "flex-error",
@@ -813,6 +810,7 @@ dependencies = [
  "ed25519-consensus",
  "enum_dispatch",
  "getrandom",
+ "hex",
  "indoc",
  "leopard-codec",
  "libp2p-identity",

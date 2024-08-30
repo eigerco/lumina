@@ -52,6 +52,34 @@ async fn get_shares_by_namespace() {
 }
 
 #[tokio::test]
+async fn get_shares_range() {
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let namespace = random_ns();
+    let data = random_bytes(1024);
+    let blob = Blob::new(namespace, data.clone()).unwrap();
+    let commitment = blob.commitment;
+
+    let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
+
+    let header = client.header_get_by_height(submitted_height).await.unwrap();
+    let blob_on_chain = client
+        .blob_get(submitted_height, namespace, commitment)
+        .await
+        .unwrap();
+    let index = blob_on_chain.index.unwrap();
+    let shares = blob_on_chain.to_shares().unwrap().len();
+
+    let shares_range = client
+        .share_get_range(submitted_height, index as usize, index as usize + shares)
+        .await
+        .unwrap();
+
+    println!("{}", serde_json::to_string_pretty(&shares_range).unwrap());
+    println!("{}", serde_json::to_string_pretty(&header).unwrap());
+    panic!();
+}
+
+#[tokio::test]
 async fn get_shares_by_namespace_wrong_ns() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
