@@ -1,6 +1,5 @@
 use celestia_proto::celestia::da::DataAvailabilityHeader as RawDataAvailabilityHeader;
 use celestia_tendermint::merkle::simple_hash_from_byte_vectors;
-use celestia_tendermint_proto::v0_34::crypto::Proof as MerkleProof;
 use celestia_tendermint_proto::v0_34::types::RowProof as RawRowProof;
 use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
@@ -12,7 +11,10 @@ use crate::consts::data_availability_header::{
 use crate::hash::Hash;
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::rsmt2d::AxisType;
-use crate::{bail_validation, Error, ExtendedDataSquare, Result, ValidateBasic, ValidationError};
+use crate::{
+    bail_validation, bail_verification, Error, ExtendedDataSquare, MerkleProof, Result,
+    ValidateBasic, ValidationError,
+};
 
 /// Header with commitments of the data availability.
 ///
@@ -246,31 +248,26 @@ impl ValidateBasic for DataAvailabilityHeader {
     }
 }
 
-// TODO: it should follow our regular try from / into RawRowProof pattern
-// utilizing proto/vendor/tendermint/types/types.proto. However we cannot
-// easily generate it, as it's in .tendermint.types package which we override
-// with celestia_tendermint_proto. so the correct solution here would be to
-// update celestia_tendermint_proto proto definitions to a recent celestia-core
-// version. Note, this wouldn't free us from merkle proof verification logic,
-// they are not present in tendermint-rs
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct RowProof {
-    #[serde(with = "hash_vec_hexstring")]
+#[serde(try_from = "RawRowProof", into = "RawRowProof")]
+pub struct RowProof {
     row_roots: Vec<NamespacedHash>,
     proofs: Vec<MerkleProof>,
-    #[serde(default, with = "hash_base64string")]
-    root: Option<Hash>,
     start_row: usize,
     end_row: usize,
 }
 
 impl RowProof {
-    fn verify(&self, root: Hash) -> Result<()> {
-        assert_eq!(self.row_roots.len(), self.proofs.len());
+    pub fn verify(&self, root: Hash) -> Result<()> {
+        if self.row_roots.len() != self.proofs.len() {
+            bail_verification!("invalid row proof: row_roots.len() != proofs.len()");
+        }
+        let Hash::Sha256(root) = root else {
+            bail_verification!("empty hash");
+        };
 
         for (row_root, proof) in self.row_roots.iter().zip(self.proofs.iter()) {
-            todo!()
-            // verify_merkle_proof(proof, &root, row_root);
+            proof.verify(row_root.to_array(), root)?;
         }
 
         Ok(())
@@ -283,83 +280,36 @@ impl TryFrom<RawRowProof> for RowProof {
     type Error = Error;
 
     fn try_from(value: RawRowProof) -> Result<Self> {
-        todo!()
+        Ok(Self {
+            row_roots: value
+                .row_roots
+                .into_iter()
+                .map(|hash| NamespacedHash::from_raw(&hash))
+                .collect::<Result<_>>()?,
+            proofs: value
+                .proofs
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_>>()?,
+            start_row: value.start_row as usize,
+            end_row: value.end_row as usize,
+        })
     }
 }
 
 impl From<RowProof> for RawRowProof {
     fn from(value: RowProof) -> Self {
-        todo!()
-    }
-}
-
-fn verify_merkle_proof(proof: &MerkleProof, root: &Hash, leaf: &Hash) {}
-
-mod hash_base64string {
-    use base64::prelude::*;
-    use serde::{de, Deserialize, Deserializer, Serializer};
-
-    use super::Hash;
-
-    pub fn serialize<S>(value: &Option<Hash>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        if let Some(hash) = value {
-            serializer.serialize_some(&BASE64_STANDARD.encode(hash))
-        } else {
-            serializer.serialize_none()
+        Self {
+            row_roots: value
+                .row_roots
+                .into_iter()
+                .map(|hash| hash.to_vec())
+                .collect(),
+            proofs: value.proofs.into_iter().map(Into::into).collect(),
+            start_row: value.start_row as u32,
+            end_row: value.end_row as u32,
+            root: vec![],
         }
-    }
-
-    /// Deserialize base64string into `Hash`
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Hash>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let Some(hash) = Option::<&str>::deserialize(deserializer)? else {
-            return Ok(None);
-        };
-        BASE64_STANDARD
-            .decode(hash)
-            .map_err(de::Error::custom)?
-            .try_into()
-            .map(Some)
-            .map_err(de::Error::custom)
-    }
-}
-
-mod hash_vec_hexstring {
-    use serde::{de, Deserialize, Deserializer, Serializer};
-
-    use super::{NamespacedHash, NamespacedHashExt};
-
-    /// Serialize from `Vec<NamespacedHash>` into `Vec<hexstring>`
-    pub fn serialize<S>(value: &[NamespacedHash], serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let hashes: Vec<_> = value
-            .iter()
-            .map(|hash| hex::encode_upper(hash.to_array()))
-            .collect();
-        serializer.serialize_some(&hashes)
-    }
-
-    /// Deserialize vec_base64string into `NamespacedHash`
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<NamespacedHash>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Option::<Vec<&str>>::deserialize(deserializer)?
-            .unwrap_or_default()
-            .into_iter()
-            .map(|raw_hash| {
-                hex::decode(raw_hash)
-                    .map_err(de::Error::custom)
-                    .and_then(|hash| NamespacedHash::from_raw(&hash).map_err(de::Error::custom))
-            })
-            .collect()
     }
 }
 
@@ -503,120 +453,3 @@ mod tests {
         row_proof.verify(dah.hash()).unwrap();
     }
 }
-//   "Proof": {
-//     "data": [
-//       "AAAAAAAAAAAAAAAAAAAAAAAAANjLtTOiQmHEwKMBAAAEAAK7jTduoBTIVHIsXZYBTeXT+ROAP0ErS1wBn3qRFHoNClY8r4gEOLhvoPDfYX5dN+qGDHdIFPG4F1aF+niSmbfQRSkw2QdjqKwDKhYUKvu10oUo5r/k0SyYJx5KImSJ0d2sBH/ajcpk
-// +DWBD0tXJTmsfiATmM8BqaxRRa5biE1T9yV1WKndAyJUC00P8e2/MG+7P1t7a9tMjG+Oxgxx1EzxJ47FDiRwnYNz2/JBqzIC33fKoiWZSeL+NFLn0Dfx+Ev1GYaKpstd1x1tgJnkEceTFVC6r7qhqRbTFJjAjgYJAB4fbBd/+QUQkdbW0uCHLtmWhkeK9YB
-// uY05L1v1c6wcXI9IhSlBLnFFdxSTonAaZYhOusiG6eNFn7FpTU0i0oHcksQL+MW3HhbOnIyyUE1Wyjsm6pFuHKBi4TwHTQOibOhvxehuxyrHkqk7QcEPK6/ioN08n2eqd1mlfXiG2wk8nDaZfdmIq3hCm2usrpmqxJHYoH/wbbMeB7AzhreueWRk38984H2
-// h1xX93ZpmUWJEJJGJ0St70Afb6RPjH9pX9vtbVXCvj65D+HPpxinReMBUj0rvGZ6IzNzoBhJYGszp5R4sdztGH8NLNWujwAFDThNRhWUX/r+APM1hdW9s=",
-//       "AAAAAAAAAAAAAAAAAAAAAAAAANjLtTOiQmHEwKMAaRdGrcBVugXTHUqmX0/UvgFUVjY/T1lnVQuz0gKhCE1aN0WvNPJautwNmv/68eAucdCm6vPqzg4KEgL777G5navyLj/1TMhLJfgTf1YNayDJLN7R13d1QQ3Peagcg+N4Itv0ZmZ6p7/QMQfw
-// aXh30yronynPhxV//932ODigrZVrbW+XBhPtgh+/DlbCrU8d65IGn3VGTDQNfZaajmogy4xNf9x089OgcOv8H1XEjj0X8iZQwW+K05wIE6STWGxXJSMywMM7A+FE5YDrnEHeIT9bsIeXvEAy2cwfrorAnQrbfPyZqSSHHQzGumhOYam1Cyz1oVUMAhJMOXR
-// drsckPXQdy38cOw/2VNFCZnLDvJIdT9kL3fk+BX/tXUMdvmR0ATY1JiqjW1YPO8fpVaG+IrbUobxDUnrq5kSmK6Gi9WIF+NzCWpPD/bjV+6nwJXEUxzjb18wVitZJZsQpMVsB9t0KXzlvr9AsKob4AZZGAAqbI4cHKjW3PNMbpH6U1WTUPldy7NQvpWDcYs
-// VbYQOEr9YiKGyUPIUdb+nPSyAd4aIpbce8fQhN9D9wE0SIDTm2hMorjJsemwdZSHifZbL4Yya7QR/Oa3x5K+82IZiuhm/y5HGEdlHB2Jg54wqJJrKvO2E=",
-//       "AAAAAAAAAAAAAAAAAAAAAAAAANjLtTOiQmHEwKMAIt3G6MztjqXhUJ6Mbw/14mlqVbzIwJNU38ITmjBXACSyjgvQCMhVZYrvWQxCuEtPHboM1HrI1rgVjMC3B7vregAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-//     ],
-//     "namespace_id": "AAAAAAAAAAAAAAAAAAAAAAAA2Mu1M6JCYcTAow==",
-//     "namespace_version": 0,
-//     "share_proofs": [
-//       {
-//         "end": 2,
-//         "nodes": [
-//           "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABCU0aUrR/wpx09HFWeoyuV1vuw5Ew3rhtCaf/Zd4chb9",
-//           "/////////////////////////////////////////////////////////////////////////////ypPU4ZqDz1t8YcunXI8ETuBth1gXLvPWIMd0JPoeJF3"
-//         ],
-//         "start": 1
-//       },
-//       {
-//         "end": 2,
-//         "nodes": [
-//           "/////////////////////////////////////////////////////////////////////////////wdXw/2tc8hhuGLcsfU9pWo5BDIKSsNJFCytj++xtFgq"
-//         ]
-//       }
-//     ]
-//   },
-//   "Shares": [
-//     "AAAAAAAAAAAAAAAAAAAAAAAAANjLtTOiQmHEwKMBAAAEAAK7jTduoBTIVHIsXZYBTeXT+ROAP0ErS1wBn3qRFHoNClY8r4gEOLhvoPDfYX5dN+qGDHdIFPG4F1aF+niSmbfQRSkw2QdjqKwDKhYUKvu10oUo5r/k0SyYJx5KImSJ0d2sBH/ajcpk+D
-// WBD0tXJTmsfiATmM8BqaxRRa5biE1T9yV1WKndAyJUC00P8e2/MG+7P1t7a9tMjG+Oxgxx1EzxJ47FDiRwnYNz2/JBqzIC33fKoiWZSeL+NFLn0Dfx+Ev1GYaKpstd1x1tgJnkEceTFVC6r7qhqRbTFJjAjgYJAB4fbBd/+QUQkdbW0uCHLtmWhkeK9YBuY
-// 05L1v1c6wcXI9IhSlBLnFFdxSTonAaZYhOusiG6eNFn7FpTU0i0oHcksQL+MW3HhbOnIyyUE1Wyjsm6pFuHKBi4TwHTQOibOhvxehuxyrHkqk7QcEPK6/ioN08n2eqd1mlfXiG2wk8nDaZfdmIq3hCm2usrpmqxJHYoH/wbbMeB7AzhreueWRk38984H2h1
-// xX93ZpmUWJEJJGJ0St70Afb6RPjH9pX9vtbVXCvj65D+HPpxinReMBUj0rvGZ6IzNzoBhJYGszp5R4sdztGH8NLNWujwAFDThNRhWUX/r+APM1hdW9s=",
-//     "AAAAAAAAAAAAAAAAAAAAAAAAANjLtTOiQmHEwKMAaRdGrcBVugXTHUqmX0/UvgFUVjY/T1lnVQuz0gKhCE1aN0WvNPJautwNmv/68eAucdCm6vPqzg4KEgL777G5navyLj/1TMhLJfgTf1YNayDJLN7R13d1QQ3Peagcg+N4Itv0ZmZ6p7/QMQfwaX
-// h30yronynPhxV//932ODigrZVrbW+XBhPtgh+/DlbCrU8d65IGn3VGTDQNfZaajmogy4xNf9x089OgcOv8H1XEjj0X8iZQwW+K05wIE6STWGxXJSMywMM7A+FE5YDrnEHeIT9bsIeXvEAy2cwfrorAnQrbfPyZqSSHHQzGumhOYam1Cyz1oVUMAhJMOXRdr
-// sckPXQdy38cOw/2VNFCZnLDvJIdT9kL3fk+BX/tXUMdvmR0ATY1JiqjW1YPO8fpVaG+IrbUobxDUnrq5kSmK6Gi9WIF+NzCWpPD/bjV+6nwJXEUxzjb18wVitZJZsQpMVsB9t0KXzlvr9AsKob4AZZGAAqbI4cHKjW3PNMbpH6U1WTUPldy7NQvpWDcYsVb
-// YQOEr9YiKGyUPIUdb+nPSyAd4aIpbce8fQhN9D9wE0SIDTm2hMorjJsemwdZSHifZbL4Yya7QR/Oa3x5K+82IZiuhm/y5HGEdlHB2Jg54wqJJrKvO2E=",
-//     "AAAAAAAAAAAAAAAAAAAAAAAAANjLtTOiQmHEwKMAIt3G6MztjqXhUJ6Mbw/14mlqVbzIwJNU38ITmjBXACSyjgvQCMhVZYrvWQxCuEtPHboM1HrI1rgVjMC3B7vregAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-//   ]
-// }
-// {
-//   "header": {
-//     "version": {
-//       "block": "11",
-//       "app": "1"
-//     },
-//     "chain_id": "private",
-//     "height": "7621",
-//     "time": "2024-08-29T13:06:07.863632032Z",
-//     "last_block_id": {
-//       "hash": "A2EDE7E806EBF59F1E2914AC2D7801B76B3A789F033911AF14C5D62F5C3E7098",
-//       "parts": {
-//         "total": 1,
-//         "hash": "0C45BA8F78E4D8163C992AB47D7930583D1EF207D5C497FC59CC02281F625FEB"
-//       }
-//     },
-//     "last_commit_hash": "526DB4A98D3661E05DF67B87239EC153515ACCD3F46BA268EFF4015295C6A2B3",
-//     "data_hash": "E414A1EEB8395CA0C353384A9EC77300698ABBF98CD1DEC688A2C5BC5525077C",
-//     "validators_hash": "73AE7622856703136CCEC52530EAEFB7BE02441ADC3395B469D82D13C1CD731F",
-//     "next_validators_hash": "73AE7622856703136CCEC52530EAEFB7BE02441ADC3395B469D82D13C1CD731F",
-//     "consensus_hash": "C0B6A634B72AE9687EA53B6D277A73ABA1386BA3CFC6D0F26963602F7F6FFCD6",
-//     "app_hash": "5A6329D9A806308D54C1A28EA0D89A5B2F4AC206BA2F3E5BF8C5E9B15F65CC2F",
-//     "last_results_hash": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
-//     "evidence_hash": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
-//     "proposer_address": "ECCF605776310B73EC57189AE89B1E587DBC2601"
-//   },
-//   "commit": {
-//     "height": 7621,
-//     "round": 0,
-//     "block_id": {
-//       "hash": "A7A4A45F0C655DA558722A14A589BA580F8A06BEE12376772A4CCFA30A989877",
-//       "parts": {
-//         "total": 1,
-//         "hash": "617CFA4E6A5670FFCAF4D06FE72D16214FBAF3B7C96CA4FBD10B47A167B066D9"
-//       }
-//     },
-//     "signatures": [
-//       {
-//         "block_id_flag": 2,
-//         "validator_address": "ECCF605776310B73EC57189AE89B1E587DBC2601",
-//         "timestamp": "2024-08-29T13:06:08.875333629Z",
-//         "signature": "Beqnt4uw2reTFRguBXuQXMsEoysvUVlB4eyHBKJK6knigN478JUaKWfgXnuFyIA9XRdTpkiS/3OkqWimQXFfCQ=="
-//       }
-//     ]
-//   },
-//   "validator_set": {
-//     "validators": [
-//       {
-//         "address": "ECCF605776310B73EC57189AE89B1E587DBC2601",
-//         "pub_key": {
-//           "type": "tendermint/PubKeyEd25519",
-//           "value": "SIQRxnQENgPMQ8Vg1XBKtFEBLpqU4+hcxwrj6R3ZJp8="
-//         },
-//         "voting_power": "5000",
-//         "proposer_priority": "0"
-//       }
-//     ],
-//     "proposer": {
-//       "address": "ECCF605776310B73EC57189AE89B1E587DBC2601",
-//       "pub_key": {
-//         "type": "tendermint/PubKeyEd25519",
-//         "value": "SIQRxnQENgPMQ8Vg1XBKtFEBLpqU4+hcxwrj6R3ZJp8="
-//       },
-//       "voting_power": "5000",
-//       "proposer_priority": "0"
-//     }
-//   },
-//
