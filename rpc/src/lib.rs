@@ -1,7 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
-mod blob;
+pub mod blob;
 pub mod client;
 mod error;
 mod header;

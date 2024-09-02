@@ -10,6 +10,7 @@ pub mod network;
 pub mod node;
 mod p2p;
 mod peer_tracker;
+mod pruner;
 pub mod store;
 mod syncer;
 #[cfg(any(test, feature = "test-utils"))]

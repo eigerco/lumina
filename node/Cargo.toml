@@ -1,6 +1,6 @@
 [package]
 name = "lumina-node"
-version = "0.2.0"
+version = "0.3.1"
 edition = "2021"
 license = "Apache-2.0"
 description = "Celestia data availability node implementation in Rust"
@@ -76,6 +76,7 @@ blockstore = { workspace = true, features = ["indexeddb"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { version = "0.2.15", features = ["js"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
+idb = "0.6.3"
 js-sys = "0.3.69"
 libp2p = { workspace = true, features = [
   "noise",
@@ -85,15 +86,16 @@ libp2p = { workspace = true, features = [
   "yamux",
 ] }
 pin-project = "1.1.5"
-rexie = "0.5.0"
+rexie = "0.6.2"
 send_wrapper = { version = "0.6.0", features = ["futures"] }
 serde-wasm-bindgen = "0.6.5"
-wasm-bindgen = "0.2.92"
-wasm-bindgen-futures = "0.4.42"
+wasm-bindgen = "0.2.93"
+wasm-bindgen-futures = "0.4.43"
+libp2p-websocket-websys = "0.3.3"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 function_name = "0.3.0"
-wasm-bindgen-test = "0.3.42"
+wasm-bindgen-test = "0.3.43"
 
 [dev-dependencies]
 bytes = "1.6.0"

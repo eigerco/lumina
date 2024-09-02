@@ -176,11 +176,9 @@ impl IndexedDbStore {
         let hash_index = header_store.index(HASH_INDEX_NAME)?;
 
         let hash_key = to_value(&hash)?;
-        let header_entry = hash_index.get(&hash_key).await?;
-
-        if header_entry.is_falsy() {
+        let Some(header_entry) = hash_index.get(hash_key).await? else {
             return Err(StoreError::NotFound);
-        }
+        };
 
         let serialized_header = from_value::<ExtendedHeaderEntry>(header_entry)?.header;
         ExtendedHeader::decode(serialized_header.as_ref())
@@ -243,7 +241,7 @@ impl IndexedDbStore {
 
         let hash_key = KeyRange::only(&to_value(&hash)?)?;
 
-        let hash_count = hash_index.count(Some(&hash_key)).await?;
+        let hash_count = hash_index.count(Some(hash_key)).await?;
 
         Ok(hash_count > 0)
     }
@@ -282,11 +280,9 @@ impl IndexedDbStore {
         let store = tx.store(SAMPLING_STORE_NAME)?;
 
         let height_key = to_value(&height)?;
-        let sampling_entry = store.get(&height_key).await?;
-
-        if sampling_entry.is_falsy() {
+        let Some(sampling_entry) = store.get(height_key).await? else {
             return Ok(None);
-        }
+        };
 
         Ok(Some(from_value(sampling_entry)?))
     }
@@ -436,7 +432,17 @@ impl From<rexie::Error> for StoreError {
     fn from(error: rexie::Error) -> StoreError {
         use rexie::Error as E;
         match error {
-            e @ E::AsyncChannelError => StoreError::ExecutorError(e.to_string()),
+            E::IdbError(idb_error) => idb_error.into(),
+            other => StoreError::FatalDatabaseError(other.to_string()),
+        }
+    }
+}
+
+impl From<idb::Error> for StoreError {
+    fn from(error: idb::Error) -> Self {
+        use idb::Error as E;
+        match error {
+            e @ E::OneshotChannelReceiveError => StoreError::ExecutorError(e.to_string()),
             other => StoreError::FatalDatabaseError(other.to_string()),
         }
     }
@@ -450,12 +456,10 @@ impl From<serde_wasm_bindgen::Error> for StoreError {
 
 async fn get_ranges(store: &rexie::Store, name: &str) -> Result<BlockRanges> {
     let key = JsValue::from_str(name);
-    let raw_ranges = store.get(&key).await?;
-
-    if raw_ranges.is_falsy() {
+    let Some(raw_ranges) = store.get(key).await? else {
         // Ranges not set yet
         return Ok(BlockRanges::default());
-    }
+    };
 
     Ok(from_value(raw_ranges)?)
 }
@@ -487,12 +491,9 @@ async fn get_by_height(header_store: &rexie::Store, height: u64) -> Result<Exten
     let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
 
     let height_key = to_value(&height)?;
-    let header_entry = height_index.get(&height_key).await?;
-
-    // querying unset key returns empty value
-    if header_entry.is_falsy() {
+    let Some(header_entry) = height_index.get(height_key).await? else {
         return Err(StoreError::NotFound);
-    }
+    };
 
     let serialized_header = from_value::<ExtendedHeaderEntry>(header_entry)?.header;
     ExtendedHeader::decode(serialized_header.as_ref())
@@ -568,7 +569,7 @@ async fn detect_schema_version(db: &Rexie) -> Result<Option<u32>> {
     // exists, then we assume we are in version 2.
     let height_key = to_value(&1)?;
     let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
-    if height_index.get(&height_key).await?.is_truthy() {
+    if height_index.get(height_key).await?.is_some() {
         return Ok(Some(2));
     }
 
@@ -577,13 +578,15 @@ async fn detect_schema_version(db: &Rexie) -> Result<Option<u32>> {
 }
 
 async fn store_is_empty(store: &rexie::Store) -> Result<bool> {
-    let vals = store.get_all(None, Some(1), None, None).await?;
+    let vals = store.get_all_keys(None, Some(1)).await?;
     Ok(vals.is_empty())
 }
 
 async fn get_schema_version(store: &rexie::Store) -> Result<u32> {
     let key = to_value(VERSION_KEY)?;
-    let val = store.get(&key).await?;
+    let Some(val) = store.get(key).await? else {
+        return Err(StoreError::NotFound);
+    };
     Ok(from_value(val)?)
 }
 
@@ -624,7 +627,7 @@ async fn insert_tx_op(
         let hash_index = header_store.index(HASH_INDEX_NAME)?;
         let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?)?;
 
-        if hash_index.count(Some(&jsvalue_hash_key)).await.unwrap_or(0) != 0 {
+        if hash_index.count(Some(jsvalue_hash_key)).await.unwrap_or(0) != 0 {
             // TODO: Replace this with `StoredDataError` when we implement
             // type-safe validation on insertion.
             return Err(StoreInsertionError::HashExists(hash).into());
@@ -668,22 +671,21 @@ async fn update_sampling_metadata_tx_op(
     }
 
     let height_key = to_value(&height)?;
-    let previous_entry = sampling_store.get(&height_key).await?;
+    let new_entry = match sampling_store.get(height_key.clone()).await? {
+        Some(previous_entry) => {
+            let mut value: SamplingMetadata = from_value(previous_entry)?;
 
-    let new_entry = if previous_entry.is_falsy() {
-        SamplingMetadata { status, cids }
-    } else {
-        let mut value: SamplingMetadata = from_value(previous_entry)?;
+            value.status = status;
 
-        value.status = status;
-
-        for cid in cids {
-            if !value.cids.contains(&cid) {
-                value.cids.push(cid);
+            for cid in cids {
+                if !value.cids.contains(&cid) {
+                    value.cids.push(cid);
+                }
             }
-        }
 
-        value
+            value
+        }
+        None => SamplingMetadata { status, cids },
     };
 
     let metadata_jsvalue = to_value(&new_entry)?;
@@ -723,12 +725,16 @@ async fn remove_last_tx_op(tx: &Transaction, _: ()) -> Result<u64> {
     set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
 
     let jsvalue_height = to_value(&height).expect("to create jsvalue");
-    let header = height_index.get(&jsvalue_height).await?;
+    let Some(header) = height_index.get(jsvalue_height).await? else {
+        return Err(StoreError::StoredDataError(
+            "inconsistency between headers and ranges table".into(),
+        ));
+    };
 
     let id = js_sys::Reflect::get(&header, &to_value("id")?)
         .map_err(|_| StoreError::StoredDataError("could not get header's DB id".into()))?;
 
-    header_store.delete(&id).await?;
+    header_store.delete(id).await?;
 
     Ok(height)
 }
@@ -783,7 +789,7 @@ mod v2 {
 
     pub(super) async fn get_head_header(store: &rexie::Store) -> Result<ExtendedHeader> {
         let store_head = store
-            .get_all(None, Some(1), None, Some(Direction::Prev))
+            .scan(None, Some(1), None, Some(Direction::Prev))
             .await?
             .first()
             .ok_or(StoreError::NotFound)?
@@ -803,10 +809,7 @@ mod v3 {
     pub(super) async fn get_header_ranges(store: &rexie::Store) -> Result<BlockRanges> {
         let mut ranges = BlockRanges::default();
 
-        for (_, raw_range) in store
-            .get_all(None, None, None, Some(Direction::Next))
-            .await?
-        {
+        for raw_range in store.get_all(None, None).await? {
             let (start, end) = from_value::<(u64, u64)>(raw_range)?;
             ranges
                 .insert_relaxed(start..=end)
@@ -973,6 +976,8 @@ pub mod tests {
                     .await
                     .unwrap();
             }
+
+            rexie.close();
         }
 
         #[named]
