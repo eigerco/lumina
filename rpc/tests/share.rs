@@ -6,7 +6,7 @@ use celestia_types::consts::appconsts::{
     SHARE_INFO_BYTES,
 };
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
-use celestia_types::Blob;
+use celestia_types::{Blob, Share};
 
 pub mod utils;
 
@@ -67,16 +67,38 @@ async fn get_shares_range() {
         .await
         .unwrap();
     let index = blob_on_chain.index.unwrap();
-    let shares = blob_on_chain.to_shares().unwrap().len();
+    let shares = blob_on_chain.to_shares().unwrap();
 
     let shares_range = client
-        .share_get_range(submitted_height, index as usize, index as usize + shares)
+        .share_get_range(
+            submitted_height,
+            index as usize,
+            index as usize + shares.len(),
+        )
         .await
         .unwrap();
 
-    println!("{}", serde_json::to_string_pretty(&shares_range).unwrap());
-    println!("{}", serde_json::to_string_pretty(&header).unwrap());
-    panic!();
+    shares_range.proof.verify(header.dah.hash()).unwrap();
+
+    for (share, received) in shares.into_iter().zip(shares_range.shares.into_iter()) {
+        assert_eq!(share, Share::try_from(received).unwrap());
+    }
+}
+
+#[tokio::test]
+async fn get_shares_range_unexisting() {
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let header = client.header_network_head().await.unwrap();
+    let shares_in_block = header.dah.square_width().pow(2);
+
+    client
+        .share_get_range(
+            header.height().value(),
+            shares_in_block as usize - 2,
+            shares_in_block as usize + 2,
+        )
+        .await
+        .unwrap_err();
 }
 
 #[tokio::test]

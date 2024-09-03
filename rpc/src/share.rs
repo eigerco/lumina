@@ -1,6 +1,16 @@
 use celestia_types::nmt::Namespace;
-use celestia_types::{ExtendedDataSquare, ExtendedHeader, NamespacedShares, Share};
+use celestia_types::{
+    ExtendedDataSquare, ExtendedHeader, NamespacedShares, RawShare, Share, ShareProof,
+};
 use jsonrpsee::proc_macros::rpc;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct GetRangeResponse {
+    pub shares: Vec<RawShare>,
+    pub proof: ShareProof,
+}
 
 #[rpc(client)]
 pub trait Share {
@@ -15,7 +25,7 @@ pub trait Share {
         height: u64,
         start: usize,
         end: usize,
-    ) -> Result<serde_json::Value, Error>;
+    ) -> Result<GetRangeResponse, Error>;
 
     /// GetShare gets a Share by coordinates in EDS.
     #[method(name = "share.GetShare")]

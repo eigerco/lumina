@@ -12,8 +12,8 @@ use crate::hash::Hash;
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::rsmt2d::AxisType;
 use crate::{
-    bail_validation, bail_verification, Error, ExtendedDataSquare, MerkleProof, Result,
-    ValidateBasic, ValidationError,
+    bail_validation, bail_verification, validation_error, Error, ExtendedDataSquare, MerkleProof,
+    Result, ValidateBasic, ValidationError,
 };
 
 /// Header with commitments of the data availability.
@@ -182,6 +182,33 @@ impl DataAvailabilityHeader {
             // On validated DAH this never happens
             .expect("len is bigger than u16::MAX")
     }
+
+    pub fn row_proof(&self, start_row: u16, end_row: u16) -> Result<RowProof> {
+        let all_roots: Vec<_> = self
+            .row_roots
+            .iter()
+            .chain(self.column_roots.iter())
+            .map(|root| root.to_array())
+            .collect();
+
+        let rows = 1 + end_row
+            .checked_sub(start_row)
+            .ok_or_else(|| validation_error!("todo"))? as usize;
+        let mut proofs = Vec::with_capacity(rows);
+        let mut row_roots = Vec::with_capacity(rows);
+
+        for idx in start_row..=end_row {
+            proofs.push(MerkleProof::new(idx as usize, &all_roots)?.0);
+            row_roots.push(self.row_root(idx).expect("todo"));
+        }
+
+        Ok(RowProof {
+            proofs,
+            row_roots,
+            start_row,
+            end_row,
+        })
+    }
 }
 
 impl Protobuf<RawDataAvailabilityHeader> for DataAvailabilityHeader {}
@@ -253,15 +280,37 @@ impl ValidateBasic for DataAvailabilityHeader {
 pub struct RowProof {
     row_roots: Vec<NamespacedHash>,
     proofs: Vec<MerkleProof>,
-    start_row: usize,
-    end_row: usize,
+    start_row: u16,
+    end_row: u16,
 }
 
 impl RowProof {
+    pub fn row_roots(&self) -> &[NamespacedHash] {
+        &self.row_roots
+    }
+
     pub fn verify(&self, root: Hash) -> Result<()> {
         if self.row_roots.len() != self.proofs.len() {
             bail_verification!("invalid row proof: row_roots.len() != proofs.len()");
         }
+
+        if self.end_row < self.start_row {
+            bail_verification!(
+                "start_row ({}) > end_row ({})",
+                self.start_row,
+                self.end_row
+            );
+        }
+
+        let length = self.end_row - self.start_row + 1;
+        if length as usize != self.proofs.len() {
+            bail_verification!(
+                "length based on start_row and end_row ({}) != length of proofs ({})",
+                length,
+                self.proofs.len()
+            );
+        }
+
         let Hash::Sha256(root) = root else {
             bail_verification!("empty hash");
         };
@@ -291,8 +340,14 @@ impl TryFrom<RawRowProof> for RowProof {
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<_>>()?,
-            start_row: value.start_row as usize,
-            end_row: value.end_row as usize,
+            start_row: value
+                .start_row
+                .try_into()
+                .map_err(|_| validation_error!("start_row ({}) exceeds u16", value.start_row))?,
+            end_row: value
+                .end_row
+                .try_into()
+                .map_err(|_| validation_error!("end_row ({}) exceeds u16", value.end_row))?,
         })
     }
 }
@@ -315,6 +370,8 @@ impl From<RowProof> for RawRowProof {
 
 #[cfg(test)]
 mod tests {
+    use crate::nmt::Namespace;
+
     use super::*;
 
     #[cfg(target_arch = "wasm32")]
@@ -397,7 +454,7 @@ mod tests {
     }
 
     #[test]
-    fn row_proof_verify_correct() {
+    fn row_proof_serde() {
         let raw_row_proof = r#"
           {
             "end_row": 1,
@@ -451,5 +508,76 @@ mod tests {
         let dah: DataAvailabilityHeader = serde_json::from_str(raw_dah).unwrap();
 
         row_proof.verify(dah.hash()).unwrap();
+    }
+
+    #[test]
+    fn row_proof_verify_correct() {
+        for square_width in [2, 4, 8, 16] {
+            let dah = random_dah(square_width);
+            let dah_root = dah.hash();
+
+            for start_row in 0..dah.square_width() - 1 {
+                for end_row in start_row..dah.square_width() {
+                    let proof = dah.row_proof(start_row, end_row).unwrap();
+
+                    proof.verify(dah_root).unwrap()
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn row_proof_verify_malformed() {
+        let dah = random_dah(16);
+        let dah_root = dah.hash();
+
+        let valid_proof = dah.row_proof(0, 1).unwrap();
+
+        // start_row > end_row
+        let mut proof = valid_proof.clone();
+        proof.end_row = 0;
+        proof.start_row = 1;
+        proof.verify(dah_root).unwrap_err();
+        dah.row_proof(1, 0).unwrap_err();
+
+        // length incorrect based on start and end
+        let mut proof = valid_proof.clone();
+        proof.end_row = 2;
+        proof.verify(dah_root).unwrap_err();
+
+        // incorrect amount of proofs
+        let mut proof = valid_proof.clone();
+        proof.proofs.push(proof.proofs[0].clone());
+        proof.verify(dah_root).unwrap_err();
+
+        // incorrect amount of roots
+        let mut proof = valid_proof.clone();
+        proof.row_roots.pop();
+        proof.verify(dah_root).unwrap_err();
+
+        // wrong proof order
+        let mut proof = valid_proof.clone();
+        proof.row_roots = proof.row_roots.into_iter().rev().collect();
+        proof.verify(dah_root).unwrap_err();
+    }
+
+    fn random_dah(square_width: u16) -> DataAvailabilityHeader {
+        let namespaces: Vec<_> = (0..square_width)
+            .map(|n| Namespace::new_v0(&[n as u8]).unwrap())
+            .collect();
+        let (row_roots, col_roots): (Vec<_>, Vec<_>) = namespaces
+            .iter()
+            .map(|&ns| {
+                let row = NamespacedHash::new(*ns, *ns, rand::random());
+                let col = NamespacedHash::new(
+                    **namespaces.first().unwrap(),
+                    **namespaces.last().unwrap(),
+                    rand::random(),
+                );
+                (row, col)
+            })
+            .unzip();
+
+        DataAvailabilityHeader::new(row_roots, col_roots).unwrap()
     }
 }

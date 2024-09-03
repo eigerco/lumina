@@ -753,6 +753,7 @@ dependencies = [
 [[package]]
 name = "celestia-tendermint"
 version = "0.32.1"
+source = "git+https://github.com/zvolin/celestia-tendermint-rs?branch=fix/proof-serialization#c62d61749af98f0adaf9a271b174fda48e5c2461"
 dependencies = [
  "bytes",
  "celestia-tendermint-proto",
@@ -781,6 +782,7 @@ dependencies = [
 [[package]]
 name = "celestia-tendermint-proto"
 version = "0.32.1"
+source = "git+https://github.com/zvolin/celestia-tendermint-rs?branch=fix/proof-serialization#c62d61749af98f0adaf9a271b174fda48e5c2461"
 dependencies = [
  "bytes",
  "flex-error",
