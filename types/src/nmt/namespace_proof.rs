@@ -168,35 +168,26 @@ impl TryFrom<RawTendermintProof> for NamespaceProof {
     type Error = Error;
 
     fn try_from(value: RawTendermintProof) -> Result<Self, Self::Error> {
-        let siblings = value
-            .nodes
-            .iter()
-            .map(|bytes| NamespacedHash::from_raw(bytes))
-            .collect::<Result<Vec<_>>>()?;
-
-        let mut proof = NmtNamespaceProof::PresenceProof {
-            proof: NmtProof {
-                siblings,
-                range: value.start as u32..value.end as u32,
-            },
-            ignore_max_ns: true,
+        let raw_proof = RawProof {
+            start: value.start as i64,
+            end: value.end as i64,
+            nodes: value.nodes,
+            leaf_hash: value.leaf_hash,
+            is_max_namespace_ignored: true,
         };
 
-        if !value.leaf_hash.is_empty() {
-            proof.convert_to_absence_proof(NamespacedHash::from_raw(&value.leaf_hash)?);
-        }
-
-        Ok(NamespaceProof(proof))
+        raw_proof.try_into()
     }
 }
 
 impl From<NamespaceProof> for RawTendermintProof {
     fn from(value: NamespaceProof) -> Self {
+        let raw_proof = RawProof::from(value);
         RawTendermintProof {
-            start: value.start_idx() as i32,
-            end: value.end_idx() as i32,
-            nodes: value.siblings().iter().map(|hash| hash.to_vec()).collect(),
-            leaf_hash: value.leaf().map(|hash| hash.to_vec()).unwrap_or_default(),
+            start: raw_proof.start as i32,
+            end: raw_proof.end as i32,
+            nodes: raw_proof.nodes,
+            leaf_hash: raw_proof.leaf_hash,
         }
     }
 }

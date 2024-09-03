@@ -812,7 +812,6 @@ dependencies = [
  "ed25519-consensus",
  "enum_dispatch",
  "getrandom",
- "hex",
  "indoc",
  "leopard-codec",
  "libp2p-identity",
