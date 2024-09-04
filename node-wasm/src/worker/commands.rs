@@ -63,6 +63,7 @@ pub(crate) enum SingleHeaderQuery {
 
 #[derive(Serialize, Deserialize, Debug, EnumAsInner)]
 pub(crate) enum WorkerResponse {
+    NodeNotRunning,
     IsRunning(bool),
     NodeStarted(Result<()>),
     EventsChannelName(String),

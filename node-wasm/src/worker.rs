@@ -6,7 +6,6 @@ use lumina_node::events::{EventSubscriber, NodeEventInfo};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use thiserror::Error;
-use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -15,6 +14,7 @@ use web_sys::{BroadcastChannel, MessageEvent, SharedWorker};
 use lumina_node::node::{Node, SyncingInfo};
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 
+use crate::ports::RequestServer;
 use crate::error::{Context, Error, Result};
 use crate::node::WasmNodeConfig;
 use crate::utils::{random_id, WorkerSelf};
@@ -230,74 +230,62 @@ impl NodeWorker {
     }
 }
 
-/*
 #[wasm_bindgen]
 pub async fn run_worker(queued_events: Vec<MessageEvent>) -> Result<()> {
     info!("Entered run_worker");
-    let (tx, mut rx) = mpsc::channel(WORKER_MESSAGE_SERVER_INCOMING_QUEUE_LENGTH);
     let events_channel_name = format!("NodeEventChannel-{}", random_id());
 
-    let mut message_server: Box<dyn MessageServer> = if SharedWorker::is_worker_type() {
-        Box::new(SharedWorkerMessageServer::new(tx.clone(), queued_events))
-    } else {
-        Box::new(DedicatedWorkerMessageServer::new(tx.clone(), queued_events).await)
-    };
+    let mut request_server = RequestServer::new();
 
     info!("Entering worker message loop");
     let mut worker = None;
-    while let Some(message) = rx.recv().await {
-        match message {
-            WorkerMessage::NewConnection(connection) => {
-                message_server.add(connection);
+    loop {
+        let (command, client_id) = match request_server.recv().await {
+            Ok(v) => v,
+            Err(e) => {
+                error!("Received invalid command: {e}");
+                continue;
             }
-            WorkerMessage::InvalidCommandReceived(client_id) => {
-                message_server.respond_err_to(client_id, WorkerError::InvalidCommandReceived);
-            }
-            WorkerMessage::Command((command, client_id)) => {
-                debug!("received from {client_id:?}: {command:?}");
-                let Some(worker) = &mut worker else {
-                    match command {
-                        NodeCommand::IsRunning => {
-                            message_server.respond_to(client_id, WorkerResponse::IsRunning(false));
-                        }
-                        NodeCommand::GetEventsChannelName => {
-                            message_server.respond_to(
-                                client_id,
-                                WorkerResponse::EventsChannelName(events_channel_name.clone()),
-                            );
-                        }
-                        NodeCommand::StartNode(config) => {
-                            match NodeWorker::new(&events_channel_name, config).await {
-                                Ok(node) => {
-                                    worker = Some(node);
-                                    message_server
-                                        .respond_to(client_id, WorkerResponse::NodeStarted(Ok(())));
-                                }
-                                Err(e) => {
-                                    message_server
-                                        .respond_to(client_id, WorkerResponse::NodeStarted(Err(e)));
-                                }
-                            };
-                        }
-                        _ => {
-                            warn!("Worker not running");
-                            message_server.respond_err_to(client_id, WorkerError::NodeNotRunning);
-                        }
-                    }
-                    continue;
-                };
+        };
 
-                let response = worker.process_command(command).await;
-                message_server.respond_to(client_id, response);
+        debug!("received from {client_id:?}: {command:?}");
+
+        let Some(worker) = &mut worker else {
+            match command {
+                NodeCommand::IsRunning => {
+                    request_server.respond_to(client_id, WorkerResponse::IsRunning(false));
+                }
+                NodeCommand::GetEventsChannelName => {
+                    request_server.respond_to(
+                        client_id,
+                        WorkerResponse::EventsChannelName(events_channel_name.clone()),
+                        );
+                }
+                NodeCommand::StartNode(config) => {
+                    match NodeWorker::new(&events_channel_name, config).await {
+                        Ok(node) => {
+                            worker = Some(node);
+                            request_server
+                                .respond_to(client_id, WorkerResponse::NodeStarted(Ok(())));
+                        }
+                        Err(e) => {
+                            request_server
+                                .respond_to(client_id, WorkerResponse::NodeStarted(Err(e)));
+                        }
+                    };
+                }
+                _ => {
+                    warn!("Worker not running");
+                    request_server.respond_to(client_id, WorkerResponse::NodeNotRunning);
+                }
             }
-        }
+            continue;
+        };
+
+        let response = worker.process_command(command).await;
+        request_server.respond_to(client_id, response);
     }
-
-    info!("Channel to WorkerMessageServer closed, exiting the SharedWorker");
-
-    Ok(())
 }
-*/
 
 async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: BroadcastChannel) {
     #[derive(Serialize)]

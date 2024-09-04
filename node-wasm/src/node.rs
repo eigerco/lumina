@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
 use tracing::error;
 use wasm_bindgen::prelude::*;
-use web_sys::{BroadcastChannel, MessagePort, Worker};
+use web_sys::{BroadcastChannel, MessagePort};
 
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_id};
@@ -19,7 +19,7 @@ use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
     Network,
 };
-use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery, WorkerResponse};
+use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery, };
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 /// Config for the lumina wasm node.
@@ -37,21 +37,7 @@ pub struct WasmNodeConfig {
 /// It's responsible for sending commands and receiving responses from the node.
 #[wasm_bindgen]
 struct NodeClient {
-    worker: RequestResponse<NodeCommand, WorkerResponse>,
-}
-
-/// Type of worker to run lumina in. Allows overriding automatically detected worker kind
-/// (which should usually be appropriate).
-#[wasm_bindgen]
-pub enum NodeWorkerKind {
-    /// Run in [`SharedWorker`]
-    ///
-    /// [`SharedWorker`]: https://developer.mozilla.org/en-US/docs/Web/API/SharedWorker
-    Shared,
-    /// Run in [`Worker`]
-    ///
-    /// [`Worker`]: https://developer.mozilla.org/en-US/docs/Web/API/Worker
-    Dedicated,
+    worker: RequestResponse,
 }
 
 #[wasm_bindgen]
