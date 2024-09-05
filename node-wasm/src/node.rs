@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
 use tracing::error;
 use wasm_bindgen::prelude::*;
-use web_sys::{BroadcastChannel, MessagePort};
+use web_sys::BroadcastChannel;
 
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_id};
@@ -14,12 +14,12 @@ use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 
 use crate::error::{Context, Result};
-use crate::ports::RequestResponse;
+use crate::ports::{MessagePortLike, RequestResponse};
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
     Network,
 };
-use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery, };
+use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 /// Config for the lumina wasm node.
@@ -72,9 +72,7 @@ impl NodeClient {
     /// })
     /// ```
     #[wasm_bindgen(constructor)]
-    pub async fn new(
-        port: MessagePort
-    ) -> Result<NodeClient> {
+    pub async fn new(port: MessagePortLike) -> Result<NodeClient> {
         // Safari doesn't have the `navigator.storage()` api
         if !is_safari()? {
             if let Err(e) = request_storage_persistence().await {
@@ -83,7 +81,7 @@ impl NodeClient {
         }
 
         Ok(Self {
-            worker: RequestResponse::new(port)
+            worker: RequestResponse::new(port),
         })
     }
 
