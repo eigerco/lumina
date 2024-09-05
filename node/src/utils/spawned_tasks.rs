@@ -1,10 +1,7 @@
 use std::fmt::{self, Debug};
-use std::future::Future;
 
-use tokio::{sync::watch, task::spawn_blocking};
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
-
-use crate::executor::{spawn_cancellable, JoinHandle};
 
 pub(crate) struct SpawnedTasks {
     cancellation_token: CancellationToken,
@@ -41,43 +38,11 @@ impl SpawnedTasks {
     }
 
     pub(crate) fn cancel_all(&mut self) {
-        // Cancel all the ongoing tasks.
         self.cancellation_token.cancel();
         // Reset the token for tasks spawned later on.
         self.cancellation_token = CancellationToken::new();
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    #[track_caller]
-    pub(crate) fn spawn_cancellable<F>(&self, fut: F) -> JoinHandle
-    where
-        F: Future<Output = ()> + Send + 'static,
-    {
-        self.counter_tx.send_modify(|counter| *counter += 1);
-        let decrease_guard = DecreaseGuard(self.counter_tx.clone());
-
-        spawn_cancellable(self.cancellation_token.child_token(), async move {
-            let _decrease_guard = decrease_guard;
-            fut.await;
-        })
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    #[track_caller]
-    pub(crate) fn spawn_cancellable<F>(&self, fut: F) -> JoinHandle
-    where
-        F: Future<Output = ()> + 'static,
-    {
-        self.counter_tx.send_modify(|counter| *counter += 1);
-        let decrease_guard = DecreaseGuard(self.counter_tx.clone());
-
-        spawn_cancellable(self.cancellation_token.child_token(), async move {
-            let _decrease_guard = decrease_guard;
-            fut.await;
-        })
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
     #[track_caller]
     pub(crate) fn spawn_blocking<F, R>(&self, f: F) -> tokio::task::JoinHandle<Option<R>>
     where
@@ -89,9 +54,10 @@ impl SpawnedTasks {
 
         let cancellation_token = self.cancellation_token.child_token();
 
-        spawn_blocking(move || {
+        tokio::task::spawn_blocking(move || {
             let _decrease_guard = decrease_guard;
 
+            // If cancel was triggered before the closure was scheduled then do not run it.
             if cancellation_token.is_cancelled() {
                 return None;
             }

@@ -237,42 +237,47 @@ mod imp {
             fn setTimeout(closure: &Closure<dyn FnMut()>, timeout: u32);
         }
 
-        let yielded = Rc::new(Cell::new(false));
-        let waker = Rc::new(RefCell::new(None::<Waker>));
+        let fut = async move {
+            let yielded = Rc::new(Cell::new(false));
+            let waker = Rc::new(RefCell::new(None::<Waker>));
 
-        let wake_closure = {
-            let yielded = yielded.clone();
-            let waker = waker.clone();
+            let wake_closure = {
+                let yielded = yielded.clone();
+                let waker = waker.clone();
 
-            Closure::new(move || {
-                yielded.set(true);
-                waker.borrow_mut().take().unwrap().wake();
+                Closure::new(move || {
+                    yielded.set(true);
+                    waker.borrow_mut().take().unwrap().wake();
+                })
+            };
+
+            // Unlike `queueMicrotask` or a naive yield_now implementation (i.e. `wake()`
+            // and return `Poll::Pending` once), `setTimeout` closure will be executed by
+            // JavaScript's event loop.
+            //
+            // This has two main benefits:
+            //
+            // * Garbage collector will be executed.
+            // * We give time to JavaScript's tasks too.
+            //
+            // Ref: https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html
+            setTimeout(&wake_closure, 0);
+
+            debug_assert!(!yielded.get(), "Closure called before reaching event loop");
+
+            poll_fn(|cx| {
+                if yielded.get() {
+                    Poll::Ready(())
+                } else {
+                    *waker.borrow_mut() = Some(cx.waker().to_owned());
+                    Poll::Pending
+                }
             })
+            .await;
         };
 
-        // Unlike `queueMicrotask` or a naive yield_now implementation (i.e. `wake()`
-        // and return `Poll::Pending` once), `setTimeout` closure will be executed by
-        // JavaScript's event loop.
-        //
-        // This has two main benefits:
-        //
-        // * Garbage collector will be executed.
-        // * We give time to JavaScript's tasks too.
-        //
-        // Ref: https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html
-        setTimeout(&wake_closure, 0);
-
-        debug_assert!(!yielded.get(), "Closure called before reaching event loop");
-
-        poll_fn(|cx| {
-            if yielded.get() {
-                Poll::Ready(())
-            } else {
-                *waker.borrow_mut() = Some(cx.waker().to_owned());
-                Poll::Pending
-            }
-        })
-        .await;
+        let fut = SendWrapper::new(fut);
+        fut.await;
     }
 }
 

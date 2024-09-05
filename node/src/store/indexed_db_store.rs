@@ -426,6 +426,11 @@ impl Store for IndexedDbStore {
         let fut = SendWrapper::new(self.remove_last());
         fut.await
     }
+
+    async fn close(self) -> Result<()> {
+        self.db.take().close();
+        Ok(())
+    }
 }
 
 impl From<rexie::Error> for StoreError {

@@ -802,7 +802,7 @@ where
     }
 
     async fn on_stop(&mut self) {
-        self.swarm.behaviour_mut().header_ex.stop().await;
+        self.swarm.behaviour_mut().header_ex.stop();
 
         for listener in self.listeners.drain(..) {
             self.swarm.remove_listener(listener);

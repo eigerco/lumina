@@ -4,6 +4,7 @@ use libp2p::{PeerId, StreamProtocol};
 use tokio::sync::oneshot;
 
 mod fused_reusable_future;
+#[cfg(not(target_arch = "wasm32"))]
 mod spawned_tasks;
 mod token;
 

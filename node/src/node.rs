@@ -228,10 +228,6 @@ where
         }
     }
 
-    fn daser(&self) -> &Daser {
-        self.daser.as_ref().expect("Daser not initialized")
-    }
-
     fn syncer(&self) -> &Syncer<S> {
         self.syncer.as_ref().expect("Syncer not initialized")
     }
