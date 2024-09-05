@@ -1,0 +1,29 @@
+{
+  "name": "lumina-node-shim",
+  "type": "module",
+  "collaborators": [
+    "Eiger <hello@eiger.co>"
+  ],
+  "description": "worker shim",
+  "version": "0.1.1",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eigerco/lumina"
+  },
+  "files": [
+    "worker.mjs"
+  ],
+  "main": "worker.mjs",
+  "homepage": "https://www.eiger.co",
+  "dependencies": {
+    "lumina-node-wasm": "^0.1.1"
+  },
+  "keywords": [
+    "blockchain",
+    "celestia",
+    "lumina",
+    "node",
+    "browser"
+  ]
+}
