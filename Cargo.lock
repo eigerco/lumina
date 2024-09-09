@@ -632,18 +632,16 @@ dependencies = [
 [[package]]
 name = "blockstore"
 version = "0.6.1"
-source = "git+https://github.com/oblique/blockstore?branch=feat/close-method#009575b0d0096d878e2547423acdc1e1bb519852"
+source = "git+https://github.com/oblique/blockstore?rev=73ed78bd138041451432354f20ef19b1a73fd866#73ed78bd138041451432354f20ef19b1a73fd866"
 dependencies = [
  "cid",
  "dashmap 6.0.1",
- "idb",
  "js-sys",
  "multihash",
  "redb",
  "rexie",
  "thiserror",
  "tokio",
- "tokio-util",
  "wasm-bindgen",
 ]
 

@@ -36,6 +36,7 @@ impl Counter {
         }
     }
 
+    /// Wait all guards to drop.
     pub(crate) async fn wait_guards(&mut self) {
         let mut notified = pin!(self.notify.notified());
 

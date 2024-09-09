@@ -45,7 +45,7 @@ const HEADER_RANGES_KEY: &str = "KEY.HEADER_RANGES";
 #[derive(Debug)]
 pub struct RedbStore {
     inner: Arc<Inner>,
-    counter: Counter,
+    task_counter: Counter,
 }
 
 #[derive(Debug)]
@@ -84,7 +84,7 @@ impl RedbStore {
                 db,
                 header_added_notifier: Notify::new(),
             }),
-            counter: Counter::new(),
+            task_counter: Counter::new(),
         };
 
         store
@@ -150,7 +150,7 @@ impl RedbStore {
         T: Send + 'static,
     {
         let inner = self.inner.clone();
-        let guard = self.counter.guard();
+        let guard = self.task_counter.guard();
 
         spawn_blocking(move || {
             let _guard = guard;
@@ -172,7 +172,7 @@ impl RedbStore {
         T: Send + 'static,
     {
         let inner = self.inner.clone();
-        let guard = self.counter.guard();
+        let guard = self.task_counter.guard();
 
         spawn_blocking(move || {
             let _guard = guard;
@@ -553,14 +553,9 @@ impl Store for RedbStore {
         self.remove_last().await
     }
 
-    async fn close(self) -> Result<()> {
-        let RedbStore { inner, mut counter } = self;
-
-        counter.wait_guards().await;
-
-        // Assert that all tasks are stopped
-        Arc::into_inner(inner).expect("Not all redb_store tasks were stopped");
-
+    async fn close(mut self) -> Result<()> {
+        // Wait all ongoing `spawn_blocking` tasks to finish.
+        self.task_counter.wait_guards().await;
         Ok(())
     }
 }
