@@ -559,7 +559,7 @@ impl Store for RedbStore {
         counter.wait_guards().await;
 
         // Assert that all tasks are stopped
-        Arc::into_inner(inner).expect("Not all redb_store::Inner were stopped");
+        Arc::into_inner(inner).expect("Not all redb_store tasks were stopped");
 
         Ok(())
     }
