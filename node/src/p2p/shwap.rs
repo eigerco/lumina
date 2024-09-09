@@ -1,4 +1,4 @@
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 use beetswap::multihasher::{Multihasher, MultihasherError};
 use blockstore::block::CidError;

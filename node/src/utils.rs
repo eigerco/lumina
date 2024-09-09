@@ -9,10 +9,9 @@ mod fused_reusable_future;
 mod token;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use counter::{Counter, CounterGuard};
+pub(crate) use counter::Counter;
 pub(crate) use fused_reusable_future::FusedReusableFuture;
-#[allow(unused_imports)]
-pub(crate) use token::{Token, TokenTriggerDropGuard};
+pub(crate) use token::Token;
 
 pub(crate) fn protocol_id(network: &str, protocol: &str) -> StreamProtocol {
     let network = network.trim_matches('/');

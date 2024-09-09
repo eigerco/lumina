@@ -55,7 +55,7 @@ impl Debug for Counter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use tokio::spawn;
     use tokio::time::{sleep, timeout};
 
@@ -66,6 +66,7 @@ mod tests {
 
         let guard1 = counter.guard();
         let guard2 = counter.guard();
+        let now = Instant::now();
 
         spawn(async move {
             let _guard = guard1;
@@ -80,5 +81,8 @@ mod tests {
         timeout(Duration::from_millis(300), counter.wait_guards())
             .await
             .unwrap();
+
+        let elapsed = now.elapsed();
+        assert!(elapsed >= Duration::from_millis(200) && elapsed < Duration::from_millis(300));
     }
 }

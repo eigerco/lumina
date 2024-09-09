@@ -13,7 +13,7 @@
 //! - bitswap 1.2.0
 //! - shwap - celestia's data availability protocol on top of bitswap
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::future::poll_fn;
 use std::sync::Arc;
 use std::task::Poll;
