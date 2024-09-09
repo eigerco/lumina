@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use celestia_proto::celestia::da::DataAvailabilityHeader as RawDataAvailabilityHeader;
 use celestia_tendermint::merkle::simple_hash_from_byte_vectors;
 use celestia_tendermint_proto::v0_34::types::RowProof as RawRowProof;
@@ -183,7 +185,8 @@ impl DataAvailabilityHeader {
             .expect("len is bigger than u16::MAX")
     }
 
-    pub fn row_proof(&self, start_row: u16, end_row: u16) -> Result<RowProof> {
+    /// Get the [`RowProof`] for given rows.
+    pub fn row_proof(&self, rows: RangeInclusive<u16>) -> Result<RowProof> {
         let all_roots: Vec<_> = self
             .row_roots
             .iter()
@@ -191,15 +194,17 @@ impl DataAvailabilityHeader {
             .map(|root| root.to_array())
             .collect();
 
-        let rows = 1 + end_row
-            .checked_sub(start_row)
-            .ok_or_else(|| validation_error!("todo"))? as usize;
-        let mut proofs = Vec::with_capacity(rows);
-        let mut row_roots = Vec::with_capacity(rows);
+        let start_row = *rows.start();
+        let end_row = *rows.end();
+        let mut proofs = Vec::with_capacity(rows.len());
+        let mut row_roots = Vec::with_capacity(rows.len());
 
-        for idx in start_row..=end_row {
+        for idx in rows {
             proofs.push(MerkleProof::new(idx as usize, &all_roots)?.0);
-            row_roots.push(self.row_root(idx).expect("todo"));
+            let row = self
+                .row_root(idx)
+                .ok_or_else(|| Error::IndexOutOfRange(idx as usize, self.row_roots.len()))?;
+            row_roots.push(row);
         }
 
         Ok(RowProof {
@@ -275,6 +280,7 @@ impl ValidateBasic for DataAvailabilityHeader {
     }
 }
 
+/// A proof of inclusion of a range of row roots in a [`DataAvailabilityHeader`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawRowProof", into = "RawRowProof")]
 pub struct RowProof {
@@ -285,10 +291,36 @@ pub struct RowProof {
 }
 
 impl RowProof {
+    /// Get the list of row roots this proof proves.
     pub fn row_roots(&self) -> &[NamespacedHash] {
         &self.row_roots
     }
 
+    /// Verify the proof against the hash of [`DataAvailabilityHeader`], proving
+    /// the inclusion of rows.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    ///  - the proof is malformed, meaning some inconsistency between start/end row,
+    ///    row roots or merkle proofs amounts
+    ///  - the verification of any inner merkle proof fails
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use celestia_types::ExtendedHeader;
+    /// # fn get_extended_header() -> ExtendedHeader {
+    /// #   let s = include_str!("../test_data/chain1/extended_header_block_1.json");
+    /// #   serde_json::from_str(s).unwrap()
+    /// # }
+    /// let eh = get_extended_header();
+    /// let dah = eh.dah;
+    ///
+    /// let proof = dah.row_proof(0..=1).unwrap();
+    ///
+    /// assert!(proof.verify(dah.hash()).is_ok());
+    /// ```
     pub fn verify(&self, root: Hash) -> Result<()> {
         if self.row_roots.len() != self.proofs.len() {
             bail_verification!("invalid row proof: row_roots.len() != proofs.len()");
@@ -518,7 +550,7 @@ mod tests {
 
             for start_row in 0..dah.square_width() - 1 {
                 for end_row in start_row..dah.square_width() {
-                    let proof = dah.row_proof(start_row, end_row).unwrap();
+                    let proof = dah.row_proof(start_row..=end_row).unwrap();
 
                     proof.verify(dah_root).unwrap()
                 }
@@ -531,14 +563,12 @@ mod tests {
         let dah = random_dah(16);
         let dah_root = dah.hash();
 
-        let valid_proof = dah.row_proof(0, 1).unwrap();
+        let valid_proof = dah.row_proof(0..=1).unwrap();
 
         // start_row > end_row
-        let mut proof = valid_proof.clone();
-        proof.end_row = 0;
-        proof.start_row = 1;
+        #[allow(clippy::reversed_empty_ranges)]
+        let proof = dah.row_proof(1..=0).unwrap();
         proof.verify(dah_root).unwrap_err();
-        dah.row_proof(1, 0).unwrap_err();
 
         // length incorrect based on start and end
         let mut proof = valid_proof.clone();

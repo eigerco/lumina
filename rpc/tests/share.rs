@@ -80,8 +80,13 @@ async fn get_shares_range() {
 
     shares_range.proof.verify(header.dah.hash()).unwrap();
 
-    for (share, received) in shares.into_iter().zip(shares_range.shares.into_iter()) {
+    for ((share, received), proven) in shares
+        .into_iter()
+        .zip(shares_range.shares.into_iter())
+        .zip(shares_range.proof.shares().iter())
+    {
         assert_eq!(share, Share::try_from(received).unwrap());
+        assert_eq!(share.as_ref(), proven.as_ref());
     }
 }
 

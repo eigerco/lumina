@@ -8,6 +8,13 @@ use crate::nmt::NamespaceProof;
 use crate::{bail_verification, validation_error, RowProof};
 use crate::{nmt::Namespace, Error, Result};
 
+/// A proof of inclusion of a continouous range of shares of some namespace
+/// in a [`DataAvailabilityHeader`].
+///
+/// The proof will proof the inclusion of shares in row roots they span
+/// and the inclusion of those row roots in the dah.
+///
+/// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawShareProof", into = "RawShareProof")]
 pub struct ShareProof {
@@ -18,6 +25,22 @@ pub struct ShareProof {
 }
 
 impl ShareProof {
+    /// Get the shares proven by this proof.
+    pub fn shares(&self) -> &[[u8; SHARE_SIZE]] {
+        &self.data
+    }
+
+    /// Verify the proof against the hash of [`DataAvailabilityHeader`], proving
+    /// the inclusion of shares.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    ///  - the proof is malformed, meaning some inconsistency between
+    ///    shares, nmt proofs or row proofs amounts
+    ///  - the verification of any inner row proof fails
+    ///
+    /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
     pub fn verify(&self, root: Hash) -> Result<()> {
         let row_roots = self.row_proof.row_roots();
 
