@@ -14,7 +14,7 @@ use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 
 use crate::error::{Context, Result};
-use crate::ports::{MessagePortLike, RequestResponse};
+use crate::ports::RequestResponse;
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
     Network,
@@ -72,7 +72,7 @@ impl NodeClient {
     /// })
     /// ```
     #[wasm_bindgen(constructor)]
-    pub async fn new(port: MessagePortLike) -> Result<NodeClient> {
+    pub async fn new(port: JsValue) -> Result<NodeClient> {
         // Safari doesn't have the `navigator.storage()` api
         if !is_safari()? {
             if let Err(e) = request_storage_persistence().await {
@@ -81,7 +81,7 @@ impl NodeClient {
         }
 
         Ok(Self {
-            worker: RequestResponse::new(port),
+            worker: RequestResponse::new(port)?,
         })
     }
 

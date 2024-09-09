@@ -1,11 +1,11 @@
 use std::fmt::Debug;
 
-use tokio::sync::{mpsc, Mutex};
 use js_sys::Array;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use thiserror::Error;
+use tokio::sync::{mpsc, Mutex};
 use tracing::{error, info, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -17,12 +17,14 @@ use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 
 use crate::error::{Context, Error, Result};
 use crate::node::WasmNodeConfig;
-use crate::ports::{ClientId, MessagePortLike, RequestServer};
+use crate::ports::{ClientId, RequestServer};
 use crate::utils::{random_id, WorkerSelf};
 use crate::worker::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 pub(crate) mod commands;
+
+const NODE_WORKER_QUEUE_SIZE: usize = 64;
 
 #[derive(Debug, Serialize, Deserialize, Error)]
 pub enum WorkerError {
@@ -41,12 +43,87 @@ pub enum WorkerError {
     NodeError(Error),
 }
 
+#[wasm_bindgen]
 struct NodeWorker {
+    event_channel_name: String,
+    worker: Mutex<Option<NodeWorkerInstance>>,
+    request_server: Mutex<RequestServer>,
+    control_channel: mpsc::Sender<JsValue>,
+}
+
+struct NodeWorkerInstance {
     node: Node<IndexedDbStore>,
     events_channel_name: String,
 }
 
+#[wasm_bindgen]
 impl NodeWorker {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        info!("Created lumina worker");
+
+        let (tx, rx) = mpsc::channel(NODE_WORKER_QUEUE_SIZE);
+
+        Self {
+            event_channel_name: format!("NodeEventChannel-{}", random_id()),
+            worker: Mutex::new(None),
+            request_server: Mutex::new(RequestServer::new(rx)),
+            control_channel: tx,
+        }
+    }
+
+    pub async fn connect(&self, port: JsValue) {
+        self.control_channel
+            .send(port)
+            .await
+            .expect("RequestServer command channel should never close")
+    }
+
+    pub async fn poll(&self) -> Result<(), Error> {
+        let (client_id, command) = self.next_command().await?;
+
+        let mut worker_lock = self.worker.lock().await;
+        let response = match &mut *worker_lock {
+            Some(worker) => worker.process_command(command).await,
+            worker @ None => match command {
+                NodeCommand::IsRunning => WorkerResponse::IsRunning(false),
+                NodeCommand::GetEventsChannelName => {
+                    WorkerResponse::EventsChannelName(self.event_channel_name.clone())
+                }
+                NodeCommand::StartNode(config) => {
+                    match NodeWorkerInstance::new(&self.event_channel_name, config).await {
+                        Ok(node) => {
+                            let _ = worker.insert(node);
+                            WorkerResponse::NodeStarted(Ok(()))
+                        }
+                        Err(e) => WorkerResponse::NodeStarted(Err(e)),
+                    }
+                }
+                _ => {
+                    warn!("Worker not running");
+                    WorkerResponse::NodeNotRunning
+                }
+            },
+        };
+
+        let server = self.request_server.lock().await;
+        server.respond_to(client_id, response);
+
+        Ok(())
+    }
+
+    async fn next_command(&self) -> Result<(ClientId, NodeCommand), Error> {
+        let mut server = self.request_server.lock().await;
+        let (client_id, result) = server.recv().await;
+
+        let command = result
+            .with_context(|| format!("could not parse command received from {client_id:?}"))?;
+
+        Ok((client_id, command))
+    }
+}
+
+impl NodeWorkerInstance {
     async fn new(events_channel_name: &str, config: WasmNodeConfig) -> Result<Self> {
         let config = config.into_node_config().await?;
 
@@ -229,79 +306,6 @@ impl NodeWorker {
     }
 }
 
-#[wasm_bindgen]
-struct NodeWorkerWrapper {
-    event_channel_name: String,
-    worker: Mutex<Option<NodeWorker>>,
-    request_server: Mutex<RequestServer>,
-    control_channel: mpsc::Sender<MessagePortLike>,
-}
-
-#[wasm_bindgen]
-impl NodeWorkerWrapper {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        info!("Created lumina worker");
-
-        // XXX: const
-        let (tx, rx) = mpsc::channel(999);
-
-        Self {
-            event_channel_name: format!("NodeEventChannel-{}", random_id()),
-            worker: Mutex::new(None),
-            request_server: Mutex::new(RequestServer::new(rx)),
-            control_channel: tx,
-        }
-    }
-
-    pub async fn connect(&self, port: MessagePortLike) {
-        self.control_channel.send(port).await.expect("RequestServer command channel should never close")
-    }
-
-    pub async fn poll(&self) -> Result<(), Error> {
-        let (client_id, command) = self.next_command().await?;
-
-        let mut worker_lock = self.worker.lock().await;
-        let response = match &mut *worker_lock {
-            Some(worker) => worker.process_command(command).await,
-            worker @ None => match command {
-                NodeCommand::IsRunning => WorkerResponse::IsRunning(false),
-                NodeCommand::GetEventsChannelName => {
-                    WorkerResponse::EventsChannelName(self.event_channel_name.clone())
-                }
-                NodeCommand::StartNode(config) => {
-                    match NodeWorker::new(&self.event_channel_name, config).await {
-                        Ok(node) => {
-                            let _ = worker.insert(node);
-                            WorkerResponse::NodeStarted(Ok(()))
-                        }
-                        Err(e) => WorkerResponse::NodeStarted(Err(e)),
-                    }
-                }
-                _ => {
-                    warn!("Worker not running");
-                    WorkerResponse::NodeNotRunning
-                }
-            },
-        };
-
-        let server = self.request_server.lock().await;
-        server.respond_to(client_id, response);
-
-        Ok(())
-    }
-
-    async fn next_command(&self) -> Result<(ClientId, NodeCommand), Error> {
-        let mut server = self.request_server.lock().await;
-        let (client_id, result) = server.recv().await;
-
-        let command = result
-            .with_context(|| format!("could not parse command received from {client_id:?}"))?;
-
-        Ok((client_id, command))
-    }
-}
-
 /*
 #[wasm_bindgen]
 pub async fn run_worker(port: MessagePortLike) -> Result<()> {
@@ -337,7 +341,7 @@ pub async fn run_worker(port: MessagePortLike) -> Result<()> {
                     );
                 }
                 NodeCommand::StartNode(config) => {
-                    match NodeWorker::new(&events_channel_name, config).await {
+                    match NodeWorkerInstance::new(&events_channel_name, config).await {
                         Ok(node) => {
                             worker = Some(node);
                             request_server

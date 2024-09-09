@@ -1,10 +1,10 @@
 {
-  "name": "lumina-node-shim",
+  "name": "lumina-node",
   "type": "module",
   "collaborators": [
     "Eiger <hello@eiger.co>"
   ],
-  "description": "worker shim",
+  "description": "Lumina node for Celestia, running in browser",
   "version": "0.1.1",
   "license": "Apache-2.0",
   "repository": {
