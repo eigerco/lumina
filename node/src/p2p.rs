@@ -22,9 +22,9 @@ use std::time::Duration;
 use blockstore::Blockstore;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_tendermint_proto::Protobuf;
-use celestia_types::namespaced_data::NamespacedData;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
+use celestia_types::row_namespace_data::RowNamespaceData;
 use celestia_types::sample::Sample;
 use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
 use celestia_types::{ExtendedHeader, FraudProof};
@@ -492,17 +492,17 @@ impl P2p {
         Ok(Sample::decode(&data[..])?)
     }
 
-    /// Request a [`NamespacedData`] on bitswap protocol.
-    pub async fn get_namespaced_data(
+    /// Request a [`RowNamespaceData`] on bitswap protocol.
+    pub async fn get_row_namespace_data(
         &self,
         namespace: Namespace,
         row_index: u16,
         block_height: u64,
-    ) -> Result<NamespacedData> {
+    ) -> Result<RowNamespaceData> {
         let cid = namespaced_data_cid(namespace, row_index, block_height)?;
         // TODO: add timeout
         let data = self.get_shwap_cid(cid, None).await?;
-        Ok(NamespacedData::decode(&data[..])?)
+        Ok(RowNamespaceData::decode(&data[..])?)
     }
 
     /// Get the addresses where [`P2p`] listens on for incoming connections.

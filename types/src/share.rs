@@ -1,5 +1,4 @@
 use blockstore::block::{Block, CidError};
-use celestia_proto::share::p2p::shrex::nd::NamespaceRowResponse as RawNamespacedRow;
 use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
@@ -19,24 +18,6 @@ mod info_byte;
 pub use info_byte::InfoByte;
 
 const SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTES;
-
-/// A collection of rows of [`Share`]s from a particular [`Namespace`].
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(from = "RawNamespacedShares", into = "RawNamespacedShares")]
-pub struct NamespacedShares {
-    /// All rows containing shares within some namespace.
-    pub rows: Vec<NamespacedRow>,
-}
-
-/// [`Share`]s from a particular [`Namespace`] with proof in the data square row.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(try_from = "RawNamespacedRow", into = "RawNamespacedRow")]
-pub struct NamespacedRow {
-    /// All shares within some namespace in the given row.
-    pub shares: Vec<Share>,
-    /// A merkle proof of inclusion or absence of the shares in this row.
-    pub proof: NamespaceProof,
-}
 
 /// A single fixed-size chunk of data which is used to form an [`ExtendedDataSquare`].
 ///
@@ -207,40 +188,55 @@ impl From<Share> for RawShare {
     }
 }
 
-impl Protobuf<RawNamespacedRow> for NamespacedRow {}
-
-impl TryFrom<RawNamespacedRow> for NamespacedRow {
-    type Error = Error;
-
-    fn try_from(value: RawNamespacedRow) -> Result<Self, Self::Error> {
-        let shares = value
-            .shares
-            .into_iter()
-            .map(|bytes| Share::from_raw(&bytes))
-            .collect::<Result<Vec<_>>>()?;
-
-        let proof: NamespaceProof = value
-            .proof
-            .map(TryInto::try_into)
-            .transpose()?
-            .ok_or(Error::MissingProof)?;
-
-        if shares.is_empty() && !proof.is_of_absence() {
-            return Err(Error::WrongProofType);
-        }
-
-        Ok(NamespacedRow { shares, proof })
-    }
+/// TODO: from shwap
+/// A collection of rows of [`Share`]s from a particular [`Namespace`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NamespacedShares {
+    /// All rows containing shares within some namespace.
+    pub rows: Vec<NamespacedRow>,
 }
 
-impl From<NamespacedRow> for RawNamespacedRow {
-    fn from(value: NamespacedRow) -> RawNamespacedRow {
-        RawNamespacedRow {
-            shares: value.shares.iter().map(|share| share.to_vec()).collect(),
-            proof: Some(value.proof.into()),
-        }
-    }
+/// [`Share`]s from a particular [`Namespace`] with proof in the data square row.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NamespacedRow {
+    /// All shares within some namespace in the given row.
+    pub shares: Vec<Share>,
+    /// A merkle proof of inclusion or absence of the shares in this row.
+    pub proof: NamespaceProof,
 }
+
+// impl TryFrom<RawNamespacedRow> for NamespacedRow {
+//     type Error = Error;
+//
+//     fn try_from(value: RawNamespacedRow) -> Result<Self, Self::Error> {
+//         let shares = value
+//             .shares
+//             .into_iter()
+//             .map(|bytes| Share::from_raw(&bytes))
+//             .collect::<Result<Vec<_>>>()?;
+//
+//         let proof: NamespaceProof = value
+//             .proof
+//             .map(TryInto::try_into)
+//             .transpose()?
+//             .ok_or(Error::MissingProof)?;
+//
+//         if shares.is_empty() && !proof.is_of_absence() {
+//             return Err(Error::WrongProofType);
+//         }
+//
+//         Ok(NamespacedRow { shares, proof })
+//     }
+// }
+//
+// impl From<NamespacedRow> for RawNamespacedRow {
+//     fn from(value: NamespacedRow) -> RawNamespacedRow {
+//         RawNamespacedRow {
+//             shares: value.shares.iter().map(|share| share.to_vec()).collect(),
+//             proof: Some(value.proof.into()),
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

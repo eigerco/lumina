@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use blockstore::Blockstore;
 use celestia_types::hash::Hash;
-use celestia_types::namespaced_data::NamespacedData;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
+use celestia_types::row_namespace_data::RowNamespaceData;
 use celestia_types::sample::Sample;
 use celestia_types::ExtendedHeader;
 use libp2p::identity::Keypair;
@@ -290,21 +290,21 @@ where
             .await?)
     }
 
-    /// Request a verified [`NamespacedData`] from the network.
+    /// Request a verified [`RowNamespaceData`] from the network.
     ///
     /// # Errors
     ///
-    /// On failure to receive a verified [`NamespacedData`] within a certain time, the
+    /// On failure to receive a verified [`RowNamespaceData`] within a certain time, the
     /// `NodeError::P2p(P2pError::BitswapQueryTimeout)` error will be returned.
-    pub async fn request_namespaced_data(
+    pub async fn request_row_namespace_data(
         &self,
         namespace: Namespace,
         row_index: u16,
         block_height: u64,
-    ) -> Result<NamespacedData> {
+    ) -> Result<RowNamespaceData> {
         Ok(self
             .p2p
-            .get_namespaced_data(namespace, row_index, block_height)
+            .get_row_namespace_data(namespace, row_index, block_height)
             .await?)
     }
 

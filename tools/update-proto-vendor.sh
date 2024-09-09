@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -xeuo pipefail
 
@@ -25,14 +25,13 @@ mkdir -p ../target/proto-vendor-src
 extract_urls ../target/proto-vendor-src \
     https://github.com/celestiaorg/celestia-app/archive/refs/tags/v1.12.0.tar.gz \
     https://github.com/celestiaorg/celestia-core/archive/refs/heads/v0.34.x-celestia.tar.gz \
-    https://github.com/celestiaorg/celestia-node/archive/refs/heads/main.tar.gz \
+    https://github.com/celestiaorg/celestia-node/archive/refs/heads/shwap.tar.gz \
     https://github.com/celestiaorg/cosmos-sdk/archive/refs/heads/release/v0.46.x-celestia.tar.gz \
     https://github.com/celestiaorg/nmt/archive/refs/heads/main.tar.gz \
     https://github.com/cosmos/cosmos-proto/archive/refs/tags/v1.0.0-alpha7.tar.gz \
     https://github.com/cosmos/gogoproto/archive/refs/tags/v1.4.11.tar.gz \
     https://github.com/celestiaorg/go-header/archive/refs/heads/main.tar.gz \
     https://github.com/googleapis/googleapis/archive/refs/heads/master.tar.gz \
-    https://github.com/celestiaorg/celestia-node/archive/refs/heads/shwap.tar.gz
 
 mkdir -p vendor
 
@@ -60,23 +59,19 @@ cp ../target/proto-vendor-src/googleapis-master/google/api/{annotations.proto,ht
 
 rm -rf vendor/header
 mkdir -p vendor/header
-cp -r ../target/proto-vendor-src/celestia-node-main/header/pb vendor/header
+cp -r ../target/proto-vendor-src/celestia-node-shwap/header/pb vendor/header
 
 rm -rf vendor/share
 mkdir -p vendor/share
-for pb_dir in ../target/proto-vendor-src/celestia-node-main/share/*/*/pb; do
-    out_dir="${pb_dir#"${pb_dir%/*/*/*}"}"
-    out_dir="vendor/share/${out_dir%/*}"
-    mkdir -p "$out_dir"
-    cp -r "$pb_dir" "$out_dir"
+shwap_dir=../target/proto-vendor-src/celestia-node-shwap/share
+find "$shwap_dir" -name pb -type d -print0 | while read -r -d '' pb_dir; do
+  # remove prefix
+  out_dir="${pb_dir#"$shwap_dir"}"
+  # remove /pb suffix
+  out_dir="vendor/share/${out_dir%/*}"
+  mkdir -p "$out_dir"
+  cp -r "$pb_dir" "$out_dir"
 done
-
-# TODO: replace with version from main, once it is merged
-# https://github.com/celestiaorg/celestia-node/pull/3184
-rm -rf vendor/share/p2p/shwap
-mkdir -p vendor/share/p2p/shwap/pb
-cp ../target/proto-vendor-src/celestia-node-shwap/share/shwap/pb/shwap.proto \
-    vendor/share/p2p/shwap/pb/shwap.proto
 
 rm -rf vendor/tendermint
 cp -r ../target/proto-vendor-src/celestia-core-0.34.x-celestia/proto/tendermint vendor
