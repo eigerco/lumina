@@ -1,3 +1,5 @@
+//! celestia-node rpc types and methods related to shares
+//!
 use celestia_types::nmt::Namespace;
 use celestia_types::{
     ExtendedDataSquare, ExtendedHeader, NamespacedShares, RawShare, Share, ShareProof,
@@ -5,10 +7,13 @@ use celestia_types::{
 use jsonrpsee::proc_macros::rpc;
 use serde::{Deserialize, Serialize};
 
+/// Response type for [`ShareClient::share_get_range`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct GetRangeResponse {
+    /// Shares contained in given range.
     pub shares: Vec<RawShare>,
+    /// Proof of inclusion of the shares.
     pub proof: ShareProof,
 }
 
