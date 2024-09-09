@@ -186,9 +186,13 @@ impl From<NamespacedShares> for RawNamespacedShares {
     }
 }
 
+/// Raw share with no namespace or length checks.
+///
+/// To be used as intermediary type in various RPC's.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RawShare {
+    /// Data held by the share.
     #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]
     pub data: Vec<u8>,
 }

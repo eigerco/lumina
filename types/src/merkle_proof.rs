@@ -7,6 +7,7 @@ use crate::{
     bail_validation, bail_verification, validation_error, verification_error, Error, Result,
 };
 
+/// A proof of inclusion of some leaf in a merkle tree.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawMerkleProof", into = "RawMerkleProof")]
 pub struct MerkleProof {
