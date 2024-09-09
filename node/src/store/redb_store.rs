@@ -23,7 +23,7 @@ use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{
     Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
 };
-use crate::utils::SpawnedTasks;
+use crate::utils::Counter;
 
 use super::utils::{deserialize_extended_header, deserialize_sampling_metadata};
 
@@ -45,7 +45,7 @@ const HEADER_RANGES_KEY: &str = "KEY.HEADER_RANGES";
 #[derive(Debug)]
 pub struct RedbStore {
     inner: Arc<Inner>,
-    tasks: SpawnedTasks,
+    counter: Counter,
 }
 
 #[derive(Debug)]
@@ -84,7 +84,7 @@ impl RedbStore {
                 db,
                 header_added_notifier: Notify::new(),
             }),
-            tasks: SpawnedTasks::new(),
+            counter: Counter::new(),
         };
 
         store
@@ -150,14 +150,17 @@ impl RedbStore {
         T: Send + 'static,
     {
         let inner = self.inner.clone();
+        let guard = self.counter.guard();
 
-        self.tasks
-            .spawn_blocking(move || {
+        spawn_blocking(move || {
+            let _guard = guard;
+
+            {
                 let mut tx = inner.db.begin_read()?;
                 f(&mut tx)
-            })
-            .await?
-            .unwrap()
+            }
+        })
+        .await?
     }
 
     /// Execute a write transaction.
@@ -169,9 +172,12 @@ impl RedbStore {
         T: Send + 'static,
     {
         let inner = self.inner.clone();
+        let guard = self.counter.guard();
 
-        self.tasks
-            .spawn_blocking(move || {
+        spawn_blocking(move || {
+            let _guard = guard;
+
+            {
                 let mut tx = inner.db.begin_write()?;
                 let res = f(&mut tx);
 
@@ -182,9 +188,9 @@ impl RedbStore {
                 }
 
                 res
-            })
-            .await?
-            .unwrap()
+            }
+        })
+        .await?
     }
 
     async fn head_height(&self) -> Result<u64> {
@@ -548,13 +554,11 @@ impl Store for RedbStore {
     }
 
     async fn close(self) -> Result<()> {
-        let RedbStore { inner, mut tasks } = self;
+        let RedbStore { inner, mut counter } = self;
 
-        tasks.cancel_all();
-        tasks.wait_all().await;
+        counter.wait_guards().await;
 
-        // Now `inner` should be the only refernce to `Arc<Inner>`, make
-        // sure we can destruct it.
+        // Assert that all tasks are stopped
         Arc::into_inner(inner).expect("Not all redb_store::Inner were stopped");
 
         Ok(())

@@ -3,13 +3,14 @@ use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::{PeerId, StreamProtocol};
 use tokio::sync::oneshot;
 
-mod fused_reusable_future;
 #[cfg(not(target_arch = "wasm32"))]
-mod spawned_tasks;
+mod counter;
+mod fused_reusable_future;
 mod token;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use counter::{Counter, CounterGuard};
 pub(crate) use fused_reusable_future::FusedReusableFuture;
-pub(crate) use spawned_tasks::SpawnedTasks;
 #[allow(unused_imports)]
 pub(crate) use token::{Token, TokenTriggerDropGuard};
 

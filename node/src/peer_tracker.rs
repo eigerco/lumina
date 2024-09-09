@@ -233,6 +233,14 @@ impl PeerTracker {
             .collect()
     }
 
+    pub fn connections(&self) -> Vec<(PeerId, SmallVec<[ConnectionId; 1]>)> {
+        self.peers
+            .iter()
+            .filter(|pair| pair.value().is_connected())
+            .map(|pair| (pair.key().to_owned(), pair.value().connections.clone()))
+            .collect()
+    }
+
     /// Returns one of the best peers.
     pub fn best_peer(&self) -> Option<PeerId> {
         const MAX_PEER_SAMPLE: usize = 128;

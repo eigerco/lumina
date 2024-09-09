@@ -25,7 +25,7 @@ where
     //
     // For the sake of simplicity we use `Weak` pointer to make it dropped with `P2p`
     // is droped, without waiting for the peer connections to close.
-    header_store: Weak<S>,
+    header_store: Arc<S>,
 }
 
 impl<S> ShwapMultihasher<S>
@@ -33,9 +33,7 @@ where
     S: Store + 'static,
 {
     pub(super) fn new(header_store: Arc<S>) -> Self {
-        ShwapMultihasher {
-            header_store: Arc::downgrade(&header_store),
-        }
+        ShwapMultihasher { header_store }
     }
 }
 
@@ -58,12 +56,8 @@ where
                     .hash()
                     .to_owned();
 
-                let header_store = self
+                let header = self
                     .header_store
-                    .upgrade()
-                    .ok_or_else(|| MultihasherError::custom_fatal("header_store closed"))?;
-
-                let header = header_store
                     .get_by_height(ns_data.id.block_height())
                     .await
                     .map_err(MultihasherError::custom_fatal)?;
@@ -82,12 +76,8 @@ where
                     .hash()
                     .to_owned();
 
-                let header_store = self
+                let header = self
                     .header_store
-                    .upgrade()
-                    .ok_or_else(|| MultihasherError::custom_fatal("header_store closed"))?;
-
-                let header = header_store
                     .get_by_height(row.id.block_height())
                     .await
                     .map_err(MultihasherError::custom_fatal)?;
@@ -105,12 +95,8 @@ where
                     .hash()
                     .to_owned();
 
-                let header_store = self
+                let header = self
                     .header_store
-                    .upgrade()
-                    .ok_or_else(|| MultihasherError::custom_fatal("header_store closed"))?;
-
-                let header = header_store
                     .get_by_height(sample.id.block_height())
                     .await
                     .map_err(MultihasherError::custom_fatal)?;

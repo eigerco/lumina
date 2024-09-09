@@ -13,7 +13,7 @@
 //! - bitswap 1.2.0
 //! - shwap - celestia's data availability protocol on top of bitswap
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::poll_fn;
 use std::sync::Arc;
 use std::task::Poll;
@@ -52,6 +52,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, trace, warn};
 
+mod connection_control;
 mod header_ex;
 pub(crate) mod header_session;
 pub(crate) mod shwap;
@@ -596,6 +597,7 @@ where
     B: Blockstore + 'static,
     S: Store + 'static,
 {
+    connection_control: connection_control::Behaviour,
     autonat: autonat::Behaviour,
     bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
     ping: ping::Behaviour,
@@ -643,6 +645,7 @@ where
     ) -> Result<Self, P2pError> {
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
+        let connection_control = connection_control::Behaviour::new();
         let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
         let ping = ping::Behaviour::new(ping::Config::default());
 
@@ -670,6 +673,7 @@ where
         });
 
         let behaviour = Behaviour {
+            connection_control,
             autonat,
             bitswap,
             ping,
@@ -802,10 +806,46 @@ where
     }
 
     async fn on_stop(&mut self) {
+        self.swarm
+            .behaviour_mut()
+            .connection_control
+            .set_stopping(true);
         self.swarm.behaviour_mut().header_ex.stop();
 
         for listener in self.listeners.drain(..) {
             self.swarm.remove_listener(listener);
+        }
+
+        for (_, ids) in self.peer_tracker.connections() {
+            for id in ids {
+                self.swarm.close_connection(id);
+            }
+        }
+
+        // Waiting until all established connections closed.
+        while self
+            .swarm
+            .network_info()
+            .connection_counters()
+            .num_established()
+            > 0
+        {
+            match self.swarm.select_next_some().await {
+                // We may receive this if connection was established just before we trigger stop.
+                SwarmEvent::ConnectionEstablished { connection_id, .. } => {
+                    // We immediately close the connection in this case.
+                    self.swarm.close_connection(connection_id);
+                }
+                SwarmEvent::ConnectionClosed {
+                    peer_id,
+                    connection_id,
+                    ..
+                } => {
+                    // This will generate the PeerDisconnected events.
+                    self.on_peer_disconnected(peer_id, connection_id);
+                }
+                _ => {}
+            }
         }
     }
 
@@ -817,7 +857,9 @@ where
                 BehaviourEvent::Kademlia(ev) => self.on_kademlia_event(ev).await?,
                 BehaviourEvent::Bitswap(ev) => self.on_bitswap_event(ev).await,
                 BehaviourEvent::Ping(ev) => self.on_ping_event(ev).await,
-                BehaviourEvent::Autonat(_) | BehaviourEvent::HeaderEx(_) => {}
+                BehaviourEvent::Autonat(_)
+                | BehaviourEvent::ConnectionControl(_)
+                | BehaviourEvent::HeaderEx(_) => {}
             },
             SwarmEvent::ConnectionEstablished {
                 peer_id,
