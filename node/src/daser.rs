@@ -562,10 +562,10 @@ mod tests {
         store.insert(headers[4..=9].to_vec()).await.unwrap();
 
         // Sample block 10
-        handle_get_shwap_cid(&mut handle, &store, 10, &edses[9], false).await;
+        handle_get_shwap_cid(&mut handle, 10, &edses[9], false).await;
 
         // Sample block 9
-        handle_get_shwap_cid(&mut handle, &store, 9, &edses[8], false).await;
+        handle_get_shwap_cid(&mut handle, 9, &edses[8], false).await;
 
         // To avoid race conditions we wait a bit for the block 8 to be scheduled
         sleep(Duration::from_millis(10)).await;
@@ -579,13 +579,12 @@ mod tests {
         // Now daser runs two concurrent data sampling: block 8 and block 20
         handle_concurrent_get_shwap_cid(
             &mut handle,
-            &store,
             [(8, &edses[9], false), (20, &edses[19], false)],
         )
         .await;
 
         // Sample and reject block 19
-        handle_get_shwap_cid(&mut handle, &store, 19, &edses[18], true).await;
+        handle_get_shwap_cid(&mut handle, 19, &edses[18], true).await;
 
         // Simulate disconnection
         handle.announce_all_peers_disconnected();
@@ -608,18 +607,18 @@ mod tests {
         handle.announce_peer_connected();
 
         // Because of disconnection and previous rejection of block 19, daser will resample it
-        handle_get_shwap_cid(&mut handle, &store, 19, &edses[18], false).await;
+        handle_get_shwap_cid(&mut handle, 19, &edses[18], false).await;
 
         // Sample block 16 until 18
         for height in (16..=18).rev() {
             let idx = height as usize - 1;
-            handle_get_shwap_cid(&mut handle, &store, height, &edses[idx], false).await;
+            handle_get_shwap_cid(&mut handle, height, &edses[idx], false).await;
         }
 
         // Sample block 5 until 7
         for height in (5..=7).rev() {
             let idx = height as usize - 1;
-            handle_get_shwap_cid(&mut handle, &store, height, &edses[idx], false).await;
+            handle_get_shwap_cid(&mut handle, height, &edses[idx], false).await;
         }
 
         handle.expect_no_cmd().await;
@@ -631,7 +630,7 @@ mod tests {
         store.insert(header).await.unwrap();
 
         // Sample block 21
-        handle_get_shwap_cid(&mut handle, &store, 21, &eds, false).await;
+        handle_get_shwap_cid(&mut handle, 21, &eds, false).await;
 
         handle.expect_no_cmd().await;
     }
@@ -651,8 +650,7 @@ mod tests {
 
         store.insert(header).await.unwrap();
 
-        let cids =
-            handle_get_shwap_cid(handle, store, height, &eds, simulate_invalid_sampling).await;
+        let cids = handle_get_shwap_cid(handle, height, &eds, simulate_invalid_sampling).await;
         handle.expect_no_cmd().await;
 
         let mut sampling_metadata = store.get_sampling_metadata(height).await.unwrap().unwrap();
@@ -735,7 +733,6 @@ mod tests {
     /// Responds to get_shwap_cid and returns all CIDs that were requested
     async fn handle_concurrent_get_shwap_cid<const N: usize>(
         handle: &mut MockP2pHandle,
-        store: &InMemoryStore,
         handling_args: [(u64, &ExtendedDataSquare, bool); N],
     ) -> Vec<Cid> {
         struct Info<'a> {
@@ -783,7 +780,7 @@ mod tests {
                 continue;
             }
 
-            let sample = gen_sample_of_cid(sample_id, info.eds, store).await;
+            let sample = gen_sample_of_cid(sample_id, info.eds).await;
             let sample_bytes = sample.encode_vec().unwrap();
 
             respond_to.send(Ok(sample_bytes)).unwrap();
@@ -796,28 +793,19 @@ mod tests {
     /// Responds to get_shwap_cid and returns all CIDs that were requested
     async fn handle_get_shwap_cid(
         handle: &mut MockP2pHandle,
-        store: &InMemoryStore,
         height: u64,
         eds: &ExtendedDataSquare,
         simulate_invalid_sampling: bool,
     ) -> Vec<Cid> {
-        handle_concurrent_get_shwap_cid(handle, store, [(height, eds, simulate_invalid_sampling)])
-            .await
+        handle_concurrent_get_shwap_cid(handle, [(height, eds, simulate_invalid_sampling)]).await
     }
 
-    async fn gen_sample_of_cid(
-        sample_id: SampleId,
-        eds: &ExtendedDataSquare,
-        store: &InMemoryStore,
-    ) -> Sample {
-        let header = store.get_by_height(sample_id.block_height()).await.unwrap();
-
+    async fn gen_sample_of_cid(sample_id: SampleId, eds: &ExtendedDataSquare) -> Sample {
         Sample::new(
             sample_id.row_index(),
             sample_id.column_index(),
             AxisType::Row,
             eds,
-            header.height().value(),
         )
         .unwrap()
     }
