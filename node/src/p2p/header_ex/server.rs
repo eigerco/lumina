@@ -191,7 +191,7 @@ where
             return Poll::Ready(());
         }
 
-        return Poll::Pending;
+        Poll::Pending
     }
 }
 
