@@ -13,13 +13,13 @@ use lumina_node::network::{canonical_network_bootnodes, network_id};
 use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 
+use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::error::{Context, Result};
 use crate::ports::RequestResponse;
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
     Network,
 };
-use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 /// Config for the lumina wasm node.

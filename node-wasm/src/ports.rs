@@ -9,8 +9,8 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{MessageEvent, MessagePort};
 
-use crate::error::{Context, Error, Result};
 use crate::commands::{NodeCommand, WorkerResponse};
+use crate::error::{Context, Error, Result};
 
 const REQUEST_MULTIPLEXER_COMMAND_CHANNEL_SIZE: usize = 64;
 

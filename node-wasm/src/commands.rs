@@ -12,9 +12,9 @@ use celestia_types::hash::Hash;
 use lumina_node::node::{PeerTrackerInfo, SyncingInfo};
 use lumina_node::store::SamplingMetadata;
 
+use crate::client::WasmNodeConfig;
 use crate::error::Error;
 use crate::error::Result;
-use crate::client::WasmNodeConfig;
 use crate::utils::JsResult;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
