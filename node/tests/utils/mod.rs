@@ -1,8 +1,11 @@
+#![allow(dead_code)]
+
 use std::env;
 use std::time::Duration;
 
 use celestia_rpc::{prelude::*, Client};
 use libp2p::{multiaddr::Protocol, Multiaddr, PeerId};
+use lumina_node::blockstore::InMemoryBlockstore;
 use lumina_node::node::NodeConfig;
 use lumina_node::test_utils::test_node_config;
 use lumina_node::{node::Node, store::InMemoryStore};
@@ -30,7 +33,7 @@ pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
     (bridge_info.id.into(), ma)
 }
 
-pub async fn new_connected_node() -> Node<InMemoryStore> {
+pub async fn new_connected_node() -> Node<InMemoryBlockstore, InMemoryStore> {
     let (_, bridge_ma) = fetch_bridge_info().await;
 
     let node = Node::new(NodeConfig {

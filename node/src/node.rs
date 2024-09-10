@@ -81,12 +81,14 @@ where
 }
 
 /// Celestia node.
-pub struct Node<S>
+pub struct Node<B, S>
 where
+    B: Blockstore + 'static,
     S: Store + 'static,
 {
     event_channel: EventChannel,
     p2p: Option<Arc<P2p>>,
+    blockstore: Option<Arc<B>>,
     store: Option<Arc<S>>,
     syncer: Option<Arc<Syncer<S>>>,
     daser: Option<Arc<Daser>>,
@@ -95,15 +97,13 @@ where
     network_compromised_task: JoinHandle,
 }
 
-impl<S> Node<S>
+impl<B, S> Node<B, S>
 where
+    B: Blockstore,
     S: Store,
 {
     /// Creates and starts a new celestia node with a given config.
-    pub async fn new<B>(config: NodeConfig<B, S>) -> Result<Self>
-    where
-        B: Blockstore + 'static,
-    {
+    pub async fn new(config: NodeConfig<B, S>) -> Result<Self> {
         let (node, _) = Node::new_subscribed(config).await?;
         Ok(node)
     }
@@ -112,10 +112,7 @@ where
     ///
     /// Returns `Node` alogn with `EventSubscriber`. Use this to avoid missing any
     /// events that will be generated on the construction of the node.
-    pub async fn new_subscribed<B>(config: NodeConfig<B, S>) -> Result<(Self, EventSubscriber)>
-    where
-        B: Blockstore + 'static,
-    {
+    pub async fn new_subscribed(config: NodeConfig<B, S>) -> Result<(Self, EventSubscriber)> {
         let event_channel = EventChannel::new();
         let event_sub = event_channel.subscribe();
         let store = Arc::new(config.store);
@@ -149,7 +146,7 @@ where
 
         let pruner = Arc::new(Pruner::start(PrunerArgs {
             store: store.clone(),
-            blockstore,
+            blockstore: blockstore.clone(),
             event_pub: event_channel.publisher(),
             pruning_interval: DEFAULT_PRUNING_INTERVAL,
         }));
@@ -182,6 +179,7 @@ where
         let node = Node {
             event_channel,
             p2p: Some(p2p),
+            blockstore: Some(blockstore),
             store: Some(store),
             syncer: Some(syncer),
             daser: Some(daser),
@@ -219,9 +217,15 @@ where
             p2p.join().await;
         }
 
-        // Everything that was holding Store is now dropped.
+        // Everything that was holding Blockstore is not dropped, so we can close it.
+        let blockstore = self.blockstore.take().expect("Blockstore not initialized");
+        let blockstore = Arc::into_inner(blockstore).expect("Not all Arc<Blockstore> were dropped");
+        if let Err(e) = blockstore.close().await {
+            warn!("Blockstore failed to close: {e}");
+        }
+
+        // Everything that was holding Store is now dropped, so we can close it.
         let store = self.store.take().expect("Store not initialized");
-        println!("{}", Arc::strong_count(&store));
         let store = Arc::into_inner(store).expect("Not all Arc<Store> were dropped");
         if let Err(e) = store.close().await {
             warn!("Store failed to close: {e}");
@@ -416,8 +420,9 @@ where
     }
 }
 
-impl<S> Drop for Node<S>
+impl<B, S> Drop for Node<B, S>
 where
+    B: Blockstore,
     S: Store,
 {
     fn drop(&mut self) {
@@ -439,18 +444,5 @@ where
         if let Some(p2p) = self.p2p.take() {
             p2p.stop();
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test_utils::async_test;
-
-    #[async_test]
-    async fn graceful_stop_then_start() {
-        // TODO: We need to start a Node with redb stores, then start a connection,
-        // wait few seconds (maybe just 2), and then stop Node. After the stop we
-        // need to be able to start a new Node with the same redb stores immediately.
     }
 }
