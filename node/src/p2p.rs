@@ -61,7 +61,9 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{self, spawn, Interval};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
-use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihasher};
+use crate::p2p::shwap::{
+    get_block_container, namespaced_data_cid, row_cid, sample_cid, ShwapMultihasher,
+};
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
@@ -465,7 +467,7 @@ impl P2p {
             None => rx.await??,
         };
 
-        Ok(data)
+        get_block_container(&cid, &data)
     }
 
     /// Request a [`Row`] on bitswap protocol.
@@ -1209,7 +1211,7 @@ where
     B: Blockstore + 'static,
     S: Store + 'static,
 {
-    let protocol_prefix = format!("/celestia/{}", network_id);
+    let protocol_prefix = format!("//celestia/{}/shwap", network_id);
 
     Ok(beetswap::Behaviour::builder(blockstore)
         .protocol_prefix(&protocol_prefix)?

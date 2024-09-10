@@ -24,9 +24,9 @@ use crate::{DataAvailabilityHeader, Error, Result};
 /// Number of bytes needed to represent [`SampleId`] in `multihash`.
 const SAMPLE_ID_SIZE: usize = 12;
 /// The code of the [`SampleId`] hashing algorithm in `multihash`.
-pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
+pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7811;
 /// The id of codec used for the [`SampleId`] in `Cid`s.
-pub const SAMPLE_ID_CODEC: u64 = 0x7800;
+pub const SAMPLE_ID_CODEC: u64 = 0x7810;
 
 /// Identifies a particular [`Share`] located in the [`ExtendedDataSquare`].
 ///

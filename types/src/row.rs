@@ -27,9 +27,9 @@ const EDS_ID_SIZE: usize = 8;
 /// Number of bytes needed to represent [`RowId`] in `multihash`.
 pub(crate) const ROW_ID_SIZE: usize = EDS_ID_SIZE + 2;
 /// The code of the [`RowId`] hashing algorithm in `multihash`.
-pub const ROW_ID_MULTIHASH_CODE: u64 = 0x7811;
+pub const ROW_ID_MULTIHASH_CODE: u64 = 0x7801;
 /// The id of codec used for the [`RowId`] in `Cid`s.
-pub const ROW_ID_CODEC: u64 = 0x7810;
+pub const ROW_ID_CODEC: u64 = 0x7800;
 
 /// Represents an EDS of a specific Height
 ///

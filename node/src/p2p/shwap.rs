@@ -109,6 +109,16 @@ pub(crate) fn convert_cid<const S: usize>(cid: &CidGeneric<S>) -> Result<Cid> {
     )))
 }
 
+pub(crate) fn get_block_container(expected_cid: &Cid, block: &[u8]) -> Result<Vec<u8>> {
+    let block = Block::decode(block).unwrap();
+    let block_cid = Cid::read_bytes(block.cid.as_slice()).unwrap();
+    if block_cid != *expected_cid {
+        panic!();
+    }
+
+    Ok(block.container)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
