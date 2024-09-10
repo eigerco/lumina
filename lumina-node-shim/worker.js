@@ -4,7 +4,7 @@ import init, { NodeWorkerWrapper, NodeClient } from "lumina-node-wasm"
 
 export default async function start_worker() {
     await init();
-    let worker = new Worker(new URL("worker.mjs", import.meta.url));
+    let worker = new Worker(new URL("worker.js", import.meta.url));
     let client = new NodeClient(worker);
     return client;
 }

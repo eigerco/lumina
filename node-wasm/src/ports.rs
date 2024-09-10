@@ -2,7 +2,7 @@ use js_sys::{Array, Function, Reflect};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::select;
 use tokio::sync::{mpsc, Mutex};
-use tracing::{error, info};
+use tracing::{error, info, trace};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast, JsValue};
@@ -116,7 +116,7 @@ impl RequestServer {
     }
 
     pub fn respond_to(&self, client: ClientId, response: WorkerResponse) {
-        info!("Responding to {client:?}");
+        trace!("Responding to {client:?}");
         if let Err(e) = self.ports[client.0].send(&response) {
             error!("Failed to send response to client: {e}");
         }
