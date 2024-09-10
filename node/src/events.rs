@@ -4,10 +4,10 @@ use std::fmt;
 use std::panic::Location;
 use std::time::Duration;
 
-use instant::SystemTime;
 use libp2p::PeerId;
 use serde::Serialize;
 use tokio::sync::broadcast;
+use web_time::SystemTime;
 
 const EVENT_CHANNEL_CAPACITY: usize = 1024;
 
@@ -281,6 +281,18 @@ pub enum NodeEvent {
         error: String,
     },
 
+    /// Pruned headers up to and including specified height.
+    PrunedHeaders {
+        /// Last header height that was pruned
+        to_height: u64,
+    },
+
+    /// Pruning fatal error.
+    FatalPrunerError {
+        /// A human readable error.
+        error: String,
+    },
+
     /// Network was compromised.
     ///
     /// This happens when a valid bad encoding fraud proof is received.
@@ -296,6 +308,7 @@ impl NodeEvent {
         match self {
             NodeEvent::FatalDaserError { .. }
             | NodeEvent::FatalSyncerError { .. }
+            | NodeEvent::FatalPrunerError { .. }
             | NodeEvent::FetchingHeadersFailed { .. }
             | NodeEvent::NetworkCompromised => true,
             NodeEvent::ConnectingToBootnodes
@@ -308,7 +321,8 @@ impl NodeEvent {
             | NodeEvent::FetchingHeadHeaderStarted
             | NodeEvent::FetchingHeadHeaderFinished { .. }
             | NodeEvent::FetchingHeadersStarted { .. }
-            | NodeEvent::FetchingHeadersFinished { .. } => false,
+            | NodeEvent::FetchingHeadersFinished { .. }
+            | NodeEvent::PrunedHeaders { .. } => false,
         }
     }
 }
@@ -412,6 +426,12 @@ impl fmt::Display for NodeEvent {
             }
             NodeEvent::FatalSyncerError { error } => {
                 write!(f, "Syncer stopped because of a fatal error: {error}")
+            }
+            Self::PrunedHeaders { to_height } => {
+                write!(f, "Pruned headers up to and including {to_height}")
+            }
+            NodeEvent::FatalPrunerError { error } => {
+                write!(f, "Pruner stopped because of a fatal error: {error}")
             }
             NodeEvent::NetworkCompromised => {
                 write!(f, "The network is compromised and should not be trusted. ")?;

@@ -1,5 +1,5 @@
-#!/bin/bash
-set -euo pipefail
+#!/usr/bin/env bash
+set -euxo pipefail
 
 DOTENV=".env"
 DOTENV_SAMPLE=".env.sample"
@@ -8,7 +8,7 @@ DOCKER_COMPOSE_FILE="./ci/docker-compose.yml"
 wait_for_docker_setup() {
   local services_running
   local services_expected
-  
+
   services_expected="$(docker compose -f "$DOCKER_COMPOSE_FILE" config --services | wc -l)"
   services_running="$(docker compose -f "$DOCKER_COMPOSE_FILE" ps --services | wc -l)"
 

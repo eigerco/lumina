@@ -1,6 +1,6 @@
 [package]
 name = "celestia-rpc"
-version = "0.2.0"
+version = "0.4.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "A collection of traits for interacting with Celestia data availability nodes RPC"
@@ -21,14 +21,14 @@ categories = [
 [dependencies]
 async-trait = "0.1.80"
 celestia-types = { workspace = true }
-jsonrpsee = { version = "0.23.1", features = ["client-core", "macros"] }
+jsonrpsee = { version = "0.24.2", features = ["client-core", "macros"] }
 serde = { version = "1.0.203", features = ["derive"] }
 thiserror = "1.0.61"
 tracing = "0.1.40"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 http = "1.1.0"
-jsonrpsee = { version = "0.23.1", features = ["http-client", "ws-client"] }
+jsonrpsee = { version = "0.24.2", features = ["http-client", "ws-client"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 libp2p = { workspace = true, features = [

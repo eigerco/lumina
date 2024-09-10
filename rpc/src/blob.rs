@@ -1,6 +1,19 @@
+//! celestia-node rpc types and methods related to blobs
+
 use celestia_types::nmt::{Namespace, NamespaceProof};
-use celestia_types::{blob::GasPrice, Blob, Commitment};
+use celestia_types::{Blob, Commitment, TxConfig};
 use jsonrpsee::proc_macros::rpc;
+use serde::{Deserialize, Serialize};
+
+/// Response type for [`BlobClient::blob_subscribe`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct BlobsAtHeight {
+    /// Blobs submitted at given height.
+    pub blobs: Option<Vec<Blob>>,
+    /// A height for which the blobs were returned.
+    pub height: u64,
+}
 
 #[rpc(client)]
 pub trait Blob {
@@ -15,8 +28,11 @@ pub trait Blob {
 
     /// GetAll returns all blobs under the given namespaces and height.
     #[method(name = "blob.GetAll")]
-    async fn blob_get_all(&self, height: u64, namespaces: &[Namespace])
-        -> Result<Vec<Blob>, Error>;
+    async fn blob_get_all(
+        &self,
+        height: u64,
+        namespaces: &[Namespace],
+    ) -> Result<Option<Vec<Blob>>, Error>;
 
     /// GetProof retrieves proofs in the given namespaces at the given height by commitment.
     #[method(name = "blob.GetProof")]
@@ -39,5 +55,13 @@ pub trait Blob {
 
     /// Submit sends Blobs and reports the height in which they were included. Allows sending multiple Blobs atomically synchronously. Uses default wallet registered on the Node.
     #[method(name = "blob.Submit")]
-    async fn blob_submit(&self, blobs: &[Blob], gas_price: GasPrice) -> Result<u64, Error>;
+    async fn blob_submit(&self, blobs: &[Blob], opts: TxConfig) -> Result<u64, Error>;
+
+    /// Subscribe to published blobs from the given namespace as they are included.
+    ///
+    /// # Notes
+    ///
+    /// Unsubscribe is not implemented by Celestia nodes.
+    #[subscription(name = "blob.Subscribe", unsubscribe = "blob.Unsubscribe", item = BlobsAtHeight)]
+    async fn blob_subscribe(&self, namespace: Namespace) -> SubcriptionResult;
 }
