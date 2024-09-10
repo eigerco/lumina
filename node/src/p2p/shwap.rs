@@ -20,11 +20,6 @@ pub(super) struct ShwapMultihasher<S>
 where
     S: Store + 'static,
 {
-    // `ShwapMultihasher` becames part of ConnectionHandler in beetswap, which means
-    // in order to drop it, the actual connection needs to close.
-    //
-    // For the sake of simplicity we use `Weak` pointer to make it dropped with `P2p`
-    // is droped, without waiting for the peer connections to close.
     header_store: Arc<S>,
 }
 

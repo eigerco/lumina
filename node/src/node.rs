@@ -217,7 +217,7 @@ where
             p2p.join().await;
         }
 
-        // Everything that was holding Blockstore is not dropped, so we can close it.
+        // Everything that was holding Blockstore is now dropped, so we can close it.
         let blockstore = self.blockstore.take().expect("Blockstore not initialized");
         let blockstore = Arc::into_inner(blockstore).expect("Not all Arc<Blockstore> were dropped");
         if let Err(e) = blockstore.close().await {

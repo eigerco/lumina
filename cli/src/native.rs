@@ -54,8 +54,9 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     };
 
     let network_id = network_id(network).to_owned();
+
     info!("Initializing store");
-    let db = open_db(args.store.clone(), &network_id).await?;
+    let db = open_db(args.store, &network_id).await?;
     let store = RedbStore::new(db.clone()).await?;
     let blockstore = RedbBlockstore::new(db);
 

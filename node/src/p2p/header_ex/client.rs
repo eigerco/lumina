@@ -1100,11 +1100,6 @@ mod tests {
         ));
     }
 
-    #[async_test]
-    async fn head_request_then_stop() {
-        //
-    }
-
     #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
     struct MockReqId(u64);
 
