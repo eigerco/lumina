@@ -11,30 +11,6 @@ use crate::consts::appconsts;
 use crate::nmt::Namespace;
 use crate::{bail_validation, Error, Result, Share};
 
-/// GasPrice represents the amount to be paid per gas unit.
-///
-/// Fee is set by multiplying GasPrice by GasLimit, which is determined by the blob sizes.
-/// If no value is provided, then this will be serialized to `-1.0` which means the node that
-/// receives the request will calculate the GasPrice for given blob.
-/// Read more about the mechanisms of fees and gas usage in [`submitting data blobs`].
-///
-/// [`submitting data blobs`]: https://docs.celestia.org/developers/submit-data#fees-and-gas-limits
-#[derive(Debug, Default, Copy, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct GasPrice(#[serde(with = "gas_prize_serde")] Option<f64>);
-
-impl From<f64> for GasPrice {
-    fn from(value: f64) -> Self {
-        Self(Some(value))
-    }
-}
-
-impl From<Option<f64>> for GasPrice {
-    fn from(value: Option<f64>) -> Self {
-        Self(value)
-    }
-}
-
 /// Arbitrary data that can be stored in the network within certain [`Namespace`].
 // NOTE: We don't use the `serde(try_from)` pattern for this type
 // becase JSON representation needs to have `commitment` field but
@@ -189,27 +165,6 @@ impl From<Blob> for RawBlob {
             data: value.data,
             share_version: value.share_version as u32,
         }
-    }
-}
-
-mod gas_prize_serde {
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    /// Serialize [`Option<f64>`] with `None` represented as `-1`
-    pub fn serialize<S>(value: &Option<f64>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let x = value.unwrap_or(-1.0);
-        serializer.serialize_f64(x)
-    }
-
-    /// Deserialize [`Option<f64>`] with an error when the value is not present.
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        f64::deserialize(deserializer).map(Some)
     }
 }
 
