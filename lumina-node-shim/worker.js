@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99;
 
-import init, { NodeWorkerWrapper, NodeClient } from "lumina-node-wasm"
+import init, { NodeWorker, NodeClient } from "lumina-node-wasm"
 
 export default async function start_worker() {
     await init();
@@ -11,7 +11,7 @@ export default async function start_worker() {
 
 if (typeof WorkerGlobalScope !== "undefined" && typeof self !== "undefined" && self instanceof WorkerGlobalScope) {
     init().then(async () => {
-        let worker = new NodeWorkerWrapper();
+        let worker = new NodeWorker();
         console.log("starting worker: ", worker);
         worker.connect(self)
 
