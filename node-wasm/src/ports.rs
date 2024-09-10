@@ -10,7 +10,7 @@ use wasm_bindgen_futures::spawn_local;
 use web_sys::{MessageEvent, MessagePort};
 
 use crate::error::{Context, Error, Result};
-use crate::worker::commands::{NodeCommand, WorkerResponse};
+use crate::commands::{NodeCommand, WorkerResponse};
 
 const REQUEST_MULTIPLEXER_COMMAND_CHANNEL_SIZE: usize = 64;
 
@@ -41,7 +41,7 @@ struct ClientConnection {
 impl ClientConnection {
     fn new(
         id: ClientId,
-        port: JsValue,
+        object: JsValue,
         forward_to: mpsc::Sender<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
     ) -> Result<Self> {
         let onmessage = Closure::new(move |ev: MessageEvent| {
@@ -56,13 +56,11 @@ impl ClientConnection {
             })
         });
 
-        register_on_message_callback(&port, &onmessage)
-            .context("failed to setup receiving part of ClientConnection")?;
+        let port = prepare_message_port(object, &onmessage)
+            .context("failed to setup port for ClientConnection")?;
 
         Ok(ClientConnection {
-            port: port
-                .dyn_into()
-                .context("failed to setup sending part of ClientConnection")?,
+            port,
             _onmessage: onmessage,
         })
     }
@@ -138,7 +136,7 @@ pub struct RequestResponse {
 }
 
 impl RequestResponse {
-    pub fn new(port: JsValue) -> Result<Self> {
+    pub fn new(object: JsValue) -> Result<Self> {
         let (tx, rx) = mpsc::channel(1);
 
         let onmessage = Closure::new(move |ev: MessageEvent| {
@@ -153,14 +151,13 @@ impl RequestResponse {
             })
         });
 
-        register_on_message_callback(&port, &onmessage)?;
+        let port = prepare_message_port(object, &onmessage)
+            .context("failed to setup port for RequestResponse")?;
 
         web_sys::console::log_1(&port);
 
         Ok(RequestResponse {
-            port: port
-                .dyn_into()
-                .context("failed to setup sending part of RequestResponse")?,
+            port,
             response_channel: Mutex::new(rx),
             _onmessage: onmessage,
         })
@@ -172,11 +169,10 @@ impl RequestResponse {
 
         self.port.post_message(&command_value)?;
 
-        web_sys::console::log_1(&JsValue::from("WAITING FOR RESPONSE"));
         let worker_response = response_channel
             .recv()
             .await
-            .expect("response channel should never be dropped")
+            .expect("response channel should never drop")
             .context("error executing command")?;
 
         Ok(worker_response)
@@ -185,34 +181,41 @@ impl RequestResponse {
 
 // helper to hide slight differences in message passing between runtime.Port used by browser
 // extensions and everything else
-fn register_on_message_callback(
-    object: &JsValue,
+fn prepare_message_port(
+    object: JsValue,
     callback: &Closure<dyn Fn(MessageEvent)>,
-) -> Result<(), Error> {
-    if Reflect::has(object, &JsValue::from("onMessage"))
+) -> Result<MessagePortLike, Error> {
+    // check whether provided object has `postMessage` method
+    let _post_message: Function = Reflect::get(&object, &"postMessage".into())?
+        .dyn_into()
+        .context("could not get object's postMessage")?;
+
+    if Reflect::has(&object, &JsValue::from("onMessage"))
         .context("failed to reflect onMessage property")?
     {
         // Browser extension runtime.Port has `onMessage` property, on which we should call
         // `addListener` on.
-        let listeners = Reflect::get(object, &"onMessage".into())
+        let listeners = Reflect::get(&object, &"onMessage".into())
             .context("could not get `onMessage` property")?;
-        // XXX: better error checking?
-        let add_listener: Function = Reflect::get(&listeners, &"addListener".into())?.dyn_into()?;
+
+        let add_listener: Function = Reflect::get(&listeners, &"addListener".into())
+            .context("could not get `onMessage.addListener` property")?
+            .dyn_into()
+            .context("expected `onMessage.addListener` to be a function")?;
         Reflect::apply(&add_listener, &listeners, &Array::of1(callback.as_ref()))
-            .context("could not add listener to object")?;
-    } else if Reflect::has(object, &JsValue::from("onmessage"))
+            .context("error calling `onMessage.addListener`")?;
+    } else if Reflect::has(&object, &JsValue::from("onmessage"))
         .context("failed to reflect onmessage property")?
     {
         // MessagePort, as well as message passing via Worker instance, requires setting
         // `onmessage` property to callback
-        let set_onmessage: Function = Reflect::get(object, &"onmessage".into())?.dyn_into()?;
-        Reflect::apply(&set_onmessage, object, &Array::of1(callback.as_ref()))
+        Reflect::set(&object, &"onmessage".into(), callback.as_ref())
             .context("could not set onmessage callback")?;
     } else {
-        return Err(Error::new("Don't know how to register on message callback"));
+        return Err(Error::new("Don't know how to register onmessage callback"));
     }
 
-    Ok(())
+    Ok(MessagePortLike::from(object))
 }
 
 #[cfg(test)]

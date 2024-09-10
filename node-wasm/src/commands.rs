@@ -14,7 +14,7 @@ use lumina_node::store::SamplingMetadata;
 
 use crate::error::Error;
 use crate::error::Result;
-use crate::node::WasmNodeConfig;
+use crate::client::WasmNodeConfig;
 use crate::utils::JsResult;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 

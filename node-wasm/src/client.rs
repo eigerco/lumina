@@ -19,7 +19,7 @@ use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
     Network,
 };
-use crate::worker::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
+use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 /// Config for the lumina wasm node.
@@ -33,8 +33,10 @@ pub struct WasmNodeConfig {
     pub bootnodes: Vec<String>,
 }
 
-/// `NodeDriver` represents lumina node running in a dedicated Worker/SharedWorker.
-/// It's responsible for sending commands and receiving responses from the node.
+/// `NodeDriver` is responsible for steering [`NodeWorker`] by sending it commands and receiving
+/// responses over the provided port.
+///
+/// [`NodeWorker`]: crate::worker::NodeWorker
 #[wasm_bindgen]
 struct NodeClient {
     worker: RequestResponse,
@@ -42,35 +44,8 @@ struct NodeClient {
 
 #[wasm_bindgen]
 impl NodeClient {
-    /// Create a new connection to a Lumina node running in a Shared Worker.
-    /// Note that single Shared Worker can be accessed from multiple tabs, so Lumina may
-    /// already have been started. Otherwise it needs to be started with [`NodeDriver::start`].
-    ///
-    /// Requires serving a worker script and providing an url to it. The script should look like
-    /// so (the import statement may vary depending on your js-bundler):
-    /// ```js
-    /// import init, { run_worker } from 'lumina_node_wasm.js';
-    ///
-    /// Error.stackTraceLimit = 99;
-    ///
-    /// // for SharedWorker we queue incoming connections
-    /// // for dedicated Worker we queue incoming messages (coming from the single client)
-    /// let queued = [];
-    /// if (typeof SharedWorkerGlobalScope !== 'undefined' && self instanceof SharedWorkerGlobalScope) {
-    ///   onconnect = (event) => {
-    ///     queued.push(event)
-    ///   }
-    /// } else {
-    ///   onmessage = (event) => {
-    ///     queued.push(event);
-    ///   }
-    /// }
-    ///
-    /// init().then(() => {
-    ///   console.log("starting worker, queued messages: ", queued.length);
-    ///   run_worker(queued);
-    /// })
-    /// ```
+    /// Create a new connection to a Lumina node running in [`NodeWorker`]. Provided `port` is
+    /// expected to have `MessagePort`-like interface for sending and receiving messages.
     #[wasm_bindgen(constructor)]
     pub async fn new(port: JsValue) -> Result<NodeClient> {
         // Safari doesn't have the `navigator.storage()` api

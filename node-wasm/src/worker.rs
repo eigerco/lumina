@@ -16,13 +16,11 @@ use lumina_node::node::{Node, SyncingInfo};
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 
 use crate::error::{Context, Error, Result};
-use crate::node::WasmNodeConfig;
+use crate::client::WasmNodeConfig;
 use crate::ports::{ClientId, RequestServer};
 use crate::utils::{random_id, WorkerSelf};
-use crate::worker::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
+use crate::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
-
-pub(crate) mod commands;
 
 const NODE_WORKER_QUEUE_SIZE: usize = 64;
 
@@ -305,67 +303,6 @@ impl NodeWorkerInstance {
         }
     }
 }
-
-/*
-#[wasm_bindgen]
-pub async fn run_worker(port: MessagePortLike) -> Result<()> {
-    info!("Entered run_worker");
-    let events_channel_name = format!("NodeEventChannel-{}", random_id());
-
-    let mut request_server = RequestServer::new(todo!());
-    //request_server.connect(port);
-
-    info!("Entering worker message loop");
-    let mut worker = None;
-    loop {
-        let (client_id, command_result) = request_server.recv().await;
-        let command = match command_result {
-            Ok(v) => v,
-            Err(e) => {
-                error!("Received invalid command from {client_id:?}: {e}");
-                continue;
-            }
-        };
-
-        debug!("received from {client_id:?}: {command:?}");
-
-        let Some(worker) = &mut worker else {
-            match command {
-                NodeCommand::IsRunning => {
-                    request_server.respond_to(client_id, WorkerResponse::IsRunning(false));
-                }
-                NodeCommand::GetEventsChannelName => {
-                    request_server.respond_to(
-                        client_id,
-                        WorkerResponse::EventsChannelName(events_channel_name.clone()),
-                    );
-                }
-                NodeCommand::StartNode(config) => {
-                    match NodeWorkerInstance::new(&events_channel_name, config).await {
-                        Ok(node) => {
-                            worker = Some(node);
-                            request_server
-                                .respond_to(client_id, WorkerResponse::NodeStarted(Ok(())));
-                        }
-                        Err(e) => {
-                            request_server
-                                .respond_to(client_id, WorkerResponse::NodeStarted(Err(e)));
-                        }
-                    };
-                }
-                _ => {
-                    warn!("Worker not running");
-                    request_server.respond_to(client_id, WorkerResponse::NodeNotRunning);
-                }
-            }
-            continue;
-        };
-
-        let response = worker.process_command(command).await;
-        request_server.respond_to(client_id, response);
-    }
-}
-*/
 
 async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: BroadcastChannel) {
     #[derive(Serialize)]
