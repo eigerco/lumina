@@ -373,6 +373,7 @@ async fn decode_and_verify_responses(
 mod tests {
     use super::*;
     use crate::events::EventChannel;
+    use crate::executor::sleep;
     use crate::p2p::header_ex::utils::ExtendedHeaderExt;
     use crate::test_utils::async_test;
     use celestia_proto::p2p::pb::StatusCode;
@@ -383,7 +384,9 @@ mod tests {
     use std::collections::VecDeque;
     use std::future::poll_fn;
     use std::io;
+    use std::pin::pin;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::Duration;
     use tokio::select;
 
     #[async_test]
@@ -778,6 +781,29 @@ mod tests {
     }
 
     #[async_test]
+    async fn request_height_then_stop() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 1), tx);
+
+        // Trigger stop
+        handler.on_stop();
+
+        assert!(matches!(
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::RequestCancelled))
+        ));
+
+        // This is special test were we do not response to the request.
+        // We avoid panicking on `MockReq` drop by clearing it.
+        mock_req.clear_pending_requests();
+    }
+
+    #[async_test]
     async fn invalid_requests() {
         let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
@@ -1100,6 +1126,38 @@ mod tests {
         ));
     }
 
+    #[async_test]
+    async fn head_request_then_stop() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, mut rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
+
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+
+        mock_req.send_n_responses(&mut handler, 5, vec![gen.next().to_header_response()]);
+
+        // Poll client and give some time to it to consume some of the responses.
+        poll_client_for(&mut handler, Duration::from_millis(100)).await;
+        // Not all requests were answered, so we shouldn't have any response.
+        rx.try_recv().unwrap_err();
+
+        // Trigger stop
+        handler.on_stop();
+
+        assert!(matches!(
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::RequestCancelled))
+        ));
+
+        // This is special test were we do not response to all requests.
+        // We avoid panicking on `MockReq` drop by clearing pending ones.
+        mock_req.clear_pending_requests();
+    }
+
     #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
     struct MockReqId(u64);
 
@@ -1166,6 +1224,10 @@ mod tests {
                 handler.on_failure(req.peer, req.id, error);
             }
         }
+
+        fn clear_pending_requests(&mut self) {
+            self.reqs.clear();
+        }
     }
 
     impl Drop for MockReq {
@@ -1187,6 +1249,7 @@ mod tests {
         peers
     }
 
+    /// Keep polling `client` until answer is received.
     async fn poll_client_and_receiver(
         client: &mut HeaderExClientHandler<MockReq>,
         mut rx: oneshot::Receiver<Result<Vec<ExtendedHeader>, P2pError>>,
@@ -1195,6 +1258,18 @@ mod tests {
             select! {
                 _ = poll_fn(|cx| client.poll(cx)) => {}
                 res = &mut rx => return res.unwrap(),
+            }
+        }
+    }
+
+    /// Keep polling `client` until specified duration is reached.
+    async fn poll_client_for(client: &mut HeaderExClientHandler<MockReq>, dur: Duration) {
+        let mut sleep = pin!(sleep(dur));
+
+        loop {
+            select! {
+                _ = poll_fn(|cx| client.poll(cx)) => {}
+                _ = &mut sleep => return,
             }
         }
     }
