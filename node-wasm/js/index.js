@@ -1,4 +1,4 @@
-export * from "lumina-node-wasm";
+import init, { NodeClient } from "lumina-node-wasm"
 
 export async function spawnNode() {
     await init();
@@ -7,3 +7,4 @@ export async function spawnNode() {
     return client;
 }
 
+export * from "lumina-node-wasm";
