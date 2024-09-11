@@ -2,7 +2,7 @@ Error.stackTraceLimit = 99;
 
 import init, { NodeWorker, NodeClient } from "lumina-node-wasm"
 
-export default async function start_worker() {
+export async function spawnNode() {
     await init();
     let worker = new Worker(new URL("worker.js", import.meta.url));
     let client = new NodeClient(worker);
