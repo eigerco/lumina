@@ -32,7 +32,7 @@ impl Token {
         self.token.is_cancelled()
     }
 
-    /// Returns when the event is triggered. If it was triggered before,
+    /// Returns when the token is triggered. If it was triggered before,
     /// it will return immediately.
     pub(crate) async fn triggered(&self) {
         self.token.cancelled().await;
