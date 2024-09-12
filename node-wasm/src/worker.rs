@@ -77,37 +77,38 @@ impl NodeWorker {
             .expect("RequestServer command channel should never close")
     }
 
-    pub async fn poll(&self) -> Result<(), Error> {
-        let (client_id, command) = self.next_command().await?;
+    #[wasm_bindgen(js_name = runWorker)]
+    pub async fn run_worker(&self) -> Result<(), Error> {
+        loop {
+            let (client_id, command) = self.next_command().await?;
 
-        let mut worker_lock = self.worker.lock().await;
-        let response = match &mut *worker_lock {
-            Some(worker) => worker.process_command(command).await,
-            worker @ None => match command {
-                NodeCommand::IsRunning => WorkerResponse::IsRunning(false),
-                NodeCommand::GetEventsChannelName => {
-                    WorkerResponse::EventsChannelName(self.event_channel_name.clone())
-                }
-                NodeCommand::StartNode(config) => {
-                    match NodeWorkerInstance::new(&self.event_channel_name, config).await {
-                        Ok(node) => {
-                            let _ = worker.insert(node);
-                            WorkerResponse::NodeStarted(Ok(()))
-                        }
-                        Err(e) => WorkerResponse::NodeStarted(Err(e)),
+            let mut worker_lock = self.worker.lock().await;
+            let response = match &mut *worker_lock {
+                Some(worker) => worker.process_command(command).await,
+                worker @ None => match command {
+                    NodeCommand::IsRunning => WorkerResponse::IsRunning(false),
+                    NodeCommand::GetEventsChannelName => {
+                        WorkerResponse::EventsChannelName(self.event_channel_name.clone())
                     }
-                }
-                _ => {
-                    warn!("Worker not running");
-                    WorkerResponse::NodeNotRunning
-                }
-            },
-        };
+                    NodeCommand::StartNode(config) => {
+                        match NodeWorkerInstance::new(&self.event_channel_name, config).await {
+                            Ok(node) => {
+                                let _ = worker.insert(node);
+                                WorkerResponse::NodeStarted(Ok(()))
+                            }
+                            Err(e) => WorkerResponse::NodeStarted(Err(e)),
+                        }
+                    }
+                    _ => {
+                        warn!("Worker not running");
+                        WorkerResponse::NodeNotRunning
+                    }
+                },
+            };
 
-        let server = self.request_server.lock().await;
-        server.respond_to(client_id, response);
-
-        Ok(())
+            let server = self.request_server.lock().await;
+            server.respond_to(client_id, response);
+        }
     }
 
     async fn next_command(&self) -> Result<(ClientId, NodeCommand), Error> {

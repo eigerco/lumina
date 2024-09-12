@@ -7,7 +7,5 @@ init().then(async () => {
     console.log("starting worker: ", worker);
     worker.connect(self)
 
-    while (true) {
-        await worker.poll();
-    }
+    await worker.runWorker();
 });

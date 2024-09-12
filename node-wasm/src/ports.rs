@@ -1,5 +1,6 @@
 use js_sys::{Array, Function, Reflect};
-use serde_wasm_bindgen::{from_value, to_value};
+use serde::Serialize;
+use serde_wasm_bindgen::{from_value, to_value, Serializer};
 use tokio::select;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{error, info, trace};
@@ -66,7 +67,10 @@ impl ClientConnection {
     }
 
     fn send(&self, message: &WorkerResponse) -> Result<()> {
-        let message_value = to_value(message).context("could not serialise message")?;
+        let serializer = Serializer::json_compatible();
+        let message_value = message
+            .serialize(&serializer)
+            .context("could not serialise message")?;
         self.port
             .post_message(&message_value)
             .context("could not send command to worker")?;

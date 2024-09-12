@@ -23,7 +23,7 @@ use crate::utils::{
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 /// Config for the lumina wasm node.
-#[wasm_bindgen(js_name = NodeConfig)]
+#[wasm_bindgen(inspectable, js_name = NodeConfig)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WasmNodeConfig {
     /// A network to connect to.
@@ -46,7 +46,6 @@ struct NodeClient {
 impl NodeClient {
     /// Create a new connection to a Lumina node running in [`NodeWorker`]. Provided `port` is
     /// expected to have `MessagePort`-like interface for sending and receiving messages.
-    #[wasm_bindgen(constructor)]
     pub async fn new(port: JsValue) -> Result<NodeClient> {
         // Safari doesn't have the `navigator.storage()` api
         if !is_safari()? {
