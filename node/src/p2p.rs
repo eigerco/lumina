@@ -612,10 +612,11 @@ where
         let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
         let ping = ping::Behaviour::new(ping::Config::default());
 
-        let identify = identify::Behaviour::new(identify::Config::new(
-            String::new(),
-            args.local_keypair.public(),
-        ));
+        let identify = identify::Behaviour::new(
+            identify::Config::new(String::new(), args.local_keypair.public())
+                // TODO: add version number
+                .with_agent_version(String::from("lumina")),
+        );
 
         let header_sub_topic = gossipsub_ident_topic(&args.network_id, "/header-sub/v0.0.1");
         let bad_encoding_fraud_sub_topic =
