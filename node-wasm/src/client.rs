@@ -46,6 +46,7 @@ struct NodeClient {
 impl NodeClient {
     /// Create a new connection to a Lumina node running in [`NodeWorker`]. Provided `port` is
     /// expected to have `MessagePort`-like interface for sending and receiving messages.
+    #[wasm_bindgen(constructor)]
     pub async fn new(port: JsValue) -> Result<NodeClient> {
         // Safari doesn't have the `navigator.storage()` api
         if !is_safari()? {
@@ -57,6 +58,11 @@ impl NodeClient {
         Ok(Self {
             worker: RequestResponse::new(port)?,
         })
+    }
+
+    /// Establish a new connection to the existing worker over provided port
+    pub async fn add_connection_to_worker(&self, port: &JsValue) -> Result<()> {
+        self.worker.add_connection_to_worker(port).await
     }
 
     /// Check whether Lumina is currently running

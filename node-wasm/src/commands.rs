@@ -21,6 +21,7 @@ use crate::wrapper::libp2p::NetworkInfoSnapshot;
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NodeCommand {
     IsRunning,
+    Connect,
     StartNode(WasmNodeConfig),
     GetEventsChannelName,
     GetLocalPeerId,

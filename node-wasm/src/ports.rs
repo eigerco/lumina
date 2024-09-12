@@ -13,7 +13,8 @@ use web_sys::{MessageEvent, MessagePort};
 use crate::commands::{NodeCommand, WorkerResponse};
 use crate::error::{Context, Error, Result};
 
-const REQUEST_MULTIPLEXER_COMMAND_CHANNEL_SIZE: usize = 64;
+const REQUEST_SERVER_COMMAND_QUEUE_SIZE: usize = 64;
+const REQUEST_SERVER_CONNECTING_QUEUE_SIZE: usize = 64;
 
 // Instead of just supporting communicaton with just `MessagePort`, allow using any object which
 // provides compatible interface
@@ -23,6 +24,13 @@ extern "C" {
 
     #[wasm_bindgen (catch , method , structural , js_name = postMessage)]
     pub fn post_message(this: &MessagePortLike, message: &JsValue) -> Result<(), JsValue>;
+
+    #[wasm_bindgen (catch , method , structural , js_name = postMessage)]
+    pub fn post_message_with_transferable(
+        this: &MessagePortLike,
+        message: &JsValue,
+        transferable: &JsValue,
+    ) -> Result<(), JsValue>;
 }
 
 impl From<MessagePort> for MessagePortLike {
@@ -43,15 +51,27 @@ impl ClientConnection {
     fn new(
         id: ClientId,
         object: JsValue,
-        forward_to: mpsc::Sender<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
+        forward_messages_to: mpsc::Sender<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
+        forward_connects_to: mpsc::Sender<JsValue>,
     ) -> Result<Self> {
         let onmessage = Closure::new(move |ev: MessageEvent| {
-            let response_tx = forward_to.clone();
+            let message_tx = forward_messages_to.clone();
+            let port_tx = forward_connects_to.clone();
             spawn_local(async move {
                 let message: Result<NodeCommand, _> =
                     from_value(ev.data()).map_err(TypedMessagePortError::FailedToConvertValue);
 
-                if let Err(e) = response_tx.send((id, message)).await {
+                let ports = ev.ports(); 
+                if Array::is_array(&ports) {
+                    let port = ports.get(0);
+                    if !port.is_undefined() {
+                        if let Err(e) = port_tx.send(port).await {
+                            error!("port forwarding channel closed, shouldn't happen: {e}");
+                        }
+                    }
+                }
+
+                if let Err(e) = message_tx.send((id, message)).await {
                     error!("message forwarding channel closed, shouldn't happen: {e}");
                 }
             })
@@ -80,34 +100,39 @@ impl ClientConnection {
 
 pub struct RequestServer {
     ports: Vec<ClientConnection>,
-    control_channel: mpsc::Receiver<JsValue>,
-    _request_channel_tx: mpsc::Sender<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
-    request_channel_rx: mpsc::Receiver<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
+    connect_tx: mpsc::Sender<JsValue>,
+    connect_rx: mpsc::Receiver<JsValue>,
+    _request_tx: mpsc::Sender<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
+    request_rx: mpsc::Receiver<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
 }
 
 impl RequestServer {
-    pub fn new(control_channel: mpsc::Receiver<JsValue>) -> RequestServer {
-        let (tx, rx) = mpsc::channel(REQUEST_MULTIPLEXER_COMMAND_CHANNEL_SIZE);
+    pub fn new() -> RequestServer {
+
+        let (request_tx, request_rx) = mpsc::channel(REQUEST_SERVER_COMMAND_QUEUE_SIZE);
+        let (connect_tx, connect_rx) = mpsc::channel(REQUEST_SERVER_CONNECTING_QUEUE_SIZE);
+
         RequestServer {
             ports: vec![],
-            control_channel,
-            _request_channel_tx: tx,
-            request_channel_rx: rx,
+            connect_tx,
+            connect_rx,
+            _request_tx: request_tx,
+            request_rx,
         }
     }
 
     pub async fn recv(&mut self) -> (ClientId, Result<NodeCommand, TypedMessagePortError>) {
         loop {
             select! {
-                message = self.request_channel_rx.recv() => {
+                message = self.request_rx.recv() => {
                     return message.expect("request channel should never close");
                 },
-                connection = self.control_channel.recv() => {
+                connection = self.connect_rx.recv() => {
                     let port = connection.expect("command channel should not close ?");
                     let client_id = ClientId(self.ports.len());
                     info!("Connecting client {client_id:?}");
 
-                        match ClientConnection::new(client_id, port, self._request_channel_tx.clone()) {
+                        match ClientConnection::new(client_id, port, self._request_tx.clone(), self.connect_tx.clone()) {
                             Ok(port) =>
                     self.ports.push(port),
                     Err(e) => {
@@ -117,6 +142,10 @@ impl RequestServer {
                 }
             }
         }
+    }
+
+    pub fn get_connect_channel(&self) -> mpsc::Sender<JsValue> {
+        self.connect_tx.clone()
     }
 
     pub fn respond_to(&self, client: ClientId, response: WorkerResponse) {
@@ -167,11 +196,24 @@ impl RequestResponse {
         })
     }
 
+    pub(crate) async fn add_connection_to_worker(&self, port: &JsValue) -> Result<()> {
+        let _response_channel = self.response_channel.lock().await;
+
+        let command_value =
+            to_value(&NodeCommand::Connect).context("could not serialise message")?;
+
+        self.port
+            .post_message_with_transferable(&command_value, &Array::of1(port))
+            .context("could not transfer port")
+    }
+
     pub(crate) async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse> {
         let mut response_channel = self.response_channel.lock().await;
         let command_value = to_value(&command).context("could not serialise message")?;
 
-        self.port.post_message(&command_value)?;
+        self.port
+            .post_message(&command_value)
+            .context("could not post message")?;
 
         let worker_response = response_channel
             .recv()

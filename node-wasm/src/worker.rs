@@ -22,8 +22,6 @@ use crate::ports::{ClientId, RequestServer};
 use crate::utils::{random_id, WorkerSelf};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
-const NODE_WORKER_QUEUE_SIZE: usize = 64;
-
 #[derive(Debug, Serialize, Deserialize, Error)]
 pub enum WorkerError {
     /// Worker is initialised, but the node has not been started yet. Use [`NodeDriver::start`].
@@ -46,7 +44,7 @@ struct NodeWorker {
     event_channel_name: String,
     worker: Mutex<Option<NodeWorkerInstance>>,
     request_server: Mutex<RequestServer>,
-    control_channel: mpsc::Sender<JsValue>,
+    connect_channel: mpsc::Sender<JsValue>,
 }
 
 struct NodeWorkerInstance {
@@ -60,18 +58,19 @@ impl NodeWorker {
     pub fn new() -> Self {
         info!("Created lumina worker");
 
-        let (tx, rx) = mpsc::channel(NODE_WORKER_QUEUE_SIZE);
+        let request_server = RequestServer::new();
+        let connect_channel = request_server.get_connect_channel();
 
         Self {
             event_channel_name: format!("NodeEventChannel-{}", random_id()),
             worker: Mutex::new(None),
-            request_server: Mutex::new(RequestServer::new(rx)),
-            control_channel: tx,
+            request_server: Mutex::new(request_server),
+            connect_channel,
         }
     }
 
     pub async fn connect(&self, port: JsValue) {
-        self.control_channel
+        self.connect_channel
             .send(port)
             .await
             .expect("RequestServer command channel should never close")
@@ -301,6 +300,7 @@ impl NodeWorkerInstance {
                 SharedWorker::worker_self().close();
                 WorkerResponse::WorkerClosed(())
             }
+            NodeCommand::Connect => panic!("unhandled NodeCommand::Connect"),
         }
     }
 }
