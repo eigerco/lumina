@@ -244,7 +244,7 @@ where
                 }
 
                 // Otherwise return the header with the maximum height
-                let resp = resps.into_iter().next().expect("no reposnes");
+                let resp = resps.into_iter().next().expect("no responses");
                 respond_to.maybe_send_ok(vec![resp]);
             }
             .boxed(),
