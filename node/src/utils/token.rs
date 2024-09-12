@@ -19,7 +19,7 @@ impl Token {
         self.token.cancel();
     }
 
-    /// Returns a guard that will trigger the event on drop.
+    /// Returns a guard that will trigger the token on drop.
     pub(crate) fn trigger_drop_guard(&self) -> TokenTriggerDropGuard {
         TokenTriggerDropGuard {
             token: Some(self.token.clone()),
