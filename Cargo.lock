@@ -3256,7 +3256,6 @@ dependencies = [
  "futures",
  "getrandom",
  "gloo-timers 0.3.0",
- "idb",
  "js-sys",
  "libp2p",
  "libp2p-websocket-websys 0.3.3",
