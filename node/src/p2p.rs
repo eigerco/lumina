@@ -612,9 +612,10 @@ where
         let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
         let ping = ping::Behaviour::new(ping::Config::default());
 
+        let agent_version = format!("lumina/{}/{}", args.network_id, env!("CARGO_PKG_VERSION"));
         let identify = identify::Behaviour::new(
             identify::Config::new(String::new(), args.local_keypair.public())
-                .with_agent_version(format!("lumina/{}", env!("CARGO_PKG_VERSION"))),
+                .with_agent_version(agent_version),
         );
 
         let header_sub_topic = gossipsub_ident_topic(&args.network_id, "/header-sub/v0.0.1");
