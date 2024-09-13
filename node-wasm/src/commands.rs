@@ -20,8 +20,8 @@ use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NodeCommand {
+    InternalPing,
     IsRunning,
-    Connect,
     StartNode(WasmNodeConfig),
     GetEventsChannelName,
     GetLocalPeerId,
@@ -64,6 +64,7 @@ pub(crate) enum SingleHeaderQuery {
 
 #[derive(Serialize, Deserialize, Debug, EnumAsInner)]
 pub(crate) enum WorkerResponse {
+    InternalPong,
     NodeNotRunning,
     IsRunning(bool),
     NodeStarted(Result<()>),

@@ -42,9 +42,9 @@ pub enum WorkerError {
 #[wasm_bindgen]
 struct NodeWorker {
     event_channel_name: String,
-    worker: Mutex<Option<NodeWorkerInstance>>,
+    worker: Option<NodeWorkerInstance>,
     request_server: Mutex<RequestServer>,
-    connect_channel: mpsc::Sender<JsValue>,
+    connect_channel: mpsc::UnboundedSender<JsValue>,
 }
 
 struct NodeWorkerInstance {
@@ -63,7 +63,7 @@ impl NodeWorker {
 
         Self {
             event_channel_name: format!("NodeEventChannel-{}", random_id()),
-            worker: Mutex::new(None),
+            worker: None,
             request_server: Mutex::new(request_server),
             connect_channel,
         }
@@ -72,19 +72,18 @@ impl NodeWorker {
     pub async fn connect(&self, port: JsValue) {
         self.connect_channel
             .send(port)
-            .await
             .expect("RequestServer command channel should never close")
     }
 
     #[wasm_bindgen(js_name = runWorker)]
-    pub async fn run_worker(&self) -> Result<(), Error> {
+    pub async fn run_worker(&mut self) -> Result<(), Error> {
         loop {
             let (client_id, command) = self.next_command().await?;
 
-            let mut worker_lock = self.worker.lock().await;
-            let response = match &mut *worker_lock {
+            let response = match &mut self.worker {
                 Some(worker) => worker.process_command(command).await,
                 worker @ None => match command {
+                    NodeCommand::InternalPing => WorkerResponse::InternalPong,
                     NodeCommand::IsRunning => WorkerResponse::IsRunning(false),
                     NodeCommand::GetEventsChannelName => {
                         WorkerResponse::EventsChannelName(self.event_channel_name.clone())
@@ -300,7 +299,7 @@ impl NodeWorkerInstance {
                 SharedWorker::worker_self().close();
                 WorkerResponse::WorkerClosed(())
             }
-            NodeCommand::Connect => panic!("unhandled NodeCommand::Connect"),
+            NodeCommand::InternalPing => WorkerResponse::InternalPong,
         }
     }
 }

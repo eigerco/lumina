@@ -7,12 +7,12 @@ work within a browser environment and be operable with javascript.
 Starting lumina inside a dedicated worker
 
 ```javascript
-import init, { Node, NodeConfig, Network } from "lumina-node";
+import { spawnNode, Node, NodeConfig, Network } from "lumina-node";
 
-const node = await init();
-const config = NodeConfig.default(Network.Mainnet);
+const node = await spawnNode();
+const mainnetConfig = NodeConfig.default(Network.Mainnet);
 
-await node.start(config);
+await node.start(mainnetConfig);
 
 await node.wait_connected();
 await node.request_head_header();

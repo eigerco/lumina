@@ -13,9 +13,6 @@ use web_sys::{MessageEvent, MessagePort};
 use crate::commands::{NodeCommand, WorkerResponse};
 use crate::error::{Context, Error, Result};
 
-const REQUEST_SERVER_COMMAND_QUEUE_SIZE: usize = 64;
-const REQUEST_SERVER_CONNECTING_QUEUE_SIZE: usize = 64;
-
 // Instead of just supporting communicaton with just `MessagePort`, allow using any object which
 // provides compatible interface
 #[wasm_bindgen]
@@ -51,8 +48,11 @@ impl ClientConnection {
     fn new(
         id: ClientId,
         object: JsValue,
-        forward_messages_to: mpsc::Sender<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
-        forward_connects_to: mpsc::Sender<JsValue>,
+        forward_messages_to: mpsc::UnboundedSender<(
+            ClientId,
+            Result<NodeCommand, TypedMessagePortError>,
+        )>,
+        forward_connects_to: mpsc::UnboundedSender<JsValue>,
     ) -> Result<Self> {
         let onmessage = Closure::new(move |ev: MessageEvent| {
             let message_tx = forward_messages_to.clone();
@@ -61,17 +61,17 @@ impl ClientConnection {
                 let message: Result<NodeCommand, _> =
                     from_value(ev.data()).map_err(TypedMessagePortError::FailedToConvertValue);
 
-                let ports = ev.ports(); 
+                let ports = ev.ports();
                 if Array::is_array(&ports) {
                     let port = ports.get(0);
                     if !port.is_undefined() {
-                        if let Err(e) = port_tx.send(port).await {
+                        if let Err(e) = port_tx.send(port) {
                             error!("port forwarding channel closed, shouldn't happen: {e}");
                         }
                     }
                 }
 
-                if let Err(e) = message_tx.send((id, message)).await {
+                if let Err(e) = message_tx.send((id, message)) {
                     error!("message forwarding channel closed, shouldn't happen: {e}");
                 }
             })
@@ -100,23 +100,22 @@ impl ClientConnection {
 
 pub struct RequestServer {
     ports: Vec<ClientConnection>,
-    connect_tx: mpsc::Sender<JsValue>,
-    connect_rx: mpsc::Receiver<JsValue>,
-    _request_tx: mpsc::Sender<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
-    request_rx: mpsc::Receiver<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
+    connect_tx: mpsc::UnboundedSender<JsValue>,
+    connect_rx: mpsc::UnboundedReceiver<JsValue>,
+    request_tx: mpsc::UnboundedSender<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
+    request_rx: mpsc::UnboundedReceiver<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
 }
 
 impl RequestServer {
     pub fn new() -> RequestServer {
-
-        let (request_tx, request_rx) = mpsc::channel(REQUEST_SERVER_COMMAND_QUEUE_SIZE);
-        let (connect_tx, connect_rx) = mpsc::channel(REQUEST_SERVER_CONNECTING_QUEUE_SIZE);
+        let (request_tx, request_rx) = mpsc::unbounded_channel();
+        let (connect_tx, connect_rx) = mpsc::unbounded_channel();
 
         RequestServer {
             ports: vec![],
             connect_tx,
             connect_rx,
-            _request_tx: request_tx,
+            request_tx,
             request_rx,
         }
     }
@@ -132,19 +131,16 @@ impl RequestServer {
                     let client_id = ClientId(self.ports.len());
                     info!("Connecting client {client_id:?}");
 
-                        match ClientConnection::new(client_id, port, self._request_tx.clone(), self.connect_tx.clone()) {
-                            Ok(port) =>
-                    self.ports.push(port),
-                    Err(e) => {
-                        error!("Failed to setup ClientConnection: {e}");
-                    }
+                        match ClientConnection::new(client_id, port, self.request_tx.clone(), self.connect_tx.clone()) {
+                            Ok(port) => self.ports.push(port),
+                            Err(e) => error!("Failed to setup ClientConnection: {e}"),
                         }
                 }
             }
         }
     }
 
-    pub fn get_connect_channel(&self) -> mpsc::Sender<JsValue> {
+    pub fn get_connect_channel(&self) -> mpsc::UnboundedSender<JsValue> {
         self.connect_tx.clone()
     }
 
@@ -197,14 +193,28 @@ impl RequestResponse {
     }
 
     pub(crate) async fn add_connection_to_worker(&self, port: &JsValue) -> Result<()> {
-        let _response_channel = self.response_channel.lock().await;
+        let mut response_channel = self.response_channel.lock().await;
 
         let command_value =
-            to_value(&NodeCommand::Connect).context("could not serialise message")?;
+            to_value(&NodeCommand::InternalPing).context("could not serialise message")?;
 
         self.port
             .post_message_with_transferable(&command_value, &Array::of1(port))
-            .context("could not transfer port")
+            .context("could not transfer port")?;
+
+        let worker_response = response_channel
+            .recv()
+            .await
+            .expect("response channel should never drop")
+            .context("error adding connection")?;
+
+        if !worker_response.is_internal_pong() {
+            Err(Error::new(&format!(
+                "invalid response, expected InternalPing got {worker_response:?}"
+            )))
+        } else {
+            Ok(())
+        }
     }
 
     pub(crate) async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse> {
