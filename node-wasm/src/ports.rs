@@ -284,23 +284,31 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn client_server() {
-        let channel0 = MessageChannel::new().unwrap();
+        let mut server = RequestServer::new();
 
-        let client0 = RequestResponse::new(channel0.port1().into()).unwrap();
+        let tx = server.get_connect_channel();
 
-        let (tx, rx) = mpsc::channel(10);
-        tx.send(channel0.port2().into()).await.unwrap();
 
         // pre-load response
         spawn_local(async move {
-            let mut server = RequestServer::new(rx);
+            let channel = MessageChannel::new().unwrap();
 
-            let (client, command) = server.recv().await;
-            assert!(matches!(command.unwrap(), NodeCommand::IsRunning));
-            server.respond_to(client, WorkerResponse::IsRunning(true));
+            tx.send(channel.port2().into()).unwrap();
+
+            let client0 = RequestResponse::new(channel.port1().into()).unwrap();
+
+
+            //let (tx, rx) = mpsc::channel(10);
+            //tx.send(channel0.port2().into()).await.unwrap();
+
+            let response = client0.exec(NodeCommand::IsRunning).await.unwrap();
+            assert!(matches!(response, WorkerResponse::IsRunning(true)));
+
         });
 
-        let response = client0.exec(NodeCommand::IsRunning).await.unwrap();
-        assert!(matches!(response, WorkerResponse::IsRunning(true)));
+        let (client, command) = server.recv().await;
+        assert!(matches!(command.unwrap(), NodeCommand::IsRunning));
+        server.respond_to(client, WorkerResponse::IsRunning(true));
+
     }
 }
