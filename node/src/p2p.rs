@@ -614,8 +614,7 @@ where
 
         let identify = identify::Behaviour::new(
             identify::Config::new(String::new(), args.local_keypair.public())
-                // TODO: add version number
-                .with_agent_version(String::from("lumina")),
+                .with_agent_version(format!("lumina/{}", env!("CARGO_PKG_VERSION"))),
         );
 
         let header_sub_topic = gossipsub_ident_topic(&args.network_id, "/header-sub/v0.0.1");
