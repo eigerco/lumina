@@ -13,16 +13,16 @@ use web_sys::{MessageEvent, MessagePort};
 use crate::commands::{NodeCommand, WorkerResponse};
 use crate::error::{Context, Error, Result};
 
-// Instead of just supporting communicaton with just `MessagePort`, allow using any object which
-// provides compatible interface
+// Instead of supporting communication with just `MessagePort`, allow using any object which
+// provides compatible interface, eg. `Worker`
 #[wasm_bindgen]
 extern "C" {
     pub type MessagePortLike;
 
-    #[wasm_bindgen (catch , method , structural , js_name = postMessage)]
+    #[wasm_bindgen(catch, method, structural, js_name = postMessage)]
     pub fn post_message(this: &MessagePortLike, message: &JsValue) -> Result<(), JsValue>;
 
-    #[wasm_bindgen (catch , method , structural , js_name = postMessage)]
+    #[wasm_bindgen(catch, method, structural, js_name = postMessage)]
     pub fn post_message_with_transferable(
         this: &MessagePortLike,
         message: &JsValue,
@@ -288,7 +288,6 @@ mod tests {
 
         let tx = server.get_connect_channel();
 
-
         // pre-load response
         spawn_local(async move {
             let channel = MessageChannel::new().unwrap();
@@ -296,19 +295,12 @@ mod tests {
             tx.send(channel.port2().into()).unwrap();
 
             let client0 = RequestResponse::new(channel.port1().into()).unwrap();
-
-
-            //let (tx, rx) = mpsc::channel(10);
-            //tx.send(channel0.port2().into()).await.unwrap();
-
             let response = client0.exec(NodeCommand::IsRunning).await.unwrap();
             assert!(matches!(response, WorkerResponse::IsRunning(true)));
-
         });
 
         let (client, command) = server.recv().await;
         assert!(matches!(command.unwrap(), NodeCommand::IsRunning));
         server.respond_to(client, WorkerResponse::IsRunning(true));
-
     }
 }
