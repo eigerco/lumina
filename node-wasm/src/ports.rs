@@ -257,7 +257,7 @@ fn prepare_message_port(
 mod tests {
     use super::*;
     use wasm_bindgen_futures::spawn_local;
-    use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
+    use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
 
     #[wasm_bindgen_test]
