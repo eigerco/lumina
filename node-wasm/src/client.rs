@@ -33,7 +33,7 @@ pub struct WasmNodeConfig {
     pub bootnodes: Vec<String>,
 }
 
-/// `NodeDriver` is responsible for steering [`NodeWorker`] by sending it commands and receiving
+/// `NodeClient` is responsible for steering [`NodeWorker`] by sending it commands and receiving
 /// responses over the provided port.
 ///
 /// [`NodeWorker`]: crate::worker::NodeWorker

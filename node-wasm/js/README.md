@@ -7,7 +7,7 @@ work within a browser environment and be operable with javascript.
 Starting lumina inside a dedicated worker
 
 ```javascript
-import { spawnNode, Node, NodeConfig, Network } from "lumina-node";
+import { spawnNode, NodeConfig, Network } from "lumina-node";
 
 const node = await spawnNode();
 const mainnetConfig = NodeConfig.default(Network.Mainnet);

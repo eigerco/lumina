@@ -1,6 +1,6 @@
 use js_sys::{Array, Function, Reflect};
 use serde::Serialize;
-use serde_wasm_bindgen::{from_value, to_value, Serializer};
+use serde_wasm_bindgen::{to_value, Serializer};
 use tokio::select;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{error, info, trace};
@@ -13,16 +13,16 @@ use crate::commands::{NodeCommand, WorkerResponse};
 use crate::error::{Context, Error, Result};
 use crate::utils::{MessageError, MessageEventExt};
 
-// Instead of just supporting communicaton with just `MessagePort`, allow using any object which
-// provides compatible interface
+// Instead of supporting communication with just `MessagePort`, allow using any object which
+// provides compatible interface, eg. `Worker`
 #[wasm_bindgen]
 extern "C" {
     pub type MessagePortLike;
 
-    #[wasm_bindgen (catch , method , structural , js_name = postMessage)]
+    #[wasm_bindgen(catch, method, structural, js_name = postMessage)]
     pub fn post_message(this: &MessagePortLike, message: &JsValue) -> Result<(), JsValue>;
 
-    #[wasm_bindgen (catch , method , structural , js_name = postMessage)]
+    #[wasm_bindgen(catch, method, structural, js_name = postMessage)]
     pub fn post_message_with_transferable(
         this: &MessagePortLike,
         message: &JsValue,
@@ -121,14 +121,14 @@ impl WorkerServer {
                     return Ok((client_id, message));
                 },
                 connection = self.connect_rx.recv() => {
-                    let port = connection.expect("command channel should not close ?");
+                    let port = connection.expect("command channel should never close");
                     let client_id = ClientId(self.ports.len());
                     info!("Connecting client {client_id:?}");
 
-                        match ClientConnection::new(client_id, port, self.request_tx.clone(), self.connect_tx.clone()) {
-                            Ok(port) => self.ports.push(port),
-                            Err(e) => error!("Failed to setup ClientConnection: {e}"),
-                        }
+                    match ClientConnection::new(client_id, port, self.request_tx.clone(), self.connect_tx.clone()) {
+                        Ok(port) => self.ports.push(port),
+                        Err(e) => error!("Failed to setup ClientConnection: {e}"),
+                    }
                 }
             }
         }
@@ -276,13 +276,12 @@ mod tests {
             tx.send(channel.port2().into()).unwrap();
 
             let client0 = WorkerClient::new(channel.port1().into()).unwrap();
-
             let response = client0.exec(NodeCommand::IsRunning).await.unwrap();
             assert!(matches!(response, WorkerResponse::IsRunning(true)));
         });
 
-        let (client, command) = server.recv().await;
-        assert!(matches!(command.unwrap(), NodeCommand::IsRunning));
+        let (client, command) = server.recv().await.unwrap();
+        assert!(matches!(command, NodeCommand::IsRunning));
         server.respond_to(client, WorkerResponse::IsRunning(true));
     }
 }
