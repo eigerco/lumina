@@ -7,11 +7,11 @@ use tracing::{error, info, trace};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::spawn_local;
 use web_sys::{MessageEvent, MessagePort};
 
 use crate::commands::{NodeCommand, WorkerResponse};
 use crate::error::{Context, Error, Result};
+use crate::utils::{MessageError, MessageEventExt};
 
 // Instead of just supporting communicaton with just `MessagePort`, allow using any object which
 // provides compatible interface
@@ -48,33 +48,24 @@ impl ClientConnection {
     fn new(
         id: ClientId,
         object: JsValue,
-        forward_messages_to: mpsc::UnboundedSender<(
-            ClientId,
-            Result<NodeCommand, TypedMessagePortError>,
-        )>,
+        forward_messages_to: mpsc::UnboundedSender<(ClientId, Result<NodeCommand, MessageError>)>,
         forward_connects_to: mpsc::UnboundedSender<JsValue>,
     ) -> Result<Self> {
         let onmessage = Closure::new(move |ev: MessageEvent| {
             let message_tx = forward_messages_to.clone();
             let port_tx = forward_connects_to.clone();
-            spawn_local(async move {
-                let message: Result<NodeCommand, _> =
-                    from_value(ev.data()).map_err(TypedMessagePortError::FailedToConvertValue);
 
-                let ports = ev.ports();
-                if Array::is_array(&ports) {
-                    let port = ports.get(0);
-                    if !port.is_undefined() {
-                        if let Err(e) = port_tx.send(port) {
-                            error!("port forwarding channel closed, shouldn't happen: {e}");
-                        }
-                    }
-                }
+            let message = ev.get_message();
 
-                if let Err(e) = message_tx.send((id, message)) {
-                    error!("message forwarding channel closed, shouldn't happen: {e}");
+            if let Some(port) = ev.get_port() {
+                if let Err(e) = port_tx.send(port) {
+                    error!("port forwarding channel closed, shouldn't happen: {e}");
                 }
-            })
+            }
+
+            if let Err(e) = message_tx.send((id, message)) {
+                error!("message forwarding channel closed, shouldn't happen: {e}");
+            }
         });
 
         let port = prepare_message_port(object, &onmessage)
@@ -98,20 +89,20 @@ impl ClientConnection {
     }
 }
 
-pub struct RequestServer {
+pub struct WorkerServer {
     ports: Vec<ClientConnection>,
     connect_tx: mpsc::UnboundedSender<JsValue>,
     connect_rx: mpsc::UnboundedReceiver<JsValue>,
-    request_tx: mpsc::UnboundedSender<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
-    request_rx: mpsc::UnboundedReceiver<(ClientId, Result<NodeCommand, TypedMessagePortError>)>,
+    request_tx: mpsc::UnboundedSender<(ClientId, Result<NodeCommand, MessageError>)>,
+    request_rx: mpsc::UnboundedReceiver<(ClientId, Result<NodeCommand, MessageError>)>,
 }
 
-impl RequestServer {
-    pub fn new() -> RequestServer {
+impl WorkerServer {
+    pub fn new() -> WorkerServer {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let (connect_tx, connect_rx) = mpsc::unbounded_channel();
 
-        RequestServer {
+        WorkerServer {
             ports: vec![],
             connect_tx,
             connect_rx,
@@ -120,11 +111,14 @@ impl RequestServer {
         }
     }
 
-    pub async fn recv(&mut self) -> (ClientId, Result<NodeCommand, TypedMessagePortError>) {
+    pub async fn recv(&mut self) -> Result<(ClientId, NodeCommand)> {
         loop {
             select! {
                 message = self.request_rx.recv() => {
-                    return message.expect("request channel should never close");
+                    let (client_id, result) =  message.expect("request channel should never close");
+                    let message = result
+                        .with_context(|| format!("could not parse command received from {client_id:?}"))?;
+                    return Ok((client_id, message));
                 },
                 connection = self.connect_rx.recv() => {
                     let port = connection.expect("command channel should not close ?");
@@ -152,40 +146,29 @@ impl RequestServer {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum TypedMessagePortError {
-    #[error("Could not convert JsValue: {0}")]
-    FailedToConvertValue(serde_wasm_bindgen::Error),
-}
-
-pub struct RequestResponse {
+pub struct WorkerClient {
     port: MessagePortLike,
-    response_channel: Mutex<mpsc::Receiver<Result<WorkerResponse, TypedMessagePortError>>>,
+    response_channel: Mutex<mpsc::UnboundedReceiver<Result<WorkerResponse, MessageError>>>,
     _onmessage: Closure<dyn Fn(MessageEvent)>,
 }
 
-impl RequestResponse {
+impl WorkerClient {
     pub fn new(object: JsValue) -> Result<Self> {
-        let (tx, rx) = mpsc::channel(1);
+        let (tx, rx) = mpsc::unbounded_channel();
 
         let onmessage = Closure::new(move |ev: MessageEvent| {
             let response_tx = tx.clone();
-            spawn_local(async move {
-                let message: Result<WorkerResponse, _> =
-                    from_value(ev.data()).map_err(TypedMessagePortError::FailedToConvertValue);
+            let message = ev.get_message();
 
-                if let Err(e) = response_tx.send(message).await {
-                    error!("message forwarding channel closed, should not happen: {e}");
-                }
-            })
+            if let Err(e) = response_tx.send(message) {
+                error!("message forwarding channel closed, should not happen: {e}");
+            }
         });
 
         let port = prepare_message_port(object, &onmessage)
-            .context("failed to setup port for RequestResponse")?;
+            .context("failed to setup port for WorkerClient")?;
 
-        web_sys::console::log_1(&port);
-
-        Ok(RequestResponse {
+        Ok(WorkerClient {
             port,
             response_channel: Mutex::new(rx),
             _onmessage: onmessage,
@@ -277,17 +260,14 @@ fn prepare_message_port(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
     use web_sys::MessageChannel;
 
-    wasm_bindgen_test_configure!(run_in_browser);
-
     #[wasm_bindgen_test]
     async fn client_server() {
-        let mut server = RequestServer::new();
-
+        let mut server = WorkerServer::new();
         let tx = server.get_connect_channel();
-
 
         // pre-load response
         spawn_local(async move {
@@ -295,20 +275,14 @@ mod tests {
 
             tx.send(channel.port2().into()).unwrap();
 
-            let client0 = RequestResponse::new(channel.port1().into()).unwrap();
-
-
-            //let (tx, rx) = mpsc::channel(10);
-            //tx.send(channel0.port2().into()).await.unwrap();
+            let client0 = WorkerClient::new(channel.port1().into()).unwrap();
 
             let response = client0.exec(NodeCommand::IsRunning).await.unwrap();
             assert!(matches!(response, WorkerResponse::IsRunning(true)));
-
         });
 
         let (client, command) = server.recv().await;
         assert!(matches!(command.unwrap(), NodeCommand::IsRunning));
         server.respond_to(client, WorkerResponse::IsRunning(true));
-
     }
 }

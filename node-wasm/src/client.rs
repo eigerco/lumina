@@ -15,7 +15,7 @@ use lumina_node::store::IndexedDbStore;
 
 use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::error::{Context, Result};
-use crate::ports::RequestResponse;
+use crate::ports::WorkerClient;
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
     Network,
@@ -39,7 +39,7 @@ pub struct WasmNodeConfig {
 /// [`NodeWorker`]: crate::worker::NodeWorker
 #[wasm_bindgen]
 struct NodeClient {
-    worker: RequestResponse,
+    worker: WorkerClient,
 }
 
 #[wasm_bindgen]
@@ -56,7 +56,7 @@ impl NodeClient {
         }
 
         Ok(Self {
-            worker: RequestResponse::new(port)?,
+            worker: WorkerClient::new(port)?,
         })
     }
 

@@ -5,7 +5,7 @@ use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use thiserror::Error;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -18,7 +18,7 @@ use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 use crate::client::WasmNodeConfig;
 use crate::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::error::{Context, Error, Result};
-use crate::ports::{ClientId, RequestServer};
+use crate::ports::WorkerServer;
 use crate::utils::{random_id, WorkerSelf};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
@@ -43,7 +43,7 @@ pub enum WorkerError {
 struct NodeWorker {
     event_channel_name: String,
     worker: Option<NodeWorkerInstance>,
-    request_server: Mutex<RequestServer>,
+    request_server: WorkerServer,
     connect_channel: mpsc::UnboundedSender<JsValue>,
 }
 
@@ -58,13 +58,13 @@ impl NodeWorker {
     pub fn new() -> Self {
         info!("Created lumina worker");
 
-        let request_server = RequestServer::new();
+        let request_server = WorkerServer::new();
         let connect_channel = request_server.get_connect_channel();
 
         Self {
             event_channel_name: format!("NodeEventChannel-{}", random_id()),
             worker: None,
-            request_server: Mutex::new(request_server),
+            request_server,
             connect_channel,
         }
     }
@@ -72,13 +72,13 @@ impl NodeWorker {
     pub async fn connect(&self, port: JsValue) {
         self.connect_channel
             .send(port)
-            .expect("RequestServer command channel should never close")
+            .expect("WorkerServer command channel should never close")
     }
 
     #[wasm_bindgen(js_name = runWorker)]
     pub async fn run_worker(&mut self) -> Result<(), Error> {
         loop {
-            let (client_id, command) = self.next_command().await?;
+            let (client_id, command) = self.request_server.recv().await?;
 
             let response = match &mut self.worker {
                 Some(worker) => worker.process_command(command).await,
@@ -104,19 +104,8 @@ impl NodeWorker {
                 },
             };
 
-            let server = self.request_server.lock().await;
-            server.respond_to(client_id, response);
+            self.request_server.respond_to(client_id, response);
         }
-    }
-
-    async fn next_command(&self) -> Result<(ClientId, NodeCommand), Error> {
-        let mut server = self.request_server.lock().await;
-        let (client_id, result) = server.recv().await;
-
-        let command = result
-            .with_context(|| format!("could not parse command received from {client_id:?}"))?;
-
-        Ok((client_id, command))
     }
 }
 

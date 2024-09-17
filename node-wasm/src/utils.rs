@@ -10,6 +10,7 @@ use lumina_node::network;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde_wasm_bindgen::from_value;
 use tracing::{info, warn};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::time::UtcTime;
@@ -18,8 +19,8 @@ use tracing_web::MakeConsoleWriter;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    DedicatedWorkerGlobalScope, Request, RequestInit, RequestMode, Response, SharedWorker,
-    SharedWorkerGlobalScope, Worker,
+    DedicatedWorkerGlobalScope, MessageEvent, Request, RequestInit, RequestMode, Response,
+    SharedWorker, SharedWorkerGlobalScope, Worker,
 };
 
 use crate::error::{Context, Error, Result};
@@ -150,6 +151,35 @@ where
             JsResult::Ok(v) => Ok(v),
             JsResult::Err(e) => Err(e),
         }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum MessageError {
+    #[error("Could not deserialise message in MessageEvent: {0}")]
+    DeserialisationFailed(serde_wasm_bindgen::Error),
+}
+
+pub(crate) trait MessageEventExt {
+    fn get_port(&self) -> Option<JsValue>;
+
+    fn get_message<T: DeserializeOwned>(&self) -> Result<T, MessageError>;
+}
+
+impl MessageEventExt for MessageEvent {
+    fn get_port(&self) -> Option<JsValue> {
+        let ports = self.ports();
+        if ports.is_array() {
+            let port = ports.get(0);
+            if !port.is_undefined() {
+                return Some(port);
+            }
+        }
+        None
+    }
+
+    fn get_message<T: DeserializeOwned>(&self) -> Result<T, MessageError> {
+        from_value(self.data()).map_err(MessageError::DeserialisationFailed)
     }
 }
 
