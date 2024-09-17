@@ -52,18 +52,15 @@ impl ClientConnection {
         forward_connects_to: mpsc::UnboundedSender<JsValue>,
     ) -> Result<Self> {
         let onmessage = Closure::new(move |ev: MessageEvent| {
-            let message_tx = forward_messages_to.clone();
-            let port_tx = forward_connects_to.clone();
-
             let message = ev.get_message();
 
             if let Some(port) = ev.get_port() {
-                if let Err(e) = port_tx.send(port) {
+                if let Err(e) = forward_connects_to.send(port) {
                     error!("port forwarding channel closed, shouldn't happen: {e}");
                 }
             }
 
-            if let Err(e) = message_tx.send((id, message)) {
+            if let Err(e) = forward_messages_to.send((id, message)) {
                 error!("message forwarding channel closed, shouldn't happen: {e}");
             }
         });
@@ -154,10 +151,9 @@ pub struct WorkerClient {
 
 impl WorkerClient {
     pub fn new(object: JsValue) -> Result<Self> {
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (response_tx, response_rx) = mpsc::unbounded_channel();
 
         let onmessage = Closure::new(move |ev: MessageEvent| {
-            let response_tx = tx.clone();
             let message = ev.get_message();
 
             if let Err(e) = response_tx.send(message) {
@@ -170,7 +166,7 @@ impl WorkerClient {
 
         Ok(WorkerClient {
             port,
-            response_channel: Mutex::new(rx),
+            response_channel: Mutex::new(response_rx),
             _onmessage: onmessage,
         })
     }

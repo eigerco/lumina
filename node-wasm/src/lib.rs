@@ -9,5 +9,5 @@ pub mod utils;
 mod worker;
 mod wrapper;
 
-#[cfg(all(target_arch = "wasm32", test))]
+#[cfg(test)]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);

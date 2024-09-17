@@ -42,7 +42,7 @@ pub enum WorkerError {
 #[wasm_bindgen]
 struct NodeWorker {
     event_channel_name: String,
-    worker: Option<NodeWorkerInstance>,
+    node: Option<NodeWorkerInstance>,
     request_server: WorkerServer,
     connect_channel: mpsc::UnboundedSender<JsValue>,
 }
@@ -63,7 +63,7 @@ impl NodeWorker {
 
         Self {
             event_channel_name: format!("NodeEventChannel-{}", random_id()),
-            worker: None,
+            node: None,
             request_server,
             connect_channel,
         }
@@ -80,9 +80,9 @@ impl NodeWorker {
         loop {
             let (client_id, command) = self.request_server.recv().await?;
 
-            let response = match &mut self.worker {
-                Some(worker) => worker.process_command(command).await,
-                worker @ None => match command {
+            let response = match &mut self.node {
+                Some(node) => node.process_command(command).await,
+                node @ None => match command {
                     NodeCommand::InternalPing => WorkerResponse::InternalPong,
                     NodeCommand::IsRunning => WorkerResponse::IsRunning(false),
                     NodeCommand::GetEventsChannelName => {
@@ -90,8 +90,8 @@ impl NodeWorker {
                     }
                     NodeCommand::StartNode(config) => {
                         match NodeWorkerInstance::new(&self.event_channel_name, config).await {
-                            Ok(node) => {
-                                let _ = worker.insert(node);
+                            Ok(instance) => {
+                                let _ = node.insert(instance);
                                 WorkerResponse::NodeStarted(Ok(()))
                             }
                             Err(e) => WorkerResponse::NodeStarted(Err(e)),
