@@ -127,7 +127,7 @@ impl RequestServer {
                     return message.expect("request channel should never close");
                 },
                 connection = self.connect_rx.recv() => {
-                    let port = connection.expect("command channel should not close ?");
+                    let port = connection.expect("command channel should never close");
                     let client_id = ClientId(self.ports.len());
                     info!("Connecting client {client_id:?}");
 
