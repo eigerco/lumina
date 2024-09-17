@@ -131,10 +131,10 @@ impl RequestServer {
                     let client_id = ClientId(self.ports.len());
                     info!("Connecting client {client_id:?}");
 
-                        match ClientConnection::new(client_id, port, self.request_tx.clone(), self.connect_tx.clone()) {
-                            Ok(port) => self.ports.push(port),
-                            Err(e) => error!("Failed to setup ClientConnection: {e}"),
-                        }
+                    match ClientConnection::new(client_id, port, self.request_tx.clone(), self.connect_tx.clone()) {
+                        Ok(port) => self.ports.push(port),
+                        Err(e) => error!("Failed to setup ClientConnection: {e}"),
+                    }
                 }
             }
         }
