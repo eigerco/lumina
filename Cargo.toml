@@ -25,6 +25,8 @@ celestia-tendermint-proto = "0.32.1"
 #libp2p-core = { path = "../../rust-libp2p/core" }
 #libp2p-swarm = { path = "../../rust-libp2p/swarm" }
 
+blockstore = { git = "https://github.com/oblique/blockstore", rev = "73ed78bd138041451432354f20ef19b1a73fd866" }
+
 # Uncomment this if you need debug symbols in release.
 # Also check node-wasm's `Cargo.toml`.
 #[profile.release]

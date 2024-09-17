@@ -12,6 +12,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{BroadcastChannel, MessageEvent, SharedWorker};
 
+use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::node::{Node, SyncingInfo};
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 
@@ -49,7 +50,7 @@ pub enum WorkerError {
 }
 
 struct NodeWorker {
-    node: Node<IndexedDbStore>,
+    node: Node<IndexedDbBlockstore, IndexedDbStore>,
     events_channel_name: String,
 }
 
