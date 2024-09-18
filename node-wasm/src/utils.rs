@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::net::{IpAddr, Ipv4Addr};
 
-use js_sys::Math;
+use js_sys::{Math, Number};
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
 use lumina_node::network;
@@ -167,6 +167,23 @@ impl MessageEventExt for MessageEvent {
             }
         }
         None
+    }
+}
+
+pub(crate) trait NumberExt {
+    fn try_into_u64(&self) -> Result<u64>;
+}
+
+impl NumberExt for Number {
+    fn try_into_u64(&self) -> Result<u64> {
+        // check whether Number is integer between -(2^53-1) and 2^53-1
+        if !Number::is_safe_integer(self) {
+            return Err(Error::new("provided number isn't integer"));
+        }
+        let value = self
+            .as_f64()
+            .expect("provided number isn't instance of a Number");
+        Ok(value as u64)
     }
 }
 

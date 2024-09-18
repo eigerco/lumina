@@ -14,8 +14,8 @@ const mainnetConfig = NodeConfig.default(Network.Mainnet);
 
 await node.start(mainnetConfig);
 
-await node.wait_connected();
-await node.request_head_header();
+await node.waitConnected();
+await node.requestHeadHeader();
 ```
 
 ## Manual setup
@@ -37,6 +37,6 @@ const worker_promise = worker.run();
 
 // client port can be used locally or transferred like any plain MessagePort
 const client = await new NodeClient(channel.port2);
-await client.wait_connected();
-await client.request_head_header();
+await client.waitConnected();
+await client.requestHeadHeader();
 ```
