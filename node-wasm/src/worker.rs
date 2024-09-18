@@ -11,8 +11,8 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{BroadcastChannel, SharedWorker};
 
-use lumina_node::events::{EventSubscriber, NodeEventInfo};
 use lumina_node::blockstore::IndexedDbBlockstore;
+use lumina_node::events::{EventSubscriber, NodeEventInfo};
 use lumina_node::node::{Node, SyncingInfo};
 use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 
