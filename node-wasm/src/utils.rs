@@ -10,7 +10,6 @@ use lumina_node::network;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use serde_wasm_bindgen::from_value;
 use tracing::{info, warn};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::time::UtcTime;
@@ -154,16 +153,8 @@ where
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum MessageError {
-    #[error("Could not deserialise message in MessageEvent: {0}")]
-    DeserialisationFailed(serde_wasm_bindgen::Error),
-}
-
 pub(crate) trait MessageEventExt {
     fn get_port(&self) -> Option<JsValue>;
-
-    fn get_message<T: DeserializeOwned>(&self) -> Result<T, MessageError>;
 }
 
 impl MessageEventExt for MessageEvent {
@@ -176,10 +167,6 @@ impl MessageEventExt for MessageEvent {
             }
         }
         None
-    }
-
-    fn get_message<T: DeserializeOwned>(&self) -> Result<T, MessageError> {
-        from_value(self.data()).map_err(MessageError::DeserialisationFailed)
     }
 }
 

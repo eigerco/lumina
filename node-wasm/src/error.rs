@@ -139,7 +139,6 @@ from_display! {
     lumina_node::node::NodeError,
     lumina_node::store::StoreError,
     crate::worker::WorkerError,
-    crate::utils::MessageError,
 }
 
 /// Utility to add more context to the [`Error`].

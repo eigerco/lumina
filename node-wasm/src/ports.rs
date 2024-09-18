@@ -1,6 +1,6 @@
 use js_sys::{Array, Function, Reflect};
 use serde::Serialize;
-use serde_wasm_bindgen::{to_value, Serializer};
+use serde_wasm_bindgen::{from_value, to_value, Serializer};
 use tokio::select;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{error, info, trace};
@@ -11,7 +11,7 @@ use web_sys::{MessageEvent, MessagePort};
 
 use crate::commands::{NodeCommand, WorkerResponse};
 use crate::error::{Context, Error, Result};
-use crate::utils::{MessageError, MessageEventExt};
+use crate::utils::MessageEventExt;
 
 // Instead of supporting communication with just `MessagePort`, allow using any object which
 // provides compatible interface, eg. `Worker`
@@ -48,17 +48,23 @@ impl ClientConnection {
     fn new(
         id: ClientId,
         object: JsValue,
-        forward_messages_to: mpsc::UnboundedSender<(ClientId, Result<NodeCommand, MessageError>)>,
+        forward_messages_to: mpsc::UnboundedSender<(ClientId, NodeCommand)>,
         forward_connects_to: mpsc::UnboundedSender<JsValue>,
     ) -> Result<Self> {
         let onmessage = Closure::new(move |ev: MessageEvent| {
-            let message = ev.get_message();
-
             if let Some(port) = ev.get_port() {
                 if let Err(e) = forward_connects_to.send(port) {
                     error!("port forwarding channel closed, shouldn't happen: {e}");
                 }
             }
+
+            let message = match from_value(ev.data()) {
+                Ok(msg) => msg,
+                Err(e) => {
+                    error!("could not deserialise message from {id:?}: {e}");
+                    return;
+                }
+            };
 
             if let Err(e) = forward_messages_to.send((id, message)) {
                 error!("message forwarding channel closed, shouldn't happen: {e}");
@@ -90,8 +96,8 @@ pub struct WorkerServer {
     ports: Vec<ClientConnection>,
     connect_tx: mpsc::UnboundedSender<JsValue>,
     connect_rx: mpsc::UnboundedReceiver<JsValue>,
-    request_tx: mpsc::UnboundedSender<(ClientId, Result<NodeCommand, MessageError>)>,
-    request_rx: mpsc::UnboundedReceiver<(ClientId, Result<NodeCommand, MessageError>)>,
+    request_tx: mpsc::UnboundedSender<(ClientId, NodeCommand)>,
+    request_rx: mpsc::UnboundedReceiver<(ClientId, NodeCommand)>,
 }
 
 impl WorkerServer {
@@ -112,9 +118,7 @@ impl WorkerServer {
         loop {
             select! {
                 message = self.request_rx.recv() => {
-                    let (client_id, result) =  message.expect("request channel should never close");
-                    let message = result
-                        .with_context(|| format!("could not parse command received from {client_id:?}"))?;
+                    let (client_id, message) =  message.expect("request channel should never close");
                     return Ok((client_id, message));
                 },
                 connection = self.connect_rx.recv() => {
@@ -145,7 +149,8 @@ impl WorkerServer {
 
 pub struct WorkerClient {
     port: MessagePortLike,
-    response_channel: Mutex<mpsc::UnboundedReceiver<Result<WorkerResponse, MessageError>>>,
+    response_channel:
+        Mutex<mpsc::UnboundedReceiver<Result<WorkerResponse, serde_wasm_bindgen::Error>>>,
     _onmessage: Closure<dyn Fn(MessageEvent)>,
 }
 
@@ -154,9 +159,7 @@ impl WorkerClient {
         let (response_tx, response_rx) = mpsc::unbounded_channel();
 
         let onmessage = Closure::new(move |ev: MessageEvent| {
-            let message = ev.get_message();
-
-            if let Err(e) = response_tx.send(message) {
+            if let Err(e) = response_tx.send(from_value(ev.data())) {
                 error!("message forwarding channel closed, should not happen: {e}");
             }
         });
