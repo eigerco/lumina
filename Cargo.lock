@@ -632,12 +632,10 @@ dependencies = [
 [[package]]
 name = "blockstore"
 version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc99329facbb960effbe7ed707c753a718877c1878eb8ca08704fa391c494020"
+source = "git+https://github.com/oblique/blockstore?rev=73ed78bd138041451432354f20ef19b1a73fd866#73ed78bd138041451432354f20ef19b1a73fd866"
 dependencies = [
  "cid",
  "dashmap 6.0.1",
- "idb",
  "js-sys",
  "multihash",
  "redb",
@@ -3256,7 +3254,6 @@ dependencies = [
  "futures",
  "getrandom",
  "gloo-timers 0.3.0",
- "idb",
  "js-sys",
  "libp2p",
  "libp2p-websocket-websys 0.3.3",
@@ -3279,6 +3276,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "void",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
