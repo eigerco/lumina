@@ -19,7 +19,7 @@ use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
 use crate::client::WasmNodeConfig;
 use crate::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::error::{Context, Error, Result};
-use crate::ports::WorkerServer;
+use crate::ports::{ClientMessage, WorkerServer};
 use crate::utils::{random_id, WorkerSelf};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
@@ -45,7 +45,7 @@ struct NodeWorker {
     event_channel_name: String,
     node: Option<NodeWorkerInstance>,
     request_server: WorkerServer,
-    connect_channel: mpsc::UnboundedSender<JsValue>,
+    control_channel: mpsc::UnboundedSender<ClientMessage>,
 }
 
 struct NodeWorkerInstance {
@@ -60,19 +60,19 @@ impl NodeWorker {
         info!("Created lumina worker");
 
         let request_server = WorkerServer::new();
-        let connect_channel = request_server.get_connect_channel();
+        let control_channel = request_server.get_control_channel();
 
         Self {
             event_channel_name: format!("NodeEventChannel-{}", random_id()),
             node: None,
             request_server,
-            connect_channel,
+            control_channel,
         }
     }
 
     pub async fn connect(&self, port: JsValue) {
-        self.connect_channel
-            .send(port)
+        self.control_channel
+            .send(ClientMessage::AddConnection(port))
             .expect("WorkerServer command channel should never close")
     }
 
