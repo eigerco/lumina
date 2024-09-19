@@ -32,7 +32,7 @@ const config = NodeConfig.default(Network.Mainnet);
 const channel = new MessageChannel();
 const worker = new NodeWorker(channel.port1);
 
-// note that this runs lumina in the current context (and doesn't create a new web-worker). runWorker doesn't return.
+// note that this runs lumina in the current context (and doesn't create a new web-worker). Promise created with `.run()` never completes.
 const worker_promise = worker.run();
 
 // client port can be used locally or transferred like any plain MessagePort
