@@ -51,14 +51,8 @@ struct ClientConnection {
 impl ClientConnection {
     fn new(
         id: ClientId,
-<<<<<<< HEAD
         port_like: JsValue,
-        forward_messages_to: mpsc::UnboundedSender<(ClientId, NodeCommand)>,
-        forward_connects_to: mpsc::UnboundedSender<JsValue>,
-=======
-        object: JsValue,
         server_tx: mpsc::UnboundedSender<ClientMessage>,
->>>>>>> 58db7a8f853abe4017da88869b30605d6a875723
     ) -> Result<Self> {
         let onmessage = Closure::new(move |ev: MessageEvent| {
             if let Some(port) = ev.get_port() {
