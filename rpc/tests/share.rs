@@ -91,7 +91,7 @@ async fn get_shares_range() {
 }
 
 #[tokio::test]
-async fn get_shares_range_unexisting() {
+async fn get_shares_range_not_existing() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let header = client.header_network_head().await.unwrap();
     let shares_in_block = header.dah.square_width().pow(2);

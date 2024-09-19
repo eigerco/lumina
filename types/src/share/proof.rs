@@ -36,8 +36,7 @@ impl ShareProof {
     /// # Errors
     ///
     /// This function will return an error if:
-    ///  - the proof is malformed, meaning some inconsistency between
-    ///    shares, nmt proofs or row proofs amounts
+    ///  - the proof is malformed. Number of shares, nmt proofs and row proofs needs to match.
     ///  - the verification of any inner row proof fails
     ///
     /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader

@@ -302,8 +302,7 @@ impl RowProof {
     /// # Errors
     ///
     /// This function will return an error if:
-    ///  - the proof is malformed, meaning some inconsistency between start/end row,
-    ///    row roots or merkle proofs amounts
+    ///  - the proof is malformed. Number of proofs, row roots and the span between starting and ending row need to match.
     ///  - the verification of any inner merkle proof fails
     ///
     /// # Example

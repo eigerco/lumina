@@ -81,7 +81,7 @@ impl MerkleProof {
     }
 }
 
-// creates a merkle tree out of the given leaves and returns it's root hash.
+// creates a merkle tree out of the given leaves and returns its root hash.
 // inner nodes needed to prove leaf with given index are collected in `aunts`.
 fn hash_leaves_collecting_aunts(
     // for recursion, index of the first leaf in current subtree wrt the whole tree
@@ -117,10 +117,10 @@ fn hash_leaves_collecting_aunts(
             // if current subtree has the leaf to prove
             if (first_leaf_index..first_leaf_index + total).contains(&leaf_to_prove) {
                 if leaf_to_prove < first_leaf_index + subtrees_split {
-                    // leaf was in left subtree, so it's aunt is right hash
+                    // leaf was in left subtree, so its aunt is right hash
                     aunts.push(right)
                 } else {
-                    // leaf was in right subtree, so it's aunt is left hash
+                    // leaf was in right subtree, so its aunt is left hash
                     aunts.push(left)
                 }
             }
