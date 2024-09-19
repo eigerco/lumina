@@ -14,6 +14,7 @@
     "files": [
         "index.js",
         "index.d.ts",
+        "index.d.ts",
         "worker.js"
     ],
     "main": "index.js",
