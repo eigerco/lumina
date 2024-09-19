@@ -17,3 +17,15 @@ await node.start(mainnetConfig);
 await node.wait_connected();
 await node.request_head_header();
 ```
+
+Note that `spawnNode` implicitly calls wasm initialisation code. If you want to set things up manually, make sure to call the default export before using any of the wasm functionality.
+
+```javascript
+import init, { NodeConfig, Network } from "lumina-node";
+
+await init();
+const config = NodeConfig.default(Network.Mainnet);
+
+console.log(config.bootnodes);
+
+```

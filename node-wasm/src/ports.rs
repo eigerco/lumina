@@ -47,7 +47,7 @@ struct ClientConnection {
 impl ClientConnection {
     fn new(
         id: ClientId,
-        object: JsValue,
+        port_like: JsValue,
         forward_messages_to: mpsc::UnboundedSender<(ClientId, NodeCommand)>,
         forward_connects_to: mpsc::UnboundedSender<JsValue>,
     ) -> Result<Self> {
@@ -71,7 +71,7 @@ impl ClientConnection {
             }
         });
 
-        let port = prepare_message_port(object, &onmessage)
+        let port = prepare_message_port(port_like, &onmessage)
             .context("failed to setup port for ClientConnection")?;
 
         Ok(ClientConnection {
