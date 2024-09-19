@@ -93,7 +93,7 @@ pub(crate) fn sample_cid(row_index: u16, column_index: u16, block_height: u64) -
     convert_cid(&sample_id.into())
 }
 
-pub(crate) fn namespaced_data_cid(
+pub(crate) fn row_namespace_data_cid(
     namespace: Namespace,
     row_index: u16,
     block_height: u64,
@@ -109,11 +109,15 @@ pub(crate) fn convert_cid<const S: usize>(cid: &CidGeneric<S>) -> Result<Cid> {
     )))
 }
 
+/// extracts the `container` part from shwaps `Block` wrapper if the cid matches expected one
 pub(crate) fn get_block_container(expected_cid: &Cid, block: &[u8]) -> Result<Vec<u8>> {
-    let block = Block::decode(block).unwrap();
-    let block_cid = Cid::read_bytes(block.cid.as_slice()).unwrap();
+    let block = Block::decode(block)?;
+    let block_cid = Cid::read_bytes(block.cid.as_slice())?;
     if block_cid != *expected_cid {
-        panic!();
+        return Err(P2pError::Shwap(format!(
+            "cid in block ({}) different than expected ({})",
+            block_cid, expected_cid
+        )));
     }
 
     Ok(block.container)

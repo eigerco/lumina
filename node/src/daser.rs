@@ -460,14 +460,17 @@ mod tests {
     use super::*;
     use crate::events::{EventChannel, EventSubscriber};
     use crate::executor::sleep;
+    use crate::p2p::shwap::convert_cid;
     use crate::p2p::P2pCmd;
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, MockP2pHandle};
+    use celestia_proto::bitswap::Block;
     use celestia_tendermint_proto::Protobuf;
     use celestia_types::sample::{Sample, SampleId};
     use celestia_types::test_utils::{generate_eds, ExtendedHeaderGenerator};
     use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
     use cid::Cid;
+    use prost::Message;
     use std::collections::HashMap;
     use std::time::Duration;
 
@@ -781,9 +784,7 @@ mod tests {
             }
 
             let sample = gen_sample_of_cid(sample_id, info.eds).await;
-            let sample_bytes = sample.encode_vec().unwrap();
-
-            respond_to.send(Ok(sample_bytes)).unwrap();
+            respond_to.send(Ok(sample)).unwrap();
         }
 
         cids.sort();
@@ -800,13 +801,20 @@ mod tests {
         handle_concurrent_get_shwap_cid(handle, [(height, eds, simulate_invalid_sampling)]).await
     }
 
-    async fn gen_sample_of_cid(sample_id: SampleId, eds: &ExtendedDataSquare) -> Sample {
-        Sample::new(
+    async fn gen_sample_of_cid(sample_id: SampleId, eds: &ExtendedDataSquare) -> Vec<u8> {
+        let sample = Sample::new(
             sample_id.row_index(),
             sample_id.column_index(),
             AxisType::Row,
             eds,
         )
-        .unwrap()
+        .unwrap();
+
+        let block = Block {
+            cid: convert_cid(&sample_id.into()).unwrap().to_bytes(),
+            container: sample.encode_vec().unwrap(),
+        };
+
+        block.encode_to_vec()
     }
 }

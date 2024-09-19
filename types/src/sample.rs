@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
 use crate::row::{RowId, ROW_ID_SIZE};
 use crate::rsmt2d::{is_ods_square, AxisType, ExtendedDataSquare};
-use crate::{DataAvailabilityHeader, Error, Result};
+use crate::{bail_validation, DataAvailabilityHeader, Error, Result};
 
 /// Number of bytes needed to represent [`SampleId`] in `multihash`.
 const SAMPLE_ID_SIZE: usize = 12;
@@ -70,7 +70,7 @@ impl Sample {
     ///
     /// ```no_run
     /// use celestia_types::AxisType;
-    /// use celestia_types::sample::Sample;
+    /// use celestia_types::sample::{Sample, SampleId};
     /// # use celestia_types::{ExtendedDataSquare, ExtendedHeader};
     /// #
     /// # fn get_extended_data_square(height: u64) -> ExtendedDataSquare {
@@ -85,9 +85,10 @@ impl Sample {
     /// let eds = get_extended_data_square(block_height);
     /// let header = get_extended_header(block_height);
     ///
-    /// let sample = Sample::new(2, 3, AxisType::Row, &eds, block_height).unwrap();
+    /// let sample_id = SampleId::new(2, 3, block_height).unwrap();
+    /// let sample = Sample::new(2, 3, AxisType::Row, &eds).unwrap();
     ///
-    /// sample.verify(&header.dah).unwrap();
+    /// sample.verify(sample_id, &header.dah).unwrap();
     /// ```
     ///
     /// [`Share`]: crate::Share
@@ -151,8 +152,7 @@ impl TryFrom<RawSample> for Sample {
 
     fn try_from(sample: RawSample) -> Result<Sample, Self::Error> {
         let Some(share) = sample.share else {
-            // todo: replace all those with validation_error?
-            return Err(Error::MissingProof);
+            bail_validation!("missing share");
         };
 
         let Some(proof) = sample.proof else {
@@ -294,7 +294,6 @@ impl From<SampleId> for CidGeneric<SAMPLE_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nmt::Namespace;
     use crate::test_utils::generate_eds;
 
     #[test]
@@ -340,8 +339,8 @@ mod tests {
     fn from_buffer() {
         let bytes = [
             0x01, // CIDv1
-            0x80, 0xF0, 0x01, // CID codec = 7800
-            0x81, 0xF0, 0x01, // multihash code = 7801
+            0x90, 0xF0, 0x01, // CID codec = 7810
+            0x91, 0xF0, 0x01, // multihash code = 7811
             0x0C, // len = SAMPLE_ID_SIZE = 12
             0, 0, 0, 0, 0, 0, 0, 64, // block height = 64
             0, 7, // row index = 7
@@ -378,22 +377,5 @@ mod tests {
         let cid = CidGeneric::<SAMPLE_ID_SIZE>::new_v1(4321, multihash);
         let codec_err = SampleId::try_from(cid).unwrap_err();
         assert!(matches!(codec_err, CidError::InvalidCidCodec(4321)));
-    }
-
-    #[test]
-    fn decode_sample_bytes() {
-        let bytes = include_bytes!("../test_data/shwap_samples/sample.data");
-        let (id, msg) = bytes.split_at(SAMPLE_ID_SIZE);
-        let id = SampleId::decode(id).unwrap();
-        let msg = Sample::decode(msg).unwrap();
-
-        assert_eq!(id.column_index(), 1);
-        assert_eq!(id.row_index(), 0);
-        assert_eq!(id.block_height(), 1);
-
-        let expected_ns =
-            Namespace::new_v0(&[11, 13, 177, 159, 193, 156, 129, 121, 234, 136]).unwrap();
-        let ns = Namespace::from_raw(&msg.share[..NS_SIZE]).unwrap();
-        assert_eq!(ns, expected_ns);
     }
 }

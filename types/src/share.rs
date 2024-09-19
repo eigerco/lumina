@@ -1,5 +1,4 @@
 use blockstore::block::{Block, CidError};
-use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::simple_merkle::tree::MerkleHash;
@@ -8,13 +7,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::consts::appconsts;
 use crate::nmt::{
-    Namespace, NamespaceProof, NamespacedSha2Hasher, NMT_CODEC, NMT_ID_SIZE, NMT_MULTIHASH_CODE,
-    NS_SIZE,
+    Namespace, NamespacedSha2Hasher, NMT_CODEC, NMT_ID_SIZE, NMT_MULTIHASH_CODE, NS_SIZE,
 };
 use crate::{Error, Result};
 
 mod info_byte;
 
+pub use celestia_proto::shwap::Share as RawShare;
 pub use info_byte::InfoByte;
 
 const SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTES;
@@ -139,39 +138,6 @@ impl Block<NMT_ID_SIZE> for Share {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(transparent)]
-struct RawNamespacedShares {
-    rows: Option<Vec<NamespacedRow>>,
-}
-
-impl From<RawNamespacedShares> for NamespacedShares {
-    fn from(value: RawNamespacedShares) -> Self {
-        Self {
-            rows: value.rows.unwrap_or_default(),
-        }
-    }
-}
-
-impl From<NamespacedShares> for RawNamespacedShares {
-    fn from(value: NamespacedShares) -> Self {
-        let rows = if value.rows.is_empty() {
-            None
-        } else {
-            Some(value.rows)
-        };
-
-        Self { rows }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(transparent)]
-struct RawShare {
-    #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]
-    data: Vec<u8>,
-}
-
 impl TryFrom<RawShare> for Share {
     type Error = Error;
 
@@ -188,60 +154,10 @@ impl From<Share> for RawShare {
     }
 }
 
-/// TODO: from shwap
-/// A collection of rows of [`Share`]s from a particular [`Namespace`].
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct NamespacedShares {
-    /// All rows containing shares within some namespace.
-    pub rows: Vec<NamespacedRow>,
-}
-
-/// [`Share`]s from a particular [`Namespace`] with proof in the data square row.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct NamespacedRow {
-    /// All shares within some namespace in the given row.
-    pub shares: Vec<Share>,
-    /// A merkle proof of inclusion or absence of the shares in this row.
-    pub proof: NamespaceProof,
-}
-
-// impl TryFrom<RawNamespacedRow> for NamespacedRow {
-//     type Error = Error;
-//
-//     fn try_from(value: RawNamespacedRow) -> Result<Self, Self::Error> {
-//         let shares = value
-//             .shares
-//             .into_iter()
-//             .map(|bytes| Share::from_raw(&bytes))
-//             .collect::<Result<Vec<_>>>()?;
-//
-//         let proof: NamespaceProof = value
-//             .proof
-//             .map(TryInto::try_into)
-//             .transpose()?
-//             .ok_or(Error::MissingProof)?;
-//
-//         if shares.is_empty() && !proof.is_of_absence() {
-//             return Err(Error::WrongProofType);
-//         }
-//
-//         Ok(NamespacedRow { shares, proof })
-//     }
-// }
-//
-// impl From<NamespacedRow> for RawNamespacedRow {
-//     fn from(value: NamespacedRow) -> RawNamespacedRow {
-//         RawNamespacedRow {
-//             shares: value.shares.iter().map(|share| share.to_vec()).collect(),
-//             proof: Some(value.proof.into()),
-//         }
-//     }
-// }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nmt::{NamespacedHash, NAMESPACED_HASH_SIZE};
+    use crate::nmt::{NamespaceProof, NamespacedHash, NAMESPACED_HASH_SIZE};
     use base64::prelude::*;
 
     #[cfg(target_arch = "wasm32")]
@@ -387,33 +303,6 @@ mod tests {
 
     fn b64_decode(s: &str) -> Vec<u8> {
         BASE64_STANDARD.decode(s).expect("failed to decode base64")
-    }
-
-    #[test]
-    fn decode_namespaced_shares() {
-        let get_shares_by_namespace_response = r#"[
-          {
-            "shares": [
-              "AAAAAAAAAAAAAAAAAAAAAAAAAAAADCBNOWAP3dMBAAAAG/HyDKgAfpEKO/iy5h2g8mvKB+94cXpupUFl9QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-            ],
-            "proof": {
-              "start": 1,
-              "end": 2,
-              "nodes": [
-                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABFmTiyJVvgoyHdw7JGii/wyMfMbSdN3Nbi6Uj0Lcprk+",
-                "/////////////////////////////////////////////////////////////////////////////0WE8jz9lbFjpXWj9v7/QgdAxYEqy4ew9TMdqil/UFZm"
-              ],
-              "leaf_hash": null,
-              "is_max_namespace_ignored": true
-            }
-          }
-        ]"#;
-
-        let ns_shares: NamespacedShares =
-            serde_json::from_str(get_shares_by_namespace_response).unwrap();
-
-        assert_eq!(ns_shares.rows[0].shares.len(), 1);
-        assert!(!ns_shares.rows[0].proof.is_of_absence());
     }
 
     #[test]

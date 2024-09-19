@@ -1,5 +1,6 @@
 use celestia_types::nmt::Namespace;
-use celestia_types::{ExtendedDataSquare, ExtendedHeader, NamespacedShares, Share};
+use celestia_types::row_namespace_data::NamespacedShares;
+use celestia_types::{ExtendedDataSquare, ExtendedHeader, Share};
 use jsonrpsee::proc_macros::rpc;
 
 #[rpc(client)]

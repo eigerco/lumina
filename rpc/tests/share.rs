@@ -29,8 +29,8 @@ async fn get_shares_by_namespace() {
         .await
         .unwrap();
 
-    let seq_len = &ns_shares.rows[0].shares[0].data()
-        [SHARE_INFO_BYTES..SHARE_INFO_BYTES + SEQUENCE_LEN_BYTES];
+    let seq_len =
+        &ns_shares.rows[0].shares[0][SHARE_INFO_BYTES..SHARE_INFO_BYTES + SEQUENCE_LEN_BYTES];
     let seq_len = u32::from_be_bytes(seq_len.try_into().unwrap());
     assert_eq!(seq_len as usize, data.len());
 
@@ -40,9 +40,9 @@ async fn get_shares_by_namespace() {
         .flat_map(|row| row.shares.into_iter())
         .fold(vec![], |mut acc, share| {
             let data = if acc.is_empty() {
-                &share.data[share.data.len() - FIRST_SPARSE_SHARE_CONTENT_SIZE..]
+                &share[share.len() - FIRST_SPARSE_SHARE_CONTENT_SIZE..]
             } else {
-                &share.data[share.data.len() - CONTINUATION_SPARSE_SHARE_CONTENT_SIZE..]
+                &share[share.len() - CONTINUATION_SPARSE_SHARE_CONTENT_SIZE..]
             };
             acc.extend_from_slice(data);
             acc

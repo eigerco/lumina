@@ -5,6 +5,7 @@ use anyhow::Result;
 const SERIALIZED: &str = r#"#[derive(::serde::Deserialize, ::serde::Serialize)]"#;
 const SERIALIZED_DEFAULT: &str =
     r#"#[derive(::serde::Deserialize, ::serde::Serialize)] #[serde(default)]"#;
+const TRANSPARENT: &str = r#"#[serde(transparent)]"#;
 const BASE64STRING: &str =
     r#"#[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]"#;
 const QUOTED: &str = r#"#[serde(with = "celestia_tendermint_proto::serializers::from_str")]"#;
@@ -38,12 +39,12 @@ static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".share.eds.byzantine.pb.BadEncoding", SERIALIZED_DEFAULT),
     (".share.eds.byzantine.pb.Share", SERIALIZED_DEFAULT),
     (".proof.pb.Proof", SERIALIZED_DEFAULT),
-    (".share.p2p.shrex.nd.NamespaceRowResponse", SERIALIZED_DEFAULT),
     (".shwap.AxisType", SERIALIZED),
     (".shwap.Row", SERIALIZED),
     (".shwap.RowNamespaceData", SERIALIZED_DEFAULT),
     (".shwap.Sample", SERIALIZED_DEFAULT),
     (".shwap.Share", SERIALIZED_DEFAULT),
+    (".shwap.Share", TRANSPARENT),
 ];
 
 #[rustfmt::skip]
@@ -57,7 +58,6 @@ static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".share.eds.byzantine.pb.BadEncoding.axis", QUOTED),
     (".proof.pb.Proof.nodes", VEC_BASE64STRING),
     (".proof.pb.Proof.leaf_hash", BASE64STRING),
-    (".share.p2p.shrex.nd.NamespaceRowResponse.shares", VEC_BASE64STRING),
     (".shwap.Share", BASE64STRING),
 ];
 

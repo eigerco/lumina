@@ -40,7 +40,7 @@ pub struct RowNamespaceDataId {
 ///
 /// It is constructed out of the ExtendedDataSquare. If, for particular EDS, shares from the namespace span multiple rows,
 /// one needs multiple RowNamespaceData instances to cover the whole range.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawRowNamespaceData", into = "RawRowNamespaceData")]
 pub struct RowNamespaceData {
     /// Proof of data inclusion
@@ -69,9 +69,9 @@ impl RowNamespaceData {
     ///
     /// let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
     ///
-    /// let rows = eds.get_namespaced_data(namespace, &header.dah, block_height as u64).unwrap();
-    /// for namespaced_data in rows {
-    ///     namespaced_data.verify(&header.dah).unwrap()
+    /// let rows = eds.get_namespace_data(namespace, &header.dah, block_height as u64).unwrap();
+    /// for (id, namespace_data) in rows {
+    ///     namespace_data.verify(id, &header.dah).unwrap()
     /// }
     /// ```
     ///
@@ -89,6 +89,16 @@ impl RowNamespaceData {
             .verify_complete_namespace(&root, &self.shares, *namespace)
             .map_err(Error::RangeProofError)
     }
+}
+
+/// A collection of rows of [`Share`]s from a particular [`Namespace`].
+///
+/// [`Share`]: crate::Share
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct NamespacedShares {
+    /// All rows containing shares within some namespace.
+    pub rows: Vec<RowNamespaceData>,
 }
 
 impl Protobuf<RawRowNamespaceData> for RowNamespaceData {}
@@ -223,8 +233,6 @@ impl From<RowNamespaceDataId> for CidGeneric<ROW_NAMESPACE_DATA_ID_SIZE> {
 
 #[cfg(test)]
 mod tests {
-    use crate::nmt::NS_SIZE;
-
     use super::*;
 
     #[test]
@@ -303,19 +311,29 @@ mod tests {
     }
 
     #[test]
-    fn decode_data_bytes() {
-        let bytes = include_bytes!("../test_data/shwap_samples/namespaced_data.data");
-        let (id, msg) = bytes.split_at(ROW_NAMESPACE_DATA_ID_SIZE);
-        let id = RowNamespaceDataId::decode(id).unwrap();
-        let msg = RowNamespaceData::decode(msg).unwrap();
+    fn decode_namespaced_shares() {
+        let get_shares_by_namespace_response = r#"[
+          {
+            "shares": [
+              "AAAAAAAAAAAAAAAAAAAAAAAAAAAADCBNOWAP3dMBAAAAG/HyDKgAfpEKO/iy5h2g8mvKB+94cXpupUFl9QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+            ],
+            "proof": {
+              "start": 1,
+              "end": 2,
+              "nodes": [
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABFmTiyJVvgoyHdw7JGii/wyMfMbSdN3Nbi6Uj0Lcprk+",
+                "/////////////////////////////////////////////////////////////////////////////0WE8jz9lbFjpXWj9v7/QgdAxYEqy4ew9TMdqil/UFZm"
+              ],
+              "leaf_hash": null,
+              "is_max_namespace_ignored": true
+            }
+          }
+        ]"#;
 
-        let ns = Namespace::new_v0(&[135, 30, 47, 81, 60, 66, 177, 20, 57, 85]).unwrap();
-        assert_eq!(id.namespace(), ns);
-        assert_eq!(id.row_index(), 0);
-        assert_eq!(id.block_height(), 1);
+        let ns_shares: NamespacedShares =
+            serde_json::from_str(get_shares_by_namespace_response).unwrap();
 
-        for s in msg.shares {
-            assert_eq!(&s[..NS_SIZE], ns.as_ref());
-        }
+        assert_eq!(ns_shares.rows[0].shares.len(), 1);
+        assert!(!ns_shares.rows[0].proof.is_of_absence());
     }
 }

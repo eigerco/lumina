@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::consts::appconsts::SHARE_SIZE;
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NS_SIZE};
 use crate::rsmt2d::{is_ods_square, ExtendedDataSquare};
-use crate::{DataAvailabilityHeader, Error, Result};
+use crate::{bail_validation, DataAvailabilityHeader, Error, Result};
 
 /// Number of bytes needed to represent [`EdsId`] in `multihash`.
 const EDS_ID_SIZE: usize = 8;
@@ -120,7 +120,7 @@ impl TryFrom<RawRow> for Row {
                 leopard_codec::reconstruct(&mut shares, data_shares)?;
                 shares
             }
-            Err(_) => todo!("error"),
+            Err(_) => bail_validation!("HalfSide missing"),
         };
 
         Ok(Row { shares })
@@ -282,8 +282,8 @@ mod tests {
     fn from_buffer() {
         let bytes = [
             0x01, // CIDv1
-            0x90, 0xF0, 0x01, // CID codec = 7810
-            0x91, 0xF0, 0x01, // multihash code = 7811
+            0x80, 0xF0, 0x01, // CID codec = 7800
+            0x81, 0xF0, 0x01, // multihash code = 7801
             0x0A, // len = ROW_ID_SIZE = 10
             0, 0, 0, 0, 0, 0, 0, 64, // block height = 64
             0, 7, // row index = 7
@@ -303,8 +303,8 @@ mod tests {
     fn zero_block_height() {
         let bytes = [
             0x01, // CIDv1
-            0x90, 0xF0, 0x01, // CID codec = 7810
-            0x91, 0xF0, 0x01, // code = 7811
+            0x80, 0xF0, 0x01, // CID codec = 7800
+            0x81, 0xF0, 0x01, // code = 7801
             0x0A, // len = ROW_ID_SIZE = 10
             0, 0, 0, 0, 0, 0, 0, 0, // invalid block height = 0 !
             0, 7, // row index = 7
