@@ -3,9 +3,8 @@ import init, { NodeWorker, NodeClient } from "lumina-node-wasm"
 Error.stackTraceLimit = 99;
 
 init().then(async () => {
-    let worker = new NodeWorker();
+    let worker = new NodeWorker(self);
     console.log("starting worker: ", worker);
-    worker.connect(self)
 
-    await worker.runWorker();
+    await worker.run();
 });

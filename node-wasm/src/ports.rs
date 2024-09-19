@@ -51,7 +51,7 @@ struct ClientConnection {
 impl ClientConnection {
     fn new(
         id: ClientId,
-        port_like: JsValue,
+        port_like_object: JsValue,
         server_tx: mpsc::UnboundedSender<ClientMessage>,
     ) -> Result<Self> {
         let onmessage = Closure::new(move |ev: MessageEvent| {
@@ -74,7 +74,7 @@ impl ClientConnection {
             }
         });
 
-        let port = prepare_message_port(port_like, &onmessage)
+        let port = prepare_message_port(port_like_object, &onmessage)
             .context("failed to setup port for ClientConnection")?;
 
         Ok(ClientConnection {

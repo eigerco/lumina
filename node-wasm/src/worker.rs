@@ -45,7 +45,7 @@ struct NodeWorker {
     event_channel_name: String,
     node: Option<NodeWorkerInstance>,
     request_server: WorkerServer,
-    control_channel: mpsc::UnboundedSender<ClientMessage>,
+    _control_channel: mpsc::UnboundedSender<ClientMessage>,
 }
 
 struct NodeWorkerInstance {
@@ -56,28 +56,25 @@ struct NodeWorkerInstance {
 #[wasm_bindgen]
 impl NodeWorker {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
+    pub fn new(port_like_object: JsValue) -> Self {
         info!("Created lumina worker");
 
         let request_server = WorkerServer::new();
         let control_channel = request_server.get_control_channel();
 
+        control_channel
+            .send(ClientMessage::AddConnection(port_like_object))
+            .expect("control channel should be ready to receive now");
+
         Self {
             event_channel_name: format!("NodeEventChannel-{}", random_id()),
             node: None,
             request_server,
-            control_channel,
+            _control_channel: control_channel,
         }
     }
 
-    pub async fn connect(&self, port: JsValue) {
-        self.control_channel
-            .send(ClientMessage::AddConnection(port))
-            .expect("WorkerServer command channel should never close")
-    }
-
-    #[wasm_bindgen(js_name = runWorker)]
-    pub async fn run_worker(&mut self) -> Result<(), Error> {
+    pub async fn run(&mut self) -> Result<(), Error> {
         loop {
             let (client_id, command) = self.request_server.recv().await?;
 

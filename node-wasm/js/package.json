@@ -13,6 +13,7 @@
     },
     "files": [
         "index.js",
+        "index.d.ts",
         "worker.js"
     ],
     "main": "index.js",
