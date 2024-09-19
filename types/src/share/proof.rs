@@ -95,14 +95,13 @@ impl TryFrom<RawShareProof> for ShareProof {
     type Error = Error;
 
     fn try_from(value: RawShareProof) -> Result<Self> {
-        println!("{:?}", value.namespace_id);
         Ok(Self {
             data: value
                 .data
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()
-                .map_err(|_| validation_error!("todo"))?,
+                .map_err(|_| validation_error!("invalid share size"))?,
             namespace_id: Namespace::new(
                 value
                     .namespace_version
@@ -117,7 +116,7 @@ impl TryFrom<RawShareProof> for ShareProof {
                 .collect::<Result<_>>()?,
             row_proof: value
                 .row_proof
-                .ok_or_else(|| validation_error!("todo"))?
+                .ok_or_else(|| validation_error!("row proof missing"))?
                 .try_into()?,
         })
     }
