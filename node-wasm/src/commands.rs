@@ -12,14 +12,15 @@ use celestia_types::hash::Hash;
 use lumina_node::node::{PeerTrackerInfo, SyncingInfo};
 use lumina_node::store::SamplingMetadata;
 
+use crate::client::WasmNodeConfig;
 use crate::error::Error;
 use crate::error::Result;
-use crate::node::WasmNodeConfig;
 use crate::utils::JsResult;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NodeCommand {
+    InternalPing,
     IsRunning,
     StartNode(WasmNodeConfig),
     GetEventsChannelName,
@@ -63,6 +64,8 @@ pub(crate) enum SingleHeaderQuery {
 
 #[derive(Serialize, Deserialize, Debug, EnumAsInner)]
 pub(crate) enum WorkerResponse {
+    InternalPong,
+    NodeNotRunning,
     IsRunning(bool),
     NodeStarted(Result<()>),
     EventsChannelName(String),

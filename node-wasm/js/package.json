@@ -1,0 +1,31 @@
+{
+    "name": "lumina-node",
+    "type": "module",
+    "collaborators": [
+        "Eiger <hello@eiger.co>"
+    ],
+    "description": "Lumina node for Celestia, running in browser",
+    "version": "0.2.0",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/eigerco/lumina.git"
+    },
+    "files": [
+        "index.js",
+        "index.d.ts",
+        "worker.js"
+    ],
+    "main": "index.js",
+    "homepage": "https://www.eiger.co",
+    "dependencies": {
+        "lumina-node-wasm": "0.2.0"
+    },
+    "keywords": [
+        "blockchain",
+        "celestia",
+        "lumina",
+        "node",
+        "browser"
+    ]
+}
