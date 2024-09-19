@@ -27,15 +27,16 @@ import init, { NodeConfig, Network } from "lumina-node";
 
 await init();
 const config = NodeConfig.default(Network.Mainnet);
-const worker = new NodeWorker();
-
+// client and worker accept any object with MessagePort like interface e.g. Worker
 const channel = new MessageChannel();
+const worker = new NodeWorker();
 worker.connect(channel.port1);
-const client = await new NodeClient(channel.port2);
 
-// note that this runs lumina in the current context (and not in a worker, like `spawnNode`). runWorker doesn't return.
+// note that this runs lumina in the current context (and doesn't create a new worker). runWorker doesn't return.
 worker.runWorker();
 
+// client port can be used locally or transferred like any plain MessagePort
+const client = await new NodeClient(channel.port2);
 await client.wait_connected();
 await client.request_head_header();
 ```
