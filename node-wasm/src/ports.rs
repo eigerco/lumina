@@ -1,7 +1,6 @@
 use js_sys::{Array, Function, Reflect};
 use serde::Serialize;
 use serde_wasm_bindgen::{from_value, to_value, Serializer};
-use tokio::select;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{error, info, trace};
 use wasm_bindgen::closure::Closure;
@@ -39,6 +38,11 @@ impl From<MessagePort> for MessagePortLike {
 #[derive(Debug, Clone, Copy)]
 pub struct ClientId(usize);
 
+pub(crate) enum ClientMessage {
+    Command { id: ClientId, command: NodeCommand },
+    AddConnection(JsValue),
+}
+
 struct ClientConnection {
     port: MessagePortLike,
     _onmessage: Closure<dyn Fn(MessageEvent)>,
@@ -47,18 +51,23 @@ struct ClientConnection {
 impl ClientConnection {
     fn new(
         id: ClientId,
+<<<<<<< HEAD
         port_like: JsValue,
         forward_messages_to: mpsc::UnboundedSender<(ClientId, NodeCommand)>,
         forward_connects_to: mpsc::UnboundedSender<JsValue>,
+=======
+        object: JsValue,
+        server_tx: mpsc::UnboundedSender<ClientMessage>,
+>>>>>>> 58db7a8f853abe4017da88869b30605d6a875723
     ) -> Result<Self> {
         let onmessage = Closure::new(move |ev: MessageEvent| {
             if let Some(port) = ev.get_port() {
-                if let Err(e) = forward_connects_to.send(port) {
+                if let Err(e) = server_tx.send(ClientMessage::AddConnection(port)) {
                     error!("port forwarding channel closed, shouldn't happen: {e}");
                 }
             }
 
-            let message = match from_value(ev.data()) {
+            let command = match from_value(ev.data()) {
                 Ok(msg) => msg,
                 Err(e) => {
                     error!("could not deserialise message from {id:?}: {e}");
@@ -66,7 +75,7 @@ impl ClientConnection {
                 }
             };
 
-            if let Err(e) = forward_messages_to.send((id, message)) {
+            if let Err(e) = server_tx.send(ClientMessage::Command { id, command }) {
                 error!("message forwarding channel closed, shouldn't happen: {e}");
             }
         });
@@ -94,39 +103,37 @@ impl ClientConnection {
 
 pub struct WorkerServer {
     ports: Vec<ClientConnection>,
-    connect_tx: mpsc::UnboundedSender<JsValue>,
-    connect_rx: mpsc::UnboundedReceiver<JsValue>,
-    request_tx: mpsc::UnboundedSender<(ClientId, NodeCommand)>,
-    request_rx: mpsc::UnboundedReceiver<(ClientId, NodeCommand)>,
+    client_tx: mpsc::UnboundedSender<ClientMessage>,
+    client_rx: mpsc::UnboundedReceiver<ClientMessage>,
 }
 
 impl WorkerServer {
     pub fn new() -> WorkerServer {
-        let (request_tx, request_rx) = mpsc::unbounded_channel();
-        let (connect_tx, connect_rx) = mpsc::unbounded_channel();
+        let (client_tx, client_rx) = mpsc::unbounded_channel();
 
         WorkerServer {
             ports: vec![],
-            connect_tx,
-            connect_rx,
-            request_tx,
-            request_rx,
+            client_tx,
+            client_rx,
         }
     }
 
     pub async fn recv(&mut self) -> Result<(ClientId, NodeCommand)> {
         loop {
-            select! {
-                message = self.request_rx.recv() => {
-                    let (client_id, message) =  message.expect("request channel should never close");
-                    return Ok((client_id, message));
-                },
-                connection = self.connect_rx.recv() => {
-                    let port = connection.expect("command channel should never close");
+            match self
+                .client_rx
+                .recv()
+                .await
+                .expect("all of client connections should never close")
+            {
+                ClientMessage::Command { id, command } => {
+                    return Ok((id, command));
+                }
+                ClientMessage::AddConnection(port) => {
                     let client_id = ClientId(self.ports.len());
                     info!("Connecting client {client_id:?}");
 
-                    match ClientConnection::new(client_id, port, self.request_tx.clone(), self.connect_tx.clone()) {
+                    match ClientConnection::new(client_id, port, self.client_tx.clone()) {
                         Ok(port) => self.ports.push(port),
                         Err(e) => error!("Failed to setup ClientConnection: {e}"),
                     }
@@ -135,8 +142,8 @@ impl WorkerServer {
         }
     }
 
-    pub fn get_connect_channel(&self) -> mpsc::UnboundedSender<JsValue> {
-        self.connect_tx.clone()
+    pub fn get_control_channel(&self) -> mpsc::UnboundedSender<ClientMessage> {
+        self.client_tx.clone()
     }
 
     pub fn respond_to(&self, client: ClientId, response: WorkerResponse) {
@@ -266,13 +273,14 @@ mod tests {
     #[wasm_bindgen_test]
     async fn client_server() {
         let mut server = WorkerServer::new();
-        let tx = server.get_connect_channel();
+        let tx = server.get_control_channel();
 
         // pre-load response
         spawn_local(async move {
             let channel = MessageChannel::new().unwrap();
 
-            tx.send(channel.port2().into()).unwrap();
+            tx.send(ClientMessage::AddConnection(channel.port2().into()))
+                .unwrap();
 
             let client0 = WorkerClient::new(channel.port1().into()).unwrap();
             let response = client0.exec(NodeCommand::IsRunning).await.unwrap();
