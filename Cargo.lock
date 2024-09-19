@@ -751,8 +751,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-tendermint"
-version = "0.32.1"
-source = "git+https://github.com/zvolin/celestia-tendermint-rs?branch=fix/proof-serialization#c62d61749af98f0adaf9a271b174fda48e5c2461"
+version = "0.32.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce8c92a01145f79a0f3ac7c44a43a9b5ee58e8a4c716b56d98833a3848db1afd"
 dependencies = [
  "bytes",
  "celestia-tendermint-proto",
@@ -780,8 +781,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-tendermint-proto"
-version = "0.32.1"
-source = "git+https://github.com/zvolin/celestia-tendermint-rs?branch=fix/proof-serialization#c62d61749af98f0adaf9a271b174fda48e5c2461"
+version = "0.32.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a95746c5221a74d7b913a415fdbb9e7c90e1b4d818dbbff59bddc034cfce2ec"
 dependencies = [
  "bytes",
  "flex-error",
