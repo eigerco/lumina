@@ -15,8 +15,10 @@ use crate::nmt::{
 use crate::{Error, Result};
 
 mod info_byte;
+mod proof;
 
 pub use info_byte::InfoByte;
+pub use proof::ShareProof;
 
 const SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTES;
 
@@ -184,11 +186,15 @@ impl From<NamespacedShares> for RawNamespacedShares {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+/// Raw share with no namespace or length checks.
+///
+/// To be used as intermediary type in various RPC's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
-struct RawShare {
+pub struct RawShare {
+    /// Data held by the share.
     #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]
-    data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 impl TryFrom<RawShare> for Share {

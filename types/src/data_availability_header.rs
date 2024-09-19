@@ -1,5 +1,8 @@
+use std::ops::RangeInclusive;
+
 use celestia_proto::celestia::da::DataAvailabilityHeader as RawDataAvailabilityHeader;
 use celestia_tendermint::merkle::simple_hash_from_byte_vectors;
+use celestia_tendermint_proto::v0_34::types::RowProof as RawRowProof;
 use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -10,7 +13,10 @@ use crate::consts::data_availability_header::{
 use crate::hash::Hash;
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::rsmt2d::AxisType;
-use crate::{bail_validation, Error, ExtendedDataSquare, Result, ValidateBasic, ValidationError};
+use crate::{
+    bail_validation, bail_verification, validation_error, Error, ExtendedDataSquare, MerkleProof,
+    Result, ValidateBasic, ValidationError,
+};
 
 /// Header with commitments of the data availability.
 ///
@@ -178,6 +184,36 @@ impl DataAvailabilityHeader {
             // On validated DAH this never happens
             .expect("len is bigger than u16::MAX")
     }
+
+    /// Get the [`RowProof`] for given rows.
+    pub fn row_proof(&self, rows: RangeInclusive<u16>) -> Result<RowProof> {
+        let all_roots: Vec<_> = self
+            .row_roots
+            .iter()
+            .chain(self.column_roots.iter())
+            .map(|root| root.to_array())
+            .collect();
+
+        let start_row = *rows.start();
+        let end_row = *rows.end();
+        let mut proofs = Vec::with_capacity(rows.len());
+        let mut row_roots = Vec::with_capacity(rows.len());
+
+        for idx in rows {
+            proofs.push(MerkleProof::new(idx as usize, &all_roots)?.0);
+            let row = self
+                .row_root(idx)
+                .ok_or_else(|| Error::IndexOutOfRange(idx as usize, self.row_roots.len()))?;
+            row_roots.push(row);
+        }
+
+        Ok(RowProof {
+            proofs,
+            row_roots,
+            start_row,
+            end_row,
+        })
+    }
 }
 
 impl Protobuf<RawDataAvailabilityHeader> for DataAvailabilityHeader {}
@@ -244,8 +280,129 @@ impl ValidateBasic for DataAvailabilityHeader {
     }
 }
 
+/// A proof of inclusion of a range of row roots in a [`DataAvailabilityHeader`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "RawRowProof", into = "RawRowProof")]
+pub struct RowProof {
+    row_roots: Vec<NamespacedHash>,
+    proofs: Vec<MerkleProof>,
+    start_row: u16,
+    end_row: u16,
+}
+
+impl RowProof {
+    /// Get the list of row roots this proof proves.
+    pub fn row_roots(&self) -> &[NamespacedHash] {
+        &self.row_roots
+    }
+
+    /// Verify the proof against the hash of [`DataAvailabilityHeader`], proving
+    /// the inclusion of rows.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    ///  - the proof is malformed. Number of proofs, row roots and the span between starting and ending row need to match.
+    ///  - the verification of any inner merkle proof fails
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use celestia_types::ExtendedHeader;
+    /// # fn get_extended_header() -> ExtendedHeader {
+    /// #   let s = include_str!("../test_data/chain1/extended_header_block_1.json");
+    /// #   serde_json::from_str(s).unwrap()
+    /// # }
+    /// let eh = get_extended_header();
+    /// let dah = eh.dah;
+    ///
+    /// let proof = dah.row_proof(0..=1).unwrap();
+    ///
+    /// assert!(proof.verify(dah.hash()).is_ok());
+    /// ```
+    pub fn verify(&self, root: Hash) -> Result<()> {
+        if self.row_roots.len() != self.proofs.len() {
+            bail_verification!("invalid row proof: row_roots.len() != proofs.len()");
+        }
+
+        if self.end_row < self.start_row {
+            bail_verification!(
+                "start_row ({}) > end_row ({})",
+                self.start_row,
+                self.end_row
+            );
+        }
+
+        let length = self.end_row - self.start_row + 1;
+        if length as usize != self.proofs.len() {
+            bail_verification!(
+                "length based on start_row and end_row ({}) != length of proofs ({})",
+                length,
+                self.proofs.len()
+            );
+        }
+
+        let Hash::Sha256(root) = root else {
+            bail_verification!("empty hash");
+        };
+
+        for (row_root, proof) in self.row_roots.iter().zip(self.proofs.iter()) {
+            proof.verify(row_root.to_array(), root)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Protobuf<RawRowProof> for RowProof {}
+
+impl TryFrom<RawRowProof> for RowProof {
+    type Error = Error;
+
+    fn try_from(value: RawRowProof) -> Result<Self> {
+        Ok(Self {
+            row_roots: value
+                .row_roots
+                .into_iter()
+                .map(|hash| NamespacedHash::from_raw(&hash))
+                .collect::<Result<_>>()?,
+            proofs: value
+                .proofs
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_>>()?,
+            start_row: value
+                .start_row
+                .try_into()
+                .map_err(|_| validation_error!("start_row ({}) exceeds u16", value.start_row))?,
+            end_row: value
+                .end_row
+                .try_into()
+                .map_err(|_| validation_error!("end_row ({}) exceeds u16", value.end_row))?,
+        })
+    }
+}
+
+impl From<RowProof> for RawRowProof {
+    fn from(value: RowProof) -> Self {
+        Self {
+            row_roots: value
+                .row_roots
+                .into_iter()
+                .map(|hash| hash.to_vec())
+                .collect(),
+            proofs: value.proofs.into_iter().map(Into::into).collect(),
+            start_row: value.start_row as u32,
+            end_row: value.end_row as u32,
+            root: vec![],
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::nmt::Namespace;
+
     use super::*;
 
     #[cfg(target_arch = "wasm32")]
@@ -325,5 +482,131 @@ mod tests {
         dah.column_roots.push(dah.column_roots[0].clone());
 
         dah.validate_basic().unwrap_err();
+    }
+
+    #[test]
+    fn row_proof_serde() {
+        let raw_row_proof = r#"
+          {
+            "end_row": 1,
+            "proofs": [
+              {
+                "aunts": [
+                  "Ch+9PsBdsN5YUt8nvAmjdOAIcVdfmPAEUNmCA8KBe5A=",
+                  "ojjC9H5JG/7OOrt5BzBXs/3w+n1LUI/0YR0d+RSfleU=",
+                  "d6bMQbLTBfZGvqXOW9MPqRM+fTB2/wLJx6CkLc8glCI="
+                ],
+                "index": 0,
+                "leaf_hash": "nOpM3A3d0JYOmNaaI5BFAeKPGwQ90TqmM/kx+sHr79s=",
+                "total": 8
+              },
+              {
+                "aunts": [
+                  "nOpM3A3d0JYOmNaaI5BFAeKPGwQ90TqmM/kx+sHr79s=",
+                  "ojjC9H5JG/7OOrt5BzBXs/3w+n1LUI/0YR0d+RSfleU=",
+                  "d6bMQbLTBfZGvqXOW9MPqRM+fTB2/wLJx6CkLc8glCI="
+                ],
+                "index": 1,
+                "leaf_hash": "Ch+9PsBdsN5YUt8nvAmjdOAIcVdfmPAEUNmCA8KBe5A=",
+                "total": 8
+              }
+            ],
+            "row_roots": [
+              "000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000D8CBB533A24261C4C0A3D37F1CBFB6F4C5EA031472EBA390D482637933874AA0A2B9735E67629993852D",
+              "00000000000000000000000000000000000000D8CBB533A24261C4C0A300000000000000000000000000000000000000D8CBB533A24261C4C0A37E409334CCB1125C793EC040741137634C148F089ACB06BFFF4C1C4CA2CBBA8E"
+            ],
+            "start_row": 0
+          }
+        "#;
+        let raw_dah = r#"
+          {
+            "row_roots": [
+              "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAA2Mu1M6JCYcTAo9N/HL+29MXqAxRy66OQ1IJjeTOHSqCiuXNeZ2KZk4Ut",
+              "AAAAAAAAAAAAAAAAAAAAAAAAANjLtTOiQmHEwKMAAAAAAAAAAAAAAAAAAAAAAAAA2Mu1M6JCYcTAo35AkzTMsRJceT7AQHQRN2NMFI8ImssGv/9MHEyiy7qO",
+              "/////////////////////////////////////////////////////////////////////////////7mTwL+NxdxcYBd89/wRzW2k9vRkQehZiXsuqZXHy89X",
+              "/////////////////////////////////////////////////////////////////////////////2X/FT2ugeYdWmvnEisSgW+9Ih8paNvrji2NYPb8ujaK"
+            ],
+            "column_roots": [
+              "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAA2Mu1M6JCYcTAo/xEv//wkWzNtkcAZiZmSGU1Te6ERwUxTtTfHzoS4bv+",
+              "AAAAAAAAAAAAAAAAAAAAAAAAANjLtTOiQmHEwKMAAAAAAAAAAAAAAAAAAAAAAAAA2Mu1M6JCYcTAo9FOCNvCjA42xYCwHrlo48iPEXLaKt+d+JdErCIrQIi6",
+              "/////////////////////////////////////////////////////////////////////////////y2UErq/83uv433HekCWokxqcY4g+nMQn3tZn2Tr6v74",
+              "/////////////////////////////////////////////////////////////////////////////z6fKmbJTvfLYFlNuDWHn87vJb6V7n44MlCkxv1dyfT2"
+            ]
+          }
+        "#;
+
+        let row_proof: RowProof = serde_json::from_str(raw_row_proof).unwrap();
+        let dah: DataAvailabilityHeader = serde_json::from_str(raw_dah).unwrap();
+
+        row_proof.verify(dah.hash()).unwrap();
+    }
+
+    #[test]
+    fn row_proof_verify_correct() {
+        for square_width in [2, 4, 8, 16] {
+            let dah = random_dah(square_width);
+            let dah_root = dah.hash();
+
+            for start_row in 0..dah.square_width() - 1 {
+                for end_row in start_row..dah.square_width() {
+                    let proof = dah.row_proof(start_row..=end_row).unwrap();
+
+                    proof.verify(dah_root).unwrap()
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn row_proof_verify_malformed() {
+        let dah = random_dah(16);
+        let dah_root = dah.hash();
+
+        let valid_proof = dah.row_proof(0..=1).unwrap();
+
+        // start_row > end_row
+        #[allow(clippy::reversed_empty_ranges)]
+        let proof = dah.row_proof(1..=0).unwrap();
+        proof.verify(dah_root).unwrap_err();
+
+        // length incorrect based on start and end
+        let mut proof = valid_proof.clone();
+        proof.end_row = 2;
+        proof.verify(dah_root).unwrap_err();
+
+        // incorrect amount of proofs
+        let mut proof = valid_proof.clone();
+        proof.proofs.push(proof.proofs[0].clone());
+        proof.verify(dah_root).unwrap_err();
+
+        // incorrect amount of roots
+        let mut proof = valid_proof.clone();
+        proof.row_roots.pop();
+        proof.verify(dah_root).unwrap_err();
+
+        // wrong proof order
+        let mut proof = valid_proof.clone();
+        proof.row_roots = proof.row_roots.into_iter().rev().collect();
+        proof.verify(dah_root).unwrap_err();
+    }
+
+    fn random_dah(square_width: u16) -> DataAvailabilityHeader {
+        let namespaces: Vec<_> = (0..square_width)
+            .map(|n| Namespace::new_v0(&[n as u8]).unwrap())
+            .collect();
+        let (row_roots, col_roots): (Vec<_>, Vec<_>) = namespaces
+            .iter()
+            .map(|&ns| {
+                let row = NamespacedHash::new(*ns, *ns, rand::random());
+                let col = NamespacedHash::new(
+                    **namespaces.first().unwrap(),
+                    **namespaces.last().unwrap(),
+                    rand::random(),
+                );
+                (row, col)
+            })
+            .unzip();
+
+        DataAvailabilityHeader::new(row_roots, col_roots).unwrap()
     }
 }

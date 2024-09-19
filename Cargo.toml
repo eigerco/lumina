@@ -11,8 +11,8 @@ celestia-rpc = { version = "0.4.0", path = "rpc", default-features = false }
 celestia-types = { version = "0.4.0", path = "types", default-features = false }
 libp2p = "0.54.0"
 nmt-rs = "0.2.1"
-celestia-tendermint = { version = "0.32.1", default-features = false }
-celestia-tendermint-proto = "0.32.1"
+celestia-tendermint = { version = "0.32.2", default-features = false }
+celestia-tendermint-proto = "0.32.2"
 
 [patch.crates-io]
 # Uncomment to apply local changes
