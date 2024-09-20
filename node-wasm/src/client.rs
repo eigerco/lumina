@@ -21,6 +21,7 @@ use crate::utils::{
     Network,
 };
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
+use crate::wrapper::node::{PeerTrackerInfoSnapshot, SyncingInfoSnapshot};
 
 /// Config for the lumina wasm node.
 #[wasm_bindgen(inspectable, js_name = NodeConfig)]
@@ -61,11 +62,13 @@ impl NodeClient {
     }
 
     /// Establish a new connection to the existing worker over provided port
+    #[wasm_bindgen(js_name = addConnectionToWorker)]
     pub async fn add_connection_to_worker(&self, port: &JsValue) -> Result<()> {
         self.worker.add_connection_to_worker(port).await
     }
 
     /// Check whether Lumina is currently running
+    #[wasm_bindgen(js_name = isRunning)]
     pub async fn is_running(&self) -> Result<bool> {
         let command = NodeCommand::IsRunning;
         let response = self.worker.exec(command).await?;
@@ -84,6 +87,7 @@ impl NodeClient {
     }
 
     /// Get node's local peer ID.
+    #[wasm_bindgen(js_name = localPeerId)]
     pub async fn local_peer_id(&self) -> Result<String> {
         let command = NodeCommand::GetLocalPeerId;
         let response = self.worker.exec(command).await?;
@@ -93,15 +97,17 @@ impl NodeClient {
     }
 
     /// Get current [`PeerTracker`] info.
-    pub async fn peer_tracker_info(&self) -> Result<JsValue> {
+    #[wasm_bindgen(js_name = peerTrackerInfo)]
+    pub async fn peer_tracker_info(&self) -> Result<PeerTrackerInfoSnapshot> {
         let command = NodeCommand::GetPeerTrackerInfo;
         let response = self.worker.exec(command).await?;
         let peer_info = response.into_peer_tracker_info().check_variant()?;
 
-        Ok(to_value(&peer_info)?)
+        Ok(peer_info.into())
     }
 
     /// Wait until the node is connected to at least 1 peer.
+    #[wasm_bindgen(js_name = waitConnected)]
     pub async fn wait_connected(&self) -> Result<()> {
         let command = NodeCommand::WaitConnected { trusted: false };
         let response = self.worker.exec(command).await?;
@@ -111,6 +117,7 @@ impl NodeClient {
     }
 
     /// Wait until the node is connected to at least 1 trusted peer.
+    #[wasm_bindgen(js_name = waitConnectedTrusted)]
     pub async fn wait_connected_trusted(&self) -> Result<()> {
         let command = NodeCommand::WaitConnected { trusted: true };
         let response = self.worker.exec(command).await?;
@@ -118,6 +125,7 @@ impl NodeClient {
     }
 
     /// Get current network info.
+    #[wasm_bindgen(js_name = networkInfo)]
     pub async fn network_info(&self) -> Result<NetworkInfoSnapshot> {
         let command = NodeCommand::GetNetworkInfo;
         let response = self.worker.exec(command).await?;
@@ -136,6 +144,7 @@ impl NodeClient {
     }
 
     /// Get all the peers that node is connected to.
+    #[wasm_bindgen(js_name = connectedPeers)]
     pub async fn connected_peers(&self) -> Result<Array> {
         let command = NodeCommand::GetConnectedPeers;
         let response = self.worker.exec(command).await?;
@@ -146,6 +155,7 @@ impl NodeClient {
     }
 
     /// Trust or untrust the peer with a given ID.
+    #[wasm_bindgen(js_name = setPeerTrust)]
     pub async fn set_peer_trust(&self, peer_id: &str, is_trusted: bool) -> Result<()> {
         let command = NodeCommand::SetPeerTrust {
             peer_id: peer_id.parse()?,
@@ -156,6 +166,10 @@ impl NodeClient {
     }
 
     /// Request the head header from the network.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
+    #[wasm_bindgen(js_name = requestHeadHeader)]
     pub async fn request_head_header(&self) -> Result<JsValue> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::Head);
         let response = self.worker.exec(command).await?;
@@ -165,6 +179,10 @@ impl NodeClient {
     }
 
     /// Request a header for the block with a given hash from the network.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
+    #[wasm_bindgen(js_name = requestHeaderByHash)]
     pub async fn request_header_by_hash(&self, hash: &str) -> Result<JsValue> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHash(hash.parse()?));
         let response = self.worker.exec(command).await?;
@@ -174,6 +192,10 @@ impl NodeClient {
     }
 
     /// Request a header for the block with a given height from the network.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
+    #[wasm_bindgen(js_name = requestHeaderByHeight)]
     pub async fn request_header_by_height(&self, height: u64) -> Result<JsValue> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHeight(height));
         let response = self.worker.exec(command).await?;
@@ -185,6 +207,10 @@ impl NodeClient {
     /// Request headers in range (from, from + amount] from the network.
     ///
     /// The headers will be verified with the `from` header.
+    ///
+    /// Returns an array of javascript objects with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
+    #[wasm_bindgen(js_name = requestVerifiedHeaders)]
     pub async fn request_verified_headers(
         &self,
         from_header: JsValue,
@@ -201,15 +227,20 @@ impl NodeClient {
     }
 
     /// Get current header syncing info.
-    pub async fn syncer_info(&self) -> Result<JsValue> {
+    #[wasm_bindgen(js_name = syncerInfo)]
+    pub async fn syncer_info(&self) -> Result<SyncingInfoSnapshot> {
         let command = NodeCommand::GetSyncerInfo;
         let response = self.worker.exec(command).await?;
         let syncer_info = response.into_syncer_info().check_variant()?;
 
-        Ok(to_value(&syncer_info?)?)
+        Ok(syncer_info?.into())
     }
 
     /// Get the latest header announced in the network.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
+    #[wasm_bindgen(js_name = getNetworkHeadHeader)]
     pub async fn get_network_head_header(&self) -> Result<JsValue> {
         let command = NodeCommand::LastSeenNetworkHead;
         let response = self.worker.exec(command).await?;
@@ -219,6 +250,10 @@ impl NodeClient {
     }
 
     /// Get the latest locally synced header.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
+    #[wasm_bindgen(js_name = getLocalHeadHeader)]
     pub async fn get_local_head_header(&self) -> Result<JsValue> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::Head);
         let response = self.worker.exec(command).await?;
@@ -228,6 +263,10 @@ impl NodeClient {
     }
 
     /// Get a synced header for the block with a given hash.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
+    #[wasm_bindgen(js_name = getHeaderByHash)]
     pub async fn get_header_by_hash(&self, hash: &str) -> Result<JsValue> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHash(hash.parse()?));
         let response = self.worker.exec(command).await?;
@@ -237,6 +276,10 @@ impl NodeClient {
     }
 
     /// Get a synced header for the block with a given height.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
+    #[wasm_bindgen(js_name = getHeaderByHeight)]
     pub async fn get_header_by_height(&self, height: u64) -> Result<JsValue> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHeight(height));
         let response = self.worker.exec(command).await?;
@@ -254,6 +297,10 @@ impl NodeClient {
     /// # Errors
     ///
     /// If range contains a height of a header that is not found in the store.
+    ///
+    /// Returns an array of javascript objects with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
+    #[wasm_bindgen(js_name = getHeaders)]
     pub async fn get_headers(
         &self,
         start_height: Option<u64>,
@@ -270,6 +317,10 @@ impl NodeClient {
     }
 
     /// Get data sampling metadata of an already sampled height.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/lumina-node/latest/lumina_node/store/struct.SamplingMetadata.html
+    #[wasm_bindgen(js_name = getSamplingMetadata)]
     pub async fn get_sampling_metadata(&self, height: u64) -> Result<JsValue> {
         let command = NodeCommand::GetSamplingMetadata { height };
         let response = self.worker.exec(command).await?;
@@ -289,6 +340,7 @@ impl NodeClient {
     }
 
     /// Returns a [`BroadcastChannel`] for events generated by [`Node`].
+    #[wasm_bindgen(js_name = eventsChannel)]
     pub async fn events_channel(&self) -> Result<BroadcastChannel> {
         let command = NodeCommand::GetEventsChannelName;
         let response = self.worker.exec(command).await?;
