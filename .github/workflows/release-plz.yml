@@ -34,28 +34,70 @@ jobs:
 
       - name: Run release-plz
         uses: MarcoIeni/release-plz-action@v0.5
+        id: release-plz
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Bump lumina-node npm version
+        if: ${{ steps.release-plz.outputs.prs_created }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          node_wasm_version="$(cargo pkgid --manifest-path=node-wasm/Cargo.toml | cut -d@ -f 2)"
+
+          cd node-wasm/js
+          # Update the version of lumina-node-wasm dependency
+          sed -i 's/"lumina-node-wasm": "0.2.0"/"lumina-node-wasm": "'$node_wasm_version'"/' package.json
+          # Update lumina-node version
+          npm version $node_wasm_version
+
+          # push a commit to release-plz's pr
+          branch_name=${{ steps.release-plz.outputs.pr.head_branch }}
+          branch_sha="$(git rev-parse "$branch_name")"
+          package_json="$(base64 package.json)"
+
+          curl https://api.github.com \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            --data '{"query": "mutation {
+              createCommitOnBranch(input: {
+                branch: {
+                  repositoryNameWithOwner: \"eigerco/lumina\",
+                  branchName: \"'"$branch_name"'\"
+                },
+                message: {
+                  headline: \"update lumina-node npm package\"
+                },
+                expectedHeadOid: \"'"$branch_sha"'\",
+                fileChanges: {
+                  additions: [{
+                    path: \"node-wasm/js/package.json\",
+                    contents: \"'"$package_json"'\"
+                  }]
+                }
+              })
+              { commit { commitUrl } }
+            }"}'
+
       - name: Release to npm
         env:
           NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
         run: |
-          CARGO_VER=$(cargo search lumina-node-wasm | sed -e 's/lumina-node-wasm = "\(.*\)".*/\1/')
-          NPM_VER=$(npm show @fl0rek/lumina-node-wasm version)
+          published_version=$(npm show lumina-node-wasm version)
+          local_version="$(cargo pkgid --manifest-path=node-wasm/Cargo.toml | cut -d@ -f 2)"
 
-          echo "Crate version: $CARGO_VER, npm version: $NPM_VER"
-          if [ "$CARGO_VER" == "$NPM_VER" ] ; then
-            echo Latest cargo version already in npm, exiting
+          if [ "$published_version" == "$local_version" ] ; then
+            echo Latest version already in npm, exiting
             exit
           fi
 
+          # publish lumina-node-wasm
           wasm-pack build --target web node-wasm
           wasm-pack publish --target web --access public node-wasm
 
+          # publish lumina-node
           cd node-wasm/js
-          # make sure versions are set correctly for package and wasm dependency
-          npm install -E lumina-node-wasm@$CARGO_VER
-          npm version $CARGO_VER
           npm publish --access public
 
