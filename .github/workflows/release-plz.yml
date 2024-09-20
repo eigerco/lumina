@@ -58,4 +58,3 @@ jobs:
           npm install -E lumina-node-wasm@$CARGO_VER
           npm version $CARGO_VER
           npm publish --access public
-
