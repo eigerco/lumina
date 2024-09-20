@@ -517,9 +517,9 @@ checksum = "d965446196e3b7decd44aa7ee49e31d630118f90ef12f97900f262eb915c951d"
 
 [[package]]
 name = "beetswap"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e41ccdd7bc2a1162380eb2657100fba24739c4b600344187d1b5a411afd326b2"
+checksum = "55f2cf2244bd65e9f00adb06c6b5e951bab980fdacdd572ff035bf610628be99"
 dependencies = [
  "asynchronous-codec",
  "blockstore",
@@ -631,13 +631,12 @@ dependencies = [
 
 [[package]]
 name = "blockstore"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc99329facbb960effbe7ed707c753a718877c1878eb8ca08704fa391c494020"
+checksum = "7679095248a6dc7555fae81154ed1baef264383c16621ef881a219576c72a9be"
 dependencies = [
  "cid",
  "dashmap 6.0.1",
- "idb",
  "js-sys",
  "multihash",
  "redb",
@@ -751,9 +750,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-tendermint"
-version = "0.32.1"
+version = "0.32.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95f93b5cbbd62b6cfde961889bf05d5fe19e70d8500c4465694306ed2695ac23"
+checksum = "ce8c92a01145f79a0f3ac7c44a43a9b5ee58e8a4c716b56d98833a3848db1afd"
 dependencies = [
  "bytes",
  "celestia-tendermint-proto",
@@ -781,9 +780,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-tendermint-proto"
-version = "0.32.1"
+version = "0.32.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8f7d49c1ececa30a4587c5fe8a4035b786b78a3253ed0f9636de591b3dc2b37"
+checksum = "9a95746c5221a74d7b913a415fdbb9e7c90e1b4d818dbbff59bddc034cfce2ec"
 dependencies = [
  "bytes",
  "flex-error",
@@ -3256,7 +3255,6 @@ dependencies = [
  "futures",
  "getrandom",
  "gloo-timers 0.3.0",
- "idb",
  "js-sys",
  "libp2p",
  "libp2p-websocket-websys 0.3.3",
@@ -3279,6 +3277,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "void",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
@@ -3313,6 +3312,7 @@ dependencies = [
  "tracing-web",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-bindgen-test",
  "web-sys",
 ]
 

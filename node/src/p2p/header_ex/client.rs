@@ -3,23 +3,24 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 use celestia_proto::p2p::pb::header_request::Data;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
-use futures::future::join_all;
+use futures::future::{join_all, BoxFuture, FutureExt};
+use futures::stream::{FuturesUnordered, StreamExt};
 use libp2p::request_response::{OutboundFailure, OutboundRequestId};
 use libp2p::PeerId;
 use tokio::sync::oneshot;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, instrument, trace};
 
-use crate::executor::{spawn, yield_now};
+use crate::executor::yield_now;
 use crate::p2p::header_ex::utils::{HeaderRequestExt, HeaderResponseExt};
 use crate::p2p::header_ex::{HeaderExError, ReqRespBehaviour};
 use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
-use crate::store::utils::VALIDATIONS_PER_YIELD;
 use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
 
 const MAX_PEERS: usize = 10;
@@ -30,12 +31,17 @@ where
 {
     reqs: HashMap<S::RequestId, State>,
     peer_tracker: Arc<PeerTracker>,
+    cancellation_token: CancellationToken,
+    tasks: FuturesUnordered<BoxFuture<'static, ()>>,
 }
 
 struct State {
     request: HeaderRequest,
-    respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+    respond_to: OneshotSender,
 }
+
+/// Oneshot sender that responds with `RequestCancelled` if not used.
+struct OneshotSender(Option<OneshotResultSender<Vec<ExtendedHeader>, P2pError>>);
 
 pub(super) trait RequestSender {
     type RequestId: Clone + Copy + Hash + Eq + Debug;
@@ -51,6 +57,36 @@ impl RequestSender for ReqRespBehaviour {
     }
 }
 
+impl OneshotSender {
+    fn new(tx: oneshot::Sender<Result<Vec<ExtendedHeader>, P2pError>>) -> Self {
+        OneshotSender(Some(tx))
+    }
+
+    fn maybe_send(&mut self, result: Result<Vec<ExtendedHeader>, P2pError>) {
+        if let Some(tx) = self.0.take() {
+            let _ = tx.send(result);
+        }
+    }
+
+    fn maybe_send_ok(&mut self, val: Vec<ExtendedHeader>) {
+        self.maybe_send(Ok(val));
+    }
+
+    fn maybe_send_err<E>(&mut self, err: E)
+    where
+        E: Into<P2pError>,
+    {
+        self.maybe_send(Err(err.into()));
+    }
+}
+
+impl Drop for OneshotSender {
+    fn drop(&mut self) {
+        // If sender is dropped without being used, then `RequestCancelled` is send.
+        self.maybe_send_err(HeaderExError::RequestCancelled);
+    }
+}
+
 impl<S> HeaderExClientHandler<S>
 where
     S: RequestSender,
@@ -59,6 +95,8 @@ where
         HeaderExClientHandler {
             reqs: HashMap::new(),
             peer_tracker,
+            cancellation_token: CancellationToken::new(),
+            tasks: FuturesUnordered::new(),
         }
     }
 
@@ -69,6 +107,11 @@ where
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
     ) {
+        if self.cancellation_token.is_cancelled() {
+            respond_to.maybe_send_err(HeaderExError::RequestCancelled);
+            return;
+        }
+
         if !request.is_valid() {
             respond_to.maybe_send_err(HeaderExError::InvalidRequest);
             return;
@@ -103,7 +146,7 @@ where
         let req_id = sender.send_request(&peer, request.clone());
         let state = State {
             request,
-            respond_to,
+            respond_to: OneshotSender::new(respond_to),
         };
 
         self.reqs.insert(req_id, state);
@@ -125,6 +168,7 @@ where
             return;
         }
 
+        let mut respond_to = OneshotSender::new(respond_to);
         let mut rxs = Vec::with_capacity(peers.len());
 
         for peer in peers {
@@ -133,7 +177,7 @@ where
             let req_id = sender.send_request(&peer, request.clone());
             let state = State {
                 request: request.clone(),
-                respond_to: tx,
+                respond_to: OneshotSender::new(tx),
             };
 
             self.reqs.insert(req_id, state);
@@ -143,45 +187,68 @@ where
         // Choose the best HEAD.
         //
         // Algorithm: https://github.com/celestiaorg/go-header/blob/e50090545cc7e049d2f965d2b5c773eaa4a2c0b2/p2p/exchange.go#L357-L381
-        spawn(async move {
-            let mut resps: Vec<_> = join_all(rxs)
-                .await
-                .into_iter()
-                // In case of HEAD all responses have only 1 header.
-                // This was already enforced by `decode_and_verify_responses`.
-                .filter_map(|v| v.ok()?.ok()?.into_iter().next())
-                .collect();
-            let mut counter: HashMap<_, usize> = HashMap::new();
+        self.tasks.push(
+            async move {
+                let mut resps = Vec::with_capacity(rxs.len());
+                let mut counter: HashMap<_, usize> = HashMap::with_capacity(rxs.len());
+                let mut invalid_response = false;
 
-            // In case of no responses, Celestia handles it as NotFound
-            if resps.is_empty() {
-                respond_to.maybe_send_err(HeaderExError::HeaderNotFound);
-                return;
-            }
+                for res in join_all(rxs).await {
+                    match res {
+                        // HEAD responses must have only 1 header.
+                        Ok(Ok(mut v)) if v.len() == 1 => {
+                            resps.append(&mut v);
+                        }
+                        // HEAD responses that have more than 1 header are invalid.
+                        //
+                        // NOTE: A reponse with 0 headers is valid and it means "not found".
+                        Ok(Ok(v)) if v.len() > 1 => {
+                            invalid_response = true;
+                        }
+                        Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse))) => {
+                            invalid_response = true;
+                        }
+                        // Ignore anything else
+                        _ => {}
+                    }
+                }
 
-            // Count peers per response
-            for resp in &resps {
-                *counter.entry(resp.hash()).or_default() += 1;
-            }
-
-            // Sort by height and then peers in descending order
-            resps.sort_unstable_by_key(|resp| {
-                let num_of_peers = counter[&resp.hash()];
-                Reverse((resp.height(), num_of_peers))
-            });
-
-            // Return the header with the highest height that was received by at least 2 peers
-            for resp in &resps {
-                if counter[&resp.hash()] >= MIN_HEAD_RESPONSES {
-                    respond_to.maybe_send_ok(vec![resp.to_owned()]);
+                // In case of no responses, Celestia handles it as NotFound
+                if resps.is_empty() {
+                    // If at least one invalid response was found then respond with InvalidResponse.
+                    if invalid_response {
+                        respond_to.maybe_send_err(HeaderExError::InvalidResponse);
+                    } else {
+                        respond_to.maybe_send_err(HeaderExError::HeaderNotFound);
+                    }
                     return;
                 }
-            }
 
-            // Otherwise return the header with the maximum height
-            let resp = resps.into_iter().next().expect("no reposnes");
-            respond_to.maybe_send_ok(vec![resp]);
-        });
+                // Count peers per response
+                for resp in &resps {
+                    *counter.entry(resp.hash()).or_default() += 1;
+                }
+
+                // Sort by height and then peers in descending order
+                resps.sort_unstable_by_key(|resp| {
+                    let num_of_peers = counter[&resp.hash()];
+                    Reverse((resp.height(), num_of_peers))
+                });
+
+                // Return the header with the highest height that was received by at least 2 peers
+                for resp in &resps {
+                    if counter[&resp.hash()] >= MIN_HEAD_RESPONSES {
+                        respond_to.maybe_send_ok(vec![resp.to_owned()]);
+                        return;
+                    }
+                }
+
+                // Otherwise return the header with the maximum height
+                let resp = resps.into_iter().next().expect("no responses");
+                respond_to.maybe_send_ok(vec![resp]);
+            }
+            .boxed(),
+        );
     }
 
     #[instrument(level = "trace", skip(self, responses), fields(responses.len = responses.len()))]
@@ -191,27 +258,19 @@ where
         request_id: S::RequestId,
         responses: Vec<HeaderResponse>,
     ) {
-        let Some(state) = self.reqs.remove(&request_id) else {
+        let Some(mut state) = self.reqs.remove(&request_id) else {
             return;
         };
 
-        trace!(
-            "Response received. Expected amount = {}",
-            state.request.amount
-        );
-
-        spawn(async move {
-            match decode_and_verify_responses(&state.request, &responses).await {
-                Ok(headers) => {
-                    // TODO: Increase peer score
-                    state.respond_to.maybe_send_ok(headers);
-                }
-                Err(e) => {
-                    // TODO: Decrease peer score
-                    state.respond_to.maybe_send_err(e);
-                }
+        self.tasks.push(
+            async move {
+                let res = decode_and_verify_responses(&state.request, &responses)
+                    .await
+                    .map_err(P2pError::from);
+                state.respond_to.maybe_send(res);
             }
-        });
+            .boxed(),
+        );
     }
 
     #[instrument(level = "debug", skip(self))]
@@ -223,15 +282,24 @@ where
     ) {
         debug!("Outbound failure");
 
-        if let Some(state) = self.reqs.remove(&request_id) {
+        if let Some(mut state) = self.reqs.remove(&request_id) {
             state
                 .respond_to
                 .maybe_send_err(HeaderExError::OutboundFailure(error));
         }
     }
 
-    pub(super) fn poll(&mut self, _cx: &mut Context) -> Poll<()> {
-        Poll::Pending
+    pub(super) fn on_stop(&mut self) {
+        self.cancellation_token.cancel();
+        self.tasks.clear();
+        self.reqs.clear();
+    }
+
+    pub(super) fn poll(&mut self, cx: &mut Context) -> Poll<()> {
+        match ready!(self.tasks.poll_next_unpin(cx)) {
+            Some(()) => Poll::Ready(()),
+            None => Poll::Pending,
+        }
     }
 }
 
@@ -239,6 +307,8 @@ async fn decode_and_verify_responses(
     request: &HeaderRequest,
     responses: &[HeaderResponse],
 ) -> Result<Vec<ExtendedHeader>, HeaderExError> {
+    trace!("Response received. Expected amount = {}", request.amount);
+
     if responses.is_empty() {
         return Err(HeaderExError::InvalidResponse);
     }
@@ -252,19 +322,17 @@ async fn decode_and_verify_responses(
 
     let mut headers = Vec::with_capacity(responses.len());
 
-    'outer: for responses in responses.chunks(VALIDATIONS_PER_YIELD) {
-        for response in responses {
-            // Unmarshal and validate. Propagate error only if nothing
-            // was decoded before.
-            let header = match response.to_validated_extented_header() {
-                Ok(header) => header,
-                Err(e) if headers.is_empty() => return Err(e),
-                Err(_) => break 'outer,
-            };
+    for response in responses {
+        // Unmarshal and validate. Propagate error only if nothing
+        // was decoded before.
+        let header = match response.to_validated_extented_header() {
+            Ok(header) => header,
+            Err(e) if headers.is_empty() => return Err(e),
+            Err(_) => break,
+        };
 
-            trace!("Header: {header}");
-            headers.push(header);
-        }
+        trace!("Header: {header}");
+        headers.push(header);
 
         // Validation is computation heavy so we yield on every chunk
         yield_now().await;
@@ -305,6 +373,7 @@ async fn decode_and_verify_responses(
 mod tests {
     use super::*;
     use crate::events::EventChannel;
+    use crate::executor::sleep;
     use crate::p2p::header_ex::utils::ExtendedHeaderExt;
     use crate::test_utils::async_test;
     use celestia_proto::p2p::pb::StatusCode;
@@ -313,8 +382,12 @@ mod tests {
     use celestia_types::test_utils::{invalidate, unverify, ExtendedHeaderGenerator};
     use libp2p::swarm::ConnectionId;
     use std::collections::VecDeque;
+    use std::future::poll_fn;
     use std::io;
+    use std::pin::pin;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::Duration;
+    use tokio::select;
 
     #[async_test]
     async fn request_height() {
@@ -332,7 +405,7 @@ mod tests {
 
         mock_req.send_n_responses(&mut handler, 1, vec![expected]);
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_header);
     }
@@ -357,7 +430,7 @@ mod tests {
 
         mock_req.send_n_responses(&mut handler, 1, vec![expected]);
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_header);
     }
@@ -381,7 +454,7 @@ mod tests {
 
         mock_req.send_n_responses(&mut handler, 1, expected);
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 3);
         assert_eq!(result, expected_headers);
     }
@@ -410,7 +483,7 @@ mod tests {
 
         mock_req.send_n_responses(&mut handler, 1, response);
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 3);
         assert_eq!(result, expected_headers);
     }
@@ -438,7 +511,7 @@ mod tests {
 
         mock_req.send_n_responses(&mut handler, 1, responses);
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 2);
         assert_eq!(result, expected_headers);
     }
@@ -461,8 +534,8 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 1, vec![response]);
 
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound))
         ));
     }
 
@@ -482,8 +555,8 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 1, vec![header4.to_header_response()]);
 
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidResponse))
         ));
     }
 
@@ -513,8 +586,8 @@ mod tests {
         );
 
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidResponse))
         ));
     }
 
@@ -538,8 +611,8 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 1, vec![header5.to_header_response()]);
 
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidResponse))
         ));
     }
 
@@ -561,8 +634,8 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 1, vec![response]);
 
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound))
         ));
     }
 
@@ -584,8 +657,8 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 1, vec![response]);
 
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidResponse))
         ));
     }
 
@@ -607,8 +680,8 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 1, vec![response]);
 
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidResponse))
         ));
     }
 
@@ -626,7 +699,7 @@ mod tests {
         let header5 = gen.next();
 
         mock_req.send_n_responses(&mut handler, 1, vec![header5.to_header_response()]);
-        let headers = rx.await.unwrap().unwrap();
+        let headers = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(headers, vec![header5]);
     }
 
@@ -650,8 +723,8 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 1, response);
 
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidResponse))
         ));
     }
 
@@ -673,8 +746,8 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 1, vec![invalid_header5.to_header_response()]);
 
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidResponse)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidResponse))
         ));
     }
 
@@ -702,9 +775,32 @@ mod tests {
 
         mock_req.send_n_responses(&mut handler, 1, expected);
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 2);
         assert_eq!(result, expected_headers);
+    }
+
+    #[async_test]
+    async fn request_height_then_stop() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 1), tx);
+
+        // Trigger stop
+        handler.on_stop();
+
+        assert!(matches!(
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::RequestCancelled))
+        ));
+
+        // This is special test were we do not response to the request.
+        // We avoid panicking on `MockReq` drop by clearing it.
+        mock_req.clear_pending_requests();
     }
 
     #[async_test]
@@ -717,24 +813,24 @@ mod tests {
         let (tx, rx) = oneshot::channel();
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(5, 0), tx);
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidRequest))
         ));
 
         // Head with zero amount
         let (tx, rx) = oneshot::channel();
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 0), tx);
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidRequest))
         ));
 
         // Head with more than one amount
         let (tx, rx) = oneshot::channel();
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 2), tx);
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidRequest))
         ));
 
         // Invalid hash
@@ -748,8 +844,8 @@ mod tests {
             tx,
         );
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidRequest))
         ));
 
         // Valid hash with more than one amount
@@ -763,8 +859,8 @@ mod tests {
             tx,
         );
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidRequest))
         ));
 
         // No data
@@ -778,8 +874,8 @@ mod tests {
             tx,
         );
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::InvalidRequest)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidRequest))
         ));
     }
 
@@ -816,7 +912,7 @@ mod tests {
         mock_req.send_n_failures(&mut handler, 1, OutboundFailure::Timeout);
         mock_req.send_n_failures(&mut handler, 1, OutboundFailure::ConnectionClosed);
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_header);
     }
@@ -859,7 +955,7 @@ mod tests {
             vec![gen.another_of(&expected_header).to_header_response()],
         );
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_header);
     }
@@ -886,7 +982,7 @@ mod tests {
             mock_req.send_n_responses(&mut handler, 1, vec![header.to_header_response()]);
         }
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_header);
     }
@@ -920,7 +1016,7 @@ mod tests {
             vec![header6.to_header_response(), header7.to_header_response()],
         );
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_header);
     }
@@ -947,7 +1043,7 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 9, vec![invalid_header5.to_header_response()]);
         mock_req.send_n_responses(&mut handler, 1, vec![expected]);
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_header);
     }
@@ -969,8 +1065,8 @@ mod tests {
         mock_req.send_n_responses(&mut handler, 10, vec![invalid_header5.to_header_response()]);
 
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::InvalidResponse))
         ));
     }
 
@@ -988,8 +1084,8 @@ mod tests {
         mock_req.send_n_failures(&mut handler, 5, OutboundFailure::ConnectionClosed);
 
         assert!(matches!(
-            rx.await,
-            Ok(Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound)))
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::HeaderNotFound))
         ));
     }
 
@@ -1009,7 +1105,7 @@ mod tests {
 
         mock_req.send_n_responses(&mut handler, 1, vec![expected]);
 
-        let result = rx.await.unwrap().unwrap();
+        let result = poll_client_and_receiver(&mut handler, rx).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_header);
     }
@@ -1024,7 +1120,42 @@ mod tests {
 
         handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
 
-        assert!(matches!(rx.await, Ok(Err(P2pError::NoConnectedPeers))));
+        assert!(matches!(
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::NoConnectedPeers)
+        ));
+    }
+
+    #[async_test]
+    async fn head_request_then_stop() {
+        let peer_tracker = peer_tracker_with_n_peers(15);
+        let mut mock_req = MockReq::new();
+        let mut handler = HeaderExClientHandler::<MockReq>::new(peer_tracker);
+
+        let (tx, mut rx) = oneshot::channel();
+
+        handler.on_send_request(&mut mock_req, HeaderRequest::with_origin(0, 1), tx);
+
+        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+
+        mock_req.send_n_responses(&mut handler, 5, vec![gen.next().to_header_response()]);
+
+        // Poll client and give some time to it to consume some of the responses.
+        poll_client_for(&mut handler, Duration::from_millis(100)).await;
+        // Not all requests were answered, so we shouldn't have any response.
+        rx.try_recv().unwrap_err();
+
+        // Trigger stop
+        handler.on_stop();
+
+        assert!(matches!(
+            poll_client_and_receiver(&mut handler, rx).await,
+            Err(P2pError::HeaderEx(HeaderExError::RequestCancelled))
+        ));
+
+        // This is special test were we do not response to all requests.
+        // We avoid panicking on `MockReq` drop by clearing pending ones.
+        mock_req.clear_pending_requests();
     }
 
     #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -1093,6 +1224,10 @@ mod tests {
                 handler.on_failure(req.peer, req.id, error);
             }
         }
+
+        fn clear_pending_requests(&mut self) {
+            self.reqs.clear();
+        }
     }
 
     impl Drop for MockReq {
@@ -1112,5 +1247,30 @@ mod tests {
         }
 
         peers
+    }
+
+    /// Keep polling `client` until answer is received.
+    async fn poll_client_and_receiver(
+        client: &mut HeaderExClientHandler<MockReq>,
+        mut rx: oneshot::Receiver<Result<Vec<ExtendedHeader>, P2pError>>,
+    ) -> Result<Vec<ExtendedHeader>, P2pError> {
+        loop {
+            select! {
+                _ = poll_fn(|cx| client.poll(cx)) => {}
+                res = &mut rx => return res.unwrap(),
+            }
+        }
+    }
+
+    /// Keep polling `client` until specified duration is reached.
+    async fn poll_client_for(client: &mut HeaderExClientHandler<MockReq>, dur: Duration) {
+        let mut sleep = pin!(sleep(dur));
+
+        loop {
+            select! {
+                _ = poll_fn(|cx| client.poll(cx)) => {}
+                _ = &mut sleep => return,
+            }
+        }
     }
 }

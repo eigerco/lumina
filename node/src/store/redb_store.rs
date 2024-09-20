@@ -23,6 +23,7 @@ use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{
     Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
 };
+use crate::utils::Counter;
 
 use super::utils::{deserialize_extended_header, deserialize_sampling_metadata};
 
@@ -44,6 +45,7 @@ const HEADER_RANGES_KEY: &str = "KEY.HEADER_RANGES";
 #[derive(Debug)]
 pub struct RedbStore {
     inner: Arc<Inner>,
+    task_counter: Counter,
 }
 
 #[derive(Debug)]
@@ -82,6 +84,7 @@ impl RedbStore {
                 db,
                 header_added_notifier: Notify::new(),
             }),
+            task_counter: Counter::new(),
         };
 
         store
@@ -147,10 +150,15 @@ impl RedbStore {
         T: Send + 'static,
     {
         let inner = self.inner.clone();
+        let guard = self.task_counter.guard();
 
         spawn_blocking(move || {
-            let mut tx = inner.db.begin_read()?;
-            f(&mut tx)
+            let _guard = guard;
+
+            {
+                let mut tx = inner.db.begin_read()?;
+                f(&mut tx)
+            }
         })
         .await?
     }
@@ -164,18 +172,23 @@ impl RedbStore {
         T: Send + 'static,
     {
         let inner = self.inner.clone();
+        let guard = self.task_counter.guard();
 
         spawn_blocking(move || {
-            let mut tx = inner.db.begin_write()?;
-            let res = f(&mut tx);
+            let _guard = guard;
 
-            if res.is_ok() {
-                tx.commit()?;
-            } else {
-                tx.abort()?;
+            {
+                let mut tx = inner.db.begin_write()?;
+                let res = f(&mut tx);
+
+                if res.is_ok() {
+                    tx.commit()?;
+                } else {
+                    tx.abort()?;
+                }
+
+                res
             }
-
-            res
         })
         .await?
     }
@@ -538,6 +551,12 @@ impl Store for RedbStore {
 
     async fn remove_last(&self) -> Result<u64> {
         self.remove_last().await
+    }
+
+    async fn close(mut self) -> Result<()> {
+        // Wait all ongoing `spawn_blocking` tasks to finish.
+        self.task_counter.wait_guards().await;
+        Ok(())
     }
 }
 

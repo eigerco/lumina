@@ -34,7 +34,7 @@ libp2p = { workspace = true, features = [
 ] }
 
 async-trait = "0.1.80"
-beetswap = "0.3.1"
+beetswap = "0.4.0"
 cid = { version = "0.11.1", features = ["serde-codec"] }
 dashmap = "5.5.3"
 futures = "0.3.30"
@@ -50,6 +50,7 @@ thiserror = "1.0.61"
 tokio = { version = "1.38.0", features = ["macros", "sync"] }
 tokio-util = "0.7.11"
 tracing = "0.1.40"
+void = "1.0.2"
 web-time = "1.1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -71,12 +72,11 @@ rustls-pki-types = "1.7.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 backoff = { version = "0.4.0", features = ["wasm-bindgen"] }
-beetswap = { version = "0.3.1", features = ["wasm-bindgen"] }
+beetswap = { version = "0.4.0", features = ["wasm-bindgen"] }
 blockstore = { workspace = true, features = ["indexeddb"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { version = "0.2.15", features = ["js"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
-idb = "0.6.3"
 js-sys = "0.3.69"
 libp2p = { workspace = true, features = [
   "noise",

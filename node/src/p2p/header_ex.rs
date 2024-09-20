@@ -88,6 +88,12 @@ pub enum HeaderExError {
     /// Error when handling connection to the server.
     #[error("Outbound failure: {0}")]
     OutboundFailure(OutboundFailure),
+
+    /// Request cancelled because [`Node`] is stopping.
+    ///
+    /// [`Node`]: crate::node::Node
+    #[error("Request cancelled because `Node` is stopping")]
+    RequestCancelled,
 }
 
 impl<S> HeaderExBehaviour<S>
@@ -116,6 +122,11 @@ where
     ) {
         self.client_handler
             .on_send_request(&mut self.req_resp, request, respond_to);
+    }
+
+    pub(crate) fn stop(&mut self) {
+        self.client_handler.on_stop();
+        self.server_handler.on_stop();
     }
 
     fn on_to_swarm(
@@ -166,8 +177,13 @@ where
                     },
                 peer,
             } => {
-                self.server_handler
-                    .on_request_received(peer, request_id, request, channel);
+                self.server_handler.on_request_received(
+                    peer,
+                    request_id,
+                    request,
+                    &mut self.req_resp,
+                    channel,
+                );
             }
 
             // Response to inbound request was sent

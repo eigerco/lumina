@@ -6,7 +6,7 @@ use celestia_types::consts::appconsts::{
     SHARE_INFO_BYTES,
 };
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
-use celestia_types::Blob;
+use celestia_types::{Blob, Share};
 
 pub mod utils;
 
@@ -49,6 +49,61 @@ async fn get_shares_by_namespace() {
         });
 
     assert_eq!(&reconstructed_data[..seq_len as usize], &data[..]);
+}
+
+#[tokio::test]
+async fn get_shares_range() {
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let namespace = random_ns();
+    let data = random_bytes(1024);
+    let blob = Blob::new(namespace, data.clone()).unwrap();
+    let commitment = blob.commitment;
+
+    let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
+
+    let header = client.header_get_by_height(submitted_height).await.unwrap();
+    let blob_on_chain = client
+        .blob_get(submitted_height, namespace, commitment)
+        .await
+        .unwrap();
+    let index = blob_on_chain.index.unwrap();
+    let shares = blob_on_chain.to_shares().unwrap();
+
+    let shares_range = client
+        .share_get_range(
+            submitted_height,
+            index as usize,
+            index as usize + shares.len(),
+        )
+        .await
+        .unwrap();
+
+    shares_range.proof.verify(header.dah.hash()).unwrap();
+
+    for ((share, received), proven) in shares
+        .into_iter()
+        .zip(shares_range.shares.into_iter())
+        .zip(shares_range.proof.shares().iter())
+    {
+        assert_eq!(share, Share::try_from(received).unwrap());
+        assert_eq!(share.as_ref(), proven.as_ref());
+    }
+}
+
+#[tokio::test]
+async fn get_shares_range_not_existing() {
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let header = client.header_network_head().await.unwrap();
+    let shares_in_block = header.dah.square_width().pow(2);
+
+    client
+        .share_get_range(
+            header.height().value(),
+            shares_in_block as usize - 2,
+            shares_in_block as usize + 2,
+        )
+        .await
+        .unwrap_err();
 }
 
 #[tokio::test]

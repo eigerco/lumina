@@ -239,7 +239,7 @@ impl IndexedDbStore {
         let header_store = tx.store(HEADER_STORE_NAME)?;
         let hash_index = header_store.index(HASH_INDEX_NAME)?;
 
-        let hash_key = KeyRange::only(&to_value(&hash)?)?;
+        let hash_key = KeyRange::only(&to_value(&hash)?).map_err(rexie::Error::IdbError)?;
 
         let hash_count = hash_index.count(Some(hash_key)).await?;
 
@@ -426,25 +426,16 @@ impl Store for IndexedDbStore {
         let fut = SendWrapper::new(self.remove_last());
         fut.await
     }
+
+    async fn close(self) -> Result<()> {
+        self.db.take().close();
+        Ok(())
+    }
 }
 
 impl From<rexie::Error> for StoreError {
     fn from(error: rexie::Error) -> StoreError {
-        use rexie::Error as E;
-        match error {
-            E::IdbError(idb_error) => idb_error.into(),
-            other => StoreError::FatalDatabaseError(other.to_string()),
-        }
-    }
-}
-
-impl From<idb::Error> for StoreError {
-    fn from(error: idb::Error) -> Self {
-        use idb::Error as E;
-        match error {
-            e @ E::OneshotChannelReceiveError => StoreError::ExecutorError(e.to_string()),
-            other => StoreError::FatalDatabaseError(other.to_string()),
-        }
+        StoreError::FatalDatabaseError(error.to_string())
     }
 }
 
@@ -625,7 +616,7 @@ async fn insert_tx_op(
     for header in headers.as_ref() {
         let hash = header.hash();
         let hash_index = header_store.index(HASH_INDEX_NAME)?;
-        let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?)?;
+        let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?).map_err(rexie::Error::IdbError)?;
 
         if hash_index.count(Some(jsvalue_hash_key)).await.unwrap_or(0) != 0 {
             // TODO: Replace this with `StoredDataError` when we implement
