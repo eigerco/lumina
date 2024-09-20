@@ -53,6 +53,9 @@ jobs:
           npm version $node_wasm_version
 
           # push a commit to release-plz's pr
+          # fetch the branch created by release-plz
+          git fetch
+          # prepare graphql query
           branch_name=${{ steps.release-plz.outputs.pr.head_branch }}
           branch_sha="$(git rev-parse "$branch_name")"
           package_json="$(base64 --wrap 0 package.json)"
@@ -75,7 +78,7 @@ jobs:
             })
             { commit { commitUrl } }
           }"}'
-
+          # create new commit with changes
           curl https://api.github.com/graphql \
             -H "Accept: application/vnd.github+json" \
             -H "Content-Type: application/json" \
