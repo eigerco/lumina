@@ -19,7 +19,7 @@
     "main": "index.js",
     "homepage": "https://www.eiger.co",
     "dependencies": {
-        "lumina-node-wasm": "0.2.0"
+        "lumina-node-wasm": "0.3.0"
     },
     "keywords": [
         "blockchain",
