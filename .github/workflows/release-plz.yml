@@ -51,8 +51,8 @@ jobs:
           git checkout "$pr_branch_name"
 
           # Update the version of lumina-node-wasm dependency
-          cd node-wasm/js
           node_wasm_version="$(cargo pkgid --manifest-path=node-wasm/Cargo.toml | cut -d@ -f 2)"
+          cd node-wasm/js
           npm pkg set "dependencies[lumina-node-wasm]=$node_wasm_version"
           # Update lumina-node version
           npm version $node_wasm_version
