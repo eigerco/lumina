@@ -44,26 +44,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
         run: |
-          node_wasm_version="$(cargo pkgid --manifest-path=node-wasm/Cargo.toml | cut -d@ -f 2)"
+          pr_branch_name=${{ steps.release-plz.outputs.pr.head_branch }}
 
-          cd node-wasm/js
+          # switch to the branch created by release-plz
+          git fetch
+          git checkout "$pr_branch_name"
+
           # Update the version of lumina-node-wasm dependency
+          node_wasm_version="$(cargo pkgid --manifest-path=node-wasm/Cargo.toml | cut -d@ -f 2)"
+          cd node-wasm/js
           npm pkg set "dependencies[lumina-node-wasm]=$node_wasm_version"
           # Update lumina-node version
           npm version $node_wasm_version
 
           # push a commit to release-plz's pr
-          # fetch the branch created by release-plz
-          git fetch
           # prepare graphql query
-          branch_name=${{ steps.release-plz.outputs.pr.head_branch }}
-          branch_sha="$(git rev-parse "$branch_name")"
+          branch_sha="$(git rev-parse "$pr_branch_name")"
           package_json="$(base64 --wrap 0 package.json)"
           query='{"query": "mutation {
             createCommitOnBranch(input: {
               branch: {
                 repositoryNameWithOwner: \"eigerco/lumina\",
-                branchName: \"'"$branch_name"'\"
+                branchName: \"'"$pr_branch_name"'\"
               },
               message: {
                 headline: \"update lumina-node npm package\"
