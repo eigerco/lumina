@@ -4,9 +4,7 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(inspectable)]
 #[derive(Debug)]
 pub struct PeerTrackerInfoSnapshot {
-    #[wasm_bindgen(js_name = "numConnectedPeers")]
     pub num_connected_peers: u64,
-    #[wasm_bindgen(js_name = "numConnectedTrustedPeers")]
     pub num_connected_trusted_peers: u64,
 }
 
@@ -20,9 +18,8 @@ pub struct BlockRange {
 #[wasm_bindgen(inspectable)]
 #[derive(Debug)]
 pub struct SyncingInfoSnapshot {
-    #[wasm_bindgen(getter_with_clone, js_name = "storedHeaders")]
+    #[wasm_bindgen(getter_with_clone)]
     pub stored_headers: Vec<BlockRange>,
-    #[wasm_bindgen(js_name = "subjectiveHead")]
     pub subjective_head: u64,
 }
 

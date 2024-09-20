@@ -7,28 +7,19 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(inspectable)]
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct NetworkInfoSnapshot {
-    #[wasm_bindgen(js_name = "numPeers")]
     pub num_peers: usize,
-    #[wasm_bindgen(js_name = "connectionCounters")]
     pub connection_counters: ConnectionCountersSnapshot,
 }
 
 #[wasm_bindgen(inspectable)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct ConnectionCountersSnapshot {
-    #[wasm_bindgen(js_name = "numConnections")]
     pub num_connections: u32,
-    #[wasm_bindgen(js_name = "numPending")]
     pub num_pending: u32,
-    #[wasm_bindgen(js_name = "numPendingIncoming")]
     pub num_pending_incoming: u32,
-    #[wasm_bindgen(js_name = "numPendingOutgoing")]
     pub num_pending_outgoing: u32,
-    #[wasm_bindgen(js_name = "numEstablished")]
     pub num_established: u32,
-    #[wasm_bindgen(js_name = "numEstablishedIncoming")]
     pub num_established_incoming: u32,
-    #[wasm_bindgen(js_name = "numEstablishedOutgoing")]
     pub num_established_outgoing: u32,
 }
 impl From<SwarmNetworkInfo> for NetworkInfoSnapshot {
