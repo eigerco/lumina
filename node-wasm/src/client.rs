@@ -1,6 +1,6 @@
 //! A browser compatible wrappers for the [`lumina-node`].
 
-use js_sys::{Array, Number};
+use js_sys::Array;
 use libp2p::identity::Keypair;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
@@ -18,7 +18,7 @@ use crate::error::{Context, Result};
 use crate::ports::WorkerClient;
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
-    Network, NumberExt,
+    Network,
 };
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::wrapper::node::{PeerTrackerInfoSnapshot, SyncingInfoSnapshot};
@@ -166,6 +166,9 @@ impl NodeClient {
     }
 
     /// Request the head header from the network.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = requestHeadHeader)]
     pub async fn request_head_header(&self) -> Result<JsValue> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::Head);
@@ -176,6 +179,9 @@ impl NodeClient {
     }
 
     /// Request a header for the block with a given hash from the network.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = requestHeaderByHash)]
     pub async fn request_header_by_hash(&self, hash: &str) -> Result<JsValue> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHash(hash.parse()?));
@@ -186,10 +192,12 @@ impl NodeClient {
     }
 
     /// Request a header for the block with a given height from the network.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = requestHeaderByHeight)]
-    pub async fn request_header_by_height(&self, height: Number) -> Result<JsValue> {
-        let command =
-            NodeCommand::RequestHeader(SingleHeaderQuery::ByHeight(height.try_into_u64()?));
+    pub async fn request_header_by_height(&self, height: u64) -> Result<JsValue> {
+        let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHeight(height));
         let response = self.worker.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
@@ -199,15 +207,18 @@ impl NodeClient {
     /// Request headers in range (from, from + amount] from the network.
     ///
     /// The headers will be verified with the `from` header.
+    ///
+    /// Returns an array of javascript objects with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = requestVerifiedHeaders)]
     pub async fn request_verified_headers(
         &self,
         from_header: JsValue,
-        amount: Number,
+        amount: u64,
     ) -> Result<Array> {
         let command = NodeCommand::GetVerifiedHeaders {
             from: from_header,
-            amount: amount.try_into_u64()?,
+            amount,
         };
         let response = self.worker.exec(command).await?;
         let headers = response.into_headers().check_variant()?;
@@ -226,6 +237,9 @@ impl NodeClient {
     }
 
     /// Get the latest header announced in the network.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getNetworkHeadHeader)]
     pub async fn get_network_head_header(&self) -> Result<JsValue> {
         let command = NodeCommand::LastSeenNetworkHead;
@@ -236,6 +250,9 @@ impl NodeClient {
     }
 
     /// Get the latest locally synced header.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getLocalHeadHeader)]
     pub async fn get_local_head_header(&self) -> Result<JsValue> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::Head);
@@ -246,6 +263,9 @@ impl NodeClient {
     }
 
     /// Get a synced header for the block with a given hash.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getHeaderByHash)]
     pub async fn get_header_by_hash(&self, hash: &str) -> Result<JsValue> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHash(hash.parse()?));
@@ -256,9 +276,12 @@ impl NodeClient {
     }
 
     /// Get a synced header for the block with a given height.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getHeaderByHeight)]
-    pub async fn get_header_by_height(&self, height: Number) -> Result<JsValue> {
-        let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHeight(height.try_into_u64()?));
+    pub async fn get_header_by_height(&self, height: u64) -> Result<JsValue> {
+        let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHeight(height));
         let response = self.worker.exec(command).await?;
         let header = response.into_header().check_variant()?;
 
@@ -274,21 +297,18 @@ impl NodeClient {
     /// # Errors
     ///
     /// If range contains a height of a header that is not found in the store.
+    ///
+    /// Returns an array of javascript objects with given structure:
+    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getHeaders)]
     pub async fn get_headers(
         &self,
-        start_height: Option<Number>,
-        end_height: Option<Number>,
+        start_height: Option<u64>,
+        end_height: Option<u64>,
     ) -> Result<Array> {
         let command = NodeCommand::GetHeadersRange {
-            start_height: start_height
-                .as_ref()
-                .map(NumberExt::try_into_u64)
-                .transpose()?,
-            end_height: end_height
-                .as_ref()
-                .map(NumberExt::try_into_u64)
-                .transpose()?,
+            start_height,
+            end_height,
         };
         let response = self.worker.exec(command).await?;
         let headers = response.into_headers().check_variant()?;
@@ -297,11 +317,12 @@ impl NodeClient {
     }
 
     /// Get data sampling metadata of an already sampled height.
+    ///
+    /// Returns a javascript object with given structure:
+    /// https://docs.rs/lumina-node/latest/lumina_node/store/struct.SamplingMetadata.html
     #[wasm_bindgen(js_name = getSamplingMetadata)]
-    pub async fn get_sampling_metadata(&self, height: Number) -> Result<JsValue> {
-        let command = NodeCommand::GetSamplingMetadata {
-            height: height.try_into_u64()?,
-        };
+    pub async fn get_sampling_metadata(&self, height: u64) -> Result<JsValue> {
+        let command = NodeCommand::GetSamplingMetadata { height };
         let response = self.worker.exec(command).await?;
         let metadata = response.into_sampling_metadata().check_variant()?;
 

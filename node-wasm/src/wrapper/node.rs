@@ -1,9 +1,8 @@
 use lumina_node::node::{PeerTrackerInfo, SyncingInfo};
-use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(inspectable)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct PeerTrackerInfoSnapshot {
     #[wasm_bindgen(js_name = "numConnectedPeers")]
     pub num_connected_peers: u64,
@@ -12,14 +11,14 @@ pub struct PeerTrackerInfoSnapshot {
 }
 
 #[wasm_bindgen(inspectable)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct BlockRange {
     pub start: u64,
     pub end: u64,
 }
 
 #[wasm_bindgen(inspectable)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct SyncingInfoSnapshot {
     #[wasm_bindgen(getter_with_clone, js_name = "storedHeaders")]
     pub stored_headers: Vec<BlockRange>,
