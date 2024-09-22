@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-#[cfg(any(not(target_arch = "wasm32"), feature = "wasm-bindgen"))]
+#[cfg(any(not(any(target_arch = "wasm32", target_arch = "riscv32")), feature = "wasm-bindgen"))]
 use std::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
@@ -21,7 +21,7 @@ pub type Validator = validator::Info;
 /// A collection of the tendermint validators.
 pub type ValidatorSet = validator::Set;
 
-#[cfg(any(not(target_arch = "wasm32"), feature = "wasm-bindgen"))]
+#[cfg(any(not(any(target_arch = "wasm32", target_arch = "riscv32")) feature = "wasm-bindgen"))]
 const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
 
 /// Block header together with the relevant Data Availability metadata.
@@ -217,7 +217,7 @@ impl ExtendedHeader {
             );
         }
 
-        #[cfg(any(not(target_arch = "wasm32"), feature = "wasm-bindgen"))]
+        #[cfg(any(not(any(target_arch = "wasm32", target_arch = "riscv32")), feature = "wasm-bindgen"))]
         {
             let now = Time::now();
             let valid_until = now.checked_add(VERIFY_CLOCK_DRIFT).unwrap();
