@@ -21,7 +21,7 @@ pub type Validator = validator::Info;
 /// A collection of the tendermint validators.
 pub type ValidatorSet = validator::Set;
 
-#[cfg(any(not(any(target_arch = "wasm32", target_arch = "riscv32")) feature = "wasm-bindgen"))]
+#[cfg(any(not(any(target_arch = "wasm32", target_arch = "riscv32")), feature = "wasm-bindgen"))]
 const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
 
 /// Block header together with the relevant Data Availability metadata.
