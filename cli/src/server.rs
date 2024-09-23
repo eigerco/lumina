@@ -26,11 +26,7 @@ struct WasmNodeArgs {
 }
 
 #[derive(RustEmbed)]
-#[folder = "$WASM_NODE_OUT_DIR"]
-struct WasmPackage;
-
-#[derive(RustEmbed)]
-#[folder = "static"]
+#[folder = "js/dist"]
 struct StaticResources;
 
 #[derive(Debug, Args)]
@@ -63,8 +59,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
 
     let app = Router::new()
         .route("/", get(serve_index_html))
-        .route("/js/*path", get(serve_embedded_path::<StaticResources>))
-        .route("/wasm/*path", get(serve_embedded_path::<WasmPackage>))
+        .route("/*path", get(serve_embedded_path::<StaticResources>))
         .route("/cfg.json", get(serve_config))
         .with_state(state);
 

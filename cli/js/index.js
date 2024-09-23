@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import init, { NodeConfig, NodeClient } from "/wasm/lumina_node_wasm.js";
+import { spawnNode, NodeConfig } from "lumina-node";
 
 async function fetch_config() {
   const response = await fetch('/cfg.json');
@@ -106,14 +106,21 @@ function log_event(event) {
 }
 
 async function main(document, window) {
-  await init();
+  window.node = await spawnNode();
 
-  window.node = await new NodeClient("/js/worker.js");
+  console.log("AAAAAA");
+  function timeout(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  await timeout(3000);
 
-  window.events = await window.node.events_channel();
+  console.log("AAAAAA");
+  window.events = await window.node.eventsChannel();
+  console.log("AAAAAA");
   window.events.onmessage = (event) => {
     log_event(event);
   };
+  console.log("AAAAAA");
 
   bind_config(await fetch_config());
 
