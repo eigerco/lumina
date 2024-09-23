@@ -17,16 +17,16 @@ async function fetch_config() {
 }
 
 async function show_stats(node) {
-  if (!node || !await node.is_running()) {
+  if (!node || !await node.isRunning()) {
     return;
   }
-  const info = await node.syncer_info();
+  const info = await node.syncerInfo();
   document.getElementById("stored-ranges").innerText = info.stored_headers.map((range) => {
     return `${range.start}..${range.end}`;
   }).join(", ");
 
   let peers_ul = document.createElement('ul');
-  (await node.connected_peers()).forEach(peer => {
+  (await node.connectedPeers()).forEach(peer => {
     var li = document.createElement("li");
     li.innerText = peer;
     li.classList.add("mono");
@@ -35,7 +35,7 @@ async function show_stats(node) {
 
   document.getElementById("peers").replaceChildren(peers_ul);
 
-  const network_head = await node.get_network_head_header();
+  const network_head = await node.getNetworkHeadHeader();
   if (network_head == null) {
     return
   }
@@ -107,26 +107,16 @@ function log_event(event) {
 
 async function main(document, window) {
   window.node = await spawnNode();
-
-  console.log("AAAAAA");
-  function timeout(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-  await timeout(3000);
-
-  console.log("AAAAAA");
   window.events = await window.node.eventsChannel();
-  console.log("AAAAAA");
   window.events.onmessage = (event) => {
     log_event(event);
   };
-  console.log("AAAAAA");
 
   bind_config(await fetch_config());
 
-  if (await window.node.is_running() === true) {
+  if (await window.node.isRunning() === true) {
     document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
-    document.getElementById("peer-id").innerText = await window.node.local_peer_id();
+    document.getElementById("peer-id").innerText = await window.node.localPeerId();
     document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
   }
 
@@ -134,7 +124,7 @@ async function main(document, window) {
     document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
 
     await window.node.start(window.config);
-    document.getElementById("peer-id").innerText = await window.node.local_peer_id();
+    document.getElementById("peer-id").innerText = await window.node.localPeerId();
     document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
   });
 
