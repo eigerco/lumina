@@ -58,6 +58,11 @@ impl NodeClient {
 
         let worker = WorkerClient::new(port)?;
 
+        // keep pinging worker until it responds.
+        // NOTE: there is a possibility that worker can take longer than a timeout
+        // to send his response. Client will then send another ping and read previous
+        // response, leaving an extra pong on the wire. This will eventually fail on
+        // decoding worker response in a future. 100ms should be enough to avoid that.
         loop {
             if timeout(100, worker.exec(NodeCommand::InternalPing))
                 .await
