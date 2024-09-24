@@ -114,10 +114,8 @@ jobs:
 
           # publish lumina-node-wasm
           wasm-pack build --target web node-wasm
-          # todo: uncomment on first release-plz pr
-          # wasm-pack publish --target web --access public node-wasm
+          wasm-pack publish --target web --access public node-wasm
 
           # publish lumina-node
           cd node-wasm/js
-          # todo: uncomment on first release-plz pr
-          # npm publish --access public
+          npm publish --access public
