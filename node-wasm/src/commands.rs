@@ -23,6 +23,7 @@ pub(crate) enum NodeCommand {
     InternalPing,
     IsRunning,
     StartNode(WasmNodeConfig),
+    StopNode,
     GetEventsChannelName,
     GetLocalPeerId,
     GetSyncerInfo,
@@ -52,7 +53,6 @@ pub(crate) enum NodeCommand {
     GetSamplingMetadata {
         height: u64,
     },
-    CloseWorker,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -68,6 +68,7 @@ pub(crate) enum WorkerResponse {
     NodeNotRunning,
     IsRunning(bool),
     NodeStarted(Result<()>),
+    NodeStopped(()),
     EventsChannelName(String),
     LocalPeerId(String),
     SyncerInfo(Result<SyncingInfo>),
@@ -81,7 +82,6 @@ pub(crate) enum WorkerResponse {
     Headers(JsResult<Array, Error>),
     LastSeenNetworkHead(JsResult<JsValue, Error>),
     SamplingMetadata(Result<Option<SamplingMetadata>>),
-    WorkerClosed(()),
 }
 
 pub(crate) trait CheckableResponseExt {
@@ -90,13 +90,17 @@ pub(crate) trait CheckableResponseExt {
     fn check_variant(self) -> Result<Self::Output, JsError>;
 }
 
-impl<T> CheckableResponseExt for Result<T, WorkerResponse> {
+impl<T: 'static> CheckableResponseExt for Result<T, WorkerResponse> {
     type Output = T;
 
     fn check_variant(self) -> Result<Self::Output, JsError> {
-        self.map_err(|response| {
-            error!("invalid response, received: {response:?}");
-            JsError::new("invalid response received for the command sent")
+        self.map_err(|response| match response {
+            // `NodeNotRunning` is not an invalid response, it is just another type of error.
+            WorkerResponse::NodeNotRunning => JsError::new("Node is not running"),
+            response => {
+                error!("invalid response, received: {response:?}");
+                JsError::new("invalid response received for the command sent")
+            }
         })
     }
 }

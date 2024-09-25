@@ -1,92 +1,40 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import init, { NodeConfig, NodeClient } from "/wasm/lumina_node_wasm.js";
+import { NodeConfig, spawnNode } from "/js/lumina_node.js";
 
-async function fetch_config() {
-  const response = await fetch('/cfg.json');
-  const json = await response.json();
-
-  console.log("Received config:", json);
-
-  let config = NodeConfig.default(json.network);
-  if (json.bootnodes.length !== 0) {
-    config.bootnodes = json.bootnodes;
-  }
-
-  return config;
-}
-
-async function show_stats(node) {
-  if (!node || !await node.is_running()) {
+async function showStats(node) {
+  if (!node || !await node.isRunning()) {
     return;
   }
-  const info = await node.syncer_info();
+  const info = await node.syncerInfo();
   document.getElementById("stored-ranges").innerText = info.stored_headers.map((range) => {
     return `${range.start}..${range.end}`;
   }).join(", ");
 
-  let peers_ul = document.createElement('ul');
-  (await node.connected_peers()).forEach(peer => {
+  let peersUl = document.createElement('ul');
+  (await node.connectedPeers()).forEach(peer => {
     var li = document.createElement("li");
     li.innerText = peer;
     li.classList.add("mono");
-    peers_ul.appendChild(li);
+    peersUl.appendChild(li);
   });
 
-  document.getElementById("peers").replaceChildren(peers_ul);
+  document.getElementById("peers").replaceChildren(peersUl);
 
-  const network_head = await node.get_network_head_header();
-  if (network_head == null) {
-    return
+  const networkHead = await node.getNetworkHeadHeader();
+  if (networkHead == null) {
+    return;
   }
 
-  const square_rows = network_head.dah.row_roots.length;
-  const square_cols = network_head.dah.column_roots.length;
+  const squareRows = networkHead.dah.row_roots.length;
+  const squareCols = networkHead.dah.column_roots.length;
 
-  document.getElementById("block-height").innerText = network_head.header.height;
-  document.getElementById("block-hash").innerText = network_head.commit.block_id.hash;
-  document.getElementById("block-data-square").innerText = `${square_rows}x${square_cols} shares`;
+  document.getElementById("block-height").innerText = networkHead.header.height;
+  document.getElementById("block-hash").innerText = networkHead.commit.block_id.hash;
+  document.getElementById("block-data-square").innerText = `${squareRows}x${squareCols} shares`;
 }
 
-function bind_config(data) {
-  const network_div = document.getElementById("network-id");
-  const bootnodes_div = document.getElementById("bootnodes");
-
-  const update_config_elements = () => {
-    network_div.value = window.config.network;
-    bootnodes_div.value = window.config.bootnodes.join("\n");
-  }
-
-  let proxy = {
-    set: function(obj, prop, value) {
-      if (prop == "network") {
-        const config = NodeConfig.default(Number(value));
-        obj.network = config.network;
-        obj.bootnodes = config.bootnodes;
-      } else if (prop == "bootnodes") {
-        obj[prop] = value;
-      } else {
-        return Reflect.set(obj, prop, value);
-      }
-
-      update_config_elements()
-
-      return true;
-    }
-  };
-
-  window.config = new Proxy(data, proxy);
-  update_config_elements();
-
-  network_div.addEventListener("change", event => {
-    window.config.network = Number(event.target.value.trim());
-  });
-  bootnodes_div.addEventListener("change", event => {
-    window.config.bootnodes = event.target.value.trim().split("\n").map(multiaddr => multiaddr.trim());
-  });
-}
-
-function log_event(event) {
+function logEvent(event) {
   // Skip noisy events
   if (event.data.get("event").type == "share_sampling_result") {
     return;
@@ -105,33 +53,67 @@ function log_event(event) {
   textarea.scrollTop = textarea.scrollHeight;
 }
 
+function starting(document) {
+  document.getElementById("start-stop").disabled = true;
+  document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
+}
+
+async function started(document, window) {
+  document.getElementById("peer-id").innerText = await window.node.localPeerId();
+  document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
+  document.getElementById("start-stop").innerText = "Stop";
+  document.getElementById("start-stop").disabled = false;
+  window.showStatsIntervalId = setInterval(async () => await showStats(window.node), 1000);
+}
+
+function stopping(document, window) {
+  clearInterval(window.showStatsIntervalId);
+  document.getElementById("start-stop").disabled = true;
+}
+
+function stopped(document) {
+  document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "hidden");
+  document.querySelectorAll(".status-value").forEach(elem => elem.innerText = "");
+  document.getElementById("start-stop").innerText = "Start";
+  document.querySelectorAll('.config').forEach(elem => elem.disabled = false);
+  document.getElementById("start-stop").disabled = false;
+}
+
 async function main(document, window) {
-  await init();
+  window.node = await spawnNode();
 
-  window.node = await new NodeClient("/js/worker.js");
-
-  window.events = await window.node.events_channel();
+  window.events = await window.node.eventsChannel();
   window.events.onmessage = (event) => {
-    log_event(event);
+    logEvent(event);
   };
 
-  bind_config(await fetch_config());
+  const networkIdDiv = document.getElementById("network-id");
+  const bootnodesDiv = document.getElementById("bootnodes");
+  const startStopDiv = document.getElementById("start-stop");
 
-  if (await window.node.is_running() === true) {
-    document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
-    document.getElementById("peer-id").innerText = await window.node.local_peer_id();
-    document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
-  }
+  window.config = NodeConfig.default(0);
+  bootnodesDiv.value = window.config.bootnodes.join("\n");
 
-  document.getElementById("start").addEventListener("click", async () => {
-    document.querySelectorAll('.config').forEach(elem => elem.disabled = true);
-
-    await window.node.start(window.config);
-    document.getElementById("peer-id").innerText = await window.node.local_peer_id();
-    document.querySelectorAll(".status").forEach(elem => elem.style.visibility = "visible");
+  networkIdDiv.addEventListener("change", event => {
+    window.config = NodeConfig.default(Number(event.target.value));
+    bootnodesDiv.value = window.config.bootnodes.join("\n");
   });
 
-  setInterval(async () => await show_stats(window.node), 1000)
+  bootnodesDiv.addEventListener("change", event => {
+    window.config.bootnodes = event.target.value.trim().split("\n").map(multiaddr => multiaddr.trim());
+  });
+
+  startStopDiv.addEventListener("click", async () => {
+    if (await window.node.isRunning() === true) {
+      stopping(document, window);
+      await window.node.stop();
+      stopped(document);
+    } else {
+      starting(document);
+      await window.node.start(window.config);
+      await started(document, window);
+    }
+  });
 }
 
 await main(document, window);
