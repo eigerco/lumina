@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.3.0...lumina-node-wasm-v0.3.1) - 2024-09-25
+
+### Other
+
+- *(node-wasm)* clarify edge case when polling worker on startup ([#390](https://github.com/eigerco/lumina/pull/390))
+
 ## [0.3.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.2.0...lumina-node-wasm-v0.3.0) - 2024-09-24
 
 ### Added

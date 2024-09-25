@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/eigerco/lumina/compare/celestia-types-v0.5.0...celestia-types-v0.5.1) - 2024-09-25
+
+### Added
+
+- *(types)* align for building for riscv32 ([#393](https://github.com/eigerco/lumina/pull/393))
+
 ## [0.5.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.4.0...celestia-types-v0.5.0) - 2024-09-24
 
 ### Added
