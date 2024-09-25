@@ -395,3 +395,53 @@ impl WasmNodeConfig {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::worker::NodeWorker;
+
+    use super::*;
+    use wasm_bindgen_futures::spawn_local;
+    use wasm_bindgen_test::wasm_bindgen_test;
+    use web_sys::MessageChannel;
+
+use tracing_subscriber::{fmt::time::UtcTime, layer::SubscriberExt, util::SubscriberInitExt, Layer};
+use tracing_web::MakeConsoleWriter;
+use tracing_subscriber::filter::LevelFilter;
+
+    #[wasm_bindgen_test]
+    async fn test_connect() {
+        let fmt_layer = tracing_subscriber::fmt::layer()
+            .with_ansi(false)
+            .with_timer(UtcTime::rfc_3339()) // std::time is not available in browsers
+            .with_writer(MakeConsoleWriter) // write events to the console
+            .with_filter(LevelFilter::INFO); // TODO: allow customizing the log level
+        tracing_subscriber::registry().with(fmt_layer).init();
+
+        let message_channel = MessageChannel::new().unwrap();
+        let mut worker = NodeWorker::new(message_channel.port1().into());
+        let client = NodeClient::new(message_channel.port2().into()).await.unwrap();
+
+        spawn_local(async move {
+            worker.run().await.unwrap();
+        });
+
+        assert!(!client.is_running().await.unwrap());
+
+        let config = WasmNodeConfig { 
+            network: Network::Private,
+            bootnodes: vec![
+            "/ip4/172.21.0.3/udp/2121/quic-v1/webtransport/certhash/uEiBR2loOqapeUYGWCLReNhXRwe0voP_2tXZdtVz9NU9qLQ/certhash/uEiAx4Mk68KLC1RPqldMev6fqZSxcwqUULBjBHMvGqqRYGw/p2p/12D3KooWQynhR9sCTqBcjA73JNzV6mNbfqz4MhCj7gKj5VFAiEFH"
+            .to_string()]
+        };
+
+        client.start(config).await.unwrap();
+        assert!(client.is_running().await.unwrap());
+
+        client.wait_connected_trusted().await.unwrap();
+
+        let info = client.network_info().await.unwrap();
+        assert_eq!(info.num_peers, 1);
+    }
+
+}
