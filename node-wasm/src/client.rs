@@ -4,7 +4,7 @@ use js_sys::Array;
 use libp2p::identity::Keypair;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
-use tracing::error;
+use tracing::{debug, error};
 use wasm_bindgen::prelude::*;
 use web_sys::BroadcastChannel;
 
@@ -18,7 +18,7 @@ use crate::error::{Context, Result};
 use crate::ports::WorkerClient;
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
-    Network,
+    timeout, Network,
 };
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::wrapper::node::{PeerTrackerInfoSnapshot, SyncingInfoSnapshot};
@@ -56,9 +56,25 @@ impl NodeClient {
             }
         }
 
-        Ok(Self {
-            worker: WorkerClient::new(port)?,
-        })
+        let worker = WorkerClient::new(port)?;
+
+        // keep pinging worker until it responds.
+        // NOTE: there is a possibility that worker can take longer than a timeout
+        // to send his response. Client will then send another ping and read previous
+        // response, leaving an extra pong on the wire. This will eventually fail on
+        // decoding worker response in a future. 100ms should be enough to avoid that.
+        loop {
+            if timeout(100, worker.exec(NodeCommand::InternalPing))
+                .await
+                .is_ok()
+            {
+                break;
+            }
+        }
+
+        debug!("Connected to worker");
+
+        Ok(Self { worker })
     }
 
     /// Establish a new connection to the existing worker over provided port
