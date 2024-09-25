@@ -57,8 +57,10 @@ mod native {
             let mut headers = HeaderMap::new();
 
             if let Some(token) = auth_token {
-                let val = HeaderValue::from_str(&format!("Bearer {token}"))?;
-                headers.insert(header::AUTHORIZATION, val);
+                if !token.is_empty() {
+                    let val = HeaderValue::from_str(&format!("Bearer {token}"))?;
+                    headers.insert(header::AUTHORIZATION, val);
+                }
             }
 
             let protocol = conn_str.split_once(':').map(|(proto, _)| proto);
