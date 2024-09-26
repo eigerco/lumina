@@ -9,10 +9,6 @@ export async function spawnNode() {
     await init();
     let worker = new Worker(new URL("/js/worker.js", import.meta.url), { type: 'module' });
     let client = await new NodeClient(worker);
-
-    // Workaround
-    await (new Promise(resolve => setTimeout(resolve, 500)));
-
     return client;
 }
 
