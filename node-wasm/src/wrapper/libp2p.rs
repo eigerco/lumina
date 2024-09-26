@@ -4,25 +4,24 @@ use libp2p::swarm::{
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
+#[wasm_bindgen(inspectable)]
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct NetworkInfoSnapshot {
     pub num_peers: usize,
-    connection_counters: ConnectionCountersSnapshot,
+    pub connection_counters: ConnectionCountersSnapshot,
 }
 
-#[wasm_bindgen]
-#[derive(Debug, Serialize, Deserialize)]
+#[wasm_bindgen(inspectable)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct ConnectionCountersSnapshot {
     pub num_connections: u32,
     pub num_pending: u32,
     pub num_pending_incoming: u32,
     pub num_pending_outgoing: u32,
+    pub num_established: u32,
     pub num_established_incoming: u32,
     pub num_established_outgoing: u32,
-    pub num_established: u32,
 }
-
 impl From<SwarmNetworkInfo> for NetworkInfoSnapshot {
     fn from(info: SwarmNetworkInfo) -> Self {
         Self {
@@ -39,9 +38,9 @@ impl From<&SwarmConnectionCounters> for ConnectionCountersSnapshot {
             num_pending: counters.num_pending(),
             num_pending_incoming: counters.num_pending_incoming(),
             num_pending_outgoing: counters.num_pending_outgoing(),
+            num_established: counters.num_established(),
             num_established_incoming: counters.num_established_incoming(),
             num_established_outgoing: counters.num_established_outgoing(),
-            num_established: counters.num_established(),
         }
     }
 }

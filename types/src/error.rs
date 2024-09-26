@@ -165,6 +165,10 @@ pub enum Error {
     UnsupportedFraudProofType(String),
 
     /// Data square index out of range.
+    #[error("Index ({0}) out of range ({1})")]
+    IndexOutOfRange(usize, usize),
+
+    /// Data square index out of range.
     #[error("Data square index out of range. row: {0}, column: {1}")]
     EdsIndexOutOfRange(u16, u16),
 

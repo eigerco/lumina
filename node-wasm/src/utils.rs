@@ -1,8 +1,10 @@
 //! Various utilities for interacting with node from wasm.
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
+use std::future::Future;
 use std::net::{IpAddr, Ipv4Addr};
 
+use gloo_timers::future::TimeoutFuture;
 use js_sys::Math;
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
@@ -18,8 +20,8 @@ use tracing_web::MakeConsoleWriter;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    DedicatedWorkerGlobalScope, Request, RequestInit, RequestMode, Response, SharedWorker,
-    SharedWorkerGlobalScope, Worker,
+    DedicatedWorkerGlobalScope, MessageEvent, Request, RequestInit, RequestMode, Response,
+    SharedWorker, SharedWorkerGlobalScope, Worker,
 };
 
 use crate::error::{Context, Error, Result};
@@ -153,6 +155,23 @@ where
     }
 }
 
+pub(crate) trait MessageEventExt {
+    fn get_port(&self) -> Option<JsValue>;
+}
+
+impl MessageEventExt for MessageEvent {
+    fn get_port(&self) -> Option<JsValue> {
+        let ports = self.ports();
+        if ports.is_array() {
+            let port = ports.get(0);
+            if !port.is_undefined() {
+                return Some(port);
+            }
+        }
+        None
+    }
+}
+
 /// Request persistent storage from user for us, which has side effect of increasing the quota we
 /// have. This function doesn't `await` on JavaScript promise, as that would block until user
 /// either allows or blocks our request in a prompt (and we cannot do much with the result anyway).
@@ -212,6 +231,7 @@ pub(crate) fn is_chrome() -> Result<bool, Error> {
     Ok(user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
 }
 
+#[allow(dead_code)]
 pub(crate) fn is_firefox() -> Result<bool, Error> {
     let user_agent = get_user_agent()?;
     Ok(user_agent.contains(FIREFOX_USER_AGENT_DETECTION_STR))
@@ -224,6 +244,7 @@ pub(crate) fn is_safari() -> Result<bool, Error> {
         && !user_agent.contains(CHROME_USER_AGENT_DETECTION_STR))
 }
 
+#[allow(dead_code)]
 pub(crate) fn shared_workers_supported() -> Result<bool, Error> {
     // For chrome we default to running in a dedicated Worker because:
     // 1. Chrome Android does not support SharedWorkers at all
@@ -349,4 +370,12 @@ fn get_dnsaddr(ma: &Multiaddr) -> Option<Cow<'_, str>> {
             None
         }
     })
+}
+
+pub(crate) async fn timeout<F: Future>(millis: u32, fut: F) -> Result<F::Output, ()> {
+    let timeout = TimeoutFuture::new(millis);
+    tokio::select! {
+        _ = timeout => Err(()),
+        res = fut => Ok(res),
+    }
 }

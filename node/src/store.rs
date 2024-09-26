@@ -157,6 +157,9 @@ pub trait Store: Send + Sync + Debug {
 
     /// Remove header with lowest height from the store.
     async fn remove_last(&self) -> Result<u64>;
+
+    /// Close store.
+    async fn close(self) -> Result<()>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].

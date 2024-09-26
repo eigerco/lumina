@@ -1,6 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
 use celestia_proto::proof::pb::Proof as RawProof;
+use celestia_tendermint_proto::v0_34::types::NmtProof as RawTendermintProof;
 use celestia_tendermint_proto::Protobuf;
 use nmt_rs::simple_merkle::proof::Proof as NmtProof;
 use serde::{Deserialize, Serialize};
@@ -159,6 +160,34 @@ impl From<NamespaceProof> for RawProof {
             nodes: value.siblings().iter().map(|hash| hash.to_vec()).collect(),
             leaf_hash: value.leaf().map(|hash| hash.to_vec()).unwrap_or_default(),
             is_max_namespace_ignored: value.max_ns_ignored(),
+        }
+    }
+}
+
+impl TryFrom<RawTendermintProof> for NamespaceProof {
+    type Error = Error;
+
+    fn try_from(value: RawTendermintProof) -> Result<Self, Self::Error> {
+        let raw_proof = RawProof {
+            start: value.start as i64,
+            end: value.end as i64,
+            nodes: value.nodes,
+            leaf_hash: value.leaf_hash,
+            is_max_namespace_ignored: true,
+        };
+
+        raw_proof.try_into()
+    }
+}
+
+impl From<NamespaceProof> for RawTendermintProof {
+    fn from(value: NamespaceProof) -> Self {
+        let raw_proof = RawProof::from(value);
+        RawTendermintProof {
+            start: raw_proof.start as i32,
+            end: raw_proof.end as i32,
+            nodes: raw_proof.nodes,
+            leaf_hash: raw_proof.leaf_hash,
         }
     }
 }

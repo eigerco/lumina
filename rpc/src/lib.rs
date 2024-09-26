@@ -7,7 +7,7 @@ mod error;
 mod header;
 #[cfg(feature = "p2p")]
 mod p2p;
-mod share;
+pub mod share;
 mod state;
 
 pub use crate::blob::BlobClient;

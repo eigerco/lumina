@@ -12,9 +12,11 @@ use crate::nmt::{
 use crate::{Error, Result};
 
 mod info_byte;
+mod proof;
 
 pub use celestia_proto::shwap::Share as RawShare;
 pub use info_byte::InfoByte;
+pub use proof::ShareProof;
 
 const SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTES;
 

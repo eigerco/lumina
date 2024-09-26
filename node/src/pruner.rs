@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 
 use crate::events::{EventPublisher, NodeEvent};
-use crate::executor::{sleep, spawn};
+use crate::executor::{sleep, spawn, JoinHandle};
 use crate::p2p::P2pError;
 use crate::store::{Store, StoreError};
 use crate::syncer::SYNCING_WINDOW;
@@ -22,17 +22,17 @@ type Result<T, E = PrunerError> = std::result::Result<T, E>;
 
 /// Representation of all the errors that can occur when interacting with the [`Pruner`].
 #[derive(Debug, thiserror::Error)]
-pub enum PrunerError {
+pub(crate) enum PrunerError {
     /// An error propagated from the [`P2p`] module.
-    #[error(transparent)]
+    #[error("P2p: {0}")]
     P2p(#[from] P2pError),
 
     /// An error propagated from the [`Store`] module.
-    #[error(transparent)]
+    #[error("Syncer: {0}")]
     Store(#[from] StoreError),
 
     /// An error propagated from the [`Blockstore`] module.
-    #[error(transparent)]
+    #[error("Blockstore: {0}")]
     Blockstore(#[from] blockstore::Error),
 
     /// Pruner removed CIDs for the last header in the store, but the last header changed
@@ -42,11 +42,12 @@ pub enum PrunerError {
     WrongHeightRemoved,
 }
 
-pub struct Pruner {
+pub(crate) struct Pruner {
     cancellation_token: CancellationToken,
+    join_handle: JoinHandle,
 }
 
-pub struct PrunerArgs<S, B>
+pub(crate) struct PrunerArgs<S, B>
 where
     S: Store,
     B: Blockstore,
@@ -62,7 +63,7 @@ where
 }
 
 impl Pruner {
-    pub fn start<S, B>(args: PrunerArgs<S, B>) -> Self
+    pub(crate) fn start<S, B>(args: PrunerArgs<S, B>) -> Self
     where
         S: Store + 'static,
         B: Blockstore + 'static,
@@ -72,7 +73,7 @@ impl Pruner {
 
         let mut worker = Worker::new(args, cancellation_token.child_token());
 
-        spawn(async move {
+        let join_handle = spawn(async move {
             if let Err(e) = worker.run().await {
                 error!("Pruner stopped because of a fatal error: {e}");
 
@@ -82,17 +83,27 @@ impl Pruner {
             }
         });
 
-        Pruner { cancellation_token }
+        Pruner {
+            cancellation_token,
+            join_handle,
+        }
     }
 
-    pub fn stop(&self) {
+    /// Stop the worker.
+    pub(crate) fn stop(&self) {
+        // Singal the Worker to stop.
         self.cancellation_token.cancel();
+    }
+
+    /// Wait until worker is completely stopped.
+    pub(crate) async fn join(&self) {
+        self.join_handle.join().await;
     }
 }
 
 impl Drop for Pruner {
     fn drop(&mut self) {
-        self.cancellation_token.cancel();
+        self.stop();
     }
 }
 
@@ -126,6 +137,7 @@ where
     async fn run(&mut self) -> Result<()> {
         let mut last_reported = None;
         let mut last_removed = None;
+
         loop {
             let pruning_window_end = Time::now().checked_sub(PRUNING_WINDOW).unwrap_or_else(|| {
                 warn!("underflow when computing pruning window start, defaulting to unix epoch");

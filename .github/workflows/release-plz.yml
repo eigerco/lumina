@@ -29,8 +29,93 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+
       - name: Run release-plz
         uses: MarcoIeni/release-plz-action@v0.5
+        id: release-plz
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Bump lumina-node npm version
+        if: steps.release-plz.outputs.prs_created == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          set -eu
+
+          pr_branch_name="${{ fromJSON(steps.release-plz.outputs.pr).head_branch }}"
+
+          # switch to the branch created by release-plz
+          git fetch
+          git checkout "$pr_branch_name"
+
+          node_wasm_version="$(cargo pkgid --manifest-path=node-wasm/Cargo.toml | cut -d@ -f 2)"
+          cd node-wasm/js
+
+          # Update lumina-node version
+          if ! npm version $node_wasm_version >/dev/null; then
+            echo "Version up to date"
+            exit
+          fi
+          # Update the version of lumina-node-wasm dependency
+          npm pkg set "dependencies[lumina-node-wasm]=$node_wasm_version"
+
+          # push a commit to release-plz's pr
+          # prepare graphql query
+          branch_sha="$(git rev-parse "$pr_branch_name")"
+          package_json="$(base64 --wrap 0 package.json)"
+          query='{"query": "mutation {
+            createCommitOnBranch(input: {
+              branch: {
+                repositoryNameWithOwner: \"eigerco/lumina\",
+                branchName: \"'"$pr_branch_name"'\"
+              },
+              message: {
+                headline: \"update lumina-node npm package\"
+              },
+              expectedHeadOid: \"'"$branch_sha"'\",
+              fileChanges: {
+                additions: [{
+                  path: \"node-wasm/js/package.json\",
+                  contents: \"'"$package_json"'\"
+                }]
+              }
+            })
+            { commit { commitUrl } }
+          }"}'
+          # create new commit with changes
+          result=$(curl -sS https://api.github.com/graphql \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            --data "$(echo "$query" | tr -d '\n')")
+
+          if echo "$result" | jq -e '.errors | length != 0' >/dev/null; then
+            echo "Commit failed: $(echo "$result" | jq '.errors')" >&2
+            exit 1
+          else
+            echo "Version updated: ${node_wasm_version}"
+          fi
+
+      - name: Release to npm
+        env:
+          NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+        run: |
+          published_version=$(npm show lumina-node-wasm version)
+          local_version="$(cargo pkgid --manifest-path=node-wasm/Cargo.toml | cut -d@ -f 2)"
+
+          if [ "$published_version" == "$local_version" ] ; then
+            echo Latest version already in npm, exiting
+            exit
+          fi
+
+          # publish lumina-node-wasm
+          wasm-pack build --target web node-wasm
+          wasm-pack publish --target web --access public node-wasm
+
+          # publish lumina-node
+          cd node-wasm/js
+          npm publish --access public
