@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import { NodeConfig, spawnNode } from "/js/lumina_node.js";
+import { NodeConfig, spawnNode } from "lumina-node";
 
 async function showStats(node) {
   if (!node || !await node.isRunning()) {

@@ -19,6 +19,10 @@ const SERVER_DEFAULT_BIND_ADDR: &str = "127.0.0.1:9876";
 struct WasmPackage;
 
 #[derive(RustEmbed)]
+#[folder = "../node-wasm/js"]
+struct WrapperPackage;
+
+#[derive(RustEmbed)]
 #[folder = "static"]
 struct StaticResources;
 
@@ -33,7 +37,14 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     let app = Router::new()
         .route("/", get(serve_index_html))
         .route("/js/*path", get(serve_embedded_path::<StaticResources>))
-        .route("/wasm/*path", get(serve_embedded_path::<WasmPackage>));
+        .route(
+            "/lumina-node/*path",
+            get(serve_embedded_path::<WrapperPackage>),
+        )
+        .route(
+            "/lumina-node-wasm/*path",
+            get(serve_embedded_path::<WasmPackage>),
+        );
 
     let listener = TcpListener::bind(&args.listen_addr).await?;
     info!("Address: http://{}", args.listen_addr);
