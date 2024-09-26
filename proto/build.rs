@@ -13,6 +13,7 @@ const VEC_BASE64STRING: &str =
     r#"#[serde(with = "celestia_tendermint_proto::serializers::bytes::vec_base64string")]"#;
 const OPTION_ANY: &str = r#"#[serde(with = "crate::serializers::option_any")]"#;
 const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_timestamp")]"#;
+const NULL_DEFAULT: &str = r#"#[serde(with = "crate::serializers::null_default")]"#;
 
 #[rustfmt::skip]
 static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
@@ -58,6 +59,7 @@ static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".share.eds.byzantine.pb.BadEncoding.axis", QUOTED),
     (".proof.pb.Proof.nodes", VEC_BASE64STRING),
     (".proof.pb.Proof.leaf_hash", BASE64STRING),
+    (".shwap.RowNamespaceData.shares", NULL_DEFAULT),
     (".shwap.Share", BASE64STRING),
 ];
 

@@ -5,7 +5,7 @@ use celestia_types::consts::appconsts::{
     CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SEQUENCE_LEN_BYTES,
     SHARE_INFO_BYTES,
 };
-use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
+use celestia_types::nmt::{Namespace, NamespacedSha2Hasher, NS_SIZE};
 use celestia_types::{Blob, Share};
 
 pub mod utils;
@@ -29,8 +29,8 @@ async fn get_shares_by_namespace() {
         .await
         .unwrap();
 
-    let seq_len =
-        &ns_shares.rows[0].shares[0][SHARE_INFO_BYTES..SHARE_INFO_BYTES + SEQUENCE_LEN_BYTES];
+    let seq_len = &ns_shares.rows[0].shares[0]
+        [NS_SIZE + SHARE_INFO_BYTES..NS_SIZE + SHARE_INFO_BYTES + SEQUENCE_LEN_BYTES];
     let seq_len = u32::from_be_bytes(seq_len.try_into().unwrap());
     assert_eq!(seq_len as usize, data.len());
 
