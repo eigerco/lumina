@@ -5,6 +5,7 @@ use celestia_rpc::prelude::*;
 pub mod utils;
 
 use crate::utils::client::{new_test_client, AuthLevel};
+use celestia_rpc::Client;
 
 #[tokio::test]
 async fn local_head() {
@@ -115,4 +116,10 @@ async fn sync_state() {
 
     let state2 = client.header_sync_state().await.unwrap();
     assert!(state2.height > state1.height);
+}
+
+#[tokio::test]
+async fn test_new_client_with_empty_token() {
+    let result = Client::new("http://localhost:8080", Some("")).await;
+    assert!(result.is_err());
 }

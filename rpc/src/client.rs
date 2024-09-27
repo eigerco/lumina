@@ -168,17 +168,6 @@ mod native {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_new_client_with_empty_token() {
-        let result = Client::new("http://localhost:8080", Some("")).await;
-        assert!(result.is_err());
-    }
-}
-
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod wasm {
     use std::{fmt, result::Result};
