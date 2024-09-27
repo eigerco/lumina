@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>Lumina</title>
-  <script type="module" src="/js/run_node.js"></script>
+  <script type="module" src="/run_node.js"></script>
   <style>
     :root {
       --bg1: #121212;
@@ -53,6 +53,18 @@
       outline: none;
     }
 
+    .button {
+      background-color: var(--bg1);
+      color: var(--fg1);
+      border: 1px solid var(--border);
+    }
+
+    .button:focus,
+    .button:focus-visible {
+      border: 1px solid var(--fg1);
+      outline: none;
+    }
+
     .status {
       margin: 1rem 0 1rem 0.5rem;
       visibility: hidden;
@@ -97,7 +109,7 @@
   <textarea id="bootnodes" class="config" cols=120 rows=8></textarea>
 
   <div>
-    <button id="start" class="config"><b>Start!</b></button>
+    <button id="start-stop" class="button" id="start-stop"><b>Start</b></button>
   </div>
 
   <h2 class="event_logs">Event Logs</h2>

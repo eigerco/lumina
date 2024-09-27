@@ -3227,7 +3227,6 @@ dependencies = [
  "redb",
  "rust-embed",
  "serde",
- "serde_repr",
  "tokio",
  "tracing",
  "tracing-appender",

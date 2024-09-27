@@ -45,7 +45,7 @@ pub(crate) enum ClientMessage {
 
 struct ClientConnection {
     port: MessagePortLike,
-    _onmessage: Closure<dyn Fn(MessageEvent)>,
+    onmessage: Closure<dyn Fn(MessageEvent)>,
 }
 
 impl ClientConnection {
@@ -77,10 +77,7 @@ impl ClientConnection {
         let port = prepare_message_port(port_like_object, &onmessage)
             .context("failed to setup port for ClientConnection")?;
 
-        Ok(ClientConnection {
-            port,
-            _onmessage: onmessage,
-        })
+        Ok(ClientConnection { port, onmessage })
     }
 
     fn send(&self, message: &WorkerResponse) -> Result<()> {
@@ -92,6 +89,12 @@ impl ClientConnection {
             .post_message(&message_value)
             .context("could not send command to worker")?;
         Ok(())
+    }
+}
+
+impl Drop for ClientConnection {
+    fn drop(&mut self) {
+        unregister_on_message(&self.port, &self.onmessage);
     }
 }
 
@@ -152,7 +155,7 @@ pub struct WorkerClient {
     port: MessagePortLike,
     response_channel:
         Mutex<mpsc::UnboundedReceiver<Result<WorkerResponse, serde_wasm_bindgen::Error>>>,
-    _onmessage: Closure<dyn Fn(MessageEvent)>,
+    onmessage: Closure<dyn Fn(MessageEvent)>,
 }
 
 impl WorkerClient {
@@ -171,7 +174,7 @@ impl WorkerClient {
         Ok(WorkerClient {
             port,
             response_channel: Mutex::new(response_rx),
-            _onmessage: onmessage,
+            onmessage,
         })
     }
 
@@ -218,6 +221,12 @@ impl WorkerClient {
     }
 }
 
+impl Drop for WorkerClient {
+    fn drop(&mut self) {
+        unregister_on_message(&self.port, &self.onmessage);
+    }
+}
+
 // helper to hide slight differences in message passing between runtime.Port used by browser
 // extensions and everything else
 fn prepare_message_port(
@@ -255,6 +264,25 @@ fn prepare_message_port(
     }
 
     Ok(MessagePortLike::from(object))
+}
+
+fn unregister_on_message(port: &MessagePortLike, callback: &Closure<dyn Fn(MessageEvent)>) {
+    let object = port.as_ref();
+
+    if Reflect::has(object, &"onMessage".into()).unwrap_or_default() {
+        // `runtime.Port` object. Unregistering callback with `removeListener`.
+        let listeners =
+            Reflect::get(object, &"onMessage".into()).expect("onMessage existence already checked");
+
+        if let Ok(rm_listener) = Reflect::get(&listeners, &"removeListener".into())
+            .and_then(|x| x.dyn_into::<Function>())
+        {
+            let _ = Reflect::apply(&rm_listener, &listeners, &Array::of1(callback.as_ref()));
+        }
+    } else if Reflect::has(object, &"onmessage".into()).unwrap_or_default() {
+        // `MessagePort` object. Unregistering callback by setting `onmessage` to `null`.
+        let _ = Reflect::set(object, &"onmessage".into(), &JsValue::NULL);
+    }
 }
 
 #[cfg(test)]

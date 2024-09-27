@@ -3,14 +3,12 @@ use std::env::current_exe;
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use lumina_node::network::Network;
-use serde_repr::Serialize_repr;
 
 use crate::native;
 #[cfg(feature = "browser-node")]
 use crate::server;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize_repr)]
-#[repr(u8)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum ArgNetwork {
     #[default]
     Mainnet,

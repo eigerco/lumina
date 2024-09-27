@@ -230,6 +230,8 @@ where
         if let Err(e) = store.close().await {
             warn!("Store failed to close: {e}");
         }
+
+        self.event_channel.publisher().send(NodeEvent::NodeStopped);
     }
 
     fn syncer(&self) -> &Syncer<S> {

@@ -234,7 +234,26 @@ mod imp {
         #[wasm_bindgen]
         extern "C" {
             #[wasm_bindgen]
-            fn setTimeout(closure: &Closure<dyn FnMut()>, timeout: u32);
+            fn setTimeout(closure: &Closure<dyn FnMut()>, timeout: u32) -> i32;
+
+            #[wasm_bindgen]
+            fn clearTimeout(id: i32);
+        }
+
+        struct ClearTimeoutOnCancel(Option<i32>);
+
+        impl ClearTimeoutOnCancel {
+            fn disarm(mut self) {
+                self.0.take();
+            }
+        }
+
+        impl Drop for ClearTimeoutOnCancel {
+            fn drop(&mut self) {
+                if let Some(id) = self.0.take() {
+                    clearTimeout(id);
+                }
+            }
         }
 
         let fut = async move {
@@ -261,7 +280,8 @@ mod imp {
             // * We give time to JavaScript's tasks too.
             //
             // Ref: https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html
-            setTimeout(&wake_closure, 0);
+            let id = setTimeout(&wake_closure, 0);
+            let guard = ClearTimeoutOnCancel(Some(id));
 
             debug_assert!(!yielded.get(), "Closure called before reaching event loop");
 
@@ -274,6 +294,8 @@ mod imp {
                 }
             })
             .await;
+
+            guard.disarm();
         };
 
         let fut = SendWrapper::new(fut);

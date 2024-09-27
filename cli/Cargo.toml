@@ -38,7 +38,6 @@ mime_guess = "2.0.4"
 redb = "2.1.1"
 rust-embed = { version = "8.4.0", features = ["interpolate-folder-path"] }
 serde = "1.0.203"
-serde_repr = "0.1.19"
 tokio = { version = "1.38.0", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
