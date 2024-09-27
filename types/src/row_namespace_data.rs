@@ -50,7 +50,7 @@ pub struct RowNamespaceData {
 }
 
 impl RowNamespaceData {
-    /// Verifies proof inside `RowNamespaceData` using a row root from [`DataAvailabilityHeader`]
+    /// Verifies the proof inside `RowNamespaceData` using a row root from [`DataAvailabilityHeader`]
     ///
     /// #Example
     /// ```no_run
