@@ -4,7 +4,7 @@ Error.stackTraceLimit = 99;
 
 init().then(async () => {
   let worker = new NodeWorker(self);
-  console.log("starting worker: ", worker);
+  console.log("Starting NodeWorker");
 
   await worker.run();
 });
