@@ -57,10 +57,11 @@ mod native {
             let mut headers = HeaderMap::new();
 
             if let Some(token) = auth_token {
-                if !token.is_empty() {
-                    let val = HeaderValue::from_str(&format!("Bearer {token}"))?;
-                    headers.insert(header::AUTHORIZATION, val);
+                if token.is_empty() {
+                    return Err(Error::ProtocolNotSupported("An empty authentication token was provided. Please provide a valid non-empty token or None.".into()));
                 }
+                let val = HeaderValue::from_str(&format!("Bearer {token}"))?;
+                headers.insert(header::AUTHORIZATION, val);
             }
 
             let protocol = conn_str.split_once(':').map(|(proto, _)| proto);
@@ -164,6 +165,17 @@ mod native {
                 Client::Ws(client) => client.subscribe_to_method(method).await,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_new_client_with_empty_token() {
+        let result = Client::new("http://localhost:8080", Some("")).await;
+        assert!(result.is_err());
     }
 }
 
