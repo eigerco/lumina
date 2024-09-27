@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.4.1...celestia-rpc-v0.4.2) - 2024-09-27
+
+### Other
+
+- updated the following local packages: celestia-types
+
 ## [0.4.1](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.4.0...celestia-rpc-v0.4.1) - 2024-09-24
 
 ### Added
