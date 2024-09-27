@@ -8,7 +8,7 @@ use axum::response::Response;
 use axum::routing::get;
 use axum::Router;
 use clap::Args;
-use rust_embed::RustEmbed;
+use rust_embed::{EmbeddedFile, RustEmbed};
 use tokio::net::TcpListener;
 use tracing::info;
 
@@ -36,7 +36,7 @@ pub(crate) struct Params {
 pub(crate) async fn run(args: Params) -> Result<()> {
     let app = Router::new()
         .route("/", get(serve_index_html))
-        .route("/js/*path", get(serve_embedded_path::<StaticResources>))
+        .route("/*path", get(serve_embedded_path::<StaticResources>))
         .route(
             "/lumina-node/*path",
             get(serve_embedded_path::<WrapperPackage>),
@@ -59,8 +59,14 @@ async fn serve_index_html() -> Result<Response, StatusCode> {
 async fn serve_embedded_path<Source: RustEmbed>(
     Path(path): Path<String>,
 ) -> Result<Response, StatusCode> {
-    if let Some(content) = Source::get(&path) {
+    if let Some(mut content) = Source::get(&path) {
         let mime = mime_guess::from_path(&path).first_or_octet_stream();
+
+        if mime == mime_guess::mime::APPLICATION_JAVASCRIPT {
+            // Here be dragons!
+            patch_imports(&mut content);
+        }
+
         Ok(Response::builder()
             .header(header::CONTENT_TYPE, mime.as_ref())
             .body(Body::from(content.data))
@@ -68,4 +74,17 @@ async fn serve_embedded_path<Source: RustEmbed>(
     } else {
         Err(StatusCode::NOT_FOUND)
     }
+}
+
+/// Patches imports of Javascript files to avoid duplication of them.
+fn patch_imports(file: &mut EmbeddedFile) {
+    file.data = String::from_utf8_lossy(&file.data)
+        .replace("\"lumina-node\"", "\"/lumina-node/index.js\"")
+        .replace("\"worker.js\"", "\"/lumina-node/worker.js\"")
+        .replace(
+            "\"lumina-node-wasm\"",
+            "\"/lumina-node-wasm/lumina_node_wasm.js\"",
+        )
+        .into_bytes()
+        .into();
 }
