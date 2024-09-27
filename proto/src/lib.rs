@@ -4,4 +4,4 @@
 
 pub mod serializers;
 
-include!(concat!(env!("OUT_DIR"), "/mod.rs"));
+include!("out/mod.rs");
