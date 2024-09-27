@@ -66,7 +66,7 @@ you need to compile wasm node manually. Follow these additional steps:
 cargo install wasm-pack
 
 # compile lumina to wasm
-wasm-pack build --target web node-wasm
+wasm-pack build node-wasm
 
 # install lumina-cli
 cargo install --path cli --features browser-node

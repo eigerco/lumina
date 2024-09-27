@@ -5,7 +5,7 @@ use std::future::Future;
 use std::net::{IpAddr, Ipv4Addr};
 
 use gloo_timers::future::TimeoutFuture;
-use js_sys::Math;
+use js_sys::{Math, Promise};
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
 use lumina_node::network;
@@ -21,7 +21,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     DedicatedWorkerGlobalScope, MessageEvent, Request, RequestInit, RequestMode, Response,
-    SharedWorker, SharedWorkerGlobalScope, Worker,
+    ServiceWorker, ServiceWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker,
 };
 
 use crate::error::{Context, Error, Result};
@@ -81,7 +81,7 @@ pub(crate) fn js_value_from_display<D: fmt::Display>(value: D) -> JsValue {
     JsValue::from(value.to_string())
 }
 
-pub(crate) trait WorkerSelf {
+trait WorkerSelf {
     type GlobalScope;
 
     fn worker_self() -> Self::GlobalScope;
@@ -102,6 +102,18 @@ impl WorkerSelf for SharedWorker {
 
 impl WorkerSelf for Worker {
     type GlobalScope = DedicatedWorkerGlobalScope;
+
+    fn worker_self() -> Self::GlobalScope {
+        JsValue::from(js_sys::global()).into()
+    }
+
+    fn is_worker_type() -> bool {
+        js_sys::global().has_type::<Self::GlobalScope>()
+    }
+}
+
+impl WorkerSelf for ServiceWorker {
+    type GlobalScope = ServiceWorkerGlobalScope;
 
     fn worker_self() -> Self::GlobalScope {
         JsValue::from(js_sys::global()).into()
@@ -182,6 +194,9 @@ pub(crate) async fn request_storage_persistence() -> Result<(), Error> {
         Worker::worker_self().navigator().storage()
     } else if SharedWorker::is_worker_type() {
         SharedWorker::worker_self().navigator().storage()
+    } else if ServiceWorker::is_worker_type() {
+        warn!("ServiceWorker doesn't have access to StorageManager");
+        return Ok(());
     } else {
         return Err(Error::new("`navigator.storage` not found in global scope"));
     };
@@ -218,6 +233,8 @@ pub(crate) fn get_user_agent() -> Result<String, Error> {
         Ok(Worker::worker_self().navigator().user_agent()?)
     } else if SharedWorker::is_worker_type() {
         Ok(SharedWorker::worker_self().navigator().user_agent()?)
+    } else if ServiceWorker::is_worker_type() {
+        Ok(ServiceWorker::worker_self().navigator().user_agent()?)
     } else {
         Err(Error::new(
             "`navigator.user_agent` not found in global scope",
@@ -256,6 +273,12 @@ pub(crate) fn random_id() -> u32 {
     (Math::random() * f64::from(u32::MAX)).floor() as u32
 }
 
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_name = fetch)]
+    fn fetch_with_request(input: &Request) -> Promise;
+}
+
 async fn fetch(url: &str, opts: &RequestInit, headers: &[(&str, &str)]) -> Result<Response, Error> {
     let request = Request::new_with_str_and_init(url, opts)
         .with_context(|| format!("failed to create a request to {url}"))?;
@@ -267,15 +290,7 @@ async fn fetch(url: &str, opts: &RequestInit, headers: &[(&str, &str)]) -> Resul
             .with_context(|| format!("failed setting header: '{name}: {value}'"))?;
     }
 
-    let fetch_promise = if let Some(window) = web_sys::window() {
-        window.fetch_with_request(&request)
-    } else if Worker::is_worker_type() {
-        Worker::worker_self().fetch_with_request(&request)
-    } else if SharedWorker::is_worker_type() {
-        SharedWorker::worker_self().fetch_with_request(&request)
-    } else {
-        return Err(Error::new("`fetch` not found in global scope"));
-    };
+    let fetch_promise = fetch_with_request(&request);
 
     JsFuture::from(fetch_promise)
         .await
