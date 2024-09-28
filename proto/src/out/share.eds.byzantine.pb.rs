@@ -8,6 +8,8 @@ pub struct Share {
     pub data: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "2")]
     pub proof: ::core::option::Option<super::super::super::super::proof::pb::Proof>,
+    #[prost(enumeration = "Axis", tag = "3")]
+    pub proof_axis: i32,
 }
 #[derive(::serde::Deserialize, ::serde::Serialize)]
 #[serde(default)]
