@@ -13,6 +13,10 @@ keywords = ["blockchain", "celestia", "lumina"]
 # Must be one of <https://crates.io/category_slugs>
 categories = ["encoding", "cryptography::cryptocurrencies"]
 
+[[bin]]
+name = "build-proto"
+path = "bin/build-proto.rs"
+
 [dependencies]
 celestia-tendermint-proto = { workspace = true }
 prost = "0.12.6"
