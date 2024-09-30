@@ -82,46 +82,27 @@ pub(crate) fn js_value_from_display<D: fmt::Display>(value: D) -> JsValue {
 }
 
 trait WorkerSelf {
-    type GlobalScope;
+    type GlobalScope: JsCast;
 
-    fn worker_self() -> Self::GlobalScope;
-    fn is_worker_type() -> bool;
+    fn worker_self() -> Self::GlobalScope {
+        js_sys::global().unchecked_into()
+    }
+
+    fn is_worker_type() -> bool {
+        js_sys::global().has_type::<Self::GlobalScope>()
+    }
 }
 
 impl WorkerSelf for SharedWorker {
     type GlobalScope = SharedWorkerGlobalScope;
-
-    fn worker_self() -> Self::GlobalScope {
-        JsValue::from(js_sys::global()).into()
-    }
-
-    fn is_worker_type() -> bool {
-        js_sys::global().has_type::<Self::GlobalScope>()
-    }
 }
 
 impl WorkerSelf for Worker {
     type GlobalScope = DedicatedWorkerGlobalScope;
-
-    fn worker_self() -> Self::GlobalScope {
-        JsValue::from(js_sys::global()).into()
-    }
-
-    fn is_worker_type() -> bool {
-        js_sys::global().has_type::<Self::GlobalScope>()
-    }
 }
 
 impl WorkerSelf for ServiceWorker {
     type GlobalScope = ServiceWorkerGlobalScope;
-
-    fn worker_self() -> Self::GlobalScope {
-        JsValue::from(js_sys::global()).into()
-    }
-
-    fn is_worker_type() -> bool {
-        js_sys::global().has_type::<Self::GlobalScope>()
-    }
 }
 
 /// This type is useful in cases where we want to deal with de/serialising `Result<T, E>`, with
