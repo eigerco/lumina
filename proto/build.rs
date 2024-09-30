@@ -64,22 +64,25 @@ static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
 ];
 
 fn main() -> Result<()> {
-
     println!("protox::compile_fds...");
-    let fds = protox::compile(&[
-        "vendor/celestia/da/data_availability_header.proto",
-        "vendor/celestia/blob/v1/tx.proto",
-        "vendor/header/pb/extended_header.proto",
-        "vendor/share/eds/byzantine/pb/share.proto",
-        "vendor/share/shwap/pb/shwap.proto",
-        "vendor/share/shwap/p2p/bitswap/pb/bitswap.proto",
-        "vendor/cosmos/base/v1beta1/coin.proto",
-        "vendor/cosmos/base/abci/v1beta1/abci.proto",
-        "vendor/cosmos/crypto/multisig/v1beta1/multisig.proto",
-        "vendor/cosmos/staking/v1beta1/query.proto",
-        "vendor/cosmos/tx/v1beta1/tx.proto",
-        "vendor/go-header/p2p/pb/header_request.proto",
-    ], &["vendor", "vendor/nmt"]).expect("protox faild to build");
+    let fds = protox::compile(
+        [
+            "vendor/celestia/da/data_availability_header.proto",
+            "vendor/celestia/blob/v1/tx.proto",
+            "vendor/header/pb/extended_header.proto",
+            "vendor/share/eds/byzantine/pb/share.proto",
+            "vendor/share/shwap/pb/shwap.proto",
+            "vendor/share/shwap/p2p/bitswap/pb/bitswap.proto",
+            "vendor/cosmos/base/v1beta1/coin.proto",
+            "vendor/cosmos/base/abci/v1beta1/abci.proto",
+            "vendor/cosmos/crypto/multisig/v1beta1/multisig.proto",
+            "vendor/cosmos/staking/v1beta1/query.proto",
+            "vendor/cosmos/tx/v1beta1/tx.proto",
+            "vendor/go-header/p2p/pb/header_request.proto",
+        ],
+        ["vendor", "vendor/nmt"],
+    )
+    .expect("protox faild to build");
     println!("protox done");
 
     let mut config = prost_build::Config::new();
@@ -105,7 +108,8 @@ fn main() -> Result<()> {
         )
         // Comments in Google's protobuf are causing issues with cargo-test
         .disable_comments([".google"])
-        .compile_fds(fds).expect("prost failed");
+        .compile_fds(fds)
+        .expect("prost failed");
 
     Ok(())
 }
