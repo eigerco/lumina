@@ -7,8 +7,8 @@ use crate::consts::appconsts::SHARE_SIZE;
 use crate::consts::data_availability_header::{
     MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
 };
-use crate::namespaced_data::{NamespacedData, NamespacedDataId};
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NmtExt, NS_SIZE};
+use crate::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
 use crate::{bail_validation, DataAvailabilityHeader, Error, InfoByte, Result};
 
 /// Represents either column or row of the [`ExtendedDataSquare`].
@@ -395,13 +395,13 @@ impl ExtendedDataSquare {
 
     /// Return all the shares that belong to the provided namespace in the EDS.
     /// Results are returned as a list of rows of shares with the inclusion proof.
-    pub fn get_namespaced_data(
+    pub fn get_namespace_data(
         &self,
         namespace: Namespace,
         dah: &DataAvailabilityHeader,
         height: u64,
-    ) -> Result<Vec<NamespacedData>> {
-        let mut data = Vec::new();
+    ) -> Result<Vec<(RowNamespaceDataId, RowNamespaceData)>> {
+        let mut rows = Vec::new();
 
         for row in 0..self.square_width {
             let Some(row_root) = dah.row_root(row) else {
@@ -427,22 +427,22 @@ impl ExtendedDataSquare {
                 // can stop search the row if we reach to a bigger namespace.
                 match ns.cmp(&namespace) {
                     Ordering::Less => {}
-                    Ordering::Equal => shares.push(share.to_owned()),
+                    Ordering::Equal => shares.push(share.to_vec()),
                     Ordering::Greater => break,
                 }
             }
 
             let proof = self.row_nmt(row)?.get_namespace_proof(*namespace);
-            let id = NamespacedDataId::new(namespace, row, height)?;
-
-            data.push(NamespacedData {
-                id,
+            let id = RowNamespaceDataId::new(namespace, row, height)?;
+            let data = RowNamespaceData {
                 proof: proof.into(),
                 shares,
-            })
+            };
+
+            rows.push((id, data))
         }
 
-        Ok(data)
+        Ok(rows)
     }
 }
 
@@ -509,21 +509,21 @@ mod tests {
         let height = 45577;
 
         let rows = eds
-            .get_namespaced_data(Namespace::new_v0(&[1, 170]).unwrap(), &dah, height)
+            .get_namespace_data(Namespace::new_v0(&[1, 170]).unwrap(), &dah, height)
             .unwrap();
         assert_eq!(rows.len(), 1);
-        let row = &rows[0];
-        row.verify(&dah).unwrap();
+        let (id, row) = &rows[0];
+        row.verify(*id, &dah).unwrap();
         assert_eq!(row.shares.len(), 2);
 
         let rows = eds
-            .get_namespaced_data(Namespace::new_v0(&[1, 187]).unwrap(), &dah, height)
+            .get_namespace_data(Namespace::new_v0(&[1, 187]).unwrap(), &dah, height)
             .unwrap();
         assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].shares.len(), 1);
-        assert_eq!(rows[1].shares.len(), 4);
-        for row in rows {
-            row.verify(&dah).unwrap();
+        assert_eq!(rows[0].1.shares.len(), 1);
+        assert_eq!(rows[1].1.shares.len(), 4);
+        for (id, row) in rows {
+            row.verify(id, &dah).unwrap();
         }
     }
 

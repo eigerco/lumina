@@ -9,7 +9,7 @@
 
 use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
-use celestia_proto::share::p2p::shwap::{ProofType as RawProofType, Sample as RawSample};
+use celestia_proto::shwap::{Sample as RawSample, Share as RawShare};
 use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
@@ -19,14 +19,14 @@ use serde::{Deserialize, Serialize};
 use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
 use crate::row::{RowId, ROW_ID_SIZE};
 use crate::rsmt2d::{is_ods_square, AxisType, ExtendedDataSquare};
-use crate::{DataAvailabilityHeader, Error, Result};
+use crate::{bail_validation, DataAvailabilityHeader, Error, Result};
 
 /// Number of bytes needed to represent [`SampleId`] in `multihash`.
 const SAMPLE_ID_SIZE: usize = 12;
 /// The code of the [`SampleId`] hashing algorithm in `multihash`.
-pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7801;
+pub const SAMPLE_ID_MULTIHASH_CODE: u64 = 0x7811;
 /// The id of codec used for the [`SampleId`] in `Cid`s.
-pub const SAMPLE_ID_CODEC: u64 = 0x7800;
+pub const SAMPLE_ID_CODEC: u64 = 0x7810;
 
 /// Identifies a particular [`Share`] located in the [`ExtendedDataSquare`].
 ///
@@ -38,13 +38,11 @@ pub struct SampleId {
     column_index: u16,
 }
 
-/// Represents Sample, with proof of its inclusion and location on EDS
+/// Represents Sample, with proof of its inclusion
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(try_from = "RawSample", into = "RawSample")]
 pub struct Sample {
-    /// Location of the sample in the EDS and associated block height
-    pub id: SampleId,
-    /// Indication whether sampling was done row or column-wise
+    /// Indication whether proving was done row or column-wise
     pub proof_type: AxisType,
     /// Share that is being sampled
     pub share: Vec<u8>,
@@ -72,7 +70,7 @@ impl Sample {
     ///
     /// ```no_run
     /// use celestia_types::AxisType;
-    /// use celestia_types::sample::Sample;
+    /// use celestia_types::sample::{Sample, SampleId};
     /// # use celestia_types::{ExtendedDataSquare, ExtendedHeader};
     /// #
     /// # fn get_extended_data_square(height: u64) -> ExtendedDataSquare {
@@ -87,9 +85,10 @@ impl Sample {
     /// let eds = get_extended_data_square(block_height);
     /// let header = get_extended_header(block_height);
     ///
-    /// let sample = Sample::new(2, 3, AxisType::Row, &eds, block_height).unwrap();
+    /// let sample_id = SampleId::new(2, 3, block_height).unwrap();
+    /// let sample = Sample::new(2, 3, AxisType::Row, &eds).unwrap();
     ///
-    /// sample.verify(&header.dah).unwrap();
+    /// sample.verify(sample_id, &header.dah).unwrap();
     /// ```
     ///
     /// [`Share`]: crate::Share
@@ -99,10 +98,8 @@ impl Sample {
         column_index: u16,
         proof_type: AxisType,
         eds: &ExtendedDataSquare,
-        block_height: u64,
     ) -> Result<Self> {
-        let share = eds.share(row_index, column_index)?.to_owned();
-        let id = SampleId::new(row_index, column_index, block_height)?;
+        let share = eds.share(row_index, column_index)?.to_vec();
 
         let range_proof = match proof_type {
             AxisType::Row => eds
@@ -119,29 +116,24 @@ impl Sample {
         };
 
         Ok(Sample {
-            id,
-            proof_type,
             share,
             proof: proof.into(),
+            proof_type,
         })
     }
 
     /// verify sample with root hash from ExtendedHeader
-    pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
+    pub fn verify(&self, id: SampleId, dah: &DataAvailabilityHeader) -> Result<()> {
         let root = match self.proof_type {
             AxisType::Row => dah
-                .row_root(self.id.row_index())
-                .ok_or(Error::EdsIndexOutOfRange(self.id.row_index(), 0))?,
+                .row_root(id.row_index())
+                .ok_or(Error::EdsIndexOutOfRange(id.row_index(), 0))?,
             AxisType::Col => dah
-                .column_root(self.id.column_index())
-                .ok_or(Error::EdsIndexOutOfRange(0, self.id.column_index()))?,
+                .column_root(id.column_index())
+                .ok_or(Error::EdsIndexOutOfRange(0, id.column_index()))?,
         };
 
-        let ns = if is_ods_square(
-            self.id.row_index(),
-            self.id.column_index(),
-            dah.square_width(),
-        ) {
+        let ns = if is_ods_square(id.row_index(), id.column_index(), dah.square_width()) {
             Namespace::from_raw(&self.share[..NS_SIZE])?
         } else {
             Namespace::PARITY_SHARE
@@ -159,22 +151,19 @@ impl TryFrom<RawSample> for Sample {
     type Error = Error;
 
     fn try_from(sample: RawSample) -> Result<Sample, Self::Error> {
-        let Some(proof) = sample.sample_proof else {
+        let Some(share) = sample.share else {
+            bail_validation!("missing share");
+        };
+
+        let Some(proof) = sample.proof else {
             return Err(Error::MissingProof);
         };
 
-        let id = SampleId::decode(&sample.sample_id)?;
-
-        let proof_type = match RawProofType::try_from(sample.proof_type) {
-            Ok(RawProofType::RowProofType) => AxisType::Row,
-            Ok(RawProofType::ColProofType) => AxisType::Col,
-            Err(_) => return Err(Error::InvalidShwapProofType(sample.proof_type)),
-        };
+        let proof_type = AxisType::try_from(sample.proof_type)?;
 
         Ok(Sample {
-            id,
             proof_type,
-            share: sample.sample_share,
+            share: share.data,
             proof: proof.try_into()?,
         })
     }
@@ -182,17 +171,10 @@ impl TryFrom<RawSample> for Sample {
 
 impl From<Sample> for RawSample {
     fn from(sample: Sample) -> RawSample {
-        let mut sample_id_bytes = BytesMut::with_capacity(SAMPLE_ID_SIZE);
-        sample.id.encode(&mut sample_id_bytes);
-
         RawSample {
-            sample_id: sample_id_bytes.to_vec(),
-            sample_share: sample.share.to_vec(),
-            sample_proof: Some(sample.proof.into()),
-            proof_type: match sample.proof_type {
-                AxisType::Row => RawProofType::RowProofType.into(),
-                AxisType::Col => RawProofType::ColProofType.into(),
-            },
+            share: Some(RawShare { data: sample.share }),
+            proof: Some(sample.proof.into()),
+            proof_type: sample.proof_type as i32,
         }
     }
 }
@@ -210,9 +192,8 @@ impl SampleId {
     /// ```no_run
     /// use celestia_types::sample::SampleId;
     ///
-    /// // Consider an 64 share EDS with block height of 15
+    /// // Consider a 64th share of EDS with block height of 15
     /// let header_height = 15;
-    ///
     /// SampleId::new(2, 1, header_height).unwrap();
     /// ```
     ///
@@ -313,7 +294,6 @@ impl From<SampleId> for CidGeneric<SAMPLE_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nmt::Namespace;
     use crate::test_utils::generate_eds;
 
     #[test]
@@ -333,14 +313,14 @@ mod tests {
     fn index_calculation() {
         let eds = generate_eds(8);
 
-        Sample::new(0, 0, AxisType::Row, &eds, 100).unwrap();
-        Sample::new(7, 6, AxisType::Row, &eds, 100).unwrap();
-        Sample::new(7, 7, AxisType::Row, &eds, 100).unwrap();
+        Sample::new(0, 0, AxisType::Row, &eds).unwrap();
+        Sample::new(7, 6, AxisType::Row, &eds).unwrap();
+        Sample::new(7, 7, AxisType::Row, &eds).unwrap();
 
-        let sample_err = Sample::new(7, 8, AxisType::Row, &eds, 100).unwrap_err();
+        let sample_err = Sample::new(7, 8, AxisType::Row, &eds).unwrap_err();
         assert!(matches!(sample_err, Error::EdsIndexOutOfRange(7, 8)));
 
-        let sample_err = Sample::new(12, 3, AxisType::Row, &eds, 100).unwrap_err();
+        let sample_err = Sample::new(12, 3, AxisType::Row, &eds).unwrap_err();
         assert!(matches!(sample_err, Error::EdsIndexOutOfRange(12, 3)));
     }
 
@@ -359,8 +339,8 @@ mod tests {
     fn from_buffer() {
         let bytes = [
             0x01, // CIDv1
-            0x80, 0xF0, 0x01, // CID codec = 7800
-            0x81, 0xF0, 0x01, // multihash code = 7801
+            0x90, 0xF0, 0x01, // CID codec = 7810
+            0x91, 0xF0, 0x01, // multihash code = 7811
             0x0C, // len = SAMPLE_ID_SIZE = 12
             0, 0, 0, 0, 0, 0, 0, 64, // block height = 64
             0, 7, // row index = 7
@@ -397,20 +377,5 @@ mod tests {
         let cid = CidGeneric::<SAMPLE_ID_SIZE>::new_v1(4321, multihash);
         let codec_err = SampleId::try_from(cid).unwrap_err();
         assert!(matches!(codec_err, CidError::InvalidCidCodec(4321)));
-    }
-
-    #[test]
-    fn decode_sample_bytes() {
-        let bytes = include_bytes!("../test_data/shwap_samples/sample.data");
-        let msg = Sample::decode(&bytes[..]).unwrap();
-
-        assert_eq!(msg.id.column_index(), 1);
-        assert_eq!(msg.id.row_index(), 0);
-        assert_eq!(msg.id.block_height(), 1);
-
-        let expected_ns =
-            Namespace::new_v0(&[11, 13, 177, 159, 193, 156, 129, 121, 234, 136]).unwrap();
-        let ns = Namespace::from_raw(&msg.share[..NS_SIZE]).unwrap();
-        assert_eq!(ns, expected_ns);
     }
 }
