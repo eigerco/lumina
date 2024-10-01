@@ -10,11 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v2
-      with:
-        version: "23.3"
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install wasm Rust
       uses: actions-rs/toolchain@v1
@@ -38,12 +33,6 @@ jobs:
     - name: Install toolchain
       uses: dtolnay/rust-toolchain@nightly
 
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v2
-      with:
-        version: "23.3"
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-
     - name: Run rustdoc check
       env:
         RUSTDOCFLAGS: --cfg docsrs -D warnings
@@ -64,12 +53,6 @@ jobs:
       WASM_BINDGEN_TEST_TIMEOUT: 120
     steps:
     - uses: actions/checkout@v1
-
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v2
-      with:
-        version: "23.3"
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install Rust
       uses: actions-rs/toolchain@v1
@@ -122,12 +105,6 @@ jobs:
         restore-keys:
           cargo-${{ hashFiles('**/Cargo.lock') }}
           cargo-
-
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v2
-      with:
-        version: "23.3"
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install Rust
       uses: actions-rs/toolchain@v1
@@ -201,12 +178,6 @@ jobs:
     steps:
     - name: Checkout sources
       uses: actions/checkout@v3
-
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v2
-      with:
-        version: "23.3"
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install toolchain
       uses: dtolnay/rust-toolchain@nightly
