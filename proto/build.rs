@@ -64,7 +64,6 @@ static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
 ];
 
 fn main() -> Result<()> {
-    println!("protox::compile_fds...");
     let fds = protox::compile(
         [
             "vendor/celestia/da/data_availability_header.proto",
