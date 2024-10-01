@@ -40,7 +40,7 @@ Install common dependencies
 
 ```bash
 # install dependencies
-sudo apt-get install -y build-essential curl git protobuf-compiler
+sudo apt-get install -y build-essential curl git
 
 # install rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
