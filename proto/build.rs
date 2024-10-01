@@ -83,7 +83,6 @@ fn main() -> Result<()> {
         ["vendor", "vendor/nmt"],
     )
     .expect("protox faild to build");
-    println!("protox done");
 
     let mut config = prost_build::Config::new();
 
