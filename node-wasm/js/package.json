@@ -11,6 +11,9 @@
         "type": "git",
         "url": "git+https://github.com/eigerco/lumina.git"
     },
+    "scripts": {
+      "tsc": "tsc"
+    },
     "files": [
         "index.js",
         "index.d.ts",
@@ -27,5 +30,8 @@
         "lumina",
         "node",
         "browser"
-    ]
+    ],
+    "devDependencies": {
+        "typescript": "^5.6.2"
+    }
 }
