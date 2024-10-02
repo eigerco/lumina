@@ -1,6 +1,6 @@
 # Lumina
 
-Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in browser-based environments. 
+Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in browser-based environments.
 
 Run Lumina now at [lumina.rs](https://lumina.rs/) and directly verify Celestia.
 
@@ -18,7 +18,7 @@ Supported features:
 > [!NOTE]
 > Lumina implements [`shwap`](https://github.com/celestiaorg/CIPs/blob/main/cips/cip-19.md) protocol to perform DASing,
 which is not yet enabled on all networks in the Go implementation. This means that even though Lumina will be sampling all
-blocks, the network is unlikely to provide the requested data yet. Shwap is going to become the main DASing protocol in 
+blocks, the network is unlikely to provide the requested data yet. Shwap is going to become the main DASing protocol in
 the upcoming celestia-node versions.
 
 ## Installing the node
@@ -62,11 +62,17 @@ To build `lumina-cli` with support for serving wasm-node to browsers, currently
 you need to compile wasm node manually. Follow these additional steps:
 
 ```bash
-# install wasm-pack
+# install npm and wasm-pack
+sudo apt-get install -y npm
 cargo install wasm-pack
 
 # compile lumina to wasm
-wasm-pack build --target web node-wasm
+wasm-pack build node-wasm
+
+# build the local webpage
+cd cli/js
+npm i && npm run build
+cd -
 
 # install lumina-cli
 cargo install --path cli --features browser-node
@@ -84,7 +90,7 @@ lumina node --network mocha
 lumina node --help
 ```
 
-### Building and serving node-wasm
+### Serving node-wasm
 
 ```bash
 # serve lumina node on default localhost:9876
@@ -161,7 +167,7 @@ cargo update
 
 ## Frontend
 
-Check out the front end at [eigerco/lumina-front](https://github.com/eigerco/lumina-front) 
+Check out the front end at [eigerco/lumina-front](https://github.com/eigerco/lumina-front)
 
 ## About Eiger
 
