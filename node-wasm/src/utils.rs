@@ -1,8 +1,10 @@
 //! Various utilities for interacting with node from wasm.
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
+use std::future::Future;
 use std::net::{IpAddr, Ipv4Addr};
 
+use gloo_timers::future::TimeoutFuture;
 use js_sys::Math;
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
@@ -368,4 +370,12 @@ fn get_dnsaddr(ma: &Multiaddr) -> Option<Cow<'_, str>> {
             None
         }
     })
+}
+
+pub(crate) async fn timeout<F: Future>(millis: u32, fut: F) -> Result<F::Output, ()> {
+    let timeout = TimeoutFuture::new(millis);
+    tokio::select! {
+        _ = timeout => Err(()),
+        res = fut => Ok(res),
+    }
 }

@@ -1,9 +1,8 @@
 //! celestia-node rpc types and methods related to shares
 //!
 use celestia_types::nmt::Namespace;
-use celestia_types::{
-    ExtendedDataSquare, ExtendedHeader, NamespacedShares, RawShare, Share, ShareProof,
-};
+use celestia_types::row_namespace_data::NamespacedShares;
+use celestia_types::{ExtendedDataSquare, ExtendedHeader, RawShare, Share, ShareProof};
 use jsonrpsee::proc_macros::rpc;
 use serde::{Deserialize, Serialize};
 

@@ -6,9 +6,11 @@
 //! [`Share`]: crate::Share
 //! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
 
+use std::iter;
+
 use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
-use celestia_proto::share::p2p::shwap::Row as RawRow;
+use celestia_proto::shwap::{row::HalfSide as RawHalfSide, Row as RawRow, Share as RawShare};
 use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
@@ -16,22 +18,34 @@ use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 
 use crate::consts::appconsts::SHARE_SIZE;
-use crate::nmt::NS_SIZE;
-use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt};
+use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NS_SIZE};
 use crate::rsmt2d::{is_ods_square, ExtendedDataSquare};
-use crate::{DataAvailabilityHeader, Error, Result};
+use crate::{bail_validation, DataAvailabilityHeader, Error, Result};
 
+/// Number of bytes needed to represent [`EdsId`] in `multihash`.
+const EDS_ID_SIZE: usize = 8;
 /// Number of bytes needed to represent [`RowId`] in `multihash`.
-pub(crate) const ROW_ID_SIZE: usize = 10;
+pub(crate) const ROW_ID_SIZE: usize = EDS_ID_SIZE + 2;
 /// The code of the [`RowId`] hashing algorithm in `multihash`.
-pub const ROW_ID_MULTIHASH_CODE: u64 = 0x7811;
+pub const ROW_ID_MULTIHASH_CODE: u64 = 0x7801;
 /// The id of codec used for the [`RowId`] in `Cid`s.
-pub const ROW_ID_CODEC: u64 = 0x7810;
+pub const ROW_ID_CODEC: u64 = 0x7800;
+
+/// Represents an EDS of a specific Height
+///
+/// # Note
+///
+/// EdsId is excluded from shwap operating on top of bitswap due to possible
+/// EDS sizes exceeding bitswap block limits.
+#[derive(Debug, PartialEq, Clone, Copy)]
+struct EdsId {
+    height: u64,
+}
 
 /// Represents particular row in a specific Data Square,
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct RowId {
-    block_height: u64,
+    eds_id: EdsId,
     index: u16,
 }
 
@@ -39,26 +53,23 @@ pub struct RowId {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(try_from = "RawRow", into = "RawRow")]
 pub struct Row {
-    /// Location of the row in the EDS and associated block height
-    pub id: RowId,
     /// Shares contained in the row
     pub shares: Vec<Vec<u8>>,
 }
 
 impl Row {
     /// Create Row with the given index from EDS
-    pub fn new(index: u16, eds: &ExtendedDataSquare, block_height: u64) -> Result<Self> {
-        let id = RowId::new(index, block_height)?;
+    pub fn new(index: u16, eds: &ExtendedDataSquare) -> Result<Self> {
         let shares = eds.row(index)?;
 
-        Ok(Row { id, shares })
+        Ok(Row { shares })
     }
 
     /// verify the row against roots from DAH
-    pub fn verify(&self, dah: &DataAvailabilityHeader) -> Result<()> {
+    pub fn verify(&self, id: RowId, dah: &DataAvailabilityHeader) -> Result<()> {
         let square_width =
             u16::try_from(self.shares.len()).map_err(|_| Error::EdsInvalidDimentions)?;
-        let row = self.id.index;
+        let row = id.index;
 
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
 
@@ -71,7 +82,7 @@ impl Row {
                 Namespace::PARITY_SHARE
             };
 
-            tree.push_leaf(share, *ns).map_err(Error::Nmt)?;
+            tree.push_leaf(share.as_ref(), *ns).map_err(Error::Nmt)?;
         }
 
         let Some(root) = dah.row_root(row) else {
@@ -92,31 +103,44 @@ impl TryFrom<RawRow> for Row {
     type Error = Error;
 
     fn try_from(row: RawRow) -> Result<Row, Self::Error> {
-        let id = RowId::decode(&row.row_id)?;
-        let mut shares = row.row_half;
-        let data_shares = shares.len();
+        let data_shares = row.shares_half.len();
 
-        shares.resize(shares.len() * 2, vec![0; SHARE_SIZE]);
+        let shares = match RawHalfSide::try_from(row.half_side) {
+            Ok(RawHalfSide::Left) => {
+                let mut shares: Vec<_> = row.shares_half.into_iter().map(|shr| shr.data).collect();
+                shares.resize(shares.len() * 2, vec![0; SHARE_SIZE]);
+                leopard_codec::encode(&mut shares, data_shares)?;
+                shares
+            }
+            Ok(RawHalfSide::Right) => {
+                let mut shares: Vec<_> = iter::repeat(vec![])
+                    .take(data_shares)
+                    .chain(row.shares_half.into_iter().map(|shr| shr.data))
+                    .collect();
+                leopard_codec::reconstruct(&mut shares, data_shares)?;
+                shares
+            }
+            Err(_) => bail_validation!("HalfSide missing"),
+        };
 
-        leopard_codec::encode(&mut shares, data_shares)?;
-
-        Ok(Row { id, shares })
+        Ok(Row { shares })
     }
 }
 
 impl From<Row> for RawRow {
     fn from(row: Row) -> RawRow {
-        let mut row_id_bytes = BytesMut::new();
-        row.id.encode(&mut row_id_bytes);
-
         // parity shares aren't transmitted over shwap, just data shares
         let square_width = row.shares.len();
-        let mut row_half = row.shares;
-        row_half.truncate(square_width / 2);
+        let shares_half = row
+            .shares
+            .into_iter()
+            .map(|data| RawShare { data })
+            .take(square_width / 2)
+            .collect();
 
         RawRow {
-            row_id: row_id_bytes.to_vec(),
-            row_half,
+            shares_half,
+            half_side: RawHalfSide::Left.into(),
         }
     }
 }
@@ -127,20 +151,20 @@ impl RowId {
     /// # Errors
     ///
     /// This function will return an error if the block height is invalid.
-    pub fn new(index: u16, block_height: u64) -> Result<Self> {
-        if block_height == 0 {
+    pub fn new(index: u16, height: u64) -> Result<Self> {
+        if height == 0 {
             return Err(Error::ZeroBlockHeight);
         }
 
         Ok(Self {
             index,
-            block_height,
+            eds_id: EdsId { height },
         })
     }
 
     /// A height of the block which contains the data.
     pub fn block_height(&self) -> u64 {
-        self.block_height
+        self.eds_id.height
     }
 
     /// An index of the row in the [`ExtendedDataSquare`].
@@ -152,7 +176,7 @@ impl RowId {
 
     pub(crate) fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(ROW_ID_SIZE);
-        bytes.put_u64(self.block_height);
+        bytes.put_u64(self.block_height());
         bytes.put_u16(self.index);
     }
 
@@ -161,15 +185,15 @@ impl RowId {
             return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
-        let block_height = buffer.get_u64();
+        let height = buffer.get_u64();
         let index = buffer.get_u16();
 
-        if block_height == 0 {
+        if height == 0 {
             return Err(CidError::InvalidCid("Zero block height".to_string()));
         }
 
         Ok(Self {
-            block_height,
+            eds_id: EdsId { height },
             index,
         })
     }
@@ -232,15 +256,14 @@ mod tests {
 
     #[test]
     fn index_calculation() {
-        let height = 100;
         let shares = vec![vec![0; SHARE_SIZE]; 8 * 8];
         let eds = ExtendedDataSquare::new(shares, "codec".to_string()).unwrap();
 
-        Row::new(1, &eds, height).unwrap();
-        Row::new(7, &eds, height).unwrap();
-        let row_err = Row::new(8, &eds, height).unwrap_err();
+        Row::new(1, &eds).unwrap();
+        Row::new(7, &eds).unwrap();
+        let row_err = Row::new(8, &eds).unwrap_err();
         assert!(matches!(row_err, Error::EdsIndexOutOfRange(8, 0)));
-        let row_err = Row::new(100, &eds, height).unwrap_err();
+        let row_err = Row::new(100, &eds).unwrap_err();
         assert!(matches!(row_err, Error::EdsIndexOutOfRange(100, 0)));
     }
 
@@ -259,8 +282,8 @@ mod tests {
     fn from_buffer() {
         let bytes = [
             0x01, // CIDv1
-            0x90, 0xF0, 0x01, // CID codec = 7810
-            0x91, 0xF0, 0x01, // multihash code = 7811
+            0x80, 0xF0, 0x01, // CID codec = 7800
+            0x81, 0xF0, 0x01, // multihash code = 7801
             0x0A, // len = ROW_ID_SIZE = 10
             0, 0, 0, 0, 0, 0, 0, 64, // block height = 64
             0, 7, // row index = 7
@@ -273,15 +296,15 @@ mod tests {
         assert_eq!(mh.size(), ROW_ID_SIZE as u8);
         let row_id = RowId::try_from(cid).unwrap();
         assert_eq!(row_id.index, 7);
-        assert_eq!(row_id.block_height, 64);
+        assert_eq!(row_id.block_height(), 64);
     }
 
     #[test]
     fn zero_block_height() {
         let bytes = [
             0x01, // CIDv1
-            0x90, 0xF0, 0x01, // CID codec = 7810
-            0x91, 0xF0, 0x01, // code = 7811
+            0x80, 0xF0, 0x01, // CID codec = 7800
+            0x81, 0xF0, 0x01, // code = 7801
             0x0A, // len = ROW_ID_SIZE = 10
             0, 0, 0, 0, 0, 0, 0, 0, // invalid block height = 0 !
             0, 7, // row index = 7
@@ -326,19 +349,19 @@ mod tests {
             let dah = DataAvailabilityHeader::from_eds(&eds);
 
             let index = rand::random::<u16>() % eds.square_width();
+            let id = RowId {
+                eds_id: EdsId { height: 1 },
+                index,
+            };
 
             let row = Row {
-                id: RowId {
-                    block_height: 1,
-                    index,
-                },
                 shares: eds.row(index).unwrap(),
             };
 
             let encoded = row.encode_vec().unwrap();
             let decoded = Row::decode(encoded.as_ref()).unwrap();
 
-            decoded.verify(&dah).unwrap();
+            decoded.verify(id, &dah).unwrap();
         }
     }
 }

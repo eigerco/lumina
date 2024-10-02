@@ -10,8 +10,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "lumina-node": "file:../../node-wasm/js/lumina-node-0.2.0.tgz",
-    "lumina-node-wasm": "file:../../node-wasm/pkg/lumina-node-wasm-0.2.0.tgz"
+    "lumina-node": "file:../../node-wasm/js",
+    "lumina-node-wasm": "file:../../node-wasm/pkg"
   },
   "devDependencies": {
     "webpack": "^5.38.1",
