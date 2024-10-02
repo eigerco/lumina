@@ -64,7 +64,7 @@ impl NodeClient {
         // response, leaving an extra pong on the wire. This will eventually fail on
         // decoding worker response in a future. 100ms should be enough to avoid that.
         loop {
-            if timeout(100, worker.exec(NodeCommand::InternalPing))
+            if timeout(200, worker.exec(NodeCommand::InternalPing))
                 .await
                 .is_ok()
             {
