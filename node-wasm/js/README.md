@@ -1,59 +1,7 @@
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-
-- [Lumina node wasm](#lumina-node-wasm)
-- [Example](#example)
-  - [Manual setup](#manual-setup)
-- [Classes](#classes)
-  - [Class: BlockRange](#class-blockrange)
-    - [Constructors](#constructors)
-    - [Properties](#properties)
-    - [Methods](#methods)
-  - [Class: ConnectionCountersSnapshot](#class-connectioncounterssnapshot)
-    - [Constructors](#constructors-1)
-    - [Properties](#properties-1)
-    - [Methods](#methods-1)
-  - [Class: NetworkInfoSnapshot](#class-networkinfosnapshot)
-    - [Constructors](#constructors-2)
-    - [Properties](#properties-2)
-    - [Methods](#methods-2)
-  - [Class: NodeClient](#class-nodeclient)
-    - [Constructors](#constructors-3)
-    - [Methods](#methods-3)
-  - [Errors](#errors)
-  - [Class: NodeConfig](#class-nodeconfig)
-    - [Constructors](#constructors-4)
-    - [Properties](#properties-3)
-    - [Methods](#methods-4)
-  - [Class: NodeWorker](#class-nodeworker)
-    - [Constructors](#constructors-5)
-    - [Methods](#methods-5)
-  - [Class: PeerTrackerInfoSnapshot](#class-peertrackerinfosnapshot)
-    - [Constructors](#constructors-6)
-    - [Properties](#properties-4)
-    - [Methods](#methods-6)
-  - [Class: SyncingInfoSnapshot](#class-syncinginfosnapshot)
-    - [Constructors](#constructors-7)
-    - [Properties](#properties-5)
-    - [Methods](#methods-7)
-- [Enumerations](#enumerations)
-  - [Enumeration: Network](#enumeration-network)
-    - [Enumeration Members](#enumeration-members)
-- [Functions](#functions)
-  - [Function: setup\_logging()](#function-setup%5C_logging)
-    - [Returns](#returns)
-    - [Defined in](#defined-in)
-- [@fl0rek/lumina-node-wasm](#fl0reklumina-node-wasm)
-  - [Enumerations](#enumerations-1)
-  - [Classes](#classes-1)
-  - [Functions](#functions-1)
-
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
 
 <a name="readmemd"></a>
 
-**@fl0rek/lumina-node-wasm** • [**Docs**](#globalsmd)
+**lumina-node-wasm** • [**Docs**](#globalsmd)
 
 ***
 
@@ -105,13 +53,15 @@ await client.requestHeadHeader();
 
 <a name="classesblockrangemd"></a>
 
-[**@fl0rek/lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd) • **Docs**
 
 ***
 
-[@fl0rek/lumina-node-wasm](#globalsmd) / BlockRange
+[lumina-node-wasm](#globalsmd) / BlockRange
 
 ## Class: BlockRange
+
+A range of blocks between `start` and `end` height, inclusive
 
 ### Constructors
 
@@ -129,9 +79,11 @@ await client.requestHeadHeader();
 
 > **end**: `bigint`
 
+Last block height in range
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:42
+lumina\_node\_wasm.d.ts:44
 
 ***
 
@@ -139,9 +91,11 @@ lumina\_node\_wasm.d.ts:42
 
 > **start**: `bigint`
 
+First block height in range
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:45
+lumina\_node\_wasm.d.ts:48
 
 ### Methods
 
@@ -155,7 +109,7 @@ lumina\_node\_wasm.d.ts:45
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:39
+lumina\_node\_wasm.d.ts:40
 
 ***
 
@@ -171,7 +125,7 @@ lumina\_node\_wasm.d.ts:39
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:34
+lumina\_node\_wasm.d.ts:35
 
 ***
 
@@ -187,16 +141,16 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:38
+lumina\_node\_wasm.d.ts:39
 
 
 <a name="classesconnectioncounterssnapshotmd"></a>
 
-[**@fl0rek/lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd) • **Docs**
 
 ***
 
-[@fl0rek/lumina-node-wasm](#globalsmd) / ConnectionCountersSnapshot
+[lumina-node-wasm](#globalsmd) / ConnectionCountersSnapshot
 
 ## Class: ConnectionCountersSnapshot
 
@@ -216,9 +170,11 @@ lumina\_node\_wasm.d.ts:38
 
 > **num\_connections**: `number`
 
+The total number of connections, both pending and established.
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:61
+lumina\_node\_wasm.d.ts:65
 
 ***
 
@@ -226,9 +182,11 @@ lumina\_node\_wasm.d.ts:61
 
 > **num\_established**: `number`
 
+The number of outgoing connections being established.
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:64
+lumina\_node\_wasm.d.ts:69
 
 ***
 
@@ -236,25 +194,7 @@ lumina\_node\_wasm.d.ts:64
 
 > **num\_established\_incoming**: `number`
 
-##### Defined in
-
-lumina\_node\_wasm.d.ts:67
-
-***
-
-#### num\_established\_outgoing
-
-> **num\_established\_outgoing**: `number`
-
-##### Defined in
-
-lumina\_node\_wasm.d.ts:70
-
-***
-
-#### num\_pending
-
-> **num\_pending**: `number`
+The number of established incoming connections.
 
 ##### Defined in
 
@@ -262,13 +202,39 @@ lumina\_node\_wasm.d.ts:73
 
 ***
 
+#### num\_established\_outgoing
+
+> **num\_established\_outgoing**: `number`
+
+The number of established outgoing connections.
+
+##### Defined in
+
+lumina\_node\_wasm.d.ts:77
+
+***
+
+#### num\_pending
+
+> **num\_pending**: `number`
+
+The total number of pending connections, both incoming and outgoing.
+
+##### Defined in
+
+lumina\_node\_wasm.d.ts:81
+
+***
+
 #### num\_pending\_incoming
 
 > **num\_pending\_incoming**: `number`
 
+The total number of pending connections, both incoming and outgoing.
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:76
+lumina\_node\_wasm.d.ts:85
 
 ***
 
@@ -276,9 +242,11 @@ lumina\_node\_wasm.d.ts:76
 
 > **num\_pending\_outgoing**: `number`
 
+The number of outgoing connections being established.
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:79
+lumina\_node\_wasm.d.ts:89
 
 ### Methods
 
@@ -292,7 +260,7 @@ lumina\_node\_wasm.d.ts:79
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:58
+lumina\_node\_wasm.d.ts:61
 
 ***
 
@@ -308,7 +276,7 @@ lumina\_node\_wasm.d.ts:58
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:53
+lumina\_node\_wasm.d.ts:56
 
 ***
 
@@ -324,18 +292,20 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:57
+lumina\_node\_wasm.d.ts:60
 
 
 <a name="classesnetworkinfosnapshotmd"></a>
 
-[**@fl0rek/lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd) • **Docs**
 
 ***
 
-[@fl0rek/lumina-node-wasm](#globalsmd) / NetworkInfoSnapshot
+[lumina-node-wasm](#globalsmd) / NetworkInfoSnapshot
 
 ## Class: NetworkInfoSnapshot
+
+Information about the connections
 
 ### Constructors
 
@@ -353,9 +323,11 @@ lumina\_node\_wasm.d.ts:57
 
 > **connection\_counters**: [`ConnectionCountersSnapshot`](#classesconnectioncounterssnapshotmd)
 
+Gets counters for ongoing network connections.
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:95
+lumina\_node\_wasm.d.ts:107
 
 ***
 
@@ -363,9 +335,11 @@ lumina\_node\_wasm.d.ts:95
 
 > **num\_peers**: `number`
 
+The number of connected peers, i.e. peers with whom at least one established connection exists.
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:98
+lumina\_node\_wasm.d.ts:111
 
 ### Methods
 
@@ -379,7 +353,7 @@ lumina\_node\_wasm.d.ts:98
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:92
+lumina\_node\_wasm.d.ts:103
 
 ***
 
@@ -395,7 +369,7 @@ lumina\_node\_wasm.d.ts:92
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:87
+lumina\_node\_wasm.d.ts:98
 
 ***
 
@@ -411,16 +385,16 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:91
+lumina\_node\_wasm.d.ts:102
 
 
 <a name="classesnodeclientmd"></a>
 
-[**@fl0rek/lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd) • **Docs**
 
 ***
 
-[@fl0rek/lumina-node-wasm](#globalsmd) / NodeClient
+[lumina-node-wasm](#globalsmd) / NodeClient
 
 ## Class: NodeClient
 
@@ -448,7 +422,7 @@ expected to have `MessagePort`-like interface for sending and receiving messages
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:113
+lumina\_node\_wasm.d.ts:126
 
 ### Methods
 
@@ -468,7 +442,7 @@ Establish a new connection to the existing worker over provided port
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:119
+lumina\_node\_wasm.d.ts:132
 
 ***
 
@@ -485,7 +459,7 @@ be processed and new NodeClient needs to be created to restart a node.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:282
+lumina\_node\_wasm.d.ts:295
 
 ***
 
@@ -501,7 +475,7 @@ Get all the peers that node is connected to.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:165
+lumina\_node\_wasm.d.ts:178
 
 ***
 
@@ -517,7 +491,7 @@ Returns a [`BroadcastChannel`] for events generated by [`Node`].
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:287
+lumina\_node\_wasm.d.ts:300
 
 ***
 
@@ -531,7 +505,7 @@ lumina\_node\_wasm.d.ts:287
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:107
+lumina\_node\_wasm.d.ts:120
 
 ***
 
@@ -554,7 +528,7 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:240
+lumina\_node\_wasm.d.ts:253
 
 ***
 
@@ -577,7 +551,7 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:249
+lumina\_node\_wasm.d.ts:262
 
 ***
 
@@ -610,7 +584,7 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:267
+lumina\_node\_wasm.d.ts:280
 
 ***
 
@@ -629,7 +603,7 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:231
+lumina\_node\_wasm.d.ts:244
 
 ***
 
@@ -648,7 +622,7 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:223
+lumina\_node\_wasm.d.ts:236
 
 ***
 
@@ -671,7 +645,7 @@ https://docs.rs/lumina-node/latest/lumina_node/store/struct.SamplingMetadata.htm
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:276
+lumina\_node\_wasm.d.ts:289
 
 ***
 
@@ -687,7 +661,7 @@ Check whether Lumina is currently running
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:124
+lumina\_node\_wasm.d.ts:137
 
 ***
 
@@ -703,7 +677,7 @@ Get all the multiaddresses on which the node listens.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:160
+lumina\_node\_wasm.d.ts:173
 
 ***
 
@@ -719,7 +693,7 @@ Get node's local peer ID.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:135
+lumina\_node\_wasm.d.ts:148
 
 ***
 
@@ -735,7 +709,7 @@ Get current network info.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:155
+lumina\_node\_wasm.d.ts:168
 
 ***
 
@@ -751,7 +725,7 @@ Get current [`PeerTracker`] info.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:140
+lumina\_node\_wasm.d.ts:153
 
 ***
 
@@ -774,7 +748,7 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:189
+lumina\_node\_wasm.d.ts:202
 
 ***
 
@@ -797,7 +771,7 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:198
+lumina\_node\_wasm.d.ts:211
 
 ***
 
@@ -816,7 +790,7 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:180
+lumina\_node\_wasm.d.ts:193
 
 ***
 
@@ -843,7 +817,7 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:210
+lumina\_node\_wasm.d.ts:223
 
 ***
 
@@ -865,7 +839,7 @@ Trust or untrust the peer with a given ID.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:172
+lumina\_node\_wasm.d.ts:185
 
 ***
 
@@ -885,7 +859,7 @@ Start a node with the provided config, if it's not running
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:130
+lumina\_node\_wasm.d.ts:143
 
 ***
 
@@ -901,7 +875,7 @@ Get current header syncing info.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:215
+lumina\_node\_wasm.d.ts:228
 
 ***
 
@@ -917,7 +891,7 @@ Wait until the node is connected to at least 1 peer.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:145
+lumina\_node\_wasm.d.ts:158
 
 ***
 
@@ -933,16 +907,16 @@ Wait until the node is connected to at least 1 trusted peer.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:150
+lumina\_node\_wasm.d.ts:163
 
 
 <a name="classesnodeconfigmd"></a>
 
-[**@fl0rek/lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd) • **Docs**
 
 ***
 
-[@fl0rek/lumina-node-wasm](#globalsmd) / NodeConfig
+[lumina-node-wasm](#globalsmd) / NodeConfig
 
 ## Class: NodeConfig
 
@@ -968,7 +942,7 @@ A list of bootstrap peers to connect to.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:311
+lumina\_node\_wasm.d.ts:324
 
 ***
 
@@ -980,7 +954,7 @@ A network to connect to.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:315
+lumina\_node\_wasm.d.ts:328
 
 ### Methods
 
@@ -994,7 +968,7 @@ lumina\_node\_wasm.d.ts:315
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:301
+lumina\_node\_wasm.d.ts:314
 
 ***
 
@@ -1010,7 +984,7 @@ lumina\_node\_wasm.d.ts:301
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:296
+lumina\_node\_wasm.d.ts:309
 
 ***
 
@@ -1026,7 +1000,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:300
+lumina\_node\_wasm.d.ts:313
 
 ***
 
@@ -1046,16 +1020,16 @@ Get the configuration with default bootnodes for provided network
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:307
+lumina\_node\_wasm.d.ts:320
 
 
 <a name="classesnodeworkermd"></a>
 
-[**@fl0rek/lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd) • **Docs**
 
 ***
 
-[@fl0rek/lumina-node-wasm](#globalsmd) / NodeWorker
+[lumina-node-wasm](#globalsmd) / NodeWorker
 
 ## Class: NodeWorker
 
@@ -1075,7 +1049,7 @@ lumina\_node\_wasm.d.ts:307
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:324
+lumina\_node\_wasm.d.ts:337
 
 ### Methods
 
@@ -1089,7 +1063,7 @@ lumina\_node\_wasm.d.ts:324
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:320
+lumina\_node\_wasm.d.ts:333
 
 ***
 
@@ -1103,18 +1077,20 @@ lumina\_node\_wasm.d.ts:320
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:328
+lumina\_node\_wasm.d.ts:341
 
 
 <a name="classespeertrackerinfosnapshotmd"></a>
 
-[**@fl0rek/lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd) • **Docs**
 
 ***
 
-[@fl0rek/lumina-node-wasm](#globalsmd) / PeerTrackerInfoSnapshot
+[lumina-node-wasm](#globalsmd) / PeerTrackerInfoSnapshot
 
 ## Class: PeerTrackerInfoSnapshot
+
+Statistics of the connected peers
 
 ### Constructors
 
@@ -1132,9 +1108,11 @@ lumina\_node\_wasm.d.ts:328
 
 > **num\_connected\_peers**: `bigint`
 
+Number of the connected peers.
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:344
+lumina\_node\_wasm.d.ts:359
 
 ***
 
@@ -1142,9 +1120,11 @@ lumina\_node\_wasm.d.ts:344
 
 > **num\_connected\_trusted\_peers**: `bigint`
 
+Number of the connected trusted peers.
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:347
+lumina\_node\_wasm.d.ts:363
 
 ### Methods
 
@@ -1158,7 +1138,7 @@ lumina\_node\_wasm.d.ts:347
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:341
+lumina\_node\_wasm.d.ts:355
 
 ***
 
@@ -1174,7 +1154,7 @@ lumina\_node\_wasm.d.ts:341
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:336
+lumina\_node\_wasm.d.ts:350
 
 ***
 
@@ -1190,18 +1170,20 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:340
+lumina\_node\_wasm.d.ts:354
 
 
 <a name="classessyncinginfosnapshotmd"></a>
 
-[**@fl0rek/lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd) • **Docs**
 
 ***
 
-[@fl0rek/lumina-node-wasm](#globalsmd) / SyncingInfoSnapshot
+[lumina-node-wasm](#globalsmd) / SyncingInfoSnapshot
 
 ## Class: SyncingInfoSnapshot
+
+Status of the synchronization.
 
 ### Constructors
 
@@ -1219,9 +1201,11 @@ lumina\_node\_wasm.d.ts:340
 
 > **stored\_headers**: [`BlockRange`](#classesblockrangemd)[]
 
+Ranges of headers that are already synchronised
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:363
+lumina\_node\_wasm.d.ts:381
 
 ***
 
@@ -1229,9 +1213,11 @@ lumina\_node\_wasm.d.ts:363
 
 > **subjective\_head**: `bigint`
 
+Syncing target. The latest height seen in the network that was successfully verified.
+
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:366
+lumina\_node\_wasm.d.ts:385
 
 ### Methods
 
@@ -1245,7 +1231,7 @@ lumina\_node\_wasm.d.ts:366
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:360
+lumina\_node\_wasm.d.ts:377
 
 ***
 
@@ -1261,7 +1247,7 @@ lumina\_node\_wasm.d.ts:360
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:355
+lumina\_node\_wasm.d.ts:372
 
 ***
 
@@ -1277,18 +1263,18 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:359
+lumina\_node\_wasm.d.ts:376
 
 # Enumerations
 
 
 <a name="enumerationsnetworkmd"></a>
 
-[**@fl0rek/lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd) • **Docs**
 
 ***
 
-[@fl0rek/lumina-node-wasm](#globalsmd) / Network
+[lumina-node-wasm](#globalsmd) / Network
 
 ## Enumeration: Network
 
@@ -1347,11 +1333,11 @@ lumina\_node\_wasm.d.ts:26
 
 <a name="functionssetup_loggingmd"></a>
 
-[**@fl0rek/lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd) • **Docs**
 
 ***
 
-[@fl0rek/lumina-node-wasm](#globalsmd) / setup\_logging
+[lumina-node-wasm](#globalsmd) / setup\_logging
 
 ## Function: setup\_logging()
 
@@ -1370,11 +1356,11 @@ lumina\_node\_wasm.d.ts:6
 
 <a name="globalsmd"></a>
 
-[**@fl0rek/lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd) • **Docs**
 
 ***
 
-# @fl0rek/lumina-node-wasm
+# lumina-node-wasm
 
 ## Enumerations
 

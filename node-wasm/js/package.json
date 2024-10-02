@@ -27,5 +27,13 @@
         "lumina",
         "node",
         "browser"
-    ]
+    ],
+    "devDependencies": {
+        "concat-md": "^0.5.1",
+        "typedoc": "^0.26.7",
+        "typedoc-plugin-markdown": "^4.2.9"
+    },
+    "scripts": {
+        "update-readme": "typedoc --plugin typedoc-plugin-markdown --out ./docs --readme ../README.md ../pkg/lumina_node_wasm.d.ts && concat-md  --decrease-title-levels --dir-name-as-title docs > README.md"
+    }
 }
