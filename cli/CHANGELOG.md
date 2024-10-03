@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/eigerco/lumina/compare/lumina-cli-v0.3.1...lumina-cli-v0.4.0) - 2024-10-03
+
+### Added
+
+- *(node,node-wasm)* [**breaking**] Integrate graceful shutdown in WASM ([#396](https://github.com/eigerco/lumina/pull/396))
+
 ## [0.3.1](https://github.com/eigerco/lumina/compare/lumina-cli-v0.3.0...lumina-cli-v0.3.1) - 2024-09-24
 
 ### Other
