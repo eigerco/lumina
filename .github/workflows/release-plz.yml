@@ -123,8 +123,8 @@ jobs:
           fi
 
           # publish lumina-node-wasm
-          wasm-pack build --target web node-wasm
-          wasm-pack publish --target web --access public node-wasm
+          wasm-pack build node-wasm
+          wasm-pack publish --access public node-wasm
 
           # publish lumina-node
           cd node-wasm/js

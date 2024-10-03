@@ -60,6 +60,8 @@ web-sys = { version = "0.3.70", features = [
   "RequestInit",
   "RequestMode",
   "Response",
+  "ServiceWorker",
+  "ServiceWorkerGlobalScope",
   "SharedWorker",
   "SharedWorkerGlobalScope",
   "StorageManager",
