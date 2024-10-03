@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::consts::appconsts::SHARE_SIZE;
 use crate::consts::data_availability_header::{
-    MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
+    max_extended_square_width, MIN_EXTENDED_SQUARE_WIDTH,
 };
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NmtExt, NS_SIZE};
 use crate::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
@@ -155,9 +155,11 @@ impl ExtendedDataSquare {
     ///  - width of the square is bigger than [`MAX_EXTENDED_SQUARE_WIDTH`]
     ///  - width of the square isn't a power of 2
     ///  - namespaces of shares aren't in non-decreasing order row and column wise
-    pub fn new(shares: Vec<Vec<u8>>, codec: String) -> Result<Self> {
+    pub fn new(shares: Vec<Vec<u8>>, codec: String, app_version: u64) -> Result<Self> {
         const MIN_SHARES: usize = MIN_EXTENDED_SQUARE_WIDTH * MIN_EXTENDED_SQUARE_WIDTH;
-        const MAX_SHARES: usize = MAX_EXTENDED_SQUARE_WIDTH * MAX_EXTENDED_SQUARE_WIDTH;
+
+        let max_extended_square_width = max_extended_square_width(app_version).expect("todo");
+        let max_shares = max_extended_square_width * max_extended_square_width;
 
         if shares.len() < MIN_SHARES {
             bail_validation!(
@@ -166,11 +168,11 @@ impl ExtendedDataSquare {
                 MIN_SHARES
             );
         }
-        if shares.len() > MAX_SHARES {
+        if shares.len() > max_shares {
             bail_validation!(
-                "shares len ({}) > MAX_SHARES ({})",
+                "shares len ({}) > max shares ({})",
                 shares.len(),
-                MAX_SHARES
+                max_shares
             );
         }
 
@@ -247,7 +249,8 @@ impl ExtendedDataSquare {
         ]
         .concat()];
 
-        ExtendedDataSquare::from_ods(ods).expect("invalid EDS")
+        // App version doesn't matter here because we have the minimum size
+        ExtendedDataSquare::from_ods(ods, 1).expect("invalid EDS")
     }
 
     /// Create a new EDS out of the provided original data square shares.
@@ -263,7 +266,7 @@ impl ExtendedDataSquare {
     /// will be checked after the parity data is generated.
     ///
     /// Additionally, this function will propagate any error from encoding parity data.
-    pub fn from_ods(mut ods_shares: Vec<Vec<u8>>) -> Result<ExtendedDataSquare> {
+    pub fn from_ods(mut ods_shares: Vec<Vec<u8>>, app_version: u64) -> Result<ExtendedDataSquare> {
         let ods_width = f64::sqrt(ods_shares.len() as f64) as usize;
         // this couldn't be detected later in `new()`
         if ods_width * ods_width != ods_shares.len() {
@@ -296,7 +299,7 @@ impl ExtendedDataSquare {
             leopard_codec::encode(row, ods_width)?;
         }
 
-        ExtendedDataSquare::new(eds_shares, "Leopard".to_string())
+        ExtendedDataSquare::new(eds_shares, "Leopard".to_string(), app_version)
     }
 
     /// The raw data of the EDS.
@@ -460,7 +463,9 @@ impl<'de> Deserialize<'de> for ExtendedDataSquare {
     {
         let eds = RawExtendedDataSquare::deserialize(deserializer)?;
         let share_number = eds.data_square.len();
-        ExtendedDataSquare::new(eds.data_square, eds.codec).map_err(|_| {
+        let app_version = 3; // TODO!!!!
+
+        ExtendedDataSquare::new(eds.data_square, eds.codec, app_version).map_err(|_| {
             <D::Error as serde::de::Error>::invalid_length(
                 share_number,
                 &"number of shares must be a perfect square",

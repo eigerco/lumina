@@ -8,14 +8,14 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
 use crate::consts::data_availability_header::{
-    MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
+    max_extended_square_width, MIN_EXTENDED_SQUARE_WIDTH,
 };
 use crate::hash::Hash;
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::rsmt2d::AxisType;
 use crate::{
     bail_validation, bail_verification, validation_error, Error, ExtendedDataSquare, MerkleProof,
-    Result, ValidateBasic, ValidationError,
+    Result, ValidateBasic, ValidateBasicWithAppVersion, ValidationError,
 };
 
 /// Header with commitments of the data availability.
@@ -66,9 +66,13 @@ pub struct DataAvailabilityHeader {
 
 impl DataAvailabilityHeader {
     /// Create new [`DataAvailabilityHeader`].
-    pub fn new(row_roots: Vec<NamespacedHash>, column_roots: Vec<NamespacedHash>) -> Result<Self> {
+    pub fn new(
+        row_roots: Vec<NamespacedHash>,
+        column_roots: Vec<NamespacedHash>,
+        app_version: u64,
+    ) -> Result<Self> {
         let dah = DataAvailabilityHeader::new_unchecked(row_roots, column_roots);
-        dah.validate_basic()?;
+        dah.validate_basic(app_version)?;
         Ok(dah)
     }
 
@@ -250,8 +254,10 @@ impl From<DataAvailabilityHeader> for RawDataAvailabilityHeader {
     }
 }
 
-impl ValidateBasic for DataAvailabilityHeader {
-    fn validate_basic(&self) -> Result<(), ValidationError> {
+impl ValidateBasicWithAppVersion for DataAvailabilityHeader {
+    fn validate_basic(&self, app_version: u64) -> Result<(), ValidationError> {
+        let max_extended_square_width = max_extended_square_width(app_version).expect("todo");
+
         if self.column_roots.len() != self.row_roots.len() {
             bail_validation!(
                 "column_roots len ({}) != row_roots len ({})",
@@ -268,11 +274,11 @@ impl ValidateBasic for DataAvailabilityHeader {
             )
         }
 
-        if self.row_roots.len() > MAX_EXTENDED_SQUARE_WIDTH {
+        if self.row_roots.len() > max_extended_square_width {
             bail_validation!(
                 "row_roots len ({}) > maximum ({})",
                 self.row_roots.len(),
-                MAX_EXTENDED_SQUARE_WIDTH,
+                max_extended_square_width,
             )
         }
 

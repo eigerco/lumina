@@ -17,6 +17,7 @@ use crate::trust_level::DEFAULT_TRUST_LEVEL;
 use crate::validator_set::ValidatorSetExt;
 use crate::{
     bail_validation, bail_verification, DataAvailabilityHeader, Error, Result, ValidateBasic,
+    ValidateBasicWithAppVersion,
 };
 
 /// Information about a tendermint validator.
@@ -182,7 +183,7 @@ impl ExtendedHeader {
             &self.commit,
         )?;
 
-        self.dah.validate_basic()?;
+        self.dah.validate_basic(self.header.version.app)?;
 
         Ok(())
     }

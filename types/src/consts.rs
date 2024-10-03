@@ -24,14 +24,77 @@ pub mod version {
 /// [`celestia-app`]: https://github.com/celestiaorg/celestia-app
 pub mod appconsts {
     pub use global_consts::*;
-    pub use v1::*;
 
     // celestia-app/pkg/appconsts/v1/app_consts
-    mod v1 {
-        /// Maximum width of a single subtree root when generating blob's commitment.
-        pub const SUBTREE_ROOT_THRESHOLD: u64 = 64;
+    pub mod v1 {
+        /// App version
+        pub const VERSION: u64 = 1;
         /// Maximum width of the original data square.
         pub const SQUARE_SIZE_UPPER_BOUND: usize = 128;
+        /// Maximum width of a single subtree root when generating blob's commitment.
+        pub const SUBTREE_ROOT_THRESHOLD: u64 = 64;
+    }
+
+    // celestia-app/pkg/appconsts/v2/app_consts
+    pub mod v2 {
+        /// App version
+        pub const VERSION: u64 = 2;
+        /// Maximum width of the original data square.
+        pub const SQUARE_SIZE_UPPER_BOUND: usize = 128;
+        /// Maximum width of a single subtree root when generating blob's commitment.
+        pub const SUBTREE_ROOT_THRESHOLD: u64 = 64;
+    }
+
+    // celestia-app/pkg/appconsts/v3/app_consts
+    pub mod v3 {
+        /// App version
+        pub const VERSION: u64 = 3;
+        /// Maximum width of the original data square.
+        pub const SQUARE_SIZE_UPPER_BOUND: usize = 128;
+        /// Maximum width of a single subtree root when generating blob's commitment.
+        pub const SUBTREE_ROOT_THRESHOLD: u64 = 64;
+
+        pub const TX_SIZE_COST_PER_BYTE: u64 = 10;
+        pub const GAS_PER_BLOB_BYTE: u64 = 8;
+    }
+
+    // celestia-app/pkg/appconsts/versioned_consts.go
+    pub const LATEST_VERSION: u64 = v3::VERSION;
+    pub const DEFAULT_SQUARE_SIZE_UPPER_BOUND: usize = v3::SQUARE_SIZE_UPPER_BOUND;
+    pub const DEFAULT_SUBTREE_ROOT_THRESHOLD: u64 = v3::SUBTREE_ROOT_THRESHOLD;
+    pub const DEFAULT_TX_SIZE_COST_PER_BYTE: u64 = v3::TX_SIZE_COST_PER_BYTE;
+    pub const DEFAULT_GAS_PER_BLOB_BYTE: u64 = v3::GAS_PER_BLOB_BYTE;
+
+    pub const fn square_size_upper_bound(version: u64) -> Option<usize> {
+        match version {
+            1 => Some(v1::SQUARE_SIZE_UPPER_BOUND),
+            2 => Some(v2::SQUARE_SIZE_UPPER_BOUND),
+            3 => Some(v3::SQUARE_SIZE_UPPER_BOUND),
+            _ => None,
+        }
+    }
+
+    pub const fn subtree_root_threshold(version: u64) -> Option<u64> {
+        match version {
+            1 => Some(v1::SUBTREE_ROOT_THRESHOLD),
+            2 => Some(v2::SUBTREE_ROOT_THRESHOLD),
+            3 => Some(v3::SUBTREE_ROOT_THRESHOLD),
+            _ => None,
+        }
+    }
+
+    pub const fn tx_size_cost_per_byte(version: u64) -> Option<u64> {
+        match version {
+            3 => Some(v3::TX_SIZE_COST_PER_BYTE),
+            _ => None,
+        }
+    }
+
+    pub const fn gas_per_blob_byte(version: u64) -> Option<u64> {
+        match version {
+            3 => Some(v3::GAS_PER_BLOB_BYTE),
+            _ => None,
+        }
     }
 
     // celestia-app/pkg/appconsts/global_consts
@@ -97,7 +160,12 @@ pub mod data_availability_header {
     /// A maximum width of the [`ExtendedDataSquare`].
     ///
     /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
-    pub const MAX_EXTENDED_SQUARE_WIDTH: usize = super::appconsts::SQUARE_SIZE_UPPER_BOUND * 2;
+    pub const fn max_extended_square_width(app_version: u64) -> Option<usize> {
+        match super::appconsts::square_size_upper_bound(app_version) {
+            Some(x) => Some(x * 2),
+            None => None,
+        }
+    }
     /// A minimum width of the [`ExtendedDataSquare`].
     ///
     /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
