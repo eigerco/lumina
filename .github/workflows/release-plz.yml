@@ -62,11 +62,19 @@ jobs:
           fi
           # Update the version of lumina-node-wasm dependency
           npm pkg set "dependencies[lumina-node-wasm]=$node_wasm_version"
+          # Update the types definition for lumina-node
+          npm i
+          npm run tsc
+
+          wasm-pack build ..
+          npm run update-readme
 
           # push a commit to release-plz's pr
           # prepare graphql query
           branch_sha="$(git rev-parse "$pr_branch_name")"
           package_json="$(base64 --wrap 0 package.json)"
+          readme="$(base64 --wrap 0 README.md)"
+          types_definitions="$(base64 --wrap 0 index.d.ts)"
           query='{"query": "mutation {
             createCommitOnBranch(input: {
               branch: {
@@ -78,10 +86,20 @@ jobs:
               },
               expectedHeadOid: \"'"$branch_sha"'\",
               fileChanges: {
-                additions: [{
-                  path: \"node-wasm/js/package.json\",
-                  contents: \"'"$package_json"'\"
-                }]
+                additions: [
+                  {
+                    path: \"node-wasm/js/package.json\",
+                    contents: \"'"$package_json"'\"
+                  },
+                  {
+                    path: \"node-wasm/js/README.md\",
+                    contents: \"'"$readme"'\"
+                  },
+                  {
+                    path: \"node-wasm/js/index.d.ts\",
+                    contents: \"'"$types_definitions"'\"
+                  }
+                ]
               }
             })
             { commit { commitUrl } }
