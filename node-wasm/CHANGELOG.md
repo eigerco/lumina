@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.3.0...lumina-node-wasm-v0.4.0) - 2024-10-03
+
+### Added
+
+- *(node,node-wasm)* [**breaking**] Integrate graceful shutdown in WASM ([#396](https://github.com/eigerco/lumina/pull/396))
+
+### Other
+
+- Include API in readme  ([#409](https://github.com/eigerco/lumina/pull/409))
+- *(node-wasm)* Switch to bundler target for wasm-pack for manifest v3 ([#398](https://github.com/eigerco/lumina/pull/398))
+- *(node-wasm)* clarify edge case when polling worker on startup ([#390](https://github.com/eigerco/lumina/pull/390))
+
 ## [0.3.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.2.0...lumina-node-wasm-v0.3.0) - 2024-09-24
 
 ### Added
