@@ -65,6 +65,8 @@ jobs:
           # Update the types definition for lumina-node
           npm i
           npm run tsc
+
+          wasm-pack build ..
           npm run update-readme
 
           # push a commit to release-plz's pr
