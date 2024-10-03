@@ -48,6 +48,10 @@ await client.waitConnected();
 await client.requestHeadHeader();
 ```
 
+## Rust API
+
+For comprehensive and fully typed interface documentation, see [lumina-node](https://docs.rs/lumina-node/latest/lumina_node/) and [celestia-types](https://docs.rs/celestia-types/latest/celestia_types/) documentation on docs.rs. You can see there the exact structure of more complex types, such as [`ExtendedHeader`](https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html). JavaScript API's goal is to provide similar interface to Rust when possible, e.g. `NodeClient` mirrors [`Node`](https://docs.rs/lumina-node/latest/lumina_node/node/struct.Node.html).
+
 # Classes
 
 
