@@ -108,5 +108,4 @@ fn main() {
         .disable_comments([".google"])
         .compile_fds(fds)
         .expect("prost failed");
-
 }
