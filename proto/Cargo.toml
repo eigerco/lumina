@@ -20,7 +20,6 @@ prost-types = "0.12.6"
 serde = { version = "1.0.203", features = ["derive"] }
 
 [build-dependencies]
-anyhow = "1.0.86"
 prost-build = "0.12.6"
 protox = "0.6.1"
 
