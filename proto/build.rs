@@ -1,7 +1,5 @@
 //! A build script generating rust types from protobuf definitions.
 
-use anyhow::Result;
-
 const SERIALIZED: &str = r#"#[derive(::serde::Deserialize, ::serde::Serialize)]"#;
 const SERIALIZED_DEFAULT: &str =
     r#"#[derive(::serde::Deserialize, ::serde::Serialize)] #[serde(default)]"#;
