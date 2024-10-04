@@ -5,4 +5,4 @@ Error.stackTraceLimit = 99;
 let worker = new NodeWorker(self);
 console.log("Starting NodeWorker");
 
-await worker.run();
+worker.run();

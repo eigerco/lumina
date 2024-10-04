@@ -5,7 +5,7 @@
         "Eiger <hello@eiger.co>"
     ],
     "description": "Lumina node for Celestia, running in browser",
-    "version": "0.3.0",
+    "version": "0.5.0",
     "license": "Apache-2.0",
     "repository": {
         "type": "git",
@@ -19,7 +19,7 @@
     "main": "index.js",
     "homepage": "https://www.eiger.co",
     "dependencies": {
-        "lumina-node-wasm": "0.3.0"
+        "lumina-node-wasm": "0.5.0"
     },
     "keywords": [
         "blockchain",
@@ -27,5 +27,15 @@
         "lumina",
         "node",
         "browser"
-    ]
+    ],
+    "devDependencies": {
+        "concat-md": "^0.5.1",
+        "typedoc": "^0.26.7",
+        "typedoc-plugin-markdown": "^4.2.9",
+        "typescript": "^5.6.2"
+    },
+    "scripts": {
+        "tsc": "tsc index.js --declaration --allowJs --emitDeclarationOnly",
+        "update-readme": "typedoc --plugin typedoc-plugin-markdown --out ./docs --readme ../README.md ../pkg/lumina_node_wasm.d.ts && concat-md  --decrease-title-levels --dir-name-as-title docs > README.md"
+    }
 }

@@ -62,11 +62,19 @@ jobs:
           fi
           # Update the version of lumina-node-wasm dependency
           npm pkg set "dependencies[lumina-node-wasm]=$node_wasm_version"
+          # Update the types definition for lumina-node
+          npm i
+          npm run tsc
+
+          wasm-pack build ..
+          npm run update-readme
 
           # push a commit to release-plz's pr
           # prepare graphql query
           branch_sha="$(git rev-parse "$pr_branch_name")"
           package_json="$(base64 --wrap 0 package.json)"
+          readme="$(base64 --wrap 0 README.md)"
+          types_definitions="$(base64 --wrap 0 index.d.ts)"
           query='{"query": "mutation {
             createCommitOnBranch(input: {
               branch: {
@@ -78,10 +86,20 @@ jobs:
               },
               expectedHeadOid: \"'"$branch_sha"'\",
               fileChanges: {
-                additions: [{
-                  path: \"node-wasm/js/package.json\",
-                  contents: \"'"$package_json"'\"
-                }]
+                additions: [
+                  {
+                    path: \"node-wasm/js/package.json\",
+                    contents: \"'"$package_json"'\"
+                  },
+                  {
+                    path: \"node-wasm/js/README.md\",
+                    contents: \"'"$readme"'\"
+                  },
+                  {
+                    path: \"node-wasm/js/index.d.ts\",
+                    contents: \"'"$types_definitions"'\"
+                  }
+                ]
               }
             })
             { commit { commitUrl } }
@@ -100,6 +118,28 @@ jobs:
             echo "Version updated: ${node_wasm_version}"
           fi
 
+  release-npm:
+    name: Release-npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          version: "23.3"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+
       - name: Release to npm
         env:
           NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
@@ -113,8 +153,8 @@ jobs:
           fi
 
           # publish lumina-node-wasm
-          wasm-pack build --target web node-wasm
-          wasm-pack publish --target web --access public node-wasm
+          wasm-pack build node-wasm
+          wasm-pack publish --access public node-wasm
 
           # publish lumina-node
           cd node-wasm/js
