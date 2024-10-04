@@ -63,7 +63,7 @@ static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".shwap.Share", BASE64STRING),
 ];
 
-fn main() -> Result<()> {
+fn main() {
     let fds = protox::compile(
         [
             "vendor/celestia/da/data_availability_header.proto",
@@ -109,5 +109,4 @@ fn main() -> Result<()> {
         .compile_fds(fds)
         .expect("prost failed");
 
-    Ok(())
 }
