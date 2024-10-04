@@ -1,6 +1,6 @@
 [package]
 name = "lumina-node-wasm"
-version = "0.3.0"
+version = "0.5.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Browser compatibility layer for the Lumina node"
@@ -60,6 +60,8 @@ web-sys = { version = "0.3.70", features = [
   "RequestInit",
   "RequestMode",
   "Response",
+  "ServiceWorker",
+  "ServiceWorkerGlobalScope",
   "SharedWorker",
   "SharedWorkerGlobalScope",
   "StorageManager",
