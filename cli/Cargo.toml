@@ -43,10 +43,5 @@ tracing = "0.1.40"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 
-[build-dependencies]
-envy = "0.4.2"
-anyhow = "1.0.86"
-serde = { version = "1.0.203", features = ["derive"] }
-
 [features]
 browser-node = []

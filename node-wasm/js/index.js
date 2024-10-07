@@ -1,4 +1,4 @@
-import { NodeClient } from "lumina-node-wasm"
+import { NodeClient } from "lumina-node-wasm";
 
 /**
 * Spawn a worker running lumina node and get the `NodeClient` connected to it.
