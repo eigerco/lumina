@@ -60,14 +60,14 @@ jobs:
             echo "Version up to date"
             exit
           fi
-          # Update the version of lumina-node-wasm dependency
-          npm pkg set "dependencies[lumina-node-wasm]=$node_wasm_version"
           # Update the types definition for lumina-node
           npm i
           npm run tsc
-
+          # Update the readme for lumina-node
           wasm-pack build ..
           npm run update-readme
+          # Update the version of lumina-node-wasm dependency
+          npm pkg set "dependencies[lumina-node-wasm]=$node_wasm_version"
 
           # push a commit to release-plz's pr
           # prepare graphql query
