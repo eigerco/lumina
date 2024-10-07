@@ -75,6 +75,7 @@ impl PeerTracker {
     ///
     /// Returns `true` if peer was not known from before.
     pub fn set_maybe_discovered(&self, peer: PeerId) -> bool {
+        tracing::error!("NEW PEREEEEE{peer:?}");
         match self.peers.entry(peer) {
             Entry::Vacant(entry) => {
                 entry.insert(PeerInfo {

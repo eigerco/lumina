@@ -398,11 +398,14 @@ impl WasmNodeConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
     use crate::worker::NodeWorker;
     use celestia_rpc::{prelude::*, Client};
     use celestia_types::ExtendedHeader;
     use libp2p::{multiaddr::Protocol, Multiaddr};
+    use rexie::Rexie;
     use serde_wasm_bindgen::from_value;
     use tracing_subscriber::filter::LevelFilter;
     use tracing_subscriber::{
@@ -416,7 +419,6 @@ mod tests {
     const WS_URL: &str = "ws://localhost:36658";
 
     pub async fn fetch_bridge_info(client: &Client) -> Multiaddr {
-        //let client = Client::new(WS_URL).await.unwrap();
         let bridge_info = client.p2p_info().await.unwrap();
 
         let mut ma = bridge_info
@@ -442,17 +444,24 @@ mod tests {
         ma
     }
 
+    async fn remove_database() -> rexie::Result<()> {
+        Rexie::delete("private").await?;
+        Rexie::delete("private-blockstore").await?;
+        Ok(())
+    }
+
     fn setup_logs() {
         let fmt_layer = tracing_subscriber::fmt::layer()
             .with_ansi(false)
             .with_timer(UtcTime::rfc_3339()) // std::time is not available in browsers
             .with_writer(MakeConsoleWriter) // write events to the console
-            .with_filter(LevelFilter::TRACE); // TODO: allow customizing the log level
+            .with_filter(LevelFilter::DEBUG); // TODO: allow customizing the log level
         tracing_subscriber::registry().with(fmt_layer).init();
     }
 
     #[wasm_bindgen_test]
-    async fn connect_to_network() {
+    async fn request_network_head_header() {
+        remove_database().await.expect("failed to clear db");
         setup_logs();
         let rpc_client = Client::new(WS_URL).await.unwrap();
 
@@ -489,5 +498,45 @@ mod tests {
         let head_header: ExtendedHeader =
             from_value(client.request_head_header().await.unwrap()).unwrap();
         assert_eq!(head_header, bridge_head_header)
+    }
+
+    #[wasm_bindgen_test]
+    async fn discover_network_peers() {
+        remove_database().await.expect("failed to clear db");
+        setup_logs();
+        let rpc_client = Client::new(WS_URL).await.unwrap();
+
+        let message_channel = MessageChannel::new().unwrap();
+        let mut worker = NodeWorker::new(message_channel.port1().into());
+        let client = NodeClient::new(message_channel.port2().into())
+            .await
+            .unwrap();
+
+        let ma = fetch_bridge_info(&rpc_client).await;
+
+        spawn_local(async move {
+            worker.run().await.unwrap();
+        });
+
+        assert!(!client.is_running().await.unwrap());
+
+        client
+            .start(WasmNodeConfig {
+                network: Network::Private,
+                bootnodes: vec![format!("{ma}")],
+            })
+            .await
+            .unwrap();
+
+        client.wait_connected_trusted().await.unwrap();
+        let info = client.network_info().await.unwrap();
+        assert_eq!(info.num_peers, 1);
+
+        gloo_timers::future::sleep(Duration::from_secs(10)).await;
+
+        client.wait_connected_trusted().await.unwrap();
+        let info = client.network_info().await.unwrap();
+        assert_eq!(info.num_peers, 2);
+
     }
 }

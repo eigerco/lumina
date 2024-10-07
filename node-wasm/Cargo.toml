@@ -75,6 +75,7 @@ web-sys = { version = "0.3.70", features = [
 wasm-bindgen-test = "0.3.42"
 celestia-rpc = { workspace = true, features = ["wasm-bindgen", "p2p"] }
 send_wrapper = {version = "0.6", features = ["futures-core"] }
+rexie = "0.6.2"
 
 [package.metadata.docs.rs]
 targets = ["wasm32-unknown-unknown"]

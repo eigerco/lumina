@@ -783,6 +783,7 @@ where
                 // Tell Swarm not to dial if peer is already connected or there
                 // is an ongoing dialing.
                 .condition(PeerCondition::DisconnectedAndNotDialing)
+                //.extend_addresses_through_behaviour()
                 .build();
 
             if let Err(e) = self.swarm.dial(dial_opts) {
@@ -1000,6 +1001,7 @@ where
                 if !matches!(acceptance, gossipsub::MessageAcceptance::Reject) {
                     // We may have discovered a new peer
                     self.peer_maybe_discovered(peer);
+                    self.swarm.dial(peer);
                 }
 
                 let _ = self
