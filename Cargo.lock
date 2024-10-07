@@ -722,7 +722,6 @@ checksum = "96c51067fd44124faa7f870b4b1c969379ad32b2ba805aa959430ceaa384f695"
 name = "celestia-proto"
 version = "0.4.0"
 dependencies = [
- "anyhow",
  "celestia-tendermint-proto",
  "prost",
  "prost-build",
