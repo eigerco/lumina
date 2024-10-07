@@ -1,7 +1,5 @@
 //! A build script generating rust types from protobuf definitions.
 
-use anyhow::Result;
-
 const SERIALIZED: &str = r#"#[derive(::serde::Deserialize, ::serde::Serialize)]"#;
 const SERIALIZED_DEFAULT: &str =
     r#"#[derive(::serde::Deserialize, ::serde::Serialize)] #[serde(default)]"#;
@@ -63,7 +61,26 @@ static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".shwap.Share", BASE64STRING),
 ];
 
-fn main() -> Result<()> {
+fn main() {
+    let fds = protox::compile(
+        [
+            "vendor/celestia/da/data_availability_header.proto",
+            "vendor/celestia/blob/v1/tx.proto",
+            "vendor/header/pb/extended_header.proto",
+            "vendor/share/eds/byzantine/pb/share.proto",
+            "vendor/share/shwap/pb/shwap.proto",
+            "vendor/share/shwap/p2p/bitswap/pb/bitswap.proto",
+            "vendor/cosmos/base/v1beta1/coin.proto",
+            "vendor/cosmos/base/abci/v1beta1/abci.proto",
+            "vendor/cosmos/crypto/multisig/v1beta1/multisig.proto",
+            "vendor/cosmos/staking/v1beta1/query.proto",
+            "vendor/cosmos/tx/v1beta1/tx.proto",
+            "vendor/go-header/p2p/pb/header_request.proto",
+        ],
+        ["vendor", "vendor/nmt"],
+    )
+    .expect("protox failed to build");
+
     let mut config = prost_build::Config::new();
 
     for (type_path, attr) in CUSTOM_TYPE_ATTRIBUTES {
@@ -87,23 +104,6 @@ fn main() -> Result<()> {
         )
         // Comments in Google's protobuf are causing issues with cargo-test
         .disable_comments([".google"])
-        .compile_protos(
-            &[
-                "vendor/celestia/da/data_availability_header.proto",
-                "vendor/celestia/blob/v1/tx.proto",
-                "vendor/header/pb/extended_header.proto",
-                "vendor/share/eds/byzantine/pb/share.proto",
-                "vendor/share/shwap/pb/shwap.proto",
-                "vendor/share/shwap/p2p/bitswap/pb/bitswap.proto",
-                "vendor/cosmos/base/v1beta1/coin.proto",
-                "vendor/cosmos/base/abci/v1beta1/abci.proto",
-                "vendor/cosmos/crypto/multisig/v1beta1/multisig.proto",
-                "vendor/cosmos/staking/v1beta1/query.proto",
-                "vendor/cosmos/tx/v1beta1/tx.proto",
-                "vendor/go-header/p2p/pb/header_request.proto",
-            ],
-            &["vendor", "vendor/nmt"],
-        )?;
-
-    Ok(())
+        .compile_fds(fds)
+        .expect("prost failed");
 }
