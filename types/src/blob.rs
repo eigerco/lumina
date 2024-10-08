@@ -1,6 +1,6 @@
 //! Types related to creation and submission of blobs.
 
-use celestia_tendermint_proto::v0_34::types::Blob as RawBlob;
+pub use celestia_tendermint_proto::v0_34::types::Blob as RawBlob;
 use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
 

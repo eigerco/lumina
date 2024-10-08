@@ -2,7 +2,7 @@ use celestia_types::state::{
     AccAddress, Address, Balance, QueryDelegationResponse, QueryRedelegationsResponse,
     QueryUnbondingDelegationResponse, TxResponse, Uint, ValAddress,
 };
-use celestia_types::{Blob, TxConfig};
+use celestia_types::{blob::RawBlob, TxConfig};
 use jsonrpsee::proc_macros::rpc;
 
 #[rpc(client)]
@@ -82,7 +82,7 @@ pub trait State {
     #[method(name = "state.SubmitPayForBlob")]
     async fn state_submit_pay_for_blob(
         &self,
-        blobs: &[Blob],
+        blobs: &[RawBlob],
         config: TxConfig,
     ) -> Result<TxResponse, Error>;
 
