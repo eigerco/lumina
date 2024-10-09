@@ -46,7 +46,6 @@ services:
       - credentials:/credentials
       - genesis:/genesis
 
-
   # Uncomment for another bridge node
   # remember to adjust services.validator.command
   # bridge-1:

@@ -30,9 +30,6 @@ pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
         ma.push(Protocol::P2p(bridge_info.id.into()))
     }
 
-    println!("PEER: {:?}", bridge_info.id);
-    println!("MA: {ma}");
-
     (bridge_info.id.into(), ma)
 }
 

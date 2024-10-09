@@ -804,7 +804,6 @@ where
                 // Tell Swarm not to dial if peer is already connected or there
                 // is an ongoing dialing.
                 .condition(PeerCondition::DisconnectedAndNotDialing)
-                //.extend_addresses_through_behaviour()
                 .build();
 
             if let Err(e) = self.swarm.dial(dial_opts) {

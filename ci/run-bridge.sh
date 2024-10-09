@@ -60,7 +60,6 @@ connect_to_common_bridge() {
   # connect to it
   echo "Connecting to $peer_id: /dns/bridge-0/tcp/2121"
   celestia p2p connect "$peer_id" "/dns/bridge-0/tcp/2121"
-
 }
 
 main() {

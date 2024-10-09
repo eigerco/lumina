@@ -483,7 +483,7 @@ mod tests {
             .await
             .unwrap();
 
-        let ma = fetch_bridge_info(&rpc_client).await;
+        let ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
 
         spawn_local(async move {
             worker.run().await.unwrap();
@@ -492,7 +492,7 @@ mod tests {
         assert!(!client.is_running().await.unwrap());
 
         client
-            .start(WasmNodeConfig {
+            .start(&WasmNodeConfig {
                 network: Network::Private,
                 bootnodes: vec![format!("{ma}")],
             })
@@ -533,7 +533,7 @@ mod tests {
         assert!(!client.is_running().await.unwrap());
 
         client
-            .start(WasmNodeConfig {
+            .start(&WasmNodeConfig {
                 network: Network::Private,
                 bootnodes: vec![format!("{ma}")],
             })
