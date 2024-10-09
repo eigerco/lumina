@@ -294,6 +294,7 @@ impl From<SampleId> for CidGeneric<SAMPLE_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::consts::appconsts::AppVersion;
     use crate::test_utils::generate_eds;
 
     #[test]
@@ -311,7 +312,7 @@ mod tests {
 
     #[test]
     fn index_calculation() {
-        let eds = generate_eds(8);
+        let eds = generate_eds(8, AppVersion::V1);
 
         Sample::new(0, 0, AxisType::Row, &eds).unwrap();
         Sample::new(7, 6, AxisType::Row, &eds).unwrap();

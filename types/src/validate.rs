@@ -1,4 +1,4 @@
-use crate::ValidationError;
+use crate::{consts::appconsts::AppVersion, ValidationError};
 
 /// A trait to perform basic validation of the data consistency.
 pub trait ValidateBasic {
@@ -7,5 +7,5 @@ pub trait ValidateBasic {
 }
 
 pub trait ValidateBasicWithAppVersion {
-    fn validate_basic(&self, app_version: u64) -> Result<(), ValidationError>;
+    fn validate_basic(&self, app_version: AppVersion) -> Result<(), ValidationError>;
 }

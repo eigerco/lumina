@@ -2,8 +2,8 @@
 
 use celestia_rpc::prelude::*;
 use celestia_types::consts::appconsts::{
-    CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE, SEQUENCE_LEN_BYTES,
-    SHARE_INFO_BYTES,
+    AppVersion, CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE,
+    SEQUENCE_LEN_BYTES, SHARE_INFO_BYTES,
 };
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher, NS_SIZE};
 use celestia_types::{Blob, Share};
@@ -18,7 +18,7 @@ async fn get_shares_by_namespace() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone()).unwrap();
+    let blob = Blob::new(namespace, AppVersion::V1, data.clone()).unwrap();
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
@@ -56,7 +56,7 @@ async fn get_shares_range() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone()).unwrap();
+    let blob = Blob::new(namespace, AppVersion::V1, data.clone()).unwrap();
     let commitment = blob.commitment;
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
@@ -111,7 +111,7 @@ async fn get_shares_by_namespace_wrong_ns() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone()).unwrap();
+    let blob = Blob::new(namespace, AppVersion::V1, data.clone()).unwrap();
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
@@ -152,7 +152,7 @@ async fn get_shares_by_namespace_wrong_ns_out_of_range() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone()).unwrap();
+    let blob = Blob::new(namespace, AppVersion::V1, data.clone()).unwrap();
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
@@ -178,7 +178,7 @@ async fn get_shares_by_namespace_wrong_roots() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone()).unwrap();
+    let blob = Blob::new(namespace, AppVersion::V1, data.clone()).unwrap();
 
     blob_submit(&client, &[blob]).await.unwrap();
 
@@ -197,7 +197,7 @@ async fn get_eds() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
     let data = vec![1, 2, 3, 4];
-    let blob = Blob::new(namespace, data.clone()).unwrap();
+    let blob = Blob::new(namespace, AppVersion::V1, data.clone()).unwrap();
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 

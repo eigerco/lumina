@@ -7,6 +7,7 @@ use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
+use crate::consts::appconsts::AppVersion;
 use crate::consts::data_availability_header::{
     max_extended_square_width, MIN_EXTENDED_SQUARE_WIDTH,
 };
@@ -15,7 +16,7 @@ use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::rsmt2d::AxisType;
 use crate::{
     bail_validation, bail_verification, validation_error, Error, ExtendedDataSquare, MerkleProof,
-    Result, ValidateBasic, ValidateBasicWithAppVersion, ValidationError,
+    Result, ValidateBasicWithAppVersion, ValidationError,
 };
 
 /// Header with commitments of the data availability.
@@ -69,7 +70,7 @@ impl DataAvailabilityHeader {
     pub fn new(
         row_roots: Vec<NamespacedHash>,
         column_roots: Vec<NamespacedHash>,
-        app_version: u64,
+        app_version: AppVersion,
     ) -> Result<Self> {
         let dah = DataAvailabilityHeader::new_unchecked(row_roots, column_roots);
         dah.validate_basic(app_version)?;
@@ -255,8 +256,8 @@ impl From<DataAvailabilityHeader> for RawDataAvailabilityHeader {
 }
 
 impl ValidateBasicWithAppVersion for DataAvailabilityHeader {
-    fn validate_basic(&self, app_version: u64) -> Result<(), ValidationError> {
-        let max_extended_square_width = max_extended_square_width(app_version).expect("todo");
+    fn validate_basic(&self, app_version: AppVersion) -> Result<(), ValidationError> {
+        let max_extended_square_width = max_extended_square_width(app_version);
 
         if self.column_roots.len() != self.row_roots.len() {
             bail_validation!(
@@ -431,7 +432,7 @@ mod tests {
     fn validate_correct() {
         let dah = sample_dah();
 
-        dah.validate_basic().unwrap();
+        dah.validate_basic(AppVersion::V1).unwrap();
     }
 
     #[test]
@@ -439,7 +440,7 @@ mod tests {
         let mut dah = sample_dah();
         dah.row_roots.pop();
 
-        dah.validate_basic().unwrap_err();
+        dah.validate_basic(AppVersion::V1).unwrap_err();
     }
 
     #[test]
@@ -458,12 +459,12 @@ mod tests {
             .take(MIN_EXTENDED_SQUARE_WIDTH)
             .collect();
 
-        dah.validate_basic().unwrap();
+        dah.validate_basic(AppVersion::V1).unwrap();
 
         dah.row_roots.pop();
         dah.column_roots.pop();
 
-        dah.validate_basic().unwrap_err();
+        dah.validate_basic(AppVersion::V1).unwrap_err();
     }
 
     #[test]
@@ -473,21 +474,21 @@ mod tests {
             .row_roots
             .into_iter()
             .cycle()
-            .take(MAX_EXTENDED_SQUARE_WIDTH)
+            .take(max_extended_square_width(AppVersion::V1))
             .collect();
         dah.column_roots = dah
             .column_roots
             .into_iter()
             .cycle()
-            .take(MAX_EXTENDED_SQUARE_WIDTH)
+            .take(max_extended_square_width(AppVersion::V1))
             .collect();
 
-        dah.validate_basic().unwrap();
+        dah.validate_basic(AppVersion::V1).unwrap();
 
         dah.row_roots.push(dah.row_roots[0].clone());
         dah.column_roots.push(dah.column_roots[0].clone());
 
-        dah.validate_basic().unwrap_err();
+        dah.validate_basic(AppVersion::V1).unwrap_err();
     }
 
     #[test]
@@ -613,6 +614,6 @@ mod tests {
             })
             .unzip();
 
-        DataAvailabilityHeader::new(row_roots, col_roots).unwrap()
+        DataAvailabilityHeader::new(row_roots, col_roots, AppVersion::V1).unwrap()
     }
 }

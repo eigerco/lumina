@@ -65,35 +65,55 @@ pub mod appconsts {
     pub const DEFAULT_TX_SIZE_COST_PER_BYTE: u64 = v3::TX_SIZE_COST_PER_BYTE;
     pub const DEFAULT_GAS_PER_BLOB_BYTE: u64 = v3::GAS_PER_BLOB_BYTE;
 
-    pub const fn square_size_upper_bound(version: u64) -> Option<usize> {
-        match version {
-            1 => Some(v1::SQUARE_SIZE_UPPER_BOUND),
-            2 => Some(v2::SQUARE_SIZE_UPPER_BOUND),
-            3 => Some(v3::SQUARE_SIZE_UPPER_BOUND),
-            _ => None,
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    #[repr(u64)]
+    pub enum AppVersion {
+        V1 = v1::VERSION,
+        V2 = v2::VERSION,
+        V3 = v3::VERSION,
+    }
+
+    impl AppVersion {
+        pub fn from_u64(version: u64) -> Option<AppVersion> {
+            if version == v1::VERSION {
+                Some(AppVersion::V1)
+            } else if version == v2::VERSION {
+                Some(AppVersion::V2)
+            } else if version == v3::VERSION {
+                Some(AppVersion::V3)
+            } else {
+                None
+            }
         }
     }
 
-    pub const fn subtree_root_threshold(version: u64) -> Option<u64> {
-        match version {
-            1 => Some(v1::SUBTREE_ROOT_THRESHOLD),
-            2 => Some(v2::SUBTREE_ROOT_THRESHOLD),
-            3 => Some(v3::SUBTREE_ROOT_THRESHOLD),
-            _ => None,
+    pub const fn square_size_upper_bound(app_version: AppVersion) -> usize {
+        match app_version {
+            AppVersion::V1 => v1::SQUARE_SIZE_UPPER_BOUND,
+            AppVersion::V2 => v2::SQUARE_SIZE_UPPER_BOUND,
+            AppVersion::V3 => v3::SQUARE_SIZE_UPPER_BOUND,
         }
     }
 
-    pub const fn tx_size_cost_per_byte(version: u64) -> Option<u64> {
-        match version {
-            3 => Some(v3::TX_SIZE_COST_PER_BYTE),
-            _ => None,
+    pub const fn subtree_root_threshold(app_version: AppVersion) -> u64 {
+        match app_version {
+            AppVersion::V1 => v1::SUBTREE_ROOT_THRESHOLD,
+            AppVersion::V2 => v2::SUBTREE_ROOT_THRESHOLD,
+            AppVersion::V3 => v3::SUBTREE_ROOT_THRESHOLD,
         }
     }
 
-    pub const fn gas_per_blob_byte(version: u64) -> Option<u64> {
-        match version {
-            3 => Some(v3::GAS_PER_BLOB_BYTE),
-            _ => None,
+    pub const fn tx_size_cost_per_byte(app_version: AppVersion) -> Option<u64> {
+        match app_version {
+            AppVersion::V1 | AppVersion::V2 => None,
+            AppVersion::V3 => Some(v3::TX_SIZE_COST_PER_BYTE),
+        }
+    }
+
+    pub const fn gas_per_blob_byte(app_version: AppVersion) -> Option<u64> {
+        match app_version {
+            AppVersion::V1 | AppVersion::V2 => None,
+            AppVersion::V3 => Some(v3::GAS_PER_BLOB_BYTE),
         }
     }
 
@@ -160,11 +180,8 @@ pub mod data_availability_header {
     /// A maximum width of the [`ExtendedDataSquare`].
     ///
     /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
-    pub const fn max_extended_square_width(app_version: u64) -> Option<usize> {
-        match super::appconsts::square_size_upper_bound(app_version) {
-            Some(x) => Some(x * 2),
-            None => None,
-        }
+    pub const fn max_extended_square_width(app_version: super::appconsts::AppVersion) -> usize {
+        super::appconsts::square_size_upper_bound(app_version) * 2
     }
     /// A minimum width of the [`ExtendedDataSquare`].
     ///
