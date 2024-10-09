@@ -1001,7 +1001,6 @@ where
                 if !matches!(acceptance, gossipsub::MessageAcceptance::Reject) {
                     // We may have discovered a new peer
                     self.peer_maybe_discovered(peer);
-                    self.swarm.dial(peer);
                 }
 
                 let _ = self

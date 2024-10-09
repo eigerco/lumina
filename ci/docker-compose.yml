@@ -22,8 +22,10 @@ services:
       # provide an id for the bridge node (default: 0)
       # each node should have a next natural number starting from 0
       - NODE_ID=0
+      # setting SKIP_AUTH to true disables the use of JWT for authentication
+      - SKIP_AUTH=true
     ports:
-      - 26658:26658
+      - 36658:26658
     volumes:
       - credentials:/credentials
       - genesis:/genesis
@@ -38,13 +40,12 @@ services:
       # provide an id for the bridge node (default: 0)
       # each node should have a next natural number starting from 0
       - NODE_ID=1
-      # setting SKIP_AUTH to true disables the use of JWT for authentication
-      - SKIP_AUTH=true
     ports:
-      - 36658:26658
+      - 26658:26658
     volumes:
       - credentials:/credentials
       - genesis:/genesis
+
 
   # Uncomment for another bridge node
   # remember to adjust services.validator.command

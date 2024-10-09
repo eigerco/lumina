@@ -418,7 +418,7 @@ mod tests {
 
     const WS_URL: &str = "ws://localhost:36658";
 
-    pub async fn fetch_bridge_info(client: &Client) -> Multiaddr {
+    pub async fn fetch_bridge_webtransport_multiaddr(client: &Client) -> Multiaddr {
         let bridge_info = client.p2p_info().await.unwrap();
 
         let mut ma = bridge_info
@@ -438,8 +438,6 @@ mod tests {
         if !ma.protocol_stack().any(|protocol| protocol == "p2p") {
             ma.push(Protocol::P2p(bridge_info.id.into()))
         }
-
-        tracing::info!("{ma:?}");
 
         ma
     }
@@ -512,7 +510,7 @@ mod tests {
             .await
             .unwrap();
 
-        let ma = fetch_bridge_info(&rpc_client).await;
+        let ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
 
         spawn_local(async move {
             worker.run().await.unwrap();
@@ -532,11 +530,10 @@ mod tests {
         let info = client.network_info().await.unwrap();
         assert_eq!(info.num_peers, 1);
 
-        gloo_timers::future::sleep(Duration::from_secs(10)).await;
+        gloo_timers::future::sleep(Duration::from_secs(1)).await;
 
         client.wait_connected_trusted().await.unwrap();
         let info = client.network_info().await.unwrap();
         assert_eq!(info.num_peers, 2);
-
     }
 }

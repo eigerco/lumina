@@ -52,6 +52,17 @@ write_jwt_token() {
   celestia bridge auth admin --p2p.network "$P2P_NETWORK" > "$NODE_JWT_FILE"
 }
 
+connect_to_common_bridge() {
+  # wait for nodes to spin up
+  sleep 5
+  # get PeerId of the common node
+  local peer_id=$(celestia p2p info --url 'ws://bridge-0:26658' | jq -r '.result.id')
+  # connect to it
+  echo "Connecting to $peer_id: /dns/bridge-0/tcp/2121"
+  celestia p2p connect "$peer_id" "/dns/bridge-0/tcp/2121"
+
+}
+
 main() {
   # Initialize the bridge node
   celestia bridge init --p2p.network "$P2P_NETWORK"
@@ -72,7 +83,15 @@ main() {
     --rpc.addr 0.0.0.0 \
     --core.ip validator \
     --keyring.keyname "$NODE_NAME" \
-    --p2p.network "$P2P_NETWORK"
+    --p2p.network "$P2P_NETWORK" &
+
+  # each node without SKIP_AUTH connects to the one with, so that bridges can discover eachother
+  if [ ! "$SKIP_AUTH" == "true" ] ; then
+    connect_to_common_bridge
+  fi
+
+  # don't exit until celestia bridge running in the background does
+  wait
 }
 
 main
