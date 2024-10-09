@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 mod commitment;
 
 pub use self::commitment::Commitment;
-use crate::consts::appconsts;
+use crate::consts::appconsts::{subtree_root_threshold, AppVersion};
 use crate::nmt::Namespace;
 use crate::{bail_validation, Error, Result, Share};
 
@@ -61,14 +61,14 @@ impl Blob {
     ///     }"#},
     /// );
     /// ```
-    pub fn new(namespace: Namespace, data: Vec<u8>) -> Result<Blob> {
-        let commitment =
-            Commitment::from_blob(namespace, appconsts::SHARE_VERSION_ZERO, &data[..])?;
+    pub fn new(namespace: Namespace, app_version: AppVersion, data: Vec<u8>) -> Result<Blob> {
+        let subtree_root_threshold = subtree_root_threshold(app_version);
+        let commitment = Commitment::from_blob(namespace, 0, subtree_root_threshold, &data[..])?;
 
         Ok(Blob {
             namespace,
             data,
-            share_version: appconsts::SHARE_VERSION_ZERO,
+            share_version: 0,
             commitment,
             index: None,
         })
@@ -97,9 +97,15 @@ impl Blob {
     ///
     /// assert!(blob.validate().is_err());
     /// ```
-    pub fn validate(&self) -> Result<()> {
-        let computed_commitment =
-            Commitment::from_blob(self.namespace, self.share_version, &self.data)?;
+    pub fn validate(&self, app_version: AppVersion) -> Result<()> {
+        let subtree_root_threshold = subtree_root_threshold(app_version);
+
+        let computed_commitment = Commitment::from_blob(
+            self.namespace,
+            self.share_version,
+            subtree_root_threshold,
+            &self.data,
+        )?;
 
         if self.commitment != computed_commitment {
             bail_validation!("blob commitment != localy computed commitment")
@@ -143,15 +149,22 @@ impl TryFrom<RawBlob> for Blob {
     type Error = Error;
 
     fn try_from(value: RawBlob) -> Result<Self, Self::Error> {
+        // FIXME: Do not use fixed AppVersion
+        let subtree_root_threshold = subtree_root_threshold(AppVersion::V1);
+
         let namespace = Namespace::new(value.namespace_version as u8, &value.namespace_id)?;
-        let commitment =
-            Commitment::from_blob(namespace, value.share_version as u8, &value.data[..])?;
+        let commitment = Commitment::from_blob(
+            namespace,
+            value.share_version as u8,
+            subtree_root_threshold,
+            &value.data[..],
+        )?;
 
         Ok(Blob {
-            commitment,
             namespace,
             data: value.data,
             share_version: value.share_version as u8,
+            commitment,
             index: None,
         })
     }
@@ -225,7 +238,7 @@ mod tests {
 
     #[test]
     fn validate_blob() {
-        sample_blob().validate().unwrap();
+        sample_blob().validate(AppVersion::V1).unwrap();
     }
 
     #[test]
@@ -233,7 +246,7 @@ mod tests {
         let mut blob = sample_blob();
         blob.commitment.0.fill(7);
 
-        blob.validate().unwrap_err();
+        blob.validate(AppVersion::V1).unwrap_err();
     }
 
     #[test]

@@ -10,7 +10,7 @@ use rand::RngCore;
 
 use crate::block::{CommitExt, GENESIS_HEIGHT};
 pub use crate::byzantine::test_utils::corrupt_eds;
-use crate::consts::appconsts::{SHARE_INFO_BYTES, SHARE_SIZE};
+use crate::consts::appconsts::{AppVersion, SHARE_INFO_BYTES, SHARE_SIZE};
 use crate::consts::version;
 use crate::hash::{Hash, HashExt};
 use crate::nmt::{Namespace, NS_SIZE};
@@ -356,7 +356,7 @@ pub fn unverify(header: &mut ExtendedHeader) {
 }
 
 /// Generate a properly encoded [`ExtendedDataSquare`] with random data.
-pub fn generate_eds(square_width: usize) -> ExtendedDataSquare {
+pub fn generate_eds(square_width: usize, app_version: AppVersion) -> ExtendedDataSquare {
     let ns = Namespace::const_v0(rand::random());
     let ods_width = square_width / 2;
 
@@ -371,7 +371,7 @@ pub fn generate_eds(square_width: usize) -> ExtendedDataSquare {
         })
         .collect();
 
-    ExtendedDataSquare::from_ods(shares).unwrap()
+    ExtendedDataSquare::from_ods(shares, app_version).unwrap()
 }
 
 pub(crate) fn random_bytes(len: usize) -> Vec<u8> {
