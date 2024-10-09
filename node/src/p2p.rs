@@ -22,9 +22,9 @@ use std::time::Duration;
 use blockstore::Blockstore;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_tendermint_proto::Protobuf;
-use celestia_types::namespaced_data::NamespacedData;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
+use celestia_types::row_namespace_data::RowNamespaceData;
 use celestia_types::sample::Sample;
 use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
 use celestia_types::{ExtendedHeader, FraudProof};
@@ -63,7 +63,9 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{self, spawn, Interval, JoinHandle};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
-use crate::p2p::shwap::{namespaced_data_cid, row_cid, sample_cid, ShwapMultihasher};
+use crate::p2p::shwap::{
+    get_block_container, row_cid, row_namespace_data_cid, sample_cid, ShwapMultihasher,
+};
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
@@ -141,6 +143,10 @@ pub enum P2pError {
     /// Bitswap query timed out.
     #[error("Bitswap query timed out")]
     BitswapQueryTimeout,
+
+    /// Shwap protocol error.
+    #[error("Shwap: {0}")]
+    Shwap(String),
 }
 
 impl P2pError {
@@ -160,7 +166,8 @@ impl P2pError {
             | P2pError::Bitswap(_)
             | P2pError::ProtoDecodeFailed(_)
             | P2pError::Cid(_)
-            | P2pError::BitswapQueryTimeout => false,
+            | P2pError::BitswapQueryTimeout
+            | P2pError::Shwap(_) => false,
         }
     }
 }
@@ -168,6 +175,20 @@ impl P2pError {
 impl From<oneshot::error::RecvError> for P2pError {
     fn from(_value: oneshot::error::RecvError) -> Self {
         P2pError::ChannelClosedUnexpectedly
+    }
+}
+
+impl From<prost::DecodeError> for P2pError {
+    fn from(value: prost::DecodeError) -> Self {
+        P2pError::ProtoDecodeFailed(celestia_tendermint_proto::Error::decode_message(value))
+    }
+}
+
+impl From<cid::Error> for P2pError {
+    fn from(value: cid::Error) -> Self {
+        P2pError::Cid(celestia_types::Error::CidError(
+            blockstore::block::CidError::InvalidCid(value.to_string()),
+        ))
     }
 }
 
@@ -491,7 +512,7 @@ impl P2p {
             None => rx.await??,
         };
 
-        Ok(data)
+        get_block_container(&cid, &data)
     }
 
     /// Request a [`Row`] on bitswap protocol.
@@ -518,17 +539,17 @@ impl P2p {
         Ok(Sample::decode(&data[..])?)
     }
 
-    /// Request a [`NamespacedData`] on bitswap protocol.
-    pub async fn get_namespaced_data(
+    /// Request a [`RowNamespaceData`] on bitswap protocol.
+    pub async fn get_row_namespace_data(
         &self,
         namespace: Namespace,
         row_index: u16,
         block_height: u64,
-    ) -> Result<NamespacedData> {
-        let cid = namespaced_data_cid(namespace, row_index, block_height)?;
+    ) -> Result<RowNamespaceData> {
+        let cid = row_namespace_data_cid(namespace, row_index, block_height)?;
         // TODO: add timeout
         let data = self.get_shwap_cid(cid, None).await?;
-        Ok(NamespacedData::decode(&data[..])?)
+        Ok(RowNamespaceData::decode(&data[..])?)
     }
 
     /// Get the addresses where [`P2p`] listens on for incoming connections.
@@ -1302,10 +1323,10 @@ where
     B: Blockstore + 'static,
     S: Store + 'static,
 {
-    let protocol_prefix = format!("/celestia/{}", network_id);
+    let protocol_prefix = celestia_protocol_id(network_id, "shwap");
 
     Ok(beetswap::Behaviour::builder(blockstore)
-        .protocol_prefix(&protocol_prefix)?
+        .protocol_prefix(protocol_prefix.as_ref())?
         .register_multihasher(ShwapMultihasher::new(store))
         .client_set_send_dont_have(false)
         .build())

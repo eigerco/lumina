@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.3.1...celestia-proto-v0.4.0) - 2024-10-03
+
+### Added
+
+- [**breaking**] shwap protocol updates ([#369](https://github.com/eigerco/lumina/pull/369))
+
+## [0.3.1](https://github.com/eigerco/lumina/compare/celestia-proto-v0.3.0...celestia-proto-v0.3.1) - 2024-09-24
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.3.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.2.0...celestia-proto-v0.3.0) - 2024-08-13
 
 ### Fixed

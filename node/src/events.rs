@@ -295,6 +295,9 @@ pub enum NodeEvent {
     /// In case of compromised network, syncing and data sampling will
     /// stop immediately.
     NetworkCompromised,
+
+    /// Node stopped.
+    NodeStopped,
 }
 
 impl NodeEvent {
@@ -317,7 +320,8 @@ impl NodeEvent {
             | NodeEvent::FetchingHeadHeaderFinished { .. }
             | NodeEvent::FetchingHeadersStarted { .. }
             | NodeEvent::FetchingHeadersFinished { .. }
-            | NodeEvent::PrunedHeaders { .. } => false,
+            | NodeEvent::PrunedHeaders { .. }
+            | NodeEvent::NodeStopped => false,
         }
     }
 }
@@ -431,6 +435,9 @@ impl fmt::Display for NodeEvent {
             NodeEvent::NetworkCompromised => {
                 write!(f, "The network is compromised and should not be trusted. ")?;
                 write!(f, "Node stopped synchronizing and sampling, but you can still make some queries to the network.")
+            }
+            NodeEvent::NodeStopped => {
+                write!(f, "Node stopped")
             }
         }
     }

@@ -53,7 +53,7 @@ pub enum AddressKind {
 
 /// A Celestia address. Either account, consensus or validator.
 #[enum_dispatch]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub enum Address {
     /// Account address.
@@ -65,21 +65,21 @@ pub enum Address {
 }
 
 /// Address of an account.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct AccAddress {
     id: Id,
 }
 
 /// Address of a validator.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct ValAddress {
     id: Id,
 }
 
 /// Address of a consensus node.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub struct ConsAddress {
     id: Id,

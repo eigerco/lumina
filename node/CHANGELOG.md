@@ -6,6 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.4.0...lumina-node-v0.5.0) - 2024-10-03
+
+### Added
+
+- [**breaking**] shwap protocol updates ([#369](https://github.com/eigerco/lumina/pull/369))
+- *(node,node-wasm)* [**breaking**] Integrate graceful shutdown in WASM ([#396](https://github.com/eigerco/lumina/pull/396))
+
+## [0.4.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.3.1...lumina-node-v0.4.0) - 2024-09-24
+
+### Added
+
+- *(node)* [**breaking**] Implement graceful shutdown ([#343](https://github.com/eigerco/lumina/pull/343))
+- *(node)* adding agent version ([#379](https://github.com/eigerco/lumina/pull/379))
+
+### Fixed
+
+- *(node)* [**breaking**] Remove unneded idb dependency ([#380](https://github.com/eigerco/lumina/pull/380))
+
+### Other
+
+- [**breaking**] Upgrade blockstore and beetswap ([#382](https://github.com/eigerco/lumina/pull/382))
+
 ## [0.3.1](https://github.com/eigerco/lumina/compare/lumina-node-v0.3.0...lumina-node-v0.3.1) - 2024-08-22
 
 ### Added

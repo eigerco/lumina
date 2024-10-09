@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.5.0...celestia-types-v0.6.0) - 2024-10-03
+
+### Added
+
+- [**breaking**] shwap protocol updates ([#369](https://github.com/eigerco/lumina/pull/369))
+- *(types)* align for building for riscv32 ([#393](https://github.com/eigerco/lumina/pull/393))
+
+## [0.5.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.4.0...celestia-types-v0.5.0) - 2024-09-24
+
+### Added
+
+- feat!(types,rpc): Add share, row, merkle proofs and share.GetRange ([#375](https://github.com/eigerco/lumina/pull/375))
+
 ## [0.4.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.3.0...celestia-types-v0.4.0) - 2024-08-22
 
 ### Added

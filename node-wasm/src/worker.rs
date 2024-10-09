@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{BroadcastChannel, SharedWorker};
+use web_sys::BroadcastChannel;
 
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::events::{EventSubscriber, NodeEventInfo};
@@ -20,7 +20,7 @@ use crate::client::WasmNodeConfig;
 use crate::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::error::{Context, Error, Result};
 use crate::ports::{ClientMessage, WorkerServer};
-use crate::utils::{random_id, WorkerSelf};
+use crate::utils::random_id;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 #[derive(Debug, Serialize, Deserialize, Error)]
@@ -78,6 +78,16 @@ impl NodeWorker {
         loop {
             let (client_id, command) = self.request_server.recv().await?;
 
+            // StopNode needs special handling because `NodeWorkerInstance` needs to be consumed.
+            if matches!(&command, NodeCommand::StopNode) {
+                if let Some(node) = self.node.take() {
+                    node.stop().await;
+                    self.request_server
+                        .respond_to(client_id, WorkerResponse::NodeStopped(()));
+                    continue;
+                }
+            }
+
             let response = match &mut self.node {
                 Some(node) => node.process_command(command).await,
                 node @ None => match command {
@@ -128,6 +138,10 @@ impl NodeWorkerInstance {
             node,
             events_channel_name: events_channel_name.to_owned(),
         })
+    }
+
+    async fn stop(self) {
+        self.node.stop().await;
     }
 
     async fn get_syncer_info(&mut self) -> Result<SyncingInfo> {
@@ -234,6 +248,7 @@ impl NodeWorkerInstance {
             NodeCommand::StartNode(_) => {
                 WorkerResponse::NodeStarted(Err(Error::new("Node already started")))
             }
+            NodeCommand::StopNode => unreachable!("StopNode is handled in `run()`"),
             NodeCommand::GetLocalPeerId => {
                 WorkerResponse::LocalPeerId(self.node.local_peer_id().to_string())
             }
@@ -282,10 +297,6 @@ impl NodeWorkerInstance {
             NodeCommand::GetSamplingMetadata { height } => {
                 WorkerResponse::SamplingMetadata(self.get_sampling_metadata(height).await)
             }
-            NodeCommand::CloseWorker => {
-                SharedWorker::worker_self().close();
-                WorkerResponse::WorkerClosed(())
-            }
             NodeCommand::InternalPing => WorkerResponse::InternalPong,
         }
     }
@@ -313,6 +324,4 @@ async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: B
             }
         }
     }
-
-    events_channel.close();
 }
