@@ -51,6 +51,8 @@ static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.da.DataAvailabilityHeader.row_roots", VEC_BASE64STRING),
     (".celestia.da.DataAvailabilityHeader.column_roots", VEC_BASE64STRING),
     (".cosmos.base.abci.v1beta1.TxResponse.tx", OPTION_ANY),
+    (".cosmos.base.abci.v1beta1.TxResponse.logs", NULL_DEFAULT),
+    (".cosmos.base.abci.v1beta1.TxResponse.events", NULL_DEFAULT),
     (".cosmos.base.query.v1beta1.PageResponse.next_key", BASE64STRING),
     (".cosmos.staking.v1beta1.RedelegationEntry.completion_time", OPTION_TIMESTAMP),
     (".cosmos.staking.v1beta1.UnbondingDelegationEntry.completion_time", OPTION_TIMESTAMP),
