@@ -41,7 +41,7 @@ pub enum WorkerError {
 }
 
 #[wasm_bindgen]
-struct NodeWorker {
+pub(crate) struct NodeWorker {
     event_channel_name: String,
     node: Option<NodeWorkerInstance>,
     request_server: WorkerServer,

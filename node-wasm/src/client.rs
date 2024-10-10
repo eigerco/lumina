@@ -409,3 +409,115 @@ impl WasmNodeConfig {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::worker::NodeWorker;
+    use celestia_rpc::{prelude::*, Client};
+    use celestia_types::ExtendedHeader;
+    use libp2p::{multiaddr::Protocol, Multiaddr};
+    use rexie::Rexie;
+    use serde_wasm_bindgen::from_value;
+    use wasm_bindgen_futures::spawn_local;
+    use wasm_bindgen_test::wasm_bindgen_test;
+    use web_sys::MessageChannel;
+
+    const WS_URL: &str = "ws://localhost:36658";
+
+    async fn spawn_connected_node(bootnodes: Vec<String>) -> NodeClient {
+        let message_channel = MessageChannel::new().unwrap();
+        let mut worker = NodeWorker::new(message_channel.port1().into());
+
+        spawn_local(async move {
+            worker.run().await.unwrap();
+        });
+
+        let client = NodeClient::new(message_channel.port2().into())
+            .await
+            .unwrap();
+
+        assert!(!client.is_running().await.expect("node ready to be run"));
+
+        client
+            .start(&WasmNodeConfig {
+                network: Network::Private,
+                bootnodes,
+            })
+            .await
+            .unwrap();
+
+        assert!(client.is_running().await.expect("running node"));
+
+        client.wait_connected_trusted().await.expect("to connect");
+
+        client
+    }
+
+    async fn fetch_bridge_webtransport_multiaddr(client: &Client) -> Multiaddr {
+        let bridge_info = client.p2p_info().await.unwrap();
+
+        let mut ma = bridge_info
+            .addrs
+            .into_iter()
+            .find(|ma| {
+                let not_localhost = !ma
+                    .iter()
+                    .any(|prot| prot == Protocol::Ip4("127.0.0.1".parse().unwrap()));
+                let webtransport = ma
+                    .protocol_stack()
+                    .any(|protocol| protocol == "webtransport");
+                not_localhost && webtransport
+            })
+            .expect("Bridge doesn't listen on webtransport");
+
+        if !ma.protocol_stack().any(|protocol| protocol == "p2p") {
+            ma.push(Protocol::P2p(bridge_info.id.into()))
+        }
+
+        ma
+    }
+
+    async fn remove_database() -> rexie::Result<()> {
+        Rexie::delete("private").await?;
+        Rexie::delete("private-blockstore").await?;
+        Ok(())
+    }
+
+    #[wasm_bindgen_test]
+    async fn request_network_head_header() {
+        remove_database().await.expect("failed to clear db");
+        let rpc_client = Client::new(WS_URL).await.unwrap();
+        let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
+
+        let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
+
+        let info = client.network_info().await.unwrap();
+        assert_eq!(info.num_peers, 1);
+
+        let bridge_head_header = rpc_client.header_network_head().await.unwrap();
+        let head_header: ExtendedHeader =
+            from_value(client.request_head_header().await.unwrap()).unwrap();
+        assert_eq!(head_header, bridge_head_header)
+    }
+
+    #[wasm_bindgen_test]
+    async fn discover_network_peers() {
+        remove_database().await.expect("failed to clear db");
+        let rpc_client = Client::new(WS_URL).await.unwrap();
+        let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
+
+        let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
+
+        let info = client.network_info().await.unwrap();
+        assert_eq!(info.num_peers, 1);
+
+        gloo_timers::future::sleep(Duration::from_secs(1)).await;
+
+        client.wait_connected_trusted().await.unwrap();
+        let info = client.network_info().await.unwrap();
+        assert_eq!(info.num_peers, 2);
+    }
+}
