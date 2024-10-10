@@ -17,20 +17,17 @@ pub trait P2P {
     #[method(name = "p2p.BandwidthStats")]
     async fn p2p_bandwidth_stats(&self) -> Result<BandwidthStats, Error>;
 
-    // This method does not report errors due to a workaround to a go-jsonrpc bug, see https://github.com/eigerco/celestia-node-rs/issues/53
     /// BlockPeer adds a peer to the set of blocked peers.
     #[method(name = "p2p.BlockPeer")]
-    async fn p2p_block_peer(&self, peer_id: &PeerId);
+    async fn p2p_block_peer(&self, peer_id: &PeerId) -> Result<(), Error>;
 
-    // This method does not report errors due to a workaround to a go-jsonrpc bug, see https://github.com/eigerco/celestia-node-rs/issues/53
     /// ClosePeer closes the connection to a given peer.
     #[method(name = "p2p.ClosePeer")]
-    async fn p2p_close_peer(&self, peer_id: &PeerId);
+    async fn p2p_close_peer(&self, peer_id: &PeerId) -> Result<(), Error>;
 
-    // This method does not report errors due to a workaround to a go-jsonrpc bug, see https://github.com/eigerco/celestia-node-rs/issues/53
     /// Connect ensures there is a connection between this host and the peer with given peer.
     #[method(name = "p2p.Connect")]
-    async fn p2p_connect(&self, address: &AddrInfo);
+    async fn p2p_connect(&self, address: &AddrInfo) -> Result<(), Error>;
 
     /// Connectedness returns a state signaling connection capabilities.
     #[method(name = "p2p.Connectedness")]
@@ -60,10 +57,9 @@ pub trait P2P {
     #[method(name = "p2p.Peers")]
     async fn p2p_peers(&self) -> Result<Vec<PeerId>, Error>;
 
-    // This method does not report errors due to a workaround to a go-jsonrpc bug, see https://github.com/eigerco/celestia-node-rs/issues/53
     /// Protect adds a peer to the list of peers who have a bidirectional peering agreement that they are protected from being trimmed, dropped or negatively scored.
     #[method(name = "p2p.Protect")]
-    async fn p2p_protect(&self, peer_id: &PeerId, tag: &str);
+    async fn p2p_protect(&self, peer_id: &PeerId, tag: &str) -> Result<(), Error>;
 
     // We might get null in response here, so Option is needed
     /// PubSubPeers returns the peer IDs of the peers joined on the given topic.
@@ -74,10 +70,9 @@ pub trait P2P {
     #[method(name = "p2p.ResourceState")]
     async fn p2p_resource_state(&self) -> Result<ResourceManagerStats, Error>;
 
-    // This method does not report errors due to a workaround to a go-jsonrpc bug, see https://github.com/eigerco/celestia-node-rs/issues/53
     /// UnblockPeer removes a peer from the set of blocked peers.
     #[method(name = "p2p.UnblockPeer")]
-    async fn p2p_unblock_peer(&self, peer_id: &PeerId);
+    async fn p2p_unblock_peer(&self, peer_id: &PeerId) -> Result<(), Error>;
 
     /// Unprotect removes a peer from the list of peers who have a bidirectional peering agreement that they are protected from being trimmed, dropped or negatively scored, returning a bool representing whether the given peer is protected or not.
     #[method(name = "p2p.Unprotect")]
