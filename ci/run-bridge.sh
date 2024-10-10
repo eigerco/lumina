@@ -75,6 +75,10 @@ main() {
   write_jwt_token
   # give validator some time to set up
   sleep 4
+  # each node without SKIP_AUTH connects to the one with, so that bridges can discover eachother
+  if [ ! "$SKIP_AUTH" == "true" ] ; then
+    connect_to_common_bridge &
+  fi
   # Start the bridge node
   echo "Configuration finished. Running a bridge node..."
   celestia bridge start \
@@ -82,15 +86,7 @@ main() {
     --rpc.addr 0.0.0.0 \
     --core.ip validator \
     --keyring.keyname "$NODE_NAME" \
-    --p2p.network "$P2P_NETWORK" &
-
-  # each node without SKIP_AUTH connects to the one with, so that bridges can discover eachother
-  if [ ! "$SKIP_AUTH" == "true" ] ; then
-    connect_to_common_bridge
-  fi
-
-  # don't exit until celestia bridge running in the background does
-  wait
+    --p2p.network "$P2P_NETWORK"
 }
 
 main
