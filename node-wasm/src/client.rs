@@ -425,7 +425,42 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
 
-    const WS_URL: &str = "ws://localhost:36658";
+    const WS_URL: &str = "ws://127.0.0.1:36658";
+
+    #[wasm_bindgen_test]
+    async fn request_network_head_header() {
+        remove_database().await.expect("failed to clear db");
+        let rpc_client = Client::new(WS_URL).await.unwrap();
+        let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
+
+        let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
+
+        let info = client.network_info().await.unwrap();
+        assert_eq!(info.num_peers, 1);
+
+        let bridge_head_header = rpc_client.header_network_head().await.unwrap();
+        let head_header: ExtendedHeader =
+            from_value(client.request_head_header().await.unwrap()).unwrap();
+        assert_eq!(head_header, bridge_head_header)
+    }
+
+    #[wasm_bindgen_test]
+    async fn discover_network_peers() {
+        remove_database().await.expect("failed to clear db");
+        let rpc_client = Client::new(WS_URL).await.unwrap();
+        let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
+
+        let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
+
+        let info = client.network_info().await.unwrap();
+        assert_eq!(info.num_peers, 1);
+
+        gloo_timers::future::sleep(Duration::from_secs(2)).await;
+
+        client.wait_connected_trusted().await.unwrap();
+        let info = client.network_info().await.unwrap();
+        assert_eq!(info.num_peers, 2);
+    }
 
     async fn spawn_connected_node(bootnodes: Vec<String>) -> NodeClient {
         let message_channel = MessageChannel::new().unwrap();
@@ -484,40 +519,5 @@ mod tests {
         Rexie::delete("private").await?;
         Rexie::delete("private-blockstore").await?;
         Ok(())
-    }
-
-    #[wasm_bindgen_test]
-    async fn request_network_head_header() {
-        remove_database().await.expect("failed to clear db");
-        let rpc_client = Client::new(WS_URL).await.unwrap();
-        let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
-
-        let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
-
-        let info = client.network_info().await.unwrap();
-        assert_eq!(info.num_peers, 1);
-
-        let bridge_head_header = rpc_client.header_network_head().await.unwrap();
-        let head_header: ExtendedHeader =
-            from_value(client.request_head_header().await.unwrap()).unwrap();
-        assert_eq!(head_header, bridge_head_header)
-    }
-
-    #[wasm_bindgen_test]
-    async fn discover_network_peers() {
-        remove_database().await.expect("failed to clear db");
-        let rpc_client = Client::new(WS_URL).await.unwrap();
-        let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
-
-        let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
-
-        let info = client.network_info().await.unwrap();
-        assert_eq!(info.num_peers, 1);
-
-        gloo_timers::future::sleep(Duration::from_secs(2)).await;
-
-        client.wait_connected_trusted().await.unwrap();
-        let info = client.network_info().await.unwrap();
-        assert_eq!(info.num_peers, 2);
     }
 }
