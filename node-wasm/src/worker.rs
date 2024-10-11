@@ -40,8 +40,12 @@ pub enum WorkerError {
     NodeError(Error),
 }
 
+/// `NodeWorker` is responsible for receiving commands from connected [`NodeClient`]s, executing
+/// them and sending a response back, as well as accepting new `NodeClient` connections.
+///
+/// [`NodeClient`]: crate::client::NodeClient
 #[wasm_bindgen]
-pub(crate) struct NodeWorker {
+pub struct NodeWorker {
     event_channel_name: String,
     node: Option<NodeWorkerInstance>,
     request_server: WorkerServer,
