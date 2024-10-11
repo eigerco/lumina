@@ -4,7 +4,7 @@ use celestia_rpc::client::Client;
 use celestia_rpc::prelude::*;
 use wasm_bindgen_test::*;
 
-// uses bridge-1, which has skip-auth enabled
+// uses bridge-0, which has skip-auth enabled
 const CELESTIA_RPC_URL: &str = "ws://localhost:36658";
 
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);

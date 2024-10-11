@@ -425,6 +425,7 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
 
+    // uses bridge-0, which has skip-auth enabled
     const WS_URL: &str = "ws://127.0.0.1:36658";
 
     #[wasm_bindgen_test]
