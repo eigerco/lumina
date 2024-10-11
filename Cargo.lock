@@ -720,7 +720,7 @@ checksum = "96c51067fd44124faa7f870b4b1c969379ad32b2ba805aa959430ceaa384f695"
 
 [[package]]
 name = "celestia-proto"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "celestia-tendermint-proto",
  "prost",
@@ -734,7 +734,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-rpc"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -804,7 +804,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "base64",
  "bech32",
@@ -3241,7 +3241,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-cli"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -3264,7 +3264,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "async-trait",
  "backoff",
@@ -3314,7 +3314,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-wasm"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "blockstore",
