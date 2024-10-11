@@ -80,6 +80,9 @@ jobs:
     - name: Test node crate
       run: wasm-pack test --headless --chrome node
 
+    - name: Test rpc crate
+      run: wasm-pack test --headless --chrome rpc
+
     - name: Test node-wasm crate
       # We're running node-wasm tests in release mode to get around a failing debug assertion
       # https://github.com/libp2p/rust-libp2p/issues/5618
