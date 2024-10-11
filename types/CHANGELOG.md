@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1](https://github.com/eigerco/lumina/compare/celestia-types-v0.6.0...celestia-types-v0.6.1) - 2024-10-11
+
+### Added
+
+- *(types)* derive PartialOrd and Ord for addresses ([#414](https://github.com/eigerco/lumina/pull/414))
+
+### Fixed
+
+- *(rpc)* use correct blob type in state submit pay for blob ([#418](https://github.com/eigerco/lumina/pull/418))
+
 ## [0.6.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.5.0...celestia-types-v0.6.0) - 2024-10-03
 
 ### Added
