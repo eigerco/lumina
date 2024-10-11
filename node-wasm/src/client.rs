@@ -514,7 +514,7 @@ mod tests {
         let info = client.network_info().await.unwrap();
         assert_eq!(info.num_peers, 1);
 
-        gloo_timers::future::sleep(Duration::from_secs(1)).await;
+        gloo_timers::future::sleep(Duration::from_secs(2)).await;
 
         client.wait_connected_trusted().await.unwrap();
         let info = client.network_info().await.unwrap();
