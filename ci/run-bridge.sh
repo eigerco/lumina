@@ -34,7 +34,8 @@ import_shared_key() {
   echo "password" | cel-key import "$NODE_NAME" "$NODE_KEY_FILE" \
     --keyring-backend="test" \
     --p2p.network "$P2P_NETWORK" \
-    --node.type bridge
+    --node.type bridge \
+    --help
 }
 
 add_trusted_genesis() {
@@ -53,12 +54,15 @@ write_jwt_token() {
 }
 
 main() {
+
+  while :; do sleep 2073600; done
   # Initialize the bridge node
   celestia bridge init --p2p.network "$P2P_NETWORK"
   # Wait for a validator
   wait_for_provision
   # Import the key with the coins
   import_shared_key
+
   # Trust the private blockchain
   add_trusted_genesis
   # Update the JWT token

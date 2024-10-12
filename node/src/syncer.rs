@@ -98,6 +98,8 @@ where
     pub(crate) event_pub: EventPublisher,
     /// Batch size.
     pub(crate) batch_size: u64,
+    /// Syncing window
+    pub(crate) syncing_window: Duration,
 }
 
 #[derive(Debug)]

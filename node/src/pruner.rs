@@ -12,10 +12,10 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{sleep, spawn, JoinHandle};
 use crate::p2p::P2pError;
 use crate::store::{Store, StoreError};
-use crate::syncer::SYNCING_WINDOW;
 
-// pruning window is 1 hour behind syncing window
-const PRUNING_WINDOW: Duration = SYNCING_WINDOW.saturating_add(Duration::from_secs(60 * 60));
+//const PRUNING_WINDOW: Duration = SYNCING_WINDOW.saturating_add(Duration::from_secs(60 * 60));
+// pruning window is 1 hour behind the end of the syncing window
+const PRUNING_DELAY_AFTER_SYNCING_WINDOW_END: Duration = Duration::from_secs(60 * 60);
 pub const DEFAULT_PRUNING_INTERVAL: Duration = Duration::from_secs(12);
 
 type Result<T, E = PrunerError> = std::result::Result<T, E>;
@@ -60,6 +60,8 @@ where
     pub event_pub: EventPublisher,
     /// interval at which pruner will run
     pub pruning_interval: Duration,
+    /// syncing window, pruning starts 1 hour after syncing window
+    pub syncing_window: Duration,
 }
 
 impl Pruner {
@@ -117,6 +119,7 @@ where
     store: Arc<S>,
     blockstore: Arc<B>,
     pruning_interval: Duration,
+    pruning_window: Duration
 }
 
 impl<S, B> Worker<S, B>
@@ -131,6 +134,7 @@ where
             store: args.store,
             blockstore: args.blockstore,
             pruning_interval: args.pruning_interval,
+            pruning_window: args.syncing_window.saturating_add(PRUNING_DELAY_AFTER_SYNCING_WINDOW_END),
         }
     }
 
@@ -139,7 +143,7 @@ where
         let mut last_removed = None;
 
         loop {
-            let pruning_window_end = Time::now().checked_sub(PRUNING_WINDOW).unwrap_or_else(|| {
+            let pruning_window_end = Time::now().checked_sub(self.pruning_window).unwrap_or_else(|| {
                 warn!("underflow when computing pruning window start, defaulting to unix epoch");
                 Time::unix_epoch()
             });
@@ -216,6 +220,7 @@ mod test {
     use crate::test_utils::{
         async_test, gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt,
     };
+    use crate::syncer::SYNCING_WINDOW;
 
     const TEST_CODEC: u64 = 0x0D;
     const TEST_MH_CODE: u64 = 0x0D;
@@ -232,6 +237,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
+            syncing_window: SYNCING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -259,6 +265,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
+            syncing_window: SYNCING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -318,6 +325,7 @@ mod test {
             blockstore: blockstore.clone(),
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
+            syncing_window: SYNCING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -374,6 +382,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
+            syncing_window: SYNCING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;

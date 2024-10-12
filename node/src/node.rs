@@ -26,7 +26,7 @@ use crate::executor::{spawn_cancellable, JoinHandle};
 use crate::p2p::{P2p, P2pArgs};
 use crate::pruner::{Pruner, PrunerArgs, DEFAULT_PRUNING_INTERVAL};
 use crate::store::{SamplingMetadata, Store, StoreError};
-use crate::syncer::{Syncer, SyncerArgs};
+use crate::syncer::{Syncer, SyncerArgs, SYNCING_WINDOW};
 
 pub use crate::daser::DaserError;
 pub use crate::p2p::{HeaderExError, P2pError};
@@ -149,6 +149,7 @@ where
             blockstore: blockstore.clone(),
             event_pub: event_channel.publisher(),
             pruning_interval: DEFAULT_PRUNING_INTERVAL,
+            syncing_window: SYNCING_WINDOW,
         }));
 
         let tasks_cancellation_token = CancellationToken::new();
