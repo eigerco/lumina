@@ -11,7 +11,7 @@ use lumina_node::test_utils::test_node_config;
 use lumina_node::{node::Node, store::InMemoryStore};
 use tokio::time::sleep;
 
-const WS_URL: &str = "ws://localhost:26658";
+const WS_URL: &str = "ws://localhost:36658";
 
 pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
     let _ = dotenvy::dotenv();

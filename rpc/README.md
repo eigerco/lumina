@@ -12,7 +12,7 @@ use celestia_types::TxConfig;
 async fn submit_blob() {
     // create a client to the celestia node
     let token = std::env::var("CELESTIA_NODE_AUTH_TOKEN").expect("Token not provided");
-    let client = Client::new("ws://localhost:26658", Some(&token))
+    let client = Client::new("ws://localhost:36658", Some(&token))
         .await
         .expect("Failed creating rpc client");
 

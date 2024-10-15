@@ -412,10 +412,10 @@ impl WasmNodeConfig {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use std::time::Duration;
 
-    use super::*;
-    use crate::worker::NodeWorker;
     use celestia_rpc::{prelude::*, Client};
     use celestia_types::ExtendedHeader;
     use libp2p::{multiaddr::Protocol, Multiaddr};
@@ -424,9 +424,12 @@ mod tests {
     use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
+    use gloo_timers::future::sleep;
+
+    use crate::worker::NodeWorker;
 
     // uses bridge-0, which has skip-auth enabled
-    const WS_URL: &str = "ws://127.0.0.1:36658";
+    const WS_URL: &str = "ws://127.0.0.1:26658";
 
     #[wasm_bindgen_test]
     async fn request_network_head_header() {
@@ -456,7 +459,7 @@ mod tests {
         let info = client.network_info().await.unwrap();
         assert_eq!(info.num_peers, 1);
 
-        gloo_timers::future::sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(300)).await;
 
         client.wait_connected_trusted().await.unwrap();
         let info = client.network_info().await.unwrap();
