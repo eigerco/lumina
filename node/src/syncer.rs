@@ -35,7 +35,7 @@ use crate::utils::{FusedReusableFuture, OneshotSenderExt};
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
-pub const SYNCING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
+pub const DEFAULT_SYNCING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
 /// Representation of all the errors that can occur in `Syncer` component.
 #[derive(Debug, thiserror::Error)]
@@ -202,6 +202,7 @@ where
     subjective_head_height: Option<u64>,
     batch_size: u64,
     ongoing_batch: Ongoing,
+    syncing_window: Duration,
 }
 
 struct Ongoing {
@@ -231,6 +232,7 @@ where
                 range: None,
                 task: FusedReusableFuture::terminated(),
             },
+            syncing_window: args.syncing_window,
         })
     }
 
@@ -474,7 +476,7 @@ where
         // make sure we're inside the syncing window before we start
         match self.store.get_by_height(next_batch.end() + 1).await {
             Ok(known_header) => {
-                if !in_syncing_window(&known_header) {
+                if !self.in_syncing_window(&known_header) {
                     return Ok(());
                 }
             }
@@ -555,6 +557,20 @@ where
 
         Ok(())
     }
+
+    fn in_syncing_window(&self, header: &ExtendedHeader) -> bool {
+        let syncing_window_start =
+            Time::now()
+                .checked_sub(self.syncing_window)
+                .unwrap_or_else(|| {
+                    warn!(
+                        "underflow when computing syncing window start, defaulting to unix epoch"
+                    );
+                    Time::unix_epoch()
+                });
+
+        header.time().after(syncing_window_start)
+    }
 }
 
 /// based on the stored headers and current network head height, calculate range of headers that
@@ -583,15 +599,6 @@ fn calculate_range_to_fetch(
 
     let range = penultimate_range_end + 1..=store_head_range.start().saturating_sub(1);
     range.truncate_left(limit)
-}
-
-fn in_syncing_window(header: &ExtendedHeader) -> bool {
-    let syncing_window_start = Time::now().checked_sub(SYNCING_WINDOW).unwrap_or_else(|| {
-        warn!("underflow when computing syncing window start, defaulting to unix epoch");
-        Time::unix_epoch()
-    });
-
-    header.time().after(syncing_window_start)
 }
 
 #[instrument(skip_all)]
@@ -780,6 +787,7 @@ mod tests {
             store: Arc::new(InMemoryStore::new()),
             event_pub: events.publisher(),
             batch_size: 512,
+            syncing_window: DEFAULT_SYNCING_WINDOW,
         })
         .unwrap();
 
@@ -927,6 +935,7 @@ mod tests {
             store: store.clone(),
             event_pub: events.publisher(),
             batch_size: 512,
+            syncing_window: DEFAULT_SYNCING_WINDOW,
         })
         .unwrap();
 
@@ -1166,6 +1175,7 @@ mod tests {
             store: store.clone(),
             event_pub: events.publisher(),
             batch_size: 512,
+            syncing_window: DEFAULT_SYNCING_WINDOW,
         })
         .unwrap();
 

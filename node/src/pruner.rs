@@ -13,7 +13,6 @@ use crate::executor::{sleep, spawn, JoinHandle};
 use crate::p2p::P2pError;
 use crate::store::{Store, StoreError};
 
-//const PRUNING_WINDOW: Duration = SYNCING_WINDOW.saturating_add(Duration::from_secs(60 * 60));
 // pruning window is 1 hour behind the end of the syncing window
 const PRUNING_DELAY_AFTER_SYNCING_WINDOW_END: Duration = Duration::from_secs(60 * 60);
 pub const DEFAULT_PRUNING_INTERVAL: Duration = Duration::from_secs(12);
@@ -119,7 +118,7 @@ where
     store: Arc<S>,
     blockstore: Arc<B>,
     pruning_interval: Duration,
-    pruning_window: Duration
+    pruning_window: Duration,
 }
 
 impl<S, B> Worker<S, B>
@@ -134,7 +133,9 @@ where
             store: args.store,
             blockstore: args.blockstore,
             pruning_interval: args.pruning_interval,
-            pruning_window: args.syncing_window.saturating_add(PRUNING_DELAY_AFTER_SYNCING_WINDOW_END),
+            pruning_window: args
+                .syncing_window
+                .saturating_add(PRUNING_DELAY_AFTER_SYNCING_WINDOW_END),
         }
     }
 
@@ -143,10 +144,15 @@ where
         let mut last_removed = None;
 
         loop {
-            let pruning_window_end = Time::now().checked_sub(self.pruning_window).unwrap_or_else(|| {
-                warn!("underflow when computing pruning window start, defaulting to unix epoch");
-                Time::unix_epoch()
-            });
+            let pruning_window_end =
+                Time::now()
+                    .checked_sub(self.pruning_window)
+                    .unwrap_or_else(|| {
+                        warn!(
+                        "underflow when computing pruning window start, defaulting to unix epoch"
+                    );
+                        Time::unix_epoch()
+                    });
 
             while let Some(header) = self.get_tail_header_to_prune(&pruning_window_end).await? {
                 if self.cancellation_token.is_cancelled() {
@@ -216,14 +222,16 @@ mod test {
     use super::*;
     use crate::blockstore::InMemoryBlockstore;
     use crate::events::{EventChannel, TryRecvError};
+    use crate::node::DEFAULT_SYNCING_WINDOW;
     use crate::store::{InMemoryStore, SamplingStatus};
     use crate::test_utils::{
         async_test, gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt,
     };
-    use crate::syncer::SYNCING_WINDOW;
 
     const TEST_CODEC: u64 = 0x0D;
     const TEST_MH_CODE: u64 = 0x0D;
+    const TEST_PRUNING_WINDOW: Duration =
+        DEFAULT_SYNCING_WINDOW.saturating_add(PRUNING_DELAY_AFTER_SYNCING_WINDOW_END);
 
     #[async_test]
     async fn empty_store() {
@@ -237,7 +245,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            syncing_window: SYNCING_WINDOW,
+            syncing_window: DEFAULT_SYNCING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -265,7 +273,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            syncing_window: SYNCING_WINDOW,
+            syncing_window: DEFAULT_SYNCING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -294,7 +302,7 @@ mod test {
         let mut event_subscriber = events.subscribe();
 
         let first_header_time =
-            (Time::now() - (PRUNING_WINDOW + Duration::from_secs(30 * 24 * 60 * 60))).unwrap();
+            (Time::now() - (TEST_PRUNING_WINDOW + Duration::from_secs(30 * 24 * 60 * 60))).unwrap();
         gen.set_time(first_header_time, Duration::from_secs(1));
 
         let blocks_with_sampling = (1..=1000)
@@ -325,7 +333,7 @@ mod test {
             blockstore: blockstore.clone(),
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            syncing_window: SYNCING_WINDOW,
+            syncing_window: DEFAULT_SYNCING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -364,12 +372,12 @@ mod test {
         let mut event_subscriber = events.subscribe();
 
         // 50 headers before pruning window edge
-        let before_pruning_edge = (Time::now() - (PRUNING_WINDOW + BLOCK_TIME * 100)).unwrap();
+        let before_pruning_edge = (Time::now() - (TEST_PRUNING_WINDOW + BLOCK_TIME * 100)).unwrap();
         gen.set_time(before_pruning_edge, BLOCK_TIME);
         store.insert(gen.next_many_verified(50)).await.unwrap();
 
         // 10 headers within 1sec of pruning window edge
-        let after_pruning_edge = (Time::now() - (PRUNING_WINDOW - BLOCK_TIME * 10)).unwrap();
+        let after_pruning_edge = (Time::now() - (TEST_PRUNING_WINDOW - BLOCK_TIME * 10)).unwrap();
         gen.set_time(after_pruning_edge, BLOCK_TIME);
         store.insert(gen.next_many_verified(10)).await.unwrap();
 
@@ -382,7 +390,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            syncing_window: SYNCING_WINDOW,
+            syncing_window: DEFAULT_SYNCING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;

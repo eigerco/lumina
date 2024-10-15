@@ -7,7 +7,7 @@ use libp2p::identity;
 use lumina_node::{
     blockstore::RedbBlockstore,
     events::{EventSubscriber, NodeEvent},
-    node::{Node, NodeConfig},
+    node::{Node, NodeConfig, DEFAULT_SYNCING_WINDOW},
     store::RedbStore,
 };
 use tempfile::tempdir;
@@ -74,6 +74,7 @@ async fn new_node(path: impl AsRef<Path>) -> (Node<RedbBlockstore, RedbStore>, E
         sync_batch_size: 512,
         blockstore,
         store,
+        syncing_window: DEFAULT_SYNCING_WINDOW,
     })
     .await
     .unwrap()

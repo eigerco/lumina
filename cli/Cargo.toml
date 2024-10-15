@@ -35,6 +35,7 @@ clap = { version = "4.5.7", features = ["derive"] }
 directories = "5.0.1"
 dotenvy = "0.15.7"
 mime_guess = "2.0.4"
+parse_duration = "2.1.1"
 redb = "2.1.1"
 rust-embed = { version = "8.4.0", features = ["interpolate-folder-path"] }
 serde = "1.0.203"
