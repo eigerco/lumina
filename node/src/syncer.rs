@@ -35,6 +35,7 @@ use crate::utils::{FusedReusableFuture, OneshotSenderExt};
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
+/// Default maximum age of headers Lumina will synchronise and store
 pub const DEFAULT_SYNCING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
 /// Representation of all the errors that can occur in `Syncer` component.
