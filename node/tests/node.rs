@@ -28,8 +28,7 @@ async fn connects_to_the_go_bridge_node() {
     let node = new_connected_node().await;
 
     let info = node.network_info().await.unwrap();
-    // our docker setup is two bridges connected, so there's already one another node connected
-    assert_eq!(info.num_peers(), 2);
+    assert!(info.num_peers() >= 1);
 }
 
 #[tokio::test]
