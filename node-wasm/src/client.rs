@@ -450,6 +450,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn discover_network_peers() {
+        crate::utils::setup_logging();
         remove_database().await.expect("failed to clear db");
         let rpc_client = Client::new(WS_URL).await.unwrap();
         let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
@@ -477,7 +478,6 @@ mod tests {
         let client = NodeClient::new(message_channel.port2().into())
             .await
             .unwrap();
-
         assert!(!client.is_running().await.expect("node ready to be run"));
 
         client
@@ -487,9 +487,7 @@ mod tests {
             })
             .await
             .unwrap();
-
         assert!(client.is_running().await.expect("running node"));
-
         client.wait_connected_trusted().await.expect("to connect");
 
         client
@@ -497,6 +495,8 @@ mod tests {
 
     async fn fetch_bridge_webtransport_multiaddr(client: &Client) -> Multiaddr {
         let bridge_info = client.p2p_info().await.unwrap();
+
+        tracing::error!("BB: {bridge_info:#?}");
 
         let mut ma = bridge_info
             .addrs
@@ -516,6 +516,7 @@ mod tests {
             ma.push(Protocol::P2p(bridge_info.id.into()))
         }
 
+        tracing::error!("B: {ma:#?}");
         ma
     }
 
