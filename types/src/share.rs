@@ -39,7 +39,8 @@ const SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTE
 #[serde(try_from = "RawShare", into = "RawShare")]
 pub struct Share {
     /// A raw data of the share.
-    pub data: [u8; appconsts::SHARE_SIZE],
+    data: [u8; appconsts::SHARE_SIZE],
+    is_parity: bool,
 }
 
 impl Share {
@@ -71,36 +72,46 @@ impl Share {
 
         Ok(Share {
             data: data.try_into().unwrap(),
+            is_parity: false,
         })
+    }
+
+    pub fn parity(data: &[u8]) -> Result<Share> {
+        if data.len() != appconsts::SHARE_SIZE {
+            return Err(Error::InvalidShareSize(data.len()));
+        }
+
+        Ok(Share {
+            data: data.try_into().unwrap(),
+            is_parity: true,
+        })
+    }
+
+    pub fn is_parity(&self) -> bool {
+        self.is_parity
     }
 
     /// Get the [`Namespace`] the [`Share`] belongs to.
     pub fn namespace(&self) -> Namespace {
-        Namespace::new_unchecked(self.data[..NS_SIZE].try_into().unwrap())
-    }
-
-    /// Get all the data that follows the [`Namespace`] of the [`Share`].
-    ///
-    /// This will include also the [`InfoByte`] and the `sequence length`.
-    pub fn data(&self) -> &[u8] {
-        &self.data[NS_SIZE..]
-    }
-
-    /// Converts this [`Share`] into the raw bytes vector.
-    ///
-    /// This will include also the [`InfoByte`] and the `sequence length`.
-    pub fn to_vec(&self) -> Vec<u8> {
-        self.as_ref().to_vec()
+        if !self.is_parity {
+            Namespace::new_unchecked(self.data[..NS_SIZE].try_into().unwrap())
+        } else {
+            Namespace::PARITY_SHARE
+        }
     }
 
     /// Return Share's `InfoByte`
-    pub fn info_byte(&self) -> InfoByte {
-        InfoByte::from_raw_unchecked(self.data[NS_SIZE])
+    pub fn info_byte(&self) -> Option<InfoByte> {
+        if !self.is_parity() {
+            Some(InfoByte::from_raw_unchecked(self.data[NS_SIZE]))
+        } else {
+            None
+        }
     }
 
     /// For first share in a sequence, return sequence length, None for continuation shares
     pub fn sequence_length(&self) -> Option<u32> {
-        if self.info_byte().is_sequence_start() {
+        if self.info_byte()?.is_sequence_start() {
             let sequence_length_bytes = &self.data[SHARE_SEQUENCE_LENGTH_OFFSET
                 ..SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES];
             Some(u32::from_be_bytes(
@@ -109,6 +120,27 @@ impl Share {
         } else {
             None
         }
+    }
+
+    pub fn blob(&self) -> Option<&[u8]> {
+        let start = if self.info_byte()?.is_sequence_start() {
+            SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES
+        } else {
+            SHARE_SEQUENCE_LENGTH_OFFSET
+        };
+        Some(&self.data[start..])
+    }
+
+    /// Get the underlying share data.
+    pub fn data(&self) -> &[u8; appconsts::SHARE_SIZE] {
+        &self.data
+    }
+
+    /// Converts this [`Share`] into the raw bytes vector.
+    ///
+    /// This will include also the [`InfoByte`] and the `sequence length`.
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.as_ref().to_vec()
     }
 }
 
