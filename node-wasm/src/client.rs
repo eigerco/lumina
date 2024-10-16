@@ -1,5 +1,7 @@
 //! A browser compatible wrappers for the [`lumina-node`].
 
+use std::time::Duration;
+
 use js_sys::Array;
 use libp2p::identity::Keypair;
 use serde::{Deserialize, Serialize};
@@ -10,7 +12,7 @@ use web_sys::BroadcastChannel;
 
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_id};
-use lumina_node::node::NodeConfig;
+use lumina_node::node::{NodeConfig, DEFAULT_SYNCING_WINDOW};
 use lumina_node::store::IndexedDbStore;
 
 use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
@@ -32,6 +34,8 @@ pub struct WasmNodeConfig {
     /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
+    /// Custom syncing window size. Pruning starts one hour after syncing window end.
+    pub syncing_window_secs: Option<u32>,
 }
 
 /// `NodeClient` is responsible for steering [`NodeWorker`] by sending it commands and receiving
@@ -95,7 +99,7 @@ impl NodeClient {
 
     /// Start a node with the provided config, if it's not running
     pub async fn start(&self, config: &WasmNodeConfig) -> Result<()> {
-        let command = NodeCommand::StartNode(config.to_owned());
+        let command = NodeCommand::StartNode(config.clone());
         let response = self.worker.exec(command).await?;
         response.into_node_started().check_variant()??;
 
@@ -373,6 +377,7 @@ impl WasmNodeConfig {
             bootnodes: canonical_network_bootnodes(network.into())
                 .map(|addr| addr.to_string())
                 .collect::<Vec<_>>(),
+            syncing_window_secs: None,
         }
     }
 
@@ -398,12 +403,18 @@ impl WasmNodeConfig {
             p2p_bootnodes.extend(resolved_addrs.into_iter());
         }
 
+        let syncing_window = self
+            .syncing_window_secs
+            .map(|d| Duration::from_secs(d.into()))
+            .unwrap_or(DEFAULT_SYNCING_WINDOW);
+
         Ok(NodeConfig {
             network_id: network_id.to_string(),
             p2p_bootnodes,
             p2p_local_keypair,
             p2p_listen_on: vec![],
             sync_batch_size: 128,
+            syncing_window,
             blockstore,
             store,
         })

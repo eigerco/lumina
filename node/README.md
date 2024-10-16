@@ -9,7 +9,7 @@ use lumina_node::blockstore::RedbBlockstore;
 use lumina_node::network::{
     canonical_network_bootnodes, network_id, Network,
 };
-use lumina_node::node::{Node, NodeConfig};
+use lumina_node::node::{Node, NodeConfig, DEFAULT_SYNCING_WINDOW};
 use lumina_node::store::RedbStore;
 use tokio::task::spawn_blocking;
 
@@ -37,6 +37,7 @@ async fn main() {
         p2p_bootnodes,
         p2p_listen_on: vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()],
         sync_batch_size: 512,
+        syncing_window: DEFAULT_SYNCING_WINDOW,
         blockstore,
         store,
     })

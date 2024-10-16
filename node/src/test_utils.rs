@@ -18,6 +18,7 @@ use crate::{
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
     store::{InMemoryStore, VerifiedExtendedHeaders},
+    syncer::DEFAULT_SYNCING_WINDOW,
     utils::OneshotResultSender,
 };
 
@@ -58,6 +59,7 @@ pub fn test_node_config() -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
         sync_batch_size: 512,
         blockstore: InMemoryBlockstore::new(),
         store: InMemoryStore::new(),
+        syncing_window: DEFAULT_SYNCING_WINDOW,
     }
 }
 
