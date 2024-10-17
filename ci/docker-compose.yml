@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile.validator
     environment:
-      # provide amount of bridge nodes to provision (default: 1)
+      # provide amount of bridge nodes to provision (default: 2)
       - BRIDGE_COUNT=2
     volumes:
       - credentials:/credentials

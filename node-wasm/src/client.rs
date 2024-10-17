@@ -418,13 +418,14 @@ mod tests {
 
     use celestia_rpc::{prelude::*, Client};
     use celestia_types::ExtendedHeader;
+    use gloo_timers::future::sleep;
     use libp2p::{multiaddr::Protocol, Multiaddr};
     use rexie::Rexie;
     use serde_wasm_bindgen::from_value;
     use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
-    use gloo_timers::future::sleep;
+    use celestia_types::p2p::PeerId;
 
     use crate::worker::NodeWorker;
 
@@ -445,7 +446,8 @@ mod tests {
         let bridge_head_header = rpc_client.header_network_head().await.unwrap();
         let head_header: ExtendedHeader =
             from_value(client.request_head_header().await.unwrap()).unwrap();
-        assert_eq!(head_header, bridge_head_header)
+        assert_eq!(head_header, bridge_head_header);
+        rpc_client.p2p_close_peer(&PeerId(client.local_peer_id().await.unwrap().parse().unwrap())).await.unwrap();
     }
 
     #[wasm_bindgen_test]
@@ -465,6 +467,7 @@ mod tests {
         client.wait_connected_trusted().await.unwrap();
         let info = client.network_info().await.unwrap();
         assert_eq!(info.num_peers, 2);
+        rpc_client.p2p_close_peer(&PeerId(client.local_peer_id().await.unwrap().parse().unwrap())).await.unwrap();
     }
 
     async fn spawn_connected_node(bootnodes: Vec<String>) -> NodeClient {
