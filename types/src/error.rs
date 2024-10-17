@@ -181,6 +181,12 @@ pub enum Error {
     ZeroBlockHeight,
 }
 
+impl From<prost::DecodeError> for Error {
+    fn from(value: prost::DecodeError) -> Self {
+        Error::Protobuf(celestia_tendermint_proto::Error::decode_message(value))
+    }
+}
+
 /// Representation of the errors that can occur when validating data.
 ///
 /// See [`ValidateBasic`]

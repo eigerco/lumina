@@ -11,16 +11,16 @@ use std::iter;
 use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
 use celestia_proto::shwap::{row::HalfSide as RawHalfSide, Row as RawRow, Share as RawShare};
-use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::NamespaceMerkleHasher;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 
 use crate::consts::appconsts::SHARE_SIZE;
-use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NS_SIZE};
-use crate::rsmt2d::{is_ods_square, ExtendedDataSquare};
-use crate::{bail_validation, DataAvailabilityHeader, Error, Result};
+use crate::nmt::{NamespacedSha2Hasher, Nmt};
+use crate::rsmt2d::ExtendedDataSquare;
+use crate::{bail_validation, DataAvailabilityHeader, Error, Result, Share};
 
 /// Number of bytes needed to represent [`EdsId`] in `multihash`.
 const EDS_ID_SIZE: usize = 8;
@@ -50,11 +50,11 @@ pub struct RowId {
 }
 
 /// Row together with the data
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(try_from = "RawRow", into = "RawRow")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(into = "RawRow")]
 pub struct Row {
     /// Shares contained in the row
-    pub shares: Vec<Vec<u8>>,
+    pub shares: Vec<Share>,
 }
 
 impl Row {
@@ -67,22 +67,12 @@ impl Row {
 
     /// verify the row against roots from DAH
     pub fn verify(&self, id: RowId, dah: &DataAvailabilityHeader) -> Result<()> {
-        let square_width =
-            u16::try_from(self.shares.len()).map_err(|_| Error::EdsInvalidDimentions)?;
         let row = id.index;
-
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
 
-        for col in 0..square_width {
-            let share = &self.shares[usize::from(col)];
-
-            let ns = if is_ods_square(row, col, square_width) {
-                Namespace::from_raw(&share[..NS_SIZE])?
-            } else {
-                Namespace::PARITY_SHARE
-            };
-
-            tree.push_leaf(share.as_ref(), *ns).map_err(Error::Nmt)?;
+        for share in &self.shares {
+            tree.push_leaf(share.as_ref(), *share.namespace())
+                .map_err(Error::Nmt)?;
         }
 
         let Some(root) = dah.row_root(row) else {
@@ -95,24 +85,32 @@ impl Row {
 
         Ok(())
     }
-}
 
-impl Protobuf<RawRow> for Row {}
+    pub fn encode(&self, bytes: &mut BytesMut) {
+        let raw = RawRow::from(self.clone());
 
-impl TryFrom<RawRow> for Row {
-    type Error = Error;
+        bytes.reserve(raw.encoded_len());
+        raw.encode(bytes).expect("capacity reserved");
+    }
 
-    fn try_from(row: RawRow) -> Result<Row, Self::Error> {
+    pub fn decode(id: RowId, buffer: &[u8]) -> Result<Self> {
+        let raw = RawRow::decode(buffer)?;
+        Self::from_raw(id, raw)
+    }
+
+    pub fn from_raw(id: RowId, row: RawRow) -> Result<Self> {
         let data_shares = row.shares_half.len();
 
         let shares = match RawHalfSide::try_from(row.half_side) {
             Ok(RawHalfSide::Left) => {
+                // We have original data, recompute parity shares
                 let mut shares: Vec<_> = row.shares_half.into_iter().map(|shr| shr.data).collect();
                 shares.resize(shares.len() * 2, vec![0; SHARE_SIZE]);
                 leopard_codec::encode(&mut shares, data_shares)?;
                 shares
             }
             Ok(RawHalfSide::Right) => {
+                // We have parity data, recompute original shares
                 let mut shares: Vec<_> = iter::repeat(vec![])
                     .take(data_shares)
                     .chain(row.shares_half.into_iter().map(|shr| shr.data))
@@ -122,6 +120,19 @@ impl TryFrom<RawRow> for Row {
             }
             Err(_) => bail_validation!("HalfSide missing"),
         };
+
+        let row_index = id.index() as usize;
+        let shares = shares
+            .into_iter()
+            .enumerate()
+            .map(|(col_index, shr)| {
+                if row_index < data_shares && col_index < data_shares {
+                    Share::from_raw(&shr)
+                } else {
+                    Share::parity(&shr)
+                }
+            })
+            .collect::<Result<_>>()?;
 
         Ok(Row { shares })
     }
@@ -134,7 +145,7 @@ impl From<Row> for RawRow {
         let shares_half = row
             .shares
             .into_iter()
-            .map(|data| RawShare { data })
+            .map(|shr| RawShare { data: shr.to_vec() })
             .take(square_width / 2)
             .collect();
 
@@ -343,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate() {
+    fn test_roundtrip_verify() {
         for _ in 0..10 {
             let eds = generate_eds(2 << (rand::random::<usize>() % 8));
             let dah = DataAvailabilityHeader::from_eds(&eds);
@@ -358,8 +369,9 @@ mod tests {
                 shares: eds.row(index).unwrap(),
             };
 
-            let encoded = row.encode_vec().unwrap();
-            let decoded = Row::decode(encoded.as_ref()).unwrap();
+            let mut buf = BytesMut::new();
+            row.encode(&mut buf);
+            let decoded = Row::decode(id, &buf).unwrap();
 
             decoded.verify(id, &dah).unwrap();
         }

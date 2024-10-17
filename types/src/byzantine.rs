@@ -334,7 +334,7 @@ pub(crate) mod test_utils {
             // only trash data after the namespace, info byte and seq length so that we don't
             // need to care whether the share is original or parity
             let offset = SHARE_SIZE - FIRST_SPARSE_SHARE_CONTENT_SIZE;
-            share[offset..].copy_from_slice(&random_bytes(SHARE_SIZE - offset));
+            share.as_mut()[offset..].copy_from_slice(&random_bytes(SHARE_SIZE - offset));
         }
 
         // create extended header with proof
