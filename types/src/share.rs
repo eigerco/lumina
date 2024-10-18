@@ -76,6 +76,13 @@ impl Share {
         })
     }
 
+    /// Create a new [`Share`] within [`Namespace::PARITY_SHARE`] from raw bytes.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the slice length isn't [`SHARE_SIZE`].
+    ///
+    /// [`SHARE_SIZE`]: crate::consts::appconsts::SHARE_SIZE
     pub fn parity(data: &[u8]) -> Result<Share> {
         if data.len() != appconsts::SHARE_SIZE {
             return Err(Error::InvalidShareSize(data.len()));
@@ -87,6 +94,7 @@ impl Share {
         })
     }
 
+    /// Returns true if share contains parity data.
     pub fn is_parity(&self) -> bool {
         self.is_parity
     }
@@ -122,6 +130,7 @@ impl Share {
         }
     }
 
+    /// Get the payload of the share containing blob data.
     pub fn blob(&self) -> Option<&[u8]> {
         let start = if self.info_byte()?.is_sequence_start() {
             SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES
@@ -192,10 +201,46 @@ impl From<Share> for RawShare {
 mod tests {
     use super::*;
     use crate::nmt::{NamespaceProof, NamespacedHash, NAMESPACED_HASH_SIZE};
+    use crate::Blob;
     use base64::prelude::*;
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    #[test]
+    fn share_structure() {
+        let ns = Namespace::new_v0(b"foo").unwrap();
+        let blob = Blob::new(ns, vec![7; 512]).unwrap();
+
+        let shares = blob.to_shares().unwrap();
+
+        assert_eq!(shares.len(), 2);
+
+        assert_eq!(shares[0].namespace(), ns);
+        assert_eq!(shares[1].namespace(), ns);
+
+        assert_eq!(shares[0].info_byte().unwrap().version(), 0);
+        assert_eq!(shares[0].info_byte().unwrap().version(), 0);
+
+        assert!(shares[0].info_byte().unwrap().is_sequence_start());
+        assert!(!shares[1].info_byte().unwrap().is_sequence_start());
+
+        const BYTES_IN_SECOND: usize = 512 - appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE;
+        assert_eq!(
+            shares[0].blob().unwrap(),
+            &[7; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE]
+        );
+        assert_eq!(
+            shares[1].blob().unwrap(),
+            &[
+                // rest of the blob
+                &[7; BYTES_IN_SECOND][..],
+                // padding
+                &[0; appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE - BYTES_IN_SECOND][..]
+            ]
+            .concat()
+        );
+    }
 
     #[test]
     fn share_should_have_correct_len() {

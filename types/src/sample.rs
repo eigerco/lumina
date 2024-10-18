@@ -138,6 +138,7 @@ impl Sample {
             .map_err(Error::RangeProofError)
     }
 
+    /// Encode Sample into the raw binary representation.
     pub fn encode(&self, bytes: &mut BytesMut) {
         let raw = RawSample::from(self.clone());
 
@@ -145,11 +146,23 @@ impl Sample {
         raw.encode(bytes).expect("capacity reserved");
     }
 
+    /// Decode Sample from the binary representation.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if protobuf deserialization
+    /// fails and propagate errors from [`Sample::from_raw`].
     pub fn decode(id: SampleId, buffer: &[u8]) -> Result<Self> {
         let raw = RawSample::decode(buffer)?;
         Self::from_raw(id, raw)
     }
 
+    /// Recover Sample from it's raw representation.
+    ///
+    /// # Errors
+    ///
+    /// This function will return error if proof is missing or invalid shares are not in
+    /// the expected namespace, and will propagate errors from [`Share`] construction.
     pub fn from_raw(id: SampleId, sample: RawSample) -> Result<Self> {
         let Some(proof) = sample.proof else {
             return Err(Error::MissingProof);

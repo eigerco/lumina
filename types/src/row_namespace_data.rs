@@ -90,6 +90,7 @@ impl RowNamespaceData {
             .map_err(Error::RangeProofError)
     }
 
+    /// Encode RowNamespaceData into the raw binary representation.
     pub fn encode(&self, bytes: &mut BytesMut) {
         let raw = RawRowNamespaceData::from(self.clone());
 
@@ -97,11 +98,23 @@ impl RowNamespaceData {
         raw.encode(bytes).expect("capacity reserved");
     }
 
+    /// Decode RowNamespaceData from the binary representation.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if protobuf deserialization
+    /// fails and propagate errors from [`RowNamespaceData::from_raw`].
     pub fn decode(id: RowNamespaceDataId, buffer: &[u8]) -> Result<Self> {
         let raw = RawRowNamespaceData::decode(buffer)?;
         Self::from_raw(id, raw)
     }
 
+    /// Recover RowNamespaceData from it's raw representation.
+    ///
+    /// # Errors
+    ///
+    /// This function will return error if proof is missing or invalid, shares are not in
+    /// the expected namespace, and will propagate errors from [`Share`] construction.
     pub fn from_raw(id: RowNamespaceDataId, namespace_data: RawRowNamespaceData) -> Result<Self> {
         let Some(proof) = namespace_data.proof else {
             return Err(Error::MissingProof);

@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::consts::appconsts::SHARE_SIZE;
 use crate::nmt::{NamespacedSha2Hasher, Nmt};
 use crate::rsmt2d::ExtendedDataSquare;
-use crate::{bail_validation, DataAvailabilityHeader, Error, Result, Share};
+use crate::{DataAvailabilityHeader, Error, Result, Share};
 
 /// Number of bytes needed to represent [`EdsId`] in `multihash`.
 const EDS_ID_SIZE: usize = 8;
@@ -65,7 +65,7 @@ impl Row {
         Ok(Row { shares })
     }
 
-    /// verify the row against roots from DAH
+    /// Verify the row against roots from DAH
     pub fn verify(&self, id: RowId, dah: &DataAvailabilityHeader) -> Result<()> {
         let row = id.index;
         let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
@@ -86,6 +86,7 @@ impl Row {
         Ok(())
     }
 
+    /// Encode Row into the raw binary representation.
     pub fn encode(&self, bytes: &mut BytesMut) {
         let raw = RawRow::from(self.clone());
 
@@ -93,23 +94,35 @@ impl Row {
         raw.encode(bytes).expect("capacity reserved");
     }
 
+    /// Decode Row from the binary representation.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if protobuf deserialization
+    /// fails and propagate errors from [`Row::from_raw`].
     pub fn decode(id: RowId, buffer: &[u8]) -> Result<Self> {
         let raw = RawRow::decode(buffer)?;
         Self::from_raw(id, raw)
     }
 
+    /// Recover Row from it's raw representation, reconstructing the missing half
+    /// using [`leopard_codec`].
+    ///
+    /// # Errors
+    ///
+    /// This function will propagate errors from [`leopard_codec`] and [`Share`] construction.
     pub fn from_raw(id: RowId, row: RawRow) -> Result<Self> {
         let data_shares = row.shares_half.len();
 
-        let shares = match RawHalfSide::try_from(row.half_side) {
-            Ok(RawHalfSide::Left) => {
+        let shares = match row.half_side() {
+            RawHalfSide::Left => {
                 // We have original data, recompute parity shares
                 let mut shares: Vec<_> = row.shares_half.into_iter().map(|shr| shr.data).collect();
                 shares.resize(shares.len() * 2, vec![0; SHARE_SIZE]);
                 leopard_codec::encode(&mut shares, data_shares)?;
                 shares
             }
-            Ok(RawHalfSide::Right) => {
+            RawHalfSide::Right => {
                 // We have parity data, recompute original shares
                 let mut shares: Vec<_> = iter::repeat(vec![])
                     .take(data_shares)
@@ -118,7 +131,6 @@ impl Row {
                 leopard_codec::reconstruct(&mut shares, data_shares)?;
                 shares
             }
-            Err(_) => bail_validation!("HalfSide missing"),
         };
 
         let row_index = id.index() as usize;
