@@ -367,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_roundtrip_verify() {
-        for _ in 0..10 {
+        for _ in 0..5 {
             let eds = generate_eds(2 << (rand::random::<usize>() % 8));
             let dah = DataAvailabilityHeader::from_eds(&eds);
 

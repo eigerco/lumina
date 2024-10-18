@@ -376,7 +376,8 @@ mod tests {
 
     #[test]
     fn test_roundtrip_verify() {
-        for _ in 0..10 {
+        // random
+        for _ in 0..5 {
             let eds = generate_eds(2 << (rand::random::<usize>() % 8));
             let dah = DataAvailabilityHeader::from_eds(&eds);
 
@@ -389,6 +390,20 @@ mod tests {
 
                 decoded.verify(id, &dah).unwrap();
             }
+        }
+
+        // parity share
+        let eds = generate_eds(2 << (rand::random::<usize>() % 8));
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+        for (id, row) in eds
+            .get_namespace_data(Namespace::PARITY_SHARE, &dah, 1)
+            .unwrap()
+        {
+            let mut buf = BytesMut::new();
+            row.encode(&mut buf);
+            let decoded = RowNamespaceData::decode(id, &buf).unwrap();
+
+            decoded.verify(id, &dah).unwrap();
         }
     }
 }
