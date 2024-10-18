@@ -58,6 +58,7 @@ impl NodeClient {
 
         let worker = WorkerClient::new(port)?;
 
+        // todo: refactor when oneshots are implemented
         // keep pinging worker until it responds.
         // NOTE: there is a possibility that worker can take longer than a timeout
         // to send his response. Client will then send another ping and read previous
@@ -71,6 +72,9 @@ impl NodeClient {
                 break;
             }
         }
+        // wait another timeout to read potential extra response from worker that
+        // could be caused by the loop above
+        let _ = timeout(200, worker.recv()).await;
 
         debug!("Connected to worker");
 
