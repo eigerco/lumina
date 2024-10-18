@@ -46,13 +46,15 @@ pub struct RowNamespaceData {
     /// Proof of data inclusion
     pub proof: NamespaceProof,
     /// Shares with data
+    #[serde(deserialize_with = "celestia_proto::serializers::null_default::deserialize")]
     pub shares: Vec<Share>,
 }
 
 impl RowNamespaceData {
     /// Verifies the proof inside `RowNamespaceData` using a row root from [`DataAvailabilityHeader`]
     ///
-    /// #Example
+    /// # Example
+    ///
     /// ```no_run
     /// use celestia_types::nmt::Namespace;
     /// # use celestia_types::{ExtendedDataSquare, ExtendedHeader};

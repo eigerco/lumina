@@ -1,7 +1,7 @@
 //! celestia-node rpc types and methods related to shares
 //!
-use ::core::future::Future;
-use ::core::marker::{Send, Sync};
+use std::future::Future;
+use std::marker::{Send, Sync};
 
 use celestia_types::nmt::Namespace;
 use celestia_types::row_namespace_data::NamespacedShares;
