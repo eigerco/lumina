@@ -219,6 +219,18 @@ impl WorkerClient {
 
         Ok(worker_response)
     }
+
+    // todo: remove when oneshots are implemented, used in workaround for initial worker connection
+    pub(crate) async fn recv(&self) -> Result<WorkerResponse> {
+        let mut response_channel = self.response_channel.lock().await;
+        let worker_response = response_channel
+            .recv()
+            .await
+            .expect("response channel should never drop")
+            .context("error receiving command")?;
+
+        Ok(worker_response)
+    }
 }
 
 impl Drop for WorkerClient {
