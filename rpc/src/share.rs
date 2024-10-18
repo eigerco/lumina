@@ -57,7 +57,7 @@ mod rpc {
     }
 }
 
-// Client implementation for the `Share` RPC API.
+/// Client implementation for the `Share` RPC API.
 pub trait ShareClient: ClientT {
     /// GetEDS gets the full EDS identified by the given root.
     fn share_get_eds<'a, 'b, 'fut>(
