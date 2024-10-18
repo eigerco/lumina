@@ -9,14 +9,14 @@
 use blockstore::block::CidError;
 use bytes::{BufMut, BytesMut};
 use celestia_proto::shwap::{RowNamespaceData as RawRowNamespaceData, Share as RawShare};
-use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 
 use crate::nmt::{Namespace, NamespaceProof};
 use crate::row::{RowId, ROW_ID_SIZE};
-use crate::{DataAvailabilityHeader, Error, Result};
+use crate::{bail_validation, DataAvailabilityHeader, Error, Result, Share};
 
 /// Number of bytes needed to represent [`RowNamespaceDataId`] in `multihash`.
 const ROW_NAMESPACE_DATA_ID_SIZE: usize = 39;
@@ -41,18 +41,20 @@ pub struct RowNamespaceDataId {
 /// It is constructed out of the ExtendedDataSquare. If, for particular EDS, shares from the namespace span multiple rows,
 /// one needs multiple RowNamespaceData instances to cover the whole range.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(try_from = "RawRowNamespaceData", into = "RawRowNamespaceData")]
+#[serde(into = "RawRowNamespaceData")]
 pub struct RowNamespaceData {
     /// Proof of data inclusion
     pub proof: NamespaceProof,
     /// Shares with data
-    pub shares: Vec<Vec<u8>>,
+    #[serde(deserialize_with = "celestia_proto::serializers::null_default::deserialize")]
+    pub shares: Vec<Share>,
 }
 
 impl RowNamespaceData {
     /// Verifies the proof inside `RowNamespaceData` using a row root from [`DataAvailabilityHeader`]
     ///
-    /// #Example
+    /// # Example
+    ///
     /// ```no_run
     /// use celestia_types::nmt::Namespace;
     /// # use celestia_types::{ExtendedDataSquare, ExtendedHeader};
@@ -89,6 +91,60 @@ impl RowNamespaceData {
             .verify_complete_namespace(&root, &self.shares, *namespace)
             .map_err(Error::RangeProofError)
     }
+
+    /// Encode RowNamespaceData into the raw binary representation.
+    pub fn encode(&self, bytes: &mut BytesMut) {
+        let raw = RawRowNamespaceData::from(self.clone());
+
+        bytes.reserve(raw.encoded_len());
+        raw.encode(bytes).expect("capacity reserved");
+    }
+
+    /// Decode RowNamespaceData from the binary representation.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if protobuf deserialization
+    /// fails and propagate errors from [`RowNamespaceData::from_raw`].
+    pub fn decode(id: RowNamespaceDataId, buffer: &[u8]) -> Result<Self> {
+        let raw = RawRowNamespaceData::decode(buffer)?;
+        Self::from_raw(id, raw)
+    }
+
+    /// Recover RowNamespaceData from it's raw representation.
+    ///
+    /// # Errors
+    ///
+    /// This function will return error if proof is missing or invalid, shares are not in
+    /// the expected namespace, and will propagate errors from [`Share`] construction.
+    pub fn from_raw(id: RowNamespaceDataId, namespace_data: RawRowNamespaceData) -> Result<Self> {
+        let Some(proof) = namespace_data.proof else {
+            return Err(Error::MissingProof);
+        };
+
+        // extract all shares according to the expected namespace
+        let shares: Vec<_> = namespace_data
+            .shares
+            .into_iter()
+            .map(|shr| {
+                if id.namespace != Namespace::PARITY_SHARE {
+                    Share::from_raw(&shr.data)
+                } else {
+                    Share::parity(&shr.data)
+                }
+            })
+            .collect::<Result<_>>()?;
+
+        // and double check they all have equal namespaces
+        if !shares.iter().all(|shr| shr.namespace() == id.namespace) {
+            bail_validation!("Namespace data must have equal namespaces");
+        }
+
+        Ok(RowNamespaceData {
+            shares,
+            proof: proof.try_into()?,
+        })
+    }
 }
 
 /// A collection of rows of [`Share`]s from a particular [`Namespace`].
@@ -101,34 +157,13 @@ pub struct NamespacedShares {
     pub rows: Vec<RowNamespaceData>,
 }
 
-impl Protobuf<RawRowNamespaceData> for RowNamespaceData {}
-
-impl TryFrom<RawRowNamespaceData> for RowNamespaceData {
-    type Error = Error;
-
-    fn try_from(namespaced_data: RawRowNamespaceData) -> Result<RowNamespaceData, Self::Error> {
-        let Some(proof) = namespaced_data.proof else {
-            return Err(Error::MissingProof);
-        };
-
-        Ok(RowNamespaceData {
-            shares: namespaced_data
-                .shares
-                .into_iter()
-                .map(|shr| shr.data)
-                .collect(),
-            proof: proof.try_into()?,
-        })
-    }
-}
-
 impl From<RowNamespaceData> for RawRowNamespaceData {
     fn from(namespaced_data: RowNamespaceData) -> RawRowNamespaceData {
         RawRowNamespaceData {
             shares: namespaced_data
                 .shares
                 .into_iter()
-                .map(|data| RawShare { data })
+                .map(|shr| RawShare { data: shr.to_vec() })
                 .collect(),
             proof: Some(namespaced_data.proof.into()),
         }
@@ -233,6 +268,8 @@ impl From<RowNamespaceDataId> for CidGeneric<ROW_NAMESPACE_DATA_ID_SIZE> {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_utils::generate_eds;
+
     use super::*;
 
     #[test]
@@ -335,5 +372,38 @@ mod tests {
 
         assert_eq!(ns_shares.rows[0].shares.len(), 1);
         assert!(!ns_shares.rows[0].proof.is_of_absence());
+    }
+
+    #[test]
+    fn test_roundtrip_verify() {
+        // random
+        for _ in 0..5 {
+            let eds = generate_eds(2 << (rand::random::<usize>() % 8));
+            let dah = DataAvailabilityHeader::from_eds(&eds);
+
+            let namespace = eds.share(1, 1).unwrap().namespace();
+
+            for (id, row) in eds.get_namespace_data(namespace, &dah, 1).unwrap() {
+                let mut buf = BytesMut::new();
+                row.encode(&mut buf);
+                let decoded = RowNamespaceData::decode(id, &buf).unwrap();
+
+                decoded.verify(id, &dah).unwrap();
+            }
+        }
+
+        // parity share
+        let eds = generate_eds(2 << (rand::random::<usize>() % 8));
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+        for (id, row) in eds
+            .get_namespace_data(Namespace::PARITY_SHARE, &dah, 1)
+            .unwrap()
+        {
+            let mut buf = BytesMut::new();
+            row.encode(&mut buf);
+            let decoded = RowNamespaceData::decode(id, &buf).unwrap();
+
+            decoded.verify(id, &dah).unwrap();
+        }
     }
 }

@@ -10,16 +10,16 @@
 use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
 use celestia_proto::shwap::{Sample as RawSample, Share as RawShare};
-use celestia_tendermint_proto::Protobuf;
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 
-use crate::nmt::{Namespace, NamespaceProof, NS_SIZE};
+use crate::nmt::NamespaceProof;
 use crate::row::{RowId, ROW_ID_SIZE};
-use crate::rsmt2d::{is_ods_square, AxisType, ExtendedDataSquare};
-use crate::{bail_validation, DataAvailabilityHeader, Error, Result};
+use crate::rsmt2d::{AxisType, ExtendedDataSquare};
+use crate::{bail_validation, DataAvailabilityHeader, Error, Result, Share};
 
 /// Number of bytes needed to represent [`SampleId`] in `multihash`.
 const SAMPLE_ID_SIZE: usize = 12;
@@ -39,13 +39,13 @@ pub struct SampleId {
 }
 
 /// Represents Sample, with proof of its inclusion
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(try_from = "RawSample", into = "RawSample")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(into = "RawSample")]
 pub struct Sample {
     /// Indication whether proving was done row or column-wise
     pub proof_type: AxisType,
     /// Share that is being sampled
-    pub share: Vec<u8>,
+    pub share: Share,
     /// Proof of the inclusion of the share
     pub proof: NamespaceProof,
 }
@@ -99,7 +99,7 @@ impl Sample {
         proof_type: AxisType,
         eds: &ExtendedDataSquare,
     ) -> Result<Self> {
-        let share = eds.share(row_index, column_index)?.to_vec();
+        let share = eds.share(row_index, column_index)?.clone();
 
         let range_proof = match proof_type {
             AxisType::Row => eds
@@ -133,38 +133,67 @@ impl Sample {
                 .ok_or(Error::EdsIndexOutOfRange(0, id.column_index()))?,
         };
 
-        let ns = if is_ods_square(id.row_index(), id.column_index(), dah.square_width()) {
-            Namespace::from_raw(&self.share[..NS_SIZE])?
-        } else {
-            Namespace::PARITY_SHARE
-        };
-
         self.proof
-            .verify_range(&root, &[&self.share], *ns)
+            .verify_range(&root, &[&self.share], *self.share.namespace())
             .map_err(Error::RangeProofError)
     }
-}
 
-impl Protobuf<RawSample> for Sample {}
+    /// Encode Sample into the raw binary representation.
+    pub fn encode(&self, bytes: &mut BytesMut) {
+        let raw = RawSample::from(self.clone());
 
-impl TryFrom<RawSample> for Sample {
-    type Error = Error;
+        bytes.reserve(raw.encoded_len());
+        raw.encode(bytes).expect("capacity reserved");
+    }
 
-    fn try_from(sample: RawSample) -> Result<Sample, Self::Error> {
-        let Some(share) = sample.share else {
-            bail_validation!("missing share");
-        };
+    /// Decode Sample from the binary representation.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if protobuf deserialization
+    /// fails and propagate errors from [`Sample::from_raw`].
+    pub fn decode(id: SampleId, buffer: &[u8]) -> Result<Self> {
+        let raw = RawSample::decode(buffer)?;
+        Self::from_raw(id, raw)
+    }
 
+    /// Recover Sample from it's raw representation.
+    ///
+    /// # Errors
+    ///
+    /// This function will return error if proof is missing or invalid shares are not in
+    /// the expected namespace, and will propagate errors from [`Share`] construction.
+    pub fn from_raw(id: SampleId, sample: RawSample) -> Result<Self> {
         let Some(proof) = sample.proof else {
             return Err(Error::MissingProof);
         };
 
+        let proof: NamespaceProof = proof.try_into()?;
         let proof_type = AxisType::try_from(sample.proof_type)?;
+
+        if proof.is_of_absence() {
+            return Err(Error::WrongProofType);
+        }
+
+        let Some(share) = sample.share else {
+            bail_validation!("missing share");
+        };
+        let Some(square_size) = proof.total_leaves() else {
+            bail_validation!("proof must be for single leaf");
+        };
+
+        let row_index = id.row_index() as usize;
+        let col_index = id.column_index() as usize;
+        let share = if row_index < square_size / 2 && col_index < square_size / 2 {
+            Share::from_raw(&share.data)?
+        } else {
+            Share::parity(&share.data)?
+        };
 
         Ok(Sample {
             proof_type,
-            share: share.data,
-            proof: proof.try_into()?,
+            share,
+            proof,
         })
     }
 }
@@ -172,7 +201,9 @@ impl TryFrom<RawSample> for Sample {
 impl From<Sample> for RawSample {
     fn from(sample: Sample) -> RawSample {
         RawSample {
-            share: Some(RawShare { data: sample.share }),
+            share: Some(RawShare {
+                data: sample.share.to_vec(),
+            }),
             proof: Some(sample.proof.into()),
             proof_type: sample.proof_type as i32,
         }
@@ -377,5 +408,30 @@ mod tests {
         let cid = CidGeneric::<SAMPLE_ID_SIZE>::new_v1(4321, multihash);
         let codec_err = SampleId::try_from(cid).unwrap_err();
         assert!(matches!(codec_err, CidError::InvalidCidCodec(4321)));
+    }
+
+    #[test]
+    fn test_roundtrip_verify() {
+        for _ in 0..5 {
+            let eds = generate_eds(2 << (rand::random::<usize>() % 8));
+            let dah = DataAvailabilityHeader::from_eds(&eds);
+
+            let row_index = rand::random::<u16>() % eds.square_width();
+            let col_index = rand::random::<u16>() % eds.square_width();
+            let proof_type = if rand::random() {
+                AxisType::Row
+            } else {
+                AxisType::Col
+            };
+
+            let id = SampleId::new(row_index, col_index, 1).unwrap();
+            let sample = Sample::new(row_index, col_index, proof_type, &eds).unwrap();
+
+            let mut buf = BytesMut::new();
+            sample.encode(&mut buf);
+            let decoded = Sample::decode(id, &buf).unwrap();
+
+            decoded.verify(id, &dah).unwrap();
+        }
     }
 }
