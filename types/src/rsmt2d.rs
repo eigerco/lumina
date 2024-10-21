@@ -210,7 +210,7 @@ impl ExtendedDataSquare {
             let mut prev_ns = None;
 
             for row in 0..square_width {
-                let share = check_share(row, col, prev_ns, AxisType::Row)?;
+                let share = check_share(row, col, prev_ns, AxisType::Col)?;
                 prev_ns = Some(share.namespace());
             }
         }
