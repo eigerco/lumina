@@ -130,8 +130,9 @@ impl Share {
         }
     }
 
-    /// Get the payload of the share containing blob data.
-    pub fn blob(&self) -> Option<&[u8]> {
+    /// Get the payload of the share. Payload is the data that shares contain after
+    /// all its metadata, e.g. blob data in sparse shares.
+    pub fn payload(&self) -> Option<&[u8]> {
         let start = if self.info_byte()?.is_sequence_start() {
             SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES
         } else {
@@ -220,18 +221,18 @@ mod tests {
         assert_eq!(shares[1].namespace(), ns);
 
         assert_eq!(shares[0].info_byte().unwrap().version(), 0);
-        assert_eq!(shares[0].info_byte().unwrap().version(), 0);
+        assert_eq!(shares[1].info_byte().unwrap().version(), 0);
 
         assert!(shares[0].info_byte().unwrap().is_sequence_start());
         assert!(!shares[1].info_byte().unwrap().is_sequence_start());
 
         const BYTES_IN_SECOND: usize = 512 - appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE;
         assert_eq!(
-            shares[0].blob().unwrap(),
+            shares[0].payload().unwrap(),
             &[7; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE]
         );
         assert_eq!(
-            shares[1].blob().unwrap(),
+            shares[1].payload().unwrap(),
             &[
                 // rest of the blob
                 &[7; BYTES_IN_SECOND][..],
