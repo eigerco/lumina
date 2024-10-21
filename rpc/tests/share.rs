@@ -51,7 +51,7 @@ async fn get_shares_by_namespace() {
         .into_iter()
         .flat_map(|row| row.shares.into_iter())
         .fold(vec![], |mut acc, share| {
-            acc.extend_from_slice(share.blob().expect("not parity"));
+            acc.extend_from_slice(share.payload().expect("not parity"));
             acc
         });
 

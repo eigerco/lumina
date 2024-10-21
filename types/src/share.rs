@@ -109,6 +109,8 @@ impl Share {
     }
 
     /// Return Share's `InfoByte`
+    ///
+    /// Returns None if share is within [`Namespace::PARITY_SHARE`].
     pub fn info_byte(&self) -> Option<InfoByte> {
         if !self.is_parity() {
             Some(InfoByte::from_raw_unchecked(self.data[NS_SIZE]))
@@ -118,6 +120,8 @@ impl Share {
     }
 
     /// For first share in a sequence, return sequence length, None for continuation shares
+    ///
+    /// Returns None if share is within [`Namespace::PARITY_SHARE`].
     pub fn sequence_length(&self) -> Option<u32> {
         if self.info_byte()?.is_sequence_start() {
             let sequence_length_bytes = &self.data[SHARE_SEQUENCE_LENGTH_OFFSET
@@ -130,8 +134,12 @@ impl Share {
         }
     }
 
-    /// Get the payload of the share. Payload is the data that shares contain after
-    /// all its metadata, e.g. blob data in sparse shares.
+    /// Get the payload of the share.
+    ///
+    /// Payload is the data that shares contain after all its metadata,
+    /// e.g. blob data in sparse shares.
+    ///
+    /// Returns None if share is within [`Namespace::PARITY_SHARE`].
     pub fn payload(&self) -> Option<&[u8]> {
         let start = if self.info_byte()?.is_sequence_start() {
             SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES
