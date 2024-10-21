@@ -475,7 +475,7 @@ mod tests {
     use bytes::BytesMut;
     use celestia_proto::bitswap::Block;
     use celestia_types::sample::{Sample, SampleId};
-    use celestia_types::test_utils::{generate_eds, ExtendedHeaderGenerator};
+    use celestia_types::test_utils::{generate_dummy_eds, ExtendedHeaderGenerator};
     use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
     use cid::Cid;
     use prost::Message;
@@ -561,7 +561,7 @@ mod tests {
         let mut headers = Vec::new();
 
         for _ in 0..20 {
-            let eds = generate_eds(2);
+            let eds = generate_dummy_eds(2);
             let dah = DataAvailabilityHeader::from_eds(&eds);
             let header = gen.next_with_dah(dah);
 
@@ -635,7 +635,7 @@ mod tests {
         handle.expect_no_cmd().await;
 
         // Push block 21 in the store
-        let eds = generate_eds(2);
+        let eds = generate_dummy_eds(2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         let header = gen.next_with_dah(dah);
         store.insert(header).await.unwrap();
@@ -654,7 +654,7 @@ mod tests {
         square_width: usize,
         simulate_invalid_sampling: bool,
     ) {
-        let eds = generate_eds(square_width);
+        let eds = generate_dummy_eds(square_width);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         let header = gen.next_with_dah(dah);
         let height = header.height().value();
