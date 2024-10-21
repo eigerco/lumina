@@ -472,8 +472,8 @@ mod tests {
     use crate::p2p::P2pCmd;
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, MockP2pHandle};
+    use bytes::BytesMut;
     use celestia_proto::bitswap::Block;
-    use celestia_tendermint_proto::Protobuf;
     use celestia_types::sample::{Sample, SampleId};
     use celestia_types::test_utils::{generate_eds, ExtendedHeaderGenerator};
     use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
@@ -818,9 +818,12 @@ mod tests {
         )
         .unwrap();
 
+        let mut container = BytesMut::new();
+        sample.encode(&mut container);
+
         let block = Block {
             cid: convert_cid(&sample_id.into()).unwrap().to_bytes(),
-            container: sample.encode_vec().unwrap(),
+            container: container.to_vec(),
         };
 
         block.encode_to_vec()
