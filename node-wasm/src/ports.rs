@@ -211,25 +211,17 @@ impl WorkerClient {
             .post_message(&command_value)
             .context("could not post message")?;
 
-        let worker_response = response_channel
-            .recv()
-            .await
-            .expect("response channel should never drop")
-            .context("error executing command")?;
+        loop {
+            let worker_response = response_channel
+                .recv()
+                .await
+                .expect("response channel should never drop")
+                .context("error executing command")?;
 
-        Ok(worker_response)
-    }
-
-    // todo: remove when oneshots are implemented, used in workaround for initial worker connection
-    pub(crate) async fn recv(&self) -> Result<WorkerResponse> {
-        let mut response_channel = self.response_channel.lock().await;
-        let worker_response = response_channel
-            .recv()
-            .await
-            .expect("response channel should never drop")
-            .context("error receiving command")?;
-
-        Ok(worker_response)
+            if !worker_response.is_internal_pong() {
+                return Ok(worker_response);
+            }
+        }
     }
 }
 
