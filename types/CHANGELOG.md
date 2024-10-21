@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.6.1...celestia-types-v0.7.0) - 2024-10-21
+
+### Added
+
+- *(types,rpc,node)* [**breaking**] refactor Share to work for parity and data ([#443](https://github.com/eigerco/lumina/pull/443))
+
 ## [0.6.1](https://github.com/eigerco/lumina/compare/celestia-types-v0.6.0...celestia-types-v0.6.1) - 2024-10-11
 
 ### Added
