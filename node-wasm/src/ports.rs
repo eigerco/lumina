@@ -196,7 +196,7 @@ impl WorkerClient {
 
         if !worker_response.is_internal_pong() {
             Err(Error::new(&format!(
-                "invalid response, expected InternalPing got {worker_response:?}"
+                "invalid response, expected InternalPong got {worker_response:?}"
             )))
         } else {
             Ok(())
