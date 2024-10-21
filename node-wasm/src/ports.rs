@@ -218,9 +218,14 @@ impl WorkerClient {
                 .expect("response channel should never drop")
                 .context("error executing command")?;
 
-            if !worker_response.is_internal_pong() {
-                return Ok(worker_response);
+            // Skip InternalPong if requested command was not InternalPing.
+            // We use this because ping is meant to be used with timeout but the server might
+            // reply with pong after the timeout is reached.
+            if worker_response.is_internal_pong() && !matches!(&command, NodeCommand::InternalPing) {
+                continue;
             }
+            
+            return Ok(worker_response);
         }
     }
 }
