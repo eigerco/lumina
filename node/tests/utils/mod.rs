@@ -1,23 +1,31 @@
 #![allow(dead_code)]
 
 use std::env;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use celestia_rpc::{prelude::*, Client};
+use celestia_types::{Blob, TxConfig};
 use libp2p::{multiaddr::Protocol, Multiaddr, PeerId};
 use lumina_node::blockstore::InMemoryBlockstore;
+use lumina_node::events::EventSubscriber;
 use lumina_node::node::NodeConfig;
 use lumina_node::test_utils::test_node_config;
 use lumina_node::{node::Node, store::InMemoryStore};
+use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 const WS_URL: &str = "ws://localhost:26658";
 
-pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
+pub async fn bridge_client() -> Client {
     let _ = dotenvy::dotenv();
 
     let auth_token = env::var("CELESTIA_NODE_AUTH_TOKEN_ADMIN").unwrap();
-    let client = Client::new(WS_URL, Some(&auth_token)).await.unwrap();
+    Client::new(WS_URL, Some(&auth_token)).await.unwrap()
+}
+
+pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
+    let client = bridge_client().await;
     let bridge_info = client.p2p_info().await.unwrap();
 
     let mut ma = bridge_info
@@ -33,10 +41,10 @@ pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
     (bridge_info.id.into(), ma)
 }
 
-pub async fn new_connected_node() -> Node<InMemoryBlockstore, InMemoryStore> {
+pub async fn new_connected_node() -> (Node<InMemoryBlockstore, InMemoryStore>, EventSubscriber) {
     let (_, bridge_ma) = fetch_bridge_info().await;
 
-    let node = Node::new(NodeConfig {
+    let (node, events) = Node::new_subscribed(NodeConfig {
         p2p_bootnodes: vec![bridge_ma],
         ..test_node_config()
     })
@@ -56,5 +64,14 @@ pub async fn new_connected_node() -> Node<InMemoryBlockstore, InMemoryStore> {
         sleep(Duration::from_secs(1)).await;
     }
 
-    node
+    (node, events)
+}
+
+pub async fn blob_submit(client: &Client, blobs: &[Blob]) -> u64 {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    let _guard = LOCK.get_or_init(|| Mutex::new(())).lock().await;
+    client
+        .blob_submit(blobs, TxConfig::default())
+        .await
+        .unwrap()
 }

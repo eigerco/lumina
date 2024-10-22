@@ -13,7 +13,7 @@ use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
 use celestia_types::row_namespace_data::RowNamespaceData;
 use celestia_types::sample::Sample;
-use celestia_types::ExtendedHeader;
+use celestia_types::{Blob, ExtendedHeader};
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
@@ -338,8 +338,13 @@ where
     ///
     /// On failure to receive a verified [`Row`] within a certain time, the
     /// `NodeError::P2p(P2pError::BitswapQueryTimeout)` error will be returned.
-    pub async fn request_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
-        Ok(self.p2p().get_row(row_index, block_height).await?)
+    pub async fn request_row(
+        &self,
+        row_index: u16,
+        block_height: u64,
+        timeout: Option<Duration>,
+    ) -> Result<Row> {
+        Ok(self.p2p().get_row(row_index, block_height, timeout).await?)
     }
 
     /// Request a verified [`Sample`] from the network.
@@ -353,10 +358,11 @@ where
         row_index: u16,
         column_index: u16,
         block_height: u64,
+        timeout: Option<Duration>,
     ) -> Result<Sample> {
         Ok(self
             .p2p()
-            .get_sample(row_index, column_index, block_height)
+            .get_sample(row_index, column_index, block_height, timeout)
             .await?)
     }
 
@@ -371,11 +377,23 @@ where
         namespace: Namespace,
         row_index: u16,
         block_height: u64,
+        timeout: Option<Duration>,
     ) -> Result<RowNamespaceData> {
         Ok(self
             .p2p()
-            .get_row_namespace_data(namespace, row_index, block_height)
+            .get_row_namespace_data(namespace, row_index, block_height, timeout)
             .await?)
+    }
+
+    /// Request all blobs with provided namespace in block corresponding to this header
+    /// on bitswap protocol.
+    pub async fn request_all_blobs(
+        &self,
+        header: &ExtendedHeader,
+        namespace: Namespace,
+        timeout: Option<Duration>,
+    ) -> Result<Vec<Blob>> {
+        Ok(self.p2p().get_all_blobs(header, namespace, timeout).await?)
     }
 
     /// Get current header syncing info.
