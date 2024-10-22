@@ -29,7 +29,7 @@ async fn get_share() {
 async fn get_shares_by_namespace() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
-    let blobs: Vec<_> = (1..rand::random::<usize>() % 4)
+    let blobs: Vec<_> = (0..rand::random::<usize>() % 4 + 1)
         .map(|_| {
             let data = random_bytes(1024);
             Blob::new(namespace, data.clone()).unwrap()
