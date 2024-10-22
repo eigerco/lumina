@@ -159,7 +159,7 @@ impl Blob {
     /// let blob = Blob::new(namespace, b"foo".to_vec()).unwrap();
     /// let shares = blob.to_shares().unwrap();
     ///
-    /// let reconstructed = Blob::reconstruct(shares).unwrap();
+    /// let reconstructed = Blob::reconstruct(&shares).unwrap();
     ///
     /// assert_eq!(blob, reconstructed);
     /// ```
@@ -231,13 +231,13 @@ impl Blob {
     /// # let namespace1 = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     /// # let namespace2 = Namespace::new_v0(&[2, 3, 4, 5, 6]).expect("Invalid namespace");
     ///
-    /// let blobs = [
+    /// let blobs = vec![
     ///     Blob::new(namespace1, b"foo".to_vec()).unwrap(),
     ///     Blob::new(namespace2, b"bar".to_vec()).unwrap(),
     /// ];
-    /// let shares = blobs.iter().flat_map(|blob| blob.to_shares().unwrap());
+    /// let shares: Vec<_> = blobs.iter().flat_map(|blob| blob.to_shares().unwrap()).collect();
     ///
-    /// let reconstructed = Blob::reconstruct_all(shares).unwrap();
+    /// let reconstructed = Blob::reconstruct_all(&shares).unwrap();
     ///
     /// assert_eq!(blobs, reconstructed);
     /// ```
