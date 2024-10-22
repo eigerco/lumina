@@ -479,7 +479,7 @@ mod tests {
     }
 
     #[test]
-    fn reconstruct_inconsistent_namespace_version() {
+    fn reconstruct_inconsistent_namespace() {
         let len = rand::random::<usize>() % 1024 * 1024 + 512;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
@@ -502,7 +502,7 @@ mod tests {
         let ns = Namespace::const_v0(rand::random());
         let mut shares = Blob::new(ns, data).unwrap().to_shares().unwrap();
 
-        // modify info byte to remove sequence start bit
+        // modify info byte to add sequence start bit
         shares[1].as_mut()[NS_SIZE] |= 0b00000001;
 
         assert!(matches!(
