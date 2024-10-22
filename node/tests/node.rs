@@ -6,7 +6,7 @@ use celestia_tendermint_proto::Protobuf;
 use celestia_types::consts::HASH_SIZE;
 use celestia_types::fraud_proof::BadEncodingFraudProof;
 use celestia_types::hash::Hash;
-use celestia_types::test_utils::{corrupt_eds, generate_eds, ExtendedHeaderGenerator};
+use celestia_types::test_utils::{corrupt_eds, generate_dummy_eds, ExtendedHeaderGenerator};
 use futures::StreamExt;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::{gossipsub, identity, noise, ping, tcp, yamux, Multiaddr, SwarmBuilder};
@@ -25,7 +25,7 @@ mod utils;
 
 #[tokio::test]
 async fn connects_to_the_go_bridge_node() {
-    let node = new_connected_node().await;
+    let (node, _) = new_connected_node().await;
 
     let info = node.network_info().await.unwrap();
     assert_eq!(info.num_peers(), 1);
@@ -182,7 +182,7 @@ async fn stops_services_when_network_is_compromised() {
     store.insert(gen.next_many_verified(64)).await.unwrap();
 
     // create a corrupted block and insert it
-    let mut eds = generate_eds(8);
+    let mut eds = generate_dummy_eds(8);
     let (header, befp) = corrupt_eds(&mut gen, &mut eds);
 
     store.insert(header).await.unwrap();

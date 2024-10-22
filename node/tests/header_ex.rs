@@ -16,7 +16,7 @@ mod utils;
 
 #[tokio::test]
 async fn request_single_header() {
-    let node = new_connected_node().await;
+    let (node, _) = new_connected_node().await;
 
     let header = node.request_header_by_height(1).await.unwrap();
     let header_by_hash = node.request_header_by_hash(&header.hash()).await.unwrap();
@@ -26,7 +26,7 @@ async fn request_single_header() {
 
 #[tokio::test]
 async fn request_verified_headers() {
-    let node = new_connected_node().await;
+    let (node, _) = new_connected_node().await;
 
     let from = node.request_header_by_height(1).await.unwrap();
     let verified_headers = node.request_verified_headers(&from, 2).await.unwrap();
@@ -41,7 +41,7 @@ async fn request_verified_headers() {
 
 #[tokio::test]
 async fn request_head() {
-    let node = new_connected_node().await;
+    let (node, _) = new_connected_node().await;
 
     let genesis = node.request_header_by_height(1).await.unwrap();
 
