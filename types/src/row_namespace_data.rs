@@ -4,7 +4,7 @@
 //! the same [`Namespace`] in a single row of the [`ExtendedDataSquare`].
 //!
 //! [`Share`]: crate::Share
-//! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+//! [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
 
 use blockstore::block::CidError;
 use bytes::{BufMut, BytesMut};
@@ -29,7 +29,7 @@ pub const ROW_NAMESPACE_DATA_CODEC: u64 = 0x7820;
 /// block's [`ExtendedDataSquare`].
 ///
 /// [`Share`]: crate::Share
-/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+/// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct RowNamespaceDataId {
     row_id: RowId,
@@ -195,7 +195,7 @@ impl RowNamespaceDataId {
 
     /// Row index of the [`ExtendedDataSquare`] that shares are located on.
     ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub fn row_index(&self) -> u16 {
         self.row_id.index()
     }

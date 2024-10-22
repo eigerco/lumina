@@ -112,7 +112,7 @@ impl Namespace {
     /// so that user-defined namespaces are correctly aligned in [`ExtendedDataSquare`]
     ///
     /// [`Share`]: crate::share::Share
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub const PRIMARY_RESERVED_PADDING: Namespace = Namespace::MAX_PRIMARY_RESERVED;
 
     /// Maximal primary reserved [`Namespace`].
@@ -133,7 +133,7 @@ impl Namespace {
     /// It is used to fill up the `original data square` after all user-submitted
     /// blobs before the parity data is generated for the [`ExtendedDataSquare`].
     ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub const TAIL_PADDING: Namespace = Namespace::const_v255(0xfe);
 
     /// The [`Namespace`] for `parity shares`.
@@ -142,7 +142,7 @@ impl Namespace {
     /// [`ExtendedDataSquare`] are inserted to the [`Nmt`] when computing
     /// merkle roots.
     ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub const PARITY_SHARE: Namespace = Namespace::const_v255(0xff);
 
     /// Create a new [`Namespace`] from the raw bytes.

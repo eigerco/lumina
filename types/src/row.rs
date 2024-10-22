@@ -4,7 +4,7 @@
 //! row of the [`ExtendedDataSquare`].
 //!
 //! [`Share`]: crate::Share
-//! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+//! [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
 
 use std::iter;
 
@@ -18,8 +18,8 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 
 use crate::consts::appconsts::SHARE_SIZE;
+use crate::eds::ExtendedDataSquare;
 use crate::nmt::{NamespacedSha2Hasher, Nmt};
-use crate::rsmt2d::ExtendedDataSquare;
 use crate::{DataAvailabilityHeader, Error, Result, Share};
 
 /// Number of bytes needed to represent [`EdsId`] in `multihash`.
@@ -192,7 +192,7 @@ impl RowId {
 
     /// An index of the row in the [`ExtendedDataSquare`].
     ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub fn index(&self) -> u16 {
         self.index
     }
