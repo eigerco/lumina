@@ -13,7 +13,7 @@ use crate::{bail_validation, DataAvailabilityHeader, Error, InfoByte, Result, Sh
 
 /// Represents either column or row of the [`ExtendedDataSquare`].
 ///
-/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+/// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum AxisType {
