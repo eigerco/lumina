@@ -1,11 +1,13 @@
+//! Types related to EDS.
+
 use std::cmp::Ordering;
 use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
-use crate::consts::appconsts::SHARE_SIZE;
+use crate::consts::appconsts::{AppVersion, SHARE_SIZE};
 use crate::consts::data_availability_header::{
-    MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
+    max_extended_square_width, MIN_EXTENDED_SQUARE_WIDTH,
 };
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NmtExt, NS_SIZE};
 use crate::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
@@ -47,7 +49,7 @@ impl Display for AxisType {
 /// The data matrix in Celestia blocks extended with parity data.
 ///
 /// It is created by a fixed size chunks of data, called [`Share`]s.
-
+///
 /// Each share is a cell of the [`ExtendedDataSquare`].
 ///
 /// # Structure
@@ -128,8 +130,8 @@ impl Display for AxisType {
 /// [`Nmt`]: crate::nmt::Nmt
 /// [`Share`]: crate::share::Share
 /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(try_from = "RawExtendedDataSquare", into = "RawExtendedDataSquare")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(into = "RawExtendedDataSquare")]
 pub struct ExtendedDataSquare {
     /// The raw data of the EDS.
     data_square: Vec<Share>,
@@ -154,9 +156,11 @@ impl ExtendedDataSquare {
     ///  - width of the square is bigger than [`MAX_EXTENDED_SQUARE_WIDTH`]
     ///  - width of the square isn't a power of 2
     ///  - namespaces of shares aren't in non-decreasing order row and column wise
-    pub fn new(shares: Vec<Vec<u8>>, codec: String) -> Result<Self> {
+    pub fn new(shares: Vec<Vec<u8>>, codec: String, app_version: AppVersion) -> Result<Self> {
         const MIN_SHARES: usize = MIN_EXTENDED_SQUARE_WIDTH * MIN_EXTENDED_SQUARE_WIDTH;
-        const MAX_SHARES: usize = MAX_EXTENDED_SQUARE_WIDTH * MAX_EXTENDED_SQUARE_WIDTH;
+
+        let max_extended_square_width = max_extended_square_width(app_version);
+        let max_shares = max_extended_square_width * max_extended_square_width;
 
         if shares.len() < MIN_SHARES {
             bail_validation!(
@@ -165,11 +169,11 @@ impl ExtendedDataSquare {
                 MIN_SHARES
             );
         }
-        if shares.len() > MAX_SHARES {
+        if shares.len() > max_shares {
             bail_validation!(
-                "shares len ({}) > MAX_SHARES ({})",
+                "shares len ({}) > max shares ({})",
                 shares.len(),
-                MAX_SHARES
+                max_shares
             );
         }
 
@@ -235,6 +239,11 @@ impl ExtendedDataSquare {
         Ok(eds)
     }
 
+    /// Creates an `ExtendedDataSquare` from [`RawExtendedDataSquare`] and an [`AppVersion`].
+    pub fn from_raw(raw_eds: RawExtendedDataSquare, app_version: AppVersion) -> Result<Self> {
+        ExtendedDataSquare::new(raw_eds.data_square, raw_eds.codec, app_version)
+    }
+
     /// Crate a new EDS that represents an empty block
     pub fn empty() -> ExtendedDataSquare {
         // ODS in this case it is just one tail padded share.
@@ -245,7 +254,9 @@ impl ExtendedDataSquare {
         ]
         .concat()];
 
-        ExtendedDataSquare::from_ods(ods).expect("invalid EDS")
+        // App version doesn't matter in this case because an empty ODS is constructed
+        // with the minimum size allowed shares, which is the same in any version.
+        ExtendedDataSquare::from_ods(ods, AppVersion::V1).expect("invalid EDS")
     }
 
     /// Create a new EDS out of the provided original data square shares.
@@ -261,7 +272,10 @@ impl ExtendedDataSquare {
     /// will be checked after the parity data is generated.
     ///
     /// Additionally, this function will propagate any error from encoding parity data.
-    pub fn from_ods(mut ods_shares: Vec<Vec<u8>>) -> Result<ExtendedDataSquare> {
+    pub fn from_ods(
+        mut ods_shares: Vec<Vec<u8>>,
+        app_version: AppVersion,
+    ) -> Result<ExtendedDataSquare> {
         let ods_width = f64::sqrt(ods_shares.len() as f64) as usize;
         // this couldn't be detected later in `new()`
         if ods_width * ods_width != ods_shares.len() {
@@ -294,7 +308,7 @@ impl ExtendedDataSquare {
             leopard_codec::encode(row, ods_width)?;
         }
 
-        ExtendedDataSquare::new(eds_shares, "Leopard".to_string())
+        ExtendedDataSquare::new(eds_shares, "Leopard".to_string(), app_version)
     }
 
     /// The raw data of the EDS.
@@ -431,19 +445,14 @@ impl ExtendedDataSquare {
     }
 }
 
+/// Raw representation of [`ExtendedDataSquare`].
 #[derive(Serialize, Deserialize)]
-struct RawExtendedDataSquare {
+pub struct RawExtendedDataSquare {
+    /// The raw data of the EDS.
     #[serde(with = "celestia_tendermint_proto::serializers::bytes::vec_base64string")]
     pub data_square: Vec<Vec<u8>>,
+    /// The codec used to encode parity shares.
     pub codec: String,
-}
-
-impl TryFrom<RawExtendedDataSquare> for ExtendedDataSquare {
-    type Error = Error;
-
-    fn try_from(eds: RawExtendedDataSquare) -> Result<Self> {
-        ExtendedDataSquare::new(eds.data_square, eds.codec)
-    }
 }
 
 impl From<ExtendedDataSquare> for RawExtendedDataSquare {
@@ -495,7 +504,8 @@ mod tests {
     #[test]
     fn get_namespaced_data() {
         let eds_json = include_str!("../test_data/shwap_samples/eds.json");
-        let eds: ExtendedDataSquare = serde_json::from_str(eds_json).unwrap();
+        let raw_eds: RawExtendedDataSquare = serde_json::from_str(eds_json).unwrap();
+        let eds = ExtendedDataSquare::from_raw(raw_eds, AppVersion::V1).unwrap();
 
         let dah_json = include_str!("../test_data/shwap_samples/dah.json");
         let dah: DataAvailabilityHeader = serde_json::from_str(dah_json).unwrap();
@@ -524,7 +534,8 @@ mod tests {
     #[test]
     fn nmt_roots() {
         let eds_json = include_str!("../test_data/shwap_samples/eds.json");
-        let eds: ExtendedDataSquare = serde_json::from_str(eds_json).unwrap();
+        let raw_eds: RawExtendedDataSquare = serde_json::from_str(eds_json).unwrap();
+        let eds = ExtendedDataSquare::from_raw(raw_eds, AppVersion::V1).unwrap();
 
         let dah_json = include_str!("../test_data/shwap_samples/dah.json");
         let dah: DataAvailabilityHeader = serde_json::from_str(dah_json).unwrap();
@@ -597,7 +608,7 @@ mod tests {
             raw_share(3, 0), raw_share(3, 1), raw_share(3, 2), raw_share(3, 3),
         ];
 
-        let eds = ExtendedDataSquare::new(shares, "fake".to_string()).unwrap();
+        let eds = ExtendedDataSquare::new(shares, "fake".to_string(), AppVersion::V1).unwrap();
 
         assert_eq!(
             eds.row(0).unwrap(),
@@ -750,13 +761,28 @@ mod tests {
 
     #[test]
     fn validation() {
-        ExtendedDataSquare::new(vec![], "fake".to_string()).unwrap_err();
-        ExtendedDataSquare::new(vec![vec![]], "fake".to_string()).unwrap_err();
-        ExtendedDataSquare::new(vec![vec![]; 4], "fake".to_string()).unwrap_err();
+        ExtendedDataSquare::new(vec![], "fake".to_string(), AppVersion::V1).unwrap_err();
+        ExtendedDataSquare::new(vec![vec![]], "fake".to_string(), AppVersion::V1).unwrap_err();
+        ExtendedDataSquare::new(vec![vec![]; 4], "fake".to_string(), AppVersion::V1).unwrap_err();
 
-        ExtendedDataSquare::new(vec![vec![0u8; SHARE_SIZE]; 4], "fake".to_string()).unwrap();
-        ExtendedDataSquare::new(vec![vec![0u8; SHARE_SIZE]; 6], "fake".to_string()).unwrap_err();
-        ExtendedDataSquare::new(vec![vec![0u8; SHARE_SIZE]; 16], "fake".to_string()).unwrap();
+        ExtendedDataSquare::new(
+            vec![vec![0u8; SHARE_SIZE]; 4],
+            "fake".to_string(),
+            AppVersion::V1,
+        )
+        .unwrap();
+        ExtendedDataSquare::new(
+            vec![vec![0u8; SHARE_SIZE]; 6],
+            "fake".to_string(),
+            AppVersion::V1,
+        )
+        .unwrap_err();
+        ExtendedDataSquare::new(
+            vec![vec![0u8; SHARE_SIZE]; 16],
+            "fake".to_string(),
+            AppVersion::V1,
+        )
+        .unwrap();
 
         let share = |n| {
             [
@@ -766,50 +792,67 @@ mod tests {
             .concat()
         };
 
-        ExtendedDataSquare::from_ods(vec![
-            // row 0
-            share(0), // ODS
-        ])
+        ExtendedDataSquare::from_ods(
+            vec![
+                // row 0
+                share(0), // ODS
+            ],
+            AppVersion::V1,
+        )
         .unwrap();
 
-        ExtendedDataSquare::from_ods(vec![
-            // row 0
-            share(1),
-            share(2),
-            // row 1
-            share(1),
-            share(3),
-        ])
+        ExtendedDataSquare::from_ods(
+            vec![
+                // row 0
+                share(1),
+                share(2),
+                // row 1
+                share(1),
+                share(3),
+            ],
+            AppVersion::V1,
+        )
         .unwrap();
 
-        ExtendedDataSquare::from_ods(vec![
-            // row 0
-            share(1),
-            share(2),
-            // row 1
-            share(1),
-            share(1), // error: smaller namespace in 2nd column
-        ])
+        ExtendedDataSquare::from_ods(
+            vec![
+                // row 0
+                share(1),
+                share(2),
+                // row 1
+                share(1),
+                share(1), // error: smaller namespace in 2nd column
+            ],
+            AppVersion::V1,
+        )
         .unwrap_err();
 
-        ExtendedDataSquare::from_ods(vec![
-            // row 0
-            share(1),
-            share(1),
-            // row 1
-            share(2),
-            share(1), // error: smaller namespace in 2nd row
-        ])
+        ExtendedDataSquare::from_ods(
+            vec![
+                // row 0
+                share(1),
+                share(1),
+                // row 1
+                share(2),
+                share(1), // error: smaller namespace in 2nd row
+            ],
+            AppVersion::V1,
+        )
         .unwrap_err();
 
         // not a power of 2
-        ExtendedDataSquare::new(vec![share(1); 6 * 6], "fake".to_string()).unwrap_err();
+        ExtendedDataSquare::new(vec![share(1); 6 * 6], "fake".to_string(), AppVersion::V1)
+            .unwrap_err();
 
         // too big
         // we need to go to the next power of 2 or we just hit other checks
-        let square_width = MAX_EXTENDED_SQUARE_WIDTH * 2;
-        ExtendedDataSquare::new(vec![share(1); square_width.pow(2)], "fake".to_string())
-            .unwrap_err();
+        let square_width = max_extended_square_width(AppVersion::V1) * 2;
+        ExtendedDataSquare::new(
+            vec![share(1); square_width.pow(2)],
+            "fake".to_string(),
+            AppVersion::V1,
+        )
+        .unwrap_err();
     }
 
     #[test]

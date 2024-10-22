@@ -268,9 +268,9 @@ impl From<RowNamespaceDataId> for CidGeneric<ROW_NAMESPACE_DATA_ID_SIZE> {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::generate_eds;
-
     use super::*;
+    use crate::consts::appconsts::AppVersion;
+    use crate::test_utils::generate_eds;
 
     #[test]
     fn round_trip() {
@@ -378,7 +378,7 @@ mod tests {
     fn test_roundtrip_verify() {
         // random
         for _ in 0..5 {
-            let eds = generate_eds(2 << (rand::random::<usize>() % 8));
+            let eds = generate_eds(2 << (rand::random::<usize>() % 8), AppVersion::V1);
             let dah = DataAvailabilityHeader::from_eds(&eds);
 
             let namespace = eds.share(1, 1).unwrap().namespace();
@@ -393,7 +393,7 @@ mod tests {
         }
 
         // parity share
-        let eds = generate_eds(2 << (rand::random::<usize>() % 8));
+        let eds = generate_eds(2 << (rand::random::<usize>() % 8), AppVersion::V1);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         for (id, row) in eds
             .get_namespace_data(Namespace::PARITY_SHARE, &dah, 1)

@@ -3,6 +3,7 @@
 use std::future::Future;
 use std::marker::{Send, Sync};
 
+use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::nmt::Namespace;
 use celestia_types::row_namespace_data::NamespacedShares;
 use celestia_types::{ExtendedDataSquare, ExtendedHeader, RawShare, Share, ShareProof};
@@ -23,11 +24,15 @@ pub struct GetRangeResponse {
 
 mod rpc {
     use super::*;
+    use celestia_types::eds::RawExtendedDataSquare;
 
     #[rpc(client)]
     pub trait Share {
         #[method(name = "share.GetEDS")]
-        async fn share_get_eds(&self, root: &ExtendedHeader) -> Result<ExtendedDataSquare, Error>;
+        async fn share_get_eds(
+            &self,
+            root: &ExtendedHeader,
+        ) -> Result<RawExtendedDataSquare, Error>;
 
         #[method(name = "share.GetRange")]
         async fn share_get_range(
@@ -69,7 +74,18 @@ pub trait ShareClient: ClientT {
         'b: 'fut,
         Self: Sized + Sync + 'fut,
     {
-        rpc::ShareClient::share_get_eds(self, root)
+        async move {
+            let app_version = root.header.version.app;
+            let app_version = AppVersion::from_u64(root.header.version.app).ok_or_else(|| {
+                let e = format!("Invalid or unsupported value for AppVersion: {app_version}");
+                Error::Custom(e)
+            })?;
+
+            let raw_eds = rpc::ShareClient::share_get_eds(self, root).await?;
+
+            ExtendedDataSquare::from_raw(raw_eds, app_version)
+                .map_err(|e| Error::Custom(e.to_string()))
+        }
     }
 
     /// GetRange gets a list of shares and their corresponding proof.

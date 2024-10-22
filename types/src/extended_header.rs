@@ -13,10 +13,12 @@ use celestia_tendermint::{validator, Hash, Time};
 use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
 
+use crate::consts::appconsts::AppVersion;
 use crate::trust_level::DEFAULT_TRUST_LEVEL;
 use crate::validator_set::ValidatorSetExt;
 use crate::{
-    bail_validation, bail_verification, DataAvailabilityHeader, Error, Result, ValidateBasic,
+    bail_validation, bail_verification, validation_error, DataAvailabilityHeader, Error, Result,
+    ValidateBasic, ValidateBasicWithAppVersion,
 };
 
 /// Information about a tendermint validator.
@@ -182,7 +184,9 @@ impl ExtendedHeader {
             &self.commit,
         )?;
 
-        self.dah.validate_basic()?;
+        let app_version = AppVersion::from_u64(self.header.version.app)
+            .ok_or_else(|| validation_error!("Invalid or unknown AppVersion in Header"))?;
+        self.dah.validate_basic(app_version)?;
 
         Ok(())
     }

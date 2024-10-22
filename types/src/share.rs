@@ -209,6 +209,7 @@ impl From<Share> for RawShare {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::consts::appconsts::AppVersion;
     use crate::nmt::{NamespaceProof, NamespacedHash, NAMESPACED_HASH_SIZE};
     use crate::Blob;
     use base64::prelude::*;
@@ -219,7 +220,7 @@ mod tests {
     #[test]
     fn share_structure() {
         let ns = Namespace::new_v0(b"foo").unwrap();
-        let blob = Blob::new(ns, vec![7; 512]).unwrap();
+        let blob = Blob::new(ns, vec![7; 512], AppVersion::V1).unwrap();
 
         let shares = blob.to_shares().unwrap();
 

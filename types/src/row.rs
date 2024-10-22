@@ -261,7 +261,7 @@ impl From<RowId> for CidGeneric<ROW_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consts::appconsts::SHARE_SIZE;
+    use crate::consts::appconsts::{AppVersion, SHARE_SIZE};
     use crate::test_utils::generate_eds;
 
     #[test]
@@ -280,7 +280,7 @@ mod tests {
     #[test]
     fn index_calculation() {
         let shares = vec![vec![0; SHARE_SIZE]; 8 * 8];
-        let eds = ExtendedDataSquare::new(shares, "codec".to_string()).unwrap();
+        let eds = ExtendedDataSquare::new(shares, "codec".to_string(), AppVersion::V1).unwrap();
 
         Row::new(1, &eds).unwrap();
         Row::new(7, &eds).unwrap();
@@ -368,7 +368,7 @@ mod tests {
     #[test]
     fn test_roundtrip_verify() {
         for _ in 0..5 {
-            let eds = generate_eds(2 << (rand::random::<usize>() % 8));
+            let eds = generate_eds(2 << (rand::random::<usize>() % 8), AppVersion::V1);
             let dah = DataAvailabilityHeader::from_eds(&eds);
 
             let index = rand::random::<u16>() % eds.square_width();

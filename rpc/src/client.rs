@@ -16,8 +16,7 @@ mod native {
     use std::result::Result;
 
     use async_trait::async_trait;
-    use celestia_types::consts::appconsts::SHARE_SIZE;
-    use celestia_types::consts::data_availability_header::MAX_EXTENDED_SQUARE_WIDTH;
+    use celestia_types::consts::appconsts::{self, SHARE_SIZE};
     use http::{header, HeaderValue};
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
@@ -29,8 +28,11 @@ mod native {
 
     use crate::Error;
 
-    const MAX_EDS_SIZE_BYTES: usize =
-        MAX_EXTENDED_SQUARE_WIDTH * MAX_EXTENDED_SQUARE_WIDTH * SHARE_SIZE;
+    // NOTE: Always the largest `appconsts::*::SQUARE_SIZE_UPPER_BOUND` needs to be used.
+    const MAX_EDS_SIZE_BYTES: usize = appconsts::v3::SQUARE_SIZE_UPPER_BOUND
+        * appconsts::v3::SQUARE_SIZE_UPPER_BOUND
+        * 4
+        * SHARE_SIZE;
 
     // The biggest response we might get is for requesting an EDS.
     // Also, we allow 1 MB extra for any metadata they come with it.

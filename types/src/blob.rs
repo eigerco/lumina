@@ -1,15 +1,14 @@
 //! Types related to creation and submission of blobs.
 
 pub use celestia_tendermint_proto::v0_34::types::Blob as RawBlob;
-use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
 
 mod commitment;
 
 pub use self::commitment::Commitment;
-use crate::consts::appconsts;
+use crate::consts::appconsts::{subtree_root_threshold, AppVersion};
 use crate::nmt::Namespace;
-use crate::{bail_validation, Error, Result, Share};
+use crate::{bail_validation, Result, Share};
 
 /// Arbitrary data that can be stored in the network within certain [`Namespace`].
 // NOTE: We don't use the `serde(try_from)` pattern for this type
@@ -44,10 +43,10 @@ impl Blob {
     /// # Example
     ///
     /// ```
-    /// use celestia_types::{Blob, nmt::Namespace};
+    /// use celestia_types::{AppVersion, Blob, nmt::Namespace};
     ///
     /// let my_namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
-    /// let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec())
+    /// let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), AppVersion::V1)
     ///     .expect("Failed to create a blob");
     ///
     /// assert_eq!(
@@ -61,14 +60,35 @@ impl Blob {
     ///     }"#},
     /// );
     /// ```
-    pub fn new(namespace: Namespace, data: Vec<u8>) -> Result<Blob> {
-        let commitment =
-            Commitment::from_blob(namespace, appconsts::SHARE_VERSION_ZERO, &data[..])?;
+    pub fn new(namespace: Namespace, data: Vec<u8>, app_version: AppVersion) -> Result<Blob> {
+        let subtree_root_threshold = subtree_root_threshold(app_version);
+        let commitment = Commitment::from_blob(namespace, &data[..], 0, subtree_root_threshold)?;
 
         Ok(Blob {
             namespace,
             data,
-            share_version: appconsts::SHARE_VERSION_ZERO,
+            share_version: 0,
+            commitment,
+            index: None,
+        })
+    }
+
+    /// Creates a `Blob` from [`RawBlob`] and an [`AppVersion`].
+    pub fn from_raw(raw: RawBlob, app_version: AppVersion) -> Result<Blob> {
+        let subtree_root_threshold = subtree_root_threshold(app_version);
+
+        let namespace = Namespace::new(raw.namespace_version as u8, &raw.namespace_id)?;
+        let commitment = Commitment::from_blob(
+            namespace,
+            &raw.data[..],
+            raw.share_version as u8,
+            subtree_root_threshold,
+        )?;
+
+        Ok(Blob {
+            namespace,
+            data: raw.data,
+            share_version: raw.share_version as u8,
             commitment,
             index: None,
         })
@@ -84,22 +104,29 @@ impl Blob {
     ///
     /// ```
     /// use celestia_types::Blob;
+    /// # use celestia_types::consts::appconsts::AppVersion;
     /// # use celestia_types::nmt::Namespace;
     /// #
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let mut blob = Blob::new(namespace, b"foo".to_vec()).unwrap();
+    /// let mut blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V1).unwrap();
     ///
-    /// assert!(blob.validate().is_ok());
+    /// assert!(blob.validate(AppVersion::V1).is_ok());
     ///
-    /// let other_blob = Blob::new(namespace, b"bar".to_vec()).unwrap();
+    /// let other_blob = Blob::new(namespace, b"bar".to_vec(), AppVersion::V1).unwrap();
     /// blob.commitment = other_blob.commitment;
     ///
-    /// assert!(blob.validate().is_err());
+    /// assert!(blob.validate(AppVersion::V1).is_err());
     /// ```
-    pub fn validate(&self) -> Result<()> {
-        let computed_commitment =
-            Commitment::from_blob(self.namespace, self.share_version, &self.data)?;
+    pub fn validate(&self, app_version: AppVersion) -> Result<()> {
+        let subtree_root_threshold = subtree_root_threshold(app_version);
+
+        let computed_commitment = Commitment::from_blob(
+            self.namespace,
+            &self.data,
+            self.share_version,
+            subtree_root_threshold,
+        )?;
 
         if self.commitment != computed_commitment {
             bail_validation!("blob commitment != localy computed commitment")
@@ -121,10 +148,11 @@ impl Blob {
     ///
     /// ```
     /// use celestia_types::Blob;
+    /// # use celestia_types::consts::appconsts::AppVersion;
     /// # use celestia_types::nmt::Namespace;
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let blob = Blob::new(namespace, b"foo".to_vec()).unwrap();
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V1).unwrap();
     /// let shares = blob.to_shares().unwrap();
     ///
     /// assert_eq!(shares.len(), 1);
@@ -134,26 +162,6 @@ impl Blob {
     /// [`InfoByte`]: crate::share::InfoByte
     pub fn to_shares(&self) -> Result<Vec<Share>> {
         commitment::split_blob_to_shares(self.namespace, self.share_version, &self.data)
-    }
-}
-
-impl Protobuf<RawBlob> for Blob {}
-
-impl TryFrom<RawBlob> for Blob {
-    type Error = Error;
-
-    fn try_from(value: RawBlob) -> Result<Self, Self::Error> {
-        let namespace = Namespace::new(value.namespace_version as u8, &value.namespace_id)?;
-        let commitment =
-            Commitment::from_blob(namespace, value.share_version as u8, &value.data[..])?;
-
-        Ok(Blob {
-            commitment,
-            namespace,
-            data: value.data,
-            share_version: value.share_version as u8,
-            index: None,
-        })
     }
 }
 
@@ -218,14 +226,14 @@ mod tests {
     fn create_from_raw() {
         let expected = sample_blob();
         let raw = RawBlob::from(expected.clone());
-        let created = Blob::try_from(raw).unwrap();
+        let created = Blob::from_raw(raw, AppVersion::V1).unwrap();
 
         assert_eq!(created, expected);
     }
 
     #[test]
     fn validate_blob() {
-        sample_blob().validate().unwrap();
+        sample_blob().validate(AppVersion::V1).unwrap();
     }
 
     #[test]
@@ -233,7 +241,7 @@ mod tests {
         let mut blob = sample_blob();
         blob.commitment.0.fill(7);
 
-        blob.validate().unwrap_err();
+        blob.validate(AppVersion::V1).unwrap_err();
     }
 
     #[test]
