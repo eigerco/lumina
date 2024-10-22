@@ -153,7 +153,7 @@ impl ExtendedDataSquare {
     ///  - shares are of sizes different than [`SHARE_SIZE`]
     ///  - amount of shares doesn't allow for forming a square
     ///  - width of the square is smaller than [`MIN_EXTENDED_SQUARE_WIDTH`]
-    ///  - width of the square is bigger than [`MAX_EXTENDED_SQUARE_WIDTH`]
+    ///  - width of the square is bigger than [`max_extended_square_width`]
     ///  - width of the square isn't a power of 2
     ///  - namespaces of shares aren't in non-decreasing order row and column wise
     pub fn new(shares: Vec<Vec<u8>>, codec: String, app_version: AppVersion) -> Result<Self> {
