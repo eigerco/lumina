@@ -5,7 +5,7 @@
 //!
 //! [`row`]: crate::row
 //! [`Share`]: crate::Share
-//! [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+//! [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
 
 use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
@@ -16,9 +16,9 @@ use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
+use crate::eds::{AxisType, ExtendedDataSquare};
 use crate::nmt::NamespaceProof;
 use crate::row::{RowId, ROW_ID_SIZE};
-use crate::rsmt2d::{AxisType, ExtendedDataSquare};
 use crate::{bail_validation, DataAvailabilityHeader, Error, Result, Share};
 
 /// Number of bytes needed to represent [`SampleId`] in `multihash`.
@@ -31,7 +31,7 @@ pub const SAMPLE_ID_CODEC: u64 = 0x7810;
 /// Identifies a particular [`Share`] located in the [`ExtendedDataSquare`].
 ///
 /// [`Share`]: crate::Share
-/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+/// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct SampleId {
     row_id: RowId,
@@ -92,7 +92,7 @@ impl Sample {
     /// ```
     ///
     /// [`Share`]: crate::Share
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub fn new(
         row_index: u16,
         column_index: u16,
@@ -229,7 +229,7 @@ impl SampleId {
     /// ```
     ///
     /// [`Share`]: crate::Share
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub fn new(row_index: u16, column_index: u16, block_height: u64) -> Result<Self> {
         if block_height == 0 {
             return Err(Error::ZeroBlockHeight);
@@ -248,14 +248,14 @@ impl SampleId {
 
     /// Row index of the [`ExtendedDataSquare`] that sample is located on.
     ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub fn row_index(&self) -> u16 {
         self.row_id.index()
     }
 
     /// Column index of the [`ExtendedDataSquare`] that sample is located on.
     ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub fn column_index(&self) -> u16 {
         self.column_index
     }

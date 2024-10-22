@@ -49,7 +49,7 @@ pub struct RawFraudProof {
 pub enum Proof {
     /// A proof that a block producer incorrectly encoded [`ExtendedDataSquare`].
     ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     BadEncoding(BadEncodingFraudProof),
 }
 

@@ -33,7 +33,7 @@ const SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTE
 ///
 /// `sequence length` is the length of the original data in bytes and is present only in the first of the shares the data was split into.
 ///
-/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+/// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
 /// [`Blob::to_shares`]: crate::Blob::to_shares
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "RawShare", into = "RawShare")]

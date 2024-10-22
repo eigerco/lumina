@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::bail_validation;
 use crate::consts::appconsts;
+use crate::eds::AxisType;
 use crate::fraud_proof::FraudProof;
 use crate::nmt::{Namespace, NamespaceProof, Nmt, NmtExt, NS_SIZE};
-use crate::rsmt2d::AxisType;
 use crate::{Error, ExtendedHeader, Result};
 
 /// A proof that the block producer incorrectly encoded [`ExtendedDataSquare`].
@@ -304,7 +304,7 @@ pub(crate) mod test_utils {
     use rand::Rng;
 
     use crate::consts::appconsts::{FIRST_SPARSE_SHARE_CONTENT_SIZE, SHARE_SIZE};
-    use crate::rsmt2d::is_ods_square;
+    use crate::eds::is_ods_square;
     use crate::test_utils::{random_bytes, ExtendedHeaderGenerator};
     use crate::{DataAvailabilityHeader, ExtendedDataSquare};
 

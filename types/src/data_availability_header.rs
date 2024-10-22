@@ -10,9 +10,9 @@ use sha2::Sha256;
 use crate::consts::data_availability_header::{
     MAX_EXTENDED_SQUARE_WIDTH, MIN_EXTENDED_SQUARE_WIDTH,
 };
+use crate::eds::AxisType;
 use crate::hash::Hash;
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
-use crate::rsmt2d::AxisType;
 use crate::{
     bail_validation, bail_verification, validation_error, Error, ExtendedDataSquare, MerkleProof,
     Result, ValidateBasic, ValidationError,
@@ -51,7 +51,7 @@ use crate::{
 /// assert!(proof.verify_complete_namespace(&root, &shares, *namespace).is_ok());
 /// ```
 ///
-/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+/// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     try_from = "RawDataAvailabilityHeader",
@@ -121,14 +121,14 @@ impl DataAvailabilityHeader {
 
     /// Merkle roots of the [`ExtendedDataSquare`] rows.
     ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub fn row_roots(&self) -> &[NamespacedHash] {
         &self.row_roots
     }
 
     /// Merkle roots of the [`ExtendedDataSquare`] columns.
     ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub fn column_roots(&self) -> &[NamespacedHash] {
         &self.column_roots
     }
@@ -175,7 +175,7 @@ impl DataAvailabilityHeader {
 
     /// Get the size of the [`ExtendedDataSquare`] for which this header was built.
     ///
-    /// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
+    /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
     pub fn square_width(&self) -> u16 {
         // `validate_basic` checks that rows num = cols num
         self.row_roots
