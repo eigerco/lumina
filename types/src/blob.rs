@@ -189,15 +189,19 @@ impl Blob {
             let Some(share) = shares.next() else {
                 return Err(Error::MissingShares);
             };
-            if share
-                .info_byte()
-                .map(|info| info.version() != share_version)
-                .unwrap_or(true)
-            {
-                return Err(Error::BlobSharesMetadataMismatch("share version".into()));
-            }
             if share.namespace() != namespace {
-                return Err(Error::BlobSharesMetadataMismatch("namespace".into()));
+                return Err(Error::BlobSharesMetadataMismatch(format!(
+                    "expected namespace ({:?}) got ({:?})",
+                    namespace,
+                    share.namespace()
+                )));
+            }
+            let version = share.info_byte().expect("non parity").version();
+            if version != share_version {
+                return Err(Error::BlobSharesMetadataMismatch(format!(
+                    "expected share version ({}) got ({})",
+                    share_version, version
+                )));
             }
             if share.sequence_length().is_some() {
                 return Err(Error::UnexpectedSequenceStart);
@@ -506,8 +510,7 @@ mod tests {
         shares[1].as_mut()[NS_SIZE] |= 0b00000001;
 
         assert!(matches!(
-            // minimum for len is 4 so 3 will break stuff
-            Blob::reconstruct(&shares[..2]),
+            Blob::reconstruct(&shares),
             Err(Error::UnexpectedSequenceStart)
         ));
     }
@@ -529,15 +532,6 @@ mod tests {
             .collect();
         let reconstructed = Blob::reconstruct_all(&shares).unwrap();
 
-        let mut blobs = blobs.into_iter();
-        let mut reconstructed = reconstructed.into_iter();
-        loop {
-            let Some(expected) = blobs.next() else {
-                assert!(reconstructed.next().is_none());
-                break;
-            };
-            let reconstructed = reconstructed.next().unwrap();
-            assert_eq!(expected, reconstructed);
-        }
+        assert_eq!(blobs, reconstructed);
     }
 }
