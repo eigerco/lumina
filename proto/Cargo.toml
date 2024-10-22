@@ -1,6 +1,6 @@
 [package]
 name = "celestia-proto"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Rust implementation of proto structs used in celestia ecosystem"
