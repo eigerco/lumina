@@ -9,7 +9,7 @@ NODE_NAME="bridge-$NODE_ID"
 # a private local network
 P2P_NETWORK="private"
 # a bridge node configuration directory
-CONFIG_DIR="$CELESTIA_HOME/.celestia-bridge-$P2P_NETWORK"
+CONFIG_DIR="$HOME/.celestia-bridge-$P2P_NETWORK"
 # directory and the files shared with the validator node
 CREDENTIALS_DIR="/credentials"
 # node credentials
@@ -68,7 +68,7 @@ main() {
   # Start the bridge node
   echo "Configuration finished. Running a bridge node..."
   celestia bridge start \
-    --rpc.skip-auth=$SKIP_AUTH \
+    --rpc.skip-auth="$SKIP_AUTH" \
     --rpc.addr 0.0.0.0 \
     --core.ip validator \
     --keyring.keyname "$NODE_NAME" \
