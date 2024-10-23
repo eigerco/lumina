@@ -36,7 +36,7 @@ pub struct WasmNodeConfig {
     pub bootnodes: Vec<String>,
     /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
     /// Headers older than syncing window by more than an hour are eligible for pruning.
-    pub syncing_window_secs: Option<u32>,
+    pub custom_syncing_window_secs: Option<u32>,
 }
 
 /// `NodeClient` is responsible for steering [`NodeWorker`] by sending it commands and receiving
@@ -378,7 +378,7 @@ impl WasmNodeConfig {
             bootnodes: canonical_network_bootnodes(network.into())
                 .map(|addr| addr.to_string())
                 .collect::<Vec<_>>(),
-            syncing_window_secs: None,
+            custom_syncing_window_secs: None,
         }
     }
 
@@ -405,7 +405,7 @@ impl WasmNodeConfig {
         }
 
         let syncing_window = self
-            .syncing_window_secs
+            .custom_syncing_window_secs
             .map(|d| Duration::from_secs(d.into()));
 
         Ok(NodeConfig {
