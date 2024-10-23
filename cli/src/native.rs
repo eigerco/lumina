@@ -20,7 +20,7 @@ use tracing::warn;
 
 use crate::common::ArgNetwork;
 
-const CELESTIA_LOCAL_BRIDGE_RPC_ADDR: &str = "ws://localhost:26658";
+const CELESTIA_LOCAL_BRIDGE_RPC_ADDR: &str = "ws://localhost:36658";
 
 #[derive(Debug, Parser)]
 pub(crate) struct Params {
