@@ -168,12 +168,10 @@ impl Blob {
         I: IntoIterator<Item = &'a Share>,
     {
         let mut shares = shares.into_iter();
-        let Some(first_share) = shares.next() else {
-            return Err(Error::MissingShares);
-        };
-        let Some(blob_len) = first_share.sequence_length() else {
-            return Err(Error::NotSequenceStart);
-        };
+        let first_share = shares.next().ok_or(Error::MissingShares)?;
+        let blob_len = first_share
+            .sequence_length()
+            .ok_or(Error::NotSequenceStart)?;
         let namespace = first_share.namespace();
         if namespace.is_reserved() {
             return Err(Error::UnexpectedReservedNamespace);
@@ -186,9 +184,7 @@ impl Blob {
         data.extend_from_slice(first_share.payload().expect("non parity"));
 
         for _ in 1..shares_needed {
-            let Some(share) = shares.next() else {
-                return Err(Error::MissingShares);
-            };
+            let share = shares.next().ok_or(Error::MissingShares)?;
             if share.namespace() != namespace {
                 return Err(Error::BlobSharesMetadataMismatch(format!(
                     "expected namespace ({:?}) got ({:?})",
