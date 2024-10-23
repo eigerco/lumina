@@ -14,11 +14,15 @@ use tokio::time::sleep;
 
 const WS_URL: &str = "ws://localhost:26658";
 
-pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
+pub async fn bridge_client() -> Client {
     let _ = dotenvy::dotenv();
 
     let auth_token = env::var("CELESTIA_NODE_AUTH_TOKEN_ADMIN").unwrap();
-    let client = Client::new(WS_URL, Some(&auth_token)).await.unwrap();
+    Client::new(WS_URL, Some(&auth_token)).await.unwrap()
+}
+
+pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
+    let client = bridge_client().await;
     let bridge_info = client.p2p_info().await.unwrap();
 
     let mut ma = bridge_info
@@ -35,6 +39,8 @@ pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
 }
 
 pub async fn new_connected_node() -> (Node<InMemoryBlockstore, InMemoryStore>, EventSubscriber) {
+    let _ = env_logger::builder().is_test(true).try_init();
+
     let (_, bridge_ma) = fetch_bridge_info().await;
 
     let (node, events) = Node::new_subscribed(NodeConfig {

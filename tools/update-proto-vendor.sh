@@ -25,7 +25,7 @@ mkdir -p ../target/proto-vendor-src
 extract_urls ../target/proto-vendor-src \
     https://github.com/celestiaorg/celestia-app/archive/refs/tags/v1.12.0.tar.gz \
     https://github.com/celestiaorg/celestia-core/archive/refs/heads/v0.34.x-celestia.tar.gz \
-    https://github.com/celestiaorg/celestia-node/archive/refs/heads/shwap.tar.gz \
+    https://github.com/celestiaorg/celestia-node/archive/refs/heads/main.tar.gz \
     https://github.com/celestiaorg/cosmos-sdk/archive/refs/heads/release/v0.46.x-celestia.tar.gz \
     https://github.com/celestiaorg/nmt/archive/refs/heads/main.tar.gz \
     https://github.com/cosmos/cosmos-proto/archive/refs/tags/v1.0.0-alpha7.tar.gz \
@@ -59,11 +59,11 @@ cp ../target/proto-vendor-src/googleapis-master/google/api/{annotations.proto,ht
 
 rm -rf vendor/header
 mkdir -p vendor/header
-cp -r ../target/proto-vendor-src/celestia-node-shwap/header/pb vendor/header
+cp -r ../target/proto-vendor-src/celestia-node-main/header/pb vendor/header
 
 rm -rf vendor/share
 mkdir -p vendor/share
-shwap_dir=../target/proto-vendor-src/celestia-node-shwap/share
+shwap_dir=../target/proto-vendor-src/celestia-node-main/share
 find "$shwap_dir" -name pb -type d -print0 | while read -r -d '' pb_dir; do
   # remove prefix
   out_dir="${pb_dir#"$shwap_dir"}"
