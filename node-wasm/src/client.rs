@@ -12,7 +12,7 @@ use web_sys::BroadcastChannel;
 
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network::{canonical_network_bootnodes, network_id};
-use lumina_node::node::{NodeConfig, DEFAULT_SYNCING_WINDOW};
+use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 
 use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
@@ -34,7 +34,8 @@ pub struct WasmNodeConfig {
     /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
-    /// Custom syncing window size. Pruning starts one hour after syncing window end.
+    /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
+    /// Headers older than syncing window by more than an hour are eligible for pruning.
     pub syncing_window_secs: Option<u32>,
 }
 
@@ -405,8 +406,7 @@ impl WasmNodeConfig {
 
         let syncing_window = self
             .syncing_window_secs
-            .map(|d| Duration::from_secs(d.into()))
-            .unwrap_or(DEFAULT_SYNCING_WINDOW);
+            .map(|d| Duration::from_secs(d.into()));
 
         Ok(NodeConfig {
             network_id: network_id.to_string(),
@@ -414,7 +414,7 @@ impl WasmNodeConfig {
             p2p_local_keypair,
             p2p_listen_on: vec![],
             sync_batch_size: 128,
-            syncing_window,
+            custom_syncing_window: syncing_window,
             blockstore,
             store,
         })

@@ -42,13 +42,9 @@ pub(crate) struct Params {
 
     /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
     /// Headers older than syncing window by more than an hour are eligible for pruning.
-    #[arg(
-        long = "syncing-window",
-        default_value = "30 days",
-        verbatim_doc_comment
-    )]
+    #[arg(long = "syncing-window", verbatim_doc_comment)]
     #[clap(value_parser = parse_duration::parse)]
-    pub(crate) syncing_window: Duration,
+    pub(crate) custom_syncing_window: Option<Duration>,
 }
 
 pub(crate) async fn run(args: Params) -> Result<()> {
@@ -84,7 +80,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         p2p_bootnodes,
         p2p_listen_on: args.listen_addrs,
         sync_batch_size: 512,
-        syncing_window: args.syncing_window,
+        custom_syncing_window: args.custom_syncing_window,
         blockstore,
         store,
     })
@@ -179,20 +175,4 @@ async fn fetch_bridge_multiaddrs(ws_url: &str) -> Result<Vec<Multiaddr>> {
     }
 
     Ok(addrs)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use lumina_node::node::DEFAULT_SYNCING_WINDOW;
-
-    #[test]
-    fn check_default_syncing_window() {
-        // Make sure the default value from clap (which doesn't default_value_t,
-        // because Duration cannot be displayed without wrapping) equals const
-        // defined in node.
-        let default_params = Params::parse_from::<[String; 0], _>([]);
-        assert_eq!(default_params.syncing_window, DEFAULT_SYNCING_WINDOW);
-    }
 }
