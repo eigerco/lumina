@@ -2,7 +2,7 @@
 
 use crate::utils::{random_bytes, random_ns};
 use celestia_rpc::prelude::*;
-use celestia_types::{consts::appconsts::AppVersion, Blob, TxConfig};
+use celestia_types::{AppVersion, Blob, TxConfig};
 
 pub mod utils;
 
