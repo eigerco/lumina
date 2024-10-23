@@ -37,6 +37,7 @@ async fn main() {
         p2p_bootnodes,
         p2p_listen_on: vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()],
         sync_batch_size: 512,
+        custom_syncing_window: None,
         blockstore,
         store,
     })
