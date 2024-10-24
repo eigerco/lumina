@@ -14,11 +14,11 @@ keywords = ["blockchain", "celestia", "lumina"]
 categories = ["encoding", "cryptography::cryptocurrencies"]
 
 [dependencies]
-blockstore = { workspace = true }
-celestia-proto = { workspace = true }
+blockstore.workspace = true
+celestia-proto.workspace = true
 celestia-tendermint = { workspace = true, features = ["std", "rust-crypto"] }
-celestia-tendermint-proto = { workspace = true }
-nmt-rs = { workspace = true }
+celestia-tendermint-proto.workspace = true
+nmt-rs.workspace = true
 
 base64 = "0.22.1"
 bech32 = "0.11.0"

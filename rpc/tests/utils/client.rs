@@ -25,7 +25,7 @@ pub enum AuthLevel {
     Admin,
 }
 
-fn token_from_env(auth_level: AuthLevel) -> Result<Option<String>> {
+pub fn token_from_env(auth_level: AuthLevel) -> Result<Option<String>> {
     match auth_level {
         AuthLevel::Public => Ok(None),
         AuthLevel::Read => Ok(Some(env::var("CELESTIA_NODE_AUTH_TOKEN_READ")?)),
@@ -34,7 +34,7 @@ fn token_from_env(auth_level: AuthLevel) -> Result<Option<String>> {
     }
 }
 
-fn env_or(var_name: &str, or_value: &str) -> String {
+pub fn env_or(var_name: &str, or_value: &str) -> String {
     env::var(var_name).unwrap_or_else(|_| or_value.to_owned())
 }
 

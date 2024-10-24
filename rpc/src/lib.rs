@@ -9,6 +9,8 @@ mod header;
 mod p2p;
 pub mod share;
 mod state;
+#[cfg(feature = "tonic_grpc")]
+pub mod tonic;
 
 pub use crate::blob::BlobClient;
 #[cfg(any(
