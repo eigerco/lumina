@@ -1,6 +1,6 @@
 use std::{collections::HashSet, time::Duration};
 
-use celestia_rpc::BlobClient;
+use celestia_rpc::{BlobClient, ShareClient};
 use celestia_types::{nmt::Namespace, Blob, TxConfig};
 use lumina_node::events::NodeEvent;
 use rand::RngCore;
@@ -55,7 +55,6 @@ async fn sampling_forward() {
             .await
             .unwrap();
     }
-    panic!();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -111,7 +110,6 @@ async fn sampling_backward() {
     })
     .await
     .unwrap();
-    panic!();
 }
 
 #[tokio::test]
@@ -128,6 +126,7 @@ async fn shwap_get() {
         .await
         .unwrap();
 
+    //let expected = client.share_get_share(0, 0).await.unwrap();
     node.request_sample(0, 0, height, Some(Duration::from_millis(500)))
         .await
         .unwrap();
