@@ -378,7 +378,7 @@ mod tests {
     fn test_roundtrip_verify() {
         // random
         for _ in 0..5 {
-            let eds = generate_eds(2 << (rand::random::<usize>() % 8), AppVersion::V1);
+            let eds = generate_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
             let dah = DataAvailabilityHeader::from_eds(&eds);
 
             let namespace = eds.share(1, 1).unwrap().namespace();
@@ -393,7 +393,7 @@ mod tests {
         }
 
         // parity share
-        let eds = generate_eds(2 << (rand::random::<usize>() % 8), AppVersion::V1);
+        let eds = generate_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         for (id, row) in eds
             .get_namespace_data(Namespace::PARITY_SHARE, &dah, 1)

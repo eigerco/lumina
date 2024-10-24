@@ -183,7 +183,7 @@ async fn stops_services_when_network_is_compromised() {
     store.insert(gen.next_many_verified(64)).await.unwrap();
 
     // create a corrupted block and insert it
-    let mut eds = generate_eds(8, AppVersion::V1);
+    let mut eds = generate_eds(8, AppVersion::V2);
     let (header, befp) = corrupt_eds(&mut gen, &mut eds);
 
     store.insert(header).await.unwrap();

@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn share_structure() {
         let ns = Namespace::new_v0(b"foo").unwrap();
-        let blob = Blob::new(ns, vec![7; 512], AppVersion::V1).unwrap();
+        let blob = Blob::new(ns, vec![7; 512], AppVersion::V2).unwrap();
 
         let shares = blob.to_shares().unwrap();
 

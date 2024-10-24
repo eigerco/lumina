@@ -562,7 +562,7 @@ mod tests {
         let mut headers = Vec::new();
 
         for _ in 0..20 {
-            let eds = generate_eds(2, AppVersion::V1);
+            let eds = generate_eds(2, AppVersion::V2);
             let dah = DataAvailabilityHeader::from_eds(&eds);
             let header = gen.next_with_dah(dah);
 
@@ -636,7 +636,7 @@ mod tests {
         handle.expect_no_cmd().await;
 
         // Push block 21 in the store
-        let eds = generate_eds(2, AppVersion::V1);
+        let eds = generate_eds(2, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         let header = gen.next_with_dah(dah);
         store.insert(header).await.unwrap();
@@ -655,7 +655,7 @@ mod tests {
         square_width: usize,
         simulate_invalid_sampling: bool,
     ) {
-        let eds = generate_eds(square_width, AppVersion::V1);
+        let eds = generate_eds(square_width, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         let header = gen.next_with_dah(dah);
         let height = header.height().value();

@@ -505,7 +505,7 @@ mod tests {
     fn get_namespaced_data() {
         let eds_json = include_str!("../test_data/shwap_samples/eds.json");
         let raw_eds: RawExtendedDataSquare = serde_json::from_str(eds_json).unwrap();
-        let eds = ExtendedDataSquare::from_raw(raw_eds, AppVersion::V1).unwrap();
+        let eds = ExtendedDataSquare::from_raw(raw_eds, AppVersion::V2).unwrap();
 
         let dah_json = include_str!("../test_data/shwap_samples/dah.json");
         let dah: DataAvailabilityHeader = serde_json::from_str(dah_json).unwrap();
@@ -535,7 +535,7 @@ mod tests {
     fn nmt_roots() {
         let eds_json = include_str!("../test_data/shwap_samples/eds.json");
         let raw_eds: RawExtendedDataSquare = serde_json::from_str(eds_json).unwrap();
-        let eds = ExtendedDataSquare::from_raw(raw_eds, AppVersion::V1).unwrap();
+        let eds = ExtendedDataSquare::from_raw(raw_eds, AppVersion::V2).unwrap();
 
         let dah_json = include_str!("../test_data/shwap_samples/dah.json");
         let dah: DataAvailabilityHeader = serde_json::from_str(dah_json).unwrap();
@@ -608,7 +608,7 @@ mod tests {
             raw_share(3, 0), raw_share(3, 1), raw_share(3, 2), raw_share(3, 3),
         ];
 
-        let eds = ExtendedDataSquare::new(shares, "fake".to_string(), AppVersion::V1).unwrap();
+        let eds = ExtendedDataSquare::new(shares, "fake".to_string(), AppVersion::V2).unwrap();
 
         assert_eq!(
             eds.row(0).unwrap(),
@@ -761,26 +761,26 @@ mod tests {
 
     #[test]
     fn validation() {
-        ExtendedDataSquare::new(vec![], "fake".to_string(), AppVersion::V1).unwrap_err();
-        ExtendedDataSquare::new(vec![vec![]], "fake".to_string(), AppVersion::V1).unwrap_err();
-        ExtendedDataSquare::new(vec![vec![]; 4], "fake".to_string(), AppVersion::V1).unwrap_err();
+        ExtendedDataSquare::new(vec![], "fake".to_string(), AppVersion::V2).unwrap_err();
+        ExtendedDataSquare::new(vec![vec![]], "fake".to_string(), AppVersion::V2).unwrap_err();
+        ExtendedDataSquare::new(vec![vec![]; 4], "fake".to_string(), AppVersion::V2).unwrap_err();
 
         ExtendedDataSquare::new(
             vec![vec![0u8; SHARE_SIZE]; 4],
             "fake".to_string(),
-            AppVersion::V1,
+            AppVersion::V2,
         )
         .unwrap();
         ExtendedDataSquare::new(
             vec![vec![0u8; SHARE_SIZE]; 6],
             "fake".to_string(),
-            AppVersion::V1,
+            AppVersion::V2,
         )
         .unwrap_err();
         ExtendedDataSquare::new(
             vec![vec![0u8; SHARE_SIZE]; 16],
             "fake".to_string(),
-            AppVersion::V1,
+            AppVersion::V2,
         )
         .unwrap();
 
@@ -797,7 +797,7 @@ mod tests {
                 // row 0
                 share(0), // ODS
             ],
-            AppVersion::V1,
+            AppVersion::V2,
         )
         .unwrap();
 
@@ -810,7 +810,7 @@ mod tests {
                 share(1),
                 share(3),
             ],
-            AppVersion::V1,
+            AppVersion::V2,
         )
         .unwrap();
 
@@ -823,7 +823,7 @@ mod tests {
                 share(1),
                 share(1), // error: smaller namespace in 2nd column
             ],
-            AppVersion::V1,
+            AppVersion::V2,
         )
         .unwrap_err();
 
@@ -836,21 +836,21 @@ mod tests {
                 share(2),
                 share(1), // error: smaller namespace in 2nd row
             ],
-            AppVersion::V1,
+            AppVersion::V2,
         )
         .unwrap_err();
 
         // not a power of 2
-        ExtendedDataSquare::new(vec![share(1); 6 * 6], "fake".to_string(), AppVersion::V1)
+        ExtendedDataSquare::new(vec![share(1); 6 * 6], "fake".to_string(), AppVersion::V2)
             .unwrap_err();
 
         // too big
         // we need to go to the next power of 2 or we just hit other checks
-        let square_width = max_extended_square_width(AppVersion::V1) * 2;
+        let square_width = max_extended_square_width(AppVersion::V2) * 2;
         ExtendedDataSquare::new(
             vec![share(1); square_width.pow(2)],
             "fake".to_string(),
-            AppVersion::V1,
+            AppVersion::V2,
         )
         .unwrap_err();
     }

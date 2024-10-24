@@ -46,7 +46,7 @@ impl Blob {
     /// use celestia_types::{AppVersion, Blob, nmt::Namespace};
     ///
     /// let my_namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
-    /// let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), AppVersion::V1)
+    /// let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), AppVersion::V2)
     ///     .expect("Failed to create a blob");
     ///
     /// assert_eq!(
@@ -109,14 +109,14 @@ impl Blob {
     /// #
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let mut blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V1).unwrap();
+    /// let mut blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2).unwrap();
     ///
-    /// assert!(blob.validate(AppVersion::V1).is_ok());
+    /// assert!(blob.validate(AppVersion::V2).is_ok());
     ///
-    /// let other_blob = Blob::new(namespace, b"bar".to_vec(), AppVersion::V1).unwrap();
+    /// let other_blob = Blob::new(namespace, b"bar".to_vec(), AppVersion::V2).unwrap();
     /// blob.commitment = other_blob.commitment;
     ///
-    /// assert!(blob.validate(AppVersion::V1).is_err());
+    /// assert!(blob.validate(AppVersion::V2).is_err());
     /// ```
     pub fn validate(&self, app_version: AppVersion) -> Result<()> {
         let subtree_root_threshold = subtree_root_threshold(app_version);
@@ -152,7 +152,7 @@ impl Blob {
     /// # use celestia_types::nmt::Namespace;
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V1).unwrap();
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2).unwrap();
     /// let shares = blob.to_shares().unwrap();
     ///
     /// assert_eq!(shares.len(), 1);
@@ -226,14 +226,14 @@ mod tests {
     fn create_from_raw() {
         let expected = sample_blob();
         let raw = RawBlob::from(expected.clone());
-        let created = Blob::from_raw(raw, AppVersion::V1).unwrap();
+        let created = Blob::from_raw(raw, AppVersion::V2).unwrap();
 
         assert_eq!(created, expected);
     }
 
     #[test]
     fn validate_blob() {
-        sample_blob().validate(AppVersion::V1).unwrap();
+        sample_blob().validate(AppVersion::V2).unwrap();
     }
 
     #[test]
@@ -241,7 +241,7 @@ mod tests {
         let mut blob = sample_blob();
         blob.commitment.0.fill(7);
 
-        blob.validate(AppVersion::V1).unwrap_err();
+        blob.validate(AppVersion::V2).unwrap_err();
     }
 
     #[test]

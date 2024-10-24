@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn befp_serde() {
         let mut gen = ExtendedHeaderGenerator::new();
-        let mut eds = generate_eds(8, AppVersion::V1);
+        let mut eds = generate_eds(8, AppVersion::V2);
         let (_, proof) = corrupt_eds(&mut gen, &mut eds);
 
         let proof = Proof::BadEncoding(proof);

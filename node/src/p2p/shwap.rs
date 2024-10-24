@@ -120,7 +120,7 @@ mod tests {
     async fn hash() {
         let store = Arc::new(InMemoryStore::new());
 
-        let eds = generate_eds(4, AppVersion::V1);
+        let eds = generate_eds(4, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
 
         let mut gen = ExtendedHeaderGenerator::new();

@@ -432,7 +432,7 @@ mod tests {
     fn validate_correct() {
         let dah = sample_dah();
 
-        dah.validate_basic(AppVersion::V1).unwrap();
+        dah.validate_basic(AppVersion::V2).unwrap();
     }
 
     #[test]
@@ -440,7 +440,7 @@ mod tests {
         let mut dah = sample_dah();
         dah.row_roots.pop();
 
-        dah.validate_basic(AppVersion::V1).unwrap_err();
+        dah.validate_basic(AppVersion::V2).unwrap_err();
     }
 
     #[test]
@@ -459,12 +459,12 @@ mod tests {
             .take(MIN_EXTENDED_SQUARE_WIDTH)
             .collect();
 
-        dah.validate_basic(AppVersion::V1).unwrap();
+        dah.validate_basic(AppVersion::V2).unwrap();
 
         dah.row_roots.pop();
         dah.column_roots.pop();
 
-        dah.validate_basic(AppVersion::V1).unwrap_err();
+        dah.validate_basic(AppVersion::V2).unwrap_err();
     }
 
     #[test]
@@ -474,21 +474,21 @@ mod tests {
             .row_roots
             .into_iter()
             .cycle()
-            .take(max_extended_square_width(AppVersion::V1))
+            .take(max_extended_square_width(AppVersion::V2))
             .collect();
         dah.column_roots = dah
             .column_roots
             .into_iter()
             .cycle()
-            .take(max_extended_square_width(AppVersion::V1))
+            .take(max_extended_square_width(AppVersion::V2))
             .collect();
 
-        dah.validate_basic(AppVersion::V1).unwrap();
+        dah.validate_basic(AppVersion::V2).unwrap();
 
         dah.row_roots.push(dah.row_roots[0].clone());
         dah.column_roots.push(dah.column_roots[0].clone());
 
-        dah.validate_basic(AppVersion::V1).unwrap_err();
+        dah.validate_basic(AppVersion::V2).unwrap_err();
     }
 
     #[test]
@@ -614,6 +614,6 @@ mod tests {
             })
             .unzip();
 
-        DataAvailabilityHeader::new(row_roots, col_roots, AppVersion::V1).unwrap()
+        DataAvailabilityHeader::new(row_roots, col_roots, AppVersion::V2).unwrap()
     }
 }
