@@ -178,7 +178,7 @@ impl Blob {
         }
         let share_version = first_share.info_byte().expect("non parity").version();
 
-        let shares_needed = blob_len_in_shares(blob_len as usize);
+        let shares_needed = shares_needed_for_blob(blob_len as usize);
         let mut data =
             Vec::with_capacity(shares_needed * appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE);
         data.extend_from_slice(first_share.payload().expect("non parity"));
@@ -298,7 +298,7 @@ impl From<Blob> for RawBlob {
     }
 }
 
-fn blob_len_in_shares(blob_len: usize) -> usize {
+fn shares_needed_for_blob(blob_len: usize) -> usize {
     let Some(without_first_share) =
         blob_len.checked_sub(appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE)
     else {
