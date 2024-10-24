@@ -184,9 +184,9 @@ pub enum Error {
     #[error("Invalid zero block height")]
     ZeroBlockHeight,
 
-    /// Share is not a start of a new blob.
-    #[error("Share is not sequence start")]
-    NotSequenceStart,
+    /// Expected first share of a blob
+    #[error("Expected first share of a blob")]
+    ExpectedShareWithSequenceStart,
 
     /// Unexpected share from reserved namespace.
     #[error("Unexpected share from reserved namespace")]

@@ -171,7 +171,7 @@ impl Blob {
         let first_share = shares.next().ok_or(Error::MissingShares)?;
         let blob_len = first_share
             .sequence_length()
-            .ok_or(Error::NotSequenceStart)?;
+            .ok_or(Error::ExpectedShareWithSequenceStart)?;
         let namespace = first_share.namespace();
         if namespace.is_reserved() {
             return Err(Error::UnexpectedReservedNamespace);
@@ -423,7 +423,7 @@ mod tests {
 
         assert!(matches!(
             Blob::reconstruct(&shares),
-            Err(Error::NotSequenceStart)
+            Err(Error::ExpectedShareWithSequenceStart)
         ));
     }
 
