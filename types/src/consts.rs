@@ -24,14 +24,117 @@ pub mod version {
 /// [`celestia-app`]: https://github.com/celestiaorg/celestia-app
 pub mod appconsts {
     pub use global_consts::*;
-    pub use v1::*;
 
     // celestia-app/pkg/appconsts/v1/app_consts
-    mod v1 {
-        /// Maximum width of a single subtree root when generating blob's commitment.
-        pub const SUBTREE_ROOT_THRESHOLD: u64 = 64;
+    /// Consts of App v1.
+    pub mod v1 {
+        /// App version.
+        pub const VERSION: u64 = 1;
         /// Maximum width of the original data square.
         pub const SQUARE_SIZE_UPPER_BOUND: usize = 128;
+        /// Maximum width of a single subtree root when generating blob's commitment.
+        pub const SUBTREE_ROOT_THRESHOLD: u64 = 64;
+    }
+
+    // celestia-app/pkg/appconsts/v2/app_consts
+    /// Consts of App v2.
+    pub mod v2 {
+        /// App version.
+        pub const VERSION: u64 = 2;
+        /// Maximum width of the original data square.
+        pub const SQUARE_SIZE_UPPER_BOUND: usize = 128;
+        /// Maximum width of a single subtree root when generating blob's commitment.
+        pub const SUBTREE_ROOT_THRESHOLD: u64 = 64;
+    }
+
+    // celestia-app/pkg/appconsts/v3/app_consts
+    /// Consts of App v3.
+    pub mod v3 {
+        /// App version.
+        pub const VERSION: u64 = 3;
+        /// Maximum width of the original data square.
+        pub const SQUARE_SIZE_UPPER_BOUND: usize = 128;
+        /// Maximum width of a single subtree root when generating blob's commitment.
+        pub const SUBTREE_ROOT_THRESHOLD: u64 = 64;
+        /// Cost of each byte in a transaction (in units of gas).
+        pub const TX_SIZE_COST_PER_BYTE: u64 = 10;
+        /// Cost of each byte in blob (in units of gas).
+        pub const GAS_PER_BLOB_BYTE: u64 = 8;
+    }
+
+    // celestia-app/pkg/appconsts/versioned_consts.go
+    /// Latest App version.
+    pub const LATEST_VERSION: u64 = v3::VERSION;
+
+    /// Enum with all valid App versions.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    #[repr(u64)]
+    pub enum AppVersion {
+        /// App v1
+        V1 = v1::VERSION,
+        /// App v2
+        V2 = v2::VERSION,
+        /// App v3
+        V3 = v3::VERSION,
+    }
+
+    impl AppVersion {
+        /// Latest App version variant.
+        pub fn latest() -> AppVersion {
+            AppVersion::from_u64(LATEST_VERSION).expect("Unknown app version")
+        }
+
+        /// Creates `AppVersion` from a numeric value.
+        pub fn from_u64(version: u64) -> Option<AppVersion> {
+            if version == v1::VERSION {
+                Some(AppVersion::V1)
+            } else if version == v2::VERSION {
+                Some(AppVersion::V2)
+            } else if version == v3::VERSION {
+                Some(AppVersion::V3)
+            } else {
+                None
+            }
+        }
+
+        /// Returns the numeric value of App version.
+        pub fn as_u64(&self) -> u64 {
+            *self as u64
+        }
+    }
+
+    /// Maximum width of the original data square.
+    pub const fn square_size_upper_bound(app_version: AppVersion) -> usize {
+        match app_version {
+            AppVersion::V1 => v1::SQUARE_SIZE_UPPER_BOUND,
+            AppVersion::V2 => v2::SQUARE_SIZE_UPPER_BOUND,
+            AppVersion::V3 => v3::SQUARE_SIZE_UPPER_BOUND,
+        }
+    }
+
+    /// Maximum width of a single subtree root when generating blob's commitment.
+    pub const fn subtree_root_threshold(app_version: AppVersion) -> u64 {
+        match app_version {
+            AppVersion::V1 => v1::SUBTREE_ROOT_THRESHOLD,
+            AppVersion::V2 => v2::SUBTREE_ROOT_THRESHOLD,
+            AppVersion::V3 => v3::SUBTREE_ROOT_THRESHOLD,
+        }
+    }
+
+    /// Cost of each byte in a transaction (in units of gas).
+    pub const fn tx_size_cost_per_byte(app_version: AppVersion) -> Option<u64> {
+        match app_version {
+            AppVersion::V1 | AppVersion::V2 => None,
+            AppVersion::V3 => Some(v3::TX_SIZE_COST_PER_BYTE),
+        }
+    }
+
+    /// Cost of each byte in blob (in units of gas).
+    pub const fn gas_per_blob_byte(app_version: AppVersion) -> Option<u64> {
+        match app_version {
+            AppVersion::V1 | AppVersion::V2 => None,
+            AppVersion::V3 => Some(v3::GAS_PER_BLOB_BYTE),
+        }
     }
 
     // celestia-app/pkg/appconsts/global_consts
@@ -97,7 +200,9 @@ pub mod data_availability_header {
     /// A maximum width of the [`ExtendedDataSquare`].
     ///
     /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
-    pub const MAX_EXTENDED_SQUARE_WIDTH: usize = super::appconsts::SQUARE_SIZE_UPPER_BOUND * 2;
+    pub const fn max_extended_square_width(app_version: super::appconsts::AppVersion) -> usize {
+        super::appconsts::square_size_upper_bound(app_version) * 2
+    }
     /// A minimum width of the [`ExtendedDataSquare`].
     ///
     /// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
