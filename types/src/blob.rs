@@ -145,7 +145,7 @@ impl Blob {
     ///
     /// This function will return an error if:
     /// - there is not enough shares to reconstruct the blob
-    /// - the first share does not start a blob
+    /// - blob doesn't start with the first share
     /// - shares are from any reserved namespace
     /// - shares for the blob have different namespaces / share version
     ///
@@ -211,11 +211,11 @@ impl Blob {
         Self::new(namespace, data)
     }
 
-    /// Reconstructs all blobs from shares.
+    /// Reconstructs all the blobs from shares.
     ///
-    /// This function will seek shares that indicate start of next blob (with
+    /// This function will seek shares that indicate start of the next blob (with
     /// [`Share::sequence_length`]) and pass them to [`Blob::reconstruct`].
-    /// It will automatically ignore all shares that are within reserved namespaces,
+    /// It will automatically ignore all shares that are within reserved namespaces
     /// e.g. it is completely fine to pass whole [`ExtendedDataSquare`] to this
     /// function and get all blobs in the block.
     ///
