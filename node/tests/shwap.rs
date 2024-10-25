@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use std::{collections::HashSet, time::Duration};
 
 use celestia_rpc::ShareClient;
@@ -224,7 +226,7 @@ async fn shwap_request_row_namespace_data() {
 }
 
 #[tokio::test]
-async fn request_all_blobs() {
+async fn shwap_request_all_blobs() {
     let (node, _) = new_connected_node().await;
     let client = bridge_client().await;
 

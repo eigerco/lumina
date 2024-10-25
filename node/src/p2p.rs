@@ -566,6 +566,7 @@ impl P2p {
         Ok(row_namespace_data)
     }
 
+    // TODO: Add a version which returns (Vec<Blob>, Vec<RowProof>)?
     /// Request all blobs with provided namespace in block corresponding to this header
     /// on bitswap protocol.
     pub async fn get_all_blobs(
@@ -581,6 +582,13 @@ impl P2p {
             .enumerate()
             .filter(|(_, row)| row.contains::<NamespacedSha2Hasher>(*namespace))
             .map(|(n, _)| n as u16);
+
+        // TODO: add Row::get_namespace_data(&self, ns, Namespace) -> RowNamespaceData
+        // If there is only a single row, fetch whole row instead. As shwap is
+        // timeout based, we cannot know if there is no node having our data
+        // or there is just no namespace data in given row.
+        // This will allow us return empty Vec early in case there are no blobs,
+        // as the row as a whole must exist.
 
         let futs = rows_to_fetch
             .map(|row_idx| {
