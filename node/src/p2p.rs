@@ -566,8 +566,8 @@ impl P2p {
         Ok(row_namespace_data)
     }
 
-    /// Request all blobs with provided namespace in block corresponding to this header
-    /// on bitswap protocol.
+    /// Request all blobs with provided namespace in the block corresponding to this header
+    /// using bitswap protocol.
     pub async fn get_all_blobs(
         &self,
         header: &ExtendedHeader,
