@@ -48,6 +48,9 @@ add_trusted_genesis() {
 }
 
 whitelist_localhost_nodes() {
+  # to get the list of ips:
+  # cargo run -- node -n private -l 0.0.0.0
+  # docker compose -f ci/docker-compose.yml exec bridge-0 celestia p2p peer-info $lumina_peerid
   dasel put -f "$CONFIG_DIR/config.toml" \
     -t json -v '["172.18.0.1/24", "172.17.0.1/24", "192.168.0.186/24"]' \
     'P2P.IPColocationWhitelist'
