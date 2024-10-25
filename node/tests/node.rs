@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use celestia_tendermint_proto::Protobuf;
+use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::consts::HASH_SIZE;
 use celestia_types::fraud_proof::BadEncodingFraudProof;
 use celestia_types::hash::Hash;
@@ -182,7 +183,7 @@ async fn stops_services_when_network_is_compromised() {
     store.insert(gen.next_many_verified(64)).await.unwrap();
 
     // create a corrupted block and insert it
-    let mut eds = generate_dummy_eds(8);
+    let mut eds = generate_dummy_eds(8, AppVersion::V2);
     let (header, befp) = corrupt_eds(&mut gen, &mut eds);
 
     store.insert(header).await.unwrap();
