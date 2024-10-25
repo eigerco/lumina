@@ -5,7 +5,7 @@ use std::{collections::HashSet, time::Duration};
 use celestia_rpc::ShareClient;
 use celestia_types::{
     nmt::{Namespace, NamespacedSha2Hasher},
-    Blob,
+    AppVersion, Blob,
 };
 use lumina_node::{events::NodeEvent, node::P2pError, NodeError};
 use rand::RngCore;
@@ -118,7 +118,7 @@ async fn shwap_request_sample() {
 
     let ns = Namespace::const_v0(rand::random());
     let blob_len = rand::random::<usize>() % 4096 + 1;
-    let blob = Blob::new(ns, random_bytes(blob_len)).unwrap();
+    let blob = Blob::new(ns, random_bytes(blob_len), AppVersion::V2).unwrap();
 
     let height = blob_submit(&client, &[blob]).await;
     let header = node.get_header_by_height(height).await.unwrap();
@@ -152,7 +152,7 @@ async fn shwap_request_row() {
 
     let ns = Namespace::const_v0(rand::random());
     let blob_len = rand::random::<usize>() % 4096 + 1;
-    let blob = Blob::new(ns, random_bytes(blob_len)).unwrap();
+    let blob = Blob::new(ns, random_bytes(blob_len), AppVersion::V2).unwrap();
 
     let height = blob_submit(&client, &[blob]).await;
     let header = node.get_header_by_height(height).await.unwrap();
@@ -181,7 +181,7 @@ async fn shwap_request_row_namespace_data() {
 
     let ns = Namespace::const_v0(rand::random());
     let blob_len = rand::random::<usize>() % 4096 + 1;
-    let blob = Blob::new(ns, random_bytes(blob_len)).unwrap();
+    let blob = Blob::new(ns, random_bytes(blob_len), AppVersion::V2).unwrap();
 
     let height = blob_submit(&client, &[blob]).await;
     let header = node.get_header_by_height(height).await.unwrap();
@@ -234,7 +234,7 @@ async fn shwap_request_all_blobs() {
     let blobs: Vec<_> = (0..5)
         .map(|_| {
             let blob_len = rand::random::<usize>() % 4096 + 1;
-            Blob::new(ns, random_bytes(blob_len)).unwrap()
+            Blob::new(ns, random_bytes(blob_len), AppVersion::V2).unwrap()
         })
         .collect();
 

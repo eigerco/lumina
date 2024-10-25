@@ -575,6 +575,7 @@ impl P2p {
         timeout: Option<Duration>,
     ) -> Result<Vec<Blob>> {
         let height = header.height().value();
+        let app_version = header.app_version()?;
         let rows_to_fetch: Vec<_> = header
             .dah
             .row_roots()
@@ -595,7 +596,8 @@ impl P2p {
             // and namespace not being present in the block, we fetch
             // whole row (which must be present).
             let row = self.get_row(rows_to_fetch[0], height, timeout).await?;
-            Blob::reconstruct_all(row.shares.iter().filter(|shr| shr.namespace() == namespace))?
+            let shares = row.shares.iter().filter(|shr| shr.namespace() == namespace);
+            Blob::reconstruct_all(shares, app_version)?
         } else {
             // Namespace spans multiple rows so it must be present
             // in the block.
@@ -603,9 +605,9 @@ impl P2p {
                 .into_iter()
                 .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, height, timeout))
                 .collect::<FuturesOrdered<_>>();
-
             let rows: Vec<_> = futs.try_collect().await?;
-            Blob::reconstruct_all(rows.iter().flat_map(|row| row.shares.iter()))?
+            let shares = rows.iter().flat_map(|row| row.shares.iter());
+            Blob::reconstruct_all(shares, app_version)?
         };
 
         Ok(blobs)
