@@ -184,8 +184,11 @@ impl ExtendedHeader {
             &self.commit,
         )?;
 
-        let app_version = AppVersion::from_u64(self.header.version.app)
-            .ok_or_else(|| validation_error!("Invalid or unsupported AppVersion in Header"))?;
+        let app_version = self.header.version.app;
+        let app_version = AppVersion::from_u64(app_version).ok_or_else(|| {
+            validation_error!("Invalid or unsupported AppVersion in header: {app_version}")
+        })?;
+
         self.dah.validate_basic(app_version)?;
 
         Ok(())

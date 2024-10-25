@@ -77,7 +77,7 @@ pub trait ShareClient: ClientT {
         async move {
             let app_version = root.header.version.app;
             let app_version = AppVersion::from_u64(root.header.version.app).ok_or_else(|| {
-                let e = format!("Invalid or unsupported value for AppVersion: {app_version}");
+                let e = format!("Invalid or unsupported AppVersion: {app_version}");
                 Error::Custom(e)
             })?;
 
