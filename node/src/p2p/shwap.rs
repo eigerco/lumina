@@ -113,14 +113,14 @@ mod tests {
     use crate::test_utils::async_test;
     use bytes::BytesMut;
     use celestia_types::consts::appconsts::AppVersion;
-    use celestia_types::test_utils::{generate_eds, ExtendedHeaderGenerator};
+    use celestia_types::test_utils::{generate_dummy_eds, ExtendedHeaderGenerator};
     use celestia_types::{AxisType, DataAvailabilityHeader};
 
     #[async_test]
     async fn hash() {
         let store = Arc::new(InMemoryStore::new());
 
-        let eds = generate_eds(4, AppVersion::V2);
+        let eds = generate_dummy_eds(4, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
 
         let mut gen = ExtendedHeaderGenerator::new();

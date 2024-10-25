@@ -30,10 +30,14 @@ async fn get_share() {
 async fn get_shares_by_namespace() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
-    let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let blobs: Vec<_> = (0..4)
+        .map(|_| {
+            let data = random_bytes(1024);
+            Blob::new(namespace, data.clone(), AppVersion::V2).unwrap()
+        })
+        .collect();
 
-    let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
+    let submitted_height = blob_submit(&client, &blobs).await.unwrap();
 
     let header = client.header_get_by_height(submitted_height).await.unwrap();
 
@@ -42,21 +46,13 @@ async fn get_shares_by_namespace() {
         .await
         .unwrap();
 
-    let seq_len = ns_shares.rows[0].shares[0]
-        .sequence_length()
-        .expect("not parity");
-    assert_eq!(seq_len as usize, data.len());
+    let reconstructed = Blob::reconstruct_all(
+        ns_shares.rows.iter().flat_map(|row| row.shares.iter()),
+        AppVersion::V2,
+    )
+    .unwrap();
 
-    let reconstructed_data = ns_shares
-        .rows
-        .into_iter()
-        .flat_map(|row| row.shares.into_iter())
-        .fold(vec![], |mut acc, share| {
-            acc.extend_from_slice(share.payload().expect("not parity"));
-            acc
-        });
-
-    assert_eq!(&reconstructed_data[..seq_len as usize], &data[..]);
+    assert_eq!(reconstructed, blobs);
 }
 
 #[tokio::test]

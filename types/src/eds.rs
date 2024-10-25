@@ -482,7 +482,7 @@ fn flatten_index(row: u16, col: u16, square_width: u16) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ExtendedHeader;
+    use crate::{test_utils::generate_eds, Blob, ExtendedHeader};
 
     #[test]
     fn axis_type_serialization() {
@@ -863,5 +863,15 @@ mod tests {
         let eds = ExtendedDataSquare::empty();
         let dah = DataAvailabilityHeader::from_eds(&eds);
         assert_eq!(dah, genesis.dah);
+    }
+
+    #[test]
+    fn reconstruct_all() {
+        let eds = generate_eds(8 << (rand::random::<usize>() % 6), AppVersion::V2);
+
+        let blobs = Blob::reconstruct_all(eds.data_square(), AppVersion::V2).unwrap();
+        // first ods row has PFB's, one blob occupies 2 rows, and rest rows have 1 blob each
+        let expected = eds.square_width() as usize / 2 - 2;
+        assert_eq!(blobs.len(), expected);
     }
 }

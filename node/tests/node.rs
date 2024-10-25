@@ -7,7 +7,7 @@ use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::consts::HASH_SIZE;
 use celestia_types::fraud_proof::BadEncodingFraudProof;
 use celestia_types::hash::Hash;
-use celestia_types::test_utils::{corrupt_eds, generate_eds, ExtendedHeaderGenerator};
+use celestia_types::test_utils::{corrupt_eds, generate_dummy_eds, ExtendedHeaderGenerator};
 use futures::StreamExt;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::{gossipsub, identity, noise, ping, tcp, yamux, Multiaddr, SwarmBuilder};
@@ -183,7 +183,7 @@ async fn stops_services_when_network_is_compromised() {
     store.insert(gen.next_many_verified(64)).await.unwrap();
 
     // create a corrupted block and insert it
-    let mut eds = generate_eds(8, AppVersion::V2);
+    let mut eds = generate_dummy_eds(8, AppVersion::V2);
     let (header, befp) = corrupt_eds(&mut gen, &mut eds);
 
     store.insert(header).await.unwrap();

@@ -1,5 +1,7 @@
 //! A browser compatible wrappers for the [`lumina-node`].
 
+use std::time::Duration;
+
 use js_sys::Array;
 use libp2p::identity::Keypair;
 use serde::{Deserialize, Serialize};
@@ -32,6 +34,9 @@ pub struct WasmNodeConfig {
     /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
+    /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
+    /// Headers older than syncing window by more than an hour are eligible for pruning.
+    pub custom_syncing_window_secs: Option<u32>,
 }
 
 /// `NodeClient` is responsible for steering [`NodeWorker`] by sending it commands and receiving
@@ -97,7 +102,7 @@ impl NodeClient {
 
     /// Start a node with the provided config, if it's not running
     pub async fn start(&self, config: &WasmNodeConfig) -> Result<()> {
-        let command = NodeCommand::StartNode(config.to_owned());
+        let command = NodeCommand::StartNode(config.clone());
         let response = self.worker.exec(command).await?;
         response.into_node_started().check_variant()??;
 
@@ -375,6 +380,7 @@ impl WasmNodeConfig {
             bootnodes: canonical_network_bootnodes(network.into())
                 .map(|addr| addr.to_string())
                 .collect::<Vec<_>>(),
+            custom_syncing_window_secs: None,
         }
     }
 
@@ -400,12 +406,17 @@ impl WasmNodeConfig {
             p2p_bootnodes.extend(resolved_addrs.into_iter());
         }
 
+        let syncing_window = self
+            .custom_syncing_window_secs
+            .map(|d| Duration::from_secs(d.into()));
+
         Ok(NodeConfig {
             network_id: network_id.to_string(),
             p2p_bootnodes,
             p2p_local_keypair,
             p2p_listen_on: vec![],
             sync_batch_size: 128,
+            custom_syncing_window: syncing_window,
             blockstore,
             store,
         })

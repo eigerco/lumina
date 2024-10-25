@@ -1,6 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use celestia_rpc::prelude::*;
@@ -38,6 +39,12 @@ pub(crate) struct Params {
     /// Persistent header store path.
     #[arg(short, long = "store")]
     pub(crate) store: Option<PathBuf>,
+
+    /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
+    /// Headers older than syncing window by more than an hour are eligible for pruning.
+    #[arg(long = "syncing-window", verbatim_doc_comment)]
+    #[clap(value_parser = parse_duration::parse)]
+    pub(crate) custom_syncing_window: Option<Duration>,
 }
 
 pub(crate) async fn run(args: Params) -> Result<()> {
@@ -73,6 +80,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         p2p_bootnodes,
         p2p_listen_on: args.listen_addrs,
         sync_batch_size: 512,
+        custom_syncing_window: args.custom_syncing_window,
         blockstore,
         store,
     })

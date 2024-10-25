@@ -10,11 +10,16 @@ use rand::RngCore;
 
 use crate::block::{CommitExt, GENESIS_HEIGHT};
 pub use crate::byzantine::test_utils::corrupt_eds;
-use crate::consts::appconsts::{AppVersion, SHARE_INFO_BYTES, SHARE_SIZE};
+use crate::consts::appconsts::{
+    AppVersion, CONTINUATION_SPARSE_SHARE_CONTENT_SIZE, FIRST_SPARSE_SHARE_CONTENT_SIZE,
+    SHARE_INFO_BYTES, SHARE_SIZE,
+};
 use crate::consts::version;
 use crate::hash::{Hash, HashExt};
 use crate::nmt::{Namespace, NS_SIZE};
-use crate::{DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, ValidatorSet};
+use crate::{
+    Blob, DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, Share, ValidatorSet,
+};
 
 /// [`ExtendedHeader`] generator for testing purposes.
 ///
@@ -356,7 +361,7 @@ pub fn unverify(header: &mut ExtendedHeader) {
 }
 
 /// Generate a properly encoded [`ExtendedDataSquare`] with random data.
-pub fn generate_eds(square_width: usize, app_version: AppVersion) -> ExtendedDataSquare {
+pub fn generate_dummy_eds(square_width: usize, app_version: AppVersion) -> ExtendedDataSquare {
     let ns = Namespace::const_v0(rand::random());
     let ods_width = square_width / 2;
 
@@ -372,6 +377,88 @@ pub fn generate_eds(square_width: usize, app_version: AppVersion) -> ExtendedDat
         .collect();
 
     ExtendedDataSquare::from_ods(shares, app_version).unwrap()
+}
+
+/// Generate a properly encoded [`ExtendedDataSquare`] with random data.
+///
+/// The generated EDS will try to mimic structure of the real blocks,
+/// having some shares from primary reserved namespace and padding shares.
+///
+/// The generated square will have PFB shares and primary reserved namespace padding
+/// in first ODS row. Then it will have a blob that spans 2 rows with padding.
+/// 4th row will have a blob with padding in the same namespace as the previous blob.
+/// Each next row have a blob in random namespace followed by padding, and last one
+/// is padded with tail padding namespace.
+///
+/// Minimum supported square_width is 8.
+pub fn generate_eds(square_width: usize, app_version: AppVersion) -> ExtendedDataSquare {
+    assert!(square_width >= 8);
+
+    let ods_width = square_width / 2;
+    let mut shares = Vec::with_capacity(ods_width * ods_width);
+
+    // pay for blob shares, only in first row
+    let pfb_shares = (rand::random::<usize>() % (ods_width - 1)) + 1;
+    shares.extend((0..pfb_shares).map(|n| {
+        let info_byte = (n == 0) as u8; // first has sequence_start
+        [
+            Namespace::PAY_FOR_BLOB.as_bytes(),
+            &[info_byte][..],
+            &random_bytes(SHARE_SIZE - NS_SIZE - SHARE_INFO_BYTES)[..],
+        ]
+        .concat()
+    }));
+    // primary namespace padding
+    shares.extend((pfb_shares..ods_width).map(|_| {
+        [
+            Namespace::PRIMARY_RESERVED_PADDING.as_bytes(),
+            &[0; SHARE_SIZE - NS_SIZE][..],
+        ]
+        .concat()
+    }));
+
+    // fill rest of rows with user blobs
+    let mut namespaces: Vec<_> = (3..ods_width)
+        .map(|_| Namespace::const_v0(rand::random()))
+        .collect();
+    namespaces.sort();
+
+    // first blob is bigger so that it spans over 2 rows
+    let blob_shares = (rand::random::<usize>() % (ods_width - 1)) + ods_width + 1;
+    let data = random_bytes(blob_len(blob_shares));
+    let blob = Blob::new(namespaces[0], data, app_version).unwrap();
+    shares.extend(blob.to_shares().unwrap().iter().map(Share::to_vec));
+
+    // namespace padding
+    shares.extend(
+        (blob_shares - ods_width..ods_width)
+            .map(|_| [namespaces[0].as_bytes(), &[0; SHARE_SIZE - NS_SIZE][..]].concat()),
+    );
+
+    // rest of the blobs, starting with one in the same namespace as the big one before
+    for ns in &namespaces {
+        let blob_shares = (rand::random::<usize>() % (ods_width - 1)) + 1;
+        let data = random_bytes(blob_len(blob_shares));
+        let blob = Blob::new(*ns, data, app_version).unwrap();
+        shares.extend(blob.to_shares().unwrap().iter().map(Share::to_vec));
+
+        let padding_ns = if ns != namespaces.last().unwrap() {
+            *ns
+        } else {
+            Namespace::TAIL_PADDING
+        };
+        shares.extend(
+            (blob_shares..ods_width)
+                .map(|_| [padding_ns.as_bytes(), &[0; SHARE_SIZE - NS_SIZE][..]].concat()),
+        );
+    }
+
+    ExtendedDataSquare::from_ods(shares, app_version).unwrap()
+}
+
+fn blob_len(shares: usize) -> usize {
+    assert_ne!(shares, 0);
+    FIRST_SPARSE_SHARE_CONTENT_SIZE + (shares - 1) * CONTINUATION_SPARSE_SHARE_CONTENT_SIZE
 }
 
 pub(crate) fn random_bytes(len: usize) -> Vec<u8> {

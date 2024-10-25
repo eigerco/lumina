@@ -74,6 +74,7 @@ async fn new_node(path: impl AsRef<Path>) -> (Node<RedbBlockstore, RedbStore>, E
         sync_batch_size: 512,
         blockstore,
         store,
+        custom_syncing_window: None,
     })
     .await
     .unwrap()

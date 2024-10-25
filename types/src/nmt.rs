@@ -354,6 +354,23 @@ impl Namespace {
             None
         }
     }
+
+    /// Returns true if the namespace is reserved for special purposes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::nmt::Namespace;
+    ///
+    /// let ns = Namespace::new_v0(b"lumina").unwrap();
+    /// assert!(!ns.is_reserved());
+    ///
+    /// assert!(Namespace::PAY_FOR_BLOB.is_reserved());
+    /// assert!(Namespace::PARITY_SHARE.is_reserved());
+    /// ```
+    pub fn is_reserved(&self) -> bool {
+        *self <= Namespace::MAX_PRIMARY_RESERVED || *self >= Namespace::MIN_SECONDARY_RESERVED
+    }
 }
 
 impl From<Namespace> for nmt_rs::NamespaceId<NS_SIZE> {

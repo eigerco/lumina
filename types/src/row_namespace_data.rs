@@ -270,7 +270,8 @@ impl From<RowNamespaceDataId> for CidGeneric<ROW_NAMESPACE_DATA_ID_SIZE> {
 mod tests {
     use super::*;
     use crate::consts::appconsts::AppVersion;
-    use crate::test_utils::generate_eds;
+    use crate::test_utils::{generate_dummy_eds, generate_eds};
+    use crate::Blob;
 
     #[test]
     fn round_trip() {
@@ -378,7 +379,7 @@ mod tests {
     fn test_roundtrip_verify() {
         // random
         for _ in 0..5 {
-            let eds = generate_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
+            let eds = generate_dummy_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
             let dah = DataAvailabilityHeader::from_eds(&eds);
 
             let namespace = eds.share(1, 1).unwrap().namespace();
@@ -393,7 +394,7 @@ mod tests {
         }
 
         // parity share
-        let eds = generate_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
+        let eds = generate_dummy_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         for (id, row) in eds
             .get_namespace_data(Namespace::PARITY_SHARE, &dah, 1)
@@ -404,6 +405,40 @@ mod tests {
             let decoded = RowNamespaceData::decode(id, &buf).unwrap();
 
             decoded.verify(id, &dah).unwrap();
+        }
+    }
+
+    #[test]
+    fn reconstruct_all() {
+        for _ in 0..3 {
+            let eds = generate_eds(8 << (rand::random::<usize>() % 6), AppVersion::V2);
+            let dah = DataAvailabilityHeader::from_eds(&eds);
+
+            let mut namespaces: Vec<_> = eds
+                .data_square()
+                .iter()
+                .map(|shr| shr.namespace())
+                .filter(|ns| !ns.is_reserved())
+                .collect();
+            namespaces.dedup();
+
+            // first namespace should have 2 blobs over 3 rows
+            let namespace_data = eds.get_namespace_data(namespaces[0], &dah, 1).unwrap();
+            assert_eq!(namespace_data.len(), 3);
+            let shares = namespace_data.iter().flat_map(|(_, row)| row.shares.iter());
+
+            let blobs = Blob::reconstruct_all(shares, AppVersion::V2).unwrap();
+            assert_eq!(blobs.len(), 2);
+
+            // rest of namespaces should have 1 blob each
+            for ns in &namespaces[1..] {
+                let namespace_data = eds.get_namespace_data(*ns, &dah, 1).unwrap();
+                assert_eq!(namespace_data.len(), 1);
+                let shares = namespace_data.iter().flat_map(|(_, row)| row.shares.iter());
+
+                let blobs = Blob::reconstruct_all(shares, AppVersion::V2).unwrap();
+                assert_eq!(blobs.len(), 1);
+            }
         }
     }
 }
