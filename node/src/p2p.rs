@@ -585,32 +585,14 @@ impl P2p {
             .map(|(n, _)| n as u16)
             .collect();
 
-        let blobs = if rows_to_fetch.is_empty() {
-            // no row with given ns
-            vec![]
-        } else if rows_to_fetch.len() == 1 {
-            // Namespace may not be present in a block at all.
-            // If row doesn't have any shares of this namespace, shwap
-            // request for given row namespace data would just time out.
-            // To differentiate between data not being in the network
-            // and namespace not being present in the block, we fetch
-            // whole row (which must be present).
-            let row = self.get_row(rows_to_fetch[0], height, timeout).await?;
-            let shares = row.shares.iter().filter(|shr| shr.namespace() == namespace);
-            Blob::reconstruct_all(shares, app_version)?
-        } else {
-            // Namespace spans multiple rows so it must be present
-            // in the block.
-            let futs = rows_to_fetch
-                .into_iter()
-                .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, height, timeout))
-                .collect::<FuturesOrdered<_>>();
-            let rows: Vec<_> = futs.try_collect().await?;
-            let shares = rows.iter().flat_map(|row| row.shares.iter());
-            Blob::reconstruct_all(shares, app_version)?
-        };
+        let futs = rows_to_fetch
+            .into_iter()
+            .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, height, timeout))
+            .collect::<FuturesOrdered<_>>();
+        let rows: Vec<_> = futs.try_collect().await?;
+        let shares = rows.iter().flat_map(|row| row.shares.iter());
 
-        Ok(blobs)
+        Ok(Blob::reconstruct_all(shares, app_version)?)
     }
 
     /// Get the addresses where [`P2p`] listens on for incoming connections.

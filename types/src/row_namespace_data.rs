@@ -79,7 +79,9 @@ impl RowNamespaceData {
     ///
     /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
     pub fn verify(&self, id: RowNamespaceDataId, dah: &DataAvailabilityHeader) -> Result<()> {
-        if self.shares.is_empty() {
+        if (self.shares.is_empty() && self.proof.is_of_presence())
+            || (!self.shares.is_empty() && self.proof.is_of_absence())
+        {
             return Err(Error::WrongProofType);
         }
 
