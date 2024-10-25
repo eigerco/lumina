@@ -566,7 +566,6 @@ impl P2p {
         Ok(row_namespace_data)
     }
 
-    // TODO: Add a version which returns (Vec<Blob>, Vec<RowProof>)?
     /// Request all blobs with provided namespace in block corresponding to this header
     /// on bitswap protocol.
     pub async fn get_all_blobs(
@@ -575,29 +574,39 @@ impl P2p {
         namespace: Namespace,
         timeout: Option<Duration>,
     ) -> Result<Vec<Blob>> {
-        let rows_to_fetch = header
+        let height = header.height().value();
+        let rows_to_fetch: Vec<_> = header
             .dah
             .row_roots()
             .iter()
             .enumerate()
             .filter(|(_, row)| row.contains::<NamespacedSha2Hasher>(*namespace))
-            .map(|(n, _)| n as u16);
+            .map(|(n, _)| n as u16)
+            .collect();
 
-        // TODO: add Row::get_namespace_data(&self, ns, Namespace) -> RowNamespaceData
-        // If there is only a single row, fetch whole row instead. As shwap is
-        // timeout based, we cannot know if there is no node having our data
-        // or there is just no namespace data in given row.
-        // This will allow us return empty Vec early in case there are no blobs,
-        // as the row as a whole must exist.
+        let blobs = if rows_to_fetch.is_empty() {
+            // no row with given ns
+            vec![]
+        } else if rows_to_fetch.len() == 1 {
+            // Namespace may not be present in a block at all.
+            // If row doesn't have any shares of this namespace, shwap
+            // request for given row namespace data would just time out.
+            // To differentiate between data not being in the network
+            // and namespace not being present in the block, we fetch
+            // whole row (which must be present).
+            let row = self.get_row(rows_to_fetch[0], height, timeout).await?;
+            Blob::reconstruct_all(row.shares.iter().filter(|shr| shr.namespace() == namespace))?
+        } else {
+            // Namespace spans multiple rows so it must be present
+            // in the block.
+            let futs = rows_to_fetch
+                .into_iter()
+                .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, height, timeout))
+                .collect::<FuturesOrdered<_>>();
 
-        let futs = rows_to_fetch
-            .map(|row_idx| {
-                self.get_row_namespace_data(namespace, row_idx, header.height().value(), timeout)
-            })
-            .collect::<FuturesOrdered<_>>();
-
-        let rows: Vec<_> = futs.try_collect().await?;
-        let blobs = Blob::reconstruct_all(rows.iter().flat_map(|row| row.shares.iter()))?;
+            let rows: Vec<_> = futs.try_collect().await?;
+            Blob::reconstruct_all(rows.iter().flat_map(|row| row.shares.iter()))?
+        };
 
         Ok(blobs)
     }

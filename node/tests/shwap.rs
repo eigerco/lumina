@@ -251,12 +251,12 @@ async fn shwap_request_all_blobs() {
 
     // check nonexisting namespace
     let ns = Namespace::const_v0(rand::random());
-    let err = node
+    let received = node
         .request_all_blobs(&header, ns, Some(Duration::from_secs(2)))
         .await
-        .unwrap_err();
+        .unwrap();
 
-    assert!(matches!(err, NodeError::P2p(P2pError::BitswapQueryTimeout)));
+    assert!(received.is_empty());
 }
 
 fn random_bytes(len: usize) -> Vec<u8> {
