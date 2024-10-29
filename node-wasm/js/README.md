@@ -947,6 +947,19 @@ lumina\_node\_wasm.d.ts:322
 
 ***
 
+#### custom\_syncing\_window\_secs?
+
+> `optional` **custom\_syncing\_window\_secs**: `number`
+
+Syncing window size, defines maximum age of headers considered for syncing and sampling.
+Headers older than syncing window by more than an hour are eligible for pruning.
+
+##### Defined in
+
+lumina\_node\_wasm.d.ts:327
+
+***
+
 #### network
 
 > **network**: [`Network`](#enumerationsnetworkmd)
@@ -955,7 +968,7 @@ A network to connect to.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:326
+lumina\_node\_wasm.d.ts:331
 
 ### Methods
 
@@ -1050,7 +1063,7 @@ lumina\_node\_wasm.d.ts:318
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:335
+lumina\_node\_wasm.d.ts:340
 
 ### Methods
 
@@ -1064,7 +1077,7 @@ lumina\_node\_wasm.d.ts:335
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:331
+lumina\_node\_wasm.d.ts:336
 
 ***
 
@@ -1078,7 +1091,7 @@ lumina\_node\_wasm.d.ts:331
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:339
+lumina\_node\_wasm.d.ts:344
 
 
 <a name="classespeertrackerinfosnapshotmd"></a>
@@ -1113,7 +1126,7 @@ Number of the connected peers.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:357
+lumina\_node\_wasm.d.ts:362
 
 ***
 
@@ -1125,7 +1138,7 @@ Number of the connected trusted peers.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:361
+lumina\_node\_wasm.d.ts:366
 
 ### Methods
 
@@ -1139,7 +1152,7 @@ lumina\_node\_wasm.d.ts:361
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:353
+lumina\_node\_wasm.d.ts:358
 
 ***
 
@@ -1155,7 +1168,7 @@ lumina\_node\_wasm.d.ts:353
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:348
+lumina\_node\_wasm.d.ts:353
 
 ***
 
@@ -1171,7 +1184,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:352
+lumina\_node\_wasm.d.ts:357
 
 
 <a name="classessyncinginfosnapshotmd"></a>
@@ -1206,7 +1219,7 @@ Ranges of headers that are already synchronised
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:379
+lumina\_node\_wasm.d.ts:384
 
 ***
 
@@ -1218,7 +1231,7 @@ Syncing target. The latest height seen in the network that was successfully veri
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:383
+lumina\_node\_wasm.d.ts:388
 
 ### Methods
 
@@ -1232,7 +1245,7 @@ lumina\_node\_wasm.d.ts:383
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:375
+lumina\_node\_wasm.d.ts:380
 
 ***
 
@@ -1248,7 +1261,7 @@ lumina\_node\_wasm.d.ts:375
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:370
+lumina\_node\_wasm.d.ts:375
 
 ***
 
@@ -1264,7 +1277,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:374
+lumina\_node\_wasm.d.ts:379
 
 # Enumerations
 
