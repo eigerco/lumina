@@ -1,12 +1,14 @@
 use std::convert::Infallible;
 
-//use celestia_proto::cosmos::base::node::v1beta1::{ service_client::ServiceClient as ConfigServiceClient, ConfigRequest, ConfigResponse, };
+use celestia_types::auth::{AuthParams, BaseAccount};
+use celestia_types::blob::BlobParams;
 
 use celestia_proto::celestia::blob::v1 as blob;
 use celestia_proto::cosmos::auth::v1beta1 as auth;
 use celestia_proto::cosmos::base::node::v1beta1 as config;
 use celestia_proto::cosmos::base::tendermint::v1beta1 as tendermint;
 
+use cosmrs::ErrorReport;
 
 use tonic::service::Interceptor;
 use tonic::transport::Channel;
@@ -14,8 +16,8 @@ use tonic::Status;
 
 pub mod types;
 
-use types::IntoGrpcParam;
-use types::{AuthParams, BaseAccount, BlobParams, Block, GasPrice};
+use types::Block;
+use types::{FromGrpcResponse, IntoGrpcParam};
 
 /*
 use celestia_proto::celestia::blob::v1::query_client::QueryClient;
@@ -83,6 +85,12 @@ pub enum Error {
 
     #[error(transparent)]
     TendermintError(#[from] celestia_tendermint::Error),
+
+    #[error(transparent)]
+    CosmrsError(#[from] ErrorReport),
+
+    #[error(transparent)]
+    TendermintProtoError(#[from] celestia_tendermint_proto::Error),
 
     #[error("Failed to parse response")]
     FailedToParseResponse,
@@ -175,11 +183,9 @@ macro_rules! make_method {
                 self.grpc_channel.clone(),
                 self.auth_interceptor.clone(),
             );
-            let response = client
-                .$method(param.into_parameter())
-                .await;
+            let response = client.$method(param.into_parameter()).await;
 
-            Ok(response?.into_inner().try_into()?)
+            Ok(response?.into_inner().try_from_response()?)
         }
     };
     ($path:ident :: $client_module:ident :: $client_struct:ident :: $method:ident; $name:ident () -> $ret:ty) => {
@@ -192,7 +198,7 @@ macro_rules! make_method {
                 .$method(::tonic::Request::new(Default::default()))
                 .await;
 
-            Ok(response?.into_inner().try_into()?)
+            Ok(response?.into_inner().try_from_response()?)
         }
     };
 }
@@ -224,10 +230,12 @@ where
         }
     }
 
-    make_method!(config::service_client::ServiceClient::config; get_min_gas_price() -> GasPrice);
+    make_method!(config::service_client::ServiceClient::config; get_min_gas_price() -> f64);
 
     make_method!(tendermint::service_client::ServiceClient::get_latest_block; get_latest_block() -> Block);
     make_method!(tendermint::service_client::ServiceClient::get_block_by_height; get_block_by_height(i64) -> Block);
+    // TODO get_node_info
+    // make_method!(tendermint::service_client::ServiceClient::get_node_info; get_node_info() -> NodeInfo);
 
     make_method!(blob::query_client::QueryClient::params; get_blob_params() -> BlobParams);
 

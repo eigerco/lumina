@@ -22,8 +22,8 @@ prost-types = "0.13.3"
 # Uncomment to apply local changes
 #beetswap = { path = "../beetswap" }
 #blockstore = { path = "../blockstore" }
-#celestia-tendermint = { path = "../celestia-tendermint-rs/tendermint" }
-#celestia-tendermint-proto = { path = "../celestia-tendermint-rs/proto" }
+celestia-tendermint = { path = "../celestia-tendermint-rs/tendermint" }
+celestia-tendermint-proto = { path = "../celestia-tendermint-rs/proto" }
 #nmt-rs = { path = "../nmt-rs" }
 #libp2p = { path = "../../rust-libp2p/libp2p" }
 #libp2p-core = { path = "../../rust-libp2p/core" }

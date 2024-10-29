@@ -24,7 +24,9 @@ celestia-types.workspace = true
 celestia-proto = { optional = true, workspace = true }
 celestia-tendermint.workspace = true
 prost.workspace = true
+
 async-trait = "0.1.80"
+cosmrs = "0.21.0"
 futures = "0.3.31"
 jsonrpsee = { version = "0.24.2", features = ["client-core", "macros"] }
 serde = { version = "1.0.203", features = ["derive"] }
@@ -57,10 +59,11 @@ getrandom = { version = "0.2.15", features = ["js"] }
 wasm-bindgen-test = "0.3.42"
 
 [features]
-default = ["p2p"]
+default = ["p2p", "secp256k1"]
 tonic_grpc = ["celestia-proto/tonic", "dep:tonic"]
 p2p = ["celestia-types/p2p"]
 wasm-bindgen = ["celestia-types/wasm-bindgen", "jsonrpsee/wasm-client"]
+secp256k1 = ["celestia-tendermint/secp256k1"]
 
 [package.metadata.docs.rs]
 features = ["p2p"]

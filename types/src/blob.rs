@@ -37,6 +37,12 @@ pub struct Blob {
     pub index: Option<u64>,
 }
 
+#[derive(Debug)]
+pub struct BlobParams {
+    pub gas_per_blob_byte: u32,
+    pub gov_max_square_size: u64,
+}
+
 impl Blob {
     /// Create a new blob with the given data within the [`Namespace`].
     ///

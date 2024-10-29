@@ -25,6 +25,7 @@ bech32 = "0.11.0"
 bytes = "1.6.0"
 cid = { version = "0.11.1", default-features = false, features = ["std"] }
 const_format = "0.2.32"
+cosmrs = "0.21.0"
 ed25519-consensus = { version = "2.1.0", optional = true }
 enum_dispatch = "0.3.13"
 leopard-codec = "0.1.0"

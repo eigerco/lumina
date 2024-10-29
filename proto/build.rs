@@ -93,6 +93,7 @@ const PROTO_FILES: &[&str] = &[
     "vendor/share/eds/byzantine/pb/share.proto",
     "vendor/share/shwap/p2p/bitswap/pb/bitswap.proto",
     "vendor/share/shwap/pb/shwap.proto",
+    //"vendor/tendermint/crypto/keys.proto",
     "vendor/tendermint/types/types.proto",
 ];
 
