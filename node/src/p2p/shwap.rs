@@ -3,8 +3,6 @@ use std::sync::Arc;
 use beetswap::multihasher::{Multihasher, MultihasherError};
 use blockstore::block::CidError;
 use celestia_proto::bitswap::Block;
-use celestia_tendermint_proto::Protobuf;
-use celestia_types::nmt::Namespace;
 use celestia_types::row::{Row, RowId, ROW_ID_MULTIHASH_CODE};
 use celestia_types::row_namespace_data::{
     RowNamespaceData, RowNamespaceDataId, ROW_NAMESPACE_DATA_ID_MULTIHASH_CODE,
@@ -50,7 +48,7 @@ where
                     .map_err(MultihasherError::custom_fatal)?;
 
                 let id = <$id_type>::try_from(cid).map_err(MultihasherError::custom_fatal)?;
-                let container = <$container_type>::decode(block.container.as_slice())
+                let container = <$container_type>::decode(id, block.container.as_slice())
                     .map_err(MultihasherError::custom_fatal)?;
 
                 let hash = convert_cid(&id.into())
@@ -83,24 +81,9 @@ where
     }
 }
 
-pub(crate) fn row_cid(row_index: u16, block_height: u64) -> Result<Cid> {
-    let row_id = RowId::new(row_index, block_height).map_err(P2pError::Cid)?;
-    convert_cid(&row_id.into())
-}
-
 pub(crate) fn sample_cid(row_index: u16, column_index: u16, block_height: u64) -> Result<Cid> {
     let sample_id = SampleId::new(row_index, column_index, block_height).map_err(P2pError::Cid)?;
     convert_cid(&sample_id.into())
-}
-
-pub(crate) fn row_namespace_data_cid(
-    namespace: Namespace,
-    row_index: u16,
-    block_height: u64,
-) -> Result<Cid> {
-    let data_id =
-        RowNamespaceDataId::new(namespace, row_index, block_height).map_err(P2pError::Cid)?;
-    convert_cid(&data_id.into())
 }
 
 pub(crate) fn convert_cid<const S: usize>(cid: &CidGeneric<S>) -> Result<Cid> {
@@ -128,21 +111,23 @@ mod tests {
     use super::*;
     use crate::store::InMemoryStore;
     use crate::test_utils::async_test;
-    use celestia_types::test_utils::{generate_eds, ExtendedHeaderGenerator};
+    use bytes::BytesMut;
+    use celestia_types::test_utils::{generate_dummy_eds, ExtendedHeaderGenerator};
     use celestia_types::{AxisType, DataAvailabilityHeader};
 
     #[async_test]
     async fn hash() {
         let store = Arc::new(InMemoryStore::new());
 
-        let eds = generate_eds(4);
+        let eds = generate_dummy_eds(4);
         let dah = DataAvailabilityHeader::from_eds(&eds);
 
         let mut gen = ExtendedHeaderGenerator::new();
         let header = gen.next_with_dah(dah.clone());
 
         let sample = Sample::new(0, 0, AxisType::Row, &eds).unwrap();
-        let sample_bytes = sample.encode_vec().unwrap();
+        let mut sample_bytes = BytesMut::new();
+        sample.encode(&mut sample_bytes);
 
         let cid = sample_cid(0, 0, 1).unwrap();
         let sample_id = SampleId::new(0, 0, 1).unwrap();
@@ -152,7 +137,7 @@ mod tests {
 
         let block = Block {
             cid: cid.to_bytes(),
-            container: sample_bytes,
+            container: sample_bytes.to_vec(),
         };
 
         let hash = ShwapMultihasher::new(store)

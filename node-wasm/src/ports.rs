@@ -196,7 +196,7 @@ impl WorkerClient {
 
         if !worker_response.is_internal_pong() {
             Err(Error::new(&format!(
-                "invalid response, expected InternalPing got {worker_response:?}"
+                "invalid response, expected InternalPong got {worker_response:?}"
             )))
         } else {
             Ok(())
@@ -211,13 +211,23 @@ impl WorkerClient {
             .post_message(&command_value)
             .context("could not post message")?;
 
-        let worker_response = response_channel
-            .recv()
-            .await
-            .expect("response channel should never drop")
-            .context("error executing command")?;
+        loop {
+            let worker_response = response_channel
+                .recv()
+                .await
+                .expect("response channel should never drop")
+                .context("error executing command")?;
 
-        Ok(worker_response)
+            // Skip InternalPong if requested command was not InternalPing.
+            // We use this because ping is meant to be used with timeout but the server might
+            // reply with pong after the timeout is reached.
+            if worker_response.is_internal_pong() && !matches!(&command, NodeCommand::InternalPing)
+            {
+                continue;
+            }
+
+            return Ok(worker_response);
+        }
     }
 }
 

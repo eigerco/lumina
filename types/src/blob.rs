@@ -1,15 +1,18 @@
 //! Types related to creation and submission of blobs.
 
-pub use celestia_tendermint_proto::v0_34::types::Blob as RawBlob;
+use std::iter;
+
 use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
 
 mod commitment;
 
-pub use self::commitment::Commitment;
 use crate::consts::appconsts;
 use crate::nmt::Namespace;
 use crate::{bail_validation, Error, Result, Share};
+
+pub use self::commitment::Commitment;
+pub use celestia_tendermint_proto::v0_34::types::Blob as RawBlob;
 
 /// Arbitrary data that can be stored in the network within certain [`Namespace`].
 // NOTE: We don't use the `serde(try_from)` pattern for this type
@@ -135,6 +138,133 @@ impl Blob {
     pub fn to_shares(&self) -> Result<Vec<Share>> {
         commitment::split_blob_to_shares(self.namespace, self.share_version, &self.data)
     }
+
+    /// Reconstructs a blob from shares.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - there is not enough shares to reconstruct the blob
+    /// - blob doesn't start with the first share
+    /// - shares are from any reserved namespace
+    /// - shares for the blob have different namespaces / share version
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::Blob;
+    /// # use celestia_types::nmt::Namespace;
+    /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
+    ///
+    /// let blob = Blob::new(namespace, b"foo".to_vec()).unwrap();
+    /// let shares = blob.to_shares().unwrap();
+    ///
+    /// let reconstructed = Blob::reconstruct(&shares).unwrap();
+    ///
+    /// assert_eq!(blob, reconstructed);
+    /// ```
+    pub fn reconstruct<'a, I>(shares: I) -> Result<Self>
+    where
+        I: IntoIterator<Item = &'a Share>,
+    {
+        let mut shares = shares.into_iter();
+        let first_share = shares.next().ok_or(Error::MissingShares)?;
+        let blob_len = first_share
+            .sequence_length()
+            .ok_or(Error::ExpectedShareWithSequenceStart)?;
+        let namespace = first_share.namespace();
+        if namespace.is_reserved() {
+            return Err(Error::UnexpectedReservedNamespace);
+        }
+        let share_version = first_share.info_byte().expect("non parity").version();
+
+        let shares_needed = shares_needed_for_blob(blob_len as usize);
+        let mut data =
+            Vec::with_capacity(shares_needed * appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE);
+        data.extend_from_slice(first_share.payload().expect("non parity"));
+
+        for _ in 1..shares_needed {
+            let share = shares.next().ok_or(Error::MissingShares)?;
+            if share.namespace() != namespace {
+                return Err(Error::BlobSharesMetadataMismatch(format!(
+                    "expected namespace ({:?}) got ({:?})",
+                    namespace,
+                    share.namespace()
+                )));
+            }
+            let version = share.info_byte().expect("non parity").version();
+            if version != share_version {
+                return Err(Error::BlobSharesMetadataMismatch(format!(
+                    "expected share version ({}) got ({})",
+                    share_version, version
+                )));
+            }
+            if share.sequence_length().is_some() {
+                return Err(Error::UnexpectedSequenceStart);
+            }
+            data.extend_from_slice(share.payload().expect("non parity"));
+        }
+
+        // remove padding
+        data.truncate(blob_len as usize);
+
+        Self::new(namespace, data)
+    }
+
+    /// Reconstructs all the blobs from shares.
+    ///
+    /// This function will seek shares that indicate start of the next blob (with
+    /// [`Share::sequence_length`]) and pass them to [`Blob::reconstruct`].
+    /// It will automatically ignore all shares that are within reserved namespaces
+    /// e.g. it is completely fine to pass whole [`ExtendedDataSquare`] to this
+    /// function and get all blobs in the block.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from [`Blob::reconstruct`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::Blob;
+    /// # use celestia_types::nmt::Namespace;
+    /// # let namespace1 = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
+    /// # let namespace2 = Namespace::new_v0(&[2, 3, 4, 5, 6]).expect("Invalid namespace");
+    ///
+    /// let blobs = vec![
+    ///     Blob::new(namespace1, b"foo".to_vec()).unwrap(),
+    ///     Blob::new(namespace2, b"bar".to_vec()).unwrap(),
+    /// ];
+    /// let shares: Vec<_> = blobs.iter().flat_map(|blob| blob.to_shares().unwrap()).collect();
+    ///
+    /// let reconstructed = Blob::reconstruct_all(&shares).unwrap();
+    ///
+    /// assert_eq!(blobs, reconstructed);
+    /// ```
+    ///
+    /// [`ExtendedDataSquare`]: crate::ExtendedDataSquare
+    pub fn reconstruct_all<'a, I>(shares: I) -> Result<Vec<Self>>
+    where
+        I: IntoIterator<Item = &'a Share>,
+    {
+        let mut shares = shares
+            .into_iter()
+            .filter(|shr| !shr.namespace().is_reserved());
+        let mut blobs = Vec::with_capacity(2);
+
+        loop {
+            let mut blob = {
+                // find next share from blobs namespace that is sequence start
+                let Some(start) = shares.find(|&shr| shr.sequence_length().is_some()) else {
+                    break;
+                };
+                iter::once(start).chain(&mut shares)
+            };
+            blobs.push(Blob::reconstruct(&mut blob)?);
+        }
+
+        Ok(blobs)
+    }
 }
 
 impl Protobuf<RawBlob> for Blob {}
@@ -168,6 +298,15 @@ impl From<Blob> for RawBlob {
     }
 }
 
+fn shares_needed_for_blob(blob_len: usize) -> usize {
+    let Some(without_first_share) =
+        blob_len.checked_sub(appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE)
+    else {
+        return 1;
+    };
+    1 + without_first_share.div_ceil(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+}
+
 mod index_serde {
     use serde::ser::Error;
     use serde::{Deserialize, Deserializer, Serializer};
@@ -197,6 +336,8 @@ mod index_serde {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::nmt::{NS_ID_SIZE, NS_SIZE};
+    use crate::test_utils::random_bytes;
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -247,5 +388,146 @@ mod tests {
             }"#,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn reconstruct() {
+        for _ in 0..10 {
+            let len = rand::random::<usize>() % 1024 * 1024;
+            let data = random_bytes(len);
+            let ns = Namespace::const_v0(rand::random());
+            let blob = Blob::new(ns, data).unwrap();
+
+            let shares = blob.to_shares().unwrap();
+            assert_eq!(blob, Blob::reconstruct(&shares).unwrap());
+        }
+    }
+
+    #[test]
+    fn reconstruct_empty() {
+        assert!(matches!(
+            Blob::reconstruct(&Vec::<Share>::new()),
+            Err(Error::MissingShares)
+        ));
+    }
+
+    #[test]
+    fn reconstruct_not_sequence_start() {
+        let len = rand::random::<usize>() % 1024 * 1024;
+        let data = random_bytes(len);
+        let ns = Namespace::const_v0(rand::random());
+        let mut shares = Blob::new(ns, data).unwrap().to_shares().unwrap();
+
+        // modify info byte to remove sequence start bit
+        shares[0].as_mut()[NS_SIZE] &= 0b11111110;
+
+        assert!(matches!(
+            Blob::reconstruct(&shares),
+            Err(Error::ExpectedShareWithSequenceStart)
+        ));
+    }
+
+    #[test]
+    fn reconstruct_reserved_namespace() {
+        for ns in (0..255).flat_map(|n| {
+            let mut v0 = [0; NS_ID_SIZE];
+            *v0.last_mut().unwrap() = n;
+            let mut v255 = [0xff; NS_ID_SIZE];
+            *v255.last_mut().unwrap() = n;
+
+            [Namespace::new_v0(&v0), Namespace::new_v255(&v255)]
+        }) {
+            let len = (rand::random::<usize>() % 1023 + 1) * 2;
+            let data = random_bytes(len);
+            let shares = Blob::new(ns.unwrap(), data).unwrap().to_shares().unwrap();
+
+            assert!(matches!(
+                Blob::reconstruct(&shares),
+                Err(Error::UnexpectedReservedNamespace)
+            ));
+        }
+    }
+
+    #[test]
+    fn reconstruct_not_enough_shares() {
+        let len = rand::random::<usize>() % 1024 * 1024 + 2048;
+        let data = random_bytes(len);
+        let ns = Namespace::const_v0(rand::random());
+        let shares = Blob::new(ns, data).unwrap().to_shares().unwrap();
+
+        assert!(matches!(
+            // minimum for len is 4 so 3 will break stuff
+            Blob::reconstruct(&shares[..2]),
+            Err(Error::MissingShares)
+        ));
+    }
+
+    #[test]
+    fn reconstruct_inconsistent_share_version() {
+        let len = rand::random::<usize>() % 1024 * 1024 + 512;
+        let data = random_bytes(len);
+        let ns = Namespace::const_v0(rand::random());
+        let mut shares = Blob::new(ns, data).unwrap().to_shares().unwrap();
+
+        // change share version in second share
+        shares[1].as_mut()[NS_SIZE] = 0b11111110;
+
+        assert!(matches!(
+            Blob::reconstruct(&shares),
+            Err(Error::BlobSharesMetadataMismatch(..))
+        ));
+    }
+
+    #[test]
+    fn reconstruct_inconsistent_namespace() {
+        let len = rand::random::<usize>() % 1024 * 1024 + 512;
+        let data = random_bytes(len);
+        let ns = Namespace::const_v0(rand::random());
+        let ns2 = Namespace::const_v0(rand::random());
+        let mut shares = Blob::new(ns, data).unwrap().to_shares().unwrap();
+
+        // change namespace in second share
+        shares[1].as_mut()[..NS_SIZE].copy_from_slice(ns2.as_bytes());
+
+        assert!(matches!(
+            Blob::reconstruct(&shares),
+            Err(Error::BlobSharesMetadataMismatch(..))
+        ));
+    }
+
+    #[test]
+    fn reconstruct_unexpected_sequence_start() {
+        let len = rand::random::<usize>() % 1024 * 1024 + 512;
+        let data = random_bytes(len);
+        let ns = Namespace::const_v0(rand::random());
+        let mut shares = Blob::new(ns, data).unwrap().to_shares().unwrap();
+
+        // modify info byte to add sequence start bit
+        shares[1].as_mut()[NS_SIZE] |= 0b00000001;
+
+        assert!(matches!(
+            Blob::reconstruct(&shares),
+            Err(Error::UnexpectedSequenceStart)
+        ));
+    }
+
+    #[test]
+    fn reconstruct_all() {
+        let blobs: Vec<_> = (0..rand::random::<usize>() % 16 + 3)
+            .map(|_| {
+                let len = rand::random::<usize>() % 1024 * 1024 + 512;
+                let data = random_bytes(len);
+                let ns = Namespace::const_v0(rand::random());
+                Blob::new(ns, data).unwrap()
+            })
+            .collect();
+
+        let shares: Vec<_> = blobs
+            .iter()
+            .flat_map(|blob| blob.to_shares().unwrap())
+            .collect();
+        let reconstructed = Blob::reconstruct_all(&shares).unwrap();
+
+        assert_eq!(blobs, reconstructed);
     }
 }

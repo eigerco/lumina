@@ -58,6 +58,7 @@ pub fn test_node_config() -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
         sync_batch_size: 512,
         blockstore: InMemoryBlockstore::new(),
         store: InMemoryStore::new(),
+        custom_syncing_window: None,
     }
 }
 

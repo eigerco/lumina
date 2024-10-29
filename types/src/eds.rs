@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt::Display;
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::consts::appconsts::SHARE_SIZE;
 use crate::consts::data_availability_header::{
@@ -9,12 +9,12 @@ use crate::consts::data_availability_header::{
 };
 use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NmtExt, NS_SIZE};
 use crate::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
-use crate::{bail_validation, DataAvailabilityHeader, Error, InfoByte, Result};
+use crate::{bail_validation, DataAvailabilityHeader, Error, InfoByte, Result, Share};
 
 /// Represents either column or row of the [`ExtendedDataSquare`].
 ///
-/// [`ExtendedDataSquare`]: crate::rsmt2d::ExtendedDataSquare
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+/// [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum AxisType {
     /// A row of the data square.
@@ -128,15 +128,14 @@ impl Display for AxisType {
 /// [`Nmt`]: crate::nmt::Nmt
 /// [`Share`]: crate::share::Share
 /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawExtendedDataSquare", into = "RawExtendedDataSquare")]
 pub struct ExtendedDataSquare {
     /// The raw data of the EDS.
-    #[serde(with = "celestia_tendermint_proto::serializers::bytes::vec_base64string")]
-    data_square: Vec<Vec<u8>>,
+    data_square: Vec<Share>,
     /// The codec used to encode parity shares.
     codec: String,
     /// pre-calculated square length
-    #[serde(skip)]
     square_width: u16,
 }
 
@@ -187,26 +186,15 @@ impl ExtendedDataSquare {
             return Err(Error::EdsInvalidDimentions);
         }
 
-        let eds = ExtendedDataSquare {
-            data_square: shares,
-            codec,
-            square_width,
-        };
-
-        let check_share = |row, col, prev_ns: Option<Namespace>, axis| -> Result<Namespace> {
-            let share = eds.share(row, col)?;
-
-            if share.len() != SHARE_SIZE {
-                bail_validation!("share len ({}) != SHARE_SIZE ({})", share.len(), SHARE_SIZE);
-            }
-
-            let ns = if is_ods_square(row, col, eds.square_width()) {
-                Namespace::from_raw(&share[..NS_SIZE])?
+        let check_share = |row, col, prev_ns: Option<Namespace>, axis| -> Result<Share> {
+            let idx = flatten_index(row, col, square_width);
+            let share = if is_ods_square(row, col, square_width) {
+                Share::from_raw(&shares[idx])?
             } else {
-                Namespace::PARITY_SHARE
+                Share::parity(&shares[idx])?
             };
 
-            if prev_ns.map_or(false, |prev_ns| ns < prev_ns) {
+            if prev_ns.map_or(false, |prev_ns| share.namespace() < prev_ns) {
                 let axis_idx = match axis {
                     AxisType::Row => row,
                     AxisType::Col => col,
@@ -214,25 +202,35 @@ impl ExtendedDataSquare {
                 bail_validation!("Shares of {axis} {axis_idx} are not sorted by their namespace");
             }
 
-            Ok(ns)
+            Ok(share)
         };
 
-        // Validate that namespaces of each row are sorted
-        for row in 0..eds.square_width() {
-            let mut prev_ns = None;
-
-            for col in 0..eds.square_width() {
-                prev_ns = Some(check_share(row, col, prev_ns, AxisType::Row)?);
-            }
-        }
         // Validate that namespaces of each column are sorted
-        for col in 0..eds.square_width() {
+        for col in 0..square_width {
             let mut prev_ns = None;
 
-            for row in 0..eds.square_width() {
-                prev_ns = Some(check_share(row, col, prev_ns, AxisType::Col)?);
+            for row in 0..square_width {
+                let share = check_share(row, col, prev_ns, AxisType::Col)?;
+                prev_ns = Some(share.namespace());
             }
         }
+        // Validate that namespaces of each row are sorted collecting data square
+        let mut data_square = Vec::with_capacity(shares.len());
+        for row in 0..square_width {
+            let mut prev_ns = None;
+
+            for col in 0..square_width {
+                let share = check_share(row, col, prev_ns, AxisType::Row)?;
+                prev_ns = Some(share.namespace());
+                data_square.push(share);
+            }
+        }
+
+        let eds = ExtendedDataSquare {
+            data_square,
+            codec,
+            square_width,
+        };
 
         Ok(eds)
     }
@@ -300,7 +298,7 @@ impl ExtendedDataSquare {
     }
 
     /// The raw data of the EDS.
-    pub fn data_square(&self) -> &[Vec<u8>] {
+    pub fn data_square(&self) -> &[Share] {
         &self.data_square
     }
 
@@ -310,28 +308,26 @@ impl ExtendedDataSquare {
     }
 
     /// Returns the share of the provided coordinates.
-    pub fn share(&self, row: u16, column: u16) -> Result<&[u8]> {
+    pub fn share(&self, row: u16, column: u16) -> Result<&Share> {
         let index = usize::from(row) * usize::from(self.square_width) + usize::from(column);
 
         self.data_square
             .get(index)
-            .map(Vec::as_slice)
             .ok_or(Error::EdsIndexOutOfRange(row, column))
     }
 
     /// Returns the mutable share of the provided coordinates.
     #[cfg(any(test, feature = "test-utils"))]
-    pub(crate) fn share_mut(&mut self, row: u16, column: u16) -> Result<&mut [u8]> {
-        let index = usize::from(row) * usize::from(self.square_width) + usize::from(column);
+    pub(crate) fn share_mut(&mut self, row: u16, column: u16) -> Result<&mut Share> {
+        let index = flatten_index(row, column, self.square_width);
 
         self.data_square
             .get_mut(index)
-            .map(Vec::as_mut_slice)
             .ok_or(Error::EdsIndexOutOfRange(row, column))
     }
 
     /// Returns the shares of a row.
-    pub fn row(&self, index: u16) -> Result<Vec<Vec<u8>>> {
+    pub fn row(&self, index: u16) -> Result<Vec<Share>> {
         self.axis(AxisType::Row, index)
     }
 
@@ -341,7 +337,7 @@ impl ExtendedDataSquare {
     }
 
     /// Returns the shares of a column.
-    pub fn column(&self, index: u16) -> Result<Vec<Vec<u8>>> {
+    pub fn column(&self, index: u16) -> Result<Vec<Share>> {
         self.axis(AxisType::Col, index)
     }
 
@@ -351,7 +347,7 @@ impl ExtendedDataSquare {
     }
 
     /// Returns the shares of column or row.
-    pub fn axis(&self, axis: AxisType, index: u16) -> Result<Vec<Vec<u8>>> {
+    pub fn axis(&self, axis: AxisType, index: u16) -> Result<Vec<Share>> {
         (0..self.square_width)
             .map(|i| {
                 let (row, col) = match axis {
@@ -376,13 +372,8 @@ impl ExtendedDataSquare {
 
             let share = self.share(row, col)?;
 
-            let ns = if is_ods_square(col, row, self.square_width) {
-                Namespace::from_raw(&share[..NS_SIZE])?
-            } else {
-                Namespace::PARITY_SHARE
-            };
-
-            tree.push_leaf(share, *ns).map_err(Error::Nmt)?;
+            tree.push_leaf(share.as_ref(), *share.namespace())
+                .map_err(Error::Nmt)?;
         }
 
         Ok(tree)
@@ -417,17 +408,11 @@ impl ExtendedDataSquare {
             for col in 0..self.square_width {
                 let share = self.share(row, col)?;
 
-                let ns = if is_ods_square(row, col, self.square_width) {
-                    Namespace::from_raw(&share[..NS_SIZE])?
-                } else {
-                    Namespace::PARITY_SHARE
-                };
-
                 // Shares in each row of EDS are sorted by namespace, so we
                 // can stop search the row if we reach to a bigger namespace.
-                match ns.cmp(&namespace) {
+                match share.namespace().cmp(&namespace) {
                     Ordering::Less => {}
-                    Ordering::Equal => shares.push(share.to_vec()),
+                    Ordering::Equal => shares.push(share.clone()),
                     Ordering::Greater => break,
                 }
             }
@@ -446,26 +431,31 @@ impl ExtendedDataSquare {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct RawExtendedDataSquare {
     #[serde(with = "celestia_tendermint_proto::serializers::bytes::vec_base64string")]
     pub data_square: Vec<Vec<u8>>,
     pub codec: String,
 }
 
-impl<'de> Deserialize<'de> for ExtendedDataSquare {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let eds = RawExtendedDataSquare::deserialize(deserializer)?;
-        let share_number = eds.data_square.len();
-        ExtendedDataSquare::new(eds.data_square, eds.codec).map_err(|_| {
-            <D::Error as serde::de::Error>::invalid_length(
-                share_number,
-                &"number of shares must be a perfect square",
-            )
-        })
+impl TryFrom<RawExtendedDataSquare> for ExtendedDataSquare {
+    type Error = Error;
+
+    fn try_from(eds: RawExtendedDataSquare) -> Result<Self> {
+        ExtendedDataSquare::new(eds.data_square, eds.codec)
+    }
+}
+
+impl From<ExtendedDataSquare> for RawExtendedDataSquare {
+    fn from(eds: ExtendedDataSquare) -> RawExtendedDataSquare {
+        RawExtendedDataSquare {
+            data_square: eds
+                .data_square
+                .into_iter()
+                .map(|shr| shr.to_vec())
+                .collect(),
+            codec: eds.codec,
+        }
     }
 }
 
@@ -476,10 +466,14 @@ pub(crate) fn is_ods_square(row: u16, column: u16, square_width: u16) -> bool {
     row < ods_width && column < ods_width
 }
 
+fn flatten_index(row: u16, col: u16, square_width: u16) -> usize {
+    usize::from(row) * usize::from(square_width) + usize::from(col)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ExtendedHeader;
+    use crate::{test_utils::generate_eds, Blob, ExtendedHeader};
 
     #[test]
     fn axis_type_serialization() {
@@ -580,90 +574,177 @@ mod tests {
 
     #[test]
     fn get_row_and_col() {
-        let share = |x, y| {
+        let raw_share = |x, y| {
             [
                 Namespace::new_v0(&[x, y]).unwrap().as_bytes(),
                 &[0u8; SHARE_SIZE - NS_SIZE][..],
             ]
             .concat()
         };
+        let share = |x, y, parity: bool| {
+            if !parity {
+                Share::from_raw(&raw_share(x, y)).unwrap()
+            } else {
+                Share::parity(&raw_share(x, y)).unwrap()
+            }
+        };
 
         #[rustfmt::skip]
         let shares = vec![
-            share(0, 0), share(0, 1), share(0, 2), share(0, 3),
-            share(1, 0), share(1, 1), share(1, 2), share(1, 3),
-            share(2, 0), share(2, 1), share(2, 2), share(2, 3),
-            share(3, 0), share(3, 1), share(3, 2), share(3, 3),
+            raw_share(0, 0), raw_share(0, 1), raw_share(0, 2), raw_share(0, 3),
+            raw_share(1, 0), raw_share(1, 1), raw_share(1, 2), raw_share(1, 3),
+            raw_share(2, 0), raw_share(2, 1), raw_share(2, 2), raw_share(2, 3),
+            raw_share(3, 0), raw_share(3, 1), raw_share(3, 2), raw_share(3, 3),
         ];
 
         let eds = ExtendedDataSquare::new(shares, "fake".to_string()).unwrap();
 
         assert_eq!(
             eds.row(0).unwrap(),
-            vec![share(0, 0), share(0, 1), share(0, 2), share(0, 3)]
+            vec![
+                share(0, 0, false),
+                share(0, 1, false),
+                share(0, 2, true),
+                share(0, 3, true)
+            ],
         );
         assert_eq!(
             eds.row(1).unwrap(),
-            vec![share(1, 0), share(1, 1), share(1, 2), share(1, 3)]
+            vec![
+                share(1, 0, false),
+                share(1, 1, false),
+                share(1, 2, true),
+                share(1, 3, true)
+            ],
         );
         assert_eq!(
             eds.row(2).unwrap(),
-            vec![share(2, 0), share(2, 1), share(2, 2), share(2, 3)]
+            vec![
+                share(2, 0, true),
+                share(2, 1, true),
+                share(2, 2, true),
+                share(2, 3, true)
+            ],
         );
         assert_eq!(
             eds.row(3).unwrap(),
-            vec![share(3, 0), share(3, 1), share(3, 2), share(3, 3)]
+            vec![
+                share(3, 0, true),
+                share(3, 1, true),
+                share(3, 2, true),
+                share(3, 3, true)
+            ],
         );
 
         assert_eq!(
             eds.axis(AxisType::Row, 0).unwrap(),
-            vec![share(0, 0), share(0, 1), share(0, 2), share(0, 3)]
+            vec![
+                share(0, 0, false),
+                share(0, 1, false),
+                share(0, 2, true),
+                share(0, 3, true)
+            ],
         );
         assert_eq!(
             eds.axis(AxisType::Row, 1).unwrap(),
-            vec![share(1, 0), share(1, 1), share(1, 2), share(1, 3)]
+            vec![
+                share(1, 0, false),
+                share(1, 1, false),
+                share(1, 2, true),
+                share(1, 3, true)
+            ],
         );
         assert_eq!(
             eds.axis(AxisType::Row, 2).unwrap(),
-            vec![share(2, 0), share(2, 1), share(2, 2), share(2, 3)]
+            vec![
+                share(2, 0, true),
+                share(2, 1, true),
+                share(2, 2, true),
+                share(2, 3, true)
+            ],
         );
         assert_eq!(
             eds.axis(AxisType::Row, 3).unwrap(),
-            vec![share(3, 0), share(3, 1), share(3, 2), share(3, 3)]
+            vec![
+                share(3, 0, true),
+                share(3, 1, true),
+                share(3, 2, true),
+                share(3, 3, true)
+            ],
         );
 
         assert_eq!(
             eds.column(0).unwrap(),
-            vec![share(0, 0), share(1, 0), share(2, 0), share(3, 0)]
+            vec![
+                share(0, 0, false),
+                share(1, 0, false),
+                share(2, 0, true),
+                share(3, 0, true)
+            ],
         );
         assert_eq!(
             eds.column(1).unwrap(),
-            vec![share(0, 1), share(1, 1), share(2, 1), share(3, 1)]
+            vec![
+                share(0, 1, false),
+                share(1, 1, false),
+                share(2, 1, true),
+                share(3, 1, true)
+            ],
         );
         assert_eq!(
             eds.column(2).unwrap(),
-            vec![share(0, 2), share(1, 2), share(2, 2), share(3, 2)]
+            vec![
+                share(0, 2, true),
+                share(1, 2, true),
+                share(2, 2, true),
+                share(3, 2, true)
+            ],
         );
         assert_eq!(
             eds.column(3).unwrap(),
-            vec![share(0, 3), share(1, 3), share(2, 3), share(3, 3)]
+            vec![
+                share(0, 3, true),
+                share(1, 3, true),
+                share(2, 3, true),
+                share(3, 3, true)
+            ],
         );
 
         assert_eq!(
             eds.axis(AxisType::Col, 0).unwrap(),
-            vec![share(0, 0), share(1, 0), share(2, 0), share(3, 0)]
+            vec![
+                share(0, 0, false),
+                share(1, 0, false),
+                share(2, 0, true),
+                share(3, 0, true)
+            ],
         );
         assert_eq!(
             eds.axis(AxisType::Col, 1).unwrap(),
-            vec![share(0, 1), share(1, 1), share(2, 1), share(3, 1)]
+            vec![
+                share(0, 1, false),
+                share(1, 1, false),
+                share(2, 1, true),
+                share(3, 1, true)
+            ],
         );
         assert_eq!(
             eds.axis(AxisType::Col, 2).unwrap(),
-            vec![share(0, 2), share(1, 2), share(2, 2), share(3, 2)]
+            vec![
+                share(0, 2, true),
+                share(1, 2, true),
+                share(2, 2, true),
+                share(3, 2, true)
+            ],
         );
         assert_eq!(
             eds.axis(AxisType::Col, 3).unwrap(),
-            vec![share(0, 3), share(1, 3), share(2, 3), share(3, 3)]
+            vec![
+                share(0, 3, true),
+                share(1, 3, true),
+                share(2, 3, true),
+                share(3, 3, true)
+            ],
         );
     }
 
@@ -739,5 +820,15 @@ mod tests {
         let eds = ExtendedDataSquare::empty();
         let dah = DataAvailabilityHeader::from_eds(&eds);
         assert_eq!(dah, genesis.dah);
+    }
+
+    #[test]
+    fn reconstruct_all() {
+        let eds = generate_eds(8 << (rand::random::<usize>() % 6));
+
+        let blobs = Blob::reconstruct_all(eds.data_square()).unwrap();
+        // first ods row has PFB's, one blob occupies 2 rows, and rest rows have 1 blob each
+        let expected = eds.square_width() as usize / 2 - 2;
+        assert_eq!(blobs.len(), expected);
     }
 }
