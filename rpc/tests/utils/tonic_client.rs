@@ -9,7 +9,9 @@ use tonic::{Request, Status};
 
 use celestia_rpc::tonic::GrpcClient;
 
-const CELESTIA_GRPC_URL: &str = "http://localhost:9090";
+//const CELESTIA_GRPC_URL: &str = "http://localhost:9090";
+//const CELESTIA_GRPC_URL: &str = "https://public-celestia-consensus.numia.xyz:9090";
+const CELESTIA_GRPC_URL: &str = "https://rpc.celestia.pops.one:9090";
 
 #[derive(Clone)]
 pub struct TestAuthInterceptor {

@@ -1,9 +1,21 @@
-use celestia_proto::cosmos::base::node::v1beta1::{
-    service_client::ServiceClient as ConfigServiceClient, ConfigRequest,
-};
+use std::convert::Infallible;
+
+//use celestia_proto::cosmos::base::node::v1beta1::{ service_client::ServiceClient as ConfigServiceClient, ConfigRequest, ConfigResponse, };
+
+use celestia_proto::celestia::blob::v1 as blob;
+use celestia_proto::cosmos::auth::v1beta1 as auth;
+use celestia_proto::cosmos::base::node::v1beta1 as config;
+use celestia_proto::cosmos::base::tendermint::v1beta1 as tendermint;
+
+
 use tonic::service::Interceptor;
 use tonic::transport::Channel;
 use tonic::Status;
+
+pub mod types;
+
+use types::IntoGrpcParam;
+use types::{AuthParams, BaseAccount, BlobParams, Block, GasPrice};
 
 /*
 use celestia_proto::celestia::blob::v1::query_client::QueryClient;
@@ -69,8 +81,18 @@ pub enum Error {
     #[error(transparent)]
     TonicError(#[from] Status),
 
+    #[error(transparent)]
+    TendermintError(#[from] celestia_tendermint::Error),
+
     #[error("Failed to parse response")]
     FailedToParseResponse,
+
+    #[error("Unexpected response type")]
+    UnexpectedResponseType(String),
+
+    /// Unreachable. Added to appease try_into conversion for GrpcClient method macro
+    #[error(transparent)]
+    Infallible(#[from] Infallible),
 }
 
 pub struct GrpcClient<I>
@@ -80,6 +102,116 @@ where
     grpc_channel: Channel,
     auth_interceptor: I,
 }
+
+/*
+macro_rules! make_method {
+    ($name:ident, $service_client:ident, $method:ident, $param:ty, $ret:ty) => {
+        pub async fn $name(&mut self, param: $param) -> Result<$ret, Error> {
+            let mut service_client =
+                $service_client::service_client::ServiceClient::with_interceptor(
+                    self.grpc_channel.clone(),
+                    self.auth_interceptor.clone(),
+                );
+            let response = service_client.$method(param).await;
+
+            Ok(response?.into_inner().try_into()?)
+        }
+    };
+    ($name:ident, $service_client:ident, $method:ident, $ret:ty) => {
+        pub async fn $name(&mut self) -> Result<$ret, Error> {
+            let mut service_client =
+                $service_client::service_client::ServiceClient::with_interceptor(
+                    self.grpc_channel.clone(),
+                    self.auth_interceptor.clone(),
+                );
+            let response = service_client
+                .$method(::tonic::Request::new(Default::default()))
+                .await;
+
+            Ok(response?.into_inner().try_into()?)
+        }
+    };
+}
+
+macro_rules! make_query {
+    ($name:ident, $service_client:ident, $method:ident, $param:ty, $ret:ty) => {
+        pub async fn $name(&mut self, param: $param) -> Result<$ret, Error> {
+            let mut client = $service_client::query_client::QueryClient::with_interceptor(
+                self.grpc_channel.clone(),
+                self.auth_interceptor.clone(),
+            );
+            let response = client.$method(param).await;
+
+            Ok(response?.into_inner().try_into()?)
+        }
+    };
+    ($name:ident, $service_client:ident, $method:ident, $ret:ty) => {
+        pub async fn $name(&mut self) -> Result<$ret, Error> {
+            let mut client = $service_client::query_client::QueryClient::with_interceptor(
+                self.grpc_channel.clone(),
+                self.auth_interceptor.clone(),
+            );
+            let response = client
+                .$method(::tonic::Request::new(Default::default()))
+                .await;
+
+            Ok(response?.into_inner().try_into()?)
+        }
+    };
+}
+*/
+
+// macro takes a path to an appropriate generated gRPC method and a desired function signature.
+// If parameters need to be converted, they should implement [`types::IntoGrpcParam`] into
+// appropriate type and return type is converted using TryFrom
+//
+// One limitation is that it expects gRPC method to be provided in exactly 4 `::` delimited
+// segments, requiring importing the proto module with `as`. This might be possible to overcome
+// by rewriting the macro as tt-muncher, but it'd increase its complexity significantly
+macro_rules! make_method {
+    ($path:ident :: $client_module:ident :: $client_struct:ident :: $method:ident; $name:ident ( $param:ty ) -> $ret:ty) => {
+        pub async fn $name(&mut self, param: $param) -> Result<$ret, Error> {
+            let mut client = $path::$client_module::$client_struct::with_interceptor(
+                self.grpc_channel.clone(),
+                self.auth_interceptor.clone(),
+            );
+            let response = client
+                .$method(param.into_parameter())
+                .await;
+
+            Ok(response?.into_inner().try_into()?)
+        }
+    };
+    ($path:ident :: $client_module:ident :: $client_struct:ident :: $method:ident; $name:ident () -> $ret:ty) => {
+        pub async fn $name(&mut self) -> Result<$ret, Error> {
+            let mut client = $path::$client_module::$client_struct::with_interceptor(
+                self.grpc_channel.clone(),
+                self.auth_interceptor.clone(),
+            );
+            let response = client
+                .$method(::tonic::Request::new(Default::default()))
+                .await;
+
+            Ok(response?.into_inner().try_into()?)
+        }
+    };
+}
+
+/*
+macro_rules! mm {
+    ($prefix:ident $(:: $tail:path)+; $name:ident ( $param:ty ) -> $ret:ty ) => {
+        mm!($prefix :: ; $($tail),* | $name($param) -> $ret);
+    };
+
+    ($($module:ident ::)+ ; $head:ident, $($tail:ident),+ | $name:ident ($param:ty) -> $ret:ty ) => {
+
+    };
+
+    //(@resolved $module:path, $client_module:ident, $client_struct:ident, $method:ident; )
+}
+
+mm!(tendermint::service_client::ServiceClient::get_block_by_height; get_block_by_height(i64) -> Block);
+*/
 
 impl<I> GrpcClient<I>
 where
@@ -91,23 +223,14 @@ where
             auth_interceptor,
         }
     }
-    pub async fn get_min_gas_price(&self) -> Result<f64, Error> {
-        const UNITS_SUFFIX: &str = "utia";
 
-        let mut min_gas_price_client = ConfigServiceClient::with_interceptor(
-            self.grpc_channel.clone(),
-            self.auth_interceptor.clone(),
-        );
-        let response = min_gas_price_client.config(ConfigRequest {}).await;
+    make_method!(config::service_client::ServiceClient::config; get_min_gas_price() -> GasPrice);
 
-        let min_gas_price_with_suffix = response?.into_inner().minimum_gas_price;
-        let min_gas_price_str = min_gas_price_with_suffix
-            .strip_suffix(UNITS_SUFFIX)
-            .ok_or(Error::FailedToParseResponse)?;
-        let min_gas_price = min_gas_price_str
-            .parse::<f64>()
-            .map_err(|_| Error::FailedToParseResponse)?;
+    make_method!(tendermint::service_client::ServiceClient::get_latest_block; get_latest_block() -> Block);
+    make_method!(tendermint::service_client::ServiceClient::get_block_by_height; get_block_by_height(i64) -> Block);
 
-        Ok(min_gas_price)
-    }
+    make_method!(blob::query_client::QueryClient::params; get_blob_params() -> BlobParams);
+
+    make_method!(auth::query_client::QueryClient::params; get_auth_params() -> AuthParams);
+    make_method!(auth::query_client::QueryClient::account; get_account(String) -> BaseAccount);
 }
