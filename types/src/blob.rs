@@ -37,9 +37,12 @@ pub struct Blob {
     pub index: Option<u64>,
 }
 
+/// Params defines the parameters for the blob module.
 #[derive(Debug)]
 pub struct BlobParams {
+    /// Gas cost per blob byte
     pub gas_per_blob_byte: u32,
+    /// Max square size
     pub gov_max_square_size: u64,
 }
 
