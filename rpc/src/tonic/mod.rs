@@ -17,7 +17,7 @@ use tonic::Status;
 
 pub mod types;
 
-use types::tx::{TxResponse, GetTxResponse};
+use types::tx::{GetTxResponse, TxResponse};
 use types::Block;
 use types::{FromGrpcResponse, IntoGrpcParam};
 
@@ -172,7 +172,6 @@ macro_rules! make_query {
     };
 }
 */
-
 
 /*
 macro_rules! make_method {

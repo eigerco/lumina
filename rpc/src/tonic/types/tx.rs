@@ -1,7 +1,7 @@
 use cosmrs::Tx;
 
+use celestia_proto::cosmos::base::abci::v1beta1::TxResponse as RawTxResponse;
 use celestia_proto::cosmos::tx::v1beta1::{BroadcastTxResponse, GetTxResponse as RawGetTxResponse};
-use celestia_proto::cosmos::base::abci::v1beta1::{TxResponse as RawTxResponse};
 
 use crate::tonic::types::FromGrpcResponse;
 use crate::tonic::Error;
@@ -86,17 +86,25 @@ impl TryFrom<RawTxResponse> for TxResponse {
 
 impl FromGrpcResponse<TxResponse> for BroadcastTxResponse {
     fn try_from_response(self) -> Result<TxResponse, Error> {
-        self.tx_response.ok_or(Error::FailedToParseResponse)?.try_into()
+        self.tx_response
+            .ok_or(Error::FailedToParseResponse)?
+            .try_into()
     }
 }
 
 impl FromGrpcResponse<GetTxResponse> for RawGetTxResponse {
     fn try_from_response(self) -> Result<GetTxResponse, Error> {
-        let tx_response = self.tx_response.ok_or(Error::FailedToParseResponse)?.try_into()?;
+        let tx_response = self
+            .tx_response
+            .ok_or(Error::FailedToParseResponse)?
+            .try_into()?;
         let tx = self.tx.ok_or(Error::FailedToParseResponse)?;
         let cosmos_tx = Tx {
             body: tx.body.ok_or(Error::FailedToParseResponse)?.try_into()?,
-            auth_info: tx.auth_info.ok_or(Error::FailedToParseResponse)?.try_into()?,
+            auth_info: tx
+                .auth_info
+                .ok_or(Error::FailedToParseResponse)?
+                .try_into()?,
             signatures: tx.signatures,
         };
 
