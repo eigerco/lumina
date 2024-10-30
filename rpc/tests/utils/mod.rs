@@ -6,7 +6,7 @@ use rand::{Rng, RngCore};
 pub mod client;
 #[cfg(feature = "p2p")]
 pub mod tiny_node;
-#[cfg(feature = "tonic_grpc")]
+#[cfg(feature = "tonic")]
 pub mod tonic_client;
 
 fn ns_to_u128(ns: Namespace) -> u128 {

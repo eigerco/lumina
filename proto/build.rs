@@ -99,7 +99,6 @@ const PROTO_FILES: &[&str] = &[
     "vendor/tendermint/types/types.proto",
 ];
 
-#[cfg(feature = "tonic")]
 const INCLUDES: &[&str] = &["vendor", "vendor/nmt"];
 
 fn main() {

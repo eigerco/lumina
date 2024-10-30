@@ -1108,7 +1108,6 @@ checksum = "a4c1a5856db92cd90dddc955bce308703d3519fb33ae3d0b8f3658e9cfd05c3f"
 dependencies = [
  "prost",
  "tendermint-proto",
- "tonic",
 ]
 
 [[package]]
