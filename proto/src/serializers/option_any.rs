@@ -1,8 +1,5 @@
 //! [`serde`] serializer for the optional [`Any`].
 
-#[cfg(feature = "tonic")]
-use pbjson_types::Any;
-#[cfg(not(feature = "tonic"))]
 use prost_types::Any;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -89,7 +86,7 @@ mod tests {
             serde_json::from_str(r#"{"tx":{"type_url":"abc","value":"AQID"}}"#).unwrap();
         let tx = msg.tx.unwrap();
         assert_eq!(tx.type_url, "abc");
-        assert_eq!(tx.value.as_ref(), &[1, 2, 3])
+        assert_eq!(tx.value.as_ref(), [1, 2, 3])
     }
 
     #[test]

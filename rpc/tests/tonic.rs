@@ -1,3 +1,5 @@
+#![cfg(feature = "tonic")]
+
 pub mod utils;
 
 use crate::utils::client::AuthLevel;
