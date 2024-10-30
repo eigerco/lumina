@@ -7,6 +7,7 @@ use celestia_proto::celestia::blob::v1 as blob;
 use celestia_proto::cosmos::auth::v1beta1 as auth;
 use celestia_proto::cosmos::base::node::v1beta1 as config;
 use celestia_proto::cosmos::base::tendermint::v1beta1 as tendermint;
+use celestia_proto::cosmos::tx::v1beta1 as tx;
 
 use cosmrs::ErrorReport;
 
@@ -16,8 +17,11 @@ use tonic::Status;
 
 pub mod types;
 
+use types::tx::{TxResponse, GetTxResponse};
 use types::Block;
 use types::{FromGrpcResponse, IntoGrpcParam};
+
+use celestia_tendermint_proto::v0_34::types::BlobTx;
 
 /*
 use celestia_proto::celestia::blob::v1::query_client::QueryClient;
@@ -169,13 +173,8 @@ macro_rules! make_query {
 }
 */
 
-// macro takes a path to an appropriate generated gRPC method and a desired function signature.
-// If parameters need to be converted, they should implement [`types::IntoGrpcParam`] into
-// appropriate type and return type is converted using TryFrom
-//
-// One limitation is that it expects gRPC method to be provided in exactly 4 `::` delimited
-// segments, requiring importing the proto module with `as`. This might be possible to overcome
-// by rewriting the macro as tt-muncher, but it'd increase its complexity significantly
+
+/*
 macro_rules! make_method {
     ($path:ident :: $client_module:ident :: $client_struct:ident :: $method:ident; $name:ident ( $param:ty ) -> $ret:ty) => {
         pub async fn $name(&mut self, param: $param) -> Result<$ret, Error> {
@@ -197,6 +196,29 @@ macro_rules! make_method {
             let response = client
                 .$method(::tonic::Request::new(Default::default()))
                 .await;
+
+            Ok(response?.into_inner().try_from_response()?)
+        }
+    };
+}
+*/
+
+// macro takes a path to an appropriate generated gRPC method and a desired function signature.
+// If parameters need to be converted, they should implement [`types::IntoGrpcParam`] into
+// appropriate type and return type is converted using TryFrom
+//
+// One limitation is that it expects gRPC method to be provided in exactly 4 `::` delimited
+// segments, requiring importing the proto module with `as`. This might be possible to overcome
+// by rewriting the macro as tt-muncher, but it'd increase its complexity significantly
+macro_rules! make_method2 {
+    ($path:ident :: $client_module:ident :: $client_struct:ident :: $method:ident; $name:ident ( $( $param:ident : $param_type:ty ),* ) -> $ret:ty) => {
+        pub async fn $name(&mut self, $($param: $param_type),*) -> Result<$ret, Error> {
+            let mut client = $path::$client_module::$client_struct::with_interceptor(
+                self.grpc_channel.clone(),
+                self.auth_interceptor.clone(),
+            );
+            let request = ::tonic::Request::new(( $($param),* ).into_parameter());
+            let response = client.$method(request).await;
 
             Ok(response?.into_inner().try_from_response()?)
         }
@@ -230,15 +252,18 @@ where
         }
     }
 
-    make_method!(config::service_client::ServiceClient::config; get_min_gas_price() -> f64);
+    make_method2!(config::service_client::ServiceClient::config; get_min_gas_price() -> f64);
 
-    make_method!(tendermint::service_client::ServiceClient::get_latest_block; get_latest_block() -> Block);
-    make_method!(tendermint::service_client::ServiceClient::get_block_by_height; get_block_by_height(i64) -> Block);
+    make_method2!(tendermint::service_client::ServiceClient::get_latest_block; get_latest_block() -> Block);
+    make_method2!(tendermint::service_client::ServiceClient::get_block_by_height; get_block_by_height(height:i64) -> Block);
     // TODO get_node_info
     // make_method!(tendermint::service_client::ServiceClient::get_node_info; get_node_info() -> NodeInfo);
 
-    make_method!(blob::query_client::QueryClient::params; get_blob_params() -> BlobParams);
+    make_method2!(blob::query_client::QueryClient::params; get_blob_params() -> BlobParams);
 
-    make_method!(auth::query_client::QueryClient::params; get_auth_params() -> AuthParams);
-    make_method!(auth::query_client::QueryClient::account; get_account(String) -> BaseAccount);
+    make_method2!(auth::query_client::QueryClient::params; get_auth_params() -> AuthParams);
+    make_method2!(auth::query_client::QueryClient::account; get_account(account: String) -> BaseAccount);
+
+    make_method2!(tx::service_client::ServiceClient::broadcast_tx; broadcast_tx(blob_tx: BlobTx, mode: tx::BroadcastMode) -> TxResponse);
+    make_method2!(tx::service_client::ServiceClient::get_tx; get_tx(hash: String) -> GetTxResponse);
 }

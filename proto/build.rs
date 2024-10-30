@@ -70,6 +70,8 @@ static EXTERN_PATHS: &[(&str, &str)] = &[
     (".tendermint", "::celestia_tendermint_proto::v0_34"),
     (".google.protobuf.Timestamp", "::celestia_tendermint_proto::google::protobuf::Timestamp"),
     (".google.protobuf.Duration", "::celestia_tendermint_proto::google::protobuf::Duration"),
+    (".cosmos.tx.v1beta1.TxBody", "cosmos_sdk_proto::cosmos::tx::v1beta1::TxBody"),
+    (".cosmos.tx.v1beta1.AuthInfo", "cosmos_sdk_proto::cosmos::tx::v1beta1::AuthInfo"),
 ];
 
 const PROTO_FILES: &[&str] = &[

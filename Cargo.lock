@@ -765,6 +765,7 @@ name = "celestia-proto"
 version = "0.4.1"
 dependencies = [
  "celestia-tendermint-proto",
+ "cosmos-sdk-proto",
  "pbjson",
  "pbjson-build",
  "pbjson-types",
@@ -1105,6 +1106,7 @@ checksum = "a4c1a5856db92cd90dddc955bce308703d3519fb33ae3d0b8f3658e9cfd05c3f"
 dependencies = [
  "prost",
  "tendermint-proto",
+ "tonic",
 ]
 
 [[package]]
