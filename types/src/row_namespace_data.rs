@@ -411,6 +411,21 @@ mod tests {
     }
 
     #[test]
+    fn verify_absent_ns() {
+        // parity share
+        let eds = generate_dummy_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+
+        // namespace bigger than pay for blob, smaller than primary reserved padding, that is not
+        // used
+        let ns = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 5]);
+        for (id, row) in eds.get_namespace_data(ns, &dah, 1).unwrap() {
+            assert!(row.shares.is_empty());
+            row.verify(id, &dah).unwrap();
+        }
+    }
+
+    #[test]
     fn reconstruct_all() {
         for _ in 0..3 {
             let eds = generate_eds(8 << (rand::random::<usize>() % 6), AppVersion::V2);

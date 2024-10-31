@@ -217,16 +217,23 @@ async fn shwap_request_row_namespace_data() {
     assert!(matches!(err, NodeError::P2p(P2pError::BitswapQueryTimeout)));
 
     // check nonexisting namespace row namespace data
-    let unknown_ns = Namespace::const_v0(rand::random());
-    match node
+    // for namespace that row actually contains
+    // PFB (0x04) < 0x05 < Primary ns padding (0x255)
+    let unknown_ns = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 5]);
+    let row = node
         .request_row_namespace_data(unknown_ns, 0, height, Some(Duration::from_secs(1)))
         .await
-    {
-        // either row will "contain" our namespace without shares
-        Ok(row_ns_data) => assert!(row_ns_data.shares.is_empty()),
-        // or we will get a query timeout
-        Err(err) => assert!(matches!(err, NodeError::P2p(P2pError::BitswapQueryTimeout))),
-    }
+        .unwrap();
+    assert!(row.shares.is_empty());
+
+    // check nonexisting namespace row namespace data
+    // for namespace that row doesn't contain
+    let unknown_ns = Namespace::TAIL_PADDING;
+    let err = node
+        .request_row_namespace_data(unknown_ns, 0, height, Some(Duration::from_secs(1)))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, NodeError::P2p(P2pError::BitswapQueryTimeout)));
 }
 
 #[tokio::test]
