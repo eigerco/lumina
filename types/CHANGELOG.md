@@ -6,6 +6,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.6.1...celestia-types-v0.7.0) - 2024-10-25
+
+### Added
+
+- *(types)* [**breaking**] Add versioned consts ([#412](https://github.com/eigerco/lumina/pull/412))
+- *(types)* [**breaking**] add blob reconstruction from shares ([#450](https://github.com/eigerco/lumina/pull/450))
+- *(types,rpc,node)* [**breaking**] refactor Share to work for parity and data ([#443](https://github.com/eigerco/lumina/pull/443))
+
+### Fixed
+
+- *(types)* axis type for eds new error reporting ([#447](https://github.com/eigerco/lumina/pull/447))
+
+### Other
+
+- *(types)* [**breaking**] Rename `rsmt2d` module to `eds` ([#449](https://github.com/eigerco/lumina/pull/449))
+
+## [0.6.1](https://github.com/eigerco/lumina/compare/celestia-types-v0.6.0...celestia-types-v0.6.1) - 2024-10-11
+
+### Added
+
+- *(types)* derive PartialOrd and Ord for addresses ([#414](https://github.com/eigerco/lumina/pull/414))
+
+### Fixed
+
+- *(rpc)* use correct blob type in state submit pay for blob ([#418](https://github.com/eigerco/lumina/pull/418))
+
 ## [0.6.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.5.0...celestia-types-v0.6.0) - 2024-10-03
 
 ### Added

@@ -57,20 +57,25 @@ impl Commitment {
     /// Generate the share commitment from the given blob data.
     pub fn from_blob(
         namespace: Namespace,
-        share_version: u8,
         blob_data: &[u8],
+        share_version: u8,
+        subtree_root_threshold: u64,
     ) -> Result<Commitment> {
         let shares = split_blob_to_shares(namespace, share_version, blob_data)?;
-        Self::from_shares(namespace, &shares)
+        Self::from_shares(namespace, &shares, subtree_root_threshold)
     }
 
     /// Generate the commitment from the given shares.
-    pub fn from_shares(namespace: Namespace, mut shares: &[Share]) -> Result<Commitment> {
+    pub fn from_shares(
+        namespace: Namespace,
+        mut shares: &[Share],
+        subtree_root_threshold: u64,
+    ) -> Result<Commitment> {
         // the commitment is the root of a merkle mountain range with max tree size
         // determined by the number of roots required to create a share commitment
         // over that blob. The size of the tree is only increased if the number of
         // subtree roots surpasses a constant threshold.
-        let subtree_width = subtree_width(shares.len() as u64, appconsts::SUBTREE_ROOT_THRESHOLD);
+        let subtree_width = subtree_width(shares.len() as u64, subtree_root_threshold);
         let tree_sizes = merkle_mountain_range_sizes(shares.len() as u64, subtree_width);
 
         let mut leaf_sets: Vec<&[_]> = Vec::with_capacity(tree_sizes.len());

@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.5.1...lumina-node-v0.6.0) - 2024-10-25
+
+### Added
+
+- *(types)* [**breaking**] Add versioned consts ([#412](https://github.com/eigerco/lumina/pull/412))
+- *(types)* [**breaking**] add blob reconstruction from shares ([#450](https://github.com/eigerco/lumina/pull/450))
+- *(node,node-wasm)* [**breaking**] Allow customising syncing window size ([#442](https://github.com/eigerco/lumina/pull/442))
+- *(types,rpc,node)* [**breaking**] refactor Share to work for parity and data ([#443](https://github.com/eigerco/lumina/pull/443))
+
+## [0.5.1](https://github.com/eigerco/lumina/compare/lumina-node-v0.5.0...lumina-node-v0.5.1) - 2024-10-11
+
+### Other
+
+- updated the following local packages: celestia-rpc, celestia-types, celestia-types, celestia-types, celestia-proto
+
 ## [0.5.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.4.0...lumina-node-v0.5.0) - 2024-10-03
 
 ### Added

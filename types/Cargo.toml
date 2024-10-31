@@ -1,6 +1,6 @@
 [package]
 name = "celestia-types"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Core types, traits and constants for working with the Celestia ecosystem"
@@ -31,6 +31,7 @@ leopard-codec = "0.1.0"
 libp2p-identity = { version = "0.2.9", optional = true }
 multiaddr = { version = "0.18.1", optional = true }
 multihash = "0.19.1"
+prost = { workspace = true }
 rand = { version = "0.8.5", optional = true }
 ruint = { version = "1.12.3", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }

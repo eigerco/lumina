@@ -1,5 +1,7 @@
 //! A browser compatible wrappers for the [`lumina-node`].
 
+use std::time::Duration;
+
 use js_sys::Array;
 use libp2p::identity::Keypair;
 use serde::{Deserialize, Serialize};
@@ -32,6 +34,9 @@ pub struct WasmNodeConfig {
     /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
+    /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
+    /// Headers older than syncing window by more than an hour are eligible for pruning.
+    pub custom_syncing_window_secs: Option<u32>,
 }
 
 /// `NodeClient` is responsible for steering [`NodeWorker`] by sending it commands and receiving
@@ -61,10 +66,12 @@ impl NodeClient {
         // keep pinging worker until it responds.
         // NOTE: there is a possibility that worker can take longer than a timeout
         // to send his response. Client will then send another ping and read previous
-        // response, leaving an extra pong on the wire. This will eventually fail on
-        // decoding worker response in a future. 100ms should be enough to avoid that.
+        // response, leaving an extra pong on the wire. This would offset all future
+        // worker responses by 1.
+        // We workaround this in `WorkerClient::exec` dropping all `InternalPong`s there.
+        // TODO: refactor when oneshots are implemented
         loop {
-            if timeout(200, worker.exec(NodeCommand::InternalPing))
+            if timeout(100, worker.exec(NodeCommand::InternalPing))
                 .await
                 .is_ok()
             {
@@ -95,7 +102,7 @@ impl NodeClient {
 
     /// Start a node with the provided config, if it's not running
     pub async fn start(&self, config: &WasmNodeConfig) -> Result<()> {
-        let command = NodeCommand::StartNode(config.to_owned());
+        let command = NodeCommand::StartNode(config.clone());
         let response = self.worker.exec(command).await?;
         response.into_node_started().check_variant()??;
 
@@ -373,6 +380,7 @@ impl WasmNodeConfig {
             bootnodes: canonical_network_bootnodes(network.into())
                 .map(|addr| addr.to_string())
                 .collect::<Vec<_>>(),
+            custom_syncing_window_secs: None,
         }
     }
 
@@ -398,12 +406,17 @@ impl WasmNodeConfig {
             p2p_bootnodes.extend(resolved_addrs.into_iter());
         }
 
+        let syncing_window = self
+            .custom_syncing_window_secs
+            .map(|d| Duration::from_secs(d.into()));
+
         Ok(NodeConfig {
             network_id: network_id.to_string(),
             p2p_bootnodes,
             p2p_local_keypair,
             p2p_listen_on: vec![],
             sync_batch_size: 128,
+            custom_syncing_window: syncing_window,
             blockstore,
             store,
         })
@@ -417,6 +430,7 @@ mod tests {
     use std::time::Duration;
 
     use celestia_rpc::{prelude::*, Client};
+    use celestia_types::p2p::PeerId;
     use celestia_types::ExtendedHeader;
     use gloo_timers::future::sleep;
     use libp2p::{multiaddr::Protocol, Multiaddr};
@@ -425,7 +439,6 @@ mod tests {
     use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
-    use celestia_types::p2p::PeerId;
 
     use crate::worker::NodeWorker;
 
@@ -447,7 +460,12 @@ mod tests {
         let head_header: ExtendedHeader =
             from_value(client.request_head_header().await.unwrap()).unwrap();
         assert_eq!(head_header, bridge_head_header);
-        rpc_client.p2p_close_peer(&PeerId(client.local_peer_id().await.unwrap().parse().unwrap())).await.unwrap();
+        rpc_client
+            .p2p_close_peer(&PeerId(
+                client.local_peer_id().await.unwrap().parse().unwrap(),
+            ))
+            .await
+            .unwrap();
     }
 
     #[wasm_bindgen_test]
@@ -467,7 +485,12 @@ mod tests {
         client.wait_connected_trusted().await.unwrap();
         let info = client.network_info().await.unwrap();
         assert_eq!(info.num_peers, 2);
-        rpc_client.p2p_close_peer(&PeerId(client.local_peer_id().await.unwrap().parse().unwrap())).await.unwrap();
+        rpc_client
+            .p2p_close_peer(&PeerId(
+                client.local_peer_id().await.unwrap().parse().unwrap(),
+            ))
+            .await
+            .unwrap();
     }
 
     async fn spawn_connected_node(bootnodes: Vec<String>) -> NodeClient {
@@ -487,6 +510,7 @@ mod tests {
             .start(&WasmNodeConfig {
                 network: Network::Private,
                 bootnodes,
+                custom_syncing_window_secs: None,
             })
             .await
             .unwrap();

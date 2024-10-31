@@ -5,6 +5,7 @@
 
 use std::ops::RangeBounds;
 use std::sync::Arc;
+use std::time::Duration;
 
 use blockstore::Blockstore;
 use celestia_types::hash::Hash;
@@ -31,7 +32,7 @@ use crate::syncer::{Syncer, SyncerArgs};
 pub use crate::daser::DaserError;
 pub use crate::p2p::{HeaderExError, P2pError};
 pub use crate::peer_tracker::PeerTrackerInfo;
-pub use crate::syncer::{SyncerError, SyncingInfo};
+pub use crate::syncer::{SyncerError, SyncingInfo, DEFAULT_SYNCING_WINDOW};
 
 /// Alias of [`Result`] with [`NodeError`] error type
 ///
@@ -74,6 +75,9 @@ where
     pub p2p_listen_on: Vec<Multiaddr>,
     /// Maximum number of headers in batch while syncing.
     pub sync_batch_size: u64,
+    /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
+    /// Headers older than syncing window by more than an hour are eligible for pruning.
+    pub custom_syncing_window: Option<Duration>,
     /// The blockstore for bitswap.
     pub blockstore: B,
     /// The store for headers.
@@ -117,6 +121,9 @@ where
         let event_sub = event_channel.subscribe();
         let store = Arc::new(config.store);
         let blockstore = Arc::new(config.blockstore);
+        let syncing_window = config
+            .custom_syncing_window
+            .unwrap_or(DEFAULT_SYNCING_WINDOW);
 
         let p2p = Arc::new(
             P2p::start(P2pArgs {
@@ -136,12 +143,14 @@ where
             p2p: p2p.clone(),
             event_pub: event_channel.publisher(),
             batch_size: config.sync_batch_size,
+            syncing_window,
         })?);
 
         let daser = Arc::new(Daser::start(DaserArgs {
             p2p: p2p.clone(),
             store: store.clone(),
             event_pub: event_channel.publisher(),
+            syncing_window,
         })?);
 
         let pruner = Arc::new(Pruner::start(PrunerArgs {
@@ -149,6 +158,7 @@ where
             blockstore: blockstore.clone(),
             event_pub: event_channel.publisher(),
             pruning_interval: DEFAULT_PRUNING_INTERVAL,
+            syncing_window,
         }));
 
         let tasks_cancellation_token = CancellationToken::new();

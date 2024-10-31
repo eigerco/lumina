@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::bail_validation;
 use crate::consts::appconsts;
+use crate::eds::AxisType;
 use crate::fraud_proof::FraudProof;
 use crate::nmt::{Namespace, NamespaceProof, Nmt, NmtExt, NS_SIZE};
-use crate::rsmt2d::AxisType;
 use crate::{Error, ExtendedHeader, Result};
 
 /// A proof that the block producer incorrectly encoded [`ExtendedDataSquare`].
@@ -304,7 +304,7 @@ pub(crate) mod test_utils {
     use rand::Rng;
 
     use crate::consts::appconsts::{FIRST_SPARSE_SHARE_CONTENT_SIZE, SHARE_SIZE};
-    use crate::rsmt2d::is_ods_square;
+    use crate::eds::is_ods_square;
     use crate::test_utils::{random_bytes, ExtendedHeaderGenerator};
     use crate::{DataAvailabilityHeader, ExtendedDataSquare};
 
@@ -334,7 +334,7 @@ pub(crate) mod test_utils {
             // only trash data after the namespace, info byte and seq length so that we don't
             // need to care whether the share is original or parity
             let offset = SHARE_SIZE - FIRST_SPARSE_SHARE_CONTENT_SIZE;
-            share[offset..].copy_from_slice(&random_bytes(SHARE_SIZE - offset));
+            share.as_mut()[offset..].copy_from_slice(&random_bytes(SHARE_SIZE - offset));
         }
 
         // create extended header with proof
@@ -417,7 +417,8 @@ pub(crate) mod test_utils {
 mod tests {
     use self::test_utils::befp_from_header_and_eds;
     use super::*;
-    use crate::test_utils::{corrupt_eds, generate_eds, ExtendedHeaderGenerator};
+    use crate::consts::appconsts::AppVersion;
+    use crate::test_utils::{corrupt_eds, generate_dummy_eds, ExtendedHeaderGenerator};
     use crate::DataAvailabilityHeader;
 
     #[cfg(target_arch = "wasm32")]
@@ -426,7 +427,7 @@ mod tests {
     #[test]
     fn validate_honest_befp_with_incorrectly_encoded_full_row() {
         let mut gen = ExtendedHeaderGenerator::new();
-        let mut eds = generate_eds(8);
+        let mut eds = generate_dummy_eds(8, AppVersion::V2);
         let (eh, proof) = corrupt_eds(&mut gen, &mut eds);
 
         proof.validate(&eh).unwrap();
@@ -435,7 +436,7 @@ mod tests {
     #[test]
     fn validate_honest_befp_with_shares_to_rebuild() {
         let mut gen = ExtendedHeaderGenerator::new();
-        let mut eds = generate_eds(8);
+        let mut eds = generate_dummy_eds(8, AppVersion::V2);
         let (eh, mut proof) = corrupt_eds(&mut gen, &mut eds);
 
         // remove some shares from the proof so they need to be reconstructed
@@ -449,7 +450,7 @@ mod tests {
     #[test]
     fn validate_fake_befp() {
         let mut gen = ExtendedHeaderGenerator::new();
-        let mut eds = generate_eds(8);
+        let mut eds = generate_dummy_eds(8, AppVersion::V2);
         let real_dah = DataAvailabilityHeader::from_eds(&eds);
 
         let prev_eh = gen.next();
@@ -463,7 +464,7 @@ mod tests {
     #[test]
     fn validate_befp_over_correct_data() {
         let mut gen = ExtendedHeaderGenerator::new();
-        let eds = generate_eds(8);
+        let eds = generate_dummy_eds(8, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         let eh = gen.next_with_dah(dah);
 
@@ -477,7 +478,7 @@ mod tests {
     #[test]
     fn validate_befp_wrong_height() {
         let mut gen = ExtendedHeaderGenerator::new();
-        let mut eds = generate_eds(8);
+        let mut eds = generate_dummy_eds(8, AppVersion::V2);
         let (mut eh, proof) = corrupt_eds(&mut gen, &mut eds);
 
         eh.header.height = 999u32.into();
@@ -488,7 +489,7 @@ mod tests {
     #[test]
     fn validate_befp_wrong_roots_square() {
         let mut gen = ExtendedHeaderGenerator::new();
-        let mut eds = generate_eds(8);
+        let mut eds = generate_dummy_eds(8, AppVersion::V2);
         let (mut eh, proof) = corrupt_eds(&mut gen, &mut eds);
 
         eh.dah = DataAvailabilityHeader::new_unchecked(Vec::new(), eh.dah.column_roots().to_vec());
@@ -499,8 +500,7 @@ mod tests {
     #[test]
     fn validate_befp_wrong_index() {
         let mut gen = ExtendedHeaderGenerator::new();
-        let mut eds = generate_eds(8);
-
+        let mut eds = generate_dummy_eds(8, AppVersion::V2);
         let (eh, mut proof) = corrupt_eds(&mut gen, &mut eds);
 
         proof.index = 999;
@@ -511,7 +511,7 @@ mod tests {
     #[test]
     fn validate_befp_wrong_shares() {
         let mut gen = ExtendedHeaderGenerator::new();
-        let mut eds = generate_eds(8);
+        let mut eds = generate_dummy_eds(8, AppVersion::V2);
         let (eh, mut proof) = corrupt_eds(&mut gen, &mut eds);
 
         proof.shares = vec![];

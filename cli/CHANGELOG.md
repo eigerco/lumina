@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/eigerco/lumina/compare/lumina-cli-v0.4.1...lumina-cli-v0.5.0) - 2024-10-25
+
+### Added
+
+- *(node,node-wasm)* [**breaking**] Allow customising syncing window size ([#442](https://github.com/eigerco/lumina/pull/442))
+
+## [0.4.1](https://github.com/eigerco/lumina/compare/lumina-cli-v0.4.0...lumina-cli-v0.4.1) - 2024-10-11
+
+### Added
+
+- setup local demo page with webpack ([#388](https://github.com/eigerco/lumina/pull/388))
+
 ## [0.4.0](https://github.com/eigerco/lumina/compare/lumina-cli-v0.3.1...lumina-cli-v0.4.0) - 2024-10-03
 
 ### Added

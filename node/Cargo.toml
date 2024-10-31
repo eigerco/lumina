@@ -1,6 +1,6 @@
 [package]
 name = "lumina-node"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Celestia data availability node implementation in Rust"
@@ -38,7 +38,7 @@ beetswap = "0.4.0"
 cid = { version = "0.11.1", features = ["serde-codec"] }
 dashmap = "5.5.3"
 futures = "0.3.30"
-prost = "0.12.6"
+prost = { workspace = true }
 rand = "0.8.5"
 serde = { version = "1.0.203", features = ["derive"] }
 smallvec = { version = "1.13.2", features = [

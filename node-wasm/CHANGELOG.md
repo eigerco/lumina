@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.5.2...lumina-node-wasm-v0.6.0) - 2024-10-25
+
+### Added
+
+- *(node,node-wasm)* [**breaking**] Allow customising syncing window size ([#442](https://github.com/eigerco/lumina/pull/442))
+
+## [0.5.2](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.5.1...lumina-node-wasm-v0.5.2) - 2024-10-21
+
+### Fixed
+
+- *(node-wasm)* workaround to clean extra message from worker ([#444](https://github.com/eigerco/lumina/pull/444))
+
+## [0.5.1](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.5.0...lumina-node-wasm-v0.5.1) - 2024-10-11
+
+### Added
+
+- setup local demo page with webpack ([#388](https://github.com/eigerco/lumina/pull/388))
+
 ## [0.5.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.3.0...lumina-node-wasm-v0.5.0) - 2024-10-03
 
 ### Added

@@ -58,6 +58,10 @@ pub enum Error {
     #[error("Missing proof")]
     MissingProof,
 
+    /// Missing shares.
+    #[error("Missing shares")]
+    MissingShares,
+
     /// Wrong proof type.
     #[error("Wrong proof type")]
     WrongProofType,
@@ -172,13 +176,35 @@ pub enum Error {
     #[error("Data square index out of range. row: {0}, column: {1}")]
     EdsIndexOutOfRange(u16, u16),
 
-    /// Could not create EDS, provided number of shares doesn't form a pefect square
+    /// Could not create EDS, provided number of shares doesn't form a pefect square.
     #[error("Invalid dimensions of EDS")]
     EdsInvalidDimentions,
 
     /// Zero block height.
     #[error("Invalid zero block height")]
     ZeroBlockHeight,
+
+    /// Expected first share of a blob
+    #[error("Expected first share of a blob")]
+    ExpectedShareWithSequenceStart,
+
+    /// Unexpected share from reserved namespace.
+    #[error("Unexpected share from reserved namespace")]
+    UnexpectedReservedNamespace,
+
+    /// Unexpected start of a new blob
+    #[error("Unexpected start of a new blob")]
+    UnexpectedSequenceStart,
+
+    /// Metadata mismatch between shares in blob.
+    #[error("Metadata mismatch between shares in blob: {0}")]
+    BlobSharesMetadataMismatch(String),
+}
+
+impl From<prost::DecodeError> for Error {
+    fn from(value: prost::DecodeError) -> Self {
+        Error::Protobuf(celestia_tendermint_proto::Error::decode_message(value))
+    }
 }
 
 /// Representation of the errors that can occur when validating data.

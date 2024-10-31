@@ -23,9 +23,9 @@ use blockstore::Blockstore;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_tendermint_proto::Protobuf;
 use celestia_types::nmt::Namespace;
-use celestia_types::row::Row;
-use celestia_types::row_namespace_data::RowNamespaceData;
-use celestia_types::sample::Sample;
+use celestia_types::row::{Row, RowId};
+use celestia_types::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
+use celestia_types::sample::{Sample, SampleId};
 use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
 use celestia_types::{ExtendedHeader, FraudProof};
 use cid::Cid;
@@ -63,9 +63,7 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::executor::{self, spawn, Interval, JoinHandle};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
-use crate::p2p::shwap::{
-    get_block_container, row_cid, row_namespace_data_cid, sample_cid, ShwapMultihasher,
-};
+use crate::p2p::shwap::{convert_cid, get_block_container, ShwapMultihasher};
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
@@ -517,10 +515,13 @@ impl P2p {
 
     /// Request a [`Row`] on bitswap protocol.
     pub async fn get_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
-        let cid = row_cid(row_index, block_height)?;
+        let id = RowId::new(row_index, block_height).map_err(P2pError::Cid)?;
+        let cid = convert_cid(&id.into())?;
+
         // TODO: add timeout
         let data = self.get_shwap_cid(cid, None).await?;
-        Ok(Row::decode(&data[..])?)
+        let row = Row::decode(id, &data[..]).map_err(|e| P2pError::Shwap(e.to_string()))?;
+        Ok(row)
     }
 
     /// Request a [`Sample`] on bitswap protocol.
@@ -534,9 +535,12 @@ impl P2p {
         column_index: u16,
         block_height: u64,
     ) -> Result<Sample> {
-        let cid = sample_cid(row_index, column_index, block_height)?;
+        let id = SampleId::new(row_index, column_index, block_height).map_err(P2pError::Cid)?;
+        let cid = convert_cid(&id.into())?;
+
         let data = self.get_shwap_cid(cid, Some(GET_SAMPLE_TIMEOUT)).await?;
-        Ok(Sample::decode(&data[..])?)
+        let sample = Sample::decode(id, &data[..]).map_err(|e| P2pError::Shwap(e.to_string()))?;
+        Ok(sample)
     }
 
     /// Request a [`RowNamespaceData`] on bitswap protocol.
@@ -546,10 +550,15 @@ impl P2p {
         row_index: u16,
         block_height: u64,
     ) -> Result<RowNamespaceData> {
-        let cid = row_namespace_data_cid(namespace, row_index, block_height)?;
+        let id =
+            RowNamespaceDataId::new(namespace, row_index, block_height).map_err(P2pError::Cid)?;
+        let cid = convert_cid(&id.into())?;
+
         // TODO: add timeout
         let data = self.get_shwap_cid(cid, None).await?;
-        Ok(RowNamespaceData::decode(&data[..])?)
+        let row_namespace_data =
+            RowNamespaceData::decode(id, &data[..]).map_err(|e| P2pError::Shwap(e.to_string()))?;
+        Ok(row_namespace_data)
     }
 
     /// Get the addresses where [`P2p`] listens on for incoming connections.

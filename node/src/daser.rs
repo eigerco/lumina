@@ -29,6 +29,7 @@
 //! 5. Steps 3 and 4 are repeated concurently, unless we detect that all peers have disconnected.
 //!    At that point Daser cleans the queue and moves back to step 1.
 
+use std::cmp::min;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -52,7 +53,7 @@ const MAX_SAMPLES_NEEDED: usize = 16;
 
 const HOUR: u64 = 60 * 60;
 const DAY: u64 = 24 * HOUR;
-const SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
+const DEFAULT_SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
 
@@ -85,6 +86,9 @@ where
     pub(crate) store: Arc<S>,
     /// Event publisher.
     pub(crate) event_pub: EventPublisher,
+    /// Size of the syncing window, default sampling window will be truncated to syncing window, if
+    /// latter is smaller
+    pub(crate) syncing_window: Duration,
 }
 
 impl Daser {
@@ -145,6 +149,7 @@ where
     done: BlockRanges,
     ongoing: BlockRanges,
     prev_head: Option<u64>,
+    sampling_window: Duration,
 }
 
 impl<S> Worker<S>
@@ -163,6 +168,7 @@ where
             done: BlockRanges::default(),
             ongoing: BlockRanges::default(),
             prev_head: None,
+            sampling_window: min(DEFAULT_SAMPLING_WINDOW, args.syncing_window),
         })
     }
 
@@ -309,7 +315,7 @@ where
         let square_width = header.dah.square_width();
 
         // Make sure that the block is still in the sampling window.
-        if !in_sampling_window(header.time()) {
+        if !self.in_sampling_window(header.time()) {
             // As soon as we reach a block that is not in the sampling
             // window, it means the rest wouldn't be either.
             self.queue
@@ -421,22 +427,22 @@ where
 
         Ok(())
     }
-}
 
-/// Returns true if `time` is within the sampling window.
-fn in_sampling_window(time: Time) -> bool {
-    let now = Time::now();
+    /// Returns true if `time` is within the sampling window.
+    fn in_sampling_window(&self, time: Time) -> bool {
+        let now = Time::now();
 
-    // Header is from the future! Thus, within sampling window.
-    if now < time {
-        return true;
+        // Header is from the future! Thus, within sampling window.
+        if now < time {
+            return true;
+        }
+
+        let Ok(age) = now.duration_since(time) else {
+            return false;
+        };
+
+        age <= self.sampling_window
     }
-
-    let Ok(age) = now.duration_since(time) else {
-        return false;
-    };
-
-    age <= SAMPLING_WINDOW
 }
 
 /// Returns unique and random indexes that will be used for sampling.
@@ -472,10 +478,11 @@ mod tests {
     use crate::p2p::P2pCmd;
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, MockP2pHandle};
+    use bytes::BytesMut;
     use celestia_proto::bitswap::Block;
-    use celestia_tendermint_proto::Protobuf;
+    use celestia_types::consts::appconsts::AppVersion;
     use celestia_types::sample::{Sample, SampleId};
-    use celestia_types::test_utils::{generate_eds, ExtendedHeaderGenerator};
+    use celestia_types::test_utils::{generate_dummy_eds, ExtendedHeaderGenerator};
     use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
     use cid::Cid;
     use prost::Message;
@@ -498,6 +505,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
+            syncing_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 
@@ -524,6 +532,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
+            syncing_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 
@@ -548,6 +557,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
+            syncing_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 
@@ -561,7 +571,7 @@ mod tests {
         let mut headers = Vec::new();
 
         for _ in 0..20 {
-            let eds = generate_eds(2);
+            let eds = generate_dummy_eds(2, AppVersion::V2);
             let dah = DataAvailabilityHeader::from_eds(&eds);
             let header = gen.next_with_dah(dah);
 
@@ -635,7 +645,7 @@ mod tests {
         handle.expect_no_cmd().await;
 
         // Push block 21 in the store
-        let eds = generate_eds(2);
+        let eds = generate_dummy_eds(2, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         let header = gen.next_with_dah(dah);
         store.insert(header).await.unwrap();
@@ -654,7 +664,7 @@ mod tests {
         square_width: usize,
         simulate_invalid_sampling: bool,
     ) {
-        let eds = generate_eds(square_width);
+        let eds = generate_dummy_eds(square_width, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         let header = gen.next_with_dah(dah);
         let height = header.height().value();
@@ -818,9 +828,12 @@ mod tests {
         )
         .unwrap();
 
+        let mut container = BytesMut::new();
+        sample.encode(&mut container);
+
         let block = Block {
             cid: convert_cid(&sample_id.into()).unwrap().to_bytes(),
-            container: sample.encode_vec().unwrap(),
+            container: container.to_vec(),
         };
 
         block.encode_to_vec()
