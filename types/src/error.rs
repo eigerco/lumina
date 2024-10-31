@@ -14,6 +14,10 @@ pub enum Error {
     #[error("Unsupported namespace version: {0}")]
     UnsupportedNamespaceVersion(u8),
 
+    /// Unsupported app version.
+    #[error("Unsupported app version: {0}")]
+    UnsupportedAppVersion(u64),
+
     /// Invalid namespace size.
     #[error("Invalid namespace size")]
     InvalidNamespaceSize,

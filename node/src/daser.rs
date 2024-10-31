@@ -54,6 +54,7 @@ const MAX_SAMPLES_NEEDED: usize = 16;
 const HOUR: u64 = 60 * 60;
 const DAY: u64 = 24 * HOUR;
 const DEFAULT_SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
+const GET_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
 
@@ -364,7 +365,9 @@ where
                     let p2p = p2p.clone();
 
                     async move {
-                        let res = p2p.get_sample(row, col, height).await;
+                        let res = p2p
+                            .get_sample(row, col, height, Some(GET_SAMPLE_TIMEOUT))
+                            .await;
                         (row, col, res)
                     }
                 })
