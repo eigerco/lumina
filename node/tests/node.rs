@@ -26,7 +26,7 @@ mod utils;
 
 #[tokio::test]
 async fn connects_to_the_go_bridge_node() {
-    let node = new_connected_node().await;
+    let (node, _) = new_connected_node().await;
 
     let info = node.network_info().await.unwrap();
     assert!(info.num_peers() >= 1);

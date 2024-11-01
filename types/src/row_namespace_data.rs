@@ -79,7 +79,9 @@ impl RowNamespaceData {
     ///
     /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
     pub fn verify(&self, id: RowNamespaceDataId, dah: &DataAvailabilityHeader) -> Result<()> {
-        if self.shares.is_empty() {
+        if (self.shares.is_empty() && self.proof.is_of_presence())
+            || (!self.shares.is_empty() && self.proof.is_of_absence())
+        {
             return Err(Error::WrongProofType);
         }
 
@@ -405,6 +407,21 @@ mod tests {
             let decoded = RowNamespaceData::decode(id, &buf).unwrap();
 
             decoded.verify(id, &dah).unwrap();
+        }
+    }
+
+    #[test]
+    fn verify_absent_ns() {
+        // parity share
+        let eds = generate_dummy_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+
+        // namespace bigger than pay for blob, smaller than primary reserved padding, that is not
+        // used
+        let ns = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 5]);
+        for (id, row) in eds.get_namespace_data(ns, &dah, 1).unwrap() {
+            assert!(row.shares.is_empty());
+            row.verify(id, &dah).unwrap();
         }
     }
 

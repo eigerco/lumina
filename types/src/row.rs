@@ -13,13 +13,12 @@ use bytes::{Buf, BufMut, BytesMut};
 use celestia_proto::shwap::{row::HalfSide as RawHalfSide, Row as RawRow, Share as RawShare};
 use cid::CidGeneric;
 use multihash::Multihash;
-use nmt_rs::NamespaceMerkleHasher;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
 use crate::consts::appconsts::SHARE_SIZE;
 use crate::eds::ExtendedDataSquare;
-use crate::nmt::{NamespacedSha2Hasher, Nmt};
+use crate::nmt::{Nmt, NmtExt};
 use crate::{DataAvailabilityHeader, Error, Result, Share};
 
 /// Number of bytes needed to represent [`EdsId`] in `multihash`.
@@ -68,7 +67,7 @@ impl Row {
     /// Verify the row against roots from DAH
     pub fn verify(&self, id: RowId, dah: &DataAvailabilityHeader) -> Result<()> {
         let row = id.index;
-        let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+        let mut tree = Nmt::default();
 
         for share in &self.shares {
             tree.push_leaf(share.as_ref(), *share.namespace())

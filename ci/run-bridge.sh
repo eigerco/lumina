@@ -9,7 +9,7 @@ NODE_NAME="bridge-$NODE_ID"
 # a private local network
 P2P_NETWORK="private"
 # a bridge node configuration directory
-CONFIG_DIR="$CELESTIA_HOME/.celestia-bridge-$P2P_NETWORK"
+CONFIG_DIR="$HOME/.celestia-bridge-$P2P_NETWORK"
 # directory and the files shared with the validator node
 CREDENTIALS_DIR="/credentials"
 # node credentials
@@ -47,6 +47,15 @@ add_trusted_genesis() {
   sed -i'.bak' "s/TrustedHash = .*/TrustedHash = $genesis_hash/" "$CONFIG_DIR/config.toml"
 }
 
+whitelist_localhost_nodes() {
+  # to get the list of ips:
+  # cargo run -- node -n private -l 0.0.0.0
+  # docker compose -f ci/docker-compose.yml exec bridge-0 celestia p2p peer-info $lumina_peerid
+  dasel put -f "$CONFIG_DIR/config.toml" \
+    -t json -v '["172.18.0.1/24", "172.17.0.1/24", "192.168.0.0/16"]' \
+    'P2P.IPColocationWhitelist'
+}
+
 write_jwt_token() {
   echo "Saving jwt token to $NODE_JWT_FILE"
   celestia bridge auth admin --p2p.network "$P2P_NETWORK" > "$NODE_JWT_FILE"
@@ -65,6 +74,8 @@ connect_to_common_bridge() {
 main() {
   # Initialize the bridge node
   celestia bridge init --p2p.network "$P2P_NETWORK"
+  # don't allow banning nodes we create in tests by pubsub ip counting
+  whitelist_localhost_nodes
   # Wait for a validator
   wait_for_provision
   # Import the key with the coins
@@ -82,7 +93,7 @@ main() {
   # Start the bridge node
   echo "Configuration finished. Running a bridge node..."
   celestia bridge start \
-    --rpc.skip-auth=$SKIP_AUTH \
+    --rpc.skip-auth="$SKIP_AUTH" \
     --rpc.addr 0.0.0.0 \
     --core.ip validator \
     --keyring.keyname "$NODE_NAME" \
