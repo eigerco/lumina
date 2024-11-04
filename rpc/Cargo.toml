@@ -36,6 +36,7 @@ tracing = "0.1.40"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 http = "1.1.0"
 jsonrpsee = { version = "0.24.2", features = ["http-client", "ws-client"] }
+pbjson-types = "0.7.0"
 tonic = { version = "0.12.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

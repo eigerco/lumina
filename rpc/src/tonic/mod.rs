@@ -262,6 +262,8 @@ where
 
     make_method2!(auth::query_client::QueryClient::params; get_auth_params() -> AuthParams);
     make_method2!(auth::query_client::QueryClient::account; get_account(account: String) -> BaseAccount);
+    // TODO: pagination?
+    make_method2!(auth::query_client::QueryClient::accounts; get_accounts() -> Vec<BaseAccount>);
 
     make_method2!(tx::service_client::ServiceClient::broadcast_tx; broadcast_tx(blob_tx: BlobTx, mode: tx::BroadcastMode) -> TxResponse);
     make_method2!(tx::service_client::ServiceClient::get_tx; get_tx(hash: String) -> GetTxResponse);

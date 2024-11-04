@@ -117,6 +117,7 @@ setup_private_validator() {
   celestia-appd keys add "$NODE_NAME" --keyring-backend="test"
   validator_addr="$(celestia-appd keys show "$NODE_NAME" -a --keyring-backend="test")"
   # Create a validator's genesis account for the genesis.json with an initial bag of coins
+  echo "VALIDATOR ADDR: $validator_addr"
   celestia-appd add-genesis-account "$validator_addr" "$VALIDATOR_COINS"
   # Generate a genesis transaction that creates a validator with a self-delegation
   celestia-appd gentx "$NODE_NAME" 5000000000utia \

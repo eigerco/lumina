@@ -799,6 +799,7 @@ dependencies = [
  "jsonrpsee",
  "libp2p",
  "nmt-rs",
+ "pbjson-types",
  "prost",
  "rand",
  "serde",

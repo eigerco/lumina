@@ -7,7 +7,8 @@ use celestia_proto::celestia::blob::v1::{
     QueryParamsRequest as QueryBlobParamsRequest, QueryParamsResponse as QueryBlobParamsResponse,
 };
 use celestia_proto::cosmos::auth::v1beta1::{
-    BaseAccount as RawBaseAccount, QueryAccountRequest, QueryAccountResponse,
+    BaseAccount as RawBaseAccount, QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest,
+    QueryAccountsResponse,
 };
 use celestia_proto::cosmos::auth::v1beta1::{
     QueryParamsRequest as QueryAuthParamsRequest, QueryParamsResponse as QueryAuthParamsResponse,
@@ -78,30 +79,40 @@ impl FromGrpcResponse<AuthParams> for QueryAuthParamsResponse {
         })
     }
 }
+fn account_from_any(any: pbjson_types::Any) -> Result<BaseAccount, Error> {
+    if any.type_url != RawBaseAccount::type_url() {
+        return Err(Error::UnexpectedResponseType(any.type_url));
+    }
+    let base_account =
+        RawBaseAccount::decode(&*any.value).map_err(|_| Error::FailedToParseResponse)?;
+
+    let any_pub_key = base_account.pub_key.ok_or(Error::FailedToParseResponse)?;
+    // cosmrs has different Any type than pbjson_types Any
+    let pub_key = PublicKey::try_from(Any {
+        type_url: any_pub_key.type_url,
+        value: any_pub_key.value.to_vec(),
+    })?;
+
+    Ok(BaseAccount {
+        address: base_account.address,
+        pub_key,
+        account_number: base_account.account_number,
+        sequence: base_account.sequence,
+    })
+}
 
 impl FromGrpcResponse<BaseAccount> for QueryAccountResponse {
     fn try_from_response(self) -> Result<BaseAccount, Error> {
-        let account = self.account.ok_or(Error::FailedToParseResponse)?;
-        if account.type_url != RawBaseAccount::type_url() {
-            return Err(Error::UnexpectedResponseType(account.type_url));
-        }
-        println!("ACTT: {:#?}", account.value);
-        let base_account =
-            RawBaseAccount::decode(&*account.value).map_err(|_| Error::FailedToParseResponse)?;
+        account_from_any(self.account.ok_or(Error::FailedToParseResponse)?)
+    }
+}
 
-        let any_pub_key = base_account.pub_key.ok_or(Error::FailedToParseResponse)?;
-        // cosmrs has different Any type than pbjson_types Any
-        let pub_key = PublicKey::try_from(Any {
-            type_url: any_pub_key.type_url,
-            value: any_pub_key.value.to_vec(),
-        })?;
-
-        Ok(BaseAccount {
-            address: base_account.address,
-            pub_key,
-            account_number: base_account.account_number,
-            sequence: base_account.sequence,
-        })
+impl FromGrpcResponse<Vec<BaseAccount>> for QueryAccountsResponse {
+    fn try_from_response(self) -> Result<Vec<BaseAccount>, Error> {
+        self.accounts
+            .into_iter()
+            .map(|acct| account_from_any(acct))
+            .collect()
     }
 }
 
@@ -146,6 +157,12 @@ impl IntoGrpcParam<BroadcastTxRequest> for (BlobTx, BroadcastMode) {
 impl IntoGrpcParam<GetTxRequest> for String {
     fn into_parameter(self) -> GetTxRequest {
         GetTxRequest { hash: self }
+    }
+}
+
+impl IntoGrpcParam<QueryAccountsRequest> for () {
+    fn into_parameter(self) -> QueryAccountsRequest {
+        QueryAccountsRequest { pagination: None }
     }
 }
 

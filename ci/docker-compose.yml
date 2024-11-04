@@ -8,6 +8,8 @@ services:
     environment:
       # provide amount of bridge nodes to provision (default: 1)
       - BRIDGE_COUNT=2
+    ports:
+      - 19090:9090
     volumes:
       - credentials:/credentials
       - genesis:/genesis

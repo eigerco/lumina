@@ -27,6 +27,10 @@ async fn get_block() {
 async fn get_account() {
     let mut client = new_test_client(AuthLevel::Write).await.unwrap();
 
+    let accounts = client.get_accounts().await.unwrap();
+
+    println!("first account : {:?}", accounts.first());
+
     let acct = client
         .get_account("celestia1p3ucd3ptpw902fluyjzhq3ffgq4ntddaf0pdta".to_string())
         .await
