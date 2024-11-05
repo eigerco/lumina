@@ -43,7 +43,7 @@ use libp2p::{
     ping,
     swarm::{
         dial_opts::{DialOpts, PeerCondition},
-        ConnectionId, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent,
+        ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent,
     },
     Multiaddr, PeerId,
 };
@@ -796,17 +796,16 @@ where
         let mut kademlia_interval = Interval::new(Duration::from_secs(30)).await;
         let mut peer_tracker_info_watcher = self.peer_tracker.info_watcher();
 
-        self.dial_bootnodes();
-
         // Initiate discovery
-        let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
+        self.bootstrap();
 
         loop {
             select! {
                 _ = self.cancellation_token.cancelled() => break,
                 _ = peer_tracker_info_watcher.changed() => {
                     if peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
-                        self.dial_bootnodes();
+                        warn!("All peers disconnected");
+                        self.bootstrap();
                     }
                 }
                 _ = report_interval.tick() => {
@@ -815,8 +814,7 @@ where
                 _ = kademlia_interval.tick() => {
                     if self.peer_tracker.info().num_connected_peers < MIN_CONNECTED_PEERS
                     {
-                        debug!("Running kademlia bootstrap procedure.");
-                        let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
+                        self.bootstrap();
                     }
                 }
                 _ = poll_closed(&mut self.bitswap_queries) => {
@@ -838,7 +836,7 @@ where
         self.on_stop().await;
     }
 
-    fn dial_bootnodes(&mut self) {
+    fn bootstrap(&mut self) {
         self.event_pub.send(NodeEvent::ConnectingToBootnodes);
 
         for (peer_id, addrs) in &self.bootnodes {
@@ -850,8 +848,15 @@ where
                 .build();
 
             if let Err(e) = self.swarm.dial(dial_opts) {
-                error!("Failed to dial on {addrs:?}: {e}");
+                if !matches!(e, DialError::DialPeerConditionFalse(_)) {
+                    warn!("Failed to dial on {addrs:?}: {e}");
+                }
             }
+        }
+
+        // trigger kademlia bootstrap
+        if self.swarm.behaviour_mut().kademlia.bootstrap().is_err() {
+            warn!("Can't run kademlia bootstrap, no known peers");
         }
     }
 
