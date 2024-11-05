@@ -27,7 +27,7 @@ use celestia_tendermint_proto::v0_34::types::BlobTx;
 use cosmrs::crypto::PublicKey;
 use cosmrs::Any;
 
-use crate::tonic::Error;
+use crate::Error;
 
 pub mod tx;
 

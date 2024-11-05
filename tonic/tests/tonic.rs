@@ -1,20 +1,17 @@
-#![cfg(feature = "tonic")]
-
 pub mod utils;
 
-use crate::utils::client::AuthLevel;
-use crate::utils::tonic_client::new_test_client;
+use crate::utils::new_test_client;
 
 #[tokio::test]
 async fn get_min_gas_price() {
-    let mut client = new_test_client(AuthLevel::Write).await.unwrap();
+    let mut client = new_test_client().await.unwrap();
     let gas_price = client.get_min_gas_price().await.unwrap();
     assert!(gas_price > 0.0);
 }
 
 #[tokio::test]
 async fn get_block() {
-    let mut client = new_test_client(AuthLevel::Write).await.unwrap();
+    let mut client = new_test_client().await.unwrap();
 
     let latest_block = client.get_latest_block().await.unwrap();
     let height = latest_block.0.header.height.value() as i64;
@@ -25,7 +22,7 @@ async fn get_block() {
 
 #[tokio::test]
 async fn get_account() {
-    let mut client = new_test_client(AuthLevel::Write).await.unwrap();
+    let mut client = new_test_client().await.unwrap();
 
     let accounts = client.get_accounts().await.unwrap();
 

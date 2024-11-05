@@ -9,8 +9,6 @@ mod header;
 mod p2p;
 pub mod share;
 mod state;
-#[cfg(all(feature = "tonic", not(target_arch = "wasm32")))]
-pub mod tonic;
 
 pub use crate::blob::BlobClient;
 #[cfg(any(

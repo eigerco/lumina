@@ -3,8 +3,8 @@ use cosmrs::Tx;
 use celestia_proto::cosmos::base::abci::v1beta1::TxResponse as RawTxResponse;
 use celestia_proto::cosmos::tx::v1beta1::{BroadcastTxResponse, GetTxResponse as RawGetTxResponse};
 
-use crate::tonic::types::FromGrpcResponse;
-use crate::tonic::Error;
+use crate::types::FromGrpcResponse;
+use crate::Error;
 
 pub struct TxResponse {
     /// The block height

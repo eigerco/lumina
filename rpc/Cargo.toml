@@ -37,7 +37,6 @@ tracing = "0.1.40"
 http = "1.1.0"
 jsonrpsee = { version = "0.24.2", features = ["http-client", "ws-client"] }
 pbjson-types = "0.7.0"
-tonic = { version = "0.12.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 libp2p = { workspace = true, features = [
@@ -60,7 +59,6 @@ wasm-bindgen-test = "0.3.42"
 
 [features]
 default = ["p2p", "secp256k1"]
-tonic = ["celestia-proto/tonic", "dep:tonic"]
 p2p = ["celestia-types/p2p"]
 wasm-bindgen = ["celestia-types/wasm-bindgen", "jsonrpsee/wasm-client"]
 secp256k1 = ["celestia-tendermint/secp256k1"]

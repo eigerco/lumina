@@ -805,7 +805,6 @@ dependencies = [
  "serde",
  "thiserror",
  "tokio",
- "tonic",
  "tracing",
  "wasm-bindgen-test",
 ]
@@ -856,6 +855,24 @@ dependencies = [
  "serde_bytes",
  "subtle-encoding",
  "time",
+]
+
+[[package]]
+name = "celestia-tonic"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "celestia-proto",
+ "celestia-tendermint",
+ "celestia-tendermint-proto",
+ "celestia-types",
+ "cosmrs",
+ "dotenvy",
+ "pbjson-types",
+ "prost",
+ "thiserror",
+ "tokio",
+ "tonic",
 ]
 
 [[package]]
