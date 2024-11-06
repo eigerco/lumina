@@ -1,7 +1,6 @@
+use cosmrs::crypto::PublicKey;
+use cosmrs::Any;
 use prost::{Message, Name};
-
-use celestia_types::auth::{AuthParams, BaseAccount};
-use celestia_types::blob::BlobParams;
 
 use celestia_proto::celestia::blob::v1::{
     QueryParamsRequest as QueryBlobParamsRequest, QueryParamsResponse as QueryBlobParamsResponse,
@@ -19,18 +18,17 @@ use celestia_proto::cosmos::base::tendermint::v1beta1::{
     GetLatestBlockResponse,
 };
 use celestia_proto::cosmos::tx::v1beta1::{BroadcastMode, BroadcastTxRequest, GetTxRequest};
-
 use celestia_tendermint::block::Block as TendermintBlock;
-
 use celestia_tendermint_proto::v0_34::types::BlobTx;
-
-use cosmrs::crypto::PublicKey;
-use cosmrs::Any;
+use celestia_types::auth::{AuthParams, BaseAccount};
+use celestia_types::blob::BlobParams;
 
 use crate::Error;
 
+/// types related to transaction querying and submission
 pub mod tx;
 
+/// block
 pub struct Block(pub TendermintBlock);
 
 pub(crate) trait FromGrpcResponse<T> {
@@ -109,10 +107,7 @@ impl FromGrpcResponse<BaseAccount> for QueryAccountResponse {
 
 impl FromGrpcResponse<Vec<BaseAccount>> for QueryAccountsResponse {
     fn try_from_response(self) -> Result<Vec<BaseAccount>, Error> {
-        self.accounts
-            .into_iter()
-            .map(|acct| account_from_any(acct))
-            .collect()
+        self.accounts.into_iter().map(account_from_any).collect()
     }
 }
 

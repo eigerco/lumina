@@ -6,6 +6,7 @@ use celestia_proto::cosmos::tx::v1beta1::{BroadcastTxResponse, GetTxResponse as 
 use crate::types::FromGrpcResponse;
 use crate::Error;
 
+/// Response to a tx query
 pub struct TxResponse {
     /// The block height
     pub height: i64,
@@ -55,9 +56,12 @@ pub struct TxResponse {
     //pub events: ::prost::alloc::vec::Vec< ::celestia_tendermint_proto::v0_34::abci::Event, >,
 }
 
+/// Response to GetTx
 pub struct GetTxResponse {
+    /// Response Transaction
     pub tx: Tx,
 
+    /// TxResponse to a Query
     pub tx_response: TxResponse,
 }
 

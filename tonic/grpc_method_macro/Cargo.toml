@@ -1,0 +1,12 @@
+[package]
+name = "grpc_method"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+quote = "1.0.37"
+syn = "2.0.87"
+proc-macro2 = "1.0.89"
+
+[lib]
+proc-macro = true
