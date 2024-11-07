@@ -23,8 +23,9 @@ rm -rf ../target/proto-vendor-src
 mkdir -p ../target/proto-vendor-src
 
 extract_urls ../target/proto-vendor-src \
-    https://github.com/celestiaorg/celestia-app/archive/refs/tags/v1.12.0.tar.gz \
+    https://github.com/celestiaorg/celestia-app/archive/refs/tags/v2.3.1.tar.gz \
     https://github.com/celestiaorg/celestia-core/archive/refs/heads/v0.34.x-celestia.tar.gz \
+    https://github.com/celestiaorg/celestia-node/archive/refs/heads/main.tar.gz \
     https://github.com/celestiaorg/cosmos-sdk/archive/refs/heads/release/v0.46.x-celestia.tar.gz \
     https://github.com/celestiaorg/nmt/archive/refs/heads/main.tar.gz \
     https://github.com/cosmos/cosmos-proto/archive/refs/tags/v1.0.0-alpha7.tar.gz \
@@ -35,7 +36,7 @@ extract_urls ../target/proto-vendor-src \
 mkdir -p vendor
 
 rm -rf vendor/celestia
-cp -r ../target/proto-vendor-src/celestia-app-1.12.0/proto/celestia vendor
+cp -r ../target/proto-vendor-src/celestia-app-2.3.1/proto/celestia vendor
 
 rm -rf vendor/go-header
 mkdir -p vendor/go-header/p2p
@@ -56,21 +57,21 @@ rm -rf vendor/google
 mkdir -p vendor/google/api
 cp ../target/proto-vendor-src/googleapis-master/google/api/{annotations.proto,http.proto} vendor/google/api
 
-#rm -rf vendor/header
-#mkdir -p vendor/header
-#cp -r ../target/proto-vendor-src/celestia-node-shwap/header/pb vendor/header
-#
-#rm -rf vendor/share
-#mkdir -p vendor/share
-#shwap_dir=../target/proto-vendor-src/celestia-node-shwap/share
-#find "$shwap_dir" -name pb -type d -print0 | while read -r -d '' pb_dir; do
-#  # remove prefix
-#  out_dir="${pb_dir#"$shwap_dir"}"
-#  # remove /pb suffix
-#  out_dir="vendor/share/${out_dir%/*}"
-#  mkdir -p "$out_dir"
-#  cp -r "$pb_dir" "$out_dir"
-#done
+rm -rf vendor/header
+mkdir -p vendor/header
+cp -r ../target/proto-vendor-src/celestia-node-main/header/pb vendor/header
+
+rm -rf vendor/share
+mkdir -p vendor/share
+main_dir=../target/proto-vendor-src/celestia-node-main/share
+find "$main_dir" -name pb -type d -print0 | while read -r -d '' pb_dir; do
+  # remove prefix
+  out_dir="${pb_dir#"$main_dir"}"
+  # remove /pb suffix
+  out_dir="vendor/share/${out_dir%/*}"
+  mkdir -p "$out_dir"
+  cp -r "$pb_dir" "$out_dir"
+done
 
 rm -rf vendor/tendermint
 cp -r ../target/proto-vendor-src/celestia-core-0.34.x-celestia/proto/tendermint vendor

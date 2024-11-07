@@ -6,7 +6,7 @@ use tonic::service::Interceptor;
 use tonic::transport::Channel;
 use tonic::{Request, Status};
 
-use celestia_tonic::GrpcClient;
+use celestia_grpc::GrpcClient;
 
 const CELESTIA_GRPC_URL: &str = "http://localhost:19090";
 //const CELESTIA_GRPC_URL: &str = "https://rpc.celestia.pops.one:9090";

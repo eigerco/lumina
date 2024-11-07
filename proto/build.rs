@@ -18,7 +18,7 @@ const NULL_DEFAULT: &str = r#"#[serde(with = "crate::serializers::null_default")
 
 #[rustfmt::skip]
 static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
-    (".celestia.da.DataAvailabilityHeader", SERIALIZED_DEFAULT),
+    (".celestia.core.v1.da.DataAvailabilityHeader", SERIALIZED_DEFAULT),
     (".celestia.blob.v1.MsgPayForBlobs", SERIALIZED_DEFAULT),
     (".cosmos.base.abci.v1beta1.ABCIMessageLog", SERIALIZED_DEFAULT),
     (".cosmos.base.abci.v1beta1.Attribute", SERIALIZED_DEFAULT),
@@ -47,12 +47,12 @@ static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".shwap.Sample", SERIALIZED_DEFAULT),
     (".shwap.Share", SERIALIZED_DEFAULT),
     (".shwap.Share", TRANSPARENT),
-    ];
+];
 
 #[rustfmt::skip]
 static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.da.DataAvailabilityHeader.row_roots", VEC_BASE64STRING),
-    (".celestia.da.DataAvailabilityHeader.column_roots", VEC_BASE64STRING),
+    (".celestia.core.v1.da.DataAvailabilityHeader.column_roots", VEC_BASE64STRING),
     #[cfg(not(feature = "tonic"))]
     (".cosmos.base.abci.v1beta1.TxResponse.tx", OPTION_ANY),
     (".cosmos.base.abci.v1beta1.TxResponse.logs", NULL_DEFAULT),
@@ -80,7 +80,7 @@ const PROTO_FILES: &[&str] = &[
     "vendor/celestia/blob/v1/params.proto",
     "vendor/celestia/blob/v1/query.proto",
     "vendor/celestia/blob/v1/tx.proto",
-    "vendor/celestia/da/data_availability_header.proto",
+    "vendor/celestia/core/v1/da/data_availability_header.proto",
     "vendor/cosmos/auth/v1beta1/auth.proto",
     "vendor/cosmos/auth/v1beta1/query.proto",
     "vendor/cosmos/base/abci/v1beta1/abci.proto",
@@ -97,7 +97,6 @@ const PROTO_FILES: &[&str] = &[
     "vendor/share/eds/byzantine/pb/share.proto",
     "vendor/share/shwap/p2p/bitswap/pb/bitswap.proto",
     "vendor/share/shwap/pb/shwap.proto",
-    //"vendor/tendermint/crypto/keys.proto",
     "vendor/tendermint/types/types.proto",
 ];
 

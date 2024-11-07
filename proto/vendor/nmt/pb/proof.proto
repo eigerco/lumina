@@ -1,4 +1,4 @@
-syntax="proto3";
+syntax = "proto3";
 
 package proof.pb;
 
@@ -6,10 +6,10 @@ option go_package = "github.com/celestiaorg/nmt/pb";
 
 message Proof {
   // Start index of the leaves that match the queried namespace.ID.
-  int64 start     = 1;
+  int64 start = 1;
   // End index (non-inclusive) of the leaves that match the queried
   // namespace.ID.
-  int64 end       = 2;
+  int64 end = 2;
   // Nodes hold the tree nodes necessary for the Merkle range proof.
   repeated bytes nodes = 3;
   // leaf_hash contains the namespace.ID if NMT does not have it and
@@ -18,5 +18,5 @@ message Proof {
   bytes leaf_hash = 4;
   // The is_max_namespace_ignored flag influences the calculation of the
   // namespace ID range for intermediate nodes in the tree.
-  bool is_max_namespace_ignored=5;
+  bool is_max_namespace_ignored = 5;
 }

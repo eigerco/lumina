@@ -1,5 +1,3 @@
-use std::convert::Infallible;
-
 use cosmrs::ErrorReport;
 use tonic::Status;
 
@@ -25,6 +23,10 @@ pub enum Error {
     #[error(transparent)]
     CosmrsError(#[from] ErrorReport),
 
+    /// Celestia types error
+    #[error(transparent)]
+    CelestiaTypesError(#[from] celestia_types::Error),
+
     /// Tendermint Proto Error
     #[error(transparent)]
     TendermintProtoError(#[from] celestia_tendermint_proto::Error),
@@ -36,8 +38,4 @@ pub enum Error {
     /// Unexpected reponse type
     #[error("Unexpected response type")]
     UnexpectedResponseType(String),
-
-    /// Unreachable. Added to appease try_into conversion for GrpcClient method macro
-    #[error(transparent)]
-    Infallible(#[from] Infallible),
 }

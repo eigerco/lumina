@@ -6,15 +6,15 @@ use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQuer
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
-
+use celestia_tendermint::block::Block;
 use celestia_tendermint_proto::v0_34::types::BlobTx;
-use celestia_types::auth::{AuthParams, BaseAccount};
+use celestia_types::auth::AuthParams;
 use celestia_types::blob::BlobParams;
 
 use grpc_method::grpc_method;
 
+use crate::types::auth::Account;
 use crate::types::tx::{GetTxResponse, TxResponse};
-use crate::types::Block;
 use crate::types::{FromGrpcResponse, IntoGrpcParam};
 use crate::Error;
 
@@ -66,12 +66,12 @@ where
 
     /// Get account
     #[grpc_method(AuthQueryClient::account)]
-    async fn get_account(&mut self, account: String) -> Result<BaseAccount, Error>;
+    async fn get_account(&mut self, account: String) -> Result<Account, Error>;
 
     // TODO: pagination?
     /// Get accounts
     #[grpc_method(AuthQueryClient::accounts)]
-    async fn get_accounts(&mut self) -> Result<Vec<BaseAccount>, Error>;
+    async fn get_accounts(&mut self) -> Result<Vec<Account>, Error>;
 
     /// Broadcast Tx
     #[grpc_method(TxServiceClient::broadcast_tx)]

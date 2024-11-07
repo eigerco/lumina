@@ -761,6 +761,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "celestia-grpc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "celestia-proto",
+ "celestia-tendermint",
+ "celestia-tendermint-proto",
+ "celestia-types",
+ "cosmrs",
+ "dotenvy",
+ "grpc_method",
+ "pbjson-types",
+ "prost",
+ "thiserror",
+ "tokio",
+ "tonic",
+]
+
+[[package]]
 name = "celestia-proto"
 version = "0.4.1"
 dependencies = [
@@ -791,7 +810,6 @@ dependencies = [
  "celestia-tendermint",
  "celestia-tendermint-proto",
  "celestia-types",
- "cosmrs",
  "dotenvy",
  "futures",
  "getrandom",
@@ -799,7 +817,6 @@ dependencies = [
  "jsonrpsee",
  "libp2p",
  "nmt-rs",
- "pbjson-types",
  "prost",
  "rand",
  "serde",
@@ -822,12 +839,10 @@ dependencies = [
  "flex-error",
  "futures",
  "instant",
- "k256",
  "num-traits",
  "once_cell",
  "prost",
  "prost-types",
- "ripemd",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -858,25 +873,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "celestia-tonic"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "celestia-proto",
- "celestia-tendermint",
- "celestia-tendermint-proto",
- "celestia-types",
- "cosmrs",
- "dotenvy",
- "grpc_method",
- "pbjson-types",
- "prost",
- "thiserror",
- "tokio",
- "tonic",
-]
-
-[[package]]
 name = "celestia-types"
 version = "0.6.1"
 dependencies = [
@@ -889,7 +885,6 @@ dependencies = [
  "celestia-tendermint-proto",
  "cid",
  "const_format",
- "cosmrs",
  "ed25519-consensus",
  "enum_dispatch",
  "getrandom",

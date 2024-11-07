@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use celestia_proto::celestia::da::DataAvailabilityHeader as RawDataAvailabilityHeader;
+use celestia_proto::celestia::core::v1::da::DataAvailabilityHeader as RawDataAvailabilityHeader;
 use celestia_tendermint::merkle::simple_hash_from_byte_vectors;
 use celestia_tendermint_proto::v0_34::types::RowProof as RawRowProof;
 use celestia_tendermint_proto::Protobuf;

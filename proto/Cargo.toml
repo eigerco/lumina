@@ -19,8 +19,8 @@ prost.workspace = true
 prost-types.workspace = true
 cosmos-sdk-proto = { version = "0.26.0", default-features = false }
 serde = { version = "1.0.203", features = ["derive"] }
-pbjson = "0.7.0"
-pbjson-types = "0.7.0"
+pbjson = { version = "0.7.0", optional = true }
+pbjson-types = { version = "0.7.0", optional = true }
 tonic = { version = "0.12.3", optional = true, default-features = false, features = [
   "codegen", "prost"
 ]}
@@ -35,8 +35,8 @@ tonic-build = { version = "0.12.3", optional = true }
 prost-build.workspace = true
 prost-types.workspace = true
 protox = "0.7.1"
-tempfile = "3.13.0"
-pbjson-build = "0.7.0"
+tempfile = { version = "3.13.0", optional = true }
+pbjson-build = { version = "0.7.0", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3.42"
@@ -45,4 +45,4 @@ wasm-bindgen-test = "0.3.42"
 serde_json = "1.0.117"
 
 [features]
-tonic = ["dep:tonic", "dep:tonic-build"]
+tonic = ["dep:tonic", "dep:tonic-build", "dep:pbjson", "dep:pbjson-types", "dep:pbjson-build", "dep:tempfile"]
