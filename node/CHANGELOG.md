@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.6.0...lumina-node-v0.7.0) - 2024-11-07
+
+### Added
+
+- *(node)* [**breaking**] add a method to get all blobs using shwap ([#452](https://github.com/eigerco/lumina/pull/452))
+
+### Fixed
+
+- *(node)* redial peers if we go below limits ([#460](https://github.com/eigerco/lumina/pull/460))
+
 ## [0.6.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.5.1...lumina-node-v0.6.0) - 2024-10-25
 
 ### Added

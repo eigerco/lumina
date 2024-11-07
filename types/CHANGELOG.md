@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.7.0...celestia-types-v0.8.0) - 2024-11-07
+
+### Added
+
+- *(node)* [**breaking**] add a method to get all blobs using shwap ([#452](https://github.com/eigerco/lumina/pull/452))
+
 ## [0.7.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.6.1...celestia-types-v0.7.0) - 2024-10-25
 
 ### Added
