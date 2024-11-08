@@ -10,6 +10,8 @@ use celestia_tendermint_proto::Protobuf;
 #[cfg(feature = "tonic")]
 use pbjson_types::Any;
 use prost::Message;
+#[cfg(not(feature = "tonic"))]
+use prost_types::Any;
 
 use crate::Error;
 

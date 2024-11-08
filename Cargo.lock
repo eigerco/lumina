@@ -898,6 +898,7 @@ dependencies = [
  "nmt-rs",
  "pbjson-types",
  "prost",
+ "prost-types",
  "rand",
  "ruint",
  "serde",
