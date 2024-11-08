@@ -1,7 +1,7 @@
 //! Helper crate for grpc_method macro for creating gRPC methods
 //!
 //! # Example
-//! ```
+//! ```rust,ignore
 //! use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient;
 //! # use tonic::service::Interceptor;
 //! # use tonic::transport::Channel;
@@ -22,7 +22,7 @@
 //!     #[grpc_method(AuthQueryClient::params)]
 //!     async fn get_auth_params(&mut self) -> Result<AuthParams, Error>;
 //! }
-//! ````
+//! ```
 
 extern crate proc_macro;
 

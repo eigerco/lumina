@@ -37,8 +37,6 @@ tonic-build = { version = "0.12.3", default-features = false, optional = true, f
 tonic = { version = "0.12.3", optional = true, default-features = false, features = [ "transport" ] }
 tonic-build = { version = "0.12.3", optional = true, default-features = false, features = ["transport"] }
 
-#[target.'cfg(not(target_arch = "wasm32"))'.build-dependencies]
-
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3.42"
 
