@@ -1,5 +1,6 @@
 #![allow(clippy::all)]
 #![allow(missing_docs)]
+#![allow(rustdoc::invalid_rust_codeblocks)]
 #![doc = include_str!("../README.md")]
 
 pub mod serializers;
