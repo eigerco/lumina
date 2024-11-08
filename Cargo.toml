@@ -7,6 +7,7 @@ blockstore = "0.7.0"
 lumina-node = { version = "0.5.1", path = "node" }
 lumina-node-wasm = { version = "0.5.2", path = "node-wasm" }
 celestia-proto = { version = "0.4.1", path = "proto" }
+celestia-grpc = { version = "0.1.0", path = "grpc" }
 celestia-rpc = { version = "0.6.0", path = "rpc", default-features = false }
 celestia-types = { version = "0.6.1", path = "types", default-features = false }
 celestia-tendermint = { version = "0.32.2", default-features = false }

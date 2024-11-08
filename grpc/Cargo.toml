@@ -31,13 +31,10 @@ thiserror = "1.0.61"
 tonic = { version = "0.12.3", default-features = false, features = [
   "codegen", "prost"
 ]}
+pbjson-types = "0.7.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 anyhow = "1.0.86"
 dotenvy = "0.15.7"
-pbjson-types = "0.7.0"
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
-
-[features]
-default = ["transport"]
-transport = ["tonic/transport"]
+tonic = { version = "0.12.3", optional = true, default-features = false, features = [ "transport" ] }

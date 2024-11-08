@@ -30,9 +30,9 @@ pub struct AuthParams {
 /// (e.g. vesting).
 #[derive(Debug, Clone, PartialEq)]
 pub struct BaseAccount {
-    /// Bech32 [`AccountId`] of this account.
+    /// Bech32 `AccountId` of this account.
     pub address: String,
-    /// Optional [`PublicKey`] associated with this account.
+    /// Optional `PublicKey` associated with this account.
     pub pub_key: Option<PublicKey>,
     /// `account_number` is the account number of the account in state
     pub account_number: u64,
