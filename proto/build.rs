@@ -51,7 +51,7 @@ static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
 
 #[rustfmt::skip]
 static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
-    (".celestia.da.DataAvailabilityHeader.row_roots", VEC_BASE64STRING),
+    (".celestia.core.v1.da.DataAvailabilityHeader.row_roots", VEC_BASE64STRING),
     (".celestia.core.v1.da.DataAvailabilityHeader.column_roots", VEC_BASE64STRING),
     #[cfg(not(feature = "tonic"))]
     (".cosmos.base.abci.v1beta1.TxResponse.tx", OPTION_ANY),
