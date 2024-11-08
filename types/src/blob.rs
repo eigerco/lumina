@@ -2,12 +2,12 @@
 
 use std::iter;
 
-use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
 
 mod commitment;
 
 use crate::consts::appconsts;
+use crate::consts::appconsts::{subtree_root_threshold, AppVersion};
 use crate::nmt::Namespace;
 use crate::{bail_validation, Error, Result, Share};
 
@@ -56,10 +56,10 @@ impl Blob {
     /// # Example
     ///
     /// ```
-    /// use celestia_types::{Blob, nmt::Namespace};
+    /// use celestia_types::{AppVersion, Blob, nmt::Namespace};
     ///
     /// let my_namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
-    /// let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec())
+    /// let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), AppVersion::V2)
     ///     .expect("Failed to create a blob");
     ///
     /// assert_eq!(
@@ -73,14 +73,35 @@ impl Blob {
     ///     }"#},
     /// );
     /// ```
-    pub fn new(namespace: Namespace, data: Vec<u8>) -> Result<Blob> {
-        let commitment =
-            Commitment::from_blob(namespace, appconsts::SHARE_VERSION_ZERO, &data[..])?;
+    pub fn new(namespace: Namespace, data: Vec<u8>, app_version: AppVersion) -> Result<Blob> {
+        let subtree_root_threshold = subtree_root_threshold(app_version);
+        let commitment = Commitment::from_blob(namespace, &data[..], 0, subtree_root_threshold)?;
 
         Ok(Blob {
             namespace,
             data,
-            share_version: appconsts::SHARE_VERSION_ZERO,
+            share_version: 0,
+            commitment,
+            index: None,
+        })
+    }
+
+    /// Creates a `Blob` from [`RawBlob`] and an [`AppVersion`].
+    pub fn from_raw(raw: RawBlob, app_version: AppVersion) -> Result<Blob> {
+        let subtree_root_threshold = subtree_root_threshold(app_version);
+
+        let namespace = Namespace::new(raw.namespace_version as u8, &raw.namespace_id)?;
+        let commitment = Commitment::from_blob(
+            namespace,
+            &raw.data[..],
+            raw.share_version as u8,
+            subtree_root_threshold,
+        )?;
+
+        Ok(Blob {
+            namespace,
+            data: raw.data,
+            share_version: raw.share_version as u8,
             commitment,
             index: None,
         })
@@ -96,22 +117,29 @@ impl Blob {
     ///
     /// ```
     /// use celestia_types::Blob;
+    /// # use celestia_types::consts::appconsts::AppVersion;
     /// # use celestia_types::nmt::Namespace;
     /// #
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let mut blob = Blob::new(namespace, b"foo".to_vec()).unwrap();
+    /// let mut blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2).unwrap();
     ///
-    /// assert!(blob.validate().is_ok());
+    /// assert!(blob.validate(AppVersion::V2).is_ok());
     ///
-    /// let other_blob = Blob::new(namespace, b"bar".to_vec()).unwrap();
+    /// let other_blob = Blob::new(namespace, b"bar".to_vec(), AppVersion::V2).unwrap();
     /// blob.commitment = other_blob.commitment;
     ///
-    /// assert!(blob.validate().is_err());
+    /// assert!(blob.validate(AppVersion::V2).is_err());
     /// ```
-    pub fn validate(&self) -> Result<()> {
-        let computed_commitment =
-            Commitment::from_blob(self.namespace, self.share_version, &self.data)?;
+    pub fn validate(&self, app_version: AppVersion) -> Result<()> {
+        let subtree_root_threshold = subtree_root_threshold(app_version);
+
+        let computed_commitment = Commitment::from_blob(
+            self.namespace,
+            &self.data,
+            self.share_version,
+            subtree_root_threshold,
+        )?;
 
         if self.commitment != computed_commitment {
             bail_validation!("blob commitment != localy computed commitment")
@@ -133,10 +161,11 @@ impl Blob {
     ///
     /// ```
     /// use celestia_types::Blob;
+    /// # use celestia_types::consts::appconsts::AppVersion;
     /// # use celestia_types::nmt::Namespace;
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let blob = Blob::new(namespace, b"foo".to_vec()).unwrap();
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2).unwrap();
     /// let shares = blob.to_shares().unwrap();
     ///
     /// assert_eq!(shares.len(), 1);
@@ -161,18 +190,18 @@ impl Blob {
     /// # Example
     ///
     /// ```
-    /// use celestia_types::Blob;
+    /// use celestia_types::{AppVersion, Blob};
     /// # use celestia_types::nmt::Namespace;
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let blob = Blob::new(namespace, b"foo".to_vec()).unwrap();
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2).unwrap();
     /// let shares = blob.to_shares().unwrap();
     ///
-    /// let reconstructed = Blob::reconstruct(&shares).unwrap();
+    /// let reconstructed = Blob::reconstruct(&shares, AppVersion::V2).unwrap();
     ///
     /// assert_eq!(blob, reconstructed);
     /// ```
-    pub fn reconstruct<'a, I>(shares: I) -> Result<Self>
+    pub fn reconstruct<'a, I>(shares: I, app_version: AppVersion) -> Result<Self>
     where
         I: IntoIterator<Item = &'a Share>,
     {
@@ -217,7 +246,7 @@ impl Blob {
         // remove padding
         data.truncate(blob_len as usize);
 
-        Self::new(namespace, data)
+        Self::new(namespace, data, app_version)
     }
 
     /// Reconstructs all the blobs from shares.
@@ -235,24 +264,24 @@ impl Blob {
     /// # Example
     ///
     /// ```
-    /// use celestia_types::Blob;
+    /// use celestia_types::{AppVersion, Blob};
     /// # use celestia_types::nmt::Namespace;
     /// # let namespace1 = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     /// # let namespace2 = Namespace::new_v0(&[2, 3, 4, 5, 6]).expect("Invalid namespace");
     ///
     /// let blobs = vec![
-    ///     Blob::new(namespace1, b"foo".to_vec()).unwrap(),
-    ///     Blob::new(namespace2, b"bar".to_vec()).unwrap(),
+    ///     Blob::new(namespace1, b"foo".to_vec(), AppVersion::V2).unwrap(),
+    ///     Blob::new(namespace2, b"bar".to_vec(), AppVersion::V2).unwrap(),
     /// ];
     /// let shares: Vec<_> = blobs.iter().flat_map(|blob| blob.to_shares().unwrap()).collect();
     ///
-    /// let reconstructed = Blob::reconstruct_all(&shares).unwrap();
+    /// let reconstructed = Blob::reconstruct_all(&shares, AppVersion::V2).unwrap();
     ///
     /// assert_eq!(blobs, reconstructed);
     /// ```
     ///
     /// [`ExtendedDataSquare`]: crate::ExtendedDataSquare
-    pub fn reconstruct_all<'a, I>(shares: I) -> Result<Vec<Self>>
+    pub fn reconstruct_all<'a, I>(shares: I, app_version: AppVersion) -> Result<Vec<Self>>
     where
         I: IntoIterator<Item = &'a Share>,
     {
@@ -269,30 +298,10 @@ impl Blob {
                 };
                 iter::once(start).chain(&mut shares)
             };
-            blobs.push(Blob::reconstruct(&mut blob)?);
+            blobs.push(Blob::reconstruct(&mut blob, app_version)?);
         }
 
         Ok(blobs)
-    }
-}
-
-impl Protobuf<RawBlob> for Blob {}
-
-impl TryFrom<RawBlob> for Blob {
-    type Error = Error;
-
-    fn try_from(value: RawBlob) -> Result<Self, Self::Error> {
-        let namespace = Namespace::new(value.namespace_version as u8, &value.namespace_id)?;
-        let commitment =
-            Commitment::from_blob(namespace, value.share_version as u8, &value.data[..])?;
-
-        Ok(Blob {
-            commitment,
-            namespace,
-            data: value.data,
-            share_version: value.share_version as u8,
-            index: None,
-        })
     }
 }
 
@@ -368,14 +377,14 @@ mod tests {
     fn create_from_raw() {
         let expected = sample_blob();
         let raw = RawBlob::from(expected.clone());
-        let created = Blob::try_from(raw).unwrap();
+        let created = Blob::from_raw(raw, AppVersion::V2).unwrap();
 
         assert_eq!(created, expected);
     }
 
     #[test]
     fn validate_blob() {
-        sample_blob().validate().unwrap();
+        sample_blob().validate(AppVersion::V2).unwrap();
     }
 
     #[test]
@@ -383,7 +392,7 @@ mod tests {
         let mut blob = sample_blob();
         blob.commitment.0.fill(7);
 
-        blob.validate().unwrap_err();
+        blob.validate(AppVersion::V2).unwrap_err();
     }
 
     #[test]
@@ -405,17 +414,17 @@ mod tests {
             let len = rand::random::<usize>() % 1024 * 1024;
             let data = random_bytes(len);
             let ns = Namespace::const_v0(rand::random());
-            let blob = Blob::new(ns, data).unwrap();
+            let blob = Blob::new(ns, data, AppVersion::V2).unwrap();
 
             let shares = blob.to_shares().unwrap();
-            assert_eq!(blob, Blob::reconstruct(&shares).unwrap());
+            assert_eq!(blob, Blob::reconstruct(&shares, AppVersion::V2).unwrap());
         }
     }
 
     #[test]
     fn reconstruct_empty() {
         assert!(matches!(
-            Blob::reconstruct(&Vec::<Share>::new()),
+            Blob::reconstruct(&Vec::<Share>::new(), AppVersion::V2),
             Err(Error::MissingShares)
         ));
     }
@@ -425,13 +434,16 @@ mod tests {
         let len = rand::random::<usize>() % 1024 * 1024;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
-        let mut shares = Blob::new(ns, data).unwrap().to_shares().unwrap();
+        let mut shares = Blob::new(ns, data, AppVersion::V2)
+            .unwrap()
+            .to_shares()
+            .unwrap();
 
         // modify info byte to remove sequence start bit
         shares[0].as_mut()[NS_SIZE] &= 0b11111110;
 
         assert!(matches!(
-            Blob::reconstruct(&shares),
+            Blob::reconstruct(&shares, AppVersion::V2),
             Err(Error::ExpectedShareWithSequenceStart)
         ));
     }
@@ -448,10 +460,13 @@ mod tests {
         }) {
             let len = (rand::random::<usize>() % 1023 + 1) * 2;
             let data = random_bytes(len);
-            let shares = Blob::new(ns.unwrap(), data).unwrap().to_shares().unwrap();
+            let shares = Blob::new(ns.unwrap(), data, AppVersion::V2)
+                .unwrap()
+                .to_shares()
+                .unwrap();
 
             assert!(matches!(
-                Blob::reconstruct(&shares),
+                Blob::reconstruct(&shares, AppVersion::V2),
                 Err(Error::UnexpectedReservedNamespace)
             ));
         }
@@ -462,11 +477,14 @@ mod tests {
         let len = rand::random::<usize>() % 1024 * 1024 + 2048;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
-        let shares = Blob::new(ns, data).unwrap().to_shares().unwrap();
+        let shares = Blob::new(ns, data, AppVersion::V2)
+            .unwrap()
+            .to_shares()
+            .unwrap();
 
         assert!(matches!(
             // minimum for len is 4 so 3 will break stuff
-            Blob::reconstruct(&shares[..2]),
+            Blob::reconstruct(&shares[..2], AppVersion::V2),
             Err(Error::MissingShares)
         ));
     }
@@ -476,13 +494,16 @@ mod tests {
         let len = rand::random::<usize>() % 1024 * 1024 + 512;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
-        let mut shares = Blob::new(ns, data).unwrap().to_shares().unwrap();
+        let mut shares = Blob::new(ns, data, AppVersion::V2)
+            .unwrap()
+            .to_shares()
+            .unwrap();
 
         // change share version in second share
         shares[1].as_mut()[NS_SIZE] = 0b11111110;
 
         assert!(matches!(
-            Blob::reconstruct(&shares),
+            Blob::reconstruct(&shares, AppVersion::V2),
             Err(Error::BlobSharesMetadataMismatch(..))
         ));
     }
@@ -493,13 +514,16 @@ mod tests {
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
         let ns2 = Namespace::const_v0(rand::random());
-        let mut shares = Blob::new(ns, data).unwrap().to_shares().unwrap();
+        let mut shares = Blob::new(ns, data, AppVersion::V2)
+            .unwrap()
+            .to_shares()
+            .unwrap();
 
         // change namespace in second share
         shares[1].as_mut()[..NS_SIZE].copy_from_slice(ns2.as_bytes());
 
         assert!(matches!(
-            Blob::reconstruct(&shares),
+            Blob::reconstruct(&shares, AppVersion::V2),
             Err(Error::BlobSharesMetadataMismatch(..))
         ));
     }
@@ -509,13 +533,16 @@ mod tests {
         let len = rand::random::<usize>() % 1024 * 1024 + 512;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
-        let mut shares = Blob::new(ns, data).unwrap().to_shares().unwrap();
+        let mut shares = Blob::new(ns, data, AppVersion::V2)
+            .unwrap()
+            .to_shares()
+            .unwrap();
 
         // modify info byte to add sequence start bit
         shares[1].as_mut()[NS_SIZE] |= 0b00000001;
 
         assert!(matches!(
-            Blob::reconstruct(&shares),
+            Blob::reconstruct(&shares, AppVersion::V2),
             Err(Error::UnexpectedSequenceStart)
         ));
     }
@@ -527,7 +554,7 @@ mod tests {
                 let len = rand::random::<usize>() % 1024 * 1024 + 512;
                 let data = random_bytes(len);
                 let ns = Namespace::const_v0(rand::random());
-                Blob::new(ns, data).unwrap()
+                Blob::new(ns, data, AppVersion::V2).unwrap()
             })
             .collect();
 
@@ -535,7 +562,7 @@ mod tests {
             .iter()
             .flat_map(|blob| blob.to_shares().unwrap())
             .collect();
-        let reconstructed = Blob::reconstruct_all(&shares).unwrap();
+        let reconstructed = Blob::reconstruct_all(&shares, AppVersion::V2).unwrap();
 
         assert_eq!(blobs, reconstructed);
     }

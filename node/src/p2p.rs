@@ -22,14 +22,15 @@ use std::time::Duration;
 use blockstore::Blockstore;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
 use celestia_tendermint_proto::Protobuf;
-use celestia_types::nmt::Namespace;
+use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
 use celestia_types::row::{Row, RowId};
 use celestia_types::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
 use celestia_types::sample::{Sample, SampleId};
 use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
-use celestia_types::{ExtendedHeader, FraudProof};
+use celestia_types::{Blob, ExtendedHeader, FraudProof};
 use cid::Cid;
-use futures::StreamExt;
+use futures::stream::FuturesOrdered;
+use futures::{StreamExt, TryStreamExt};
 use libp2p::core::transport::ListenerId;
 use libp2p::{
     autonat,
@@ -42,7 +43,7 @@ use libp2p::{
     ping,
     swarm::{
         dial_opts::{DialOpts, PeerCondition},
-        ConnectionId, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent,
+        ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent,
     },
     Multiaddr, PeerId,
 };
@@ -82,8 +83,6 @@ const MIN_CONNECTED_PEERS: u64 = 4;
 
 // Maximum size of a [`Multihash`].
 pub(crate) const MAX_MH_SIZE: usize = 64;
-
-pub(crate) const GET_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 // all fraud proofs for height bigger than head height by this threshold
 // will be ignored
@@ -145,6 +144,10 @@ pub enum P2pError {
     /// Shwap protocol error.
     #[error("Shwap: {0}")]
     Shwap(String),
+
+    /// An error propagated from [`celestia_types`].
+    #[error(transparent)]
+    CelestiaTypes(#[from] celestia_types::Error),
 }
 
 impl P2pError {
@@ -165,7 +168,8 @@ impl P2pError {
             | P2pError::ProtoDecodeFailed(_)
             | P2pError::Cid(_)
             | P2pError::BitswapQueryTimeout
-            | P2pError::Shwap(_) => false,
+            | P2pError::Shwap(_)
+            | P2pError::CelestiaTypes(_) => false,
         }
     }
 }
@@ -514,31 +518,32 @@ impl P2p {
     }
 
     /// Request a [`Row`] on bitswap protocol.
-    pub async fn get_row(&self, row_index: u16, block_height: u64) -> Result<Row> {
+    pub async fn get_row(
+        &self,
+        row_index: u16,
+        block_height: u64,
+        timeout: Option<Duration>,
+    ) -> Result<Row> {
         let id = RowId::new(row_index, block_height).map_err(P2pError::Cid)?;
         let cid = convert_cid(&id.into())?;
 
-        // TODO: add timeout
-        let data = self.get_shwap_cid(cid, None).await?;
+        let data = self.get_shwap_cid(cid, timeout).await?;
         let row = Row::decode(id, &data[..]).map_err(|e| P2pError::Shwap(e.to_string()))?;
         Ok(row)
     }
 
     /// Request a [`Sample`] on bitswap protocol.
-    ///
-    /// This method awaits for a verified `Sample` until timeout of 10 second
-    /// is reached. On timeout it is safe to assume that sampling of the block
-    /// failed.
     pub async fn get_sample(
         &self,
         row_index: u16,
         column_index: u16,
         block_height: u64,
+        timeout: Option<Duration>,
     ) -> Result<Sample> {
         let id = SampleId::new(row_index, column_index, block_height).map_err(P2pError::Cid)?;
         let cid = convert_cid(&id.into())?;
 
-        let data = self.get_shwap_cid(cid, Some(GET_SAMPLE_TIMEOUT)).await?;
+        let data = self.get_shwap_cid(cid, timeout).await?;
         let sample = Sample::decode(id, &data[..]).map_err(|e| P2pError::Shwap(e.to_string()))?;
         Ok(sample)
     }
@@ -549,16 +554,45 @@ impl P2p {
         namespace: Namespace,
         row_index: u16,
         block_height: u64,
+        timeout: Option<Duration>,
     ) -> Result<RowNamespaceData> {
         let id =
             RowNamespaceDataId::new(namespace, row_index, block_height).map_err(P2pError::Cid)?;
         let cid = convert_cid(&id.into())?;
 
-        // TODO: add timeout
-        let data = self.get_shwap_cid(cid, None).await?;
+        let data = self.get_shwap_cid(cid, timeout).await?;
         let row_namespace_data =
             RowNamespaceData::decode(id, &data[..]).map_err(|e| P2pError::Shwap(e.to_string()))?;
         Ok(row_namespace_data)
+    }
+
+    /// Request all blobs with provided namespace in the block corresponding to this header
+    /// using bitswap protocol.
+    pub async fn get_all_blobs(
+        &self,
+        header: &ExtendedHeader,
+        namespace: Namespace,
+        timeout: Option<Duration>,
+    ) -> Result<Vec<Blob>> {
+        let height = header.height().value();
+        let app_version = header.app_version()?;
+        let rows_to_fetch: Vec<_> = header
+            .dah
+            .row_roots()
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| row.contains::<NamespacedSha2Hasher>(*namespace))
+            .map(|(n, _)| n as u16)
+            .collect();
+
+        let futs = rows_to_fetch
+            .into_iter()
+            .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, height, timeout))
+            .collect::<FuturesOrdered<_>>();
+        let rows: Vec<_> = futs.try_collect().await?;
+        let shares = rows.iter().flat_map(|row| row.shares.iter());
+
+        Ok(Blob::reconstruct_all(shares, app_version)?)
     }
 
     /// Get the addresses where [`P2p`] listens on for incoming connections.
@@ -762,17 +796,16 @@ where
         let mut kademlia_interval = Interval::new(Duration::from_secs(30)).await;
         let mut peer_tracker_info_watcher = self.peer_tracker.info_watcher();
 
-        self.dial_bootnodes();
-
         // Initiate discovery
-        let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
+        self.bootstrap();
 
         loop {
             select! {
                 _ = self.cancellation_token.cancelled() => break,
                 _ = peer_tracker_info_watcher.changed() => {
                     if peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
-                        self.dial_bootnodes();
+                        warn!("All peers disconnected");
+                        self.bootstrap();
                     }
                 }
                 _ = report_interval.tick() => {
@@ -781,8 +814,7 @@ where
                 _ = kademlia_interval.tick() => {
                     if self.peer_tracker.info().num_connected_peers < MIN_CONNECTED_PEERS
                     {
-                        debug!("Running kademlia bootstrap procedure.");
-                        let _ = self.swarm.behaviour_mut().kademlia.bootstrap();
+                        self.bootstrap();
                     }
                 }
                 _ = poll_closed(&mut self.bitswap_queries) => {
@@ -804,7 +836,7 @@ where
         self.on_stop().await;
     }
 
-    fn dial_bootnodes(&mut self) {
+    fn bootstrap(&mut self) {
         self.event_pub.send(NodeEvent::ConnectingToBootnodes);
 
         for (peer_id, addrs) in &self.bootnodes {
@@ -816,8 +848,15 @@ where
                 .build();
 
             if let Err(e) = self.swarm.dial(dial_opts) {
-                error!("Failed to dial on {addrs:?}: {e}");
+                if !matches!(e, DialError::DialPeerConditionFalse(_)) {
+                    warn!("Failed to dial on {addrs:?}: {e}");
+                }
             }
+        }
+
+        // trigger kademlia bootstrap
+        if self.swarm.behaviour_mut().kademlia.bootstrap().is_err() {
+            warn!("Can't run kademlia bootstrap, no known peers");
         }
     }
 

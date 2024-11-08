@@ -13,10 +13,12 @@ use celestia_tendermint::{validator, Hash, Time};
 use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize};
 
+use crate::consts::appconsts::AppVersion;
 use crate::trust_level::DEFAULT_TRUST_LEVEL;
 use crate::validator_set::ValidatorSetExt;
 use crate::{
     bail_validation, bail_verification, DataAvailabilityHeader, Error, Result, ValidateBasic,
+    ValidateBasicWithAppVersion,
 };
 
 /// Information about a tendermint validator.
@@ -82,6 +84,17 @@ impl ExtendedHeader {
         let header = ExtendedHeader::decode(bytes)?;
         header.validate()?;
         Ok(header)
+    }
+
+    /// Get the app version.
+    ///
+    /// # Errors
+    ///
+    /// This function returns an error if the app version set in header
+    /// is not currently supported.
+    pub fn app_version(&self) -> Result<AppVersion> {
+        let app_version = self.header.version.app;
+        AppVersion::from_u64(app_version).ok_or(Error::UnsupportedAppVersion(app_version))
     }
 
     /// Get the block chain id.
@@ -182,7 +195,8 @@ impl ExtendedHeader {
             &self.commit,
         )?;
 
-        self.dah.validate_basic()?;
+        let app_version = self.app_version()?;
+        self.dah.validate_basic(app_version)?;
 
         Ok(())
     }

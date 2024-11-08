@@ -781,7 +781,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "celestia-tendermint-proto",
  "cosmos-sdk-proto",
@@ -802,7 +802,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-rpc"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -874,7 +874,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.6.1"
+version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
  "bech32",
@@ -3355,7 +3355,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-cli"
-version = "0.4.1"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -3379,7 +3379,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node"
-version = "0.5.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "backoff",
@@ -3429,7 +3429,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-wasm"
-version = "0.5.2"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "blockstore",

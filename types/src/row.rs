@@ -13,13 +13,12 @@ use bytes::{Buf, BufMut, BytesMut};
 use celestia_proto::shwap::{row::HalfSide as RawHalfSide, Row as RawRow, Share as RawShare};
 use cid::CidGeneric;
 use multihash::Multihash;
-use nmt_rs::NamespaceMerkleHasher;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
 use crate::consts::appconsts::SHARE_SIZE;
 use crate::eds::ExtendedDataSquare;
-use crate::nmt::{NamespacedSha2Hasher, Nmt};
+use crate::nmt::{Nmt, NmtExt};
 use crate::{DataAvailabilityHeader, Error, Result, Share};
 
 /// Number of bytes needed to represent [`EdsId`] in `multihash`.
@@ -68,7 +67,7 @@ impl Row {
     /// Verify the row against roots from DAH
     pub fn verify(&self, id: RowId, dah: &DataAvailabilityHeader) -> Result<()> {
         let row = id.index;
-        let mut tree = Nmt::with_hasher(NamespacedSha2Hasher::with_ignore_max_ns(true));
+        let mut tree = Nmt::default();
 
         for share in &self.shares {
             tree.push_leaf(share.as_ref(), *share.namespace())
@@ -261,7 +260,7 @@ impl From<RowId> for CidGeneric<ROW_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consts::appconsts::SHARE_SIZE;
+    use crate::consts::appconsts::{AppVersion, SHARE_SIZE};
     use crate::test_utils::{generate_dummy_eds, generate_eds};
     use crate::Blob;
 
@@ -281,7 +280,7 @@ mod tests {
     #[test]
     fn index_calculation() {
         let shares = vec![vec![0; SHARE_SIZE]; 8 * 8];
-        let eds = ExtendedDataSquare::new(shares, "codec".to_string()).unwrap();
+        let eds = ExtendedDataSquare::new(shares, "codec".to_string(), AppVersion::V2).unwrap();
 
         Row::new(1, &eds).unwrap();
         Row::new(7, &eds).unwrap();
@@ -369,7 +368,7 @@ mod tests {
     #[test]
     fn test_roundtrip_verify() {
         for _ in 0..5 {
-            let eds = generate_dummy_eds(2 << (rand::random::<usize>() % 8));
+            let eds = generate_dummy_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
             let dah = DataAvailabilityHeader::from_eds(&eds);
 
             let index = rand::random::<u16>() % eds.square_width();
@@ -393,11 +392,14 @@ mod tests {
     #[test]
     fn reconstruct_all() {
         for _ in 0..3 {
-            let eds = generate_eds(8 << (rand::random::<usize>() % 6));
+            let eds = generate_eds(8 << (rand::random::<usize>() % 6), AppVersion::V2);
 
             let rows: Vec<_> = (1..4).map(|row| Row::new(row, &eds).unwrap()).collect();
-            let blobs =
-                Blob::reconstruct_all(rows.iter().flat_map(|row| row.shares.iter())).unwrap();
+            let blobs = Blob::reconstruct_all(
+                rows.iter().flat_map(|row| row.shares.iter()),
+                AppVersion::V2,
+            )
+            .unwrap();
 
             assert_eq!(blobs.len(), 2);
         }

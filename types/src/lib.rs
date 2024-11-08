@@ -7,7 +7,7 @@ mod block;
 mod byzantine;
 pub mod consts;
 mod data_availability_header;
-mod eds;
+pub mod eds;
 mod error;
 mod extended_header;
 pub mod fraud_proof;
@@ -33,6 +33,7 @@ mod validator_set;
 
 pub use crate::blob::{Blob, Commitment};
 pub use crate::block::*;
+pub use crate::consts::appconsts::AppVersion;
 pub use crate::data_availability_header::*;
 pub use crate::eds::{AxisType, ExtendedDataSquare};
 pub use crate::error::*;

@@ -79,7 +79,9 @@ impl RowNamespaceData {
     ///
     /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
     pub fn verify(&self, id: RowNamespaceDataId, dah: &DataAvailabilityHeader) -> Result<()> {
-        if self.shares.is_empty() {
+        if (self.shares.is_empty() && self.proof.is_of_presence())
+            || (!self.shares.is_empty() && self.proof.is_of_absence())
+        {
             return Err(Error::WrongProofType);
         }
 
@@ -268,12 +270,10 @@ impl From<RowNamespaceDataId> for CidGeneric<ROW_NAMESPACE_DATA_ID_SIZE> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        test_utils::{generate_dummy_eds, generate_eds},
-        Blob,
-    };
-
     use super::*;
+    use crate::consts::appconsts::AppVersion;
+    use crate::test_utils::{generate_dummy_eds, generate_eds};
+    use crate::Blob;
 
     #[test]
     fn round_trip() {
@@ -381,7 +381,7 @@ mod tests {
     fn test_roundtrip_verify() {
         // random
         for _ in 0..5 {
-            let eds = generate_dummy_eds(2 << (rand::random::<usize>() % 8));
+            let eds = generate_dummy_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
             let dah = DataAvailabilityHeader::from_eds(&eds);
 
             let namespace = eds.share(1, 1).unwrap().namespace();
@@ -396,7 +396,7 @@ mod tests {
         }
 
         // parity share
-        let eds = generate_dummy_eds(2 << (rand::random::<usize>() % 8));
+        let eds = generate_dummy_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         for (id, row) in eds
             .get_namespace_data(Namespace::PARITY_SHARE, &dah, 1)
@@ -411,9 +411,24 @@ mod tests {
     }
 
     #[test]
+    fn verify_absent_ns() {
+        // parity share
+        let eds = generate_dummy_eds(2 << (rand::random::<usize>() % 8), AppVersion::V2);
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+
+        // namespace bigger than pay for blob, smaller than primary reserved padding, that is not
+        // used
+        let ns = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 5]);
+        for (id, row) in eds.get_namespace_data(ns, &dah, 1).unwrap() {
+            assert!(row.shares.is_empty());
+            row.verify(id, &dah).unwrap();
+        }
+    }
+
+    #[test]
     fn reconstruct_all() {
         for _ in 0..3 {
-            let eds = generate_eds(8 << (rand::random::<usize>() % 6));
+            let eds = generate_eds(8 << (rand::random::<usize>() % 6), AppVersion::V2);
             let dah = DataAvailabilityHeader::from_eds(&eds);
 
             let mut namespaces: Vec<_> = eds
@@ -429,7 +444,7 @@ mod tests {
             assert_eq!(namespace_data.len(), 3);
             let shares = namespace_data.iter().flat_map(|(_, row)| row.shares.iter());
 
-            let blobs = Blob::reconstruct_all(shares).unwrap();
+            let blobs = Blob::reconstruct_all(shares, AppVersion::V2).unwrap();
             assert_eq!(blobs.len(), 2);
 
             // rest of namespaces should have 1 blob each
@@ -438,7 +453,7 @@ mod tests {
                 assert_eq!(namespace_data.len(), 1);
                 let shares = namespace_data.iter().flat_map(|(_, row)| row.shares.iter());
 
-                let blobs = Blob::reconstruct_all(shares).unwrap();
+                let blobs = Blob::reconstruct_all(shares, AppVersion::V2).unwrap();
                 assert_eq!(blobs.len(), 1);
             }
         }
