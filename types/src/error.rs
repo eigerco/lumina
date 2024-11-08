@@ -117,6 +117,10 @@ pub enum Error {
     #[error("Invalid proof type: {0}")]
     InvalidShwapProofType(i32),
 
+    /// Could not deserialise Public Key
+    #[error("Could not deserialize public key")]
+    InvalidPublicKey,
+
     /// Range proof verification error.
     #[error("Range proof verification failed: {0:?}")]
     RangeProofError(nmt_rs::simple_merkle::error::RangeProofError),

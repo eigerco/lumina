@@ -2,10 +2,19 @@
 
 use celestia_proto::cosmos::auth::v1beta1::BaseAccount as RawBaseAccount;
 use celestia_proto::cosmos::auth::v1beta1::ModuleAccount as RawModuleAccount;
+use celestia_proto::cosmos::crypto::ed25519::PubKey as Ed25519PubKey;
+use celestia_proto::cosmos::crypto::secp256k1::PubKey as Secp256k1PubKey;
 use celestia_tendermint::public_key::PublicKey;
 use celestia_tendermint_proto::Protobuf;
 
+#[cfg(feature = "tonic")]
+use pbjson_types::Any;
+use prost::Message;
+
 use crate::Error;
+
+const COSMOS_ED25519_PUBKEY: &str = "/cosmos.crypto.ed25519.PubKey";
+const COSMOS_SECP256K1_PUBKEY: &str = "/cosmos.crypto.secp256k1.PubKey";
 
 /// Params defines the parameters for the auth module.
 #[derive(Debug)]
@@ -56,7 +65,7 @@ impl From<BaseAccount> for RawBaseAccount {
     fn from(account: BaseAccount) -> Self {
         RawBaseAccount {
             address: account.address,
-            pub_key: None, //todo!(),
+            pub_key: account.pub_key.map(any_from_public_key),
             account_number: account.account_number,
             sequence: account.sequence,
         }
@@ -67,9 +76,10 @@ impl TryFrom<RawBaseAccount> for BaseAccount {
     type Error = Error;
 
     fn try_from(account: RawBaseAccount) -> Result<Self, Self::Error> {
+        let pub_key = account.pub_key.map(public_key_from_any).transpose()?;
         Ok(BaseAccount {
             address: account.address,
-            pub_key: None,
+            pub_key,
             account_number: account.account_number,
             sequence: account.sequence,
         })
@@ -100,6 +110,41 @@ impl TryFrom<RawModuleAccount> for ModuleAccount {
             name: account.name,
             permissions: account.permissions,
         })
+    }
+}
+
+fn public_key_from_any(any: Any) -> Result<PublicKey, Error> {
+    match any.type_url.as_ref() {
+        COSMOS_ED25519_PUBKEY => {
+            PublicKey::from_raw_ed25519(&Ed25519PubKey::decode(&*any.value)?.key)
+        }
+        COSMOS_SECP256K1_PUBKEY => {
+            PublicKey::from_raw_secp256k1(&Secp256k1PubKey::decode(&*any.value)?.key)
+        }
+        other => return Err(Error::InvalidPublicKeyType(other.to_string())),
+    }
+    .ok_or(Error::InvalidPublicKey)
+}
+
+fn any_from_public_key(key: PublicKey) -> Any {
+    match key {
+        key @ PublicKey::Ed25519(_) => Any {
+            type_url: COSMOS_ED25519_PUBKEY.to_string(),
+            value: Ed25519PubKey {
+                key: key.to_bytes(),
+            }
+            .encode_to_vec()
+            .into(),
+        },
+        key @ PublicKey::Secp256k1(_) => Any {
+            type_url: COSMOS_SECP256K1_PUBKEY.to_string(),
+            value: Secp256k1PubKey {
+                key: key.to_bytes(),
+            }
+            .encode_to_vec()
+            .into(),
+        },
+        _ => unimplemented!("unexpected key type"),
     }
 }
 

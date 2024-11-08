@@ -20,7 +20,7 @@ categories = [
 
 [dependencies]
 celestia-tendermint-proto.workspace = true
-celestia-types.workspace = true
+celestia-types = { workspace = true, features = [ "tonic" ] }
 celestia-proto = { workspace = true, features = [ "tonic" ] }
 celestia-tendermint.workspace = true
 prost.workspace = true

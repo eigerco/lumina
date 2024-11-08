@@ -87,6 +87,7 @@ const PROTO_FILES: &[&str] = &[
     "vendor/cosmos/base/node/v1beta1/query.proto",
     "vendor/cosmos/base/tendermint/v1beta1/query.proto",
     "vendor/cosmos/base/v1beta1/coin.proto",
+    "vendor/cosmos/crypto/ed25519/keys.proto",
     "vendor/cosmos/crypto/multisig/v1beta1/multisig.proto",
     "vendor/cosmos/crypto/secp256k1/keys.proto",
     "vendor/cosmos/staking/v1beta1/query.proto",
