@@ -11,7 +11,10 @@ use celestia_tendermint_proto::Protobuf;
 use pbjson_types::Any;
 #[cfg(not(feature = "tonic"))]
 use prost_types::Any;
+// workaround for otherwise unused prost-types if tonic feature flag is enabled tripping up CI
 use prost::Message;
+#[allow(unused_imports)]
+use prost_types::Any as _;
 
 use crate::Error;
 
