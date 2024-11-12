@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.6.0...lumina-node-wasm-v0.6.1) - 2024-11-07
+
+### Other
+
+- update lumina-node npm package
+
 ## [0.6.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.5.2...lumina-node-wasm-v0.6.0) - 2024-10-25
 
 ### Added
