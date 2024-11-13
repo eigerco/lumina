@@ -15,7 +15,7 @@ const NULL_DEFAULT: &str = r#"#[serde(with = "crate::serializers::null_default")
 
 #[rustfmt::skip]
 static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
-    (".celestia.da.DataAvailabilityHeader", SERIALIZED_DEFAULT),
+    (".celestia.core.v1.da.DataAvailabilityHeader", SERIALIZED_DEFAULT),
     (".celestia.blob.v1.MsgPayForBlobs", SERIALIZED_DEFAULT),
     (".cosmos.base.abci.v1beta1.ABCIMessageLog", SERIALIZED_DEFAULT),
     (".cosmos.base.abci.v1beta1.Attribute", SERIALIZED_DEFAULT),
@@ -48,8 +48,8 @@ static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
 
 #[rustfmt::skip]
 static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
-    (".celestia.da.DataAvailabilityHeader.row_roots", VEC_BASE64STRING),
-    (".celestia.da.DataAvailabilityHeader.column_roots", VEC_BASE64STRING),
+    (".celestia.core.v1.da.DataAvailabilityHeader.row_roots", VEC_BASE64STRING),
+    (".celestia.core.v1.da.DataAvailabilityHeader.column_roots", VEC_BASE64STRING),
     (".cosmos.base.abci.v1beta1.TxResponse.tx", OPTION_ANY),
     (".cosmos.base.abci.v1beta1.TxResponse.logs", NULL_DEFAULT),
     (".cosmos.base.abci.v1beta1.TxResponse.events", NULL_DEFAULT),
@@ -66,7 +66,7 @@ static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
 fn main() {
     let fds = protox::compile(
         [
-            "vendor/celestia/da/data_availability_header.proto",
+            "vendor/celestia/core/v1/da/data_availability_header.proto",
             "vendor/celestia/blob/v1/tx.proto",
             "vendor/header/pb/extended_header.proto",
             "vendor/share/eds/byzantine/pb/share.proto",

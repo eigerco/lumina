@@ -1,0 +1,35 @@
+syntax = "proto3";
+package celestia.signal.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/celestiaorg/celestia-app/x/signal/types";
+
+// Msg defines the signal Msg service.
+service Msg {
+  // SignalVersion allows a validator to signal for a version.
+  rpc SignalVersion(MsgSignalVersion) returns (MsgSignalVersionResponse) {
+    option (google.api.http).post = "/signal/v1/signal";
+  }
+
+  // TryUpgrade tallies all the votes for all the versions to determine if a
+  // quorum has been reached for a version.
+  rpc TryUpgrade(MsgTryUpgrade) returns (MsgTryUpgradeResponse) {
+    option (google.api.http).post = "/signal/v1/upgrade";
+  }
+}
+
+// MsgSignalVersion signals for an upgrade.
+message MsgSignalVersion {
+  string validator_address = 1;
+  uint64 version = 2;
+}
+
+// MsgSignalVersionResponse is the response type for the SignalVersion method.
+message MsgSignalVersionResponse {}
+
+// MsgTryUpgrade tries to upgrade the chain.
+message MsgTryUpgrade { string signer = 1; }
+
+// MsgTryUpgradeResponse is the response type for the TryUpgrade method.
+message MsgTryUpgradeResponse {}
