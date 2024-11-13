@@ -236,7 +236,7 @@ async fn head_selection_with_multiple_peers() {
 
     new_b_node.wait_connected().await.unwrap();
     // small delay needed for client to include new_b_node in head selection process
-    sleep(Duration::from_millis(50)).await;
+    sleep(Duration::from_millis(100)).await;
 
     // now 2 nodes agree on head with height 25
     let network_head = client.request_head_header().await.unwrap();
