@@ -480,9 +480,9 @@ mod tests {
         let info = client.network_info().await.unwrap();
         assert_eq!(info.num_peers, 1);
 
-        sleep(Duration::from_secs(300)).await;
+        sleep(Duration::from_millis(300)).await;
 
-        client.wait_connected_trusted().await.unwrap();
+        client.wait_connected().await.unwrap();
         let info = client.network_info().await.unwrap();
         assert_eq!(info.num_peers, 2);
         rpc_client
@@ -523,8 +523,6 @@ mod tests {
     async fn fetch_bridge_webtransport_multiaddr(client: &Client) -> Multiaddr {
         let bridge_info = client.p2p_info().await.unwrap();
 
-        tracing::error!("BB: {bridge_info:#?}");
-
         let mut ma = bridge_info
             .addrs
             .into_iter()
@@ -543,7 +541,6 @@ mod tests {
             ma.push(Protocol::P2p(bridge_info.id.into()))
         }
 
-        tracing::error!("B: {ma:#?}");
         ma
     }
 
