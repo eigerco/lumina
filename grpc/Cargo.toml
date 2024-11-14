@@ -24,7 +24,7 @@ celestia-types = { workspace = true, features = [ "tonic" ] }
 celestia-proto = { workspace = true, features = [ "tonic" ] }
 celestia-tendermint.workspace = true
 prost.workspace = true
-grpc_method.path = "./grpc_method_macro"
+grpc_method = { version = "0.1.0", path = "grpc_method_macro" }
 
 cosmrs = "0.21.0"
 thiserror = "1.0.61"
