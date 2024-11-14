@@ -765,18 +765,27 @@ name = "celestia-grpc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "celestia-grpc-macros",
  "celestia-proto",
  "celestia-tendermint",
  "celestia-tendermint-proto",
  "celestia-types",
  "cosmrs",
  "dotenvy",
- "grpc_method",
  "pbjson-types",
  "prost",
  "thiserror",
  "tokio",
  "tonic",
+]
+
+[[package]]
+name = "celestia-grpc-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -1931,15 +1940,6 @@ dependencies = [
  "ff",
  "rand_core",
  "subtle",
-]
-
-[[package]]
-name = "grpc_method"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.87",
 ]
 
 [[package]]

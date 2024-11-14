@@ -11,7 +11,7 @@ use celestia_tendermint_proto::v0_34::types::BlobTx;
 use celestia_types::auth::AuthParams;
 use celestia_types::blob::BlobParams;
 
-use grpc_method::grpc_method;
+use celestia_grpc_macros::grpc_method;
 
 use crate::types::auth::Account;
 use crate::types::tx::{GetTxResponse, TxResponse};
