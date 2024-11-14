@@ -828,8 +828,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-tendermint"
-version = "0.32.2"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs/?branch=chore%2Fprost-0.13.3#7c77122234fcc8473b99345ba4fe943d89438fbd"
+version = "0.32.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0da8dd966aaa817ce6e320bc4037a29094354f5d2cee19758498de2f98642c64"
 dependencies = [
  "bytes",
  "celestia-tendermint-proto",
@@ -859,8 +860,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-tendermint-proto"
-version = "0.32.2"
-source = "git+https://github.com/eigerco/celestia-tendermint-rs/?branch=chore%2Fprost-0.13.3#7c77122234fcc8473b99345ba4fe943d89438fbd"
+version = "0.32.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9bbd5c2345d29ea85566ad8a1114cc0dfb20dacf8f9e0722d64886d0e1e064f7"
 dependencies = [
  "bytes",
  "flex-error",

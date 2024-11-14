@@ -23,8 +23,8 @@ prost-types = "0.13.3"
 # Uncomment to apply local changes
 #beetswap = { path = "../beetswap" }
 #blockstore = { path = "../blockstore" }
-celestia-tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs/", branch = "chore/prost-0.13.3" }
-celestia-tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs/", branch = "chore/prost-0.13.3" }
+#celestia-tendermint = { git = "https://github.com/eigerco/celestia-tendermint-rs/", branch = "chore/prost-0.13.3" }
+#celestia-tendermint-proto = { git = "https://github.com/eigerco/celestia-tendermint-rs/", branch = "chore/prost-0.13.3" }
 #nmt-rs = { path = "../nmt-rs" }
 #libp2p = { path = "../../rust-libp2p/libp2p" }
 #libp2p-core = { path = "../../rust-libp2p/core" }

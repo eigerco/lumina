@@ -3,7 +3,6 @@
 
 mod client;
 mod error;
-/// Custom types and wrappers needed by gRPC
 pub mod types;
 
 pub use crate::client::GrpcClient;

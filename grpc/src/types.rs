@@ -1,3 +1,5 @@
+//! Custom types and wrappers needed by gRPC
+
 use prost::Message;
 
 use celestia_proto::celestia::blob::v1::{

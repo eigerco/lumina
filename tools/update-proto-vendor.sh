@@ -66,7 +66,7 @@ mkdir -p vendor/share
 shwap_dir=../target/proto-vendor-src/celestia-node-main/share
 find "$shwap_dir" -name pb -type d -print0 | while read -r -d '' pb_dir; do
   # remove prefix
-  out_dir="${pb_dir#"$main_dir"}"
+  out_dir="${pb_dir#"$shwap_dir"}"
   # remove /pb suffix
   out_dir="vendor/share/${out_dir%/*}"
   mkdir -p "$out_dir"
