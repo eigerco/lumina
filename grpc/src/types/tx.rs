@@ -1,7 +1,9 @@
 use cosmrs::Tx;
 
+use celestia_proto::cosmos::base::abci::v1beta1::AbciMessageLog;
 use celestia_proto::cosmos::base::abci::v1beta1::TxResponse as RawTxResponse;
 use celestia_proto::cosmos::tx::v1beta1::{BroadcastTxResponse, GetTxResponse as RawGetTxResponse};
+use celestia_tendermint_proto::v0_34::abci::Event;
 
 use crate::types::FromGrpcResponse;
 use crate::Error;
@@ -27,9 +29,9 @@ pub struct TxResponse {
     /// non-deterministic.
     pub raw_log: String,
 
-    // The output of the application's logger (typed). May be non-deterministic.
-    //#[serde(with = "crate::serializers::null_default")]
-    //pub logs: ::prost::alloc::vec::Vec<AbciMessageLog>,
+    /// The output of the application's logger (typed). May be non-deterministic.
+    pub logs: Vec<AbciMessageLog>,
+
     /// Additional information. May be non-deterministic.
     pub info: String,
 
@@ -39,21 +41,19 @@ pub struct TxResponse {
     /// Amount of gas consumed by transaction.
     pub gas_used: i64,
 
-    // The request transaction bytes.
-    //#[serde(with = "crate::serializers::option_any")]
-    //pub tx: ::core::option::Option<::pbjson_types::Any>,
+    /// The request transaction bytes.
+    pub tx: ::core::option::Option<::pbjson_types::Any>,
+
     /// Time of the previous block. For heights > 1, it's the weighted median of
     /// the timestamps of the valid votes in the block.LastCommit. For height == 1,
     /// it's genesis time.
     pub timestamp: String,
-    // Events defines all the events emitted by processing a transaction. Note,
-    // these events include those emitted by processing all the messages and those
-    // emitted from the ante. Whereas Logs contains the events, with
-    // additional metadata, emitted only by processing the messages.
-    //
-    // Since: cosmos-sdk 0.42.11, 0.44.5, 0.45
-    //#[serde(with = "crate::serializers::null_default")]
-    //pub events: ::prost::alloc::vec::Vec< ::celestia_tendermint_proto::v0_34::abci::Event, >,
+
+    /// Events defines all the events emitted by processing a transaction. Note,
+    /// these events include those emitted by processing all the messages and those
+    /// emitted from the ante. Whereas Logs contains the events, with
+    /// additional metadata, emitted only by processing the messages.
+    pub events: Vec<Event>,
 }
 
 /// Response to GetTx
@@ -77,13 +77,13 @@ impl TryFrom<RawTxResponse> for TxResponse {
             code: response.code,
             data: response.data,
             raw_log: response.raw_log,
-            //logs: response.logs
+            logs: response.logs,
             info: response.info,
             gas_wanted: response.gas_wanted,
             gas_used: response.gas_used,
-            //tx: response.tx
+            tx: response.tx,
             timestamp: response.timestamp,
-            //events: response.events
+            events: response.events,
         })
     }
 }
