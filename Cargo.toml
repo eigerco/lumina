@@ -14,7 +14,7 @@ celestia-tendermint-proto = "0.32.2"
 
 libp2p = "0.54.0"
 nmt-rs = "0.2.1"
-prost = "0.12.6"
+prost = "0.13.3"
 
 [patch.crates-io]
 # Uncomment to apply local changes

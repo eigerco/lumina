@@ -16,7 +16,7 @@ categories = ["encoding", "cryptography::cryptocurrencies"]
 [dependencies]
 celestia-tendermint-proto = { workspace = true }
 prost = { workspace = true }
-prost-types = "0.12.6"
+prost-types = "0.13.3"
 serde = { version = "1.0.203", features = ["derive"] }
 
 [build-dependencies]
