@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile.validator
     environment:
-      # provide amount of bridge nodes to provision (default: 1)
+      # provide amount of bridge nodes to provision (default: 2)
       - BRIDGE_COUNT=2
     volumes:
       - credentials:/credentials
@@ -22,6 +22,8 @@ services:
       # provide an id for the bridge node (default: 0)
       # each node should have a next natural number starting from 0
       - NODE_ID=0
+      # setting SKIP_AUTH to true disables the use of JWT for authentication
+      - SKIP_AUTH=true
     ports:
       - 26658:26658
     volumes:
@@ -38,8 +40,6 @@ services:
       # provide an id for the bridge node (default: 0)
       # each node should have a next natural number starting from 0
       - NODE_ID=1
-      # setting SKIP_AUTH to true disables the use of JWT for authentication
-      - SKIP_AUTH=true
     ports:
       - 36658:26658
     volumes:
@@ -57,9 +57,9 @@ services:
   #   environment:
   #     # provide an id for the bridge node (default: 0)
   #     # each node should have a next natural number starting from 0
-  #     - NODE_ID=1
+  #     - NODE_ID=2
   #   ports:
-  #     - 36658:26658
+  #     - 46658:26658
   #   volumes:
   #     - credentials:/credentials
   #     - genesis:/genesis

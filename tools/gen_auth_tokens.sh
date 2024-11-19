@@ -19,7 +19,7 @@ wait_for_docker_setup() {
 
   # wait for the service to start
   while :; do
-    curl http://127.0.0.1:26658 > /dev/null 2>&1 && break
+    curl http://127.0.0.1:36658 > /dev/null 2>&1 && break
     sleep 1
   done
 }
@@ -41,7 +41,7 @@ ensure_dotenv_file() {
 
 generate_token() {
   local auth_level="$1"
-  docker compose -f "$DOCKER_COMPOSE_FILE" exec -T bridge-0 \
+  docker compose -f "$DOCKER_COMPOSE_FILE" exec -T bridge-1 \
     celestia bridge auth "$auth_level" --p2p.network private
 }
 
