@@ -5,6 +5,7 @@ use celestia_proto::cosmos::auth::v1beta1::{
     QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
     QueryParamsRequest as QueryAuthParamsRequest, QueryParamsResponse as QueryAuthParamsResponse,
 };
+use celestia_tendermint_proto::google::protobuf::Any;
 use celestia_types::auth::{AuthParams, BaseAccount, ModuleAccount};
 
 use crate::types::make_empty_params;
@@ -19,6 +20,15 @@ pub enum Account {
     Base(BaseAccount),
     /// Account for modules that holds coins on a pool
     Module(ModuleAccount),
+}
+
+impl Account {
+    pub fn base_account_ref(&self) -> Option<&BaseAccount> {
+        match self {
+            Account::Base(acct) => Some(&acct),
+            Account::Module(acct) => acct.base_account.as_ref(),
+        }
+    }
 }
 
 impl FromGrpcResponse<AuthParams> for QueryAuthParamsResponse {
@@ -60,7 +70,7 @@ impl IntoGrpcParam<QueryAccountsRequest> for () {
     }
 }
 
-fn account_from_any(any: pbjson_types::Any) -> Result<Account, Error> {
+fn account_from_any(any: Any) -> Result<Account, Error> {
     let account = if any.type_url == RawBaseAccount::type_url() {
         let base_account =
             RawBaseAccount::decode(&*any.value).map_err(|_| Error::FailedToParseResponse)?;

@@ -1,16 +1,40 @@
 #![cfg(not(target_arch = "wasm32"))]
 
+use std::u64;
+
 use celestia_grpc::types::auth::Account;
+use celestia_grpc::types::tx::prep_signed_tx;
+use celestia_proto::cosmos::tx::v1beta1::BroadcastMode;
+use celestia_types::{blob::MsgPayForBlobs, nmt::Namespace, AppVersion, Blob};
 
 pub mod utils;
 
-use crate::utils::new_test_client;
+use crate::utils::{load_account_key, new_test_client};
 
 #[tokio::test]
 async fn get_min_gas_price() {
     let mut client = new_test_client().await.unwrap();
     let gas_price = client.get_min_gas_price().await.unwrap();
     assert!(gas_price > 0.0);
+}
+
+#[tokio::test]
+async fn get_blob_params() {
+    let mut client = new_test_client().await.unwrap();
+    let params = client.get_blob_params().await.unwrap();
+    assert!(params.gas_per_blob_byte > 0);
+    assert!(params.gov_max_square_size > 0);
+}
+
+#[tokio::test]
+async fn get_auth_params() {
+    let mut client = new_test_client().await.unwrap();
+    let params = client.get_auth_params().await.unwrap();
+    assert!(params.max_memo_characters > 0);
+    assert!(params.tx_sig_limit > 0);
+    assert!(params.tx_size_cost_per_byte > 0);
+    assert!(params.sig_verify_cost_ed25519 > 0);
+    assert!(params.sig_verify_cost_secp256k1 > 0);
 }
 
 #[tokio::test]
@@ -41,4 +65,59 @@ async fn get_account() {
     let account = client.get_account(address).await.unwrap();
 
     assert_eq!(&account, first_account);
+}
+
+#[tokio::test]
+async fn submit_blob() {
+    let mut client = new_test_client().await.unwrap();
+    let address = "celestia1rkfxnqt8wwu2vqgpa2ph84xa2ty0nseex4xqlc".to_string();
+    let private_key =
+        hex::decode("374b1d38f76c57fb6a1bb7bb840795239640441a37f506dc8de0d82b1ea9f690").unwrap();
+    let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
+    let blob = Blob::new(namespace, "Hello, World!".into(), AppVersion::V1).unwrap();
+    let blobs = vec![blob];
+
+    let chain_id = "private".to_string();
+    let keypair = load_account_key(&private_key);
+
+    let account = client.get_account(address.clone()).await.unwrap();
+
+    let msg_pay_for_blobs = MsgPayForBlobs::new(&blobs, address).unwrap();
+
+    // gas and fees are overestimated for simplicity
+    let tx = prep_signed_tx(
+        &msg_pay_for_blobs,
+        account.base_account_ref().unwrap(),
+        100000,
+        5000,
+        chain_id,
+        keypair,
+    );
+
+    use prost::Message;
+
+    let txbody = tx.body.clone().unwrap();
+
+    let response = client
+        .broadcast_tx(tx, blobs, BroadcastMode::Sync)
+        .await
+        .unwrap();
+
+
+    // TODO: sth more CI-like
+    // wait for the tx to become available
+    for i in 1..10 {
+        println!("LOP");
+        let res = client.get_tx(response.txhash.clone()).await;
+        println!("{res:#?}");
+        if res.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+
+    let submitted_tx = client
+        .get_tx(response.txhash)
+        .await
+        .expect("get to be successful");
 }

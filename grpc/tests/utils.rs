@@ -1,8 +1,11 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use std::env;
+use std::path::Path;
+use std::{env, fs};
 
 use anyhow::Result;
+use celestia_tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
+use celestia_types::auth::AccountKeypair;
 use tonic::metadata::{Ascii, MetadataValue};
 use tonic::service::Interceptor;
 use tonic::transport::Channel;
@@ -47,4 +50,15 @@ pub async fn new_test_client() -> Result<GrpcClient<TestAuthInterceptor>> {
 
     let auth_interceptor = TestAuthInterceptor::new(None)?;
     Ok(GrpcClient::new(grpc_channel, auth_interceptor))
+}
+
+pub fn load_account_key(key_bytes: &[u8]) -> AccountKeypair {
+    //let hex_encoded = fs::read_to_string(path).unwrap();
+    //let bytes = hex::decode(hex_encoded.trim()).unwrap();
+    let signing_key = SigningKey::from_slice(key_bytes).unwrap();
+
+    AccountKeypair {
+        verifying_key: *signing_key.verifying_key(),
+        signing_key,
+    }
 }

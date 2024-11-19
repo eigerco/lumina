@@ -72,8 +72,10 @@ static EXTERN_PATHS: &[(&str, &str)] = &[
     (".tendermint", "::celestia_tendermint_proto::v0_34"),
     (".google.protobuf.Timestamp", "::celestia_tendermint_proto::google::protobuf::Timestamp"),
     (".google.protobuf.Duration", "::celestia_tendermint_proto::google::protobuf::Duration"),
-    (".cosmos.tx.v1beta1.TxBody", "cosmos_sdk_proto::cosmos::tx::v1beta1::TxBody"),
-    (".cosmos.tx.v1beta1.AuthInfo", "cosmos_sdk_proto::cosmos::tx::v1beta1::AuthInfo"),
+    (".google.protobuf.Any", "::celestia_tendermint_proto::google::protobuf::Any"),
+    //(".cosmos.tx.v1beta1.TxBody", "cosmos_sdk_proto::cosmos::tx::v1beta1::TxBody"),
+    //(".cosmos.tx.v1beta1.AuthInfo", "cosmos_sdk_proto::cosmos::tx::v1beta1::AuthInfo"),
+    //(".cosmos.tx.v1beta1.SignerInfo", "cosmos_sdk_proto::cosmos::tx::v1beta1::SignerInfo"),
 ];
 
 const PROTO_FILES: &[&str] = &[
@@ -152,7 +154,7 @@ fn tonic_build(fds: FileDescriptorSet) {
         .use_arc_self(true)
         // override prost-types with pbjson-types
         .compile_well_known_types(true)
-        .extern_path(".google.protobuf", "::pbjson_types")
+        //.extern_path(".google.protobuf", "::pbjson_types")
         .file_descriptor_set_path(buf_img.path())
         .skip_protoc_run();
 

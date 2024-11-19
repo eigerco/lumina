@@ -1,7 +1,5 @@
 //! Custom types and wrappers needed by gRPC
 
-use prost::Message;
-
 use celestia_proto::celestia::blob::v1::{
     QueryParamsRequest as QueryBlobParamsRequest, QueryParamsResponse as QueryBlobParamsResponse,
 };
@@ -10,9 +8,7 @@ use celestia_proto::cosmos::base::tendermint::v1beta1::{
     GetBlockByHeightRequest, GetBlockByHeightResponse, GetLatestBlockRequest,
     GetLatestBlockResponse,
 };
-use celestia_proto::cosmos::tx::v1beta1::{BroadcastMode, BroadcastTxRequest, GetTxRequest};
 use celestia_tendermint::block::Block;
-use celestia_tendermint_proto::v0_34::types::BlobTx;
 use celestia_types::blob::BlobParams;
 
 use crate::Error;
@@ -83,22 +79,6 @@ impl FromGrpcResponse<f64> for ConfigResponse {
 impl IntoGrpcParam<GetBlockByHeightRequest> for i64 {
     fn into_parameter(self) -> GetBlockByHeightRequest {
         GetBlockByHeightRequest { height: self }
-    }
-}
-
-impl IntoGrpcParam<BroadcastTxRequest> for (BlobTx, BroadcastMode) {
-    fn into_parameter(self) -> BroadcastTxRequest {
-        let (blob_tx, mode) = self;
-        BroadcastTxRequest {
-            tx_bytes: blob_tx.encode_to_vec(),
-            mode: mode.into(),
-        }
-    }
-}
-
-impl IntoGrpcParam<GetTxRequest> for String {
-    fn into_parameter(self) -> GetTxRequest {
-        GetTxRequest { hash: self }
     }
 }
 

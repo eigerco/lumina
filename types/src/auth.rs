@@ -1,16 +1,19 @@
 //! types related to accounts
 
+//use ed25519_consensus::{SigningKey, VerificationKey};
+
 use celestia_proto::cosmos::auth::v1beta1::BaseAccount as RawBaseAccount;
 use celestia_proto::cosmos::auth::v1beta1::ModuleAccount as RawModuleAccount;
 use celestia_proto::cosmos::crypto::ed25519::PubKey as Ed25519PubKey;
 use celestia_proto::cosmos::crypto::secp256k1::PubKey as Secp256k1PubKey;
 use celestia_tendermint::public_key::PublicKey;
 use celestia_tendermint_proto::Protobuf;
+//use celestia_tendermint::private_key::Secp256k1 as SigningKey;
+//use celestia_tendermint::public_key::Secp256k1 as VerificationKey;
+use celestia_tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
+use celestia_tendermint::public_key::Secp256k1 as VerifyingKey;
 
-#[cfg(feature = "tonic")]
-use pbjson_types::Any;
-#[cfg(not(feature = "tonic"))]
-use prost_types::Any;
+use celestia_tendermint_proto::google::protobuf::Any;
 // workaround for otherwise unused prost-types if tonic feature flag is enabled tripping up CI
 use prost::Message;
 #[allow(unused_imports)]
@@ -64,6 +67,14 @@ pub struct ModuleAccount {
     pub name: String,
     /// Permissions associated with this module account.
     pub permissions: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountKeypair {
+    /// public key
+    pub verifying_key: VerifyingKey,
+    /// private key
+    pub signing_key: SigningKey,
 }
 
 impl From<BaseAccount> for RawBaseAccount {

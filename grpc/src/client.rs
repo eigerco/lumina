@@ -6,10 +6,10 @@ use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQuer
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
+use celestia_proto::cosmos::tx::v1beta1::Tx as RawTx;
 use celestia_tendermint::block::Block;
-use celestia_tendermint_proto::v0_34::types::BlobTx;
 use celestia_types::auth::AuthParams;
-use celestia_types::blob::BlobParams;
+use celestia_types::blob::{Blob, BlobParams};
 
 use celestia_grpc_macros::grpc_method;
 
@@ -53,9 +53,6 @@ where
     #[grpc_method(TendermintServiceClient::get_block_by_height)]
     async fn get_block_by_height(&mut self, height: i64) -> Result<Block, Error>;
 
-    // TODO get_node_info
-    // make_method!(TendermintServiceClient::get_node_info; get_node_info() -> NodeInfo);
-
     /// Get blob params
     #[grpc_method(BlobQueryClient::params)]
     async fn get_blob_params(&mut self) -> Result<BlobParams, Error>;
@@ -77,7 +74,8 @@ where
     #[grpc_method(TxServiceClient::broadcast_tx)]
     async fn broadcast_tx(
         &mut self,
-        blob_tx: BlobTx,
+        tx: RawTx,
+        blobs: Vec<Blob>,
         mode: BroadcastMode,
     ) -> Result<TxResponse, Error>;
 

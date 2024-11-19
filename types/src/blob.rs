@@ -10,8 +10,10 @@ use crate::consts::appconsts;
 use crate::consts::appconsts::{subtree_root_threshold, AppVersion};
 use crate::nmt::Namespace;
 use crate::{bail_validation, Error, Result, Share};
+use celestia_tendermint_proto::Protobuf;
 
 pub use self::commitment::Commitment;
+pub use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
 pub use celestia_tendermint_proto::v0_34::types::Blob as RawBlob;
 
 /// Arbitrary data that can be stored in the network within certain [`Namespace`].
@@ -38,12 +40,29 @@ pub struct Blob {
 }
 
 /// Params defines the parameters for the blob module.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct BlobParams {
     /// Gas cost per blob byte
     pub gas_per_blob_byte: u32,
     /// Max square size
     pub gov_max_square_size: u64,
+}
+
+/// MsgPayForBlobs pays for the inclusion of a blob in the block.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsgPayForBlobs {
+    pub signer: String,
+    /// namespaces is a list of namespaces that the blobs are associated with.
+    pub namespaces: Vec<Namespace>,
+    /// sizes of the associated blobs
+    pub blob_sizes: Vec<u32>,
+    /// share_commitments is a list of share commitments (one per blob).
+    pub share_commitments: Vec<Commitment>,
+    /// share_versions are the versions of the share format that the blobs
+    /// associated with this message should use when included in a block. The
+    /// share_versions specified must match the share_versions used to generate the
+    /// share_commitment in this message.
+    pub share_versions: Vec<u32>,
 }
 
 impl Blob {
@@ -324,6 +343,84 @@ fn shares_needed_for_blob(blob_len: usize) -> usize {
     };
     1 + without_first_share.div_ceil(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
 }
+
+impl MsgPayForBlobs {
+    pub fn new(blobs: &[Blob], signer_address: String) -> Result<Self> {
+        let blob_count = blobs.len();
+        let mut blob_sizes = Vec::with_capacity(blob_count);
+        let mut namespaces = Vec::with_capacity(blob_count);
+        let mut share_commitments = Vec::with_capacity(blob_count);
+        let mut share_versions = Vec::with_capacity(blob_count);
+        for blob in blobs {
+            blob_sizes.push(u32::try_from(blob.data.len()).map_err(|_| Error::BlobTooLarge)?);
+            namespaces.push(blob.namespace);
+            share_commitments.push(blob.commitment);
+            share_versions.push(u32::from(blob.share_version));
+        }
+
+        Ok(Self {
+            signer: signer_address,
+            namespaces,
+            blob_sizes,
+            share_commitments,
+            share_versions,
+        })
+    }
+}
+
+impl From<MsgPayForBlobs> for RawMsgPayForBlobs {
+    fn from(msg: MsgPayForBlobs) -> Self {
+        let namespaces = msg
+            .namespaces
+            .into_iter()
+            .map(|n| n.as_bytes().to_vec())
+            .collect();
+        let share_commitments = msg
+            .share_commitments
+            .into_iter()
+            .map(|c| c.0.to_vec())
+            .collect();
+
+        RawMsgPayForBlobs {
+            signer: msg.signer,
+            namespaces,
+            blob_sizes: msg.blob_sizes,
+            share_commitments,
+            share_versions: msg.share_versions,
+        }
+    }
+}
+
+impl TryFrom<RawMsgPayForBlobs> for MsgPayForBlobs {
+    type Error = Error;
+
+    fn try_from(msg: RawMsgPayForBlobs) -> Result<MsgPayForBlobs, Self::Error> {
+        let namespaces = msg
+            .namespaces
+            .into_iter()
+            .map(|n| Namespace::from_raw(&n))
+            .collect::<Result<_, Error>>()?;
+        let share_commitments = msg
+            .share_commitments
+            .into_iter()
+            .map(|c| {
+                Ok(Commitment(
+                    c.try_into().map_err(|_| Error::InvalidComittmentLength)?,
+                ))
+            })
+            .collect::<Result<_, Error>>()?;
+
+        Ok(MsgPayForBlobs {
+            signer: msg.signer,
+            namespaces,
+            blob_sizes: msg.blob_sizes,
+            share_commitments,
+            share_versions: msg.share_versions,
+        })
+    }
+}
+
+impl Protobuf<RawMsgPayForBlobs> for MsgPayForBlobs {}
 
 mod index_serde {
     use serde::ser::Error;

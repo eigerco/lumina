@@ -21,12 +21,16 @@ categories = [
 [dependencies]
 celestia-tendermint-proto.workspace = true
 celestia-types = { workspace = true, features = [ "tonic" ] }
-celestia-proto = { workspace = true, features = [ "tonic" ] }
+celestia-proto = { workspace = true, features = [ "tonic", "cosmrs" ] }
 celestia-tendermint.workspace = true
 prost.workspace = true
 celestia-grpc-macros = { version = "0.1.0", path = "grpc-macros" }
+cosmos-sdk-proto = "0.26.0"
 
+hex = "0.4.3"
+serde = "1.0.215"
 cosmrs = "0.21.0"
+k256 = "0.13.4"
 thiserror = "1.0.61"
 tonic = { version = "0.12.3", default-features = false, features = [
   "codegen", "prost"

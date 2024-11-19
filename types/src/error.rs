@@ -211,6 +211,14 @@ pub enum Error {
     /// Metadata mismatch between shares in blob.
     #[error("Metadata mismatch between shares in blob: {0}")]
     BlobSharesMetadataMismatch(String),
+
+    /// Blob too large, length must fit u32
+    #[error("Blob too large")]
+    BlobTooLarge,
+
+    /// Invalid comittment length
+    #[error("Invalid committment length")]
+    InvalidComittmentLength,
 }
 
 impl From<prost::DecodeError> for Error {

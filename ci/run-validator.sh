@@ -105,6 +105,10 @@ provision_bridge_nodes() {
   echo "Provisioning finished."
 }
 
+provision_grpc_account() {
+  #celestia-appd keys import 
+}
+
 # Set up the validator for a private alone network.
 # Based on
 # https://github.com/celestiaorg/celestia-app/blob/main/scripts/single-node.sh

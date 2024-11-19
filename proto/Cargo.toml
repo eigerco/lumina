@@ -18,9 +18,11 @@ celestia-tendermint-proto.workspace = true
 prost.workspace = true
 prost-types.workspace = true
 cosmos-sdk-proto = { version = "0.26.0", default-features = false }
+cosmrs = { version = "0.21.0", optional = true }
 serde = { version = "1.0.203", features = ["derive"] }
 pbjson = { version = "0.7.0", optional = true }
 pbjson-types = { version = "0.7.0", optional = true }
+thiserror = { version = "2.0.3", optional = true }
 tonic = { version = "0.12.3", optional = true, default-features = false, features = [
   "codegen", "prost"
 ]}
@@ -44,4 +46,5 @@ wasm-bindgen-test = "0.3.42"
 serde_json = "1.0.117"
 
 [features]
-tonic = ["dep:tonic", "dep:tonic-build", "dep:pbjson", "dep:pbjson-types", "dep:pbjson-build", "dep:tempfile"]
+tonic = [ "dep:tonic", "dep:tonic-build", "dep:pbjson", "dep:pbjson-types", "dep:pbjson-build", "dep:tempfile" ]
+cosmrs = [ "dep:cosmrs", "dep:thiserror" ]

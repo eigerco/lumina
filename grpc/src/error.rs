@@ -27,6 +27,10 @@ pub enum Error {
     #[error(transparent)]
     CelestiaTypesError(#[from] celestia_types::Error),
 
+    /// Error coming from a celestia-proto cosmrs compatibility layer
+    //#[error(transparent)]
+    //CelestiaProtoCosmrsError(#[from] celestia_proto::cosmrs::Error),
+
     /// Tendermint Proto Error
     #[error(transparent)]
     TendermintProtoError(#[from] celestia_tendermint_proto::Error),
