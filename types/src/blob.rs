@@ -15,6 +15,7 @@ use celestia_tendermint_proto::Protobuf;
 pub use self::commitment::Commitment;
 pub use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
 pub use celestia_tendermint_proto::v0_34::types::Blob as RawBlob;
+pub use celestia_tendermint_proto::v0_34::types::BlobTx as RawBlobTx;
 
 /// Arbitrary data that can be stored in the network within certain [`Namespace`].
 // NOTE: We don't use the `serde(try_from)` pattern for this type

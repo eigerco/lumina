@@ -1,12 +1,13 @@
 use prost::{Message, Name};
 
 use celestia_proto::cosmos::auth::v1beta1::{
-    BaseAccount as RawBaseAccount, ModuleAccount as RawModuleAccount, QueryAccountRequest,
-    QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
+    QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
     QueryParamsRequest as QueryAuthParamsRequest, QueryParamsResponse as QueryAuthParamsResponse,
 };
 use celestia_tendermint_proto::google::protobuf::Any;
-use celestia_types::auth::{AuthParams, BaseAccount, ModuleAccount};
+use celestia_types::auth::{
+    AuthParams, BaseAccount, ModuleAccount, RawBaseAccount, RawModuleAccount,
+};
 
 use crate::types::make_empty_params;
 use crate::types::{FromGrpcResponse, IntoGrpcParam};
@@ -25,7 +26,7 @@ pub enum Account {
 impl Account {
     pub fn base_account_ref(&self) -> Option<&BaseAccount> {
         match self {
-            Account::Base(acct) => Some(&acct),
+            Account::Base(acct) => Some(acct),
             Account::Module(acct) => acct.base_account.as_ref(),
         }
     }

@@ -1,7 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use std::u64;
-
 use celestia_grpc::types::auth::Account;
 use celestia_grpc::types::tx::prep_signed_tx;
 use celestia_proto::cosmos::tx::v1beta1::BroadcastMode;
@@ -94,29 +92,14 @@ async fn submit_blob() {
         keypair,
     );
 
-    use prost::Message;
-
-    let txbody = tx.body.clone().unwrap();
-
     let response = client
         .broadcast_tx(tx, blobs, BroadcastMode::Sync)
         .await
         .unwrap();
 
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
-    // TODO: sth more CI-like
-    // wait for the tx to become available
-    for i in 1..10 {
-        println!("LOP");
-        let res = client.get_tx(response.txhash.clone()).await;
-        println!("{res:#?}");
-        if res.is_ok() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }
-
-    let submitted_tx = client
+    let _submitted_tx = client
         .get_tx(response.txhash)
         .await
         .expect("get to be successful");

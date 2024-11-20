@@ -1,29 +1,26 @@
 use std::convert::Infallible;
 
-use celestia_tendermint_proto::google::protobuf::Any;
 use cosmrs::Tx;
 use k256::ecdsa::{signature::Signer, Signature};
 use prost::{Message, Name};
 use serde::{Deserialize, Serialize};
 
-use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
-
-use celestia_proto::cosmos::base::abci::v1beta1::AbciMessageLog;
-use celestia_proto::cosmos::base::abci::v1beta1::TxResponse as RawTxResponse;
+use celestia_proto::cosmos::base::abci::v1beta1::{AbciMessageLog, TxResponse as RawTxResponse};
 use celestia_proto::cosmos::base::v1beta1::Coin;
 use celestia_proto::cosmos::crypto::secp256k1;
 use celestia_proto::cosmos::tx::v1beta1::mode_info::{Single, Sum};
-use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use celestia_proto::cosmos::tx::v1beta1::{
-    AuthInfo, BroadcastTxResponse, Fee, GetTxRequest as RawGetTxRequest,
-    GetTxResponse as RawGetTxResponse, ModeInfo, SignerInfo, Tx as RawTx, TxBody,
+    AuthInfo, BroadcastMode, BroadcastTxRequest, BroadcastTxResponse, Fee,
+    GetTxRequest as RawGetTxRequest, GetTxResponse as RawGetTxResponse, ModeInfo, SignDoc,
+    SignerInfo, Tx as RawTx, TxBody,
 };
-use celestia_proto::cosmos::tx::v1beta1::{BroadcastMode, BroadcastTxRequest, GetTxRequest};
+use celestia_tendermint_proto::google::protobuf::Any;
 use celestia_tendermint_proto::v0_34::abci::Event;
-use celestia_tendermint_proto::v0_34::types::{Blob as RawBlob, BlobTx as RawBlobTx};
 use celestia_tendermint_proto::Protobuf;
 use celestia_types::auth::{AccountKeypair, BaseAccount};
-use celestia_types::blob::{Blob, MsgPayForBlobs};
+use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlob, RawBlobTx, RawMsgPayForBlobs};
+//use celestia_tendermint_proto::v0_34::types::{BlobTx as RawBlobTx};
+//use celestia_types::state::RawTxResponse;
 
 use crate::types::{FromGrpcResponse, IntoGrpcParam};
 use crate::Error;
@@ -196,12 +193,12 @@ pub fn prep_signed_tx(
 
     let public_key_as_any = Any {
         type_url: secp256k1::PubKey::type_url(),
-        value: public_key.encode_to_vec().into(),
+        value: public_key.encode_to_vec(),
     };
 
     let auth_info = AuthInfo {
         signer_infos: vec![SignerInfo {
-            public_key: Some(public_key_as_any.into()),
+            public_key: Some(public_key_as_any),
             mode_info: SIGNING_MODE_INFO,
             sequence: base_account.sequence,
         }],
@@ -241,7 +238,7 @@ pub fn new_blob_tx(signed_tx: &RawTx, blobs: Vec<Blob>) -> RawBlobTx {
     // From https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
     const BLOB_TX_TYPE_ID: &str = "BLOB";
 
-    let blobs = blobs.into_iter().map(|blob| RawBlob::from(blob)).collect();
+    let blobs = blobs.into_iter().map(RawBlob::from).collect();
     RawBlobTx {
         tx: signed_tx.encode_to_vec(),
         blobs,

@@ -1,25 +1,19 @@
 //! types related to accounts
 
-//use ed25519_consensus::{SigningKey, VerificationKey};
+use prost::Message;
 
-use celestia_proto::cosmos::auth::v1beta1::BaseAccount as RawBaseAccount;
-use celestia_proto::cosmos::auth::v1beta1::ModuleAccount as RawModuleAccount;
 use celestia_proto::cosmos::crypto::ed25519::PubKey as Ed25519PubKey;
 use celestia_proto::cosmos::crypto::secp256k1::PubKey as Secp256k1PubKey;
-use celestia_tendermint::public_key::PublicKey;
-use celestia_tendermint_proto::Protobuf;
-//use celestia_tendermint::private_key::Secp256k1 as SigningKey;
-//use celestia_tendermint::public_key::Secp256k1 as VerificationKey;
 use celestia_tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
+use celestia_tendermint::public_key::PublicKey;
 use celestia_tendermint::public_key::Secp256k1 as VerifyingKey;
-
 use celestia_tendermint_proto::google::protobuf::Any;
-// workaround for otherwise unused prost-types if tonic feature flag is enabled tripping up CI
-use prost::Message;
-#[allow(unused_imports)]
-use prost_types::Any as _;
+use celestia_tendermint_proto::Protobuf;
 
 use crate::Error;
+
+pub use celestia_proto::cosmos::auth::v1beta1::BaseAccount as RawBaseAccount;
+pub use celestia_proto::cosmos::auth::v1beta1::ModuleAccount as RawModuleAccount;
 
 const COSMOS_ED25519_PUBKEY: &str = "/cosmos.crypto.ed25519.PubKey";
 const COSMOS_SECP256K1_PUBKEY: &str = "/cosmos.crypto.secp256k1.PubKey";
@@ -149,16 +143,14 @@ fn any_from_public_key(key: PublicKey) -> Any {
             value: Ed25519PubKey {
                 key: key.to_bytes(),
             }
-            .encode_to_vec()
-            .into(),
+            .encode_to_vec(),
         },
         key @ PublicKey::Secp256k1(_) => Any {
             type_url: COSMOS_SECP256K1_PUBKEY.to_string(),
             value: Secp256k1PubKey {
                 key: key.to_bytes(),
             }
-            .encode_to_vec()
-            .into(),
+            .encode_to_vec(),
         },
         _ => unimplemented!("unexpected key type"),
     }

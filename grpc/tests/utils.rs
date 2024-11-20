@@ -1,7 +1,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use std::path::Path;
-use std::{env, fs};
+use std::env;
 
 use anyhow::Result;
 use celestia_tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
@@ -53,8 +52,6 @@ pub async fn new_test_client() -> Result<GrpcClient<TestAuthInterceptor>> {
 }
 
 pub fn load_account_key(key_bytes: &[u8]) -> AccountKeypair {
-    //let hex_encoded = fs::read_to_string(path).unwrap();
-    //let bytes = hex::decode(hex_encoded.trim()).unwrap();
     let signing_key = SigningKey::from_slice(key_bytes).unwrap();
 
     AccountKeypair {
