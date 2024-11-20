@@ -24,6 +24,7 @@ pub enum Account {
 }
 
 impl Account {
+    /// Return [`BaseAccount`] reference, if it exists, from either Base or Module account
     pub fn base_account_ref(&self) -> Option<&BaseAccount> {
         match self {
             Account::Base(acct) => Some(acct),

@@ -70,3 +70,4 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-udeps.ignore]
 development = ["indoc"]
+normal = ["prost-types"] # unused if tonic flag is enabled

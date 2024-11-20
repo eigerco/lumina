@@ -156,6 +156,8 @@ impl IntoGrpcParam<RawGetTxRequest> for String {
     }
 }
 
+/// Prepare and sign transaction [`RawTx`] so that it can be sent alongside the blobs for
+/// submission
 pub fn prep_signed_tx(
     msg_pay_for_blobs: &MsgPayForBlobs,
     base_account: &BaseAccount,
