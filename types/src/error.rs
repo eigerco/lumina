@@ -66,6 +66,10 @@ pub enum Error {
     #[error("Missing shares")]
     MissingShares,
 
+    /// Missing fee field
+    #[error("Missing fee field")]
+    MissingFee,
+
     /// Wrong proof type.
     #[error("Wrong proof type")]
     WrongProofType,
@@ -219,6 +223,10 @@ pub enum Error {
     /// Invalid comittment length
     #[error("Invalid committment length")]
     InvalidComittmentLength,
+
+    /// Empty blob list provided when creating MsgPayForBlobs
+    #[error("Empty blob list")]
+    EmptyBlobList,
 }
 
 impl From<prost::DecodeError> for Error {

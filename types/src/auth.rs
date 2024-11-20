@@ -1,7 +1,7 @@
 //! types related to accounts
 
-use prost::Message;
 use pbjson_types::Any;
+use prost::Message;
 
 use celestia_proto::cosmos::crypto::ed25519::PubKey as Ed25519PubKey;
 use celestia_proto::cosmos::crypto::secp256k1::PubKey as Secp256k1PubKey;
@@ -143,14 +143,16 @@ fn any_from_public_key(key: PublicKey) -> Any {
             value: Ed25519PubKey {
                 key: key.to_bytes(),
             }
-            .encode_to_vec().into(),
+            .encode_to_vec()
+            .into(),
         },
         key @ PublicKey::Secp256k1(_) => Any {
             type_url: COSMOS_SECP256K1_PUBKEY.to_string(),
             value: Secp256k1PubKey {
                 key: key.to_bytes(),
             }
-            .encode_to_vec().into(),
+            .encode_to_vec()
+            .into(),
         },
         _ => unimplemented!("unexpected key type"),
     }

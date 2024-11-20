@@ -4,8 +4,6 @@
 #![cfg(not(doctest))]
 #![doc = include_str!("../README.md")]
 
-#[cfg(feature = "cosmrs")]
-pub mod cosmrs;
 pub mod serializers;
 
 #[cfg(not(feature = "tonic"))]

@@ -52,13 +52,23 @@ whitelist_localhost_nodes() {
   # cargo run -- node -n private -l 0.0.0.0
   # docker compose -f ci/docker-compose.yml exec bridge-0 celestia p2p peer-info $lumina_peerid
   dasel put -f "$CONFIG_DIR/config.toml" \
-    -t json -v '["172.18.0.1/24", "172.17.0.1/24", "192.168.0.0/16"]' \
+    -t json -v '["172.16.0.0/12", "192.168.0.0/16"]' \
     'P2P.IPColocationWhitelist'
 }
 
 write_jwt_token() {
   echo "Saving jwt token to $NODE_JWT_FILE"
   celestia bridge auth admin --p2p.network "$P2P_NETWORK" > "$NODE_JWT_FILE"
+}
+
+connect_to_common_bridge() {
+  # wait for nodes to spin up
+  sleep 5
+  # get PeerId of the common node
+  local peer_id=$(celestia p2p info --url 'ws://bridge-0:26658' | jq -r '.result.id')
+  # connect to it
+  echo "Connecting to $peer_id: /dns/bridge-0/tcp/2121"
+  celestia p2p connect "$peer_id" "/dns/bridge-0/tcp/2121"
 }
 
 main() {
@@ -76,6 +86,10 @@ main() {
   write_jwt_token
   # give validator some time to set up
   sleep 4
+  # each node without SKIP_AUTH connects to the one with, so that bridges can discover eachother
+  if [ ! "$SKIP_AUTH" == "true" ] ; then
+    connect_to_common_bridge &
+  fi
   # Start the bridge node
   echo "Configuration finished. Running a bridge node..."
   celestia bridge start \

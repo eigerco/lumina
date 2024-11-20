@@ -1,5 +1,5 @@
-use prost::{Message, Name};
 use pbjson_types::Any;
+use prost::{Message, Name};
 
 use celestia_proto::cosmos::auth::v1beta1::{
     QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,

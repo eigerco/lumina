@@ -29,7 +29,7 @@ async fn connects_to_the_go_bridge_node() {
     let (node, _) = new_connected_node().await;
 
     let info = node.network_info().await.unwrap();
-    assert_eq!(info.num_peers(), 1);
+    assert!(info.num_peers() >= 1);
 }
 
 #[tokio::test]

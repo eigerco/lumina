@@ -104,15 +104,17 @@ const INCLUDES: &[&str] = &["vendor", "vendor/nmt"];
 
 fn main() {
     let fds = protox_compile();
+    #[cfg(not(feature = "tonic"))]
     prost_build(fds);
     #[cfg(feature = "tonic")]
-    tonic_build(protox_compile())
+    tonic_build(fds)
 }
 
 fn protox_compile() -> FileDescriptorSet {
     protox::compile(PROTO_FILES, INCLUDES).expect("protox failed to build")
 }
 
+#[cfg(not(feature = "tonic"))]
 fn prost_build(fds: FileDescriptorSet) {
     let mut config = prost_build::Config::new();
 
@@ -145,13 +147,13 @@ fn tonic_build(fds: FileDescriptorSet) {
     prost_config.enable_type_names();
 
     let mut tonic_config = tonic_build::configure()
+        .include_file("mod.rs")
         .build_client(true)
         .build_server(false)
         .client_mod_attribute(".", "#[cfg(not(target_arch=\"wasm32\"))]")
         .use_arc_self(true)
         // override prost-types with pbjson-types
         .compile_well_known_types(true)
-        //.extern_path(".google.protobuf", "::pbjson_types")
         .file_descriptor_set_path(buf_img.path())
         .skip_protoc_run();
 

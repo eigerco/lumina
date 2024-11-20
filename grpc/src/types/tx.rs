@@ -1,10 +1,9 @@
 use std::convert::Infallible;
 
-use cosmrs::Tx;
 use k256::ecdsa::{signature::Signer, Signature};
+use pbjson_types::Any;
 use prost::{Message, Name};
 use serde::{Deserialize, Serialize};
-use pbjson_types::Any;
 
 use celestia_proto::cosmos::base::abci::v1beta1::{AbciMessageLog, TxResponse as RawTxResponse};
 use celestia_proto::cosmos::base::v1beta1::Coin;
@@ -19,6 +18,7 @@ use celestia_tendermint_proto::v0_34::abci::Event;
 use celestia_tendermint_proto::Protobuf;
 use celestia_types::auth::{AccountKeypair, BaseAccount};
 use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlob, RawBlobTx, RawMsgPayForBlobs};
+use celestia_types::tx::Tx;
 
 use crate::types::{FromGrpcResponse, IntoGrpcParam};
 use crate::Error;
@@ -121,14 +121,12 @@ impl FromGrpcResponse<GetTxResponse> for RawGetTxResponse {
 
         let tx = self.tx.ok_or(Error::FailedToParseResponse)?;
 
-        let cosmrs_tx_body: cosmos_sdk_proto::cosmos::tx::v1beta1::TxBody =
-            tx.body.ok_or(Error::FailedToParseResponse)?.into();
-        let cosmrs_auth_info: cosmos_sdk_proto::cosmos::tx::v1beta1::AuthInfo =
-            tx.auth_info.ok_or(Error::FailedToParseResponse)?.into();
-
         let cosmos_tx = Tx {
-            body: cosmrs_tx_body.try_into()?,
-            auth_info: cosmrs_auth_info.try_into()?,
+            body: tx.body.ok_or(Error::FailedToParseResponse)?.try_into()?,
+            auth_info: tx
+                .auth_info
+                .ok_or(Error::FailedToParseResponse)?
+                .try_into()?,
             signatures: tx.signatures,
         };
 
@@ -142,7 +140,8 @@ impl FromGrpcResponse<GetTxResponse> for RawGetTxResponse {
 impl IntoGrpcParam<BroadcastTxRequest> for (RawTx, Vec<Blob>, BroadcastMode) {
     fn into_parameter(self) -> BroadcastTxRequest {
         let (tx, blobs, mode) = self;
-        assert!(blobs.len() > 0);
+        // empty blob list causes error response, but this is already checked when creating MsgPayForBlobs
+        debug_assert!(!blobs.is_empty());
         let blob_tx = new_blob_tx(&tx, blobs);
         BroadcastTxRequest {
             tx_bytes: blob_tx.encode_to_vec(),
@@ -207,7 +206,9 @@ pub fn prep_signed_tx(
     let msg_pay_for_blobs_value: Result<_, Infallible> = msg_pay_for_blobs.encode_vec();
     let msg_pay_for_blobs_as_any = Any {
         type_url: RawMsgPayForBlobs::type_url(),
-        value: msg_pay_for_blobs_value.expect("Result to be Infallible").into(),
+        value: msg_pay_for_blobs_value
+            .expect("Result to be Infallible")
+            .into(),
     };
 
     let tx_body = TxBody {

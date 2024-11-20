@@ -348,6 +348,9 @@ fn shares_needed_for_blob(blob_len: usize) -> usize {
 impl MsgPayForBlobs {
     pub fn new(blobs: &[Blob], signer_address: String) -> Result<Self> {
         let blob_count = blobs.len();
+        if blob_count == 0 {
+            return Err(Error::EmptyBlobList);
+        }
         let mut blob_sizes = Vec::with_capacity(blob_count);
         let mut namespaces = Vec::with_capacity(blob_count);
         let mut share_commitments = Vec::with_capacity(blob_count);

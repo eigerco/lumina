@@ -1,4 +1,3 @@
-use cosmrs::ErrorReport;
 use tonic::Status;
 
 /// Alias for a `Result` with the error type [`celestia_tonic::Error`].
@@ -19,17 +18,9 @@ pub enum Error {
     #[error(transparent)]
     TendermintError(#[from] celestia_tendermint::Error),
 
-    /// Cosmrs Error
-    #[error(transparent)]
-    CosmrsError(#[from] ErrorReport),
-
     /// Celestia types error
     #[error(transparent)]
     CelestiaTypesError(#[from] celestia_types::Error),
-
-    /// Error coming from a celestia-proto cosmrs compatibility layer
-    //#[error(transparent)]
-    //CelestiaProtoCosmrsError(#[from] celestia_proto::cosmrs::Error),
 
     /// Tendermint Proto Error
     #[error(transparent)]
