@@ -3,11 +3,15 @@
 use celestia_grpc::types::auth::Account;
 use celestia_grpc::types::tx::prep_signed_tx;
 use celestia_proto::cosmos::tx::v1beta1::BroadcastMode;
-use celestia_types::{blob::MsgPayForBlobs, nmt::Namespace, AppVersion, Blob};
+use celestia_types::blob::MsgPayForBlobs;
+use celestia_types::nmt::Namespace;
+use celestia_types::{AppVersion, Blob};
 
 pub mod utils;
 
-use crate::utils::{load_account_key, new_test_client};
+use crate::utils::{load_account, new_test_client};
+
+const BRIDGE_0_DATA: &str = "../ci/credentials/bridge-0";
 
 #[tokio::test]
 async fn get_min_gas_price() {
@@ -68,16 +72,11 @@ async fn get_account() {
 #[tokio::test]
 async fn submit_blob() {
     let mut client = new_test_client().await.unwrap();
-    let address = "celestia1rkfxnqt8wwu2vqgpa2ph84xa2ty0nseex4xqlc".to_string();
-    let private_key =
-        hex::decode("374b1d38f76c57fb6a1bb7bb840795239640441a37f506dc8de0d82b1ea9f690").unwrap();
+
+    let (address, keypair) = load_account(BRIDGE_0_DATA);
     let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
-    let blob = Blob::new(namespace, "Hello, World!".into(), AppVersion::V1).unwrap();
-    let blobs = vec![blob];
-
+    let blobs = vec![Blob::new(namespace, "Hello, World!".into(), AppVersion::V1).unwrap()];
     let chain_id = "private".to_string();
-    let keypair = load_account_key(&private_key);
-
     let account = client.get_account(address.clone()).await.unwrap();
 
     let msg_pay_for_blobs = MsgPayForBlobs::new(&blobs, address).unwrap();

@@ -140,9 +140,19 @@ impl FromGrpcResponse<GetTxResponse> for RawGetTxResponse {
 impl IntoGrpcParam<BroadcastTxRequest> for (RawTx, Vec<Blob>, BroadcastMode) {
     fn into_parameter(self) -> BroadcastTxRequest {
         let (tx, blobs, mode) = self;
+
+        // From https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
+        const BLOB_TX_TYPE_ID: &str = "BLOB";
+
         // empty blob list causes error response, but this is already checked when creating MsgPayForBlobs
         debug_assert!(!blobs.is_empty());
-        let blob_tx = new_blob_tx(&tx, blobs);
+
+        let blobs = blobs.into_iter().map(RawBlob::from).collect();
+        let blob_tx = RawBlobTx {
+            tx: tx.encode_to_vec(),
+            blobs,
+            type_id: BLOB_TX_TYPE_ID.to_string(),
+        };
         BroadcastTxRequest {
             tx_bytes: blob_tx.encode_to_vec(),
             mode: mode.into(),
@@ -232,18 +242,5 @@ pub fn prep_signed_tx(
         auth_info: Some(auth_info),
         body: Some(tx_body),
         signatures: vec![signature.to_bytes().to_vec()],
-    }
-}
-
-
-fn new_blob_tx(signed_tx: &RawTx, blobs: Vec<Blob>) -> RawBlobTx {
-    // From https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
-    const BLOB_TX_TYPE_ID: &str = "BLOB";
-
-    let blobs = blobs.into_iter().map(RawBlob::from).collect();
-    RawBlobTx {
-        tx: signed_tx.encode_to_vec(),
-        blobs,
-        type_id: BLOB_TX_TYPE_ID.to_string(),
     }
 }
