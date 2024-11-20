@@ -1,10 +1,10 @@
 use prost::{Message, Name};
+use pbjson_types::Any;
 
 use celestia_proto::cosmos::auth::v1beta1::{
     QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
     QueryParamsRequest as QueryAuthParamsRequest, QueryParamsResponse as QueryAuthParamsResponse,
 };
-use celestia_tendermint_proto::google::protobuf::Any;
 use celestia_types::auth::{
     AuthParams, BaseAccount, ModuleAccount, RawBaseAccount, RawModuleAccount,
 };

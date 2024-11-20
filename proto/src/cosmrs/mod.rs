@@ -1,10 +1,4 @@
-use crate::cosmos::base::v1beta1::Coin;
-use crate::cosmos::crypto::multisig::v1beta1::CompactBitArray;
-use crate::cosmos::tx::v1beta1::mode_info::Multi;
-use crate::cosmos::tx::v1beta1::mode_info::Single;
-use crate::cosmos::tx::v1beta1::mode_info::Sum;
-use crate::cosmos::tx::v1beta1::{AuthInfo, Fee, ModeInfo, SignerInfo, Tip, TxBody};
-use celestia_tendermint_proto::google::protobuf::Any;
+use pbjson_types::Any;
 
 use cosmos_sdk_proto::cosmos::base::v1beta1::Coin as CosmrsCoin;
 use cosmos_sdk_proto::cosmos::crypto::multisig::v1beta1::CompactBitArray as CosmrsCompactBitArray;
@@ -17,6 +11,13 @@ use cosmos_sdk_proto::cosmos::tx::v1beta1::ModeInfo as CosmrsModeInfo;
 use cosmos_sdk_proto::cosmos::tx::v1beta1::SignerInfo as CosmrsSignerInfo;
 use cosmos_sdk_proto::cosmos::tx::v1beta1::Tip as CosmrsTip;
 use cosmos_sdk_proto::cosmos::tx::v1beta1::TxBody as CosmrsTxBody;
+
+use crate::cosmos::base::v1beta1::Coin;
+use crate::cosmos::crypto::multisig::v1beta1::CompactBitArray;
+use crate::cosmos::tx::v1beta1::mode_info::Multi;
+use crate::cosmos::tx::v1beta1::mode_info::Single;
+use crate::cosmos::tx::v1beta1::mode_info::Sum;
+use crate::cosmos::tx::v1beta1::{AuthInfo, Fee, ModeInfo, SignerInfo, Tip, TxBody};
 
 pub trait ProtobufAnyConvertable {
     type Target;

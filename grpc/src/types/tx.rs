@@ -4,6 +4,7 @@ use cosmrs::Tx;
 use k256::ecdsa::{signature::Signer, Signature};
 use prost::{Message, Name};
 use serde::{Deserialize, Serialize};
+use pbjson_types::Any;
 
 use celestia_proto::cosmos::base::abci::v1beta1::{AbciMessageLog, TxResponse as RawTxResponse};
 use celestia_proto::cosmos::base::v1beta1::Coin;
@@ -14,13 +15,10 @@ use celestia_proto::cosmos::tx::v1beta1::{
     GetTxRequest as RawGetTxRequest, GetTxResponse as RawGetTxResponse, ModeInfo, SignDoc,
     SignerInfo, Tx as RawTx, TxBody,
 };
-use celestia_tendermint_proto::google::protobuf::Any;
 use celestia_tendermint_proto::v0_34::abci::Event;
 use celestia_tendermint_proto::Protobuf;
 use celestia_types::auth::{AccountKeypair, BaseAccount};
 use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlob, RawBlobTx, RawMsgPayForBlobs};
-//use celestia_tendermint_proto::v0_34::types::{BlobTx as RawBlobTx};
-//use celestia_types::state::RawTxResponse;
 
 use crate::types::{FromGrpcResponse, IntoGrpcParam};
 use crate::Error;
@@ -193,7 +191,7 @@ pub fn prep_signed_tx(
 
     let public_key_as_any = Any {
         type_url: secp256k1::PubKey::type_url(),
-        value: public_key.encode_to_vec(),
+        value: public_key.encode_to_vec().into(),
     };
 
     let auth_info = AuthInfo {
@@ -209,7 +207,7 @@ pub fn prep_signed_tx(
     let msg_pay_for_blobs_value: Result<_, Infallible> = msg_pay_for_blobs.encode_vec();
     let msg_pay_for_blobs_as_any = Any {
         type_url: RawMsgPayForBlobs::type_url(),
-        value: msg_pay_for_blobs_value.expect("Result to be Infallible"),
+        value: msg_pay_for_blobs_value.expect("Result to be Infallible").into(),
     };
 
     let tx_body = TxBody {
