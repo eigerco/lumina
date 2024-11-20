@@ -235,7 +235,8 @@ pub fn prep_signed_tx(
     }
 }
 
-pub fn new_blob_tx(signed_tx: &RawTx, blobs: Vec<Blob>) -> RawBlobTx {
+
+fn new_blob_tx(signed_tx: &RawTx, blobs: Vec<Blob>) -> RawBlobTx {
     // From https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
     const BLOB_TX_TYPE_ID: &str = "BLOB";
 
