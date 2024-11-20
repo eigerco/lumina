@@ -1,3 +1,5 @@
+//! Types associated with submitting and querying transaction
+
 use celestia_tendermint_proto::Protobuf;
 use pbjson_types::Any;
 
@@ -61,7 +63,7 @@ pub struct AuthInfo {
     /// Defines the signing modes for the required signers.
     ///
     /// The number and order of elements must match the required signers from transaction
-    /// [`Body`][`super::Body`]’s messages. The first element is the primary signer and the one
+    /// [`TxBody`]’s messages. The first element is the primary signer and the one
     /// which pays the [`Fee`].
     pub signer_infos: Vec<SignerInfo>,
     /// [`Fee`] and gas limit for the transaction.

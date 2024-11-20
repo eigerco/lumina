@@ -52,7 +52,7 @@ pub struct BaseAccount {
     pub sequence: u64,
 }
 
-/// ModuleAccount defines an account for modules that holds coins on a pool.
+/// [`ModuleAccount`] defines an account for modules that holds coins on a pool.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleAccount {
     /// [`BaseAccount`] specification of this module account.
@@ -63,6 +63,7 @@ pub struct ModuleAccount {
     pub permissions: Vec<String>,
 }
 
+/// [`AccountKeypair`] is a pair of keys associated with an account
 #[derive(Debug, Clone)]
 pub struct AccountKeypair {
     /// public key

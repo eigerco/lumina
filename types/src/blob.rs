@@ -52,6 +52,7 @@ pub struct BlobParams {
 /// MsgPayForBlobs pays for the inclusion of a blob in the block.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MsgPayForBlobs {
+    /// signer is the bech32 encoded signer address
     pub signer: String,
     /// namespaces is a list of namespaces that the blobs are associated with.
     pub namespaces: Vec<Namespace>,
@@ -346,6 +347,7 @@ fn shares_needed_for_blob(blob_len: usize) -> usize {
 }
 
 impl MsgPayForBlobs {
+    /// Create a pay for blobs message for the provided Blobs and signer
     pub fn new(blobs: &[Blob], signer_address: String) -> Result<Self> {
         let blob_count = blobs.len();
         if blob_count == 0 {

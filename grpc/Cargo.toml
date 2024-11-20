@@ -21,7 +21,7 @@ categories = [
 [dependencies]
 celestia-tendermint-proto.workspace = true
 celestia-types = { workspace = true, features = [ "tonic" ] }
-celestia-proto = { workspace = true, features = [ "tonic", "cosmrs" ] }
+celestia-proto = { workspace = true, features = [ "tonic" ] }
 celestia-tendermint.workspace = true
 prost.workspace = true
 celestia-grpc-macros = { version = "0.1.0", path = "grpc-macros" }
