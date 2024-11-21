@@ -25,7 +25,7 @@ pub use celestia_proto::cosmos::tx::v1beta1::TxBody as RawTxBody;
 
 pub type Signature = Vec<u8>;
 
-// [`BOND_DENOM`] defines the native staking denomination
+/// [`BOND_DENOM`] defines the native staking denomination
 pub const BOND_DENOM: &str = "utia";
 
 /// [`Tx`] is the standard type used for broadcasting transactions.
@@ -218,6 +218,9 @@ pub struct Coin {
 }
 
 impl Fee {
+    /// Create [`Fee`] struct with provided number of utia and gas limit,
+    /// without setting custom [`Fee::payer`] or [`Fee::granter`] fields,
+    /// which means first tx signer is responsible for paying.
     pub fn new(utia_fee: u64, gas_limit: u64) -> Self {
         Fee {
             amount: vec![Coin {

@@ -86,6 +86,10 @@ pub enum Error {
     #[error("Bit array to large")]
     BitarrayTooLarge,
 
+    /// Malformed CompactBitArray
+    #[error("CompactBitArray malformed")]
+    MalformedCompactBitArray,
+
     /// Wrong proof type.
     #[error("Wrong proof type")]
     WrongProofType,

@@ -45,7 +45,7 @@ async fn submit_pay_for_blob() {
         .unwrap();
 
     let received_blob = client
-        .blob_get(tx_response.height.into(), namespace, blob.commitment)
+        .blob_get(tx_response.height as u64, namespace, blob.commitment)
         .await
         .unwrap();
 

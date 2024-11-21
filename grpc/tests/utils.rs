@@ -65,7 +65,7 @@ pub async fn new_test_client() -> Result<GrpcClient<TestAuthInterceptor>> {
 }
 
 pub fn load_account(path: &str) -> TestAccount {
-    let account_file = format!("{path}.addr"); // TODO: consolidate
+    let account_file = format!("{path}.addr");
     let key_file = format!("{path}.plaintext-key");
 
     let account = fs::read_to_string(account_file).expect("file with account name to exists");
