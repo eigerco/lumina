@@ -6,7 +6,7 @@ use prost::{Message, Name};
 
 use celestia_proto::cosmos::crypto::secp256k1;
 use celestia_proto::cosmos::tx::v1beta1::{
-    BroadcastMode, BroadcastTxRequest, BroadcastTxResponse, GetTxRequest as RawGetTxRequest,
+    BroadcastTxRequest, BroadcastTxResponse, GetTxRequest as RawGetTxRequest,
     GetTxResponse as RawGetTxResponse, SignDoc,
 };
 use celestia_tendermint::public_key::Secp256k1 as VerifyingKey;
@@ -19,6 +19,8 @@ use celestia_types::state::{
 
 use crate::types::{FromGrpcResponse, IntoGrpcParam};
 use crate::Error;
+
+pub use celestia_proto::cosmos::tx::v1beta1::BroadcastMode;
 
 /// Response to GetTx
 #[derive(Debug)]
