@@ -164,6 +164,7 @@ impl IntoGrpcParam<RawGetTxRequest> for String {
     }
 }
 
+/// Sign `tx_body` and the transaction metadata as the `base_account` using `signer`
 pub fn sign_tx(
     tx_body: RawTxBody,
     chain_id: String,
