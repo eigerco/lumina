@@ -10,6 +10,7 @@ use celestia_proto::cosmos::tx::v1beta1::Tx as RawTx;
 use celestia_tendermint::block::Block;
 use celestia_types::auth::AuthParams;
 use celestia_types::blob::{Blob, BlobParams};
+use celestia_types::state::Address;
 
 use celestia_grpc_macros::grpc_method;
 
@@ -63,7 +64,7 @@ where
 
     /// Get account
     #[grpc_method(AuthQueryClient::account)]
-    async fn get_account(&mut self, account: String) -> Result<Account, Error>;
+    async fn get_account(&mut self, account: &Address) -> Result<Account, Error>;
 
     // TODO: pagination?
     /// Get accounts

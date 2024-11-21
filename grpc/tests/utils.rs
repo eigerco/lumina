@@ -8,13 +8,26 @@ use tonic::service::Interceptor;
 use tonic::transport::Channel;
 use tonic::{Request, Status};
 
-use celestia_tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
-use celestia_types::auth::AccountKeypair;
-
 use celestia_grpc::GrpcClient;
+use celestia_tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
+use celestia_tendermint::public_key::Secp256k1 as VerifyingKey;
+use celestia_types::state::Address;
 
 const CELESTIA_GRPC_URL: &str = "http://localhost:19090";
 
+/// [`TestAccount`] stores celestia account credentials and information, for cases where we don't
+/// mind jusk keeping the plaintext secret key in memory
+#[derive(Debug, Clone)]
+pub struct TestAccount {
+    /// Bech32 `AccountId` of this account
+    pub address: Address,
+    /// public key
+    pub verifying_key: VerifyingKey,
+    /// private key
+    pub signing_key: SigningKey,
+}
+
+//
 #[derive(Clone)]
 pub struct TestAuthInterceptor {
     token: Option<MetadataValue<Ascii>>,
@@ -51,8 +64,8 @@ pub async fn new_test_client() -> Result<GrpcClient<TestAuthInterceptor>> {
     Ok(GrpcClient::new(grpc_channel, auth_interceptor))
 }
 
-pub fn load_account(path: &str) -> (String, AccountKeypair) {
-    let account_file = format!("{path}.addr");
+pub fn load_account(path: &str) -> TestAccount {
+    let account_file = format!("{path}.addr"); // TODO: consolidate
     let key_file = format!("{path}.plaintext-key");
 
     let account = fs::read_to_string(account_file).expect("file with account name to exists");
@@ -63,10 +76,9 @@ pub fn load_account(path: &str) -> (String, AccountKeypair) {
     )
     .expect("valid key material");
 
-    let keypair = AccountKeypair {
+    TestAccount {
+        address: account.trim().parse().expect("valid address"),
         verifying_key: *signing_key.verifying_key(),
         signing_key,
-    };
-
-    (account.trim().to_string(), keypair)
+    }
 }

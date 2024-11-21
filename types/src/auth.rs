@@ -2,17 +2,16 @@
 
 #[cfg(feature = "tonic")]
 use pbjson_types::Any;
+use prost::Message;
 #[cfg(not(feature = "tonic"))]
 use prost_types::Any;
-use prost::Message;
 
 use celestia_proto::cosmos::crypto::ed25519::PubKey as Ed25519PubKey;
 use celestia_proto::cosmos::crypto::secp256k1::PubKey as Secp256k1PubKey;
-use celestia_tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
 use celestia_tendermint::public_key::PublicKey;
-use celestia_tendermint::public_key::Secp256k1 as VerifyingKey;
 use celestia_tendermint_proto::Protobuf;
 
+use crate::state::Address;
 use crate::Error;
 
 pub use celestia_proto::cosmos::auth::v1beta1::BaseAccount as RawBaseAccount;
@@ -45,7 +44,7 @@ pub struct AuthParams {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BaseAccount {
     /// Bech32 `AccountId` of this account.
-    pub address: String,
+    pub address: Address,
     /// Optional `PublicKey` associated with this account.
     pub pub_key: Option<PublicKey>,
     /// `account_number` is the account number of the account in state
@@ -66,19 +65,10 @@ pub struct ModuleAccount {
     pub permissions: Vec<String>,
 }
 
-/// [`AccountKeypair`] is a pair of keys associated with an account
-#[derive(Debug, Clone)]
-pub struct AccountKeypair {
-    /// public key
-    pub verifying_key: VerifyingKey,
-    /// private key
-    pub signing_key: SigningKey,
-}
-
 impl From<BaseAccount> for RawBaseAccount {
     fn from(account: BaseAccount) -> Self {
         RawBaseAccount {
-            address: account.address,
+            address: account.address.to_string(),
             pub_key: account.pub_key.map(any_from_public_key),
             account_number: account.account_number,
             sequence: account.sequence,
@@ -92,7 +82,7 @@ impl TryFrom<RawBaseAccount> for BaseAccount {
     fn try_from(account: RawBaseAccount) -> Result<Self, Self::Error> {
         let pub_key = account.pub_key.map(public_key_from_any).transpose()?;
         Ok(BaseAccount {
-            address: account.address,
+            address: account.address.parse()?,
             pub_key,
             account_number: account.account_number,
             sequence: account.sequence,

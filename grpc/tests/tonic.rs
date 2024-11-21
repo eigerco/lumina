@@ -1,7 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use celestia_grpc::types::auth::Account;
-use celestia_grpc::types::tx::prep_signed_tx;
+use celestia_grpc::types::tx::sign_tx;
 use celestia_proto::cosmos::tx::v1beta1::BroadcastMode;
 use celestia_types::blob::MsgPayForBlobs;
 use celestia_types::nmt::Namespace;
@@ -11,7 +11,7 @@ pub mod utils;
 
 use crate::utils::{load_account, new_test_client};
 
-const BRIDGE_0_DATA: &str = "../ci/credentials/bridge-0";
+const BRIDGE_0_ACCOUNT_DATA: &str = "../ci/credentials/bridge-0";
 
 #[tokio::test]
 async fn get_min_gas_price() {
@@ -59,12 +59,12 @@ async fn get_account() {
     let first_account = accounts.first().expect("account to exist");
 
     let address = match first_account {
-        Account::Base(acct) => acct.address.to_string(),
-        Account::Module(acct) => acct.base_account.as_ref().unwrap().address.to_string(),
+        Account::Base(acct) => acct.address.clone(),
+        Account::Module(acct) => acct.base_account.as_ref().unwrap().address.clone(),
         _ => unimplemented!("unknown account type"),
     };
 
-    let account = client.get_account(address).await.unwrap();
+    let account = client.get_account(&address).await.unwrap();
 
     assert_eq!(&account, first_account);
 }
@@ -73,22 +73,28 @@ async fn get_account() {
 async fn submit_blob() {
     let mut client = new_test_client().await.unwrap();
 
-    let (address, keypair) = load_account(BRIDGE_0_DATA);
+    let account_credentials = load_account(BRIDGE_0_ACCOUNT_DATA);
     let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
     let blobs = vec![Blob::new(namespace, "Hello, World!".into(), AppVersion::V3).unwrap()];
     let chain_id = "private".to_string();
-    let account = client.get_account(address.clone()).await.unwrap();
-
-    let msg_pay_for_blobs = MsgPayForBlobs::new(&blobs, address).unwrap();
-
+    let account = client
+        .get_account(&account_credentials.address)
+        .await
+        .unwrap();
     // gas and fees are overestimated for simplicity
-    let tx = prep_signed_tx(
-        &msg_pay_for_blobs,
-        account.base_account_ref().unwrap(),
-        100000,
-        5000,
+    let gas_limit = 100000;
+    let fee = 5000;
+
+    let msg_pay_for_blobs = MsgPayForBlobs::new(&blobs, account_credentials.address).unwrap();
+
+    let tx = sign_tx(
+        msg_pay_for_blobs.into(),
         chain_id,
-        keypair,
+        account.base_account_ref().unwrap(),
+        account_credentials.verifying_key,
+        account_credentials.signing_key,
+        gas_limit,
+        fee,
     );
 
     let response = client

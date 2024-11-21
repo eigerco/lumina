@@ -1,5 +1,3 @@
-use std::convert::Infallible;
-
 use k256::ecdsa::{signature::Signer, Signature};
 use pbjson_types::Any;
 use prost::{Message, Name};
@@ -12,12 +10,12 @@ use celestia_proto::cosmos::tx::v1beta1::mode_info::{Single, Sum};
 use celestia_proto::cosmos::tx::v1beta1::{
     AuthInfo, BroadcastMode, BroadcastTxRequest, BroadcastTxResponse, Fee,
     GetTxRequest as RawGetTxRequest, GetTxResponse as RawGetTxResponse, ModeInfo, SignDoc,
-    SignerInfo, Tx as RawTx, TxBody,
+    SignerInfo, Tx as RawTx, TxBody as RawTxBody,
 };
+use celestia_tendermint::public_key::Secp256k1 as VerifyingKey;
 use celestia_tendermint_proto::v0_34::abci::Event;
-use celestia_tendermint_proto::Protobuf;
-use celestia_types::auth::{AccountKeypair, BaseAccount};
-use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlob, RawBlobTx, RawMsgPayForBlobs};
+use celestia_types::auth::BaseAccount;
+use celestia_types::blob::{Blob, RawBlob, RawBlobTx};
 use celestia_types::tx::Tx;
 
 use crate::types::{FromGrpcResponse, IntoGrpcParam};
@@ -166,15 +164,14 @@ impl IntoGrpcParam<RawGetTxRequest> for String {
     }
 }
 
-/// Prepare and sign transaction [`RawTx`] so that it can be sent alongside the blobs for
-/// submission
-pub fn prep_signed_tx(
-    msg_pay_for_blobs: &MsgPayForBlobs,
+pub fn sign_tx(
+    tx_body: RawTxBody,
+    chain_id: String,
     base_account: &BaseAccount,
+    verifying_key: VerifyingKey,
+    signer: impl Signer<Signature>,
     gas_limit: u64,
     fee: u64,
-    chain_id: String,
-    account_keys: AccountKeypair,
 ) -> RawTx {
     // From https://github.com/celestiaorg/celestia-app/blob/v2.3.1/pkg/appconsts/global_consts.go#L77
     const FEE_DENOM: &str = "utia";
@@ -193,11 +190,7 @@ pub fn prep_signed_tx(
     };
 
     let public_key = secp256k1::PubKey {
-        key: account_keys
-            .verifying_key
-            .to_encoded_point(true)
-            .as_bytes()
-            .to_vec(),
+        key: verifying_key.to_encoded_point(true).as_bytes().to_vec(),
     };
 
     let public_key_as_any = Any {
@@ -214,20 +207,6 @@ pub fn prep_signed_tx(
         fee: Some(fee),
         tip: None,
     };
-
-    let msg_pay_for_blobs_value: Result<_, Infallible> = msg_pay_for_blobs.encode_vec();
-    let msg_pay_for_blobs_as_any = Any {
-        type_url: RawMsgPayForBlobs::type_url(),
-        value: msg_pay_for_blobs_value
-            .expect("Result to be Infallible")
-            .into(),
-    };
-
-    let tx_body = TxBody {
-        messages: vec![msg_pay_for_blobs_as_any],
-        ..TxBody::default()
-    };
-
     let bytes_to_sign = SignDoc {
         body_bytes: tx_body.encode_to_vec(),
         auth_info_bytes: auth_info.encode_to_vec(),
@@ -236,7 +215,7 @@ pub fn prep_signed_tx(
     }
     .encode_to_vec();
 
-    let signature: Signature = account_keys.signing_key.sign(&bytes_to_sign);
+    let signature: Signature = signer.sign(&bytes_to_sign);
 
     RawTx {
         auth_info: Some(auth_info),

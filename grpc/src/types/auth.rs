@@ -8,6 +8,7 @@ use celestia_proto::cosmos::auth::v1beta1::{
 use celestia_types::auth::{
     AuthParams, BaseAccount, ModuleAccount, RawBaseAccount, RawModuleAccount,
 };
+use celestia_types::state::Address;
 
 use crate::types::make_empty_params;
 use crate::types::{FromGrpcResponse, IntoGrpcParam};
@@ -60,9 +61,11 @@ impl FromGrpcResponse<Vec<Account>> for QueryAccountsResponse {
 
 make_empty_params!(QueryAuthParamsRequest);
 
-impl IntoGrpcParam<QueryAccountRequest> for String {
+impl IntoGrpcParam<QueryAccountRequest> for &Address {
     fn into_parameter(self) -> QueryAccountRequest {
-        QueryAccountRequest { address: self }
+        QueryAccountRequest {
+            address: self.to_string(),
+        }
     }
 }
 

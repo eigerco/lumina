@@ -5,11 +5,11 @@ use pbjson_types::Any;
 #[cfg(not(feature = "tonic"))]
 use prost_types::Any;
 
-use celestia_tendermint_proto::Protobuf;
 use celestia_proto::cosmos::tx::v1beta1::{
     AuthInfo as RawAuthInfo, Fee, SignerInfo, TxBody as RawTxBody,
 };
 use celestia_tendermint::block::Height;
+use celestia_tendermint_proto::Protobuf;
 
 use crate::Error;
 
