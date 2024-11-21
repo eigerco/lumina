@@ -25,6 +25,9 @@ pub use celestia_proto::cosmos::tx::v1beta1::TxBody as RawTxBody;
 
 pub type Signature = Vec<u8>;
 
+// [`BOND_DENOM`] defines the native staking denomination
+pub const BOND_DENOM: &str = "utia";
+
 /// [`Tx`] is the standard type used for broadcasting transactions.
 #[derive(Debug, Clone)]
 pub struct Tx {
@@ -188,7 +191,7 @@ pub enum Sum {
 /// Fee includes the amount of coins paid in fees and the maximum
 /// gas to be used by the transaction. The ratio yields an effective "gasprice",
 /// which must be above some miminum to be accepted into the mempool.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Fee {
     /// amount is the amount of coins to be paid as a fee
     pub amount: Vec<Coin>,
@@ -211,7 +214,20 @@ pub struct Coin {
     /// Coin denomination
     pub denom: String,
     /// Coin amount
-    pub amount: String, // TODO: should be int?
+    pub amount: u64,
+}
+
+impl Fee {
+    pub fn new(utia_fee: u64, gas_limit: u64) -> Self {
+        Fee {
+            amount: vec![Coin {
+                denom: BOND_DENOM.to_string(),
+                amount: utia_fee,
+            }],
+            gas_limit,
+            ..Default::default()
+        }
+    }
 }
 
 impl TryFrom<RawTxBody> for TxBody {
@@ -407,7 +423,7 @@ impl From<Coin> for RawCoin {
     fn from(value: Coin) -> Self {
         RawCoin {
             denom: value.denom,
-            amount: value.amount,
+            amount: value.amount.to_string(),
         }
     }
 }
@@ -418,7 +434,10 @@ impl TryFrom<RawCoin> for Coin {
     fn try_from(value: RawCoin) -> Result<Self, Self::Error> {
         Ok(Coin {
             denom: value.denom,
-            amount: value.amount,
+            amount: value
+                .amount
+                .parse()
+                .map_err(|_| Error::InvalidCoinAmount(value.amount))?,
         })
     }
 }

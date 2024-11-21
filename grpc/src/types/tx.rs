@@ -4,19 +4,18 @@ use k256::ecdsa::{signature::Signer, Signature};
 use pbjson_types::Any;
 use prost::{Message, Name};
 
-use celestia_proto::cosmos::base::v1beta1::Coin;
 use celestia_proto::cosmos::crypto::secp256k1;
-use celestia_proto::cosmos::tx::v1beta1::mode_info::{Single, Sum};
 use celestia_proto::cosmos::tx::v1beta1::{
-    BroadcastMode, BroadcastTxRequest, BroadcastTxResponse, Fee, GetTxRequest as RawGetTxRequest,
-    GetTxResponse as RawGetTxResponse, ModeInfo, SignDoc, SignerInfo, TxBody as RawTxBody,
+    BroadcastMode, BroadcastTxRequest, BroadcastTxResponse, GetTxRequest as RawGetTxRequest,
+    GetTxResponse as RawGetTxResponse, SignDoc,
 };
 use celestia_tendermint::public_key::Secp256k1 as VerifyingKey;
 use celestia_tendermint_proto::Protobuf;
 use celestia_types::auth::BaseAccount;
 use celestia_types::blob::{Blob, RawBlob, RawBlobTx};
-use celestia_types::state::{RawTx, TxResponse};
-use celestia_types::tx::{AuthInfo, Tx};
+use celestia_types::state::{
+    AuthInfo, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum, Tx, TxResponse,
+};
 
 use crate::types::{FromGrpcResponse, IntoGrpcParam};
 use crate::Error;
@@ -104,26 +103,14 @@ pub fn sign_tx(
     gas_limit: u64,
     fee: u64,
 ) -> RawTx {
-    // From https://github.com/celestiaorg/celestia-app/blob/v2.3.1/pkg/appconsts/global_consts.go#L77
-    const FEE_DENOM: &str = "utia";
     // From https://github.com/celestiaorg/cosmos-sdk/blob/v1.25.0-sdk-v0.46.16/proto/cosmos/tx/signing/v1beta1/signing.proto#L24
-    const SIGNING_MODE_INFO: Option<ModeInfo> = Some(ModeInfo {
-        sum: Some(Sum::Single(Single { mode: 1 })),
-    });
-
-    let fee = Fee {
-        amount: vec![Coin {
-            denom: FEE_DENOM.to_string(),
-            amount: fee.to_string(),
-        }],
-        gas_limit,
-        ..Fee::default()
+    const SIGNING_MODE_INFO: ModeInfo = ModeInfo {
+        sum: Sum::Single { mode: 1 },
     };
 
     let public_key = secp256k1::PubKey {
         key: verifying_key.to_encoded_point(true).as_bytes().to_vec(),
     };
-
     let public_key_as_any = Any {
         type_url: secp256k1::PubKey::type_url(),
         value: public_key.encode_to_vec().into(),
@@ -135,7 +122,7 @@ pub fn sign_tx(
             mode_info: SIGNING_MODE_INFO,
             sequence: base_account.sequence,
         }],
-        fee,
+        fee: Fee::new(fee, gas_limit),
     };
     let auth_info_bytes: Result<_, Infallible> = auth_info.encode_vec();
 

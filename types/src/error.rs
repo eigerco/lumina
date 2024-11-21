@@ -192,6 +192,10 @@ pub enum Error {
     #[error("Invalid balance amount: {0}")]
     InvalidBalanceAmount(String),
 
+    /// Invalid coin amount.
+    #[error("Invalid coin amount: {0}")]
+    InvalidCoinAmount(String),
+
     /// Invalid Public Key
     #[error("Invalid Public Key")]
     InvalidPublicKeyType(String),
