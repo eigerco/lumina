@@ -24,6 +24,7 @@ prost-types.workspace = true
 
 base64 = "0.22.1"
 bech32 = "0.11.0"
+bitvec = "1.0.1"
 bytes = "1.6.0"
 cid = { version = "0.11.1", default-features = false, features = ["std"] }
 const_format = "0.2.32"

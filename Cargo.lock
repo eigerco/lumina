@@ -883,6 +883,7 @@ version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
  "bech32",
+ "bitvec",
  "blockstore",
  "bytes",
  "celestia-proto",

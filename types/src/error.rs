@@ -70,6 +70,22 @@ pub enum Error {
     #[error("Missing fee field")]
     MissingFee,
 
+    /// Missing sum field
+    #[error("Missing sum field")]
+    MissingSum,
+
+    /// Missing mode info field
+    #[error("Missing mode info field")]
+    MissingModeInfo,
+
+    /// Missing bitarray field
+    #[error("Missing bitarray field")]
+    MissingBitarray,
+
+    /// Bit array too large
+    #[error("Bit array to large")]
+    BitarrayTooLarge,
+
     /// Wrong proof type.
     #[error("Wrong proof type")]
     WrongProofType,

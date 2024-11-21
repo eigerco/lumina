@@ -1,4 +1,3 @@
-
 use serde::{Deserialize, Serialize};
 
 use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
@@ -64,8 +63,8 @@ mod tx_body_conversion {
     use pbjson_types::Any;
     use prost::Name;
 
-    use celestia_tendermint_proto::Protobuf;
     use celestia_proto::cosmos::tx::v1beta1::TxBody as RawTxBody;
+    use celestia_tendermint_proto::Protobuf;
 
     impl From<MsgPayForBlobs> for RawTxBody {
         fn from(msg: MsgPayForBlobs) -> Self {

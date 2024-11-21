@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod auth;
+mod bit_array;
 pub mod blob;
 mod block;
 mod byzantine;
@@ -27,7 +28,6 @@ mod sync;
 #[cfg_attr(docsrs, doc(cfg(feature = "test-utils")))]
 pub mod test_utils;
 pub mod trust_level;
-pub mod tx;
 mod tx_config;
 mod validate;
 mod validator_set;

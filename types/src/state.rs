@@ -10,7 +10,7 @@ pub use self::balance::Balance;
 pub use self::query_delegation::{
     QueryDelegationResponse, QueryRedelegationsResponse, QueryUnbondingDelegationResponse,
 };
-pub use self::tx::{RawTx, TxResponse};
+pub use self::tx::{RawTx, RawTxBody, RawTxResponse, Tx, TxBody, TxResponse};
 
 /// A 256-bit unsigned integer.
 pub type Uint = ruint::aliases::U256;
