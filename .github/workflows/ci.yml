@@ -63,7 +63,7 @@ jobs:
     - name: Install wasm-pack
       uses: taiki-e/cache-cargo-install-action@v1
       with:
-        tool: wasm-pack@0.13.1
+        tool: wasm-pack@0.12.1
 
     - name: Install chromedriver # we don't specify chrome version to match whatever's installed
       uses: nanasess/setup-chromedriver@v2
