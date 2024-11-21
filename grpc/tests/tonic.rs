@@ -75,7 +75,7 @@ async fn submit_blob() {
 
     let (address, keypair) = load_account(BRIDGE_0_DATA);
     let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
-    let blobs = vec![Blob::new(namespace, "Hello, World!".into(), AppVersion::V1).unwrap()];
+    let blobs = vec![Blob::new(namespace, "Hello, World!".into(), AppVersion::V3).unwrap()];
     let chain_id = "private".to_string();
     let account = client.get_account(address.clone()).await.unwrap();
 

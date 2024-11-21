@@ -1,8 +1,11 @@
 //! Types associated with submitting and querying transaction
 
-use celestia_tendermint_proto::Protobuf;
+#[cfg(feature = "tonic")]
 use pbjson_types::Any;
+#[cfg(not(feature = "tonic"))]
+use prost_types::Any;
 
+use celestia_tendermint_proto::Protobuf;
 use celestia_proto::cosmos::tx::v1beta1::{
     AuthInfo as RawAuthInfo, Fee, SignerInfo, TxBody as RawTxBody,
 };

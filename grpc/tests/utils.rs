@@ -57,8 +57,6 @@ pub fn load_account(path: &str) -> (String, AccountKeypair) {
 
     let account = fs::read_to_string(account_file).expect("file with account name to exists");
     let hex_encoded_key = fs::read_to_string(key_file).expect("file with plaintext key to exists");
-    //let (_label, key_material) = SecretDocument::read_pem_file(key_file).expect("valid private key file");
-    //let key : EcPrivateKey = key_material.try_into().expect("valid key data");
 
     let signing_key = SigningKey::from_slice(
         &hex::decode(hex_encoded_key.trim()).expect("valid hex representation"),

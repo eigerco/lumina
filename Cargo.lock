@@ -808,7 +808,6 @@ version = "0.7.1"
 dependencies = [
  "anyhow",
  "async-trait",
- "celestia-proto",
  "celestia-tendermint",
  "celestia-tendermint-proto",
  "celestia-types",

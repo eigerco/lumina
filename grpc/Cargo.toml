@@ -27,13 +27,13 @@ prost.workspace = true
 celestia-grpc-macros = { version = "0.1.0", path = "grpc-macros" }
 
 hex = "0.4.3"
-serde = "1.0.215"
 k256 = "0.13.4"
+pbjson-types = "0.7.0"
+serde = "1.0.215"
 thiserror = "1.0.61"
 tonic = { version = "0.12.3", default-features = false, features = [
   "codegen", "prost"
 ]}
-pbjson-types = "0.7.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 anyhow = "1.0.86"

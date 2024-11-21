@@ -1,6 +1,9 @@
 //! types related to accounts
 
+#[cfg(feature = "tonic")]
 use pbjson_types::Any;
+#[cfg(not(feature = "tonic"))]
+use prost_types::Any;
 use prost::Message;
 
 use celestia_proto::cosmos::crypto::ed25519::PubKey as Ed25519PubKey;

@@ -1,5 +1,8 @@
 //! [`serde`] serializer for the optional [`Any`].
 
+#[cfg(feature = "tonic")]
+use pbjson_types::Any;
+#[cfg(not(feature = "tonic"))]
 use prost_types::Any;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

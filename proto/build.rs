@@ -72,6 +72,7 @@ static EXTERN_PATHS: &[(&str, &str)] = &[
     (".tendermint", "::celestia_tendermint_proto::v0_34"),
     (".google.protobuf.Timestamp", "::celestia_tendermint_proto::google::protobuf::Timestamp"),
     (".google.protobuf.Duration", "::celestia_tendermint_proto::google::protobuf::Duration"),
+    #[cfg(feature = "tonic")]
     (".google.protobuf.Any", "::pbjson_types::Any"),
 ];
 

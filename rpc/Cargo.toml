@@ -21,7 +21,6 @@ categories = [
 [dependencies]
 celestia-tendermint-proto.workspace = true
 celestia-types.workspace = true
-celestia-proto = { optional = true, workspace = true }
 celestia-tendermint.workspace = true
 prost.workspace = true
 

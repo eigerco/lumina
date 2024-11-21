@@ -62,7 +62,7 @@ default = ["p2p"]
 p2p = ["dep:libp2p-identity", "dep:multiaddr", "dep:serde_repr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
 wasm-bindgen = ["celestia-tendermint/wasm-bindgen"]
-tonic = ["dep:pbjson-types"]
+tonic = ["dep:pbjson-types", "celestia-proto/tonic"]
 
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]
