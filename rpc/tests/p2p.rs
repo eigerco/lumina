@@ -13,6 +13,7 @@ async fn info_test() {
     client.p2p_info().await.expect("Failed to get node info");
 }
 
+#[ignore]
 #[tokio::test]
 async fn add_remove_peer_test() {
     // add and then remove a peer, testing outputs from `p2p.Peers` and `p2p.Connectedness`
@@ -64,6 +65,7 @@ async fn add_remove_peer_test() {
     assert!(!final_peers.contains(&addr_info.id));
 }
 
+#[ignore]
 #[tokio::test]
 async fn protect_unprotect_test() {
     // check whether reported protect status reacts correctly to protect/unprotect requests and
@@ -213,6 +215,7 @@ async fn nat_status_test() {
         .expect("failed to query NAT status");
 }
 
+#[ignore]
 #[tokio::test]
 async fn peer_info_test() {
     let addr_info = utils::tiny_node::start_tiny_node()

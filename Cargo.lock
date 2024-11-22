@@ -738,6 +738,7 @@ version = "0.7.1"
 dependencies = [
  "anyhow",
  "async-trait",
+ "celestia-tendermint-proto",
  "celestia-types",
  "dotenvy",
  "futures",
@@ -746,6 +747,7 @@ dependencies = [
  "jsonrpsee",
  "libp2p",
  "nmt-rs",
+ "prost",
  "rand",
  "serde",
  "thiserror",
