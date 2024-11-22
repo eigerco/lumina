@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use celestia_proto::cosmos::base::abci::v1beta1::AbciMessageLog;
 use celestia_tendermint_proto::v0_34::abci::Event;
 
-use crate::bit_array::BitVector;
+use crate::state::bit_array::BitVector;
 use crate::Error;
 use crate::Height;
 

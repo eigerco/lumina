@@ -3,6 +3,7 @@
 mod address;
 pub mod auth;
 mod balance;
+mod bit_array;
 mod query_delegation;
 mod tx;
 

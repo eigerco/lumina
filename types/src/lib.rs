@@ -1,7 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
-mod bit_array;
 pub mod blob;
 mod block;
 mod byzantine;
