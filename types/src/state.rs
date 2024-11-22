@@ -1,6 +1,7 @@
 //! Types and interfaces for accessing Celestia's state-relevant information.
 
 mod address;
+pub mod auth;
 mod balance;
 mod query_delegation;
 mod tx;

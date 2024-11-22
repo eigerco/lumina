@@ -1,3 +1,4 @@
+use prost::Message;
 use tonic::service::Interceptor;
 use tonic::transport::Channel;
 
@@ -7,8 +8,8 @@ use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient a
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
 use celestia_tendermint::block::Block;
-use celestia_types::auth::AuthParams;
-use celestia_types::blob::{Blob, BlobParams};
+use celestia_types::blob::{Blob, BlobParams, RawBlobTx};
+use celestia_types::state::auth::AuthParams;
 use celestia_types::state::Address;
 use celestia_types::state::{RawTx, TxResponse};
 
@@ -71,14 +72,37 @@ where
     #[grpc_method(AuthQueryClient::accounts)]
     async fn get_accounts(&mut self) -> Result<Vec<Account>, Error>;
 
-    /// Broadcast Tx
+    /// Broadcast prepared and serialised transaction
     #[grpc_method(TxServiceClient::broadcast_tx)]
     async fn broadcast_tx(
+        &mut self,
+        tx_bytes: Vec<u8>,
+        mode: BroadcastMode,
+    ) -> Result<TxResponse, Error>;
+
+    /// Broadcast blob transaction
+    pub async fn broadcast_blob_tx(
         &mut self,
         tx: RawTx,
         blobs: Vec<Blob>,
         mode: BroadcastMode,
-    ) -> Result<TxResponse, Error>;
+    ) -> Result<TxResponse, Error> {
+        // From https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
+        const BLOB_TX_TYPE_ID: &str = "BLOB";
+
+        if blobs.is_empty() {
+            return Err(Error::TxEmptyBlobList);
+        }
+
+        let blobs = blobs.into_iter().map(Into::into).collect();
+        let blob_tx = RawBlobTx {
+            tx: tx.encode_to_vec(),
+            blobs,
+            type_id: BLOB_TX_TYPE_ID.to_string(),
+        };
+
+        self.broadcast_tx(blob_tx.encode_to_vec(), mode).await
+    }
 
     /// Get Tx
     #[grpc_method(TxServiceClient::get_tx)]

@@ -33,4 +33,8 @@ pub enum Error {
     /// Unexpected reponse type
     #[error("Unexpected response type")]
     UnexpectedResponseType(String),
+
+    /// Empty blob submission list
+    #[error("Attempted to submit blob transaction with empty blob list")]
+    TxEmptyBlobList,
 }

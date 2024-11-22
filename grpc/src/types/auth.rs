@@ -5,7 +5,7 @@ use celestia_proto::cosmos::auth::v1beta1::{
     QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
     QueryParamsRequest as QueryAuthParamsRequest, QueryParamsResponse as QueryAuthParamsResponse,
 };
-use celestia_types::auth::{
+use celestia_types::state::auth::{
     AuthParams, BaseAccount, ModuleAccount, RawBaseAccount, RawModuleAccount,
 };
 use celestia_types::state::Address;

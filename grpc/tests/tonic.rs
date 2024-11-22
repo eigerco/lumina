@@ -97,7 +97,7 @@ async fn submit_blob() {
     );
 
     let response = client
-        .broadcast_tx(tx, blobs, BroadcastMode::Sync)
+        .broadcast_blob_tx(tx, blobs, BroadcastMode::Sync)
         .await
         .unwrap();
 

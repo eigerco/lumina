@@ -16,24 +16,10 @@ use crate::Error;
 
 pub use celestia_proto::cosmos::auth::v1beta1::BaseAccount as RawBaseAccount;
 pub use celestia_proto::cosmos::auth::v1beta1::ModuleAccount as RawModuleAccount;
+pub use celestia_proto::cosmos::auth::v1beta1::Params as AuthParams;
 
 const COSMOS_ED25519_PUBKEY: &str = "/cosmos.crypto.ed25519.PubKey";
 const COSMOS_SECP256K1_PUBKEY: &str = "/cosmos.crypto.secp256k1.PubKey";
-
-/// Params defines the parameters for the auth module.
-#[derive(Debug)]
-pub struct AuthParams {
-    /// Maximum number of memo characters
-    pub max_memo_characters: u64,
-    /// Maximum nubmer of signatures
-    pub tx_sig_limit: u64,
-    /// Cost per transaction byte
-    pub tx_size_cost_per_byte: u64,
-    /// Cost to verify ed25519 signature
-    pub sig_verify_cost_ed25519: u64,
-    /// Cost to verify secp255k1 signature
-    pub sig_verify_cost_secp256k1: u64,
-}
 
 /// [`BaseAccount`] defines a base account type.
 ///

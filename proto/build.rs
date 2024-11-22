@@ -11,7 +11,6 @@ const BASE64STRING: &str =
 const QUOTED: &str = r#"#[serde(with = "celestia_tendermint_proto::serializers::from_str")]"#;
 const VEC_BASE64STRING: &str =
     r#"#[serde(with = "celestia_tendermint_proto::serializers::bytes::vec_base64string")]"#;
-#[cfg(not(feature = "tonic"))]
 const OPTION_ANY: &str = r#"#[serde(with = "crate::serializers::option_any")]"#;
 const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_timestamp")]"#;
 const NULL_DEFAULT: &str = r#"#[serde(with = "crate::serializers::null_default")]"#;
@@ -53,7 +52,6 @@ static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
 static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.core.v1.da.DataAvailabilityHeader.row_roots", VEC_BASE64STRING),
     (".celestia.core.v1.da.DataAvailabilityHeader.column_roots", VEC_BASE64STRING),
-    #[cfg(not(feature = "tonic"))]
     (".cosmos.base.abci.v1beta1.TxResponse.tx", OPTION_ANY),
     (".cosmos.base.abci.v1beta1.TxResponse.logs", NULL_DEFAULT),
     (".cosmos.base.abci.v1beta1.TxResponse.events", NULL_DEFAULT),
