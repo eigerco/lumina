@@ -784,7 +784,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "celestia-tendermint-proto",
  "pbjson",
