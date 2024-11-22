@@ -16,7 +16,6 @@ use crate::Error;
 
 /// Enum representing different types of account
 #[derive(Debug, PartialEq)]
-#[non_exhaustive]
 pub enum Account {
     /// Base account type
     Base(BaseAccount),

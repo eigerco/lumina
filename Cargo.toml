@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cli", "node", "node-wasm", "proto", "rpc", "grpc", "types"]
+members = ["cli", "grpc", "grpc/grpc-macros", "node", "node-wasm", "proto", "rpc", "types", ]
 
 [workspace.dependencies]
 blockstore = "0.7.0"

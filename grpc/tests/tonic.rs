@@ -61,7 +61,6 @@ async fn get_account() {
     let address = match first_account {
         Account::Base(acct) => acct.address.clone(),
         Account::Module(acct) => acct.base_account.as_ref().unwrap().address.clone(),
-        _ => unimplemented!("unknown account type"),
     };
 
     let account = client.get_account(&address).await.unwrap();
