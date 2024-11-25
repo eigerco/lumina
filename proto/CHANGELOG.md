@@ -6,37 +6,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.1](https://github.com/fl0rek/celestia-node-rs/compare/celestia-proto-v0.5.0...celestia-proto-v0.5.1) - 2024-11-22
-
-### Added
-
-- Tonic gRPC
-
-### Fixed
-
-- fix wasm
-- fix any pubkey
-- fix wasm
-- fix wasm
-- fix wasm
-- fix wasm deps
-
-### Other
-
-- Yiannis review
-- CI2
-- CI
-- remove cosmrs, streamline
-- Any->Any
-- blob submission
-- lasts tests
-- doctests
-- missed serialisation
-- Merge remote-tracking branch 'upstream/main' into feat/grpc
-- cleanup, updates
-- missing rpc methods
-- types cleanup
-
 ## [0.5.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.4.1...celestia-proto-v0.5.0) - 2024-10-25
 
 ### Added
