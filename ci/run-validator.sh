@@ -59,6 +59,7 @@ provision_bridge_nodes() {
   for node_idx in $(seq 0 "$last_node_idx"); do
     local bridge_name="bridge-$node_idx"
     local key_file="$CREDENTIALS_DIR/$bridge_name.key"
+    local plaintext_key_file="$CREDENTIALS_DIR/$bridge_name.plaintext-key"
     local addr_file="$CREDENTIALS_DIR/$bridge_name.addr"
 
     if [ ! -e "$key_file" ]; then
@@ -67,6 +68,8 @@ provision_bridge_nodes() {
       celestia-appd keys add "$bridge_name" --keyring-backend "test"
       # export it
       echo "password" | celestia-appd keys export "$bridge_name" 2> "$key_file.lock"
+      # export also plaintext key for convenience in tests
+      echo y | celestia-appd keys export "$bridge_name" --unsafe --unarmored-hex 2> "${plaintext_key_file}"
       # the `.lock` file and `mv` ensures that readers read file only after finished writing
       mv "$key_file.lock" "$key_file"
       # export associated address

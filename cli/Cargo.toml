@@ -25,9 +25,9 @@ path = "src/main.rs"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 celestia-rpc = { workspace = true, features = ["p2p"] }
-celestia-types = { workspace = true }
-libp2p = { workspace = true }
-lumina-node = { workspace = true }
+celestia-types.workspace = true
+libp2p.workspace = true
+lumina-node.workspace = true
 
 anyhow = "1.0.86"
 axum = "0.7.5"

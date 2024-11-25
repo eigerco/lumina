@@ -1,6 +1,10 @@
 //! [`serde`] serializer for the optional [`Any`].
 
+#[cfg(feature = "tonic")]
+use pbjson_types::Any;
+#[cfg(not(feature = "tonic"))]
 use prost_types::Any;
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Deserialize `Option<Any>`.
@@ -17,7 +21,7 @@ where
 
     let any = Option::<Def>::deserialize(deserializer)?.map(|def| Any {
         type_url: def.type_url,
-        value: def.value,
+        value: def.value.into(),
     });
 
     Ok(any)
@@ -65,7 +69,7 @@ mod tests {
         let msg = TxResponse {
             tx: Some(Any {
                 type_url: "abc".to_string(),
-                value: vec![1, 2, 3],
+                value: vec![1, 2, 3].into(),
             }),
         };
         let json = serde_json::to_string(&msg).unwrap();
@@ -85,7 +89,7 @@ mod tests {
             serde_json::from_str(r#"{"tx":{"type_url":"abc","value":"AQID"}}"#).unwrap();
         let tx = msg.tx.unwrap();
         assert_eq!(tx.type_url, "abc");
-        assert_eq!(tx.value, &[1, 2, 3])
+        assert_eq!(tx.value.as_ref(), [1, 2, 3])
     }
 
     #[test]

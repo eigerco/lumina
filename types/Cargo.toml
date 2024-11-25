@@ -14,14 +14,17 @@ keywords = ["blockchain", "celestia", "lumina"]
 categories = ["encoding", "cryptography::cryptocurrencies"]
 
 [dependencies]
-blockstore = { workspace = true }
-celestia-proto = { workspace = true }
-celestia-tendermint = { workspace = true, features = ["std", "rust-crypto"] }
-celestia-tendermint-proto = { workspace = true }
-nmt-rs = { workspace = true }
+blockstore.workspace = true
+celestia-proto.workspace = true
+celestia-tendermint = { workspace = true, features = ["std", "rust-crypto", "secp256k1"] }
+celestia-tendermint-proto.workspace = true
+nmt-rs.workspace = true
+prost.workspace = true
+prost-types.workspace = true
 
 base64 = "0.22.1"
 bech32 = "0.11.0"
+bitvec = "1.0.1"
 bytes = "1.6.0"
 cid = { version = "0.11.1", default-features = false, features = ["std"] }
 const_format = "0.2.32"
@@ -31,7 +34,7 @@ leopard-codec = "0.1.0"
 libp2p-identity = { version = "0.2.9", optional = true }
 multiaddr = { version = "0.18.1", optional = true }
 multihash = "0.19.1"
-prost = { workspace = true }
+pbjson-types = { version = "0.7.0", optional = true }
 rand = { version = "0.8.5", optional = true }
 ruint = { version = "1.12.3", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
@@ -60,6 +63,7 @@ default = ["p2p"]
 p2p = ["dep:libp2p-identity", "dep:multiaddr", "dep:serde_repr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
 wasm-bindgen = ["celestia-tendermint/wasm-bindgen"]
+tonic = ["dep:pbjson-types", "celestia-proto/tonic"]
 
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]
@@ -67,3 +71,4 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-udeps.ignore]
 development = ["indoc"]
+normal = ["prost-types"] # unused if tonic flag is enabled

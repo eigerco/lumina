@@ -44,7 +44,7 @@ cp -r ../target/proto-vendor-src/go-header-main/p2p/pb vendor/go-header/p2p
 
 rm -rf vendor/cosmos
 mkdir -p vendor/cosmos
-cp -r ../target/proto-vendor-src/cosmos-sdk-release-v0.46.x-celestia/proto/cosmos/{base,staking,crypto,tx} vendor/cosmos
+cp -r ../target/proto-vendor-src/cosmos-sdk-release-v0.46.x-celestia/proto/cosmos/{auth,base,staking,crypto,tx} vendor/cosmos
 
 rm -rf vendor/cosmos_proto
 cp -r ../target/proto-vendor-src/cosmos-proto-1.0.0-alpha7/proto/cosmos_proto vendor

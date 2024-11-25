@@ -14,17 +14,33 @@ keywords = ["blockchain", "celestia", "lumina"]
 categories = ["encoding", "cryptography::cryptocurrencies"]
 
 [dependencies]
-celestia-tendermint-proto = { workspace = true }
-prost = { workspace = true }
-prost-types = "0.12.6"
+celestia-tendermint-proto.workspace = true
+prost.workspace = true
+prost-types.workspace = true
 serde = { version = "1.0.203", features = ["derive"] }
+pbjson = { version = "0.7.0", optional = true }
+pbjson-types = { version = "0.7.0", optional = true }
+tonic = { version = "0.12.3", optional = true, default-features = false, features = [
+  "codegen", "prost"
+]}
 
 [build-dependencies]
-prost-build = "0.12.6"
-protox = "0.6.1"
+prost-build.workspace = true
+prost-types.workspace = true
+protox = "0.7.1"
+tempfile = { version = "3.13.0", optional = true }
+pbjson-build = { version = "0.7.0", optional = true }
+tonic-build = { version = "0.12.3", default-features = false, optional = true, features = [ "prost" ]}
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tonic = { version = "0.12.3", optional = true, default-features = false, features = [ "transport" ] }
+tonic-build = { version = "0.12.3", optional = true, default-features = false, features = ["transport"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3.42"
 
 [dev-dependencies]
 serde_json = "1.0.117"
+
+[features]
+tonic = [ "dep:tonic", "dep:tonic-build", "dep:pbjson", "dep:pbjson-types", "dep:pbjson-build", "dep:tempfile" ]

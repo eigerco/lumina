@@ -1,0 +1,42 @@
+[package]
+name = "celestia-grpc"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "A client for interacting with Celestia validator nodes gRPC"
+authors = ["Eiger <hello@eiger.co>"]
+homepage = "https://www.eiger.co"
+repository = "https://github.com/eigerco/lumina"
+readme = "README.md"
+# crates.io is limited to 5 keywords and 5 categories
+keywords = ["blockchain", "celestia", "lumina"]
+# Must be one of <https://crates.io/category_slugs>
+categories = [
+  "api-bindings",
+  "asynchronous",
+  "encoding",
+  "cryptography::cryptocurrencies",
+]
+
+[dependencies]
+celestia-tendermint-proto.workspace = true
+celestia-types = { workspace = true, features = [ "tonic" ] }
+celestia-proto = { workspace = true, features = [ "tonic" ] }
+celestia-tendermint.workspace = true
+prost.workspace = true
+celestia-grpc-macros = { version = "0.1.0", path = "grpc-macros" }
+
+hex = "0.4.3"
+k256 = "0.13.4"
+pbjson-types = "0.7.0"
+serde = "1.0.215"
+thiserror = "1.0.61"
+tonic = { version = "0.12.3", default-features = false, features = [
+  "codegen", "prost"
+]}
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+anyhow = "1.0.86"
+dotenvy = "0.15.7"
+tokio = { version = "1.38.0", features = ["rt", "macros"] }
+tonic = { version = "0.12.3", optional = true, default-features = false, features = [ "transport" ] }
