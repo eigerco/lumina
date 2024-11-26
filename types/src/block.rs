@@ -1,3 +1,5 @@
+//! Blocks within the chains of a Tendermint network
+
 use celestia_proto::tendermint_celestia_mods::types::Block as RawBlock;
 use serde::{Deserialize, Serialize};
 use tendermint::block::{Commit, CommitSig, Header, Id};
@@ -18,6 +20,13 @@ pub(crate) const GENESIS_HEIGHT: u64 = 1;
 /// The height of the block in Celestia network.
 pub type Height = tendermint::block::Height;
 
+/// Blocks consist of a header, transactions, votes (the commit), and a list of
+/// evidence of malfeasance (i.e. signing conflicting votes).
+///
+/// This is a modified version of [`tendermint::block::Block`] which contains
+/// [modifications](data-mod) that Celestia introduced.
+///
+/// [data-mod]: https://github.com/celestiaorg/celestia-core/blob/a1268f7ae3e688144a613c8a439dd31818aae07d/proto/tendermint/types/types.proto#L84-L104
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(try_from = "RawBlock", into = "RawBlock")]
 pub struct Block {
@@ -30,36 +39,24 @@ pub struct Block {
     /// Evidence of malfeasance
     pub evidence: evidence::List,
 
-    /// Last commit
+    /// Last commit, should be `None` for the initial block.
     pub last_commit: Option<Commit>,
 }
 
 impl Block {
-    /// constructor
+    /// Builds a new [`Block`], based on the given [`Header`], [`Data`], evidence, and last commit.
     pub fn new(
         header: Header,
         data: Data,
         evidence: evidence::List,
         last_commit: Option<Commit>,
-    ) -> Result<Self, Error> {
-        if last_commit.is_none() && header.height.value() != 1 {
-            return Err(Error::Tendermint(tendermint::Error::invalid_block(
-                "last_commit is empty on non-first block".to_string(),
-            )));
-        }
-
-        if last_commit.is_some() && header.height.value() == 1 {
-            return Err(Error::Tendermint(tendermint::Error::invalid_block(
-                "last_commit is filled on first block".to_string(),
-            )));
-        }
-
-        Ok(Block {
+    ) -> Self {
+        Block {
             header,
             data,
             evidence,
             last_commit,
-        })
+        }
     }
 
     /// Get header
@@ -94,38 +91,26 @@ impl TryFrom<RawBlock> for Block {
             .ok_or_else(tendermint::Error::missing_header)?
             .try_into()?;
 
-        // if last_commit is Commit::Default, it is considered nil by Go.
+        // If last_commit is the default Commit, it is considered nil by Go.
         let last_commit = value
             .last_commit
             .map(TryInto::try_into)
             .transpose()?
             .filter(|c| c != &Commit::default());
 
-        if last_commit.is_none() && header.height.value() != 1 {
-            return Err(Error::Tendermint(tendermint::Error::invalid_block(
-                "last_commit is empty on non-first block".to_string(),
-            )));
-        }
-
-        // Todo: Figure out requirements.
-        // if last_commit.is_some() && header.height.value() == 1 {
-        //    return Err(Kind::InvalidFirstBlock.context("last_commit is not null on first
-        // height").into());
-        //}
-
-        Ok(Block {
+        Ok(Block::new(
             header,
-            data: value
+            value
                 .data
                 .ok_or_else(tendermint::Error::missing_data)?
                 .try_into()?,
-            evidence: value
+            value
                 .evidence
                 .map(TryInto::try_into)
                 .transpose()?
                 .unwrap_or_default(),
             last_commit,
-        })
+        ))
     }
 }
 

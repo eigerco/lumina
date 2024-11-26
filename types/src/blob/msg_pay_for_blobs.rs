@@ -58,10 +58,9 @@ impl MsgPayForBlobs {
 
 impl From<MsgPayForBlobs> for RawTxBody {
     fn from(msg: MsgPayForBlobs) -> Self {
-        let msg_pay_for_blobs_value = msg.encode_vec();
         let msg_pay_for_blobs_as_any = Any {
             type_url: RawMsgPayForBlobs::type_url(),
-            value: msg_pay_for_blobs_value.into(),
+            value: msg.encode_vec(),
         };
 
         RawTxBody {

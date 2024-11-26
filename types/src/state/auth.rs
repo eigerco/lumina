@@ -119,16 +119,14 @@ fn any_from_public_key(key: PublicKey) -> Any {
             value: Ed25519PubKey {
                 key: key.to_bytes(),
             }
-            .encode_to_vec()
-            .into(),
+            .encode_to_vec(),
         },
         key @ PublicKey::Secp256k1(_) => Any {
             type_url: COSMOS_SECP256K1_PUBKEY.to_string(),
             value: Secp256k1PubKey {
                 key: key.to_bytes(),
             }
-            .encode_to_vec()
-            .into(),
+            .encode_to_vec(),
         },
         _ => unimplemented!("unexpected key type"),
     }
