@@ -1,8 +1,8 @@
-use celestia_grpc_macros::grpc_method;
 use prost::Message;
 use tonic::service::Interceptor;
 use tonic::transport::Channel;
 
+use celestia_grpc_macros::grpc_method;
 use celestia_proto::celestia::blob::v1::query_client::QueryClient as BlobQueryClient;
 use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQueryClient;
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;

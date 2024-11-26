@@ -220,6 +220,7 @@ fn tonic_build(fds: FileDescriptorSet) {
         .expect("should be able to compile protobuf using tonic");
 }
 
+/// Create a list of Tentermint messages that needs to be replaced with Celestia's modifications.
 fn tendermint_mods_extern_paths(fds: &FileDescriptorSet) -> Vec<(String, String)> {
     let mut extern_paths = Vec::new();
 
@@ -238,6 +239,7 @@ fn tendermint_mods_extern_paths(fds: &FileDescriptorSet) -> Vec<(String, String)
     extern_paths
 }
 
+/// Returns the names of all the Protobuf messages of a proto package.
 fn get_proto_types_of(fds: &FileDescriptorSet, proto_package: &str) -> HashSet<String> {
     let proto_package_prefix = format!("{proto_package}.");
     let mut types = HashSet::new();

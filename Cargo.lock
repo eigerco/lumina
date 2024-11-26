@@ -787,7 +787,6 @@ dependencies = [
  "serde",
  "serde_json",
  "subtle-encoding",
- "tempfile",
  "tendermint-proto",
  "tonic",
  "tonic-build",
