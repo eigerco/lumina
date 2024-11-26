@@ -3,7 +3,7 @@
 use std::str::FromStr;
 
 use celestia_proto::serializers::cow_str::CowStr;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serializer};
 use tendermint::hash::Hash;
 
 /// Deserialize [`tendermint::hash::Hash`].
@@ -20,5 +20,5 @@ pub fn serialize<S>(value: &Hash, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    value.to_string().serialize(serializer)
+    serializer.serialize_some(&value.to_string())
 }

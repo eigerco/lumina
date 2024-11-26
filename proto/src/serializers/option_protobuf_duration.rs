@@ -33,7 +33,7 @@ where
                 seconds: value.seconds,
                 nanos: value.nanos,
             };
-            Def::serialize(&def, serializer)
+            serializer.serialize_some(&def)
         }
         None => serializer.serialize_none(),
     }
