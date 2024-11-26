@@ -33,11 +33,11 @@ use std::cmp::min;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use celestia_tendermint::Time;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use rand::Rng;
+use tendermint::Time;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};

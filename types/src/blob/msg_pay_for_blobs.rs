@@ -1,7 +1,9 @@
-use serde::{Deserialize, Serialize};
-
 use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
-use celestia_tendermint_proto::Protobuf;
+use celestia_proto::cosmos::tx::v1beta1::TxBody as RawTxBody;
+use prost::Name;
+use serde::{Deserialize, Serialize};
+use tendermint_proto::google::protobuf::Any;
+use tendermint_proto::Protobuf;
 
 use crate::blob::{Blob, Commitment};
 use crate::nmt::Namespace;
@@ -54,32 +56,17 @@ impl MsgPayForBlobs {
     }
 }
 
-#[cfg(feature = "tonic")]
-mod tx_body_conversion {
-    use super::{MsgPayForBlobs, RawMsgPayForBlobs};
+impl From<MsgPayForBlobs> for RawTxBody {
+    fn from(msg: MsgPayForBlobs) -> Self {
+        let msg_pay_for_blobs_value = msg.encode_vec();
+        let msg_pay_for_blobs_as_any = Any {
+            type_url: RawMsgPayForBlobs::type_url(),
+            value: msg_pay_for_blobs_value.into(),
+        };
 
-    use std::convert::Infallible;
-
-    use pbjson_types::Any;
-    use prost::Name;
-
-    use celestia_proto::cosmos::tx::v1beta1::TxBody as RawTxBody;
-    use celestia_tendermint_proto::Protobuf;
-
-    impl From<MsgPayForBlobs> for RawTxBody {
-        fn from(msg: MsgPayForBlobs) -> Self {
-            let msg_pay_for_blobs_value: Result<_, Infallible> = msg.encode_vec();
-            let msg_pay_for_blobs_as_any = Any {
-                type_url: RawMsgPayForBlobs::type_url(),
-                value: msg_pay_for_blobs_value
-                    .expect("Result to be Infallible")
-                    .into(),
-            };
-
-            RawTxBody {
-                messages: vec![msg_pay_for_blobs_as_any],
-                ..RawTxBody::default()
-            }
+        RawTxBody {
+            messages: vec![msg_pay_for_blobs_as_any],
+            ..RawTxBody::default()
         }
     }
 }

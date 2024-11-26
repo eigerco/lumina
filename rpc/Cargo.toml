@@ -19,9 +19,7 @@ categories = [
 ]
 
 [dependencies]
-celestia-tendermint-proto.workspace = true
 celestia-types.workspace = true
-celestia-tendermint.workspace = true
 prost.workspace = true
 
 async-trait = "0.1.80"

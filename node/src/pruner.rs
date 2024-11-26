@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blockstore::Blockstore;
-use celestia_tendermint::Time;
 use celestia_types::ExtendedHeader;
+use tendermint::Time;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};

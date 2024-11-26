@@ -1,3 +1,4 @@
+use celestia_grpc_macros::grpc_method;
 use prost::Message;
 use tonic::service::Interceptor;
 use tonic::transport::Channel;
@@ -7,13 +8,11 @@ use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQuer
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
-use celestia_tendermint::block::Block;
+use celestia_proto::cosmos::tx::v1beta1::Tx as RawTx;
 use celestia_types::blob::{Blob, BlobParams, RawBlobTx};
+use celestia_types::block::Block;
 use celestia_types::state::auth::AuthParams;
-use celestia_types::state::Address;
-use celestia_types::state::{RawTx, TxResponse};
-
-use celestia_grpc_macros::grpc_method;
+use celestia_types::state::{Address, TxResponse};
 
 use crate::types::auth::Account;
 use crate::types::tx::GetTxResponse;

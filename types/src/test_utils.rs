@@ -1,12 +1,12 @@
 //! Utilities for writing tests.
 use std::time::Duration;
 
-use celestia_tendermint::block::header::{Header, Version};
-use celestia_tendermint::block::{parts, Commit, CommitSig};
-use celestia_tendermint::public_key::PublicKey;
-use celestia_tendermint::{chain, Signature, Time};
 use ed25519_consensus::SigningKey;
 use rand::RngCore;
+use tendermint::block::header::{Header, Version};
+use tendermint::block::{parts, Commit, CommitSig};
+use tendermint::public_key::PublicKey;
+use tendermint::{chain, Signature, Time};
 
 use crate::block::{CommitExt, GENESIS_HEIGHT};
 pub use crate::byzantine::test_utils::corrupt_eds;
@@ -330,19 +330,19 @@ pub fn unverify(header: &mut ExtendedHeader) {
     let key = SigningKey::new(rand::thread_rng());
     let pub_key_bytes = key.verification_key().to_bytes();
     let pub_key = PublicKey::from_raw_ed25519(&pub_key_bytes).unwrap();
-    let validator_address = celestia_tendermint::account::Id::new(rand::random());
+    let validator_address = tendermint::account::Id::new(rand::random());
 
     header.header.proposer_address = validator_address;
 
     header.validator_set = ValidatorSet::new(
-        vec![celestia_tendermint::validator::Info {
+        vec![tendermint::validator::Info {
             address: validator_address,
             pub_key,
             power: 5000_u32.into(),
             name: None,
             proposer_priority: 0_i64.into(),
         }],
-        Some(celestia_tendermint::validator::Info {
+        Some(tendermint::validator::Info {
             address: validator_address,
             pub_key,
             power: 5000_u32.into(),
@@ -478,12 +478,12 @@ fn generate_new(
 
     let pub_key_bytes = signing_key.verification_key().to_bytes();
     let pub_key = PublicKey::from_raw_ed25519(&pub_key_bytes).unwrap();
-    let validator_address = celestia_tendermint::account::Id::new(rand::random());
+    let validator_address = tendermint::account::Id::new(rand::random());
 
     let last_block_id = if height == GENESIS_HEIGHT {
         None
     } else {
-        Some(celestia_tendermint::block::Id {
+        Some(tendermint::block::Id {
             hash: Hash::Sha256(rand::random()),
             part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
                 .expect("invalid PartSetHeader"),
@@ -500,8 +500,8 @@ fn generate_new(
             height: height.try_into().unwrap(),
             time,
             last_block_id,
-            last_commit_hash: Hash::default_sha256(),
-            data_hash: Hash::None,
+            last_commit_hash: Some(Hash::default_sha256()),
+            data_hash: Some(Hash::None),
             validators_hash: Hash::None,
             next_validators_hash: Hash::None,
             consensus_hash: Hash::Sha256(rand::random()),
@@ -510,14 +510,14 @@ fn generate_new(
                 .to_vec()
                 .try_into()
                 .unwrap(),
-            last_results_hash: Hash::default_sha256(),
-            evidence_hash: Hash::default_sha256(),
+            last_results_hash: Some(Hash::default_sha256()),
+            evidence_hash: Some(Hash::default_sha256()),
             proposer_address: validator_address,
         },
         commit: Commit {
             height: height.try_into().unwrap(),
             round: 0_u16.into(),
-            block_id: celestia_tendermint::block::Id {
+            block_id: tendermint::block::Id {
                 hash: Hash::None,
                 part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
                     .expect("invalid PartSetHeader"),
@@ -529,14 +529,14 @@ fn generate_new(
             }],
         },
         validator_set: ValidatorSet::new(
-            vec![celestia_tendermint::validator::Info {
+            vec![tendermint::validator::Info {
                 address: validator_address,
                 pub_key,
                 power: 5000_u32.into(),
                 name: None,
                 proposer_priority: 0_i64.into(),
             }],
-            Some(celestia_tendermint::validator::Info {
+            Some(tendermint::validator::Info {
                 address: validator_address,
                 pub_key,
                 power: 5000_u32.into(),
@@ -571,7 +571,7 @@ fn generate_next(
     let last_block_id = if increment == 1 {
         Some(current.commit.block_id)
     } else {
-        Some(celestia_tendermint::block::Id {
+        Some(tendermint::block::Id {
             hash: Hash::Sha256(rand::random()),
             part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
                 .expect("invalid PartSetHeader"),
@@ -585,8 +585,8 @@ fn generate_next(
             height,
             time,
             last_block_id,
-            last_commit_hash: Hash::default_sha256(),
-            data_hash: Hash::None,
+            last_commit_hash: Some(Hash::default_sha256()),
+            data_hash: Some(Hash::None),
             validators_hash: Hash::None,
             next_validators_hash: Hash::None,
             consensus_hash: Hash::Sha256(rand::random()),
@@ -595,14 +595,14 @@ fn generate_next(
                 .to_vec()
                 .try_into()
                 .unwrap(),
-            last_results_hash: Hash::default_sha256(),
-            evidence_hash: Hash::default_sha256(),
+            last_results_hash: Some(Hash::default_sha256()),
+            evidence_hash: Some(Hash::default_sha256()),
             proposer_address: validator_address,
         },
         commit: Commit {
             height,
             round: 0_u16.into(),
-            block_id: celestia_tendermint::block::Id {
+            block_id: tendermint::block::Id {
                 hash: Hash::None,
                 part_set_header: parts::Header::new(1, Hash::Sha256(rand::random()))
                     .expect("invalid PartSetHeader"),
@@ -627,7 +627,7 @@ fn generate_next(
 fn hash_and_sign(header: &mut ExtendedHeader, signing_key: &SigningKey) {
     header.header.validators_hash = header.validator_set.hash();
     header.header.next_validators_hash = header.validator_set.hash();
-    header.header.data_hash = header.dah.hash();
+    header.header.data_hash = Some(header.dah.hash());
     header.commit.block_id.hash = header.header.hash();
 
     let vote_sign = header

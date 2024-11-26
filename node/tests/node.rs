@@ -2,7 +2,6 @@
 
 use std::time::Duration;
 
-use celestia_tendermint_proto::Protobuf;
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::consts::HASH_SIZE;
 use celestia_types::fraud_proof::BadEncodingFraudProof;
@@ -18,6 +17,7 @@ use lumina_node::test_utils::{
     ExtendedHeaderGeneratorExt,
 };
 use rand::Rng;
+use tendermint_proto::Protobuf;
 use tokio::{select, spawn, sync::mpsc, time::sleep};
 
 use crate::utils::{fetch_bridge_info, new_connected_node};
@@ -264,7 +264,7 @@ fn spawn_befp_announcer(connect_to: Multiaddr) -> mpsc::Sender<BadEncodingFraudP
             select! {
                 _ = announcer.select_next_some() => (),
                 Some(proof) = rx.recv() => {
-                    let proof = proof.encode_vec().unwrap();
+                    let proof = proof.encode_vec();
                     announcer.behaviour_mut().gossipsub.publish(topic.hash(), proof).unwrap();
                 }
             }
