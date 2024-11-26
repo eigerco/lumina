@@ -100,7 +100,7 @@ pub fn sign_tx(
     };
     let public_key_as_any = Any {
         type_url: secp256k1::PubKey::type_url(),
-        value: public_key.encode_to_vec().into(),
+        value: public_key.encode_to_vec(),
     };
 
     let auth_info = AuthInfo {
