@@ -838,7 +838,6 @@ dependencies = [
  "multihash",
  "nmt-rs",
  "prost",
- "prost-types",
  "rand",
  "ruint",
  "serde",
