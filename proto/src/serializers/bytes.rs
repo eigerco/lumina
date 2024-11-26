@@ -162,30 +162,3 @@ pub mod option_base64string {
         serializer.serialize_some(&base64_string)
     }
 }
-
-/// Serialize into string, deserialize from string
-pub mod string {
-    use crate::serializers::cow_str::CowStr;
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    /// Deserialize string into `Vec<u8>`
-    #[allow(dead_code)]
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string = Option::<CowStr>::deserialize(deserializer)?.unwrap_or_default();
-        Ok(string.as_bytes().to_vec())
-    }
-
-    /// Serialize from `T` into string
-    #[allow(dead_code)]
-    pub fn serialize<S, T>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-        T: AsRef<[u8]>,
-    {
-        let string = std::str::from_utf8(value.as_ref()).map_err(serde::ser::Error::custom)?;
-        serializer.serialize_some(string)
-    }
-}
