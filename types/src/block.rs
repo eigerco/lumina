@@ -1,15 +1,129 @@
-use celestia_tendermint::block::{Commit, CommitSig, Header, Id};
-use celestia_tendermint::signature::SIGNATURE_LENGTH;
-use celestia_tendermint::vote;
-use celestia_tendermint::{chain, Hash, Vote};
+//! Blocks within the chains of a Tendermint network
+
+use celestia_proto::tendermint_celestia_mods::types::Block as RawBlock;
+use serde::{Deserialize, Serialize};
+use tendermint::block::{Commit, CommitSig, Header, Id};
+use tendermint::signature::SIGNATURE_LENGTH;
+use tendermint::{chain, evidence, vote, Vote};
+use tendermint_proto::Protobuf;
 
 use crate::consts::{genesis::MAX_CHAIN_ID_LEN, version};
+use crate::hash::Hash;
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
+
+mod data;
+
+pub use data::Data;
 
 pub(crate) const GENESIS_HEIGHT: u64 = 1;
 
 /// The height of the block in Celestia network.
-pub type Height = celestia_tendermint::block::Height;
+pub type Height = tendermint::block::Height;
+
+/// Blocks consist of a header, transactions, votes (the commit), and a list of
+/// evidence of malfeasance (i.e. signing conflicting votes).
+///
+/// This is a modified version of [`tendermint::block::Block`] which contains
+/// [modifications](data-mod) that Celestia introduced.
+///
+/// [data-mod]: https://github.com/celestiaorg/celestia-core/blob/a1268f7ae3e688144a613c8a439dd31818aae07d/proto/tendermint/types/types.proto#L84-L104
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(try_from = "RawBlock", into = "RawBlock")]
+pub struct Block {
+    /// Block header
+    pub header: Header,
+
+    /// Transaction data
+    pub data: Data,
+
+    /// Evidence of malfeasance
+    pub evidence: evidence::List,
+
+    /// Last commit, should be `None` for the initial block.
+    pub last_commit: Option<Commit>,
+}
+
+impl Block {
+    /// Builds a new [`Block`], based on the given [`Header`], [`Data`], evidence, and last commit.
+    pub fn new(
+        header: Header,
+        data: Data,
+        evidence: evidence::List,
+        last_commit: Option<Commit>,
+    ) -> Self {
+        Block {
+            header,
+            data,
+            evidence,
+            last_commit,
+        }
+    }
+
+    /// Get header
+    pub fn header(&self) -> &Header {
+        &self.header
+    }
+
+    /// Get data
+    pub fn data(&self) -> &Data {
+        &self.data
+    }
+
+    /// Get evidence
+    pub fn evidence(&self) -> &evidence::List {
+        &self.evidence
+    }
+
+    /// Get last commit
+    pub fn last_commit(&self) -> &Option<Commit> {
+        &self.last_commit
+    }
+}
+
+impl Protobuf<RawBlock> for Block {}
+
+impl TryFrom<RawBlock> for Block {
+    type Error = Error;
+
+    fn try_from(value: RawBlock) -> Result<Self, Self::Error> {
+        let header: Header = value
+            .header
+            .ok_or_else(tendermint::Error::missing_header)?
+            .try_into()?;
+
+        // If last_commit is the default Commit, it is considered nil by Go.
+        let last_commit = value
+            .last_commit
+            .map(TryInto::try_into)
+            .transpose()?
+            .filter(|c| c != &Commit::default());
+
+        Ok(Block::new(
+            header,
+            value
+                .data
+                .ok_or_else(tendermint::Error::missing_data)?
+                .try_into()?,
+            value
+                .evidence
+                .map(TryInto::try_into)
+                .transpose()?
+                .unwrap_or_default(),
+            last_commit,
+        ))
+    }
+}
+
+impl From<Block> for RawBlock {
+    fn from(value: Block) -> Self {
+        RawBlock {
+            header: Some(value.header.into()),
+            data: Some(value.data.into()),
+            evidence: Some(value.evidence.into()),
+            last_commit: value.last_commit.map(Into::into),
+        }
+    }
+}
 
 impl ValidateBasic for Header {
     fn validate_basic(&self) -> Result<(), ValidationError> {
@@ -98,12 +212,12 @@ impl ValidateBasic for CommitSig {
 
 /// An extension trait for the [`Commit`] to perform additional actions.
 ///
-/// [`Commit`]: celestia_tendermint::block::Commit
+/// [`Commit`]: tendermint::block::Commit
 pub trait CommitExt {
     /// Get the signed [`Vote`] from the [`Commit`] at the given index.
     ///
-    /// [`Commit`]: celestia_tendermint::block::Commit
-    /// [`Vote`]: celestia_tendermint::Vote
+    /// [`Commit`]: tendermint::block::Commit
+    /// [`Vote`]: tendermint::Vote
     fn vote_sign_bytes(&self, chain_id: &chain::Id, signature_idx: usize) -> Result<Vec<u8>>;
 }
 
@@ -141,9 +255,11 @@ impl CommitExt for Commit {
             validator_address,
             validator_index: signature_idx.try_into()?,
             signature,
+            extension: Vec::new(),
+            extension_signature: None,
         };
 
-        Ok(vote.to_signable_vec(chain_id.clone())?)
+        Ok(vote.into_signable_vec(chain_id.clone()))
     }
 }
 
@@ -163,7 +279,7 @@ mod tests {
 
     fn sample_commit() -> Commit {
         serde_json::from_str(r#"{
-          "height": 1,
+          "height": "1",
           "round": 0,
           "block_id": {
             "hash": "17F7D5108753C39714DCA67E6A73CE855C6EA9B0071BBD4FFE5D2EF7F3973BFC",

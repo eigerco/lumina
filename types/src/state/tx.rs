@@ -1,12 +1,8 @@
-use celestia_tendermint_proto::Protobuf;
-#[cfg(feature = "tonic")]
-use pbjson_types::Any;
-#[cfg(not(feature = "tonic"))]
-use prost_types::Any;
-use serde::{Deserialize, Serialize};
-
 use celestia_proto::cosmos::base::abci::v1beta1::AbciMessageLog;
-use celestia_tendermint_proto::v0_34::abci::Event;
+use serde::{Deserialize, Serialize};
+use tendermint_proto::google::protobuf::Any;
+use tendermint_proto::v0_34::abci::Event;
+use tendermint_proto::Protobuf;
 
 use crate::state::bit_array::BitVector;
 use crate::Error;

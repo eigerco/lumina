@@ -1,10 +1,8 @@
 use std::cell::RefCell;
-use std::convert::Infallible;
 use std::fmt::Display;
 use std::pin::pin;
 
 use async_trait::async_trait;
-use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
@@ -14,6 +12,7 @@ use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use smallvec::smallvec;
+use tendermint_proto::Protobuf;
 use tokio::sync::Notify;
 use tracing::warn;
 use wasm_bindgen::JsValue;
@@ -45,6 +44,7 @@ const VERSION_KEY: &str = "version";
 struct ExtendedHeaderEntry {
     // We use those fields as indexes, names need to match ones in `add_index`
     height: u64,
+    #[serde(with = "celestia_types::serializers::hash")]
     hash: Hash,
     header: Vec<u8>,
 }
@@ -593,7 +593,11 @@ async fn insert_tx_op(
     headers: VerifiedExtendedHeaders,
 ) -> Result<ExtendedHeader> {
     let head = headers.as_ref().first().expect("headers to not be empty");
-    let tail = headers.as_ref().last().expect("headers to not be empty");
+    let tail = headers
+        .as_ref()
+        .last()
+        .cloned()
+        .expect("headers to not be empty");
 
     let header_store = tx.store(HEADER_STORE_NAME)?;
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
@@ -609,11 +613,11 @@ async fn insert_tx_op(
     verify_against_neighbours(
         &header_store,
         prev_exists.then_some(head),
-        next_exists.then_some(tail),
+        next_exists.then_some(&tail),
     )
     .await?;
 
-    for header in headers.as_ref() {
+    for header in headers {
         let hash = header.hash();
         let hash_index = header_store.index(HASH_INDEX_NAME)?;
         let jsvalue_hash_key = KeyRange::only(&to_value(&hash)?).map_err(rexie::Error::IdbError)?;
@@ -624,14 +628,11 @@ async fn insert_tx_op(
             return Err(StoreInsertionError::HashExists(hash).into());
         }
 
-        // make sure Result is Infallible, we unwrap it later
-        let serialized_header: std::result::Result<_, Infallible> = header.encode_vec();
-
         let height = header.height().value();
         let header_entry = ExtendedHeaderEntry {
             height,
             hash,
-            header: serialized_header.unwrap(),
+            header: header.encode_vec(),
         };
 
         let jsvalue_header = to_value(&header_entry)?;
@@ -644,7 +645,7 @@ async fn insert_tx_op(
         .expect("invalid range");
     set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
 
-    Ok(tail.clone())
+    Ok(tail)
 }
 
 async fn update_sampling_metadata_tx_op(
@@ -959,7 +960,7 @@ pub mod tests {
                 let header_entry = ExtendedHeaderEntry {
                     height: header.height().value(),
                     hash: header.hash(),
-                    header: header.encode_vec().unwrap(),
+                    header: header.encode_vec(),
                 };
 
                 header_store

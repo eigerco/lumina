@@ -16,9 +16,9 @@ use std::time::Duration;
 
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoffBuilder;
-use celestia_tendermint::Time;
 use celestia_types::ExtendedHeader;
 use serde::{Deserialize, Serialize};
+use tendermint::Time;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;

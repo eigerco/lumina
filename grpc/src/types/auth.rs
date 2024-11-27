@@ -1,4 +1,3 @@
-use pbjson_types::Any;
 use prost::{Message, Name};
 
 use celestia_proto::cosmos::auth::v1beta1::{
@@ -9,6 +8,7 @@ use celestia_types::state::auth::{
     AuthParams, BaseAccount, ModuleAccount, RawBaseAccount, RawModuleAccount,
 };
 use celestia_types::state::Address;
+use tendermint_proto::google::protobuf::Any;
 
 use crate::types::make_empty_params;
 use crate::types::{FromGrpcResponse, IntoGrpcParam};

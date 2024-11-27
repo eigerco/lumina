@@ -1,9 +1,9 @@
-use celestia_tendermint::Hash;
-use celestia_tendermint_proto::v0_34::types::ShareProof as RawShareProof;
-use celestia_tendermint_proto::Protobuf;
+use celestia_proto::celestia::core::v1::proof::ShareProof as RawShareProof;
 use serde::{Deserialize, Serialize};
+use tendermint_proto::Protobuf;
 
 use crate::consts::appconsts::SHARE_SIZE;
+use crate::hash::Hash;
 use crate::nmt::NamespaceProof;
 use crate::{bail_verification, validation_error, RowProof};
 use crate::{nmt::Namespace, Error, Result};

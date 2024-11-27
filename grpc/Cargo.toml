@@ -19,16 +19,15 @@ categories = [
 ]
 
 [dependencies]
-celestia-tendermint-proto.workspace = true
-celestia-types = { workspace = true, features = [ "tonic" ] }
-celestia-proto = { workspace = true, features = [ "tonic" ] }
-celestia-tendermint.workspace = true
-prost.workspace = true
 celestia-grpc-macros = { version = "0.1.0", path = "grpc-macros" }
+celestia-proto = { workspace = true, features = ["tonic"] }
+celestia-types.workspace = true
+prost.workspace = true
+tendermint-proto.workspace = true
+tendermint.workspace = true
 
 hex = "0.4.3"
 k256 = "0.13.4"
-pbjson-types = "0.7.0"
 serde = "1.0.215"
 thiserror = "1.0.61"
 tonic = { version = "0.12.3", default-features = false, features = [

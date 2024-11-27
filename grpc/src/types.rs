@@ -8,8 +8,8 @@ use celestia_proto::cosmos::base::tendermint::v1beta1::{
     GetBlockByHeightRequest, GetBlockByHeightResponse, GetLatestBlockRequest,
     GetLatestBlockResponse,
 };
-use celestia_tendermint::block::Block;
 use celestia_types::blob::BlobParams;
+use celestia_types::block::Block;
 
 use crate::Error;
 

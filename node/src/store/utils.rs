@@ -1,6 +1,6 @@
-#[cfg(not(target_arch = "wasm32"))]
-use celestia_tendermint_proto::Protobuf;
 use celestia_types::ExtendedHeader;
+#[cfg(not(target_arch = "wasm32"))]
+use tendermint_proto::Protobuf;
 
 use crate::executor::yield_now;
 use crate::store::Result;

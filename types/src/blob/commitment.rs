@@ -3,11 +3,11 @@ use std::num::NonZeroU64;
 
 use base64::prelude::*;
 use bytes::{Buf, BufMut, BytesMut};
-use celestia_tendermint::crypto::sha256::HASH_SIZE;
-use celestia_tendermint::{crypto, merkle};
-use celestia_tendermint_proto::serializers::cow_str::CowStr;
+use celestia_proto::serializers::cow_str::CowStr;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tendermint::crypto::sha256::HASH_SIZE;
+use tendermint::{crypto, merkle};
 
 use crate::consts::appconsts;
 use crate::nmt::{Namespace, NamespacedHashExt, NamespacedSha2Hasher, Nmt, RawNamespacedHash};
@@ -46,7 +46,7 @@ use crate::{InfoByte, Share};
 /// [`Blob`]: crate::Blob
 /// [`Share`]: crate::share::Share
 /// [`MsgPayForBlobs`]: celestia_proto::celestia::blob::v1::MsgPayForBlobs
-/// [`merkle hash`]: celestia_tendermint::merkle::simple_hash_from_byte_vectors
+/// [`merkle hash`]: tendermint::merkle::simple_hash_from_byte_vectors
 /// [`Nmt`]: crate::nmt::Nmt
 /// [`ExtendedDataSquare`]: crate::ExtendedDataSquare
 /// [`share commitment rules`]: https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/data_square_layout.md#blob-share-commitment-rules

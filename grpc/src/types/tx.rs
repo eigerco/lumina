@@ -1,7 +1,4 @@
-use std::convert::Infallible;
-
 use k256::ecdsa::{signature::Signer, Signature};
-use pbjson_types::Any;
 use prost::{Message, Name};
 
 use celestia_proto::cosmos::crypto::secp256k1;
@@ -9,12 +6,13 @@ use celestia_proto::cosmos::tx::v1beta1::{
     BroadcastTxRequest, BroadcastTxResponse, GetTxRequest as RawGetTxRequest,
     GetTxResponse as RawGetTxResponse, SignDoc,
 };
-use celestia_tendermint::public_key::Secp256k1 as VerifyingKey;
-use celestia_tendermint_proto::Protobuf;
 use celestia_types::state::auth::BaseAccount;
 use celestia_types::state::{
     AuthInfo, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum, Tx, TxResponse,
 };
+use tendermint::public_key::Secp256k1 as VerifyingKey;
+use tendermint_proto::google::protobuf::Any;
+use tendermint_proto::Protobuf;
 
 use crate::types::{FromGrpcResponse, IntoGrpcParam};
 use crate::Error;
@@ -102,7 +100,7 @@ pub fn sign_tx(
     };
     let public_key_as_any = Any {
         type_url: secp256k1::PubKey::type_url(),
-        value: public_key.encode_to_vec().into(),
+        value: public_key.encode_to_vec(),
     };
 
     let auth_info = AuthInfo {
@@ -113,11 +111,10 @@ pub fn sign_tx(
         }],
         fee: Fee::new(fee, gas_limit),
     };
-    let auth_info_bytes: Result<_, Infallible> = auth_info.encode_vec();
 
     let bytes_to_sign = SignDoc {
         body_bytes: tx_body.encode_to_vec(),
-        auth_info_bytes: auth_info_bytes.expect("Result to be Infallible"),
+        auth_info_bytes: auth_info.clone().encode_vec(),
         chain_id,
         account_number: base_account.account_number,
     }

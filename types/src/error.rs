@@ -22,13 +22,13 @@ pub enum Error {
     #[error("Invalid namespace size")]
     InvalidNamespaceSize,
 
-    /// Error propagated from the [`celestia_tendermint`].
+    /// Error propagated from the [`tendermint`].
     #[error(transparent)]
-    Tendermint(#[from] celestia_tendermint::Error),
+    Tendermint(#[from] tendermint::Error),
 
-    /// Error propagated from the [`celestia_tendermint_proto`].
+    /// Error propagated from the [`tendermint_proto`].
     #[error(transparent)]
-    Protobuf(#[from] celestia_tendermint_proto::Error),
+    Protobuf(#[from] tendermint_proto::Error),
 
     /// Error propagated from the [`cid::multihash`].
     #[error(transparent)]
@@ -255,7 +255,7 @@ pub enum Error {
 
 impl From<prost::DecodeError> for Error {
     fn from(value: prost::DecodeError) -> Self {
-        Error::Protobuf(celestia_tendermint_proto::Error::decode_message(value))
+        Error::Protobuf(tendermint_proto::Error::decode_message(value))
     }
 }
 

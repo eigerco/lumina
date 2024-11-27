@@ -9,9 +9,9 @@ use tonic::transport::Channel;
 use tonic::{Request, Status};
 
 use celestia_grpc::GrpcClient;
-use celestia_tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
-use celestia_tendermint::public_key::Secp256k1 as VerifyingKey;
 use celestia_types::state::Address;
+use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
+use tendermint::public_key::Secp256k1 as VerifyingKey;
 
 const CELESTIA_GRPC_URL: &str = "http://localhost:19090";
 

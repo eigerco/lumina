@@ -1,7 +1,8 @@
-use celestia_tendermint::crypto::default::Sha256;
-use celestia_tendermint::merkle::{Hash, MerkleHash};
-use celestia_tendermint_proto::{v0_34::crypto::Proof as RawMerkleProof, Protobuf};
+use celestia_proto::celestia::core::v1::proof::Proof as RawMerkleProof;
 use serde::{Deserialize, Serialize};
+use tendermint::crypto::default::Sha256;
+use tendermint::merkle::{Hash, MerkleHash};
+use tendermint_proto::Protobuf;
 
 use crate::{
     bail_validation, bail_verification, validation_error, verification_error, Error, Result,
@@ -211,8 +212,8 @@ impl From<MerkleProof> for RawMerkleProof {
 
 #[cfg(test)]
 mod tests {
-    use celestia_tendermint::crypto::default::Sha256;
-    use celestia_tendermint::merkle::simple_hash_from_byte_vectors;
+    use tendermint::crypto::default::Sha256;
+    use tendermint::merkle::simple_hash_from_byte_vectors;
 
     use crate::test_utils::random_bytes;
 

@@ -6,12 +6,12 @@ use std::io::Cursor;
 use std::ops::{Bound, RangeBounds, RangeInclusive};
 
 use async_trait::async_trait;
-use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
 use prost::Message;
 use serde::{Deserialize, Serialize};
+use tendermint_proto::Protobuf;
 use thiserror::Error;
 
 pub use crate::block_ranges::{BlockRange, BlockRanges, BlockRangesError};
