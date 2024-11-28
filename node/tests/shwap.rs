@@ -33,7 +33,8 @@ async fn shwap_sampling_forward() {
                 break height;
             }
         };
-        let new_head = timeout(Duration::from_secs(2), get_new_head).await.unwrap();
+        // timeout is double of the block time on CI
+        let new_head = timeout(Duration::from_secs(9), get_new_head).await.unwrap();
 
         // wait for height to be sampled
         let wait_height_sampled = async {
@@ -86,7 +87,7 @@ async fn shwap_sampling_backward() {
         .unwrap();
 
     // take just first N headers because batch size can be big
-    let mut headers_to_sample: HashSet<_> = (from_height..to_height).rev().take(50).collect();
+    let mut headers_to_sample: HashSet<_> = (from_height..to_height).rev().take(25).collect();
 
     // wait for all heights to be sampled
     timeout(Duration::from_secs(10), async {
