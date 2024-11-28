@@ -94,7 +94,7 @@ impl From<MsgPayForBlobs> for RawMsgPayForBlobs {
         let share_commitments = msg
             .share_commitments
             .into_iter()
-            .map(|c| c.0.to_vec())
+            .map(|c| c.hash.to_vec())
             .collect();
 
         RawMsgPayForBlobs {
@@ -120,9 +120,9 @@ impl TryFrom<RawMsgPayForBlobs> for MsgPayForBlobs {
             .share_commitments
             .into_iter()
             .map(|c| {
-                Ok(Commitment(
-                    c.try_into().map_err(|_| Error::InvalidComittmentLength)?,
-                ))
+                Ok(Commitment {
+                    hash: c.try_into().map_err(|_| Error::InvalidComittmentLength)?,
+                })
             })
             .collect::<Result<_, Error>>()?;
 

@@ -24,6 +24,8 @@ use celestia_tendermint_proto::serializers::cow_str::CowStr;
 use cid::CidGeneric;
 use multihash::Multihash;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "wasm-bindgen")]
+use wasm_bindgen::prelude::*;
 
 mod namespace_proof;
 mod namespaced_hash;
@@ -91,6 +93,7 @@ pub type Proof = nmt_rs::simple_merkle::proof::Proof<NamespacedSha2Hasher>;
 ///  - secondary reserved namespaces - those use version `0xff` so they are always placed after
 ///    user-submitted data.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
 impl Namespace {

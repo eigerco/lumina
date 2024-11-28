@@ -17,12 +17,15 @@ pub use self::msg_pay_for_blobs::MsgPayForBlobs;
 pub use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
 pub use celestia_tendermint_proto::v0_34::types::Blob as RawBlob;
 pub use celestia_tendermint_proto::v0_34::types::BlobTx as RawBlobTx;
+#[cfg(feature = "wasm-bindgen")]
+use wasm_bindgen::prelude::*;
 
 /// Arbitrary data that can be stored in the network within certain [`Namespace`].
 // NOTE: We don't use the `serde(try_from)` pattern for this type
 // becase JSON representation needs to have `commitment` field but
 // Protobuf definition doesn't.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen(getter_with_clone))]
 pub struct Blob {
     /// A [`Namespace`] the [`Blob`] belongs to.
     pub namespace: Namespace,
@@ -35,6 +38,7 @@ pub struct Blob {
     pub share_version: u8,
     /// A [`Commitment`] computed from the [`Blob`]s data.
     pub commitment: Commitment,
+
     /// Index of the blob's first share in the EDS. Only set for blobs retrieved from chain.
     // note: celestia supports deserializing blobs without index, so we should too
     #[serde(default, with = "index_serde")]
@@ -394,7 +398,7 @@ mod tests {
     #[test]
     fn validate_blob_commitment_mismatch() {
         let mut blob = sample_blob();
-        blob.commitment.0.fill(7);
+        blob.commitment.hash.fill(7);
 
         blob.validate(AppVersion::V2).unwrap_err();
     }

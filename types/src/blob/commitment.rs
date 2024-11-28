@@ -8,6 +8,8 @@ use celestia_tendermint::{crypto, merkle};
 use celestia_tendermint_proto::serializers::cow_str::CowStr;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "wasm-bindgen")]
+use wasm_bindgen::prelude::*;
 
 use crate::consts::appconsts;
 use crate::nmt::{Namespace, NamespacedHashExt, NamespacedSha2Hasher, Nmt, RawNamespacedHash};
@@ -50,8 +52,19 @@ use crate::{InfoByte, Share};
 /// [`Nmt`]: crate::nmt::Nmt
 /// [`ExtendedDataSquare`]: crate::ExtendedDataSquare
 /// [`share commitment rules`]: https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/data_square_layout.md#blob-share-commitment-rules
+
+#[cfg(not(feature = "wasm-bindgen"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Commitment(pub merkle::Hash);
+pub struct Commitment {
+    pub hash: merkle::Hash,
+}
+#[cfg(feature = "wasm-bindgen")]
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Commitment {
+    #[wasm_bindgen(skip)]
+    pub hash: merkle::Hash,
+}
 
 impl Commitment {
     /// Generate the share commitment from the given blob data.
@@ -101,7 +114,7 @@ impl Commitment {
 
         let hash = merkle::simple_hash_from_byte_vectors::<crypto::default::Sha256>(&subtree_roots);
 
-        Ok(Commitment(hash))
+        Ok(Commitment { hash })
     }
 }
 
@@ -110,7 +123,7 @@ impl Serialize for Commitment {
     where
         S: Serializer,
     {
-        let s = BASE64_STANDARD.encode(self.0);
+        let s = BASE64_STANDARD.encode(self.hash);
         serializer.serialize_str(&s)
     }
 }
@@ -133,7 +146,7 @@ impl<'de> Deserialize<'de> for Commitment {
             .try_into()
             .map_err(|_| serde::de::Error::custom("commitment is not a size of a sha256"))?;
 
-        Ok(Commitment(hash))
+        Ok(Commitment { hash })
     }
 }
 
