@@ -2,8 +2,7 @@
 
 use crate::utils::{random_bytes, random_ns};
 use celestia_rpc::prelude::*;
-use celestia_types::{blob::RawBlob, AppVersion, Blob, TxConfig};
-use prost::Message;
+use celestia_types::{AppVersion, Blob, TxConfig};
 
 pub mod utils;
 
@@ -37,13 +36,11 @@ async fn balance_for_address() {
 async fn submit_pay_for_blob() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let namespace = random_ns();
-    let data = random_bytes(500);
+    let data = random_bytes(5);
     let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
-    let raw: RawBlob = blob.clone().into();
-    let proto = raw.encode_to_vec();
 
     let tx_response = client
-        .state_submit_pay_for_blob(&[&proto], TxConfig::default())
+        .state_submit_pay_for_blob(&[blob.clone().into()], TxConfig::default())
         .await
         .unwrap();
 

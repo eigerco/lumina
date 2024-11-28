@@ -5,11 +5,6 @@ use celestia_types::state::{
 use celestia_types::{blob::RawBlob, TxConfig};
 use jsonrpsee::proc_macros::rpc;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct Base64String(
-    #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")] Vec<u8>,
-);
-
 #[rpc(client)]
 pub trait State {
     /// AccountAddress retrieves the address of the node's account/signer
@@ -87,7 +82,7 @@ pub trait State {
     #[method(name = "state.SubmitPayForBlob")]
     async fn state_submit_pay_for_blob(
         &self,
-        blobs: &[&[u8]],
+        blobs: &[RawBlob],
         config: TxConfig,
     ) -> Result<TxResponse, Error>;
 

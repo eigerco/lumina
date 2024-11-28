@@ -135,9 +135,6 @@ setup_private_validator() {
   # reduce the time of commiting the proposed block
   # bringing this value too low results in errors
   sed -i'.bak' 's|^timeout_commit.*|timeout_commit = "1s"|g' "$CONFIG_DIR/config/config.toml"
-
-  # Set app version to 1
-  sed -i'.bak' 's|"app_version": "2"|"app_version": "1"|g' "$CONFIG_DIR/config/genesis.json"
 }
 
 main() {
@@ -147,7 +144,7 @@ main() {
   provision_bridge_nodes &
   # Start the celestia-app
   echo "Configuration finished. Running a validator node..."
-  celestia-appd start --api.enable --grpc.enable # --force-no-bbr
+  celestia-appd start --api.enable --grpc.enable --force-no-bbr
 }
 
 main
