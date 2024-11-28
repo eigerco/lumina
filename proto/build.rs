@@ -17,6 +17,7 @@ const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_tim
 const OPTION_PROTOBUF_DURATION: &str =
     r#"#[serde(with = "crate::serializers::option_protobuf_duration")]"#;
 const NULL_DEFAULT: &str = r#"#[serde(with = "crate::serializers::null_default")]"#;
+const VEC_SKIP_IF_EMPTY: &str = r#"#[serde(skip_serializing_if = "::std::vec::Vec::is_empty")]"#;
 const BYTES_SKIP_IF_EMPTY: &str = r#"#[serde(skip_serializing_if = "bytes::Bytes::is_empty")]"#;
 
 #[rustfmt::skip]
@@ -82,6 +83,7 @@ static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".proof.pb.Proof.nodes", VEC_BASE64STRING),
     (".proto.blob.v1.BlobProto.data", BASE64STRING),
     (".proto.blob.v1.BlobProto.namespace_id", BASE64STRING),
+    (".proto.blob.v1.BlobProto.signer", VEC_SKIP_IF_EMPTY),
     (".proto.blob.v1.BlobProto.signer", BASE64STRING),
     (".shwap.RowNamespaceData.shares", NULL_DEFAULT),
     (".shwap.Share", BASE64STRING),
