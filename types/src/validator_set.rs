@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
-use celestia_tendermint::block::CommitSig;
-use celestia_tendermint::crypto::default::signature::Verifier;
-use celestia_tendermint::validator::{Info, Set};
-use celestia_tendermint::{account, block, chain};
+use tendermint::block::CommitSig;
+use tendermint::crypto::default::signature::Verifier;
+use tendermint::validator::{Info, Set};
+use tendermint::{account, block, chain};
 
+use crate::block::CommitExt;
 use crate::trust_level::TrustLevelRatio;
 use crate::{
-    bail_validation, bail_verification, CommitExt, Result, ValidateBasic, ValidationError,
-    VerificationError,
+    bail_validation, bail_verification, Result, ValidateBasic, ValidationError, VerificationError,
 };
 
 impl ValidateBasic for Set {
@@ -162,14 +162,14 @@ fn find_validator<'a>(vals: &'a Set, val_id: &account::Id) -> Option<(usize, &'a
 mod tests {
     use super::*;
 
-    use celestia_tendermint_proto::v0_34::types::ValidatorSet as RawValidatorSet;
+    use tendermint_proto::v0_34::types::ValidatorSet as RawValidatorSet;
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
     fn sample_commit() -> block::Commit {
         serde_json::from_str(r#"{
-          "height": 1,
+          "height": "1",
           "round": 0,
           "block_id": {
             "hash": "17F7D5108753C39714DCA67E6A73CE855C6EA9B0071BBD4FFE5D2EF7F3973BFC",

@@ -24,10 +24,10 @@ crate-type = ["cdylib", "rlib"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 blockstore.workspace = true
-celestia-tendermint.workspace = true
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 libp2p = { workspace = true, features = ["serde"] }
 lumina-node.workspace = true
+tendermint.workspace = true
 
 anyhow = "1.0.86"
 console_error_panic_hook = "0.1.7"

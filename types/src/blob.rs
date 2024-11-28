@@ -15,8 +15,8 @@ use crate::{bail_validation, Error, Result, Share};
 pub use self::commitment::Commitment;
 pub use self::msg_pay_for_blobs::MsgPayForBlobs;
 pub use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
-pub use celestia_tendermint_proto::v0_34::types::Blob as RawBlob;
-pub use celestia_tendermint_proto::v0_34::types::BlobTx as RawBlobTx;
+pub use celestia_proto::proto::blob::v1::BlobProto as RawBlob;
+pub use celestia_proto::proto::blob::v1::BlobTx as RawBlobTx;
 #[cfg(feature = "wasm-bindgen")]
 use wasm_bindgen::prelude::*;
 
@@ -30,7 +30,7 @@ pub struct Blob {
     /// A [`Namespace`] the [`Blob`] belongs to.
     pub namespace: Namespace,
     /// Data stored within the [`Blob`].
-    #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]
+    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
     pub data: Vec<u8>,
     /// Version indicating the format in which [`Share`]s should be created from this [`Blob`].
     ///
@@ -320,6 +320,7 @@ impl From<Blob> for RawBlob {
             namespace_version: value.namespace.version() as u32,
             data: value.data,
             share_version: value.share_version as u32,
+            signer: Vec::new(),
         }
     }
 }

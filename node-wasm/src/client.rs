@@ -538,7 +538,7 @@ mod tests {
         }
         let header = found.expect("blob to exists");
 
-        let blob = client
+        let _blob = client
             .request_all_blobs(to_value(&header).unwrap(), namespace, None)
             .await
             .unwrap();

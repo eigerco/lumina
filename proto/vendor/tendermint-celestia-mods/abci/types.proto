@@ -1,0 +1,165 @@
+syntax = "proto3";
+package tendermint_celestia_mods.abci;
+
+import "tendermint/types/types.proto";
+import "google/protobuf/timestamp.proto";
+import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
+
+import "tendermint-celestia-mods/types/types.proto";
+import "tendermint/abci/types.proto";
+
+// This file is copied from http://github.com/tendermint/abci
+// NOTE: When using custom types, mind the warnings.
+// https://github.com/gogo/protobuf/blob/master/custom_types.md#warnings-and-issues
+
+//----------------------------------------
+// Request types
+
+message Request {
+  oneof value {
+    tendermint.abci.RequestEcho               echo                 = 1;
+    tendermint.abci.RequestFlush              flush                = 2;
+    tendermint.abci.RequestInfo               info                 = 3;
+    tendermint.abci.RequestSetOption          set_option           = 4;
+    tendermint.abci.RequestInitChain          init_chain           = 5;
+    tendermint.abci.RequestQuery              query                = 6;
+    tendermint.abci.RequestBeginBlock         begin_block          = 7;
+    tendermint.abci.RequestCheckTx            check_tx             = 8;
+    tendermint.abci.RequestDeliverTx          deliver_tx           = 9;
+    tendermint.abci.RequestEndBlock           end_block            = 10;
+    tendermint.abci.RequestCommit             commit               = 11;
+    tendermint.abci.RequestListSnapshots      list_snapshots       = 12;
+    RequestOfferSnapshot      offer_snapshot       = 13;
+    tendermint.abci.RequestLoadSnapshotChunk  load_snapshot_chunk  = 14;
+    tendermint.abci.RequestApplySnapshotChunk apply_snapshot_chunk = 15;
+    RequestPrepareProposal    prepare_proposal     = 16;
+    RequestProcessProposal    process_proposal     = 17;
+  }
+}
+
+message TimeoutsInfo {
+  google.protobuf.Duration timeout_propose = 1 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+  google.protobuf.Duration timeout_commit  = 2 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+}
+
+// offers a snapshot to the application
+message RequestOfferSnapshot {
+  tendermint.abci.Snapshot snapshot    = 1;  // snapshot offered by peers
+  bytes    app_hash    = 2;  // light client-verified app hash for snapshot height
+  uint64   app_version = 3;  // The application version at which the snapshot was taken
+}
+
+message RequestPrepareProposal {
+  // BlockData is a slice of candidate transactions that may be included in a
+  // block. BlockData is sent to the application so that the application can
+  // filter and re-arrange the slice of candidate transactions.
+  tendermint_celestia_mods.types.Data block_data = 1;
+  // BlockDataSize is the maximum size (in bytes) that BlockData should be.
+  int64 block_data_size = 2;
+  // chain_id is a unique identifier for the blockchain network this proposal
+  // belongs to (e.g. mocha-1).
+  string chain_id = 3;
+  // height is the height of the proposal block
+  int64 height = 4;
+  // time is the time that will end up in the header. This is the voting power
+  // weighted median of the last commit.
+  google.protobuf.Timestamp time = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+}
+
+message RequestProcessProposal {
+  tendermint.types.Header header     = 1 [(gogoproto.nullable) = false];
+  tendermint_celestia_mods.types.Data   block_data = 2;
+}
+
+//----------------------------------------
+// Response types
+
+message Response {
+  oneof value {
+    tendermint.abci.ResponseException          exception            = 1;
+    tendermint.abci.ResponseEcho               echo                 = 2;
+    tendermint.abci.ResponseFlush              flush                = 3;
+    ResponseInfo               info                 = 4;
+    tendermint.abci.ResponseSetOption          set_option           = 5;
+    ResponseInitChain          init_chain           = 6;
+    tendermint.abci.ResponseQuery              query                = 7;
+    tendermint.abci.ResponseBeginBlock         begin_block          = 8;
+    tendermint.abci.ResponseCheckTx            check_tx             = 9;
+    tendermint.abci.ResponseDeliverTx          deliver_tx           = 10;
+    ResponseEndBlock           end_block            = 11;
+    tendermint.abci.ResponseCommit             commit               = 12;
+    tendermint.abci.ResponseListSnapshots      list_snapshots       = 13;
+    tendermint.abci.ResponseOfferSnapshot      offer_snapshot       = 14;
+    tendermint.abci.ResponseLoadSnapshotChunk  load_snapshot_chunk  = 15;
+    tendermint.abci.ResponseApplySnapshotChunk apply_snapshot_chunk = 16;
+    ResponsePrepareProposal    prepare_proposal     = 17;
+    ResponseProcessProposal    process_proposal     = 18;
+  }
+}
+
+message ResponseInitChain {
+  tendermint.abci.ConsensusParams          consensus_params = 1;
+  repeated tendermint.abci.ValidatorUpdate validators       = 2 [(gogoproto.nullable) = false];
+  bytes                    app_hash         = 3;
+  TimeoutsInfo             timeouts         = 4 [(gogoproto.nullable) = false];
+}
+
+message ResponseInfo {
+  string data = 1;
+
+  string version     = 2;
+  uint64 app_version = 3;
+
+  int64 last_block_height   = 4;
+  bytes last_block_app_hash = 5;
+
+  TimeoutsInfo timeouts = 6 [(gogoproto.nullable) = false];
+}
+
+message ResponseEndBlock {
+  repeated tendermint.abci.ValidatorUpdate validator_updates       = 1 [(gogoproto.nullable) = false];
+  tendermint.abci.ConsensusParams          consensus_param_updates = 2;
+  repeated tendermint.abci.Event           events                  = 3
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
+  TimeoutsInfo timeouts = 4 [(gogoproto.nullable) = false];
+}
+
+message ResponsePrepareProposal {
+  tendermint_celestia_mods.types.Data block_data = 1;
+}
+
+message ResponseProcessProposal {
+  Result         result   = 1;
+  repeated bytes evidence = 2;
+
+  enum Result {
+    UNKNOWN = 0;  // Unknown result, invalidate
+    ACCEPT  = 1;  // proposal verified, vote on the proposal
+    REJECT  = 2;  // proposal invalidated
+  }
+}
+
+
+//----------------------------------------
+// Service Definition
+
+service ABCIApplication {
+  rpc Echo(tendermint.abci.RequestEcho) returns (tendermint.abci.ResponseEcho);
+  rpc Flush(tendermint.abci.RequestFlush) returns (tendermint.abci.ResponseFlush);
+  rpc Info(tendermint.abci.RequestInfo) returns (ResponseInfo);
+  rpc SetOption(tendermint.abci.RequestSetOption) returns (tendermint.abci.ResponseSetOption);
+  rpc DeliverTx(tendermint.abci.RequestDeliverTx) returns (tendermint.abci.ResponseDeliverTx);
+  rpc CheckTx(tendermint.abci.RequestCheckTx) returns (tendermint.abci.ResponseCheckTx);
+  rpc Query(tendermint.abci.RequestQuery) returns (tendermint.abci.ResponseQuery);
+  rpc Commit(tendermint.abci.RequestCommit) returns (tendermint.abci.ResponseCommit);
+  rpc InitChain(tendermint.abci.RequestInitChain) returns (ResponseInitChain);
+  rpc BeginBlock(tendermint.abci.RequestBeginBlock) returns (tendermint.abci.ResponseBeginBlock);
+  rpc EndBlock(tendermint.abci.RequestEndBlock) returns (ResponseEndBlock);
+  rpc ListSnapshots(tendermint.abci.RequestListSnapshots) returns (tendermint.abci.ResponseListSnapshots);
+  rpc OfferSnapshot(RequestOfferSnapshot) returns (tendermint.abci.ResponseOfferSnapshot);
+  rpc LoadSnapshotChunk(tendermint.abci.RequestLoadSnapshotChunk) returns (tendermint.abci.ResponseLoadSnapshotChunk);
+  rpc ApplySnapshotChunk(tendermint.abci.RequestApplySnapshotChunk) returns (tendermint.abci.ResponseApplySnapshotChunk);
+  rpc PrepareProposal(RequestPrepareProposal) returns (ResponsePrepareProposal);
+  rpc ProcessProposal(RequestProcessProposal) returns (ResponseProcessProposal);
+}

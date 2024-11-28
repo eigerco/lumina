@@ -20,8 +20,6 @@ categories = [
 
 [dependencies]
 celestia-proto.workspace = true
-celestia-tendermint.workspace = true
-celestia-tendermint-proto.workspace = true
 celestia-types.workspace = true
 libp2p = { workspace = true, features = [
   "autonat",
@@ -33,6 +31,8 @@ libp2p = { workspace = true, features = [
   "kad",
 ] }
 prost.workspace = true
+tendermint-proto.workspace = true
+tendermint.workspace = true
 
 async-trait = "0.1.80"
 beetswap = "0.4.0"

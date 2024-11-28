@@ -1,15 +1,11 @@
 //! types related to accounts
 
-#[cfg(feature = "tonic")]
-use pbjson_types::Any;
-use prost::Message;
-#[cfg(not(feature = "tonic"))]
-use prost_types::Any;
-
 use celestia_proto::cosmos::crypto::ed25519::PubKey as Ed25519PubKey;
 use celestia_proto::cosmos::crypto::secp256k1::PubKey as Secp256k1PubKey;
-use celestia_tendermint::public_key::PublicKey;
-use celestia_tendermint_proto::Protobuf;
+use prost::Message;
+use tendermint::public_key::PublicKey;
+use tendermint_proto::google::protobuf::Any;
+use tendermint_proto::Protobuf;
 
 use crate::state::Address;
 use crate::Error;
@@ -123,16 +119,14 @@ fn any_from_public_key(key: PublicKey) -> Any {
             value: Ed25519PubKey {
                 key: key.to_bytes(),
             }
-            .encode_to_vec()
-            .into(),
+            .encode_to_vec(),
         },
         key @ PublicKey::Secp256k1(_) => Any {
             type_url: COSMOS_SECP256K1_PUBKEY.to_string(),
             value: Secp256k1PubKey {
                 key: key.to_bytes(),
             }
-            .encode_to_vec()
-            .into(),
+            .encode_to_vec(),
         },
         _ => unimplemented!("unexpected key type"),
     }

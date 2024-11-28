@@ -11,7 +11,6 @@ import "tendermint/crypto/keys.proto";
 import "tendermint/types/params.proto";
 import "google/protobuf/timestamp.proto";
 import "gogoproto/gogo.proto";
-import "google/protobuf/duration.proto";
 
 // This file is copied from http://github.com/tendermint/abci
 // NOTE: When using custom types, mind the warnings.
@@ -37,8 +36,6 @@ message Request {
     RequestOfferSnapshot      offer_snapshot       = 13;
     RequestLoadSnapshotChunk  load_snapshot_chunk  = 14;
     RequestApplySnapshotChunk apply_snapshot_chunk = 15;
-    RequestPrepareProposal    prepare_proposal     = 16;
-    RequestProcessProposal    process_proposal     = 17;
   }
 }
 
@@ -47,11 +44,6 @@ message RequestEcho {
 }
 
 message RequestFlush {}
-
-message TimeoutsInfo {
-  google.protobuf.Duration timeout_propose = 1 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
-  google.protobuf.Duration timeout_commit  = 2 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
-}
 
 message RequestInfo {
   string version       = 1;
@@ -114,9 +106,8 @@ message RequestListSnapshots {}
 
 // offers a snapshot to the application
 message RequestOfferSnapshot {
-  Snapshot snapshot    = 1;  // snapshot offered by peers
-  bytes    app_hash    = 2;  // light client-verified app hash for snapshot height
-  uint64   app_version = 3;  // The application version at which the snapshot was taken
+  Snapshot snapshot = 1;  // snapshot offered by peers
+  bytes    app_hash = 2;  // light client-verified app hash for snapshot height
 }
 
 // loads a snapshot chunk
@@ -131,28 +122,6 @@ message RequestApplySnapshotChunk {
   uint32 index  = 1;
   bytes  chunk  = 2;
   string sender = 3;
-}
-
-message RequestPrepareProposal {
-  // BlockData is a slice of candidate transactions that may be included in a
-  // block. BlockData is sent to the application so that the application can
-  // filter and re-arrange the slice of candidate transactions.
-  tendermint.types.Data block_data = 1;
-  // BlockDataSize is the maximum size (in bytes) that BlockData should be.
-  int64 block_data_size = 2;
-  // chain_id is a unique identifier for the blockchain network this proposal
-  // belongs to (e.g. mocha-1).
-  string chain_id = 3;
-  // height is the height of the proposal block
-  int64 height = 4;
-  // time is the time that will end up in the header. This is the voting power
-  // weighted median of the last commit.
-  google.protobuf.Timestamp time = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-}
-
-message RequestProcessProposal {
-  tendermint.types.Header header     = 1 [(gogoproto.nullable) = false];
-  tendermint.types.Data   block_data = 2;
 }
 
 //----------------------------------------
@@ -176,8 +145,6 @@ message Response {
     ResponseOfferSnapshot      offer_snapshot       = 14;
     ResponseLoadSnapshotChunk  load_snapshot_chunk  = 15;
     ResponseApplySnapshotChunk apply_snapshot_chunk = 16;
-    ResponsePrepareProposal    prepare_proposal     = 17;
-    ResponseProcessProposal    process_proposal     = 18;
   }
 }
 
@@ -200,8 +167,6 @@ message ResponseInfo {
 
   int64 last_block_height   = 4;
   bytes last_block_app_hash = 5;
-
-  TimeoutsInfo timeouts = 6 [(gogoproto.nullable) = false];
 }
 
 // nondeterministic
@@ -216,7 +181,6 @@ message ResponseInitChain {
   ConsensusParams          consensus_params = 1;
   repeated ValidatorUpdate validators       = 2 [(gogoproto.nullable) = false];
   bytes                    app_hash         = 3;
-  TimeoutsInfo             timeouts         = 4 [(gogoproto.nullable) = false];
 }
 
 message ResponseQuery {
@@ -274,7 +238,6 @@ message ResponseEndBlock {
   ConsensusParams          consensus_param_updates = 2;
   repeated Event           events                  = 3
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
-  TimeoutsInfo timeouts = 4 [(gogoproto.nullable) = false];
 }
 
 message ResponseCommit {
@@ -316,21 +279,6 @@ message ResponseApplySnapshotChunk {
     RETRY           = 3;  // Retry chunk (combine with refetch and reject)
     RETRY_SNAPSHOT  = 4;  // Retry snapshot (combine with refetch and reject)
     REJECT_SNAPSHOT = 5;  // Reject this snapshot, try others
-  }
-}
-
-message ResponsePrepareProposal {
-  tendermint.types.Data block_data = 1;
-}
-
-message ResponseProcessProposal {
-  Result         result   = 1;
-  repeated bytes evidence = 2;
-
-  enum Result {
-    UNKNOWN = 0;  // Unknown result, invalidate
-    ACCEPT  = 1;  // proposal verified, vote on the proposal
-    REJECT  = 2;  // proposal invalidated
   }
 }
 
@@ -458,8 +406,8 @@ service ABCIApplication {
   rpc EndBlock(RequestEndBlock) returns (ResponseEndBlock);
   rpc ListSnapshots(RequestListSnapshots) returns (ResponseListSnapshots);
   rpc OfferSnapshot(RequestOfferSnapshot) returns (ResponseOfferSnapshot);
-  rpc LoadSnapshotChunk(RequestLoadSnapshotChunk) returns (ResponseLoadSnapshotChunk);
-  rpc ApplySnapshotChunk(RequestApplySnapshotChunk) returns (ResponseApplySnapshotChunk);
-  rpc PrepareProposal(RequestPrepareProposal) returns (ResponsePrepareProposal);
-  rpc ProcessProposal(RequestProcessProposal) returns (ResponseProcessProposal);
+  rpc LoadSnapshotChunk(RequestLoadSnapshotChunk)
+      returns (ResponseLoadSnapshotChunk);
+  rpc ApplySnapshotChunk(RequestApplySnapshotChunk)
+      returns (ResponseApplySnapshotChunk);
 }

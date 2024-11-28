@@ -16,7 +16,7 @@ pub enum Error {
 
     /// Tendermint Error
     #[error(transparent)]
-    TendermintError(#[from] celestia_tendermint::Error),
+    TendermintError(#[from] tendermint::Error),
 
     /// Celestia types error
     #[error(transparent)]
@@ -24,7 +24,7 @@ pub enum Error {
 
     /// Tendermint Proto Error
     #[error(transparent)]
-    TendermintProtoError(#[from] celestia_tendermint_proto::Error),
+    TendermintProtoError(#[from] tendermint_proto::Error),
 
     /// Failed to parse gRPC response
     #[error("Failed to parse response")]

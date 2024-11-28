@@ -6,14 +6,15 @@ use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
-use celestia_tendermint::block::header::Header;
-use celestia_tendermint::block::{Commit, Height};
-use celestia_tendermint::chain::id::Id;
-use celestia_tendermint::{validator, Hash, Time};
-use celestia_tendermint_proto::Protobuf;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tendermint::block::header::Header;
+use tendermint::block::{Commit, Height};
+use tendermint::chain::id::Id;
+use tendermint::{validator, Time};
+use tendermint_proto::Protobuf;
 
 use crate::consts::appconsts::AppVersion;
+use crate::hash::Hash;
 use crate::trust_level::DEFAULT_TRUST_LEVEL;
 use crate::validator_set::ValidatorSetExt;
 use crate::{
@@ -59,8 +60,7 @@ const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
 /// fetched_header.validate().expect("Invalid block header");
 /// genesis_header.verify(&fetched_header).expect("Malicious header received");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(try_from = "RawExtendedHeader", into = "RawExtendedHeader")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtendedHeader {
     /// Tendermint block header.
     pub header: Header,
@@ -164,11 +164,11 @@ impl ExtendedHeader {
         }
 
         // ensure data root from raw header matches computed root
-        if self.dah.hash() != self.header.data_hash {
+        if self.dah.hash() != self.header.data_hash.unwrap_or_default() {
             bail_validation!(
                 "dah hash ({}) != header dah hash ({})",
                 self.dah.hash(),
-                self.header.data_hash,
+                self.header.data_hash.unwrap_or_default(),
             )
         }
 
@@ -428,6 +428,97 @@ impl From<ExtendedHeader> for RawExtendedHeader {
     }
 }
 
+mod custom_serde {
+    use celestia_proto::celestia::core::v1::da::DataAvailabilityHeader;
+    use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
+    use serde::{Deserialize, Serialize};
+    use tendermint_proto::v0_34::types::Commit as RawCommit;
+    use tendermint_proto::v0_34::types::{BlockId, CommitSig, Header, ValidatorSet};
+
+    #[derive(Deserialize, Serialize)]
+    pub(super) struct SerdeExtendedHeader {
+        header: Option<Header>,
+        commit: Option<SerdeCommit>,
+        validator_set: Option<ValidatorSet>,
+        dah: Option<DataAvailabilityHeader>,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    pub(super) struct SerdeCommit {
+        height: i64,
+        round: i32,
+        block_id: Option<BlockId>,
+        #[serde(with = "tendermint_proto::serializers::nullable")]
+        signatures: Vec<CommitSig>,
+    }
+
+    impl From<RawExtendedHeader> for SerdeExtendedHeader {
+        fn from(value: RawExtendedHeader) -> Self {
+            SerdeExtendedHeader {
+                header: value.header,
+                commit: value.commit.map(|commit| commit.into()),
+                validator_set: value.validator_set,
+                dah: value.dah,
+            }
+        }
+    }
+
+    impl From<SerdeExtendedHeader> for RawExtendedHeader {
+        fn from(value: SerdeExtendedHeader) -> Self {
+            RawExtendedHeader {
+                header: value.header,
+                commit: value.commit.map(|commit| commit.into()),
+                validator_set: value.validator_set,
+                dah: value.dah,
+            }
+        }
+    }
+
+    impl From<RawCommit> for SerdeCommit {
+        fn from(value: RawCommit) -> Self {
+            SerdeCommit {
+                height: value.height,
+                round: value.round,
+                block_id: value.block_id,
+                signatures: value.signatures,
+            }
+        }
+    }
+
+    impl From<SerdeCommit> for RawCommit {
+        fn from(value: SerdeCommit) -> Self {
+            RawCommit {
+                height: value.height,
+                round: value.round,
+                block_id: value.block_id,
+                signatures: value.signatures,
+            }
+        }
+    }
+}
+
+impl Serialize for ExtendedHeader {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let pb: RawExtendedHeader = self.clone().into();
+        let custom_ser: custom_serde::SerdeExtendedHeader = pb.into();
+        custom_ser.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExtendedHeader {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let custom_de = custom_serde::SerdeExtendedHeader::deserialize(deserializer)?;
+        let pb: RawExtendedHeader = custom_de.into();
+        ExtendedHeader::try_from(pb).map_err(serde::de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -493,7 +584,7 @@ mod tests {
     #[test]
     fn validate_dah_hash_mismatch() {
         let mut eh = sample_eh_chain_1_block_27();
-        eh.header.data_hash = Hash::Sha256([0; 32]);
+        eh.header.data_hash = Some(Hash::Sha256([0; 32]));
 
         eh.validate().unwrap_err();
     }

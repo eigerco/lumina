@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod blob;
-mod block;
+pub mod block;
 mod byzantine;
 pub mod consts;
 mod data_availability_header;
@@ -19,6 +19,7 @@ pub mod p2p;
 pub mod row;
 pub mod row_namespace_data;
 pub mod sample;
+pub mod serializers;
 mod share;
 pub mod state;
 mod sync;
@@ -31,7 +32,7 @@ mod validate;
 mod validator_set;
 
 pub use crate::blob::{Blob, Commitment};
-pub use crate::block::*;
+pub use crate::block::Height;
 pub use crate::consts::appconsts::AppVersion;
 pub use crate::data_availability_header::*;
 pub use crate::eds::{AxisType, ExtendedDataSquare};

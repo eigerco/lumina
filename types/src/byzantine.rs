@@ -1,13 +1,13 @@
 use celestia_proto::share::eds::byzantine::pb::BadEncoding as RawBadEncodingFraudProof;
 use celestia_proto::share::eds::byzantine::pb::Share as RawShareWithProof;
-use celestia_tendermint::{block::Height, Hash};
-use celestia_tendermint_proto::Protobuf;
-use serde::{Deserialize, Serialize};
+use tendermint::block::Height;
+use tendermint_proto::Protobuf;
 
 use crate::bail_validation;
 use crate::consts::appconsts;
 use crate::eds::AxisType;
 use crate::fraud_proof::FraudProof;
+use crate::hash::Hash;
 use crate::nmt::{Namespace, NamespaceProof, Nmt, NmtExt, NS_SIZE};
 use crate::{Error, ExtendedHeader, Result};
 
@@ -25,11 +25,7 @@ use crate::{Error, ExtendedHeader, Result};
 /// [`Data Availability Sampling`]: https://docs.celestia.org/learn/how-celestia-works/data-availability-layer
 /// [`ExtendedDataSquare`]: crate::ExtendedDataSquare
 /// [`Share`]: crate::share::Share
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(
-    try_from = "RawBadEncodingFraudProof",
-    into = "RawBadEncodingFraudProof"
-)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BadEncodingFraudProof {
     header_hash: Hash,
     block_height: Height,

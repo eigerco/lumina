@@ -1,0 +1,14 @@
+syntax = "proto3";
+package tendermint_celestia_mods.types;
+
+import "gogoproto/gogo.proto";
+import "tendermint/types/types.proto";
+import "tendermint/types/evidence.proto";
+import "tendermint-celestia-mods/types/types.proto";
+
+message Block {
+  tendermint.types.Header                        header      = 1 [(gogoproto.nullable) = false];
+  Data                          data        = 2 [(gogoproto.nullable) = false];
+  tendermint.types.EvidenceList evidence    = 3 [(gogoproto.nullable) = false];
+  tendermint.types.Commit                        last_commit = 4;
+}

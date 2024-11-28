@@ -1,10 +1,10 @@
 use std::ops::{Deref, DerefMut};
 
+use celestia_proto::celestia::core::v1::proof::NmtProof as RawNmtProof;
 use celestia_proto::proof::pb::Proof as RawProof;
-use celestia_tendermint_proto::v0_34::types::NmtProof as RawTendermintProof;
-use celestia_tendermint_proto::Protobuf;
 use nmt_rs::simple_merkle::proof::Proof as NmtProof;
 use serde::{Deserialize, Serialize};
+use tendermint_proto::Protobuf;
 
 use crate::nmt::{NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, NS_SIZE};
 use crate::{Error, Result};
@@ -179,10 +179,10 @@ impl From<NamespaceProof> for RawProof {
     }
 }
 
-impl TryFrom<RawTendermintProof> for NamespaceProof {
+impl TryFrom<RawNmtProof> for NamespaceProof {
     type Error = Error;
 
-    fn try_from(value: RawTendermintProof) -> Result<Self, Self::Error> {
+    fn try_from(value: RawNmtProof) -> Result<Self, Self::Error> {
         let raw_proof = RawProof {
             start: value.start as i64,
             end: value.end as i64,
@@ -195,10 +195,10 @@ impl TryFrom<RawTendermintProof> for NamespaceProof {
     }
 }
 
-impl From<NamespaceProof> for RawTendermintProof {
+impl From<NamespaceProof> for RawNmtProof {
     fn from(value: NamespaceProof) -> Self {
         let raw_proof = RawProof::from(value);
-        RawTendermintProof {
+        RawNmtProof {
             start: raw_proof.start as i32,
             end: raw_proof.end as i32,
             nodes: raw_proof.nodes,

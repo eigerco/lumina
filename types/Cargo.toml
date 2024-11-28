@@ -16,11 +16,10 @@ categories = ["encoding", "cryptography::cryptocurrencies"]
 [dependencies]
 blockstore.workspace = true
 celestia-proto.workspace = true
-celestia-tendermint = { workspace = true, features = ["std", "rust-crypto", "secp256k1"] }
-celestia-tendermint-proto.workspace = true
 nmt-rs.workspace = true
 prost.workspace = true
-prost-types.workspace = true
+tendermint = { workspace = true, features = ["std", "rust-crypto", "secp256k1"] }
+tendermint-proto.workspace = true
 
 base64 = "0.22.1"
 bech32 = "0.11.0"
@@ -34,18 +33,19 @@ leopard-codec = "0.1.0"
 libp2p-identity = { version = "0.2.9", optional = true }
 multiaddr = { version = "0.18.1", optional = true }
 multihash = "0.19.1"
-pbjson-types = { version = "0.7.0", optional = true }
 rand = { version = "0.8.5", optional = true }
 ruint = { version = "1.12.3", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_repr = { version = "0.1.19", optional = true }
 sha2 = "0.10.6"
 thiserror = "1.0.61"
-wasm-bindgen = { version = "0.2.95", optional = true }
 
 # `time` is a dependency of a dependency but we need to specify it
 # for fixing rust-lang/rust#125319.
 time = { version = "0.3.36", default-features = false }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { version = "0.2.95", optional = true }
 
 [dev-dependencies]
 ed25519-consensus = "2.1.0"
@@ -63,8 +63,8 @@ wasm-bindgen-test = "0.3.42"
 default = ["p2p"]
 p2p = ["dep:libp2p-identity", "dep:multiaddr", "dep:serde_repr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
-wasm-bindgen = ["celestia-tendermint/wasm-bindgen", "dep:wasm-bindgen"]
-tonic = ["dep:pbjson-types", "celestia-proto/tonic"]
+wasm-bindgen = ["dep:wasm-bindgen", "time/wasm-bindgen"]
+tonic = ["celestia-proto/tonic"]
 
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]
@@ -72,4 +72,3 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-udeps.ignore]
 development = ["indoc"]
-normal = ["prost-types"] # unused if tonic flag is enabled

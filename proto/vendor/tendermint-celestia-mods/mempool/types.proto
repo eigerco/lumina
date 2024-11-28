@@ -1,0 +1,20 @@
+syntax = "proto3";
+package tendermint_celestia_mods.mempool;
+
+import "tendermint/mempool/types.proto";
+
+message SeenTx {
+  bytes tx_key = 1;
+}
+
+message WantTx {
+  bytes tx_key = 1;
+}
+
+message Message {
+  oneof sum {
+    tendermint.mempool.Txs    txs     = 1;
+    SeenTx seen_tx = 2;
+    WantTx want_tx = 3;
+  }
+}

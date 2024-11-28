@@ -210,9 +210,9 @@ mod tests {
     use crate::test_utils::{async_test, gen_filled_store};
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::StatusCode;
-    use celestia_tendermint_proto::Protobuf;
     use celestia_types::ExtendedHeader;
     use std::future::poll_fn;
+    use tendermint_proto::Protobuf;
     use tokio::select;
     use tokio::sync::oneshot;
 
