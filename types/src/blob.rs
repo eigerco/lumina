@@ -5,6 +5,7 @@ use std::iter;
 use serde::{Deserialize, Serialize};
 
 mod commitment;
+mod msg_pay_for_blobs;
 
 use crate::consts::appconsts;
 use crate::consts::appconsts::{subtree_root_threshold, AppVersion};
@@ -12,7 +13,10 @@ use crate::nmt::Namespace;
 use crate::{bail_validation, Error, Result, Share};
 
 pub use self::commitment::Commitment;
-pub use celestia_tendermint_proto::v0_34::types::Blob as RawBlob;
+pub use self::msg_pay_for_blobs::MsgPayForBlobs;
+pub use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
+pub use celestia_proto::proto::blob::v1::BlobProto as RawBlob;
+pub use celestia_proto::proto::blob::v1::BlobTx as RawBlobTx;
 
 /// Arbitrary data that can be stored in the network within certain [`Namespace`].
 // NOTE: We don't use the `serde(try_from)` pattern for this type
@@ -23,7 +27,7 @@ pub struct Blob {
     /// A [`Namespace`] the [`Blob`] belongs to.
     pub namespace: Namespace,
     /// Data stored within the [`Blob`].
-    #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]
+    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
     pub data: Vec<u8>,
     /// Version indicating the format in which [`Share`]s should be created from this [`Blob`].
     ///
@@ -35,6 +39,15 @@ pub struct Blob {
     // note: celestia supports deserializing blobs without index, so we should too
     #[serde(default, with = "index_serde")]
     pub index: Option<u64>,
+}
+
+/// Params defines the parameters for the blob module.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct BlobParams {
+    /// Gas cost per blob byte
+    pub gas_per_blob_byte: u32,
+    /// Max square size
+    pub gov_max_square_size: u64,
 }
 
 impl Blob {
@@ -303,6 +316,7 @@ impl From<Blob> for RawBlob {
             namespace_version: value.namespace.version() as u32,
             data: value.data,
             share_version: value.share_version as u32,
+            signer: Vec::new(),
         }
     }
 }

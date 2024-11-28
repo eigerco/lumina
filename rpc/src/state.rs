@@ -1,6 +1,6 @@
 use celestia_types::state::{
     AccAddress, Address, Balance, QueryDelegationResponse, QueryRedelegationsResponse,
-    QueryUnbondingDelegationResponse, TxResponse, Uint, ValAddress,
+    QueryUnbondingDelegationResponse, RawTxResponse, Uint, ValAddress,
 };
 use celestia_types::{blob::RawBlob, TxConfig};
 use jsonrpsee::proc_macros::rpc;
@@ -31,7 +31,7 @@ pub trait State {
         dest: &ValAddress,
         amount: Uint,
         config: TxConfig,
-    ) -> Result<TxResponse, Error>;
+    ) -> Result<RawTxResponse, Error>;
 
     /// CancelUnbondingDelegation cancels a user's pending undelegation from a validator.
     #[method(name = "state.CancelUnbondingDelegation")]
@@ -41,7 +41,7 @@ pub trait State {
         amount: Uint,
         height: Uint,
         config: TxConfig,
-    ) -> Result<TxResponse, Error>;
+    ) -> Result<RawTxResponse, Error>;
 
     /// Delegate sends a user's liquid tokens to a validator for delegation.
     #[method(name = "state.Delegate")]
@@ -50,7 +50,7 @@ pub trait State {
         addr: &ValAddress,
         amount: Uint,
         config: TxConfig,
-    ) -> Result<TxResponse, Error>;
+    ) -> Result<RawTxResponse, Error>;
 
     /// IsStopped checks if the Module's context has been stopped.
     #[method(name = "state.IsStopped")]
@@ -84,7 +84,7 @@ pub trait State {
         &self,
         blobs: &[RawBlob],
         config: TxConfig,
-    ) -> Result<TxResponse, Error>;
+    ) -> Result<RawTxResponse, Error>;
 
     /// Transfer sends the given amount of coins from default wallet of the node to the given account address.
     #[method(name = "state.Transfer")]
@@ -93,7 +93,7 @@ pub trait State {
         to: &AccAddress,
         amount: Uint,
         config: TxConfig,
-    ) -> Result<TxResponse, Error>;
+    ) -> Result<RawTxResponse, Error>;
 
     /// Undelegate undelegates a user's delegated tokens, unbonding them from the current validator.
     #[method(name = "Undelegate")]
@@ -102,5 +102,5 @@ pub trait State {
         addr: &ValAddress,
         amount: Uint,
         config: TxConfig,
-    ) -> Result<TxResponse, Error>;
+    ) -> Result<RawTxResponse, Error>;
 }

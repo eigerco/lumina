@@ -1,6 +1,7 @@
-use celestia_tendermint::hash::Hash;
-use celestia_tendermint::time::Time;
 use serde::{Deserialize, Serialize};
+use tendermint::time::Time;
+
+use crate::hash::Hash;
 
 /// A state of the blockchain synchronization.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -14,8 +15,10 @@ pub struct SyncState {
     /// The last height to be synced.
     pub to_height: u64,
     /// The first hash to be synced.
+    #[serde(with = "crate::serializers::hash")]
     pub from_hash: Hash,
     /// The last hash to be synced.
+    #[serde(with = "crate::serializers::hash")]
     pub to_hash: Hash,
     /// The time when syncing began.
     pub start: Time,

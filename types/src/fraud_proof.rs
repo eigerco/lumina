@@ -2,14 +2,12 @@
 //!
 //! A fraud proof is a proof of the detected malicious action done to the network.
 
-use std::convert::Infallible;
-
-use celestia_tendermint::block::Height;
-use celestia_tendermint::Hash;
-use celestia_tendermint_proto::Protobuf;
 use serde::{Deserialize, Serialize, Serializer};
+use tendermint::block::Height;
+use tendermint_proto::Protobuf;
 
 pub use crate::byzantine::BadEncodingFraudProof;
+use crate::hash::Hash;
 use crate::{Error, ExtendedHeader, Result};
 
 /// A proof of the malicious actions done to the network.
@@ -38,7 +36,7 @@ pub trait FraudProof {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RawFraudProof {
     proof_type: String,
-    #[serde(with = "celestia_tendermint_proto::serializers::bytes::base64string")]
+    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
     data: Vec<u8>,
 }
 
@@ -70,13 +68,10 @@ impl TryFrom<RawFraudProof> for Proof {
 impl From<&Proof> for RawFraudProof {
     fn from(value: &Proof) -> Self {
         match value {
-            Proof::BadEncoding(befp) => {
-                let encoded: Result<_, Infallible> = befp.encode_vec();
-                RawFraudProof {
-                    proof_type: BadEncodingFraudProof::TYPE.to_owned(),
-                    data: encoded.unwrap(),
-                }
-            }
+            Proof::BadEncoding(befp) => RawFraudProof {
+                proof_type: BadEncodingFraudProof::TYPE.to_owned(),
+                data: befp.clone().encode_vec(),
+            },
         }
     }
 }

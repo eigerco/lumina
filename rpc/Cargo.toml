@@ -19,20 +19,23 @@ categories = [
 ]
 
 [dependencies]
+celestia-types.workspace = true
+prost.workspace = true
+
 async-trait = "0.1.80"
-celestia-types = { workspace = true }
 jsonrpsee = { version = "0.24.2", features = ["client-core", "macros"] }
 serde = { version = "1.0.203", features = ["derive"] }
 thiserror = "1.0.61"
 tracing = "0.1.40"
-prost = "0.12"
-celestia-tendermint-proto.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 http = "1.1.0"
 jsonrpsee = { version = "0.24.2", features = ["http-client", "ws-client"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+anyhow = "1.0.86"
+dotenvy = "0.15.7"
+futures = "0.3.31"
 libp2p = { workspace = true, features = [
   "tokio",
   "macros",
@@ -40,10 +43,7 @@ libp2p = { workspace = true, features = [
   "noise",
   "yamux",
 ] }
-anyhow = "1.0.86"
-dotenvy = "0.15.7"
-futures = "0.3.30"
-nmt-rs = { workspace = true }
+nmt-rs.workspace = true
 rand = "0.8.5"
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
 tracing = "0.1.40"

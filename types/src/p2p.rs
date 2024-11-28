@@ -58,7 +58,7 @@ pub struct ResourceManagerStats {
 /// [`PeerId`]: libp2p_identity::PeerId
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PeerId(
-    #[serde(with = "celestia_tendermint_proto::serializers::from_str")] pub libp2p_identity::PeerId,
+    #[serde(with = "tendermint_proto::serializers::from_str")] pub libp2p_identity::PeerId,
 );
 
 impl From<libp2p_identity::PeerId> for PeerId {

@@ -22,13 +22,13 @@ pub enum Error {
     #[error("Invalid namespace size")]
     InvalidNamespaceSize,
 
-    /// Error propagated from the [`celestia_tendermint`].
+    /// Error propagated from the [`tendermint`].
     #[error(transparent)]
-    Tendermint(#[from] celestia_tendermint::Error),
+    Tendermint(#[from] tendermint::Error),
 
-    /// Error propagated from the [`celestia_tendermint_proto`].
+    /// Error propagated from the [`tendermint_proto`].
     #[error(transparent)]
-    Protobuf(#[from] celestia_tendermint_proto::Error),
+    Protobuf(#[from] tendermint_proto::Error),
 
     /// Error propagated from the [`cid::multihash`].
     #[error(transparent)]
@@ -65,6 +65,30 @@ pub enum Error {
     /// Missing shares.
     #[error("Missing shares")]
     MissingShares,
+
+    /// Missing fee field
+    #[error("Missing fee field")]
+    MissingFee,
+
+    /// Missing sum field
+    #[error("Missing sum field")]
+    MissingSum,
+
+    /// Missing mode info field
+    #[error("Missing mode info field")]
+    MissingModeInfo,
+
+    /// Missing bitarray field
+    #[error("Missing bitarray field")]
+    MissingBitarray,
+
+    /// Bit array too large
+    #[error("Bit array to large")]
+    BitarrayTooLarge,
+
+    /// Malformed CompactBitArray
+    #[error("CompactBitArray malformed")]
+    MalformedCompactBitArray,
 
     /// Wrong proof type.
     #[error("Wrong proof type")]
@@ -117,6 +141,10 @@ pub enum Error {
     #[error("Invalid proof type: {0}")]
     InvalidShwapProofType(i32),
 
+    /// Could not deserialise Public Key
+    #[error("Could not deserialize public key")]
+    InvalidPublicKey,
+
     /// Range proof verification error.
     #[error("Range proof verification failed: {0:?}")]
     RangeProofError(nmt_rs::simple_merkle::error::RangeProofError),
@@ -168,6 +196,14 @@ pub enum Error {
     #[error("Invalid balance amount: {0}")]
     InvalidBalanceAmount(String),
 
+    /// Invalid coin amount.
+    #[error("Invalid coin amount: {0}")]
+    InvalidCoinAmount(String),
+
+    /// Invalid Public Key
+    #[error("Invalid Public Key")]
+    InvalidPublicKeyType(String),
+
     /// Unsupported fraud proof type.
     #[error("Unsupported fraud proof type: {0}")]
     UnsupportedFraudProofType(String),
@@ -203,11 +239,23 @@ pub enum Error {
     /// Metadata mismatch between shares in blob.
     #[error("Metadata mismatch between shares in blob: {0}")]
     BlobSharesMetadataMismatch(String),
+
+    /// Blob too large, length must fit u32
+    #[error("Blob too large")]
+    BlobTooLarge,
+
+    /// Invalid comittment length
+    #[error("Invalid committment length")]
+    InvalidComittmentLength,
+
+    /// Empty blob list provided when creating MsgPayForBlobs
+    #[error("Empty blob list")]
+    EmptyBlobList,
 }
 
 impl From<prost::DecodeError> for Error {
     fn from(value: prost::DecodeError) -> Self {
-        Error::Protobuf(celestia_tendermint_proto::Error::decode_message(value))
+        Error::Protobuf(tendermint_proto::Error::decode_message(value))
     }
 }
 

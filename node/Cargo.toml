@@ -19,10 +19,8 @@ categories = [
 ]
 
 [dependencies]
-celestia-proto = { workspace = true }
-celestia-tendermint = { workspace = true }
-celestia-tendermint-proto = { workspace = true }
-celestia-types = { workspace = true }
+celestia-proto.workspace = true
+celestia-types.workspace = true
 libp2p = { workspace = true, features = [
   "autonat",
   "ping",
@@ -32,13 +30,15 @@ libp2p = { workspace = true, features = [
   "request-response",
   "kad",
 ] }
+prost.workspace = true
+tendermint-proto.workspace = true
+tendermint.workspace = true
 
 async-trait = "0.1.80"
 beetswap = "0.4.0"
 cid = { version = "0.11.1", features = ["serde-codec"] }
 dashmap = "5.5.3"
 futures = "0.3.30"
-prost = { workspace = true }
 rand = "0.8.5"
 serde = { version = "1.0.203", features = ["derive"] }
 smallvec = { version = "1.13.2", features = [

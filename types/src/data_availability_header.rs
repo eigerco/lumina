@@ -1,11 +1,11 @@
 use std::ops::RangeInclusive;
 
 use celestia_proto::celestia::core::v1::da::DataAvailabilityHeader as RawDataAvailabilityHeader;
-use celestia_tendermint::merkle::simple_hash_from_byte_vectors;
-use celestia_tendermint_proto::v0_34::types::RowProof as RawRowProof;
-use celestia_tendermint_proto::Protobuf;
+use celestia_proto::celestia::core::v1::proof::RowProof as RawRowProof;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use tendermint::merkle::simple_hash_from_byte_vectors;
+use tendermint_proto::Protobuf;
 
 use crate::consts::appconsts::AppVersion;
 use crate::consts::data_availability_header::{
@@ -165,7 +165,7 @@ impl DataAvailabilityHeader {
     /// let eh = get_extended_header();
     /// let dah = eh.dah;
     ///
-    /// assert_eq!(dah.hash(), eh.header.data_hash);
+    /// assert_eq!(dah.hash(), eh.header.data_hash.unwrap());
     /// ```
     pub fn hash(&self) -> Hash {
         let all_roots: Vec<_> = self

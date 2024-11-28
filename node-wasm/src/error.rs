@@ -133,7 +133,7 @@ from_js_value! {
 
 from_display! {
     blockstore::Error,
-    celestia_tendermint::error::Error,
+    tendermint::error::Error,
     libp2p::identity::ParseError,
     libp2p::multiaddr::Error,
     lumina_node::node::NodeError,

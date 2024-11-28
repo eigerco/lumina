@@ -1,11 +1,10 @@
 use std::fmt::Display;
 use std::ops::RangeInclusive;
+use std::path::Path;
 use std::pin::pin;
 use std::sync::Arc;
-use std::{convert::Infallible, path::Path};
 
 use async_trait::async_trait;
-use celestia_tendermint_proto::Protobuf;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
@@ -13,6 +12,7 @@ use redb::{
     CommitError, Database, ReadTransaction, ReadableTable, StorageError, Table, TableDefinition,
     TableError, TransactionError, WriteTransaction,
 };
+use tendermint_proto::Protobuf;
 use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
 use tracing::warn;
@@ -270,9 +270,8 @@ impl RedbStore {
             .map_err(|e| StoreInsertionError::HeadersVerificationFailed(e.to_string()))?;
 
         self.write_tx(move |tx| {
-            let headers = headers.as_ref();
-
-            let (Some(head), Some(tail)) = (headers.first(), headers.last()) else {
+            let (Some(head), Some(tail)) = (headers.as_ref().first(), headers.as_ref().last())
+            else {
                 return Ok(());
             };
 
@@ -296,9 +295,7 @@ impl RedbStore {
             for header in headers {
                 let height = header.height().value();
                 let hash = header.hash();
-                // until unwrap_infallible is stabilised, make sure Result is Infallible manually
-                let serialized_header: Result<_, Infallible> = header.encode_vec();
-                let serialized_header = serialized_header.unwrap();
+                let serialized_header = header.encode_vec();
 
                 if headers_table
                     .insert(height, &serialized_header[..])?
@@ -369,8 +366,7 @@ impl RedbStore {
             };
 
             // make sure Result is Infallible and unwrap it later
-            let serialized: Result<_, Infallible> = entry.encode_vec();
-            let serialized = serialized.unwrap();
+            let serialized = entry.encode_vec();
 
             sampling_metadata_table.insert(height, &serialized[..])?;
 

@@ -1,9 +1,9 @@
 use celestia_proto::p2p::pb::header_request::Data;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse, StatusCode};
-use celestia_tendermint_proto::Protobuf;
 use celestia_types::consts::HASH_SIZE;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use tendermint_proto::Protobuf;
 
 use crate::p2p::header_ex::HeaderExError;
 
@@ -88,7 +88,7 @@ pub(super) trait ExtendedHeaderExt {
 impl ExtendedHeaderExt for ExtendedHeader {
     fn to_header_response(&self) -> HeaderResponse {
         HeaderResponse {
-            body: self.encode_vec().unwrap(),
+            body: self.clone().encode_vec(),
             status_code: StatusCode::Ok.into(),
         }
     }

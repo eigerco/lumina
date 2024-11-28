@@ -21,12 +21,12 @@ use std::time::Duration;
 
 use blockstore::Blockstore;
 use celestia_proto::p2p::pb::{header_request, HeaderRequest};
-use celestia_tendermint_proto::Protobuf;
+use celestia_types::fraud_proof::BadEncodingFraudProof;
+use celestia_types::hash::Hash;
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
 use celestia_types::row::{Row, RowId};
 use celestia_types::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
 use celestia_types::sample::{Sample, SampleId};
-use celestia_types::{fraud_proof::BadEncodingFraudProof, hash::Hash};
 use celestia_types::{Blob, ExtendedHeader, FraudProof};
 use cid::Cid;
 use futures::stream::FuturesOrdered;
@@ -48,6 +48,7 @@ use libp2p::{
     Multiaddr, PeerId,
 };
 use smallvec::SmallVec;
+use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
@@ -131,7 +132,7 @@ pub enum P2pError {
 
     /// ProtoBuf message failed to be decoded.
     #[error("ProtoBuf decoding error: {0}")]
-    ProtoDecodeFailed(#[from] celestia_tendermint_proto::Error),
+    ProtoDecodeFailed(#[from] tendermint_proto::Error),
 
     /// An error propagated from [`celestia_types`] that is related to [`Cid`].
     #[error("CID error: {0}")]
@@ -182,7 +183,7 @@ impl From<oneshot::error::RecvError> for P2pError {
 
 impl From<prost::DecodeError> for P2pError {
     fn from(value: prost::DecodeError) -> Self {
-        P2pError::ProtoDecodeFailed(celestia_tendermint_proto::Error::decode_message(value))
+        P2pError::ProtoDecodeFailed(tendermint_proto::Error::decode_message(value))
     }
 }
 

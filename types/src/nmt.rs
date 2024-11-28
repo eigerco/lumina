@@ -19,11 +19,11 @@
 
 use base64::prelude::*;
 use blockstore::block::CidError;
-use celestia_tendermint::hash::SHA256_HASH_SIZE;
-use celestia_tendermint_proto::serializers::cow_str::CowStr;
+use celestia_proto::serializers::cow_str::CowStr;
 use cid::CidGeneric;
 use multihash::Multihash;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tendermint::hash::SHA256_HASH_SIZE;
 
 mod namespace_proof;
 mod namespaced_hash;
