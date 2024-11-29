@@ -208,7 +208,7 @@ impl DataAvailabilityHeader {
             proofs.push(MerkleProof::new(idx as usize, &all_roots)?.0);
             let row = self
                 .row_root(idx)
-                .ok_or_else(|| Error::IndexOutOfRange(idx as usize, self.row_roots.len()))?;
+                .ok_or(Error::IndexOutOfRange(idx as usize, self.row_roots.len()))?;
             row_roots.push(row);
         }
 

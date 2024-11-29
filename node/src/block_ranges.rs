@@ -49,7 +49,7 @@ pub(crate) trait BlockRangeExt {
 
 pub(crate) struct BlockRangeDisplay<'a>(&'a RangeInclusive<u64>);
 
-impl<'a> Display for BlockRangeDisplay<'a> {
+impl Display for BlockRangeDisplay<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}-{}", self.0.start(), self.0.end())
     }
