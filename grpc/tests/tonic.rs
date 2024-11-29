@@ -7,7 +7,7 @@ use celestia_types::blob::MsgPayForBlobs;
 use celestia_types::nmt::Namespace;
 use celestia_types::{AppVersion, Blob};
 
-pub mod utils;
+mod utils;
 
 use crate::utils::{load_account, new_test_client};
 
