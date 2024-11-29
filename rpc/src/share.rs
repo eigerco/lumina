@@ -58,7 +58,7 @@ mod rpc {
 ///
 /// Please note that celestia-node requires just the block height for most of those API's.
 /// This trait instead requires [`ExtendedHeader`] to perform validation of the returned types.
-// NOTE: we use EH anyhwhere where Share is returned because it's gonna be required in future,
+// NOTE: we use EH wherever Share is returned because it's gonna be required in future
 // to check if shares are allowed to have version 1 in corresponding app version
 pub trait ShareClient: ClientT {
     /// GetEDS gets the full EDS identified by the given root.
