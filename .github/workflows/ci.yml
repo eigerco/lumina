@@ -19,10 +19,10 @@ jobs:
         target: wasm32-unknown-unknown
 
     - name: Run clippy for native
-      run: cargo clippy --all --all-targets -- -D warnings -D missing-docs
+      run: cargo clippy --all --all-targets -- -D warnings
 
     - name: Run clippy for wasm32
-      run: cargo clippy --all --all-targets --target=wasm32-unknown-unknown -- -D warnings -D missing-docs
+      run: cargo clippy --all --all-targets --target=wasm32-unknown-unknown -- -D warnings
 
 
   docs:
@@ -30,7 +30,20 @@ jobs:
     steps:
     - uses: actions/checkout@v1
 
-    - name: Install toolchain
+    - name: Install wasm Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: clippy
+        target: wasm32-unknown-unknown
+
+    - name: Missing docs for native
+      run: cargo clippy --all -- -D missing-docs
+
+    - name: Missing docs for wasm32
+      run: cargo clippy --all --target=wasm32-unknown-unknown -- -D missing-docs
+
+    - name: Install nightly toolchain
       uses: dtolnay/rust-toolchain@nightly
 
     - name: Run rustdoc check

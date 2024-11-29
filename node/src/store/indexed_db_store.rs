@@ -307,7 +307,7 @@ impl IndexedDbStore {
 }
 
 trait TransactionOperationFn<'a, Arg>:
-    FnOnce(&'a Transaction, Arg) -> <Self as TransactionOperationFn<Arg>>::Fut
+    FnOnce(&'a Transaction, Arg) -> <Self as TransactionOperationFn<'a, Arg>>::Fut
 {
     type Fut: Future<Output = <Self as TransactionOperationFn<'a, Arg>>::Output>;
     type Output;
