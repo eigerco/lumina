@@ -3,7 +3,7 @@
 use celestia_rpc::prelude::*;
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
-use celestia_types::{Blob, Share};
+use celestia_types::Blob;
 
 pub mod utils;
 
@@ -42,7 +42,7 @@ async fn get_shares_by_namespace() {
     let header = client.header_get_by_height(submitted_height).await.unwrap();
 
     let ns_shares = client
-        .share_get_shares_by_namespace(&header, namespace)
+        .share_get_namespace_data(&header, namespace)
         .await
         .unwrap();
 
@@ -63,7 +63,7 @@ async fn get_shares_by_namespace_forbidden() {
     // those namespaces are forbidden in celestia-node's implementation
     for ns in [Namespace::TAIL_PADDING, Namespace::PARITY_SHARE] {
         client
-            .share_get_shares_by_namespace(&header, ns)
+            .share_get_namespace_data(&header, ns)
             .await
             .unwrap_err();
     }
@@ -88,11 +88,7 @@ async fn get_shares_range() {
     let shares = blob_on_chain.to_shares().unwrap();
 
     let shares_range = client
-        .share_get_range(
-            submitted_height,
-            index as usize,
-            index as usize + shares.len(),
-        )
+        .share_get_range(&header, index, index + shares.len() as u64)
         .await
         .unwrap();
 
@@ -103,7 +99,7 @@ async fn get_shares_range() {
         .zip(shares_range.shares.into_iter())
         .zip(shares_range.proof.shares().iter())
     {
-        assert_eq!(share, Share::try_from(received).unwrap());
+        assert_eq!(share, received);
         assert_eq!(share.as_ref(), proven.as_ref());
     }
 }
@@ -116,12 +112,31 @@ async fn get_shares_range_not_existing() {
 
     client
         .share_get_range(
-            header.height().value(),
-            shares_in_block as usize - 2,
-            shares_in_block as usize + 2,
+            &header,
+            shares_in_block as u64 - 2,
+            shares_in_block as u64 + 2,
         )
         .await
         .unwrap_err();
+}
+
+#[tokio::test]
+async fn get_shares_range_ignores_parity() {
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
+
+    let namespace = random_ns();
+    let data = random_bytes(100);
+    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
+
+    let header = client.header_get_by_height(submitted_height).await.unwrap();
+    let square_width = header.dah.square_width() as u64;
+
+    // if the share was parity we would fail deserializing resulting shares
+    client
+        .share_get_range(&header, square_width / 2, square_width / 2 + 1)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -149,7 +164,7 @@ async fn get_shares_by_namespace_wrong_ns() {
     // check the case where we receive absence proof
     let random_ns = random_ns_range(min_ns, max_ns);
     let ns_shares = client
-        .share_get_shares_by_namespace(&header, random_ns)
+        .share_get_namespace_data(&header, random_ns)
         .await
         .unwrap();
     assert_eq!(ns_shares.rows.len(), 1);
@@ -183,7 +198,7 @@ async fn get_shares_by_namespace_wrong_ns_out_of_range() {
     let zero = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     let random_ns = random_ns_range(zero, min_ns);
     let ns_shares = client
-        .share_get_shares_by_namespace(&header, random_ns)
+        .share_get_namespace_data(&header, random_ns)
         .await
         .unwrap();
 
@@ -203,7 +218,7 @@ async fn get_shares_by_namespace_wrong_roots() {
     let genesis = client.header_get_by_height(1).await.unwrap();
 
     let ns_shares = client
-        .share_get_shares_by_namespace(&genesis, namespace)
+        .share_get_namespace_data(&genesis, namespace)
         .await
         .unwrap();
 

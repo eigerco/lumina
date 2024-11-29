@@ -154,7 +154,7 @@ impl RowNamespaceData {
 /// [`Share`]: crate::Share
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct NamespacedShares {
+pub struct NamespaceData {
     /// All rows containing shares within some namespace.
     pub rows: Vec<RowNamespaceData>,
 }
@@ -370,7 +370,7 @@ mod tests {
           }
         ]"#;
 
-        let ns_shares: NamespacedShares =
+        let ns_shares: NamespaceData =
             serde_json::from_str(get_shares_by_namespace_response).unwrap();
 
         assert_eq!(ns_shares.rows[0].shares.len(), 1);

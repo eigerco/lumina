@@ -34,7 +34,7 @@ wait_for_block() {
   local block_num="$1"
   local block_hash=""
 
-  # Wait for the block to be created 
+  # Wait for the block to be created
   while [[ -z "$block_hash" ]]; do
     # `|| echo` fallbacks to an empty string in case it's not ready
     block_hash="$(celestia-appd query block "$block_num" 2>/dev/null | jq '.block_id.hash' || echo)"
@@ -133,14 +133,8 @@ setup_private_validator() {
   # If you encounter: `sed: -I or -i may not be used with stdin` on MacOS you can mitigate by installing gnu-sed
   # https://gist.github.com/andre3k1/e3a1a7133fded5de5a9ee99c87c6fa0d?permalink_comment_id=3082272#gistcomment-3082272
   sed -i'.bak' 's|"tcp://127.0.0.1:26657"|"tcp://0.0.0.0:26657"|g' "$CONFIG_DIR/config/config.toml"
-  sed -i'.bak' 's|"null"|"kv"|g' "$CONFIG_DIR/config/config.toml"
-
-  # reduce the time of commiting the proposed block
-  # bringing this value too low results in errors
-  sed -i'.bak' 's|^timeout_commit.*|timeout_commit = "1s"|g' "$CONFIG_DIR/config/config.toml"
-
-  # Set app version to 1
-  sed -i'.bak' 's|"app_version": "2"|"app_version": "1"|g' "$CONFIG_DIR/config/genesis.json"
+  # enable transaction indexing
+  sed -i'.bak' 's|indexer = .*|indexer = "kv"|g' "$CONFIG_DIR/config/config.toml"
 }
 
 main() {
@@ -150,7 +144,7 @@ main() {
   provision_bridge_nodes &
   # Start the celestia-app
   echo "Configuration finished. Running a validator node..."
-  celestia-appd start --api.enable --grpc.enable
+  celestia-appd start --api.enable --grpc.enable --force-no-bbr
 }
 
 main
