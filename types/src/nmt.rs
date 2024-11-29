@@ -24,7 +24,7 @@ use cid::CidGeneric;
 use multihash::Multihash;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tendermint::hash::SHA256_HASH_SIZE;
-#[cfg(feature = "wasm-bindgen")]
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::*;
 
 mod namespace_proof;
@@ -93,7 +93,7 @@ pub type Proof = nmt_rs::simple_merkle::proof::Proof<NamespacedSha2Hasher>;
 ///  - secondary reserved namespaces - those use version `0xff` so they are always placed after
 ///    user-submitted data.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
-#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
+#[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
 impl Namespace {

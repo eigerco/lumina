@@ -8,7 +8,7 @@ use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tendermint::crypto::sha256::HASH_SIZE;
 use tendermint::{crypto, merkle};
-#[cfg(feature = "wasm-bindgen")]
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::*;
 
 use crate::consts::appconsts;
@@ -52,16 +52,17 @@ use crate::{InfoByte, Share};
 /// [`Nmt`]: crate::nmt::Nmt
 /// [`ExtendedDataSquare`]: crate::ExtendedDataSquare
 /// [`share commitment rules`]: https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/data_square_layout.md#blob-share-commitment-rules
-
-#[cfg(not(feature = "wasm-bindgen"))]
+#[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Commitment {
+    ///  hash of the commitment
     pub hash: merkle::Hash,
 }
-#[cfg(feature = "wasm-bindgen")]
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 #[wasm_bindgen]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Commitment {
+    ///  hash of the commitment
     #[wasm_bindgen(skip)]
     pub hash: merkle::Hash,
 }

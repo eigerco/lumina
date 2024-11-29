@@ -54,8 +54,6 @@ void = "1.0.2"
 web-time = "1.1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-opendal = "0.50.2"
-
 backoff = { version = "0.4.0", features = ["tokio"] }
 blockstore = { workspace = true, features = ["redb"] }
 tokio = { version = "1.38.0", features = ["fs", "rt-multi-thread", "time"] }
