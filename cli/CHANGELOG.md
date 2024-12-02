@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2](https://github.com/eigerco/lumina/compare/lumina-cli-v0.5.1...lumina-cli-v0.5.2) - 2024-12-02
+
+### Added
+
+- *(grpc, types, proto)* [**breaking**] Add tonic gRPC ([#454](https://github.com/eigerco/lumina/pull/454))
+
+### Other
+
+- *(node-wasm)* Add integration tests for node-wasm ([#420](https://github.com/eigerco/lumina/pull/420))
+
 ## [0.5.1](https://github.com/eigerco/lumina/compare/lumina-cli-v0.5.0...lumina-cli-v0.5.1) - 2024-11-07
 
 ### Other
