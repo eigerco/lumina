@@ -516,18 +516,17 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn get_blob() {
-        crate::utils::setup_logging();
         remove_database().await.expect("failed to clear db");
         let rpc_client = Client::new(WS_URL).await.unwrap();
         let namespace = Namespace::new_v0(&[0xCD, 0xDC, 0xCD, 0xDC, 0xCD, 0xDC]).unwrap();
         let data = b"Hello, World";
         let blobs = vec![Blob::new(namespace, data.to_vec(), AppVersion::V3).unwrap()];
-        info!("presubmit");
+
         let submitted_height = rpc_client
             .blob_submit(&blobs, TxConfig::default())
             .await
             .expect("successful submission");
-        info!("preheader");
+
         let header = rpc_client
             .header_get_by_height(submitted_height)
             .await
@@ -536,12 +535,11 @@ mod tests {
         let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
-        info!("pregetblobs");
-
         let mut blobs = client
             .request_all_blobs(to_value(&header).unwrap(), namespace, None)
             .await
             .expect("to fetch blob");
+
         assert_eq!(blobs.len(), 1);
         let blob = blobs.pop().unwrap();
         assert_eq!(blob.data, data);
