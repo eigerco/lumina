@@ -456,7 +456,6 @@ mod tests {
     use libp2p::{multiaddr::Protocol, Multiaddr};
     use rexie::Rexie;
     use serde_wasm_bindgen::from_value;
-    use tracing::info;
     use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;

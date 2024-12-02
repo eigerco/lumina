@@ -52,18 +52,10 @@ use crate::{InfoByte, Share};
 /// [`Nmt`]: crate::nmt::Nmt
 /// [`ExtendedDataSquare`]: crate::ExtendedDataSquare
 /// [`share commitment rules`]: https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/data_square_layout.md#blob-share-commitment-rules
-#[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
+#[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Commitment {
     ///  hash of the commitment
-    pub hash: merkle::Hash,
-}
-#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
-#[wasm_bindgen]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Commitment {
-    ///  hash of the commitment
-    #[wasm_bindgen(skip)]
     pub hash: merkle::Hash,
 }
 
@@ -117,6 +109,18 @@ impl Commitment {
 
         Ok(Commitment { hash })
     }
+
+    /*
+    #[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
+    pub fn hash(&self) -> &merkle::Hash {
+        &self.hash
+    }
+
+    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+    pub fn hash(&self) -> &merkle::Hash {
+        &self.hash
+    }
+    */
 }
 
 impl Serialize for Commitment {
