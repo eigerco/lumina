@@ -1047,6 +1047,11 @@ lumina\_node\_wasm.d.ts:318
 
 ## Class: NodeWorker
 
+`NodeWorker` is responsible for receiving commands from connected [`NodeClient`]s, executing
+them and sending a response back, as well as accepting new `NodeClient` connections.
+
+[`NodeClient`]: crate::client::NodeClient
+
 ### Constructors
 
 #### new NodeWorker()
@@ -1063,7 +1068,7 @@ lumina\_node\_wasm.d.ts:318
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:340
+lumina\_node\_wasm.d.ts:344
 
 ### Methods
 
@@ -1077,7 +1082,7 @@ lumina\_node\_wasm.d.ts:340
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:336
+lumina\_node\_wasm.d.ts:340
 
 ***
 
@@ -1091,7 +1096,7 @@ lumina\_node\_wasm.d.ts:336
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:344
+lumina\_node\_wasm.d.ts:348
 
 
 <a name="classespeertrackerinfosnapshotmd"></a>
@@ -1126,7 +1131,7 @@ Number of the connected peers.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:362
+lumina\_node\_wasm.d.ts:366
 
 ***
 
@@ -1138,7 +1143,7 @@ Number of the connected trusted peers.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:366
+lumina\_node\_wasm.d.ts:370
 
 ### Methods
 
@@ -1152,7 +1157,7 @@ lumina\_node\_wasm.d.ts:366
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:358
+lumina\_node\_wasm.d.ts:362
 
 ***
 
@@ -1168,7 +1173,7 @@ lumina\_node\_wasm.d.ts:358
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:353
+lumina\_node\_wasm.d.ts:357
 
 ***
 
@@ -1184,7 +1189,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:357
+lumina\_node\_wasm.d.ts:361
 
 
 <a name="classessyncinginfosnapshotmd"></a>
@@ -1219,7 +1224,7 @@ Ranges of headers that are already synchronised
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:384
+lumina\_node\_wasm.d.ts:388
 
 ***
 
@@ -1231,7 +1236,7 @@ Syncing target. The latest height seen in the network that was successfully veri
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:388
+lumina\_node\_wasm.d.ts:392
 
 ### Methods
 
@@ -1245,7 +1250,7 @@ lumina\_node\_wasm.d.ts:388
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:380
+lumina\_node\_wasm.d.ts:384
 
 ***
 
@@ -1261,7 +1266,7 @@ lumina\_node\_wasm.d.ts:380
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:375
+lumina\_node\_wasm.d.ts:379
 
 ***
 
@@ -1277,7 +1282,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:379
+lumina\_node\_wasm.d.ts:383
 
 # Enumerations
 
