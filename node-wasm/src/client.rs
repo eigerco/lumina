@@ -451,7 +451,7 @@ mod tests {
 
     use celestia_rpc::{prelude::*, Client};
     use celestia_types::p2p::PeerId;
-    use celestia_types::ExtendedHeader;
+    use celestia_types::{AppVersion, ExtendedHeader, TxConfig};
     use gloo_timers::future::sleep;
     use libp2p::{multiaddr::Protocol, Multiaddr};
     use rexie::Rexie;
@@ -519,29 +519,33 @@ mod tests {
         crate::utils::setup_logging();
         remove_database().await.expect("failed to clear db");
         let rpc_client = Client::new(WS_URL).await.unwrap();
+        let namespace = Namespace::new_v0(&[0xCD, 0xDC, 0xCD, 0xDC, 0xCD, 0xDC]).unwrap();
+        let data = b"Hello, World";
+        let blobs = vec![Blob::new(namespace, data.to_vec(), AppVersion::V3).unwrap()];
+        info!("presubmit");
+        let submitted_height = rpc_client
+            .blob_submit(&blobs, TxConfig::default())
+            .await
+            .expect("successful submission");
+        info!("preheader");
+        let header = rpc_client
+            .header_get_by_height(submitted_height)
+            .await
+            .expect("header for blob");
+
         let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
-        let namespace = Namespace::new_v0(&[0xAF, 0xAF, 0xAF, 0xAF, 0xAF, 0xAF]).unwrap();
-        let mut found = None;
-        // TODO: once gRPC blob submission works from browser, submit blob and get its height that
-        // way. Otherwise, this looks for a blob submitted from the RPC tests `rpc/tests/blob.rs`
-        'find_header: for h in 1..=500 {
-            info!("HH: {h}");
-            let header = rpc_client.header_get_by_height(h).await.unwrap();
-            for row in header.dah.row_roots() {
-                if row.min_namespace() < *namespace && *namespace < row.max_namespace() {
-                    found = Some(header.clone());
-                    break 'find_header;
-                }
-            }
-        }
-        let header = found.expect("blob to exists");
+        info!("pregetblobs");
 
-        let _blob = client
+        let mut blobs = client
             .request_all_blobs(to_value(&header).unwrap(), namespace, None)
             .await
-            .unwrap();
+            .expect("to fetch blob");
+        assert_eq!(blobs.len(), 1);
+        let blob = blobs.pop().unwrap();
+        assert_eq!(blob.data, data);
+        assert_eq!(blob.namespace, namespace);
     }
 
     async fn spawn_connected_node(bootnodes: Vec<String>) -> NodeClient {

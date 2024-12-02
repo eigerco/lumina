@@ -41,7 +41,6 @@ pub struct Blob {
     pub share_version: u8,
     /// A [`Commitment`] computed from the [`Blob`]s data.
     pub commitment: Commitment,
-
     /// Index of the blob's first share in the EDS. Only set for blobs retrieved from chain.
     // note: celestia supports deserializing blobs without index, so we should too
     #[serde(default, with = "index_serde")]

@@ -6,7 +6,6 @@ use std::time::Duration;
 use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::prelude::*;
 use celestia_types::consts::appconsts::AppVersion;
-use celestia_types::nmt::Namespace;
 use celestia_types::{Blob, Commitment};
 use jsonrpsee::core::client::Subscription;
 
@@ -18,7 +17,7 @@ use crate::utils::{random_bytes, random_bytes_array, random_ns};
 #[tokio::test]
 async fn blob_submit_and_get() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
-    let namespace = Namespace::new_v0(&[0xAF, 0xAF, 0xAF, 0xAF, 0xAF, 0xAF]).unwrap();
+    let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
 
