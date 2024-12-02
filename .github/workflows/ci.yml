@@ -21,6 +21,9 @@ jobs:
     - name: Run clippy for native
       run: cargo clippy --all --all-targets -- -D warnings
 
+    - name: Run clippy for celestia-grpc-macros
+      run: cargo clippy -p celestia-grpc-macros --all-targets -- -D warnings
+
     - name: Run clippy for wasm32
       run: cargo clippy --all --all-targets --target=wasm32-unknown-unknown -- -D warnings
 
