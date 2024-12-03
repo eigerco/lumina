@@ -56,7 +56,7 @@ use crate::{InfoByte, Share};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Commitment {
     ///  hash of the commitment
-    pub hash: merkle::Hash,
+    hash: merkle::Hash,
 }
 
 impl Commitment {
@@ -110,17 +110,31 @@ impl Commitment {
         Ok(Commitment { hash })
     }
 
-    /*
-    #[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
     pub fn hash(&self) -> &merkle::Hash {
         &self.hash
     }
 
-    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
-    pub fn hash(&self) -> &merkle::Hash {
-        &self.hash
+}
+
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+impl Commitment {
+    #[wasm_bindgen(js_name = hash)]
+    pub fn js_hash(&self) -> Vec<u8> {
+        self.hash.to_vec()
     }
-    */
+}
+
+impl From<Commitment> for merkle::Hash {
+    fn from(commitment: Commitment) -> Self {
+        commitment.hash
+    }
+}
+
+impl From<merkle::Hash> for Commitment {
+    fn from(hash: merkle::Hash) -> Self {
+        Commitment { hash }
+    }
 }
 
 impl Serialize for Commitment {

@@ -2,6 +2,7 @@ use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
 use celestia_proto::cosmos::tx::v1beta1::TxBody as RawTxBody;
 use prost::Name;
 use serde::{Deserialize, Serialize};
+use tendermint::merkle::Hash;
 use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
 
@@ -80,7 +81,7 @@ impl From<MsgPayForBlobs> for RawMsgPayForBlobs {
         let share_commitments = msg
             .share_commitments
             .into_iter()
-            .map(|c| c.hash.to_vec())
+            .map(|c| Hash::from(c).to_vec())
             .collect();
 
         RawMsgPayForBlobs {
@@ -106,9 +107,8 @@ impl TryFrom<RawMsgPayForBlobs> for MsgPayForBlobs {
             .share_commitments
             .into_iter()
             .map(|c| {
-                Ok(Commitment {
-                    hash: c.try_into().map_err(|_| Error::InvalidComittmentLength)?,
-                })
+                let hash = Hash::try_from(c).map_err(|_| Error::InvalidComittmentLength)?;
+                Ok(hash.into())
             })
             .collect::<Result<_, Error>>()?;
 

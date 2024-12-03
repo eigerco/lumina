@@ -6,7 +6,7 @@ use std::time::Duration;
 use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::prelude::*;
 use celestia_types::consts::appconsts::AppVersion;
-use celestia_types::{Blob, Commitment};
+use celestia_types::Blob;
 use jsonrpsee::core::client::Subscription;
 
 pub mod utils;
@@ -194,9 +194,7 @@ async fn blob_get_get_proof_wrong_commitment() {
     let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
-    let commitment = Commitment {
-        hash: random_bytes_array(),
-    };
+    let commitment = random_bytes_array().into();
 
     let submitted_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
 
