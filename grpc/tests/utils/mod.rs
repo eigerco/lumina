@@ -1,4 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
+//! Utilities for grpc tests
 
 use std::{env, fs};
 
@@ -51,11 +52,11 @@ impl TestAuthInterceptor {
     }
 }
 
-pub fn env_or(var_name: &str, or_value: &str) -> String {
+fn env_or(var_name: &str, or_value: &str) -> String {
     env::var(var_name).unwrap_or_else(|_| or_value.to_owned())
 }
 
-pub async fn new_test_client() -> Result<GrpcClient<TestAuthInterceptor>> {
+pub(crate) async fn new_test_client() -> Result<GrpcClient<TestAuthInterceptor>> {
     let _ = dotenvy::dotenv();
     let url = env_or("CELESTIA_GRPC_URL", CELESTIA_GRPC_URL);
     let grpc_channel = Channel::from_shared(url)?.connect().await?;
@@ -64,7 +65,7 @@ pub async fn new_test_client() -> Result<GrpcClient<TestAuthInterceptor>> {
     Ok(GrpcClient::new(grpc_channel, auth_interceptor))
 }
 
-pub fn load_account(path: &str) -> TestAccount {
+pub(crate) fn load_account(path: &str) -> TestAccount {
     let account_file = format!("{path}.addr");
     let key_file = format!("{path}.plaintext-key");
 

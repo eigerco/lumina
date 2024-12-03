@@ -1,4 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
+//! gRPC tests
 
 use celestia_grpc::types::auth::Account;
 use celestia_grpc::types::tx::sign_tx;
@@ -7,7 +8,7 @@ use celestia_types::blob::MsgPayForBlobs;
 use celestia_types::nmt::Namespace;
 use celestia_types::{AppVersion, Blob};
 
-pub mod utils;
+mod utils;
 
 use crate::utils::{load_account, new_test_client};
 
@@ -101,7 +102,7 @@ async fn submit_blob() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
     let _submitted_tx = client
         .get_tx(response.txhash)
