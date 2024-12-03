@@ -110,15 +110,16 @@ impl Commitment {
         Ok(Commitment { hash })
     }
 
+    ///  hash of the commitment
     pub fn hash(&self) -> &merkle::Hash {
         &self.hash
     }
-
 }
 
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 #[wasm_bindgen]
 impl Commitment {
+    ///  hash of the commitment
     #[wasm_bindgen(js_name = hash)]
     pub fn js_hash(&self) -> Vec<u8> {
         self.hash.to_vec()
