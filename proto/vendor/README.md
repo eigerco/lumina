@@ -124,7 +124,7 @@ Keep in mind that if the type exists in the same file, then full path is not nee
 Vendor any message type that contains a modified message type. The best example here is the modified `Data`:
 
 * We need to vendor `tendermint.types.Block` in `tendermint-celestia-mods` because it uses `Data` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/types/block.proto#L9-L14)).
-* Then vendor `tendermint.blockchain.BlockResponse` because it uses `tendermint.types.Block` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/blockchain/types.proto#L9-L11)). Notice that `BlockResponse.block` now has a type of `endermint_celestia_mods.types.Block`.
+* Then vendor `tendermint.blockchain.BlockResponse` because it uses `tendermint.types.Block` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/blockchain/types.proto#L9-L11)). Notice that `BlockResponse.block` now has a type of `tendermint_celestia_mods.types.Block`.
 * Then vendor `tendermint.blockchain.Message` because it uses `tendermint.blockchain.BlockResponse` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/blockchain/types.proto#L13-L21)).
 
 **Step 6:**
