@@ -131,7 +131,7 @@ Vendor any message type that contains a modified message type. The best example 
 
 Modify `build.rs`:
 
-* Add the new `.proto` files in `PROTO_FILES` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/build.rs#L136-L142)).
+* Add all the new `.proto` files in `PROTO_FILES` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/build.rs#L136-L142)).
 * Adjust `CUSTOM_TYPE_ATTRIBUTES` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/build.rs#L58-L62)) and `CUSTOM_FIELD_ATTRIBUTES` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/build.rs#L91-L101)).
 * Map `.tendermint` to `::tendermint_proto::v0_34` via `EXTERN_PATHS` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/build.rs#L109)). This will also inform `prost` that it doesn't need to generate code for `tendermint` directory.
 * Add `.bytes([".tendermint_celestia_mods.abci"])` in Prost config. This is needed because [`tendermint-rs` does it](https://github.com/informalsystems/tendermint-rs/blob/2f94e7f5346a094ec98e9019d0181815ccede7f1/tools/proto-compiler/src/main.rs#L89-L90) and we want to keep the same type.
