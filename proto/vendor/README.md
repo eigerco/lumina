@@ -142,7 +142,7 @@ Modify `build.rs`:
 Some rules of thumb:
 
 1. If a type exists in `tendermint-proto` and `celestia-tendermint-mods`, always choose
-   the latter. This includes GRPC stubs too.
+   the latter. This includes gRPC stubs too.
 2. If the type from point 1 has a higher level implementation in `tendermint` crate, then
    reimplement that in `celestia-types` and integrate it with the one from `celestia-tendermint-mods`. 
 
