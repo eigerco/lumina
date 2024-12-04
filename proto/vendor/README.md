@@ -135,7 +135,7 @@ Modify `build.rs`:
 * Adjust `CUSTOM_TYPE_ATTRIBUTES` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/build.rs#L58-L62)) and `CUSTOM_FIELD_ATTRIBUTES` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/build.rs#L91-L101)).
 * Map `.tendermint` to `::tendermint_proto::v0_34` via `EXTERN_PATHS` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/build.rs#L109)). This will also inform `prost` that it doesn't need to generate code for `tendermint` directory.
 * Add `.bytes([".tendermint_celestia_mods.abci"])` in Prost config. This is needed because [`tendermint-rs` does it](https://github.com/informalsystems/tendermint-rs/blob/2f94e7f5346a094ec98e9019d0181815ccede7f1/tools/proto-compiler/src/main.rs#L89-L90) and we want to keep the same type.
-* We [implemented a way](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/build.rs#L224-L263) do automatically replace any `.tendermint` types with `.tendermint-celestia-mods` using [`extern_path`](https://docs.rs/prost-build/0.13.3/prost_build/struct.Config.html#method.extern_path). This will make Protobuf definitions (e.g. `cosmos`) to use `tendermint-celestia-mods` types.
+* We [implemented a way](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/build.rs#L224-L263) to automatically replace any `.tendermint` types with `.tendermint-celestia-mods` using [`extern_path`](https://docs.rs/prost-build/0.13.3/prost_build/struct.Config.html#method.extern_path). This will make Protobuf definitions (e.g. `cosmos`) use `tendermint-celestia-mods` types.
 
 ### How to integrate modifications
 
