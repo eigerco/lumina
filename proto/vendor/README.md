@@ -71,7 +71,7 @@ crate, so we've had two choices:
    all the types of the `tendermint-proto` crate, additionally we'd need to wrap all the types of the `tendermint` crate.
 2. Vendor only the differences and wrap only the affected types of `tendermint` crate.
 
-We decided to choose the latter since it requires much less boilerplate code.
+We decided to choose the latter since it requires significantly less boilerplate code.
 
 ### How to vendor only the differences
 
