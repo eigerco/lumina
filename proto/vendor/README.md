@@ -102,7 +102,7 @@ would become `package tendermint_celestia_mods.types` ([link](https://github.com
 **Step 3:**
 
 Whenever you find `import "tendermint/path/to/file.proto"` and the `path/to/file.proto` exists
-in `tendermint-celestia-mods` then add `import "tendermint-celestia-mods/path/to/file.proto"`.
+in `tendermint-celestia-mods`, add `import "tendermint-celestia-mods/path/to/file.proto"`.
 For example in `abci/types.proto` we added `import "tendermint-celestia-mods/types/types.proto"`
 ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/abci/types.proto#L9)).
 
