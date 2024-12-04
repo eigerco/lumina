@@ -14,7 +14,9 @@ use crate::p2p::P2pError;
 use crate::store::{Store, StoreError};
 
 // pruning window is 1 hour behind the end of the syncing window
-const PRUNING_DELAY_AFTER_SYNCING_WINDOW_END: Duration = Duration::from_secs(60 * 60);
+pub const DEFAULT_PRUNING_DELAY: Duration = Duration::from_secs(60 * 60);
+pub const MIN_PRUNING_DELAY: Duration = Duration::from_secs(60);
+
 pub const DEFAULT_PRUNING_INTERVAL: Duration = Duration::from_secs(12);
 
 type Result<T, E = PrunerError> = std::result::Result<T, E>;
@@ -59,8 +61,8 @@ where
     pub event_pub: EventPublisher,
     /// interval at which pruner will run
     pub pruning_interval: Duration,
-    /// syncing window, pruning starts 1 hour after syncing window
-    pub syncing_window: Duration,
+    /// Size of pruning window
+    pub pruning_window: Duration,
 }
 
 impl Pruner {
@@ -133,9 +135,7 @@ where
             store: args.store,
             blockstore: args.blockstore,
             pruning_interval: args.pruning_interval,
-            pruning_window: args
-                .syncing_window
-                .saturating_add(PRUNING_DELAY_AFTER_SYNCING_WINDOW_END),
+            pruning_window: args.pruning_window,
         }
     }
 
@@ -231,7 +231,7 @@ mod test {
     const TEST_CODEC: u64 = 0x0D;
     const TEST_MH_CODE: u64 = 0x0D;
     const TEST_PRUNING_WINDOW: Duration =
-        DEFAULT_SYNCING_WINDOW.saturating_add(PRUNING_DELAY_AFTER_SYNCING_WINDOW_END);
+        DEFAULT_SYNCING_WINDOW.saturating_add(DEFAULT_PRUNING_DELAY);
 
     #[async_test]
     async fn empty_store() {
@@ -245,7 +245,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            syncing_window: DEFAULT_SYNCING_WINDOW,
+            pruning_window: TEST_PRUNING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -273,7 +273,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            syncing_window: DEFAULT_SYNCING_WINDOW,
+            pruning_window: TEST_PRUNING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -333,7 +333,7 @@ mod test {
             blockstore: blockstore.clone(),
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            syncing_window: DEFAULT_SYNCING_WINDOW,
+            pruning_window: TEST_PRUNING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -390,7 +390,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            syncing_window: DEFAULT_SYNCING_WINDOW,
+            pruning_window: TEST_PRUNING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;

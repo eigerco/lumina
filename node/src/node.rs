@@ -21,14 +21,18 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
+use crate::blockstore::InMemoryBlockstore;
 use crate::daser::{Daser, DaserArgs};
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
 use crate::executor::{spawn_cancellable, JoinHandle};
 use crate::p2p::{P2p, P2pArgs};
 use crate::pruner::{Pruner, PrunerArgs, DEFAULT_PRUNING_INTERVAL};
-use crate::store::{SamplingMetadata, Store, StoreError};
+use crate::store::{InMemoryStore, SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs};
 
+mod builder;
+
+pub use self::builder::NodeBuilder;
 pub use crate::daser::DaserError;
 pub use crate::p2p::{HeaderExError, P2pError};
 pub use crate::peer_tracker::PeerTrackerInfo;
@@ -59,29 +63,21 @@ pub enum NodeError {
     Daser(#[from] DaserError),
 }
 
-/// Node conifguration.
-pub struct NodeConfig<B, S>
+struct NodeConfig<B, S>
 where
     B: Blockstore,
     S: Store,
 {
-    /// An id of the network to connect to.
-    pub network_id: String,
-    /// The keypair to be used as [`Node`]s identity.
-    pub p2p_local_keypair: Keypair,
-    /// List of bootstrap nodes to connect to and trust.
-    pub p2p_bootnodes: Vec<Multiaddr>,
-    /// List of the addresses where [`Node`] will listen for incoming connections.
-    pub p2p_listen_on: Vec<Multiaddr>,
-    /// Maximum number of headers in batch while syncing.
-    pub sync_batch_size: u64,
-    /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
-    /// Headers older than syncing window by more than an hour are eligible for pruning.
-    pub custom_syncing_window: Option<Duration>,
-    /// The blockstore for bitswap.
-    pub blockstore: B,
-    /// The store for headers.
-    pub store: S,
+    pub(crate) blockstore: B,
+    pub(crate) store: S,
+    pub(crate) network_id: String,
+    pub(crate) p2p_local_keypair: Keypair,
+    pub(crate) p2p_bootnodes: Vec<Multiaddr>,
+    pub(crate) p2p_listen_on: Vec<Multiaddr>,
+    pub(crate) sync_batch_size: u64,
+    pub(crate) syncing_window: Duration,
+    pub(crate) sampling_window: Duration,
+    pub(crate) pruning_window: Duration,
 }
 
 /// Celestia node.
@@ -101,13 +97,19 @@ where
     network_compromised_task: JoinHandle,
 }
 
+impl Node<InMemoryBlockstore, InMemoryStore> {
+    pub fn builder() -> NodeBuilder<InMemoryBlockstore, InMemoryStore> {
+        NodeBuilder::new()
+    }
+}
+
 impl<B, S> Node<B, S>
 where
     B: Blockstore,
     S: Store,
 {
     /// Creates and starts a new celestia node with a given config.
-    pub async fn new(config: NodeConfig<B, S>) -> Result<Self> {
+    async fn new(config: NodeConfig<B, S>) -> Result<Self> {
         let (node, _) = Node::new_subscribed(config).await?;
         Ok(node)
     }
@@ -116,14 +118,11 @@ where
     ///
     /// Returns `Node` alogn with `EventSubscriber`. Use this to avoid missing any
     /// events that will be generated on the construction of the node.
-    pub async fn new_subscribed(config: NodeConfig<B, S>) -> Result<(Self, EventSubscriber)> {
+    async fn new_subscribed(config: NodeConfig<B, S>) -> Result<(Self, EventSubscriber)> {
         let event_channel = EventChannel::new();
         let event_sub = event_channel.subscribe();
         let store = Arc::new(config.store);
         let blockstore = Arc::new(config.blockstore);
-        let syncing_window = config
-            .custom_syncing_window
-            .unwrap_or(DEFAULT_SYNCING_WINDOW);
 
         let p2p = Arc::new(
             P2p::start(P2pArgs {
@@ -143,14 +142,14 @@ where
             p2p: p2p.clone(),
             event_pub: event_channel.publisher(),
             batch_size: config.sync_batch_size,
-            syncing_window,
+            syncing_window: config.syncing_window,
         })?);
 
         let daser = Arc::new(Daser::start(DaserArgs {
             p2p: p2p.clone(),
             store: store.clone(),
             event_pub: event_channel.publisher(),
-            syncing_window,
+            sampling_window: config.sampling_window,
         })?);
 
         let pruner = Arc::new(Pruner::start(PrunerArgs {
@@ -158,7 +157,7 @@ where
             blockstore: blockstore.clone(),
             event_pub: event_channel.publisher(),
             pruning_interval: DEFAULT_PRUNING_INTERVAL,
-            syncing_window,
+            pruning_window: config.pruning_window,
         }));
 
         let tasks_cancellation_token = CancellationToken::new();

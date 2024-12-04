@@ -11,7 +11,6 @@ use wasm_bindgen::prelude::*;
 use web_sys::BroadcastChannel;
 
 use lumina_node::blockstore::IndexedDbBlockstore;
-use lumina_node::network::{canonical_network_bootnodes, network_id};
 use lumina_node::node::NodeConfig;
 use lumina_node::store::IndexedDbStore;
 

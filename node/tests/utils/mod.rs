@@ -9,9 +9,9 @@ use celestia_types::{Blob, TxConfig};
 use libp2p::{multiaddr::Protocol, Multiaddr, PeerId};
 use lumina_node::blockstore::InMemoryBlockstore;
 use lumina_node::events::EventSubscriber;
-use lumina_node::node::NodeConfig;
-use lumina_node::test_utils::test_node_config;
-use lumina_node::{node::Node, store::InMemoryStore};
+use lumina_node::node::Node;
+use lumina_node::store::InMemoryStore;
+use lumina_node::test_utils::test_node_builder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
@@ -44,12 +44,11 @@ pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
 pub async fn new_connected_node() -> (Node<InMemoryBlockstore, InMemoryStore>, EventSubscriber) {
     let (_, bridge_ma) = fetch_bridge_info().await;
 
-    let (node, events) = Node::new_subscribed(NodeConfig {
-        p2p_bootnodes: vec![bridge_ma],
-        ..test_node_config()
-    })
-    .await
-    .unwrap();
+    let (node, events) = test_node_builder()
+        .bootnodes([bridge_ma])
+        .start_subscribed()
+        .await
+        .unwrap();
 
     node.wait_connected_trusted().await.unwrap();
 
