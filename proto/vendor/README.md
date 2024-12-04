@@ -108,9 +108,9 @@ For example in `abci/types.proto` we added `import "tendermint-celestia-mods/typ
 
 **Step 4:**
 
-On any fields that their message type was not added/modified by us, we need to change their type
-to the `tendermint` one. For example in `abci/types.proto` we changed `RequestEcho` types to
-`tendermint.abci.RequestEcho`. It was also needed to add `import "tendermint/abci/types.proto"`
+For any field where the message type was _not_ added/modified, you need to change the type to use 
+the `tendermint` one. For example in `abci/types.proto` we changed `RequestEcho` types to
+`tendermint.abci.RequestEcho` and added the required `import "tendermint/abci/types.proto"`
 ([link 1](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/abci/types.proto#L21),
 [link 2](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/abci/types.proto#L148)).
 
