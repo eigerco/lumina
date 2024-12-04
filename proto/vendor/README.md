@@ -80,8 +80,8 @@ We decided to choose the latter since it requires significantly less boilerplate
 
 **Step 1:**
 
-Copy all modified/added Protobuf messages at `tendermint-celestia-mods` directory
-and keep them in same filenames/paths. For example `Data` message should be in
+Copy all modified/added Protobuf messages to `tendermint-celestia-mods` directory
+keeping the relative file and directory structure. For example `Data` message should be in
 `tendermint-celestia-mods/types/types.proto`.
 
 We also exclude types that where migrated to other Protobuf packages:
