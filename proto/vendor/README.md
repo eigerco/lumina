@@ -114,8 +114,7 @@ the `tendermint` one. For example in `abci/types.proto` we changed `RequestEcho`
 ([link 1](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/abci/types.proto#L21),
 [link 2](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/abci/types.proto#L148)).
 
-If the message type of the field is redefined in `tendermint-celestia-mods` then the one from the
-modifications should be used
+If a message type of the field is redefined in `tendermint-celestia-mods` then only the modified one should be used.
 ([link](https://github.com/oblique/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/abci/types.proto#L70-L73)).
 Keep in mind that if the type exists in the same file, then full path is not needed.
 
