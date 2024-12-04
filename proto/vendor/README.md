@@ -95,9 +95,9 @@ Notice we're excluding the types that were migrated to other Protobuf packages:
 
 **Step 2:**
 
-Rename the `package` of all `.proto` file from `tendermint` to `tendermint_celestia_mods`.
+Rename the `package` of all the `.proto` files from `tendermint` to `tendermint_celestia_mods`.
 For example in `tendermint-celestia-mods/types/types.proto` the line `package tendermint.types`
-must become `package tendermint_celestia_mods.types` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/types/types.proto#L2)).
+would become `package tendermint_celestia_mods.types` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/tendermint-celestia-mods/types/types.proto#L2)).
 
 **Step 3:**
 
