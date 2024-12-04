@@ -84,7 +84,7 @@ Copy all modified/added Protobuf messages to `tendermint-celestia-mods` director
 keeping the relative file and directory structure. For example `Data` message should be in
 `tendermint-celestia-mods/types/types.proto`.
 
-We also exclude types that where migrated to other Protobuf packages:
+Notice we're excluding the types that were migrated to other Protobuf packages:
 
 * `tendermint.types.Blob` replaced by `proto.blob.v1.BlobProto` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/go-square/blob/v1/blob.proto#L10-L18)).
 * `tendermint.types.BlobTx` replaced by `proto.blob.v1.BlobTx` ([link](https://github.com/eigerco/lumina/blob/82c51f6ac88fd3662a0f91a0cf19a717986e3470/proto/vendor/go-square/blob/v1/blob.proto#L23-L27)).
