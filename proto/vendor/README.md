@@ -68,7 +68,7 @@ Types of the `tendermint` crate are tightly integrated with types of the `tender
 crate, so we've had two choices:
 
 1. Vendor the whole `celestia-core/proto/tendermint` and write type conversion for
-   all the types of `tendermint-proto` crate and even wrap all the types of `tendermint` crate.
+   all the types of the `tendermint-proto` crate, additionally we'd need to wrap all the types of the `tendermint` crate.
 2. Vendor only the differences and wrap only the affected types of `tendermint` crate.
 
 We decided to choose the latter since it requires much less boilerplate code.
