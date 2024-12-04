@@ -64,8 +64,8 @@ The differences are:
 
 ### Vendoring approaches
 
-Types of `tendermint` crate are tightly integrated with types of `tendermint-proto`
-crate, so we had two choices:
+Types of the `tendermint` crate are tightly integrated with types of the `tendermint-proto`
+crate, so we've had two choices:
 
 1. Vendor the whole `celestia-core/proto/tendermint` and write type conversion for
    all the types of `tendermint-proto` crate and even wrap all the types of `tendermint` crate.
