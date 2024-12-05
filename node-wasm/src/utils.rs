@@ -74,7 +74,7 @@ impl TryFrom<network::Network> for Network {
             network::Network::Mainnet => Ok(Network::Mainnet),
             network::Network::Arabica => Ok(Network::Arabica),
             network::Network::Mocha => Ok(Network::Mocha),
-            network::Network::Custom(id) => match id.as_str() {
+            network::Network::Custom(id) => match id.as_ref() {
                 "private" => Ok(Network::Private),
                 _ => Err(Error::new("Unsupported network id")),
             },
