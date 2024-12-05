@@ -7,14 +7,28 @@ use libp2p::Multiaddr;
 use tracing::{info, warn};
 
 use crate::blockstore::InMemoryBlockstore;
-use crate::daser::{DEFAULT_SAMPLING_WINDOW, MIN_SAMPLING_WINDOW};
 use crate::events::EventSubscriber;
 use crate::network::Network;
-use crate::node::DEFAULT_SYNCING_WINDOW;
 use crate::node::{Node, NodeConfig, Result};
-use crate::pruner::{DEFAULT_PRUNING_DELAY, MIN_PRUNING_DELAY};
 use crate::store::{InMemoryStore, Store};
-use crate::syncer::MIN_SYNCING_WINDOW;
+
+const HOUR: u64 = 60 * 60;
+const DAY: u64 = 24 * HOUR;
+
+/// Default maximum age of block headers [`Node`] will synchronise and store.
+pub const DEFAULT_SYNCING_WINDOW: Duration = Duration::from_secs(30 * DAY);
+/// Minimum configurable syncing window that can be used in [`NodeBuilder`].
+pub const MIN_SYNCING_WINDOW: Duration = Duration::from_secs(60);
+
+/// Default maximum age of block [`Node`] will sample and store.
+pub const DEFAULT_SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
+/// Minimum configurable sampling window that can be used in [`NodeBuilder`].
+pub const MIN_SAMPLING_WINDOW: Duration = Duration::from_secs(60);
+
+/// Default delay after the syncing window before [`Node`] prunes the block.
+pub const DEFAULT_PRUNING_DELAY: Duration = Duration::from_secs(HOUR);
+/// Minimum pruning delay that can be used in [`NodeBuilder`].
+pub const MIN_PRUNING_DELAY: Duration = Duration::from_secs(60);
 
 /// [`Node`] builder.
 pub struct NodeBuilder<B, S>
@@ -32,6 +46,22 @@ where
     syncing_window: Option<Duration>,
     sampling_window: Option<Duration>,
     pruning_delay: Option<Duration>,
+}
+
+/// Representation of all the errors that can occur when interacting with the [`NodeBuilder`].
+#[derive(Debug, thiserror::Error)]
+pub enum NodeBuilderError {
+    /// Syncing window is smaller than [`MIN_SYNCING_WINDOW`].
+    #[error("Syncing window is {0:?} but cannot be smaller than {MIN_SYNCING_WINDOW:?}")]
+    VerySmallSynincWindow(Duration),
+
+    /// Sampling window is smaller than [`MIN_SAMPLING_WINDOW`].
+    #[error("Sampling window is {0:?} but cannot be smaller than {MIN_SAMPLING_WINDOW:?}")]
+    VerySmallSamplingWindow(Duration),
+
+    /// Sampling window is smaller than [`MIN_PRUNING_DELAY`].
+    #[error("Pruning delay is {0:?} but cannot be smaller than {MIN_PRUNING_DELAY:?}")]
+    VerySmallPruningDelay(Duration),
 }
 
 impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
@@ -195,8 +225,8 @@ where
     /// Syncing window defines maximum age of headers considered for syncing.
     /// Headers older than syncing window by more than an hour are eligible for pruning.
     ///
-    /// **Default if [`InMemoryStore`] is used:** 60 seconds.
-    /// **Default:** 30 days.
+    /// **Default if [`InMemoryStore`] is used:** 60 seconds.\
+    /// **Default:** 30 days.\
     /// **Minimum:** 60 seconds.
     pub fn syncing_window(self, dur: Duration) -> Self {
         NodeBuilder {
@@ -210,8 +240,8 @@ where
     /// Sampling window defines the maximum age of a block considered for sampling.
     /// Sampling window will be truncated to syncing window, if latter is smaller.
     ///
-    /// **Default if [`InMemoryBlockstore`] is used:** 60 seconds.
-    /// **Default:** 30 days.
+    /// **Default if [`InMemoryBlockstore`] is used:** 60 seconds.\
+    /// **Default:** 30 days.\
     /// **Minimum:** 60 seconds.
     pub fn sampling_window(self, dur: Duration) -> Self {
         NodeBuilder {
@@ -225,8 +255,8 @@ where
     /// Pruning delay how much time the pruner should wait after syncing window in
     /// order to prune the block.
     ///
-    /// **Default if [`InMemoryStore`] is used: 60 seconds.
-    /// **Default:** 1 hour.
+    /// **Default if [`InMemoryStore`] is used:** 60 seconds.\
+    /// **Default:** 1 hour.\
     /// **Minimum:** 60 seconds.
     pub fn pruning_delay(self, dur: Duration) -> Self {
         NodeBuilder {
@@ -235,7 +265,7 @@ where
         }
     }
 
-    fn build_config(self) -> Result<NodeConfig<B, S>> {
+    fn build_config(self) -> Result<NodeConfig<B, S>, NodeBuilderError> {
         let network = self.network.expect("todo");
 
         let bootnodes = if self.bootnodes.is_empty() {
@@ -286,18 +316,18 @@ where
         };
 
         if syncing_window < MIN_SYNCING_WINDOW {
-            panic!("todo");
+            return Err(NodeBuilderError::VerySmallSynincWindow(syncing_window));
         }
 
         // Truncate sampling window if needed.
         let sampling_window = sampling_window.min(syncing_window);
 
         if sampling_window < MIN_SAMPLING_WINDOW {
-            panic!("todo");
+            return Err(NodeBuilderError::VerySmallSamplingWindow(sampling_window));
         }
 
         if pruning_delay < MIN_PRUNING_DELAY {
-            panic!("todo");
+            return Err(NodeBuilderError::VerySmallPruningDelay(pruning_delay));
         }
 
         let pruning_window = syncing_window.saturating_add(pruning_delay);

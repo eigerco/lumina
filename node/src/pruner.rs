@@ -13,10 +13,6 @@ use crate::executor::{sleep, spawn, JoinHandle};
 use crate::p2p::P2pError;
 use crate::store::{Store, StoreError};
 
-// pruning window is 1 hour behind the end of the syncing window
-pub const DEFAULT_PRUNING_DELAY: Duration = Duration::from_secs(60 * 60);
-pub const MIN_PRUNING_DELAY: Duration = Duration::from_secs(60);
-
 pub const DEFAULT_PRUNING_INTERVAL: Duration = Duration::from_secs(12);
 
 type Result<T, E = PrunerError> = std::result::Result<T, E>;

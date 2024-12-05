@@ -49,11 +49,6 @@ use crate::p2p::{P2p, P2pError};
 use crate::store::{BlockRanges, SamplingStatus, Store, StoreError};
 
 const MAX_SAMPLES_NEEDED: usize = 16;
-
-const HOUR: u64 = 60 * 60;
-const DAY: u64 = 24 * HOUR;
-pub const DEFAULT_SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
-pub const MIN_SAMPLING_WINDOW: Duration = Duration::from_secs(60);
 const GET_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;

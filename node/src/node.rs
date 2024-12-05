@@ -32,11 +32,14 @@ use crate::syncer::{Syncer, SyncerArgs};
 
 mod builder;
 
-pub use self::builder::NodeBuilder;
+pub use self::builder::{
+    NodeBuilder, NodeBuilderError, DEFAULT_PRUNING_DELAY, DEFAULT_SAMPLING_WINDOW,
+    DEFAULT_SYNCING_WINDOW, MIN_PRUNING_DELAY, MIN_SAMPLING_WINDOW, MIN_SYNCING_WINDOW,
+};
 pub use crate::daser::DaserError;
 pub use crate::p2p::{HeaderExError, P2pError};
 pub use crate::peer_tracker::PeerTrackerInfo;
-pub use crate::syncer::{SyncerError, SyncingInfo, DEFAULT_SYNCING_WINDOW};
+pub use crate::syncer::{SyncerError, SyncingInfo};
 
 /// Alias of [`Result`] with [`NodeError`] error type
 ///
@@ -46,6 +49,10 @@ pub type Result<T, E = NodeError> = std::result::Result<T, E>;
 /// Representation of all the errors that can occur when interacting with the [`Node`].
 #[derive(Debug, thiserror::Error)]
 pub enum NodeError {
+    /// An error propagated from the [`NodeBuilder`] component.
+    #[error("NodeBuilder: {0}")]
+    NodeBuilder(#[from] NodeBuilderError),
+
     /// An error propagated from the `P2p` component.
     #[error("P2p: {0}")]
     P2p(#[from] P2pError),
