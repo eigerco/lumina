@@ -59,8 +59,8 @@ where
 {
     /// Creates and starts a new Celestia [`Node`].
     pub async fn start(self) -> Result<Node<B, S>> {
-        let config = self.build_config()?;
-        Node::new(config).await
+        let (node, _) = self.start_subscribed().await?;
+        Ok(node)
     }
 
     /// Creates and starts a new Celestia [`Node`].
@@ -69,7 +69,7 @@ where
     /// any events that will be generated on the construction of the node.
     pub async fn start_subscribed(self) -> Result<(Node<B, S>, EventSubscriber)> {
         let config = self.build_config()?;
-        Node::new_subscribed(config).await
+        Node::start(config).await
     }
 
     /// Set the [`Blockstore`] for Bitswap.

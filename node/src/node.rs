@@ -109,16 +109,7 @@ where
     S: Store,
 {
     /// Creates and starts a new celestia node with a given config.
-    async fn new(config: NodeConfig<B, S>) -> Result<Self> {
-        let (node, _) = Node::new_subscribed(config).await?;
-        Ok(node)
-    }
-
-    /// Creates and starts a new celestia node with a given config.
-    ///
-    /// Returns `Node` alogn with `EventSubscriber`. Use this to avoid missing any
-    /// events that will be generated on the construction of the node.
-    async fn new_subscribed(config: NodeConfig<B, S>) -> Result<(Self, EventSubscriber)> {
+    async fn start(config: NodeConfig<B, S>) -> Result<(Self, EventSubscriber)> {
         let event_channel = EventChannel::new();
         let event_sub = event_channel.subscribe();
         let store = Arc::new(config.store);
