@@ -61,7 +61,7 @@ impl From<Network> for network::Network {
             Network::Mainnet => network::Network::Mainnet,
             Network::Arabica => network::Network::Arabica,
             Network::Mocha => network::Network::Mocha,
-            Network::Private => network::Network::Private,
+            Network::Private => network::Network::custom("private").expect("invalid network id"),
         }
     }
 }
@@ -72,7 +72,8 @@ impl From<network::Network> for Network {
             network::Network::Mainnet => Network::Mainnet,
             network::Network::Arabica => Network::Arabica,
             network::Network::Mocha => Network::Mocha,
-            network::Network::Private => Network::Private,
+            network::Network::Custom(n) if n.as_str() == "private" => Network::Private,
+            network::Network::Custom(_) => panic!("todo"),
         }
     }
 }

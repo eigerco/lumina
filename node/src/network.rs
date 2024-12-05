@@ -37,6 +37,10 @@ impl NetworkId {
             Ok(NetworkId(id.to_owned()))
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl Deref for NetworkId {
