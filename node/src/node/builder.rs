@@ -35,6 +35,7 @@ where
 }
 
 impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
+    /// Creates a new [`NodeBuilder`] that is using in-memory stores.
     pub fn new() -> Self {
         NodeBuilder {
             blockstore: InMemoryBlockstore::new(),
@@ -56,6 +57,21 @@ where
     B: Blockstore + 'static,
     S: Store + 'static,
 {
+    /// Creates and starts a new Celestia [`Node`].
+    pub async fn start(self) -> Result<Node<B, S>> {
+        let config = self.build_config()?;
+        Node::new(config).await
+    }
+
+    /// Creates and starts a new Celestia [`Node`].
+    ///
+    /// Returns [`Node`] alogn with [`EventSubscriber`]. Use this to avoid missing
+    /// any events that will be generated on the construction of the node.
+    pub async fn start_subscribed(self) -> Result<(Node<B, S>, EventSubscriber)> {
+        let config = self.build_config()?;
+        Node::new_subscribed(config).await
+    }
+
     /// Set the [`Blockstore`] for Bitswap.
     ///
     /// **Default:** [`InMemoryBlockstore`]
@@ -207,7 +223,7 @@ where
         if bootnodes.is_empty() && self.listen.is_empty() {
             // It is a valid scenario for user to create a node without any bootnodes
             // and listening addresses. However it may not be what they wanted. Because
-            // of this we display a warning.
+            // of that we display a warning.
             warn!("Node has empty bootnodes and listening addresses. It will never connect to another peer.");
         }
 
@@ -279,15 +295,5 @@ where
             sampling_window,
             pruning_window,
         })
-    }
-
-    pub async fn start(self) -> Result<Node<B, S>> {
-        let config = self.build_config()?;
-        Node::new(config).await
-    }
-
-    pub async fn start_subscribed(self) -> Result<(Node<B, S>, EventSubscriber)> {
-        let config = self.build_config()?;
-        Node::new_subscribed(config).await
     }
 }
