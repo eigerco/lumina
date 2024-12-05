@@ -696,6 +696,7 @@ mod tests {
     use crate::block_ranges::{BlockRange, BlockRangeExt};
     use crate::events::EventChannel;
     use crate::node::HeaderExError;
+    use crate::node::DEFAULT_SYNCING_WINDOW;
     use crate::p2p::header_session;
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};

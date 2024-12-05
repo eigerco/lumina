@@ -218,7 +218,7 @@ mod test {
     use super::*;
     use crate::blockstore::InMemoryBlockstore;
     use crate::events::{EventChannel, TryRecvError};
-    use crate::node::DEFAULT_SYNCING_WINDOW;
+    use crate::node::{DEFAULT_PRUNING_DELAY, DEFAULT_SYNCING_WINDOW};
     use crate::store::{InMemoryStore, SamplingStatus};
     use crate::test_utils::{
         async_test, gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt,

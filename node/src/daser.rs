@@ -471,6 +471,7 @@ mod tests {
     use super::*;
     use crate::events::{EventChannel, EventSubscriber};
     use crate::executor::sleep;
+    use crate::node::DEFAULT_SAMPLING_WINDOW;
     use crate::p2p::shwap::convert_cid;
     use crate::p2p::P2pCmd;
     use crate::store::InMemoryStore;
