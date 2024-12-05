@@ -28,7 +28,7 @@ pub enum Network {
 pub struct InvalidNetworkId(String);
 
 /// Valid network id
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetworkId(String);
 
 impl NetworkId {
@@ -61,6 +61,12 @@ impl FromStr for NetworkId {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         NetworkId::new(s)
+    }
+}
+
+impl fmt::Display for NetworkId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
