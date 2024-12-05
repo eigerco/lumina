@@ -36,6 +36,24 @@ where
 
 impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
     /// Creates a new [`NodeBuilder`] that is using in-memory stores.
+    ///
+    /// After the creation you can use [`NodeBuilder::blockstore`]
+    /// and [`NodeBuilder::store`] to set other stores.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use lumina_node::network::Network;
+    /// # use lumina_node::NodeBuilder;
+    /// #
+    /// # async fn example() {
+    /// let node = NodeBuilder::new()
+    ///     .network(Network::Mainnet)
+    ///     .start()
+    ///     .await
+    ///     .unwrap();
+    /// # }
+    /// ```
     pub fn new() -> Self {
         NodeBuilder {
             blockstore: InMemoryBlockstore::new(),

@@ -22,14 +22,17 @@ pub enum Network {
     Custom(NetworkId),
 }
 
+/// Error for invalid network id.
 #[derive(Debug, Error)]
 #[error("Invalid network id: {0}")]
 pub struct InvalidNetworkId(String);
 
+/// Valid network id
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct NetworkId(String);
 
 impl NetworkId {
+    /// Creates validated network id.
     pub fn new(id: &str) -> Result<NetworkId, InvalidNetworkId> {
         if id.contains('/') {
             Err(InvalidNetworkId(id.to_owned()))
@@ -37,8 +40,10 @@ impl NetworkId {
             Ok(NetworkId(id.to_owned()))
         }
     }
+}
 
-    pub fn as_str(&self) -> &str {
+impl AsRef<str> for NetworkId {
+    fn as_ref(&self) -> &str {
         &self.0
     }
 }
@@ -51,11 +56,21 @@ impl Deref for NetworkId {
     }
 }
 
+impl FromStr for NetworkId {
+    type Err = InvalidNetworkId;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        NetworkId::new(s)
+    }
+}
+
 impl Network {
+    /// Creates a `Network::Custom` value.
     pub fn custom(id: &str) -> Result<Network, InvalidNetworkId> {
         Ok(Network::Custom(NetworkId::new(id)?))
     }
 
+    /// Returns true if value is `Network::Custom` variant.
     pub fn is_custom(&self) -> bool {
         matches!(self, Network::Custom(_))
     }
@@ -112,7 +127,7 @@ impl FromStr for Network {
             "Mainnet" | "MainNet" | "mainnet" | "celestia" => Ok(Network::Mainnet),
             "Arabica" | "arabica" | "arabica-11" => Ok(Network::Arabica),
             "Mocha" | "mocha" | "mocha-4" => Ok(Network::Mocha),
-            custom_id => Ok(Network::Custom(NetworkId::new(custom_id)?)),
+            custom_id => Network::custom(custom_id),
         }
     }
 }
