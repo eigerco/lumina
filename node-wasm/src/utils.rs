@@ -66,14 +66,18 @@ impl From<Network> for network::Network {
     }
 }
 
-impl From<network::Network> for Network {
-    fn from(network: network::Network) -> Network {
+impl TryFrom<network::Network> for Network {
+    type Error = Error;
+
+    fn try_from(network: network::Network) -> Result<Network, Error> {
         match network {
-            network::Network::Mainnet => Network::Mainnet,
-            network::Network::Arabica => Network::Arabica,
-            network::Network::Mocha => Network::Mocha,
-            network::Network::Custom(n) if n.as_str() == "private" => Network::Private,
-            network::Network::Custom(_) => panic!("todo"),
+            network::Network::Mainnet => Ok(Network::Mainnet),
+            network::Network::Arabica => Ok(Network::Arabica),
+            network::Network::Mocha => Ok(Network::Mocha),
+            network::Network::Custom(id) => match id.as_str() {
+                "private" => Ok(Network::Private),
+                _ => Err(Error::new("Unsupported network id")),
+            },
         }
     }
 }

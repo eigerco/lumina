@@ -52,6 +52,12 @@ impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
     }
 }
 
+impl Default for NodeBuilder<InMemoryBlockstore, InMemoryStore> {
+    fn default() -> Self {
+        NodeBuilder::new()
+    }
+}
+
 impl<B, S> NodeBuilder<B, S>
 where
     B: Blockstore + 'static,
@@ -287,7 +293,7 @@ where
             blockstore: self.blockstore,
             store: self.store,
             network_id: network.id().to_owned(),
-            p2p_local_keypair: self.keypair.unwrap_or_else(|| Keypair::generate_ed25519()),
+            p2p_local_keypair: self.keypair.unwrap_or_else(Keypair::generate_ed25519),
             p2p_bootnodes: bootnodes,
             p2p_listen_on: self.listen,
             sync_batch_size: self.sync_batch_size.unwrap_or(512),
