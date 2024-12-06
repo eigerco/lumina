@@ -53,7 +53,7 @@ where
 pub enum NodeBuilderError {
     /// Syncing window is smaller than [`MIN_SYNCING_WINDOW`].
     #[error("Syncing window is {0:?} but cannot be smaller than {MIN_SYNCING_WINDOW:?}")]
-    VerySmallSynincWindow(Duration),
+    VerySmallSyncingWindow(Duration),
 
     /// Sampling window is smaller than [`MIN_SAMPLING_WINDOW`].
     #[error("Sampling window is {0:?} but cannot be smaller than {MIN_SAMPLING_WINDOW:?}")]
@@ -316,7 +316,7 @@ where
         };
 
         if syncing_window < MIN_SYNCING_WINDOW {
-            return Err(NodeBuilderError::VerySmallSynincWindow(syncing_window));
+            return Err(NodeBuilderError::VerySmallSyncingWindow(syncing_window));
         }
 
         // Truncate sampling window if needed.
