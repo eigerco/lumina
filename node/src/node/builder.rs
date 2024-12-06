@@ -53,15 +53,15 @@ where
 pub enum NodeBuilderError {
     /// Syncing window is smaller than [`MIN_SYNCING_WINDOW`].
     #[error("Syncing window is {0:?} but cannot be smaller than {MIN_SYNCING_WINDOW:?}")]
-    VerySmallSyncingWindow(Duration),
+    SyncingWindowTooSmall(Duration),
 
     /// Sampling window is smaller than [`MIN_SAMPLING_WINDOW`].
     #[error("Sampling window is {0:?} but cannot be smaller than {MIN_SAMPLING_WINDOW:?}")]
-    VerySmallSamplingWindow(Duration),
+    SamplingWindowTooSmall(Duration),
 
-    /// Sampling window is smaller than [`MIN_PRUNING_DELAY`].
+    /// Pruning delay is smaller than [`MIN_PRUNING_DELAY`].
     #[error("Pruning delay is {0:?} but cannot be smaller than {MIN_PRUNING_DELAY:?}")]
-    VerySmallPruningDelay(Duration),
+    PruningDelayTooSmall(Duration),
 }
 
 impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
@@ -316,18 +316,18 @@ where
         };
 
         if syncing_window < MIN_SYNCING_WINDOW {
-            return Err(NodeBuilderError::VerySmallSyncingWindow(syncing_window));
+            return Err(NodeBuilderError::SyncingWindowTooSmall(syncing_window));
         }
 
         // Truncate sampling window if needed.
         let sampling_window = sampling_window.min(syncing_window);
 
         if sampling_window < MIN_SAMPLING_WINDOW {
-            return Err(NodeBuilderError::VerySmallSamplingWindow(sampling_window));
+            return Err(NodeBuilderError::SamplingWindowTooSmall(sampling_window));
         }
 
         if pruning_delay < MIN_PRUNING_DELAY {
-            return Err(NodeBuilderError::VerySmallPruningDelay(pruning_delay));
+            return Err(NodeBuilderError::PruningDelayTooSmall(pruning_delay));
         }
 
         let pruning_window = syncing_window.saturating_add(pruning_delay);
