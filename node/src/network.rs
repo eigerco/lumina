@@ -141,9 +141,9 @@ impl FromStr for Network {
 impl fmt::Display for Network {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            Network::Mainnet => "mainnet",
-            Network::Arabica => "arabica",
-            Network::Mocha => "mocha",
+            Network::Mainnet => "Mainnet",
+            Network::Arabica => "Arabica",
+            Network::Mocha => "Mocha",
             Network::Custom(ref s) => s,
         };
 
