@@ -6,27 +6,26 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use celestia_rpc::prelude::*;
 use celestia_rpc::Client;
-use clap::Parser;
+use clap::{value_parser, Parser};
 use directories::ProjectDirs;
-use libp2p::{identity, multiaddr::Protocol, Multiaddr};
+use libp2p::multiaddr::{Multiaddr, Protocol};
 use lumina_node::blockstore::RedbBlockstore;
 use lumina_node::events::NodeEvent;
-use lumina_node::network::{canonical_network_bootnodes, network_id, Network};
-use lumina_node::node::{Node, NodeConfig};
+use lumina_node::network::Network;
+use lumina_node::node::Node;
 use lumina_node::store::{RedbStore, Store};
 use tokio::task::spawn_blocking;
 use tracing::info;
 use tracing::warn;
-
-use crate::common::ArgNetwork;
 
 const CELESTIA_LOCAL_BRIDGE_RPC_ADDR: &str = "ws://localhost:36658";
 
 #[derive(Debug, Parser)]
 pub(crate) struct Params {
     /// Network to connect.
-    #[arg(short, long, value_enum, default_value_t)]
-    pub(crate) network: ArgNetwork,
+    #[arg(short, long)]
+    #[clap(value_parser = value_parser!(Network))]
+    pub(crate) network: Network,
 
     /// Listening addresses. Can be used multiple times.
     #[arg(short, long = "listen")]
@@ -44,26 +43,12 @@ pub(crate) struct Params {
     /// Headers older than syncing window by more than an hour are eligible for pruning.
     #[arg(long = "syncing-window", verbatim_doc_comment)]
     #[clap(value_parser = parse_duration::parse)]
-    pub(crate) custom_syncing_window: Option<Duration>,
+    pub(crate) syncing_window: Option<Duration>,
 }
 
 pub(crate) async fn run(args: Params) -> Result<()> {
-    let network = args.network.into();
-    let p2p_local_keypair = identity::Keypair::generate_ed25519();
-
-    let p2p_bootnodes = if args.bootnodes.is_empty() {
-        match network {
-            Network::Private => fetch_bridge_multiaddrs(CELESTIA_LOCAL_BRIDGE_RPC_ADDR).await?,
-            network => canonical_network_bootnodes(network).collect(),
-        }
-    } else {
-        args.bootnodes
-    };
-
-    let network_id = network_id(network).to_owned();
-
     info!("Initializing store");
-    let db = open_db(args.store, &network_id).await?;
+    let db = open_db(args.store, args.network.id()).await?;
     let store = RedbStore::new(db.clone()).await?;
     let blockstore = RedbBlockstore::new(db);
 
@@ -74,18 +59,32 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         info!("Initialised store, present headers: {stored_ranges}");
     }
 
-    let (_node, mut events) = Node::new_subscribed(NodeConfig {
-        network_id,
-        p2p_local_keypair,
-        p2p_bootnodes,
-        p2p_listen_on: args.listen_addrs,
-        sync_batch_size: 512,
-        custom_syncing_window: args.custom_syncing_window,
-        blockstore,
-        store,
-    })
-    .await
-    .context("Failed to start node")?;
+    let mut node_builder = Node::builder()
+        .store(store)
+        .blockstore(blockstore)
+        .network(args.network.clone());
+
+    if args.bootnodes.is_empty() {
+        if args.network.is_custom() {
+            let bootnodes = fetch_bridge_multiaddrs(CELESTIA_LOCAL_BRIDGE_RPC_ADDR).await?;
+            node_builder = node_builder.bootnodes(bootnodes);
+        }
+    } else {
+        node_builder = node_builder.bootnodes(args.bootnodes);
+    }
+
+    if !args.listen_addrs.is_empty() {
+        node_builder = node_builder.listen(args.listen_addrs);
+    }
+
+    if let Some(syncing_window) = args.syncing_window {
+        node_builder = node_builder.syncing_window(syncing_window);
+    }
+
+    let (_node, mut events) = node_builder
+        .start_subscribed()
+        .await
+        .context("Failed to start node")?;
 
     while let Ok(ev) = events.recv().await {
         match ev.event {

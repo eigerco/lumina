@@ -9,12 +9,10 @@ use celestia_types::hash::Hash;
 use celestia_types::test_utils::{corrupt_eds, generate_dummy_eds, ExtendedHeaderGenerator};
 use futures::StreamExt;
 use libp2p::swarm::NetworkBehaviour;
-use libp2p::{gossipsub, identity, noise, ping, tcp, yamux, Multiaddr, SwarmBuilder};
-use lumina_node::node::{Node, NodeConfig};
+use libp2p::{gossipsub, noise, ping, tcp, yamux, Multiaddr, SwarmBuilder};
 use lumina_node::store::{InMemoryStore, Store};
 use lumina_node::test_utils::{
-    gen_filled_store, listening_test_node_config, test_node_config, test_node_config_with_keypair,
-    ExtendedHeaderGeneratorExt,
+    gen_filled_store, listening_test_node_builder, test_node_builder, ExtendedHeaderGeneratorExt,
 };
 use rand::Rng;
 use tendermint_proto::Protobuf;
@@ -35,12 +33,7 @@ async fn connects_to_the_go_bridge_node() {
 #[tokio::test]
 async fn header_store_access() {
     let (store, _) = gen_filled_store(100).await;
-    let node = Node::new(NodeConfig {
-        store,
-        ..test_node_config()
-    })
-    .await
-    .unwrap();
+    let node = test_node_builder().store(store).start().await.unwrap();
 
     // check local head
     let head = node.get_local_head_header().await.unwrap();
@@ -99,14 +92,11 @@ async fn peer_discovery() {
     // Node1
     //
     // This node connects to Bridge node.
-    let node1_keypair = identity::Keypair::generate_ed25519();
-    let node1 = Node::new(NodeConfig {
-        p2p_bootnodes: vec![bridge_ma],
-        p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
-        ..test_node_config_with_keypair(node1_keypair)
-    })
-    .await
-    .unwrap();
+    let node1 = listening_test_node_builder()
+        .bootnodes([bridge_ma])
+        .start()
+        .await
+        .unwrap();
 
     node1.wait_connected().await.unwrap();
 
@@ -115,27 +105,22 @@ async fn peer_discovery() {
     // Node2
     //
     // This node connects to Node1 and will discover Bridge node.
-    let node2_keypair = identity::Keypair::generate_ed25519();
-    let node2 = Node::new(NodeConfig {
-        p2p_bootnodes: node1_addrs.clone(),
-        p2p_listen_on: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
-        ..test_node_config_with_keypair(node2_keypair)
-    })
-    .await
-    .unwrap();
+    let node2 = listening_test_node_builder()
+        .bootnodes(node1_addrs.clone())
+        .start()
+        .await
+        .unwrap();
 
     node2.wait_connected().await.unwrap();
 
     // Node3
     //
     // This node connects to Node1 and will discover Node2 and Bridge node.
-    let node3_keypair = identity::Keypair::generate_ed25519();
-    let node3 = Node::new(NodeConfig {
-        p2p_bootnodes: node1_addrs.clone(),
-        ..test_node_config_with_keypair(node3_keypair)
-    })
-    .await
-    .unwrap();
+    let node3 = listening_test_node_builder()
+        .bootnodes(node1_addrs)
+        .start()
+        .await
+        .unwrap();
 
     node3.wait_connected().await.unwrap();
 
@@ -189,12 +174,11 @@ async fn stops_services_when_network_is_compromised() {
     store.insert(header).await.unwrap();
 
     // spawn node
-    let node = Node::new(NodeConfig {
-        store,
-        ..listening_test_node_config()
-    })
-    .await
-    .unwrap();
+    let node = listening_test_node_builder()
+        .store(store)
+        .start()
+        .await
+        .unwrap();
 
     // get the address to dial
     sleep(Duration::from_millis(300)).await;
