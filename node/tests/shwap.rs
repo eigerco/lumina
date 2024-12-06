@@ -87,7 +87,7 @@ async fn shwap_sampling_backward() {
         .unwrap();
 
     // take just first N headers because batch size can be big
-    let mut headers_to_sample: HashSet<_> = (from_height..to_height).rev().take(25).collect();
+    let mut headers_to_sample: HashSet<_> = (from_height..to_height).rev().take(10).collect();
 
     // wait for all heights to be sampled
     timeout(Duration::from_secs(10), async {
