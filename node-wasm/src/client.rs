@@ -402,7 +402,7 @@ impl WasmNodeConfig {
         let mut builder = NodeBuilder::new()
             .store(store)
             .blockstore(blockstore)
-            .network(self.network.into())
+            .network(network)
             .sync_batch_size(128);
 
         let mut bootnodes = Vec::with_capacity(self.bootnodes.len());
