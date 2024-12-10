@@ -23,14 +23,10 @@ pub struct TestAccount {
     pub signing_key: SigningKey,
 }
 
-fn env_or(var_name: &str, or_value: &str) -> String {
-    env::var(var_name).unwrap_or_else(|_| or_value.to_owned())
-}
-
 #[cfg(not(target_arch = "wasm32"))]
 pub fn new_test_client() -> Result<GrpcClient<tonic::transport::Channel>> {
     let _ = dotenvy::dotenv();
-    let url = env_or("CELESTIA_GRPC_URL", CELESTIA_GRPC_URL);
+    let url = std::env::var("CELESTIA_GRPC_URL").unwrap_or_else(|_| CELESTIA_GRPC_URL.into());
 
     Ok(GrpcClient::with_url(url)?)
 }
