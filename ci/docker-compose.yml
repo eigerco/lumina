@@ -14,6 +14,16 @@ services:
       - credentials:/credentials
       - genesis:/genesis
 
+  grpcwebproxy:
+    image: grpcwebproxy
+    platform: "linux/amd64"
+    build:
+      context: .
+      dockerfile: Dockerfile.grpcwebproxy
+    command: --backend_addr=validator:9090 --run_tls_server=false --allow_all_origins
+    ports:
+      - 18080:8080
+
   bridge-0:
     image: bridge
     platform: "linux/amd64"

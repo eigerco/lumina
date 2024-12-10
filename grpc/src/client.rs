@@ -1,7 +1,4 @@
-use prost::Message;
-use tonic::service::Interceptor;
-use tonic::transport::Channel;
-
+use bytes::Bytes;
 use celestia_grpc_macros::grpc_method;
 use celestia_proto::celestia::blob::v1::query_client::QueryClient as BlobQueryClient;
 use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQueryClient;
@@ -13,6 +10,10 @@ use celestia_types::blob::{Blob, BlobParams, RawBlobTx};
 use celestia_types::block::Block;
 use celestia_types::state::auth::AuthParams;
 use celestia_types::state::{Address, TxResponse};
+use http_body::Body;
+use prost::Message;
+use tonic::body::BoxBody;
+use tonic::client::GrpcService;
 
 use crate::types::auth::Account;
 use crate::types::tx::GetTxResponse;
@@ -21,25 +22,23 @@ use crate::Error;
 
 pub use celestia_proto::cosmos::tx::v1beta1::BroadcastMode;
 
+type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
+
 /// Struct wrapping all the tonic types and doing type conversion behind the scenes.
-pub struct GrpcClient<I>
-where
-    I: Interceptor,
-{
-    grpc_channel: Channel,
-    auth_interceptor: I,
+pub struct GrpcClient<T> {
+    transport: T,
 }
 
-impl<I> GrpcClient<I>
+impl<T> GrpcClient<T>
 where
-    I: Interceptor + Clone,
+    T: GrpcService<BoxBody> + Clone,
+    T::Error: Into<StdError>,
+    T::ResponseBody: Body<Data = Bytes> + Send + 'static,
+    <T::ResponseBody as Body>::Error: Into<StdError> + Send,
 {
     /// Create a new client out of channel and optional auth
-    pub fn new(grpc_channel: Channel, auth_interceptor: I) -> Self {
-        Self {
-            grpc_channel,
-            auth_interceptor,
-        }
+    pub fn new(transport: T) -> Self {
+        Self { transport }
     }
 
     /// Get Minimum Gas price
@@ -106,4 +105,25 @@ where
     /// Get Tx
     #[grpc_method(TxServiceClient::get_tx)]
     async fn get_tx(&mut self, hash: String) -> Result<GetTxResponse, Error>;
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl GrpcClient<tonic::transport::Channel> {
+    /// Create a new client connected to the given `url` with default
+    /// settings of [`tonic::transport::Channel`].
+    pub fn with_url(url: impl Into<String>) -> Result<Self, tonic::transport::Error> {
+        let channel = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
+        Ok(Self { transport: channel })
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl GrpcClient<tonic_web_wasm_client::Client> {
+    /// Create a new client connected to the given `url` with default
+    /// settings of [`tonic_web_wasm_client::Client`].
+    pub fn with_grpcweb_url(url: impl Into<String>) -> Self {
+        Self {
+            transport: tonic_web_wasm_client::Client::new(url.into()),
+        }
+    }
 }

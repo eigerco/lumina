@@ -58,10 +58,10 @@ impl GrpcMethod {
         let method = quote! {
             #doc_hash #doc_group
             pub #signature {
-                let mut client = #grpc_client_struct :: with_interceptor(
-                    self.grpc_channel.clone(),
-                    self.auth_interceptor.clone(),
+                let mut client = #grpc_client_struct :: new(
+                    self.transport.clone(),
                 );
+
                 let request = ::tonic::Request::new(( #( #params ),* ).into_parameter());
                 let response = client. #grpc_method_name (request).await;
                 response?.into_inner().try_from_response()

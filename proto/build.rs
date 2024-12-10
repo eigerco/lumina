@@ -194,7 +194,6 @@ fn tonic_build(fds: FileDescriptorSet) {
         .include_file("mod.rs")
         .build_client(true)
         .build_server(false)
-        .client_mod_attribute(".", "#[cfg(not(target_arch=\"wasm32\"))]")
         .use_arc_self(true)
         .compile_well_known_types(true)
         .skip_protoc_run()
