@@ -3,6 +3,7 @@
 cargo build -p native
 
 mkdir -p ./bindings
+mkdir -p ./ios
  
 cargo run --bin uniffi-bindgen generate --library ../target/debug/libnative.dylib --language swift --out-dir ./bindings
  

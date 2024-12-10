@@ -17,7 +17,7 @@ celestia-types.workspace = true
 tendermint.workspace = true
 libp2p.workspace = true
 
-uniffi = { version = "0.28.3", features = ["bindgen", "cli"] }
+uniffi = { version = "0.28.3", features = ["bindgen", "tokio", "cli"] }
 tokio = { version = "1.0", features = ["full"] }
 redb = "2.1.1"
 thiserror = "1.0.61"
