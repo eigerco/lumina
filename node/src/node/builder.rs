@@ -45,6 +45,10 @@ where
 /// Representation of all the errors that can occur when interacting with the [`NodeBuilder`].
 #[derive(Debug, thiserror::Error)]
 pub enum NodeBuilderError {
+    /// Network is not specified
+    #[error("Network is not specified")]
+    NetworkNotSpecified,
+
     /// Syncing window is smaller than [`MIN_SYNCING_WINDOW`].
     #[error("Syncing window is {0:?} but cannot be smaller than {MIN_SYNCING_WINDOW:?}")]
     SyncingWindowTooSmall(Duration),
@@ -237,7 +241,7 @@ where
     }
 
     fn build_config(self) -> Result<NodeConfig<B, S>, NodeBuilderError> {
-        let network = self.network.expect("todo");
+        let network = self.network.ok_or(NodeBuilderError::NetworkNotSpecified)?;
 
         let bootnodes = if self.bootnodes.is_empty() {
             network.canonical_bootnodes().collect()
