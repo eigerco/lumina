@@ -61,18 +61,23 @@ impl From<Network> for network::Network {
             Network::Mainnet => network::Network::Mainnet,
             Network::Arabica => network::Network::Arabica,
             Network::Mocha => network::Network::Mocha,
-            Network::Private => network::Network::Private,
+            Network::Private => network::Network::custom("private").expect("invalid network id"),
         }
     }
 }
 
-impl From<network::Network> for Network {
-    fn from(network: network::Network) -> Network {
+impl TryFrom<network::Network> for Network {
+    type Error = Error;
+
+    fn try_from(network: network::Network) -> Result<Network, Error> {
         match network {
-            network::Network::Mainnet => Network::Mainnet,
-            network::Network::Arabica => Network::Arabica,
-            network::Network::Mocha => Network::Mocha,
-            network::Network::Private => Network::Private,
+            network::Network::Mainnet => Ok(Network::Mainnet),
+            network::Network::Arabica => Ok(Network::Arabica),
+            network::Network::Mocha => Ok(Network::Mocha),
+            network::Network::Custom(id) => match id.as_ref() {
+                "private" => Ok(Network::Private),
+                _ => Err(Error::new("Unsupported network id: {id}")),
+            },
         }
     }
 }

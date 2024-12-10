@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use celestia_types::test_utils::{invalidate, unverify};
 use lumina_node::{
-    node::{HeaderExError, Node, NodeConfig, NodeError, P2pError},
+    node::{HeaderExError, NodeError, P2pError},
     store::{Store, VerifiedExtendedHeaders},
-    test_utils::{gen_filled_store, listening_test_node_config, test_node_config},
+    test_utils::{gen_filled_store, listening_test_node_builder, test_node_builder},
 };
 use tokio::time::{sleep, timeout};
 
@@ -59,24 +59,22 @@ async fn client_server() {
     let server_headers = header_generator.next_many(20);
     server_store.insert(&server_headers[..]).await.unwrap();
 
-    let server = Node::new(NodeConfig {
-        store: server_store,
-        ..listening_test_node_config()
-    })
-    .await
-    .unwrap();
+    let server = listening_test_node_builder()
+        .store(server_store)
+        .start()
+        .await
+        .unwrap();
 
     // give server a sec to breathe, otherwise occiasionally client has problems with connecting
     sleep(Duration::from_millis(100)).await;
     let server_addrs = server.listeners().await.unwrap();
 
     // Client node
-    let client = Node::new(NodeConfig {
-        p2p_bootnodes: server_addrs.clone(),
-        ..test_node_config()
-    })
-    .await
-    .unwrap();
+    let client = test_node_builder()
+        .bootnodes(server_addrs)
+        .start()
+        .await
+        .unwrap();
 
     client.wait_connected().await.unwrap();
 
@@ -145,24 +143,21 @@ async fn head_selection_with_multiple_peers() {
 
     // Server group A, nodes with synced stores
     let mut servers = vec![
-        Node::new(NodeConfig {
-            store: server_store.async_clone().await,
-            ..listening_test_node_config()
-        })
-        .await
-        .unwrap(),
-        Node::new(NodeConfig {
-            store: server_store.async_clone().await,
-            ..listening_test_node_config()
-        })
-        .await
-        .unwrap(),
-        Node::new(NodeConfig {
-            store: server_store.async_clone().await,
-            ..listening_test_node_config()
-        })
-        .await
-        .unwrap(),
+        listening_test_node_builder()
+            .store(server_store.async_clone().await)
+            .start()
+            .await
+            .unwrap(),
+        listening_test_node_builder()
+            .store(server_store.async_clone().await)
+            .start()
+            .await
+            .unwrap(),
+        listening_test_node_builder()
+            .store(server_store.async_clone().await)
+            .start()
+            .await
+            .unwrap(),
     ];
 
     // Server group B, single node with additional headers
@@ -173,12 +168,11 @@ async fn head_selection_with_multiple_peers() {
         .unwrap();
 
     servers.push(
-        Node::new(NodeConfig {
-            store: server_store.async_clone().await,
-            ..listening_test_node_config()
-        })
-        .await
-        .unwrap(),
+        listening_test_node_builder()
+            .store(server_store.async_clone().await)
+            .start()
+            .await
+            .unwrap(),
     );
 
     // give server a sec to breathe, otherwise occiasionally client has problems with connecting
@@ -190,12 +184,11 @@ async fn head_selection_with_multiple_peers() {
     }
 
     // Client Node
-    let client = Node::new(NodeConfig {
-        p2p_bootnodes: server_addrs,
-        ..listening_test_node_config()
-    })
-    .await
-    .unwrap();
+    let client = listening_test_node_builder()
+        .bootnodes(server_addrs)
+        .start()
+        .await
+        .unwrap();
 
     client.wait_connected().await.unwrap();
 
@@ -204,13 +197,12 @@ async fn head_selection_with_multiple_peers() {
     let client_addr = client.listeners().await.unwrap();
 
     // Rogue node, connects to client so isn't trusted
-    let rogue_node = Node::new(NodeConfig {
-        store: gen_filled_store(26).await.0,
-        p2p_bootnodes: client_addr.clone(),
-        ..listening_test_node_config()
-    })
-    .await
-    .unwrap();
+    let rogue_node = listening_test_node_builder()
+        .store(gen_filled_store(26).await.0)
+        .bootnodes(client_addr.clone())
+        .start()
+        .await
+        .unwrap();
 
     rogue_node.wait_connected().await.unwrap();
     // small delay needed for client to include rogue_node in head selection process
@@ -221,13 +213,12 @@ async fn head_selection_with_multiple_peers() {
     assert_eq!(common_server_headers.last().unwrap(), &network_head);
 
     // new node from group B joins, head should go up
-    let new_b_node = Node::new(NodeConfig {
-        store: server_store.async_clone().await,
-        p2p_bootnodes: client_addr,
-        ..test_node_config()
-    })
-    .await
-    .unwrap();
+    let new_b_node = test_node_builder()
+        .store(server_store.async_clone().await)
+        .bootnodes(client_addr)
+        .start()
+        .await
+        .unwrap();
 
     // Head requests are send only to trusted peers, so we add
     // `new_b_node` as trusted.
@@ -257,23 +248,21 @@ async fn replaced_header_server_store() {
         .await
         .unwrap();
 
-    let server = Node::new(NodeConfig {
-        store: server_store,
-        ..listening_test_node_config()
-    })
-    .await
-    .unwrap();
+    let server = listening_test_node_builder()
+        .store(server_store)
+        .start()
+        .await
+        .unwrap();
 
     // give server a sec to breathe, otherwise occiasionally client has problems with connecting
     sleep(Duration::from_millis(100)).await;
     let server_addrs = server.listeners().await.unwrap();
 
-    let client = Node::new(NodeConfig {
-        p2p_bootnodes: server_addrs,
-        ..listening_test_node_config()
-    })
-    .await
-    .unwrap();
+    let client = listening_test_node_builder()
+        .bootnodes(server_addrs)
+        .start()
+        .await
+        .unwrap();
 
     client.wait_connected().await.unwrap();
 
@@ -314,23 +303,21 @@ async fn invalidated_header_server_store() {
 
     server_store.insert(&server_headers[..]).await.unwrap();
 
-    let server = Node::new(NodeConfig {
-        store: server_store,
-        ..listening_test_node_config()
-    })
-    .await
-    .unwrap();
+    let server = listening_test_node_builder()
+        .store(server_store)
+        .start()
+        .await
+        .unwrap();
 
     // give server a sec to breathe, otherwise occiasionally client has problems with connecting
     sleep(Duration::from_millis(100)).await;
     let server_addrs = server.listeners().await.unwrap();
 
-    let client = Node::new(NodeConfig {
-        p2p_bootnodes: server_addrs,
-        ..listening_test_node_config()
-    })
-    .await
-    .unwrap();
+    let client = listening_test_node_builder()
+        .bootnodes(server_addrs)
+        .start()
+        .await
+        .unwrap();
 
     client.wait_connected().await.unwrap();
 
@@ -376,23 +363,21 @@ async fn unverified_header_server_store() {
         .await
         .unwrap();
 
-    let server = Node::new(NodeConfig {
-        store: server_store,
-        ..listening_test_node_config()
-    })
-    .await
-    .unwrap();
+    let server = listening_test_node_builder()
+        .store(server_store)
+        .start()
+        .await
+        .unwrap();
 
     // give server a sec to breathe, otherwise occiasionally client has problems with connecting
     sleep(Duration::from_millis(100)).await;
     let server_addrs = server.listeners().await.unwrap();
 
-    let client = Node::new(NodeConfig {
-        p2p_bootnodes: server_addrs,
-        ..listening_test_node_config()
-    })
-    .await
-    .unwrap();
+    let client = listening_test_node_builder()
+        .bootnodes(server_addrs)
+        .start()
+        .await
+        .unwrap();
 
     client.wait_connected().await.unwrap();
 

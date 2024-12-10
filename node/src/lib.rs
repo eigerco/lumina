@@ -22,4 +22,4 @@ mod utils;
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[doc(inline)]
-pub use crate::node::{Node, NodeConfig, NodeError, Result};
+pub use crate::node::{Node, NodeBuilder, NodeError, Result};

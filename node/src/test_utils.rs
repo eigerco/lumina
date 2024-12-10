@@ -7,18 +7,18 @@ use celestia_types::hash::Hash;
 use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
-use libp2p::identity::{self, Keypair};
 use tokio::sync::{mpsc, watch};
 
 use crate::{
     block_ranges::{BlockRange, BlockRanges},
     blockstore::InMemoryBlockstore,
     executor::timeout,
-    node::NodeConfig,
+    network::Network,
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
     store::{InMemoryStore, VerifiedExtendedHeaders},
     utils::OneshotResultSender,
+    NodeBuilder,
 };
 
 #[cfg(test)]
@@ -45,39 +45,14 @@ pub fn new_block_ranges<const N: usize>(ranges: [BlockRange; N]) -> BlockRanges 
     BlockRanges::from_vec(ranges.into_iter().collect()).expect("invalid BlockRanges")
 }
 
-/// [`NodeConfig`] with default values for the usage in tests.
-///
-/// Can be used to fill the missing fields with `..test_node_config()` syntax.
-pub fn test_node_config() -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
-    let node_keypair = identity::Keypair::generate_ed25519();
-    NodeConfig {
-        network_id: "private".to_string(),
-        p2p_local_keypair: node_keypair,
-        p2p_bootnodes: vec![],
-        p2p_listen_on: vec![],
-        sync_batch_size: 512,
-        blockstore: InMemoryBlockstore::new(),
-        store: InMemoryStore::new(),
-        custom_syncing_window: None,
-    }
+/// [`NodeBuilder`] with default values for the usage in tests.
+pub fn test_node_builder() -> NodeBuilder<InMemoryBlockstore, InMemoryStore> {
+    NodeBuilder::new().network(Network::custom("private").unwrap())
 }
 
-/// [`NodeConfig`] with listen address and default values for the usage in tests.
-pub fn listening_test_node_config() -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
-    NodeConfig {
-        p2p_listen_on: vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()],
-        ..test_node_config()
-    }
-}
-
-/// [`NodeConfig`] with given keypair and default values for the usage in tests.
-pub fn test_node_config_with_keypair(
-    keypair: Keypair,
-) -> NodeConfig<InMemoryBlockstore, InMemoryStore> {
-    NodeConfig {
-        p2p_local_keypair: keypair,
-        ..test_node_config()
-    }
+/// [`NodeBuilder`] with listen address and default values for the usage in tests.
+pub fn listening_test_node_builder() -> NodeBuilder<InMemoryBlockstore, InMemoryStore> {
+    test_node_builder().listen(["/ip4/0.0.0.0/tcp/0".parse().unwrap()])
 }
 
 /// Extends test header generator for easier insertion into the store
