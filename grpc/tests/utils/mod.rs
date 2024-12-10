@@ -1,4 +1,4 @@
-use std::{env, time::Duration};
+use std::time::Duration;
 
 use anyhow::Result;
 use celestia_grpc::GrpcClient;
