@@ -15,15 +15,10 @@ use crate::store::{InMemoryStore, Store};
 const HOUR: u64 = 60 * 60;
 const DAY: u64 = 24 * HOUR;
 
-/// Default maximum age of block headers [`Node`] will synchronise and store.
+/// Default maximum age of blocks [`Node`] will synchronise, sample, and store.
 pub const DEFAULT_SYNCING_WINDOW: Duration = Duration::from_secs(30 * DAY);
 /// Minimum configurable syncing window that can be used in [`NodeBuilder`].
 pub const MIN_SYNCING_WINDOW: Duration = Duration::from_secs(60);
-
-/// Default maximum age of block [`Node`] will sample and store.
-pub const DEFAULT_SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
-/// Minimum configurable sampling window that can be used in [`NodeBuilder`].
-pub const MIN_SAMPLING_WINDOW: Duration = Duration::from_secs(60);
 
 /// Default delay after the syncing window before [`Node`] prunes the block.
 pub const DEFAULT_PRUNING_DELAY: Duration = Duration::from_secs(HOUR);
@@ -44,7 +39,6 @@ where
     listen: Vec<Multiaddr>,
     sync_batch_size: Option<u64>,
     syncing_window: Option<Duration>,
-    sampling_window: Option<Duration>,
     pruning_delay: Option<Duration>,
 }
 
@@ -54,10 +48,6 @@ pub enum NodeBuilderError {
     /// Syncing window is smaller than [`MIN_SYNCING_WINDOW`].
     #[error("Syncing window is {0:?} but cannot be smaller than {MIN_SYNCING_WINDOW:?}")]
     SyncingWindowTooSmall(Duration),
-
-    /// Sampling window is smaller than [`MIN_SAMPLING_WINDOW`].
-    #[error("Sampling window is {0:?} but cannot be smaller than {MIN_SAMPLING_WINDOW:?}")]
-    SamplingWindowTooSmall(Duration),
 
     /// Pruning delay is smaller than [`MIN_PRUNING_DELAY`].
     #[error("Pruning delay is {0:?} but cannot be smaller than {MIN_PRUNING_DELAY:?}")]
@@ -94,7 +84,6 @@ impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
             listen: Vec::new(),
             sync_batch_size: None,
             syncing_window: None,
-            sampling_window: None,
             pruning_delay: None,
         }
     }
@@ -142,7 +131,6 @@ where
             listen: self.listen,
             sync_batch_size: self.sync_batch_size,
             syncing_window: self.syncing_window,
-            sampling_window: self.sampling_window,
             pruning_delay: self.pruning_delay,
         }
     }
@@ -163,7 +151,6 @@ where
             listen: self.listen,
             sync_batch_size: self.sync_batch_size,
             syncing_window: self.syncing_window,
-            sampling_window: self.sampling_window,
             pruning_delay: self.pruning_delay,
         }
     }
@@ -222,10 +209,9 @@ where
 
     /// Set syncing window.
     ///
-    /// Syncing window defines maximum age of headers considered for syncing.
-    /// Headers older than syncing window by more than an hour are eligible for pruning.
+    /// Syncing window defines maximum age of a block considered for syncing and sampling.
     ///
-    /// **Default if [`InMemoryStore`] is used:** 60 seconds.\
+    /// **Default if [`InMemoryStore`]/[`InMemoryBlockstore`] are used:** 60 seconds.\
     /// **Default:** 30 days.\
     /// **Minimum:** 60 seconds.
     pub fn syncing_window(self, dur: Duration) -> Self {
@@ -235,27 +221,12 @@ where
         }
     }
 
-    /// Set sampling window.
-    ///
-    /// Sampling window defines the maximum age of a block considered for sampling.
-    /// Sampling window will be truncated to syncing window, if latter is smaller.
-    ///
-    /// **Default if [`InMemoryBlockstore`] is used:** 60 seconds.\
-    /// **Default:** 30 days.\
-    /// **Minimum:** 60 seconds.
-    pub fn sampling_window(self, dur: Duration) -> Self {
-        NodeBuilder {
-            sampling_window: Some(dur),
-            ..self
-        }
-    }
-
     /// Set pruning delay.
     ///
     /// Pruning delay how much time the pruner should wait after syncing window in
     /// order to prune the block.
     ///
-    /// **Default if [`InMemoryStore`] is used:** 60 seconds.\
+    /// **Default if [`InMemoryStore`]/[`InMemoryBlockstore`] are used:** 60 seconds.\
     /// **Default:** 1 hour.\
     /// **Minimum:** 60 seconds.
     pub fn pruning_delay(self, dur: Duration) -> Self {
@@ -288,28 +259,20 @@ where
         //
         // If user implements their own in-memory stores then they are responsible
         // to set the syncing window to something smaller than `DEFAULT_SYNCING_WINDOW`.
-        let in_memory_store_used = TypeId::of::<S>() == TypeId::of::<InMemoryStore>();
-        let in_memory_blockstore_used = TypeId::of::<B>() == TypeId::of::<InMemoryBlockstore>();
+        let in_memory_stores_used = TypeId::of::<S>() == TypeId::of::<InMemoryStore>()
+            || TypeId::of::<B>() == TypeId::of::<InMemoryBlockstore>();
 
         let syncing_window = if let Some(dur) = self.syncing_window {
             dur
-        } else if in_memory_store_used {
+        } else if in_memory_stores_used {
             MIN_SYNCING_WINDOW
         } else {
             DEFAULT_SYNCING_WINDOW
         };
 
-        let sampling_window = if let Some(dur) = self.syncing_window {
-            dur
-        } else if in_memory_blockstore_used {
-            MIN_SAMPLING_WINDOW
-        } else {
-            DEFAULT_SAMPLING_WINDOW
-        };
-
         let pruning_delay = if let Some(dur) = self.pruning_delay {
             dur
-        } else if in_memory_store_used {
+        } else if in_memory_stores_used {
             MIN_PRUNING_DELAY
         } else {
             DEFAULT_PRUNING_DELAY
@@ -319,23 +282,13 @@ where
             return Err(NodeBuilderError::SyncingWindowTooSmall(syncing_window));
         }
 
-        // Truncate sampling window if needed.
-        let sampling_window = sampling_window.min(syncing_window);
-
-        if sampling_window < MIN_SAMPLING_WINDOW {
-            return Err(NodeBuilderError::SamplingWindowTooSmall(sampling_window));
-        }
-
         if pruning_delay < MIN_PRUNING_DELAY {
             return Err(NodeBuilderError::PruningDelayTooSmall(pruning_delay));
         }
 
         let pruning_window = syncing_window.saturating_add(pruning_delay);
 
-        info!(
-            "Syncing window: {:?}, Sampling window: {:?}, Pruning window: {:?}",
-            syncing_window, sampling_window, pruning_window
-        );
+        info!("Syncing window: {syncing_window:?}, Pruning window: {pruning_window:?}",);
 
         Ok(NodeConfig {
             blockstore: self.blockstore,
@@ -346,7 +299,6 @@ where
             p2p_listen_on: self.listen,
             sync_batch_size: self.sync_batch_size.unwrap_or(512),
             syncing_window,
-            sampling_window,
             pruning_window,
         })
     }
