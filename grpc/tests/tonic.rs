@@ -1,4 +1,4 @@
-#![cfg(not(target_arch = "wasm32"))]
+use std::time::Duration;
 
 use celestia_grpc::types::auth::Account;
 use celestia_grpc::types::tx::sign_tx;
@@ -9,28 +9,34 @@ use celestia_types::{AppVersion, Blob};
 
 pub mod utils;
 
-use crate::utils::{load_account, new_test_client};
+use crate::utils::{load_account, new_test_client, sleep};
 
-const BRIDGE_0_ACCOUNT_DATA: &str = "../ci/credentials/bridge-0";
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::test as async_test;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
-#[tokio::test]
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+#[async_test]
 async fn get_min_gas_price() {
-    let mut client = new_test_client().await.unwrap();
+    let mut client = new_test_client().unwrap();
     let gas_price = client.get_min_gas_price().await.unwrap();
     assert!(gas_price > 0.0);
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_blob_params() {
-    let mut client = new_test_client().await.unwrap();
+    let mut client = new_test_client().unwrap();
     let params = client.get_blob_params().await.unwrap();
     assert!(params.gas_per_blob_byte > 0);
     assert!(params.gov_max_square_size > 0);
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_auth_params() {
-    let mut client = new_test_client().await.unwrap();
+    let mut client = new_test_client().unwrap();
     let params = client.get_auth_params().await.unwrap();
     assert!(params.max_memo_characters > 0);
     assert!(params.tx_sig_limit > 0);
@@ -39,9 +45,9 @@ async fn get_auth_params() {
     assert!(params.sig_verify_cost_secp256k1 > 0);
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_block() {
-    let mut client = new_test_client().await.unwrap();
+    let mut client = new_test_client().unwrap();
 
     let latest_block = client.get_latest_block().await.unwrap();
     let height = latest_block.header.height.value() as i64;
@@ -50,9 +56,9 @@ async fn get_block() {
     assert_eq!(block.header, latest_block.header);
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_account() {
-    let mut client = new_test_client().await.unwrap();
+    let mut client = new_test_client().unwrap();
 
     let accounts = client.get_accounts().await.unwrap();
 
@@ -68,11 +74,11 @@ async fn get_account() {
     assert_eq!(&account, first_account);
 }
 
-#[tokio::test]
+#[async_test]
 async fn submit_blob() {
-    let mut client = new_test_client().await.unwrap();
+    let mut client = new_test_client().unwrap();
 
-    let account_credentials = load_account(BRIDGE_0_ACCOUNT_DATA);
+    let account_credentials = load_account();
     let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
     let blobs = vec![Blob::new(namespace, "Hello, World!".into(), AppVersion::V3).unwrap()];
     let chain_id = "private".to_string();
@@ -101,7 +107,7 @@ async fn submit_blob() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    sleep(Duration::from_secs(3)).await;
 
     let _submitted_tx = client
         .get_tx(response.txhash)

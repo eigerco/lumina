@@ -26,7 +26,9 @@ prost.workspace = true
 tendermint-proto.workspace = true
 tendermint.workspace = true
 
+bytes = "1.8"
 hex = "0.4.3"
+http-body = "1"
 k256 = "0.13.4"
 serde = "1.0.215"
 thiserror = "1.0.61"
@@ -35,7 +37,19 @@ tonic = { version = "0.12.3", default-features = false, features = [
 ]}
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tonic = { version = "0.12.3", default-features = false, features = [ "transport" ] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2.15", features = ["js"] }
+tonic-web-wasm-client = "0.6"
+
+[dev-dependencies]
 anyhow = "1.0.86"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 dotenvy = "0.15.7"
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
-tonic = { version = "0.12.3", optional = true, default-features = false, features = [ "transport" ] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+gloo-timers = { version = "0.3.0", features = ["futures"] }
+wasm-bindgen-test = "0.3.42"
