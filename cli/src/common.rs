@@ -1,21 +1,11 @@
 use std::env::current_exe;
 
 use anyhow::Result;
-use clap::{Parser, ValueEnum};
-use lumina_node::network::Network;
+use clap::Parser;
 
 use crate::native;
 #[cfg(feature = "browser-node")]
 use crate::server;
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub(crate) enum ArgNetwork {
-    #[default]
-    Mainnet,
-    Arabica,
-    Mocha,
-    Private,
-}
 
 #[derive(Debug, Parser)]
 pub(crate) enum CliArgs {
@@ -63,26 +53,4 @@ fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
         .init();
 
     guard
-}
-
-impl From<ArgNetwork> for Network {
-    fn from(network: ArgNetwork) -> Network {
-        match network {
-            ArgNetwork::Mainnet => Network::Mainnet,
-            ArgNetwork::Arabica => Network::Arabica,
-            ArgNetwork::Mocha => Network::Mocha,
-            ArgNetwork::Private => Network::Private,
-        }
-    }
-}
-
-impl From<Network> for ArgNetwork {
-    fn from(network: Network) -> ArgNetwork {
-        match network {
-            Network::Mainnet => ArgNetwork::Mainnet,
-            Network::Arabica => ArgNetwork::Arabica,
-            Network::Mocha => ArgNetwork::Mocha,
-            Network::Private => ArgNetwork::Private,
-        }
-    }
 }
