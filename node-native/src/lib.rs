@@ -24,7 +24,7 @@ fn get_base_path() -> Result<PathBuf> {
         .map(PathBuf::from)
         .map(|p| p.join("Library/Application Support/lumina"))
         .map_err(|e| LuminaError::StorageError {
-            message: format!("Could not get HOME directory: {}", e),
+            msg: format!("Could not get HOME directory: {}", e),
         })
 }
 
@@ -34,14 +34,14 @@ fn get_base_path() -> Result<PathBuf> {
     std::env::var("LUMINA_DATA_DIR")
         .map(PathBuf::from)
         .map_err(|e| LuminaError::StorageError {
-            message: format!("Could not get LUMINA_DATA_DIR: {}", e),
+            msg: format!("Could not get LUMINA_DATA_DIR: {}", e),
         })
 }
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn get_base_path() -> Result<PathBuf> {
     Err(LuminaError::StorageError {
-        message: "Unsupported platform".to_string(),
+        msg: "Unsupported platform".to_string(),
     })
 }
 
@@ -49,26 +49,26 @@ fn get_base_path() -> Result<PathBuf> {
 pub enum LuminaError {
     #[error("Node is not running")]
     NodeNotRunning,
-    #[error("Network error: {message}")]
-    NetworkError { message: String },
-    #[error("Storage error: {message}")]
-    StorageError { message: String },
+    #[error("Network error: {msg}")]
+    NetworkError { msg: String },
+    #[error("Storage error: {msg}")]
+    StorageError { msg: String },
     #[error("Node is already running")]
     AlreadyRunning,
     #[error("Lock error")]
     LockError,
-    #[error("Invalid hash format: {message}")]
-    InvalidHash { message: String },
-    #[error("Invalid header format: {message}")]
-    InvalidHeader { message: String },
-    #[error("Storage initialization failed: {message}")]
-    StorageInit { message: String },
+    #[error("Invalid hash format: {msg}")]
+    InvalidHash { msg: String },
+    #[error("Invalid header format: {msg}")]
+    InvalidHeader { msg: String },
+    #[error("Storage initialization failed: {msg}")]
+    StorageInit { msg: String },
 }
 
 impl From<NodeError> for LuminaError {
     fn from(error: NodeError) -> Self {
         LuminaError::NetworkError {
-            message: error.to_string(),
+            msg: error.to_string(),
         }
     }
 }
@@ -103,20 +103,20 @@ impl LuminaNode {
         let base_path = get_base_path()?;
 
         std::fs::create_dir_all(&base_path).map_err(|e| LuminaError::StorageError {
-            message: format!("Failed to create data directory: {}", e),
+            msg: format!("Failed to create data directory: {}", e),
         })?;
 
         let store_path = base_path.join(format!("store-{}", network_id));
         let db = Arc::new(redb::Database::create(&store_path).map_err(|e| {
             LuminaError::StorageInit {
-                message: format!("Failed to create database: {}", e),
+                msg: format!("Failed to create database: {}", e),
             }
         })?);
 
         let store = RedbStore::new(db.clone())
             .await
             .map_err(|e| LuminaError::StorageInit {
-                message: format!("Failed to initialize store: {}", e),
+                msg: format!("Failed to initialize store: {}", e),
             })?;
 
         let blockstore = RedbBlockstore::new(db);
@@ -138,9 +138,7 @@ impl LuminaNode {
 
         let new_node = Node::new(config)
             .await
-            .map_err(|e| LuminaError::NetworkError {
-                message: e.to_string(),
-            })?;
+            .map_err(|e| LuminaError::NetworkError { msg: e.to_string() })?;
 
         let subscriber = new_node.event_subscriber();
         let mut events_guard = self.events_subscriber.lock().await;
@@ -211,7 +209,7 @@ impl LuminaNode {
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
         let peer_id = peer_id
             .to_libp2p()
-            .map_err(|e| LuminaError::NetworkError { message: e })?;
+            .map_err(|e| LuminaError::NetworkError { msg: e })?;
         Ok(node.set_peer_trust(peer_id, is_trusted).await?)
     }
 
@@ -225,9 +223,8 @@ impl LuminaNode {
     pub async fn request_header_by_hash(&self, hash: String) -> Result<String> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
-        let hash = Hash::from_str(&hash).map_err(|e| LuminaError::InvalidHash {
-            message: e.to_string(),
-        })?;
+        let hash =
+            Hash::from_str(&hash).map_err(|e| LuminaError::InvalidHash { msg: e.to_string() })?;
         let header = node.request_header_by_hash(&hash).await?;
         Ok(header.to_string()) //if extended header is needed, we need a wrapper
     }
@@ -248,7 +245,7 @@ impl LuminaNode {
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
         let from: ExtendedHeader =
             serde_json::from_str(&from).map_err(|e| LuminaError::InvalidHeader {
-                message: format!("Invalid header JSON: {}", e),
+                msg: format!("Invalid header JSON: {}", e),
             })?;
         let headers = node.request_verified_headers(&from, amount).await?;
         Ok(headers.into_iter().map(|h| h.to_string()).collect())
@@ -268,7 +265,7 @@ impl LuminaNode {
         header.map_or(
             // todo: better error handling, its undefined in wasm
             Err(LuminaError::NetworkError {
-                message: "No network head header available".to_string(),
+                msg: "No network head header available".to_string(),
             }),
             |h| Ok(h.to_string()),
         )
@@ -284,9 +281,8 @@ impl LuminaNode {
     pub async fn get_header_by_hash(&self, hash: String) -> Result<String> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
-        let hash = Hash::from_str(&hash).map_err(|e| LuminaError::InvalidHash {
-            message: e.to_string(),
-        })?;
+        let hash =
+            Hash::from_str(&hash).map_err(|e| LuminaError::InvalidHash { msg: e.to_string() })?;
         let header = node.get_header_by_hash(&hash).await?;
         Ok(header.to_string())
     }
@@ -330,9 +326,7 @@ impl LuminaNode {
         match subscriber.try_recv() {
             Ok(event) => Ok(Some(event.event.into())),
             Err(TryRecvError::Empty) => Ok(None),
-            Err(e) => Err(LuminaError::NetworkError {
-                message: e.to_string(),
-            }),
+            Err(e) => Err(LuminaError::NetworkError { msg: e.to_string() }),
         }
     }
 }
