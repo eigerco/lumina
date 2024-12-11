@@ -18,31 +18,38 @@ use uniffi::Object;
 
 pub type Result<T> = std::result::Result<T, LuminaError>;
 
-#[cfg(target_os = "ios")]
+/// Returns the platform-specific base path for storing Lumina data.
+///
+/// The function determines the base path based on the target operating system:
+/// - **iOS**: `~/Library/Application Support/lumina`
+/// - **Android**: Value of the `LUMINA_DATA_DIR` environment variable
+/// - **Other platforms**: Returns an error indicating unsupported platform.
 fn get_base_path() -> Result<PathBuf> {
-    std::env::var("HOME")
-        .map(PathBuf::from)
-        .map(|p| p.join("Library/Application Support/lumina"))
-        .map_err(|e| LuminaError::StorageError {
-            msg: format!("Could not get HOME directory: {}", e),
-        })
-}
+    #[cfg(target_os = "ios")]
+    {
+        std::env::var("HOME")
+            .map(PathBuf::from)
+            .map(|p| p.join("Library/Application Support/lumina"))
+            .map_err(|e| LuminaError::StorageError {
+                msg: format!("Could not get HOME directory: {}", e),
+            })
+    }
 
-#[cfg(target_os = "android")]
-fn get_base_path() -> Result<PathBuf> {
-    // On Android, we'll use the app's files directory passed from the platform
-    std::env::var("LUMINA_DATA_DIR")
-        .map(PathBuf::from)
-        .map_err(|e| LuminaError::StorageError {
-            msg: format!("Could not get LUMINA_DATA_DIR: {}", e),
-        })
-}
+    #[cfg(target_os = "android")]
+    {
+        std::env::var("LUMINA_DATA_DIR")
+            .map(PathBuf::from)
+            .map_err(|e| LuminaError::StorageError {
+                msg: format!("Could not get LUMINA_DATA_DIR: {}", e),
+            })
+    }
 
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
-fn get_base_path() -> Result<PathBuf> {
-    Err(LuminaError::StorageError {
-        msg: "Unsupported platform".to_string(),
-    })
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    {
+        Err(LuminaError::StorageError {
+            msg: "Unsupported platform".to_string(),
+        })
+    }
 }
 
 #[derive(Error, Debug, uniffi::Error)]
@@ -73,6 +80,7 @@ impl From<NodeError> for LuminaError {
     }
 }
 
+/// The main Lumina node that manages the connection to the Celestia network.
 #[derive(Object)]
 pub struct LuminaNode {
     node: Arc<Mutex<Option<Node<RedbBlockstore, RedbStore>>>>,
@@ -82,6 +90,7 @@ pub struct LuminaNode {
 
 #[uniffi::export(async_runtime = "tokio")]
 impl LuminaNode {
+    /// Sets a new connection to the Lumina node for the specified network.
     #[uniffi::constructor]
     pub fn new(network: Network) -> Result<Arc<Self>> {
         Ok(Arc::new(Self {
@@ -91,6 +100,7 @@ impl LuminaNode {
         }))
     }
 
+    /// Starts the Lumina node. Returns true if successfully started.
     pub async fn start(&self) -> Result<bool> {
         let mut node_guard = self.node.lock().await;
 
@@ -148,6 +158,7 @@ impl LuminaNode {
         Ok(true)
     }
 
+    /// Stops the running node and closes all network connections.
     pub async fn stop(&self) -> Result<()> {
         let mut node_guard = self.node.lock().await;
         let node = node_guard.take().ok_or(LuminaError::NodeNotRunning)?;
@@ -155,34 +166,40 @@ impl LuminaNode {
         Ok(())
     }
 
+    /// Checks if the node is currently running.
     pub async fn is_running(&self) -> bool {
         self.node.lock().await.is_some()
     }
 
+    /// Gets the local peer ID as a string.
     pub async fn local_peer_id(&self) -> Result<String> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
-        Ok(node.local_peer_id().to_string())
+        Ok(node.local_peer_id().to_base58())
     }
 
+    /// Gets information about connected peers.
     pub async fn peer_tracker_info(&self) -> Result<PeerTrackerInfo> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
         Ok(node.peer_tracker_info().into())
     }
 
+    /// Waits until the node is connected to at least one peer.
     pub async fn wait_connected(&self) -> Result<()> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
         Ok(node.wait_connected().await?)
     }
 
+    /// Waits until the node is connected to at least one trusted peer.
     pub async fn wait_connected_trusted(&self) -> Result<()> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
         Ok(node.wait_connected_trusted().await?)
     }
 
+    /// Gets current network information.
     pub async fn network_info(&self) -> Result<NetworkInfo> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -190,6 +207,7 @@ impl LuminaNode {
         Ok(info.into())
     }
 
+    /// Gets list of addresses the node is listening to.
     pub async fn listeners(&self) -> Result<Vec<String>> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -197,6 +215,7 @@ impl LuminaNode {
         Ok(listeners.into_iter().map(|l| l.to_string()).collect())
     }
 
+    /// Gets list of currently connected peer IDs.
     pub async fn connected_peers(&self) -> Result<Vec<PeerId>> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -204,6 +223,7 @@ impl LuminaNode {
         Ok(peers.into_iter().map(PeerId::from).collect())
     }
 
+    /// Sets whether a peer with give ID is trusted.
     pub async fn set_peer_trust(&self, peer_id: PeerId, is_trusted: bool) -> Result<()> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -213,6 +233,9 @@ impl LuminaNode {
         Ok(node.set_peer_trust(peer_id, is_trusted).await?)
     }
 
+    /// Request the head header from the network.
+    ///
+    /// Returns a serialized ExtendedHeader string.
     pub async fn request_head_header(&self) -> Result<String> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -220,6 +243,7 @@ impl LuminaNode {
         Ok(header.to_string()) //if extended header is needed, we need a wrapper
     }
 
+    /// Request a header for the block with a given hash from the network.
     pub async fn request_header_by_hash(&self, hash: String) -> Result<String> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -229,6 +253,7 @@ impl LuminaNode {
         Ok(header.to_string()) //if extended header is needed, we need a wrapper
     }
 
+    /// Requests a header by its height.
     pub async fn request_header_by_height(&self, height: u64) -> Result<String> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -236,6 +261,10 @@ impl LuminaNode {
         Ok(header.to_string())
     }
 
+    /// Request headers in range (from, from + amount] from the network.
+    ///
+    /// The headers will be verified with the `from` header.
+    /// Returns array of serialized ExtendedHeader strings.
     pub async fn request_verified_headers(
         &self,
         from: String, // serialized header like its done for WASM
@@ -251,6 +280,7 @@ impl LuminaNode {
         Ok(headers.into_iter().map(|h| h.to_string()).collect())
     }
 
+    /// Gets current syncing information.
     pub async fn syncer_info(&self) -> Result<SyncingInfo> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -258,6 +288,7 @@ impl LuminaNode {
         Ok(info.into())
     }
 
+    /// Gets the latest header announced in the network.
     pub async fn get_network_head_header(&self) -> Result<String> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -271,6 +302,7 @@ impl LuminaNode {
         )
     }
 
+    /// Gets the latest locally synced header.
     pub async fn get_local_head_header(&self) -> Result<String> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -278,6 +310,7 @@ impl LuminaNode {
         Ok(header.to_string())
     }
 
+    /// Get a synced header for the block with a given hash.
     pub async fn get_header_by_hash(&self, hash: String) -> Result<String> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -287,6 +320,7 @@ impl LuminaNode {
         Ok(header.to_string())
     }
 
+    /// Get a synced header for the block with a given height.
     pub async fn get_header_by_height(&self, height: u64) -> Result<String> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -294,6 +328,13 @@ impl LuminaNode {
         Ok(header.to_string())
     }
 
+    /// Gets headers from the given heights range.
+    ///
+    /// If start of the range is undefined (None), the first returned header will be of height 1.
+    /// If end of the range is undefined (None), the last returned header will be the last header in the
+    /// store.
+    ///
+    /// Returns array of serialized ExtendedHeader strings.
     pub async fn get_headers(
         &self,
         start_height: Option<u64>,
@@ -312,6 +353,9 @@ impl LuminaNode {
         Ok(headers.into_iter().map(|h| h.to_string()).collect())
     }
 
+    /// Gets data sampling metadata for a height.
+    ///
+    /// Returns serialized SamplingMetadata string if metadata exists for the height.
     pub async fn get_sampling_metadata(&self, height: u64) -> Result<Option<String>> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
@@ -319,6 +363,7 @@ impl LuminaNode {
         Ok(metadata.map(|m| serde_json::to_string(&m).unwrap()))
     }
 
+    /// Returns the next event from the node's event channel.
     pub async fn events_channel(&self) -> Result<Option<NodeEvent>> {
         let mut events_guard = self.events_subscriber.lock().await;
         let subscriber = events_guard.as_mut().ok_or(LuminaError::NodeNotRunning)?;
