@@ -112,7 +112,7 @@ where
 
     /// Creates and starts a new Celestia [`Node`].
     ///
-    /// Returns [`Node`] alogn with [`EventSubscriber`]. Use this to avoid missing
+    /// Returns [`Node`] along with [`EventSubscriber`]. Use this to avoid missing
     /// any events that will be generated on the construction of the node.
     pub async fn start_subscribed(self) -> Result<(Node<B, S>, EventSubscriber)> {
         let config = self.build_config()?;
