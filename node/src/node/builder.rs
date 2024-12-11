@@ -61,8 +61,8 @@ pub enum NodeBuilderError {
 impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
     /// Creates a new [`NodeBuilder`] which uses in-memory stores.
     ///
-    /// After the creation you can use [`NodeBuilder::blockstore`]
-    /// and [`NodeBuilder::store`] to set other stores.
+    /// After the creation you can call [`NodeBuilder::blockstore`]
+    /// and [`NodeBuilder::store`] to use other stores.
     ///
     /// # Example
     ///
