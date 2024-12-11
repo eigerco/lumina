@@ -56,18 +56,28 @@ impl From<LuminaPeerTrackerInfo> for PeerTrackerInfo {
 
 #[derive(Record)]
 pub struct NetworkInfo {
+    /// The total number of connected peers.
     pub num_peers: u32,
+    /// Counters of ongoing network connections.
     pub connection_counters: ConnectionCounters,
 }
 
+/// Counters of ongoing network connections.
 #[derive(Record)]
 pub struct ConnectionCounters {
+    /// The current number of connections.
     pub num_connections: u32,
+    /// The current number of pending connections.
     pub num_pending: u32,
+    /// The current number of incoming connections.
     pub num_pending_incoming: u32,
+    /// The current number of outgoing connections.
     pub num_pending_outgoing: u32,
+    /// The current number of established connections.
     pub num_established: u32,
+    /// The current number of established inbound connections.
     pub num_established_incoming: u32,
+    /// The current number of established outbound connections.
     pub num_established_outgoing: u32,
 }
 
@@ -94,6 +104,7 @@ impl From<&Libp2pConnectionCounters> for ConnectionCounters {
     }
 }
 
+/// A range of blocks.
 #[derive(Record)]
 pub struct BlockRange {
     pub start: u64,
@@ -109,9 +120,12 @@ impl From<LuminaBlockRange> for BlockRange {
     }
 }
 
+/// Status of the node syncing.
 #[derive(Record)]
 pub struct SyncingInfo {
+    /// Ranges of headers that are already synchronised
     pub stored_headers: Vec<BlockRange>,
+    /// Syncing target. The latest height seen in the network that was successfully verified.
     pub subjective_head: u64,
 }
 
@@ -131,7 +145,7 @@ impl From<LuminaSyncingInfo> for SyncingInfo {
 
 #[derive(Record, Clone, Debug)]
 pub struct PeerId {
-    // Store as base58 string for now
+    /// The peer ID stored as base58 string.
     pub peer_id: String,
 }
 
@@ -161,70 +175,124 @@ pub struct ShareCoordinate {
     pub column: u16,
 }
 
+/// Events emitted by the node.
 #[derive(uniffi::Enum)]
 pub enum NodeEvent {
+    /// Node is connecting to bootnodes
     ConnectingToBootnodes,
+    /// Peer just connected
     PeerConnected {
+        /// The ID of the peer.
         id: PeerId,
+        /// Whether peer was in the trusted list or not.
         trusted: bool,
     },
     PeerDisconnected {
+        /// The ID of the peer.
         id: PeerId,
+        /// Whether peer was in the trusted list or not.
         trusted: bool,
     },
+    /// Sampling just started.
     SamplingStarted {
+        /// The block height that will be sampled.
         height: u64,
+        /// The square width of the block.
         square_width: u16,
+        /// The coordinates of the shares that will be sampled.
         shares: Vec<ShareCoordinate>,
     },
+    /// A share was sampled.
     ShareSamplingResult {
+        /// The block height of the share.
         height: u64,
+        /// The square width of the block.
         square_width: u16,
+        /// The row of the share.
         row: u16,
+        /// The column of the share.
         column: u16,
+        /// The result of the sampling of the share.
         accepted: bool,
     },
+    /// Sampling just finished.
     SamplingFinished {
+        /// The block height that was sampled.
         height: u64,
+        /// The overall result of the sampling.
         accepted: bool,
+        /// How much time sampling took in milliseconds.
         took_ms: u64,
     },
+    /// Data sampling fatal error.
     FatalDaserError {
+        /// A human readable error.
         error: String,
     },
+    /// A new header was added from HeaderSub.
     AddedHeaderFromHeaderSub {
+        /// The height of the header.
         height: u64,
     },
+    /// Fetching header of network head just started.
     FetchingHeadHeaderStarted,
+    /// Fetching header of network head just finished.
     FetchingHeadHeaderFinished {
+        /// The height of the network head.
         height: u64,
+        /// How much time fetching took in milliseconds.
         took_ms: u64,
     },
+    /// Fetching headers of a specific block range just started.
     FetchingHeadersStarted {
+        /// Start of the range.
         from_height: u64,
+        /// End of the range (included).
         to_height: u64,
     },
+    /// Fetching headers of a specific block range just finished.
     FetchingHeadersFinished {
+        /// Start of the range.
         from_height: u64,
+        /// End of the range (included).
         to_height: u64,
+        /// How much time fetching took in milliseconds.
         took_ms: u64,
     },
+    /// Fetching headers of a specific block range just failed.
     FetchingHeadersFailed {
+        /// Start of the range.
         from_height: u64,
+        /// End of the range (included).
         to_height: u64,
+        /// A human readable error.
         error: String,
+        /// How much time fetching took in milliseconds.
         took_ms: u64,
     },
+    /// Header syncing fatal error.
     FatalSyncerError {
+        /// A human readable error.
         error: String,
     },
+    /// Pruned headers up to and including specified height.
     PrunedHeaders {
+        /// Last header height that was pruned
         to_height: u64,
     },
+    /// Pruning fatal error.
     FatalPrunerError {
+        /// A human readable error.
         error: String,
     },
+    /// Network was compromised.
+    ///
+    /// This happens when a valid bad encoding fraud proof is received.
+    /// Ideally it would never happen, but protection needs to exist.
+    /// In case of compromised network, syncing and data sampling will
+    /// stop immediately.
     NetworkCompromised,
+    /// Node stopped.
     NodeStopped,
 }
 
@@ -322,11 +390,16 @@ impl From<LuminaNodeEvent> for NodeEvent {
     }
 }
 
+/// Information about a node event.
 #[derive(Record)]
 pub struct NodeEventInfo {
+    /// The event that occurred.
     pub event: NodeEvent,
-    pub timestamp: u64, // Unix timestamp in milliseconds for now
+    /// Unix timestamp in milliseconds when the event occurred.
+    pub timestamp: u64,
+    /// Source file path where the event was emitted.
     pub file_path: String,
+    /// Line number in source file where event was emitted.
     pub file_line: u32,
 }
 
