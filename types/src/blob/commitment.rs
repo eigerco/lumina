@@ -56,6 +56,7 @@ use crate::{InfoByte, Share};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Commitment {
     ///  hash of the commitment
+    #[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen(skip))]
     hash: merkle::Hash,
 }
 
