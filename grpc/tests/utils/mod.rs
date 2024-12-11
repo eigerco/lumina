@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use anyhow::Result;
 use celestia_grpc::GrpcClient;
 use celestia_types::state::Address;
 use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
@@ -24,16 +23,16 @@ pub struct TestAccount {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn new_test_client() -> Result<GrpcClient<tonic::transport::Channel>> {
+pub fn new_test_client() -> GrpcClient<tonic::transport::Channel> {
     let _ = dotenvy::dotenv();
     let url = std::env::var("CELESTIA_GRPC_URL").unwrap_or_else(|_| CELESTIA_GRPC_URL.into());
 
-    Ok(GrpcClient::with_url(url)?)
+    GrpcClient::with_url(url).expect("creating client failed")
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn new_test_client() -> Result<GrpcClient<tonic_web_wasm_client::Client>> {
-    Ok(GrpcClient::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL))
+pub fn new_test_client() -> GrpcClient<tonic_web_wasm_client::Client> {
+    GrpcClient::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL)
 }
 
 pub fn load_account() -> TestAccount {

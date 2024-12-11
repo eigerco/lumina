@@ -750,7 +750,6 @@ checksum = "96c51067fd44124faa7f870b4b1c969379ad32b2ba805aa959430ceaa384f695"
 name = "celestia-grpc"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "bytes",
  "celestia-grpc-macros",
  "celestia-proto",

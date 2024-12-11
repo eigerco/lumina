@@ -21,14 +21,14 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[async_test]
 async fn get_min_gas_price() {
-    let mut client = new_test_client().unwrap();
+    let mut client = new_test_client();
     let gas_price = client.get_min_gas_price().await.unwrap();
     assert!(gas_price > 0.0);
 }
 
 #[async_test]
 async fn get_blob_params() {
-    let mut client = new_test_client().unwrap();
+    let mut client = new_test_client();
     let params = client.get_blob_params().await.unwrap();
     assert!(params.gas_per_blob_byte > 0);
     assert!(params.gov_max_square_size > 0);
@@ -36,7 +36,7 @@ async fn get_blob_params() {
 
 #[async_test]
 async fn get_auth_params() {
-    let mut client = new_test_client().unwrap();
+    let mut client = new_test_client();
     let params = client.get_auth_params().await.unwrap();
     assert!(params.max_memo_characters > 0);
     assert!(params.tx_sig_limit > 0);
@@ -47,7 +47,7 @@ async fn get_auth_params() {
 
 #[async_test]
 async fn get_block() {
-    let mut client = new_test_client().unwrap();
+    let mut client = new_test_client();
 
     let latest_block = client.get_latest_block().await.unwrap();
     let height = latest_block.header.height.value() as i64;
@@ -58,7 +58,7 @@ async fn get_block() {
 
 #[async_test]
 async fn get_account() {
-    let mut client = new_test_client().unwrap();
+    let mut client = new_test_client();
 
     let accounts = client.get_accounts().await.unwrap();
 
@@ -76,7 +76,7 @@ async fn get_account() {
 
 #[async_test]
 async fn submit_blob() {
-    let mut client = new_test_client().unwrap();
+    let mut client = new_test_client();
 
     let account_credentials = load_account();
     let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();

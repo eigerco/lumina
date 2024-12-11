@@ -43,9 +43,6 @@ tonic = { version = "0.12.3", default-features = false, features = [ "transport"
 getrandom = { version = "0.2.15", features = ["js"] }
 tonic-web-wasm-client = "0.6"
 
-[dev-dependencies]
-anyhow = "1.0.86"
-
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 dotenvy = "0.15.7"
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
