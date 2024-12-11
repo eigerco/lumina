@@ -227,7 +227,7 @@ where
 
     /// Set pruning delay.
     ///
-    /// Pruning delay how much time the pruner should wait after syncing window in
+    /// Pruning delay defines how much time the pruner should wait after syncing window in
     /// order to prune the block.
     ///
     /// **Default if [`InMemoryStore`]/[`InMemoryBlockstore`] are used:** 60 seconds.\
