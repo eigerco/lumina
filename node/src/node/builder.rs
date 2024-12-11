@@ -256,10 +256,9 @@ where
             warn!("Node has empty bootnodes and listening addresses. It will never connect to another peer.");
         }
 
-        // `Node` is memory hungry when in-memory stores are used and the user most
-        // probably will never know that they need to have a smaller syncing window
-        // to avoid it. In order to make `lumina` more user friendly we decided to
-        // have a different default when our in-memory stores are used.
+        // `Node` is memory hungry when in-memory stores are used and the user may not
+        // expect they should set a smaller syncing window to reduce that. For user-friendliness
+        // sake, use smaller default syncing window, if we're running in memory.
         //
         // If user implements their own in-memory stores then they are responsible
         // to set the syncing window to something smaller than `DEFAULT_SYNCING_WINDOW`.
