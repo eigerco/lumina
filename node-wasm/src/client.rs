@@ -5,7 +5,6 @@ use std::time::Duration;
 use celestia_types::nmt::Namespace;
 use celestia_types::Blob;
 use js_sys::Array;
-use libp2p::identity::Keypair;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
 use tracing::{debug, error};
@@ -13,8 +12,8 @@ use wasm_bindgen::prelude::*;
 use web_sys::BroadcastChannel;
 
 use lumina_node::blockstore::IndexedDbBlockstore;
-use lumina_node::network::{canonical_network_bootnodes, network_id};
-use lumina_node::node::NodeConfig;
+use lumina_node::network;
+use lumina_node::node::NodeBuilder;
 use lumina_node::store::IndexedDbStore;
 
 use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
@@ -395,19 +394,24 @@ impl NodeClient {
 impl WasmNodeConfig {
     /// Get the configuration with default bootnodes for provided network
     pub fn default(network: Network) -> WasmNodeConfig {
+        let bootnodes = network::Network::from(network)
+            .canonical_bootnodes()
+            .map(|addr| addr.to_string())
+            .collect::<Vec<_>>();
+
         WasmNodeConfig {
             network,
-            bootnodes: canonical_network_bootnodes(network.into())
-                .map(|addr| addr.to_string())
-                .collect::<Vec<_>>(),
+            bootnodes,
             custom_syncing_window_secs: None,
         }
     }
 
-    pub(crate) async fn into_node_config(
+    pub(crate) async fn into_node_builder(
         self,
-    ) -> Result<NodeConfig<IndexedDbBlockstore, IndexedDbStore>> {
-        let network_id = network_id(self.network.into());
+    ) -> Result<NodeBuilder<IndexedDbBlockstore, IndexedDbStore>> {
+        let network = network::Network::from(self.network);
+        let network_id = network.id();
+
         let store = IndexedDbStore::new(network_id)
             .await
             .context("Failed to open the store")?;
@@ -415,31 +419,30 @@ impl WasmNodeConfig {
             .await
             .context("Failed to open the blockstore")?;
 
-        let p2p_local_keypair = Keypair::generate_ed25519();
+        let mut builder = NodeBuilder::new()
+            .store(store)
+            .blockstore(blockstore)
+            .network(network)
+            .sync_batch_size(128);
 
-        let mut p2p_bootnodes = Vec::with_capacity(self.bootnodes.len());
+        let mut bootnodes = Vec::with_capacity(self.bootnodes.len());
+
         for addr in self.bootnodes {
             let addr = addr
                 .parse()
                 .with_context(|| format!("invalid multiaddr: '{addr}"))?;
             let resolved_addrs = resolve_dnsaddr_multiaddress(addr).await?;
-            p2p_bootnodes.extend(resolved_addrs.into_iter());
+            bootnodes.extend(resolved_addrs.into_iter());
         }
 
-        let syncing_window = self
-            .custom_syncing_window_secs
-            .map(|d| Duration::from_secs(d.into()));
+        builder = builder.bootnodes(bootnodes);
 
-        Ok(NodeConfig {
-            network_id: network_id.to_string(),
-            p2p_bootnodes,
-            p2p_local_keypair,
-            p2p_listen_on: vec![],
-            sync_batch_size: 128,
-            custom_syncing_window: syncing_window,
-            blockstore,
-            store,
-        })
+        if let Some(secs) = self.custom_syncing_window_secs {
+            let dur = Duration::from_secs(secs.into());
+            builder = builder.syncing_window(dur);
+        }
+
+        Ok(builder)
     }
 }
 

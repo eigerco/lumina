@@ -2,10 +2,16 @@
 name = "celestia-grpc-macros"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
+description = "Helper crate for grpc_method macro for creating gRPC client, used by celestia-grpc"
+authors = ["Eiger <hello@eiger.co>"]
+homepage = "https://www.eiger.co"
+repository = "https://github.com/eigerco/lumina"
+readme = "README.md"
 
 [dependencies]
 quote = "1.0.37"
-syn = "2.0.87"
+syn = { version = "2.0.87", features = ["full", "extra-traits"] }
 proc-macro2 = "1.0.89"
 
 [lib]

@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.5.0...celestia-proto-v0.6.0) - 2024-12-02
+
+### Added
+
+- *(proto,types,rpc)* [**breaking**] celestia node v0.20.4 upgrade ([#469](https://github.com/eigerco/lumina/pull/469))
+- *(grpc, types, proto)* [**breaking**] Add tonic gRPC ([#454](https://github.com/eigerco/lumina/pull/454))
+- *(proto)* [**breaking**] update celestia-app and node proto definitios ([#459](https://github.com/eigerco/lumina/pull/459))
+
+### Other
+
+- *(proto,types,node,grpc)* [**breaking**] Use `tendermint-rs` instead of `celestia-tendermint-rs` fork ([#463](https://github.com/eigerco/lumina/pull/463))
+
 ## [0.5.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.4.1...celestia-proto-v0.5.0) - 2024-10-25
 
 ### Added

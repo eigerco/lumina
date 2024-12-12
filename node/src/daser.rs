@@ -29,7 +29,6 @@
 //! 5. Steps 3 and 4 are repeated concurently, unless we detect that all peers have disconnected.
 //!    At that point Daser cleans the queue and moves back to step 1.
 
-use std::cmp::min;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -50,10 +49,6 @@ use crate::p2p::{P2p, P2pError};
 use crate::store::{BlockRanges, SamplingStatus, Store, StoreError};
 
 const MAX_SAMPLES_NEEDED: usize = 16;
-
-const HOUR: u64 = 60 * 60;
-const DAY: u64 = 24 * HOUR;
-const DEFAULT_SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
 const GET_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
@@ -87,9 +82,8 @@ where
     pub(crate) store: Arc<S>,
     /// Event publisher.
     pub(crate) event_pub: EventPublisher,
-    /// Size of the syncing window, default sampling window will be truncated to syncing window, if
-    /// latter is smaller
-    pub(crate) syncing_window: Duration,
+    /// Size of the sampling window.
+    pub(crate) sampling_window: Duration,
 }
 
 impl Daser {
@@ -169,7 +163,7 @@ where
             done: BlockRanges::default(),
             ongoing: BlockRanges::default(),
             prev_head: None,
-            sampling_window: min(DEFAULT_SAMPLING_WINDOW, args.syncing_window),
+            sampling_window: args.sampling_window,
         })
     }
 
@@ -477,6 +471,7 @@ mod tests {
     use super::*;
     use crate::events::{EventChannel, EventSubscriber};
     use crate::executor::sleep;
+    use crate::node::DEFAULT_SYNCING_WINDOW;
     use crate::p2p::shwap::convert_cid;
     use crate::p2p::P2pCmd;
     use crate::store::InMemoryStore;
@@ -508,7 +503,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
-            syncing_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: DEFAULT_SYNCING_WINDOW,
         })
         .unwrap();
 
@@ -535,7 +530,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
-            syncing_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: DEFAULT_SYNCING_WINDOW,
         })
         .unwrap();
 
@@ -560,7 +555,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
-            syncing_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: DEFAULT_SYNCING_WINDOW,
         })
         .unwrap();
 

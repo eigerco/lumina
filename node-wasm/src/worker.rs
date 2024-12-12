@@ -17,7 +17,7 @@ use web_sys::BroadcastChannel;
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::events::{EventSubscriber, NodeEventInfo};
 use lumina_node::node::{Node, SyncingInfo};
-use lumina_node::store::{IndexedDbStore, SamplingMetadata, Store};
+use lumina_node::store::{IndexedDbStore, SamplingMetadata};
 
 use crate::client::WasmNodeConfig;
 use crate::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
@@ -126,15 +126,7 @@ impl NodeWorker {
 
 impl NodeWorkerInstance {
     async fn new(events_channel_name: &str, config: WasmNodeConfig) -> Result<Self> {
-        let config = config.into_node_config().await?;
-
-        if let Ok(store_height) = config.store.head_height().await {
-            info!("Initialised store with head height: {store_height}");
-        } else {
-            info!("Initialised new empty store");
-        }
-
-        let (node, events_sub) = Node::new_subscribed(config).await?;
+        let (node, events_sub) = config.into_node_builder().await?.start_subscribed().await?;
 
         let events_channel = BroadcastChannel::new(events_channel_name)
             .context("Failed to allocate BroadcastChannel")?;
