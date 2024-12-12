@@ -39,11 +39,11 @@ pub(crate) struct Params {
     #[arg(short, long = "store")]
     pub(crate) store: Option<PathBuf>,
 
-    /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
-    /// Headers older than syncing window by more than an hour are eligible for pruning.
-    #[arg(long = "syncing-window", verbatim_doc_comment)]
+    /// Sampling window size, defines maximum age of headers considered for syncing and sampling.
+    /// Headers older than sampling window by more than an hour are eligible for pruning.
+    #[arg(long = "sampling-window", verbatim_doc_comment)]
     #[clap(value_parser = parse_duration::parse)]
-    pub(crate) syncing_window: Option<Duration>,
+    pub(crate) sampling_window: Option<Duration>,
 }
 
 pub(crate) async fn run(args: Params) -> Result<()> {
@@ -77,8 +77,8 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         node_builder = node_builder.listen(args.listen_addrs);
     }
 
-    if let Some(syncing_window) = args.syncing_window {
-        node_builder = node_builder.syncing_window(syncing_window);
+    if let Some(sampling_window) = args.sampling_window {
+        node_builder = node_builder.sampling_window(sampling_window);
     }
 
     let (_node, mut events) = node_builder

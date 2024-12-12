@@ -33,9 +33,9 @@ pub struct WasmNodeConfig {
     /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
-    /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
-    /// Headers older than syncing window by more than an hour are eligible for pruning.
-    pub custom_syncing_window_secs: Option<u32>,
+    /// Sampling window size, defines maximum age of headers considered for syncing and sampling.
+    /// Headers older than sampling window by more than an hour are eligible for pruning.
+    pub custom_sampling_window_secs: Option<u32>,
 }
 
 /// `NodeClient` is responsible for steering [`NodeWorker`] by sending it commands and receiving
@@ -382,7 +382,7 @@ impl WasmNodeConfig {
         WasmNodeConfig {
             network,
             bootnodes,
-            custom_syncing_window_secs: None,
+            custom_sampling_window_secs: None,
         }
     }
 
@@ -417,9 +417,9 @@ impl WasmNodeConfig {
 
         builder = builder.bootnodes(bootnodes);
 
-        if let Some(secs) = self.custom_syncing_window_secs {
+        if let Some(secs) = self.custom_sampling_window_secs {
             let dur = Duration::from_secs(secs.into());
-            builder = builder.syncing_window(dur);
+            builder = builder.sampling_window(dur);
         }
 
         Ok(builder)
@@ -513,7 +513,7 @@ mod tests {
             .start(&WasmNodeConfig {
                 network: Network::Private,
                 bootnodes,
-                custom_syncing_window_secs: None,
+                custom_sampling_window_secs: None,
             })
             .await
             .unwrap();
