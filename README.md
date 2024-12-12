@@ -5,7 +5,7 @@ Rust implementation of Celestia's [data availability node](https://github.com/ce
 Run Lumina now at [lumina.rs](https://lumina.rs/) and directly verify Celestia.
 
 Supported features:
-- Backward and forward synchronization of block headers within syncing window
+- Backward and forward synchronization of block headers within sampling window
 - Header exchange (`header-ex`) client and server
 - Listening for, verifying and redistributing extended headers on gossip protocol (`header-sub`)
 - Listening for, verifying and redistributing fraud proofs on gossip protocol (`fraud-sub`)

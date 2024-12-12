@@ -33,8 +33,8 @@ use crate::syncer::{Syncer, SyncerArgs};
 mod builder;
 
 pub use self::builder::{
-    NodeBuilder, NodeBuilderError, DEFAULT_PRUNING_DELAY, DEFAULT_SYNCING_WINDOW,
-    MIN_PRUNING_DELAY, MIN_SYNCING_WINDOW,
+    NodeBuilder, NodeBuilderError, DEFAULT_PRUNING_DELAY, DEFAULT_SAMPLING_WINDOW,
+    MIN_PRUNING_DELAY, MIN_SAMPLING_WINDOW,
 };
 pub use crate::daser::DaserError;
 pub use crate::p2p::{HeaderExError, P2pError};
@@ -82,7 +82,7 @@ where
     pub(crate) p2p_bootnodes: Vec<Multiaddr>,
     pub(crate) p2p_listen_on: Vec<Multiaddr>,
     pub(crate) sync_batch_size: u64,
-    pub(crate) syncing_window: Duration,
+    pub(crate) sampling_window: Duration,
     pub(crate) pruning_window: Duration,
 }
 
@@ -158,14 +158,16 @@ where
             p2p: p2p.clone(),
             event_pub: event_channel.publisher(),
             batch_size: config.sync_batch_size,
-            syncing_window: config.syncing_window,
+            // We sync only what we need to sample. So syncing_window is
+            // the same as sampling_window.
+            syncing_window: config.sampling_window,
         })?);
 
         let daser = Arc::new(Daser::start(DaserArgs {
             p2p: p2p.clone(),
             store: store.clone(),
             event_pub: event_channel.publisher(),
-            sampling_window: config.syncing_window,
+            sampling_window: config.sampling_window,
         })?);
 
         let pruner = Arc::new(Pruner::start(PrunerArgs {
