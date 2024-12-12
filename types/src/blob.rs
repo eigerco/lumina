@@ -401,7 +401,7 @@ mod tests {
     #[test]
     fn validate_blob_commitment_mismatch() {
         let mut blob = sample_blob();
-        blob.commitment = [7; 32].into();
+        blob.commitment = Commitment::new([7; 32]);
 
         blob.validate(AppVersion::V2).unwrap_err();
     }

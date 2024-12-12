@@ -1,5 +1,4 @@
 #![cfg(not(target_arch = "wasm32"))]
-//! gRPC tests
 
 use celestia_grpc::types::auth::Account;
 use celestia_grpc::types::tx::sign_tx;

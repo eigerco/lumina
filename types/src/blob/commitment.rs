@@ -16,6 +16,8 @@ use crate::nmt::{Namespace, NamespacedHashExt, NamespacedSha2Hasher, Nmt, RawNam
 use crate::{Error, Result};
 use crate::{InfoByte, Share};
 
+// TODO: once https://github.com/rustwasm/wasm-bindgen/pull/4351 is merged,
+// this can be replaced with a single common type definition
 /// A merkle hash used to identify the [`Blob`]s data.
 ///
 /// In Celestia network, the transaction which pays for the blob's inclusion
@@ -56,11 +58,15 @@ use crate::{InfoByte, Share};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Commitment {
     ///  hash of the commitment
-    #[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen(skip))]
     hash: merkle::Hash,
 }
 
 impl Commitment {
+    /// Create a new commitment with hash
+    pub fn new(hash: merkle::Hash) -> Self {
+        Commitment { hash }
+    }
+
     /// Generate the share commitment from the given blob data.
     pub fn from_blob(
         namespace: Namespace,
@@ -130,12 +136,6 @@ impl Commitment {
 impl From<Commitment> for merkle::Hash {
     fn from(commitment: Commitment) -> Self {
         commitment.hash
-    }
-}
-
-impl From<merkle::Hash> for Commitment {
-    fn from(hash: merkle::Hash) -> Self {
-        Commitment { hash }
     }
 }
 

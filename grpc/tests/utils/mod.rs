@@ -1,5 +1,4 @@
 #![cfg(not(target_arch = "wasm32"))]
-//! Utilities for grpc tests
 
 use std::{env, fs};
 
