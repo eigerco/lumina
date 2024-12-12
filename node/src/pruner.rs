@@ -34,7 +34,7 @@ pub(crate) enum PrunerError {
 
     /// Pruner removed CIDs for the last header in the store, but the last header changed
     /// before it could be removed (probably becasue of an insert of an older header).
-    /// Since pruning window is 1h behind syncing window, this should not happen.
+    /// Since pruning window is at least 1 minute behind sampling window, this should not happen.
     #[error("Pruner detected invalid removal and will stop")]
     WrongHeightRemoved,
 }
@@ -218,7 +218,7 @@ mod test {
     use super::*;
     use crate::blockstore::InMemoryBlockstore;
     use crate::events::{EventChannel, TryRecvError};
-    use crate::node::{DEFAULT_PRUNING_DELAY, DEFAULT_SYNCING_WINDOW};
+    use crate::node::{DEFAULT_PRUNING_DELAY, DEFAULT_SAMPLING_WINDOW};
     use crate::store::{InMemoryStore, SamplingStatus};
     use crate::test_utils::{
         async_test, gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt,
@@ -227,7 +227,7 @@ mod test {
     const TEST_CODEC: u64 = 0x0D;
     const TEST_MH_CODE: u64 = 0x0D;
     const TEST_PRUNING_WINDOW: Duration =
-        DEFAULT_SYNCING_WINDOW.saturating_add(DEFAULT_PRUNING_DELAY);
+        DEFAULT_SAMPLING_WINDOW.saturating_add(DEFAULT_PRUNING_DELAY);
 
     #[async_test]
     async fn empty_store() {

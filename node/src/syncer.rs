@@ -696,7 +696,7 @@ mod tests {
     use crate::block_ranges::{BlockRange, BlockRangeExt};
     use crate::events::EventChannel;
     use crate::node::HeaderExError;
-    use crate::node::DEFAULT_SYNCING_WINDOW;
+    use crate::node::DEFAULT_SAMPLING_WINDOW;
     use crate::p2p::header_session;
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
@@ -787,7 +787,7 @@ mod tests {
             store: Arc::new(InMemoryStore::new()),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SYNCING_WINDOW,
+            syncing_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 
@@ -935,7 +935,7 @@ mod tests {
             store: store.clone(),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SYNCING_WINDOW,
+            syncing_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 
@@ -1175,7 +1175,7 @@ mod tests {
             store: store.clone(),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SYNCING_WINDOW,
+            syncing_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 
