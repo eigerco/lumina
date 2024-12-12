@@ -11,7 +11,7 @@ use std::time::SystemTime;
 use uniffi::{Enum, Record};
 
 /// Supported Celestia networks.
-#[derive(Debug, Default, Clone, Copy, Enum)]
+#[derive(Debug, Default, Clone, Enum)]
 pub enum Network {
     /// Celestia mainnet.
     #[default]
@@ -20,18 +20,20 @@ pub enum Network {
     Arabica,
     /// Mocha testnet.
     Mocha,
-    /// Private local network.
-    Private,
+    /// Custom network.
+    Custom { id: String },
 }
 
 // From implementation for converting between Lumina and Uniffi types
-impl From<Network> for network::Network {
-    fn from(network: Network) -> Self {
+impl From<&Network> for network::Network {
+    fn from(network: &Network) -> Self {
         match network {
             Network::Mainnet => network::Network::Mainnet,
             Network::Arabica => network::Network::Arabica,
             Network::Mocha => network::Network::Mocha,
-            Network::Private => network::Network::Private,
+            Network::Custom { id } => {
+                network::Network::Custom(network::NetworkId::new(id).expect("invalid network id"))
+            }
         }
     }
 }
