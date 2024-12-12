@@ -40,6 +40,7 @@ serde_repr = { version = "0.1.19", optional = true }
 sha2 = "0.10.6"
 thiserror = "1.0.61"
 time = { version = "0.3.36", default-features = false }
+wasm-bindgen = { version = "0.2.99", optional = true }
 
 [dev-dependencies]
 ed25519-consensus = "2.1.0"
@@ -57,7 +58,7 @@ wasm-bindgen-test = "0.3.42"
 default = ["p2p"]
 p2p = ["dep:libp2p-identity", "dep:multiaddr", "dep:serde_repr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
-wasm-bindgen = ["time/wasm-bindgen"]
+wasm-bindgen = ["time/wasm-bindgen", "dep:wasm-bindgen"]
 
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]

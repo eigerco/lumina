@@ -12,6 +12,8 @@ use tendermint::block::{Commit, Height};
 use tendermint::chain::id::Id;
 use tendermint::{validator, Time};
 use tendermint_proto::Protobuf;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 use crate::consts::appconsts::AppVersion;
 use crate::hash::Hash;
@@ -32,6 +34,64 @@ pub type ValidatorSet = validator::Set;
     feature = "wasm-bindgen"
 ))]
 const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
+
+// TODO: once https://github.com/rustwasm/wasm-bindgen/pull/4351 is merged,
+// this can be replaced with a single common type definition
+/// Block header together with the relevant Data Availability metadata.
+///
+/// [`ExtendedHeader`]s are used to announce and describe the blocks
+/// in the Celestia network.
+///
+/// Before being used, each header should be validated and verified with a header you trust.
+///
+/// # Example
+///
+/// ```
+/// # use celestia_types::ExtendedHeader;
+/// # fn trusted_genesis_header() -> ExtendedHeader {
+/// #     let s = include_str!("../test_data/chain1/extended_header_block_1.json");
+/// #     serde_json::from_str(s).unwrap()
+/// # }
+/// # fn some_untrusted_header() -> ExtendedHeader {
+/// #     let s = include_str!("../test_data/chain1/extended_header_block_27.json");
+/// #     serde_json::from_str(s).unwrap()
+/// # }
+/// let genesis_header = trusted_genesis_header();
+///
+/// // fetch new header
+/// let fetched_header = some_untrusted_header();
+///
+/// fetched_header.validate().expect("Invalid block header");
+/// genesis_header.verify(&fetched_header).expect("Malicious header received");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
+pub struct ExtendedHeader {
+    /// Tendermint block header.
+    #[cfg_attr(
+        all(feature = "wasm-bindgen", target_arch = "wasm32"),
+        wasm_bindgen(skip)
+    )]
+    pub header: Header,
+    /// Commit metadata and signatures from validators committing the block.
+    #[cfg_attr(
+        all(feature = "wasm-bindgen", target_arch = "wasm32"),
+        wasm_bindgen(skip)
+    )]
+    pub commit: Commit,
+    /// Information about the set of validators commiting the block.
+    #[cfg_attr(
+        all(feature = "wasm-bindgen", target_arch = "wasm32"),
+        wasm_bindgen(skip)
+    )]
+    pub validator_set: ValidatorSet,
+    /// Header of the block data availability.
+    #[cfg_attr(
+        all(feature = "wasm-bindgen", target_arch = "wasm32"),
+        wasm_bindgen(getter_with_clone)
+    )]
+    pub dah: DataAvailabilityHeader,
+}
 
 /// Block header together with the relevant Data Availability metadata.
 ///
@@ -61,14 +121,20 @@ const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
 /// genesis_header.verify(&fetched_header).expect("Malicious header received");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
 pub struct ExtendedHeader {
     /// Tendermint block header.
+    #[wasm_bindgen(skip)]
     pub header: Header,
     /// Commit metadata and signatures from validators committing the block.
+    #[wasm_bindgen(skip)]
     pub commit: Commit,
     /// Information about the set of validators commiting the block.
+    #[wasm_bindgen(skip)]
     pub validator_set: ValidatorSet,
     /// Header of the block data availability.
+    #[wasm_bindgen(skip)]
     pub dah: DataAvailabilityHeader,
 }
 

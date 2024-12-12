@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use tendermint::merkle::simple_hash_from_byte_vectors;
 use tendermint_proto::Protobuf;
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::prelude::*;
 
 use crate::consts::appconsts::AppVersion;
 use crate::consts::data_availability_header::{
@@ -58,6 +60,7 @@ use crate::{
     try_from = "RawDataAvailabilityHeader",
     into = "RawDataAvailabilityHeader"
 )]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub struct DataAvailabilityHeader {
     /// Merkle roots of the [`ExtendedDataSquare`] rows.
     row_roots: Vec<NamespacedHash>,
