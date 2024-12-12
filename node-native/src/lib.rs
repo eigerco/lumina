@@ -1,3 +1,8 @@
+//! Native library providing Rust to mobile language bindings for the Lumina node.
+//!
+//! This crate uses Mozillas UniFFI to generate Swift and Kotlin bindings for the Lumina node,
+//! allowing it to be used from iOS and Android applications.
+
 mod types;
 
 use celestia_types::ExtendedHeader;
@@ -5,17 +10,18 @@ use libp2p::identity::Keypair;
 use lumina_node::{
     blockstore::RedbBlockstore,
     events::{EventSubscriber, TryRecvError},
-    network::{canonical_network_bootnodes, network_id},
+    network,
     store::RedbStore,
-    Node, NodeConfig, NodeError,
+    Node, NodeError,
 };
-use std::{path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 use tendermint::hash::Hash;
 use thiserror::Error;
 use tokio::sync::Mutex;
 use types::{Network, NetworkInfo, NodeEvent, PeerId, PeerTrackerInfo, SyncingInfo};
 use uniffi::Object;
 
+/// Result type alias for LuminaNode operations that can fail with a LuminaError
 pub type Result<T> = std::result::Result<T, LuminaError>;
 
 /// Returns the platform-specific base path for storing Lumina data.
@@ -52,24 +58,55 @@ fn get_base_path() -> Result<PathBuf> {
     }
 }
 
+/// Represents all possible errors that can occur in the LuminaNode.
 #[derive(Error, Debug, uniffi::Error)]
 pub enum LuminaError {
+    /// Error returned when trying to perform operations on a node that isn't running
     #[error("Node is not running")]
     NodeNotRunning,
+
+    /// Error returned when network operations fail
     #[error("Network error: {msg}")]
-    NetworkError { msg: String },
+    NetworkError {
+        /// Description of the network error
+        msg: String,
+    },
+
+    /// Error returned when storage operations fail
     #[error("Storage error: {msg}")]
-    StorageError { msg: String },
+    StorageError {
+        /// Description of the storage error
+        msg: String,
+    },
+
+    /// Error returned when trying to start a node that's already running
     #[error("Node is already running")]
     AlreadyRunning,
+
+    /// Error returned when a mutex lock operation fails
     #[error("Lock error")]
     LockError,
+
+    /// Error returned when a hash string is invalid or malformed
     #[error("Invalid hash format: {msg}")]
-    InvalidHash { msg: String },
+    InvalidHash {
+        /// Description of why the hash is invalid
+        msg: String,
+    },
+
+    /// Error returned when a header is invalid or malformed
     #[error("Invalid header format: {msg}")]
-    InvalidHeader { msg: String },
+    InvalidHeader {
+        /// Description of why the header is invalid
+        msg: String,
+    },
+
+    /// Error returned when storage initialization fails
     #[error("Storage initialization failed: {msg}")]
-    StorageInit { msg: String },
+    StorageInit {
+        /// Description of why storage initialization failed
+        msg: String,
+    },
 }
 
 impl From<NodeError> for LuminaError {
@@ -108,7 +145,8 @@ impl LuminaNode {
             return Err(LuminaError::AlreadyRunning);
         }
 
-        let network_id = network_id(self.network.into());
+        let network = network::Network::from(&self.network);
+        let network_id = network.id();
 
         let base_path = get_base_path()?;
 
@@ -131,26 +169,22 @@ impl LuminaNode {
 
         let blockstore = RedbBlockstore::new(db);
 
-        let p2p_bootnodes = canonical_network_bootnodes(self.network.into()).collect::<Vec<_>>();
-
+        let p2p_bootnodes = network.canonical_bootnodes().collect::<Vec<_>>();
         let p2p_local_keypair = Keypair::generate_ed25519();
 
-        let config = NodeConfig {
-            network_id: network_id.to_string(),
-            p2p_bootnodes,
-            p2p_local_keypair,
-            p2p_listen_on: vec![],
-            sync_batch_size: 128,
-            custom_syncing_window: Some(Duration::from_secs(60 * 60 * 24)),
-            store,
-            blockstore,
-        };
+        let builder = Node::builder()
+            .store(store)
+            .blockstore(blockstore)
+            .network(network)
+            .bootnodes(p2p_bootnodes)
+            .keypair(p2p_local_keypair)
+            .sync_batch_size(128);
 
-        let new_node = Node::new(config)
+        let (new_node, subscriber) = builder
+            .start_subscribed()
             .await
             .map_err(|e| LuminaError::NetworkError { msg: e.to_string() })?;
 
-        let subscriber = new_node.event_subscriber();
         let mut events_guard = self.events_subscriber.lock().await;
         *events_guard = Some(subscriber);
 
