@@ -7,6 +7,8 @@ use std::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use serde_wasm_bindgen::to_value;
 use tendermint::block::header::Header;
 use tendermint::block::{Commit, Height};
 use tendermint::chain::id::Id;
@@ -14,8 +16,6 @@ use tendermint::{validator, Time};
 use tendermint_proto::Protobuf;
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::*;
-#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
-use serde_wasm_bindgen::to_value;
 
 use crate::consts::appconsts::AppVersion;
 use crate::hash::Hash;
@@ -484,6 +484,27 @@ impl ExtendedHeader {
     #[wasm_bindgen(getter)]
     pub fn dah(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
         to_value(&self.validator_set)
+    }
+
+    /// Decode protobuf encoded header and then validate it.
+    #[wasm_bindgen(js_name = validate)]
+    pub fn js_validate(&self) -> Result<(), JsValue> {
+        Ok(self.validate()?)
+    }
+
+    #[wasm_bindgen(js_name = verify)]
+    pub fn js_verify(&self, untrusted: &ExtendedHeader) -> Result<(), JsValue> {
+        Ok(self.verify(untrusted)?)
+    }
+
+    #[wasm_bindgen(js_name = verify_range)]
+    pub fn js_verify_range(&self, untrusted: Vec<ExtendedHeader>) -> Result<(), JsValue> {
+        Ok(self.verify_range(&untrusted)?)
+    }
+
+    #[wasm_bindgen(js_name = verify_adjacent_range)]
+    pub fn js_verify_adjacent_range(&self, untrusted: Vec<ExtendedHeader>) -> Result<(), JsValue> {
+        Ok(self.verify_adjacent_range(&untrusted)?)
     }
 }
 

@@ -224,6 +224,64 @@ impl DataAvailabilityHeader {
     }
 }
 
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+impl DataAvailabilityHeader {
+    /// Merkle roots of the [`ExtendedDataSquare`] rows.
+    #[wasm_bindgen(js_name = row_roots)]
+    pub fn js_row_roots(&self) -> Result<js_sys::Array, serde_wasm_bindgen::Error> {
+        self.row_roots()
+            .iter()
+            .map(|h| serde_wasm_bindgen::to_value(&h))
+            .collect()
+    }
+
+    /// Merkle roots of the [`ExtendedDataSquare`] columns.
+    #[wasm_bindgen(js_name = column_roots)]
+    pub fn js_column_roots(&self) -> Result<js_sys::Array, serde_wasm_bindgen::Error> {
+        self.column_roots()
+            .iter()
+            .map(|h| serde_wasm_bindgen::to_value(&h))
+            .collect()
+    }
+
+    /// Get a root of the row with the given index.
+    #[wasm_bindgen(js_name = row_root)]
+    pub fn js_row_root(&self, row: u16) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        serde_wasm_bindgen::to_value(&self.row_root(row))
+    }
+
+    /// Get the a root of the column with the given index.
+    #[wasm_bindgen(js_name = column_root)]
+    pub fn js_column_root(&self, column: u16) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        serde_wasm_bindgen::to_value(&self.column_root(column))
+    }
+
+    /// Compute the combined hash of all rows and columns.
+    ///
+    /// This is the data commitment for the block.
+    #[wasm_bindgen(js_name = hash)]
+    pub fn js_hash(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        serde_wasm_bindgen::to_value(&self.hash())
+    }
+
+    /// Get the size of the [`ExtendedDataSquare`] for which this header was built.
+    #[wasm_bindgen(js_name = square_width)]
+    pub fn js_square_width(&self) -> u16 {
+        self.square_width()
+    }
+
+    /// Get the size of the [`ExtendedDataSquare`] for which this header was built.
+    #[wasm_bindgen(js_name = row_proof)]
+    pub fn js_row_proof(&self, first_row: u16, last_row: u16) -> Result<JsValue, JsValue> {
+        if first_row > last_row {
+            return Err(js_sys::Error::new("invalid row range provided").into());
+        }
+        let row_proof = self.row_proof(first_row..=last_row)?;
+        Ok(serde_wasm_bindgen::to_value(&row_proof)?)
+    }
+}
+
 impl Protobuf<RawDataAvailabilityHeader> for DataAvailabilityHeader {}
 
 impl TryFrom<RawDataAvailabilityHeader> for DataAvailabilityHeader {

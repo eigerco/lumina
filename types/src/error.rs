@@ -1,6 +1,4 @@
 use crate::consts::appconsts;
-#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
-use wasm_bindgen::{describe::WasmDescribe, convert::IntoWasmAbi, JsValue};
 
 /// Alias for a `Result` with the error type [`celestia_types::Error`].
 ///

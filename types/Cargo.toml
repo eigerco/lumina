@@ -62,7 +62,7 @@ wasm-bindgen-test = "0.3.42"
 default = ["p2p"]
 p2p = ["dep:libp2p-identity", "dep:multiaddr", "dep:serde_repr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
-wasm-bindgen = ["time/wasm-bindgen", "dep:wasm-bindgen", "dep:serde-wasm-bindgen"]
+wasm-bindgen = ["time/wasm-bindgen", "dep:wasm-bindgen", "dep:serde-wasm-bindgen", "dep:js-sys", "nmt-rs/serde"]
 
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]
