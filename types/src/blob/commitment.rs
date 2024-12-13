@@ -16,8 +16,6 @@ use crate::nmt::{Namespace, NamespacedHashExt, NamespacedSha2Hasher, Nmt, RawNam
 use crate::{Error, Result};
 use crate::{InfoByte, Share};
 
-// TODO: once https://github.com/rustwasm/wasm-bindgen/pull/4351 is merged,
-// this can be replaced with a single common type definition
 /// A merkle hash used to identify the [`Blob`]s data.
 ///
 /// In Celestia network, the transaction which pays for the blob's inclusion

@@ -7,7 +7,7 @@ use celestia_types::blob::MsgPayForBlobs;
 use celestia_types::nmt::Namespace;
 use celestia_types::{AppVersion, Blob};
 
-mod utils;
+pub mod utils;
 
 use crate::utils::{load_account, new_test_client};
 
@@ -101,7 +101,7 @@ async fn submit_blob() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
     let _submitted_tx = client
         .get_tx(response.txhash)

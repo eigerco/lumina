@@ -376,6 +376,28 @@ impl Namespace {
     }
 }
 
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+impl Namespace {
+    /// Converts the [`Namespace`] to a byte slice.
+    #[wasm_bindgen(js_name = "asBytes")]
+    pub fn js_as_bytes(&self) -> js_sys::Uint8Array {
+        (&self.0 .0[..]).into()
+    }
+
+    /// Returns the first byte indicating the version of the [`Namespace`].
+    #[wasm_bindgen(js_name = "version", getter)]
+    pub fn js_version(&self) -> u8 {
+        self.as_bytes()[0]
+    }
+
+    /// Returns the trailing 28 bytes indicating the id of the [`Namespace`].
+    #[wasm_bindgen(js_name = "id", getter)]
+    pub fn js_id(&self) -> js_sys::Uint8Array {
+        (&self.as_bytes()[1..]).into()
+    }
+}
+
 impl From<Namespace> for nmt_rs::NamespaceId<NS_SIZE> {
     fn from(value: Namespace) -> Self {
         value.0
