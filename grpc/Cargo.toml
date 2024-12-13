@@ -30,23 +30,30 @@ bytes = "1.8"
 hex = "0.4.3"
 http-body = "1"
 k256 = "0.13.4"
+regex = { version = "1.11", default-features = false }
 serde = "1.0.215"
 thiserror = "1.0.61"
+tokio = { version = "1.38.0", features = ["sync"] }
 tonic = { version = "0.12.3", default-features = false, features = [
   "codegen", "prost"
 ]}
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.38.0", features = ["time"] }
 tonic = { version = "0.12.3", default-features = false, features = [ "transport" ] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2.15", features = ["js"] }
+gloo-timers = { version = "0.3.0", features = ["futures"] }
+send_wrapper = { version = "0.6.0", features = ["futures"] }
 tonic-web-wasm-client = "0.6"
+
+[dev-dependencies]
+rand_core = "0.6.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 dotenvy = "0.15.7"
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-gloo-timers = { version = "0.3.0", features = ["futures"] }
 wasm-bindgen-test = "0.3.42"

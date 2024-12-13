@@ -62,9 +62,10 @@ impl GrpcMethod {
                     self.transport.clone(),
                 );
 
-                let request = ::tonic::Request::new(( #( #params ),* ).into_parameter());
+                let param = crate::grpc::IntoGrpcParam::into_parameter(( #( #params ),* ));
+                let request = ::tonic::Request::new(param);
                 let response = client. #grpc_method_name (request).await;
-                response?.into_inner().try_from_response()
+                crate::grpc::FromGrpcResponse::try_from_response(response?.into_inner())
             }
         };
 

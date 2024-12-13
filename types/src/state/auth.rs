@@ -8,6 +8,7 @@ use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
 
 use crate::state::Address;
+use crate::validation_error;
 use crate::Error;
 
 pub use celestia_proto::cosmos::auth::v1beta1::BaseAccount as RawBaseAccount;
@@ -40,7 +41,7 @@ pub struct BaseAccount {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleAccount {
     /// [`BaseAccount`] specification of this module account.
-    pub base_account: Option<BaseAccount>,
+    pub base_account: BaseAccount,
     /// Name of the module.
     pub name: String,
     /// Permissions associated with this module account.
@@ -74,7 +75,7 @@ impl TryFrom<RawBaseAccount> for BaseAccount {
 
 impl From<ModuleAccount> for RawModuleAccount {
     fn from(account: ModuleAccount) -> Self {
-        let base_account = account.base_account.map(BaseAccount::into);
+        let base_account = Some(account.base_account.into());
         RawModuleAccount {
             base_account,
             name: account.name,
@@ -89,8 +90,8 @@ impl TryFrom<RawModuleAccount> for ModuleAccount {
     fn try_from(account: RawModuleAccount) -> Result<Self, Self::Error> {
         let base_account = account
             .base_account
-            .map(RawBaseAccount::try_into)
-            .transpose()?;
+            .ok_or_else(|| validation_error!("base account missing"))?
+            .try_into()?;
         Ok(ModuleAccount {
             base_account,
             name: account.name,

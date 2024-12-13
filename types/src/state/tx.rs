@@ -1,10 +1,17 @@
+use std::fmt;
+
 use celestia_proto::cosmos::base::abci::v1beta1::AbciMessageLog;
 use serde::{Deserialize, Serialize};
+use serde_repr::Deserialize_repr;
+use serde_repr::Serialize_repr;
 use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::v0_34::abci::Event;
 use tendermint_proto::Protobuf;
 
+use crate::bail_validation;
+use crate::hash::Hash;
 use crate::state::bit_array::BitVector;
+use crate::state::Address;
 use crate::Error;
 use crate::Height;
 
@@ -76,13 +83,14 @@ pub struct TxResponse {
     pub height: Height,
 
     /// The transaction hash.
-    pub txhash: String,
+    #[serde(with = "crate::serializers::hash")]
+    pub txhash: Hash,
 
     /// Namespace for the Code
     pub codespace: String,
 
     /// Response code.
-    pub code: u32,
+    pub code: ErrorCode,
 
     /// Result bytes, if any.
     pub data: String,
@@ -104,9 +112,6 @@ pub struct TxResponse {
     pub gas_used: i64,
 
     /// The request transaction bytes.
-    #[serde(skip)]
-    // caused by prost_types/pbjson_types::Any conditional compilation, should be
-    // removed once we align on tendermint::Any
     pub tx: Option<Any>,
 
     /// Time of the previous block. For heights > 1, it's the weighted median of
@@ -197,20 +202,11 @@ pub struct Fee {
     /// if unset, the first signer is responsible for paying the fees. If set, the specified account must pay the fees.
     /// the payer must be a tx signer (and thus have signed this field in AuthInfo).
     /// setting this field does *not* change the ordering of required signers for the transaction.
-    pub payer: String,
+    pub payer: Option<Address>,
     /// if set, the fee payer (either the first signer or the value of the payer field) requests that a fee grant be used
     /// to pay fees instead of the fee payer's own balance. If an appropriate fee grant does not exist or the chain does
     /// not support fee grants, this will fail
-    pub granter: String,
-}
-
-/// Coin defines a token with a denomination and an amount.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Coin {
-    /// Coin denomination
-    pub denom: String,
-    /// Coin amount
-    pub amount: u64,
+    pub granter: Option<Address>,
 }
 
 impl Fee {
@@ -226,6 +222,175 @@ impl Fee {
             gas_limit,
             ..Default::default()
         }
+    }
+}
+
+/// Coin defines a token with a denomination and an amount.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct Coin {
+    /// Coin denomination
+    pub denom: String,
+    /// Coin amount
+    pub amount: u64,
+}
+
+impl Coin {
+    /// Create a coin with given amount of `utia`.
+    pub fn utia(amount: u64) -> Self {
+        Self {
+            denom: "utia".into(),
+            amount,
+        }
+    }
+}
+
+/// Error codes associated with transaction responses.
+// source https://github.com/celestiaorg/cosmos-sdk/blob/v1.25.1-sdk-v0.46.16/types/errors/errors.go#L38
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize_repr, Deserialize_repr)]
+#[repr(u32)]
+pub enum ErrorCode {
+    /// No error
+    Success = 0,
+    /// Cannot parse a transaction
+    TxDecode = 2,
+    /// Sequence number (nonce) is incorrect for the signature
+    InvalidSequence = 3,
+    /// Request without sufficient authorization is handled
+    Unauthorized = 4,
+    /// Account cannot pay requested amount
+    InsufficientFunds = 5,
+    /// Request is unknown
+    UnknownRequest = 6,
+    /// Address is invalid
+    InvalidAddress = 7,
+    /// Pubkey is invalid
+    InvalidPubKey = 8,
+    /// Address is unknown
+    UnknownAddress = 9,
+    /// Coin is invalid
+    InvalidCoins = 10,
+    /// Gas exceeded
+    OutOfGas = 11,
+    /// Memo too large
+    MemoTooLarge = 12,
+    /// Fee is insufficient
+    InsufficientFee = 13,
+    /// Too many signatures
+    TooManySignatures = 14,
+    /// No signatures in transaction
+    NoSignatures = 15,
+    /// Error converting to json
+    JSONMarshal = 16,
+    /// Error converting from json
+    JSONUnmarshal = 17,
+    /// Request contains invalid data
+    InvalidRequest = 18,
+    /// Tx already exists in the mempool
+    TxInMempoolCache = 19,
+    /// Mempool is full
+    MempoolIsFull = 20,
+    /// Tx is too large
+    TxTooLarge = 21,
+    /// Key doesn't exist
+    KeyNotFound = 22,
+    /// Key password is invalid
+    WrongPassword = 23,
+    /// Tx intended signer does not match the given signer
+    InvalidSigner = 24,
+    /// Invalid gas adjustment
+    InvalidGasAdjustment = 25,
+    /// Invalid height
+    InvalidHeight = 26,
+    /// Invalid version
+    InvalidVersion = 27,
+    /// Chain-id is invalid
+    InvalidChainID = 28,
+    /// Invalid type
+    InvalidType = 29,
+    /// Tx rejected due to an explicitly set timeout height
+    TxTimeoutHeight = 30,
+    /// Unknown extension options.
+    UnknownExtensionOptions = 31,
+    /// Account sequence defined in the signer info doesn't match the account's actual sequence
+    WrongSequence = 32,
+    /// Packing a protobuf message to Any failed
+    PackAny = 33,
+    /// Unpacking a protobuf message from Any failed
+    UnpackAny = 34,
+    /// Internal logic error, e.g. an invariant or assertion that is violated
+    Logic = 35,
+    /// Conflict error, e.g. when two goroutines try to access the same resource and one of them fails
+    Conflict = 36,
+    /// Called a branch of a code which is currently not supported
+    NotSupported = 37,
+    /// Requested entity doesn't exist in the state
+    NotFound = 38,
+    /// Internal errors caused by external operation
+    IO = 39,
+    /// Min-gas-prices field in BaseConfig is empty
+    AppConfig = 40,
+    /// Invalid GasWanted value is supplied
+    InvalidGasLimit = 41,
+    /// Node recovered from panic
+    Panic = 111222,
+}
+
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl TryFrom<u32> for ErrorCode {
+    type Error = Error;
+
+    fn try_from(value: u32) -> Result<ErrorCode, Self::Error> {
+        let error_code = match value {
+            0 => ErrorCode::Success,
+            2 => ErrorCode::TxDecode,
+            3 => ErrorCode::InvalidSequence,
+            4 => ErrorCode::Unauthorized,
+            5 => ErrorCode::InsufficientFunds,
+            6 => ErrorCode::UnknownRequest,
+            7 => ErrorCode::InvalidAddress,
+            8 => ErrorCode::InvalidPubKey,
+            9 => ErrorCode::UnknownAddress,
+            10 => ErrorCode::InvalidCoins,
+            11 => ErrorCode::OutOfGas,
+            12 => ErrorCode::MemoTooLarge,
+            13 => ErrorCode::InsufficientFee,
+            14 => ErrorCode::TooManySignatures,
+            15 => ErrorCode::NoSignatures,
+            16 => ErrorCode::JSONMarshal,
+            17 => ErrorCode::JSONUnmarshal,
+            18 => ErrorCode::InvalidRequest,
+            19 => ErrorCode::TxInMempoolCache,
+            20 => ErrorCode::MempoolIsFull,
+            21 => ErrorCode::TxTooLarge,
+            22 => ErrorCode::KeyNotFound,
+            23 => ErrorCode::WrongPassword,
+            24 => ErrorCode::InvalidSigner,
+            25 => ErrorCode::InvalidGasAdjustment,
+            26 => ErrorCode::InvalidHeight,
+            27 => ErrorCode::InvalidVersion,
+            28 => ErrorCode::InvalidChainID,
+            29 => ErrorCode::InvalidType,
+            30 => ErrorCode::TxTimeoutHeight,
+            31 => ErrorCode::UnknownExtensionOptions,
+            32 => ErrorCode::WrongSequence,
+            33 => ErrorCode::PackAny,
+            34 => ErrorCode::UnpackAny,
+            35 => ErrorCode::Logic,
+            36 => ErrorCode::Conflict,
+            37 => ErrorCode::NotSupported,
+            38 => ErrorCode::NotFound,
+            39 => ErrorCode::IO,
+            40 => ErrorCode::AppConfig,
+            41 => ErrorCode::InvalidGasLimit,
+            111222 => ErrorCode::Panic,
+            _ => bail_validation!("error code ({}) unknown", value),
+        };
+        Ok(error_code)
     }
 }
 
@@ -289,9 +454,9 @@ impl TryFrom<RawTxResponse> for TxResponse {
     fn try_from(response: RawTxResponse) -> Result<TxResponse, Self::Error> {
         Ok(TxResponse {
             height: response.height.try_into()?,
-            txhash: response.txhash,
+            txhash: response.txhash.parse()?,
             codespace: response.codespace,
-            code: response.code,
+            code: response.code.try_into()?,
             data: response.data,
             raw_log: response.raw_log,
             logs: response.logs,
@@ -336,11 +501,16 @@ impl TryFrom<RawFee> for Fee {
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<_, Error>>()?;
+
         Ok(Fee {
             amount,
             gas_limit: value.gas_limit,
-            payer: value.payer,
-            granter: value.granter,
+            payer: (!value.payer.is_empty())
+                .then(|| value.payer.parse())
+                .transpose()?,
+            granter: (!value.granter.is_empty())
+                .then(|| value.granter.parse())
+                .transpose()?,
         })
     }
 }
@@ -351,8 +521,8 @@ impl From<Fee> for RawFee {
         RawFee {
             amount,
             gas_limit: value.gas_limit,
-            payer: value.payer,
-            granter: value.granter,
+            payer: value.payer.map(|acc| acc.to_string()).unwrap_or_default(),
+            granter: value.granter.map(|acc| acc.to_string()).unwrap_or_default(),
         }
     }
 }

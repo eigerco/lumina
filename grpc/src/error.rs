@@ -1,9 +1,10 @@
+use celestia_types::{hash::Hash, state::ErrorCode};
 use tonic::Status;
 
 /// Alias for a `Result` with the error type [`celestia_tonic::Error`].
 ///
 /// [`celestia_tonic::Error`]: crate::Error
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Representation of all the errors that can occur when interacting with [`celestia_tonic`].
 ///
@@ -37,4 +38,36 @@ pub enum Error {
     /// Empty blob submission list
     #[error("Attempted to submit blob transaction with empty blob list")]
     TxEmptyBlobList,
+
+    /// Broadcasting transaction failed
+    #[error("Broadcasting transaction {0} failed; code: {1}, error: {2}, gas limit: {3}")]
+    TxBroadcastFailed(Hash, ErrorCode, String, u64),
+
+    /// Executing transaction failed
+    #[error("Transaction {0} execution failed; code: {1}, error: {2}")]
+    TxExecutionFailed(Hash, ErrorCode, String),
+
+    /// Transaction was evicted from the mempool
+    #[error("Transaction {0} was evicted from the mempool")]
+    TxEvicted(Hash),
+
+    /// Transaction wasn't found, it was likely rejected
+    #[error("Transaction {0} wasn't found, it was likely rejected")]
+    TxNotFound(Hash),
+
+    /// Unsupported key algorithm
+    #[error("Key algorithm not supported")]
+    KeyAlgorithmNotSupported,
+
+    /// Provided public key differs from one associated with account
+    #[error("Provided public key differs from one associated with account")]
+    PublicKeyMismatch,
+
+    /// Public key not found in account and not provided
+    #[error("Public key not found in account and not provided")]
+    PublicKeyMissing,
+
+    /// Updating gas price failed
+    #[error("Updating gas price failed: {0}")]
+    UpdatingGasPriceFailed(String),
 }
