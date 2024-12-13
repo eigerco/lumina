@@ -832,6 +832,7 @@ dependencies = [
  "enum_dispatch",
  "getrandom",
  "indoc",
+ "js-sys",
  "leopard-codec",
  "libp2p-identity",
  "multiaddr",
@@ -841,6 +842,7 @@ dependencies = [
  "rand",
  "ruint",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "serde_repr",
  "sha2 0.10.8",
@@ -2478,10 +2480,11 @@ checksum = "8eaf4bc02d17cbdd7ff4c7438cafcdf7fb9a4613313ad11b4f8fefe7d3fa0130"
 
 [[package]]
 name = "js-sys"
-version = "0.3.70"
+version = "0.3.76"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1868808506b929d7b0cfa8f75951347aa71bb21144b7791bae35d9bccfcfe37a"
+checksum = "6717b6b5b077764fb5966237269cb3c64edddde4b14ce42647430a78ced9e7b7"
 dependencies = [
+ "once_cell",
  "wasm-bindgen",
 ]
 

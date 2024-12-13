@@ -1,4 +1,6 @@
 use crate::consts::appconsts;
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::{describe::WasmDescribe, convert::IntoWasmAbi, JsValue};
 
 /// Alias for a `Result` with the error type [`celestia_types::Error`].
 ///
@@ -256,6 +258,13 @@ pub enum Error {
 impl From<prost::DecodeError> for Error {
     fn from(value: prost::DecodeError) -> Self {
         Error::Protobuf(tendermint_proto::Error::decode_message(value))
+    }
+}
+
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+impl From<Error> for wasm_bindgen::JsValue {
+    fn from(value: Error) -> Self {
+        js_sys::Error::new(&value.to_string()).into()
     }
 }
 

@@ -12,8 +12,10 @@ use tendermint::block::{Commit, Height};
 use tendermint::chain::id::Id;
 use tendermint::{validator, Time};
 use tendermint_proto::Protobuf;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::*;
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use serde_wasm_bindgen::to_value;
 
 use crate::consts::appconsts::AppVersion;
 use crate::hash::Hash;
@@ -454,6 +456,34 @@ impl ExtendedHeader {
         }
 
         self.verify_range(untrusted)
+    }
+}
+
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+impl ExtendedHeader {
+    /// Tendermint block header.
+    #[wasm_bindgen(getter)]
+    pub fn header(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        to_value(&self.header)
+    }
+
+    /// Commit metadata and signatures from validators committing the block.
+    #[wasm_bindgen(getter)]
+    pub fn commit(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        to_value(&self.commit)
+    }
+
+    /// Information about the set of validators commiting the block.
+    #[wasm_bindgen(getter)]
+    pub fn validator_set(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        to_value(&self.validator_set)
+    }
+
+    /// Header of the block data availability.
+    #[wasm_bindgen(getter)]
+    pub fn dah(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        to_value(&self.validator_set)
     }
 }
 

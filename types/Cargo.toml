@@ -43,6 +43,8 @@ time = { version = "0.3.36", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { version = "0.2.95", optional = true }
+serde-wasm-bindgen = { version = "0.6.5", optional = true }
+js-sys = { version = "0.3.76", optional = true }
 
 [dev-dependencies]
 ed25519-consensus = "2.1.0"
@@ -60,7 +62,7 @@ wasm-bindgen-test = "0.3.42"
 default = ["p2p"]
 p2p = ["dep:libp2p-identity", "dep:multiaddr", "dep:serde_repr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
-wasm-bindgen = ["time/wasm-bindgen", "dep:wasm-bindgen"]
+wasm-bindgen = ["time/wasm-bindgen", "dep:wasm-bindgen", "dep:serde-wasm-bindgen"]
 
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]
