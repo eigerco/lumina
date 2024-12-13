@@ -27,7 +27,6 @@ prost-types = "0.13.3"
 #libp2p = { path = "../../rust-libp2p/libp2p" }
 #libp2p-core = { path = "../../rust-libp2p/core" }
 #libp2p-swarm = { path = "../../rust-libp2p/swarm" }
-system-configuration = { git = "https://github.com/mullvad/system-configuration-rs", tag = "v0.6.1" }
 
 # Uncomment this if you need debug symbols in release.
 # Also check node-wasm's `Cargo.toml`.
