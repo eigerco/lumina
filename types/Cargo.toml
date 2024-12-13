@@ -42,6 +42,7 @@ thiserror = "1.0.61"
 time = { version = "0.3.36", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { version = "0.3.76", optional = true }
 wasm-bindgen = { version = "0.2.95", optional = true }
 
 [dev-dependencies]
