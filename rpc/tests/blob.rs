@@ -194,7 +194,7 @@ async fn blob_get_get_proof_wrong_commitment() {
     let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
-    let commitment = Commitment(random_bytes_array());
+    let commitment = Commitment::new(random_bytes_array());
 
     let submitted_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
 

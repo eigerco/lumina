@@ -24,6 +24,8 @@ use cid::CidGeneric;
 use multihash::Multihash;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tendermint::hash::SHA256_HASH_SIZE;
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::prelude::*;
 
 mod namespace_proof;
 mod namespaced_hash;
@@ -91,6 +93,7 @@ pub type Proof = nmt_rs::simple_merkle::proof::Proof<NamespacedSha2Hasher>;
 ///  - secondary reserved namespaces - those use version `0xff` so they are always placed after
 ///    user-submitted data.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
 impl Namespace {
@@ -370,6 +373,28 @@ impl Namespace {
     /// ```
     pub fn is_reserved(&self) -> bool {
         *self <= Namespace::MAX_PRIMARY_RESERVED || *self >= Namespace::MIN_SECONDARY_RESERVED
+    }
+}
+
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+impl Namespace {
+    /// Converts the [`Namespace`] to a byte slice.
+    #[wasm_bindgen(js_name = "asBytes")]
+    pub fn js_as_bytes(&self) -> js_sys::Uint8Array {
+        (&self.0 .0[..]).into()
+    }
+
+    /// Returns the first byte indicating the version of the [`Namespace`].
+    #[wasm_bindgen(js_name = "version", getter)]
+    pub fn js_version(&self) -> u8 {
+        self.as_bytes()[0]
+    }
+
+    /// Returns the trailing 28 bytes indicating the id of the [`Namespace`].
+    #[wasm_bindgen(js_name = "id", getter)]
+    pub fn js_id(&self) -> js_sys::Uint8Array {
+        (&self.as_bytes()[1..]).into()
     }
 }
 

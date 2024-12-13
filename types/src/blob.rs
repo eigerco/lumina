@@ -17,12 +17,18 @@ pub use self::msg_pay_for_blobs::MsgPayForBlobs;
 pub use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
 pub use celestia_proto::proto::blob::v1::BlobProto as RawBlob;
 pub use celestia_proto::proto::blob::v1::BlobTx as RawBlobTx;
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::prelude::*;
 
 /// Arbitrary data that can be stored in the network within certain [`Namespace`].
 // NOTE: We don't use the `serde(try_from)` pattern for this type
 // becase JSON representation needs to have `commitment` field but
 // Protobuf definition doesn't.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct Blob {
     /// A [`Namespace`] the [`Blob`] belongs to.
     pub namespace: Namespace,
@@ -395,7 +401,7 @@ mod tests {
     #[test]
     fn validate_blob_commitment_mismatch() {
         let mut blob = sample_blob();
-        blob.commitment.0.fill(7);
+        blob.commitment = Commitment::new([7; 32]);
 
         blob.validate(AppVersion::V2).unwrap_err();
     }

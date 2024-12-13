@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use celestia_types::nmt::Namespace;
+use celestia_types::Blob;
 use enum_as_inner::EnumAsInner;
 use js_sys::Array;
 use libp2p::Multiaddr;
@@ -53,6 +55,12 @@ pub(crate) enum NodeCommand {
     GetSamplingMetadata {
         height: u64,
     },
+    RequestAllBlobs {
+        #[serde(with = "serde_wasm_bindgen::preserve")]
+        header: JsValue,
+        namespace: Namespace,
+        timeout_secs: Option<f64>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -82,6 +90,7 @@ pub(crate) enum WorkerResponse {
     Headers(JsResult<Array, Error>),
     LastSeenNetworkHead(JsResult<JsValue, Error>),
     SamplingMetadata(Result<Option<SamplingMetadata>>),
+    Blobs(Result<Vec<Blob>>),
 }
 
 pub(crate) trait CheckableResponseExt {
