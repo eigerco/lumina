@@ -70,28 +70,12 @@ const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
 #[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
 pub struct ExtendedHeader {
     /// Tendermint block header.
-    #[cfg_attr(
-        all(feature = "wasm-bindgen", target_arch = "wasm32"),
-        wasm_bindgen(skip)
-    )]
     pub header: Header,
     /// Commit metadata and signatures from validators committing the block.
-    #[cfg_attr(
-        all(feature = "wasm-bindgen", target_arch = "wasm32"),
-        wasm_bindgen(skip)
-    )]
     pub commit: Commit,
     /// Information about the set of validators commiting the block.
-    #[cfg_attr(
-        all(feature = "wasm-bindgen", target_arch = "wasm32"),
-        wasm_bindgen(skip)
-    )]
     pub validator_set: ValidatorSet,
     /// Header of the block data availability.
-    #[cfg_attr(
-        all(feature = "wasm-bindgen", target_arch = "wasm32"),
-        wasm_bindgen(getter_with_clone)
-    )]
     pub dah: DataAvailabilityHeader,
 }
 
