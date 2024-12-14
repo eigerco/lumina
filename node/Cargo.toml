@@ -69,6 +69,7 @@ libp2p = { workspace = true, features = [
 redb = "2.1.1"
 rustls-pemfile = "2.1.2"
 rustls-pki-types = "1.7.0"
+uniffi = { version = "0.28.0", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 backoff = { version = "0.4.0", features = ["wasm-bindgen"] }
@@ -110,7 +111,9 @@ serde_json = "1.0.117"
 tempfile = "3.10.1"
 
 [features]
+default-features = []
 test-utils = ["celestia-types/test-utils"]
+uniffi = ["dep:uniffi", "celestia-types/uniffi"] 
 
 [package.metadata.docs.rs]
 features = ["test-utils"]

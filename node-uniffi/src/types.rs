@@ -3,55 +3,35 @@ use libp2p::swarm::NetworkInfo as Libp2pNetworkInfo;
 use libp2p::PeerId as Libp2pPeerId;
 use lumina_node::block_ranges::BlockRange as LuminaBlockRange;
 use lumina_node::events::{NodeEvent as LuminaNodeEvent, NodeEventInfo as LuminaNodeEventInfo};
-use lumina_node::network;
-use lumina_node::node::PeerTrackerInfo as LuminaPeerTrackerInfo;
 use lumina_node::node::SyncingInfo as LuminaSyncingInfo;
 use std::str::FromStr;
 use std::time::SystemTime;
-use uniffi::{Enum, Record};
+use uniffi::Record;
 
-/// Supported Celestia networks.
-#[derive(Debug, Default, Clone, Enum)]
-pub enum Network {
-    /// Celestia mainnet.
-    #[default]
-    Mainnet,
-    /// Arabica testnet.
-    Arabica,
-    /// Mocha testnet.
-    Mocha,
-    /// Custom network.
-    Custom { id: String },
+/// Configuration options for the Lumina node
+#[derive(Debug, Clone, Record)]
+pub struct NodeStartConfig {
+    /// Custom syncing window in seconds, defines maximum age of headers
+    /// considered for syncing and sampling
+    pub syncing_window_secs: Option<u32>,
+
+    /// Custom pruning delay after the syncing window in seconds
+    pub pruning_delay_secs: Option<u32>,
+
+    /// Maximum number of headers in batch while syncing
+    pub sync_batch_size: Option<u64>,
+
+    /// Whether to listen for incoming connections
+    pub enable_listener: bool,
 }
 
-// From implementation for converting between Lumina and Uniffi types
-impl From<&Network> for network::Network {
-    fn from(network: &Network) -> Self {
-        match network {
-            Network::Mainnet => network::Network::Mainnet,
-            Network::Arabica => network::Network::Arabica,
-            Network::Mocha => network::Network::Mocha,
-            Network::Custom { id } => {
-                network::Network::Custom(network::NetworkId::new(id).expect("invalid network id"))
-            }
-        }
-    }
-}
-
-/// Statistics of the connected peers
-#[derive(Debug, Clone, Default, Record)]
-pub struct PeerTrackerInfo {
-    /// Number of the connected peers.
-    pub num_connected_peers: u64,
-    /// Number of the connected trusted peers.
-    pub num_connected_trusted_peers: u64,
-}
-
-impl From<LuminaPeerTrackerInfo> for PeerTrackerInfo {
-    fn from(info: LuminaPeerTrackerInfo) -> Self {
+impl Default for NodeStartConfig {
+    fn default() -> Self {
         Self {
-            num_connected_peers: info.num_connected_peers,
-            num_connected_trusted_peers: info.num_connected_trusted_peers,
+            syncing_window_secs: None,
+            pruning_delay_secs: None,
+            sync_batch_size: None,
+            enable_listener: false,
         }
     }
 }
