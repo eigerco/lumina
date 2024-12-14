@@ -2,6 +2,7 @@
 //!
 //! This crate uses Mozillas UniFFI to generate Swift and Kotlin bindings for the Lumina node,
 //! allowing it to be used from iOS and Android applications.
+#![cfg(not(target_arch = "wasm32"))]
 
 mod types;
 
@@ -10,7 +11,8 @@ use libp2p::identity::Keypair;
 use lumina_node::{
     blockstore::RedbBlockstore,
     events::{EventSubscriber, TryRecvError},
-    network,
+    network::Network,
+    node::PeerTrackerInfo,
     store::RedbStore,
     Node, NodeError,
 };
@@ -18,8 +20,12 @@ use std::{path::PathBuf, str::FromStr, sync::Arc};
 use tendermint::hash::Hash;
 use thiserror::Error;
 use tokio::sync::Mutex;
-use types::{Network, NetworkInfo, NodeEvent, PeerId, PeerTrackerInfo, SyncingInfo};
+use types::{NetworkInfo, NodeEvent, PeerId, SyncingInfo};
 use uniffi::Object;
+
+uniffi::setup_scaffolding!();
+
+lumina_node::uniffi_reexport_scaffolding!();
 
 /// Result type alias for LuminaNode operations that can fail with a LuminaError
 pub type Result<T> = std::result::Result<T, LuminaError>;
@@ -145,8 +151,7 @@ impl LuminaNode {
             return Err(LuminaError::AlreadyRunning);
         }
 
-        let network = network::Network::from(&self.network);
-        let network_id = network.id();
+        let network_id = self.network.id();
 
         let base_path = get_base_path()?;
 
@@ -169,13 +174,13 @@ impl LuminaNode {
 
         let blockstore = RedbBlockstore::new(db);
 
-        let p2p_bootnodes = network.canonical_bootnodes().collect::<Vec<_>>();
+        let p2p_bootnodes = self.network.canonical_bootnodes().collect::<Vec<_>>();
         let p2p_local_keypair = Keypair::generate_ed25519();
 
         let builder = Node::builder()
             .store(store)
             .blockstore(blockstore)
-            .network(network)
+            .network(self.network.clone())
             .bootnodes(p2p_bootnodes)
             .keypair(p2p_local_keypair)
             .sync_batch_size(128);
@@ -216,7 +221,7 @@ impl LuminaNode {
     pub async fn peer_tracker_info(&self) -> Result<PeerTrackerInfo> {
         let node_guard = self.node.lock().await;
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
-        Ok(node.peer_tracker_info().into())
+        Ok(node.peer_tracker_info())
     }
 
     /// Waits until the node is connected to at least one peer.
@@ -409,5 +414,3 @@ impl LuminaNode {
         }
     }
 }
-
-uniffi::setup_scaffolding!();

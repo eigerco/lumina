@@ -1,5 +1,5 @@
 [package]
-name = "native"
+name = "lumina-node-uniffi"
 version = "0.1.0"
 edition = "2021"
 description = "Mobile bindings for Lumina node"
@@ -12,8 +12,8 @@ name = "uniffi-bindgen"
 path = "./src/bin/uniffi-bindgen.rs"
 
 [dependencies]
-lumina-node.workspace = true
-celestia-types.workspace = true
+lumina-node = { workspace = true, features = ["uniffi"] }
+celestia-types = { workspace = true, features = ["uniffi"] }
 tendermint.workspace = true
 libp2p.workspace = true
 redb = "2.1.1"

@@ -942,6 +942,7 @@ dependencies = [
  "tendermint-proto",
  "thiserror 1.0.69",
  "time",
+ "uniffi",
  "wasm-bindgen-test",
 ]
 
@@ -3547,11 +3548,27 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "uniffi",
  "void",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-time",
+]
+
+[[package]]
+name = "lumina-node-uniffi"
+version = "0.1.0"
+dependencies = [
+ "celestia-types",
+ "libp2p",
+ "lumina-node",
+ "redb",
+ "serde_json",
+ "tendermint",
+ "thiserror 1.0.69",
+ "tokio",
+ "uniffi",
 ]
 
 [[package]]
@@ -3792,21 +3809,6 @@ dependencies = [
  "pin-project",
  "smallvec",
  "unsigned-varint 0.7.2",
-]
-
-[[package]]
-name = "native"
-version = "0.1.0"
-dependencies = [
- "celestia-types",
- "libp2p",
- "lumina-node",
- "redb",
- "serde_json",
- "tendermint",
- "thiserror 1.0.69",
- "tokio",
- "uniffi",
 ]
 
 [[package]]

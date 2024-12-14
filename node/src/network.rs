@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Supported Celestia networks.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum Network {
     /// Celestia mainnet.
@@ -28,8 +29,11 @@ pub enum Network {
 pub struct InvalidNetworkId(String);
 
 /// Valid network id
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NetworkId(String);
+pub struct NetworkId {
+    pub id: String, // / Rename from 0 to id since uniffi doesn't support tuple structs
+}
 
 impl NetworkId {
     /// Creates validated network id.
@@ -37,14 +41,14 @@ impl NetworkId {
         if id.contains('/') {
             Err(InvalidNetworkId(id.to_owned()))
         } else {
-            Ok(NetworkId(id.to_owned()))
+            Ok(NetworkId { id: id.to_owned() })
         }
     }
 }
 
 impl AsRef<str> for NetworkId {
     fn as_ref(&self) -> &str {
-        &self.0
+        &self.id
     }
 }
 
@@ -52,7 +56,7 @@ impl Deref for NetworkId {
     type Target = str;
 
     fn deref(&self) -> &str {
-        &self.0
+        &self.id
     }
 }
 
@@ -66,7 +70,7 @@ impl FromStr for NetworkId {
 
 impl fmt::Display for NetworkId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(&self.id)
     }
 }
 
@@ -87,7 +91,7 @@ impl Network {
             Network::Mainnet => "celestia",
             Network::Arabica => "arabica-11",
             Network::Mocha => "mocha-4",
-            Network::Custom(ref s) => &s.0,
+            Network::Custom(ref s) => &s.id,
         }
     }
 
