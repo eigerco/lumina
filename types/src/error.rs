@@ -259,6 +259,13 @@ impl From<prost::DecodeError> for Error {
     }
 }
 
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+impl From<Error> for wasm_bindgen::JsValue {
+    fn from(value: Error) -> Self {
+        js_sys::Error::new(&value.to_string()).into()
+    }
+}
+
 /// Representation of the errors that can occur when validating data.
 ///
 /// See [`ValidateBasic`]

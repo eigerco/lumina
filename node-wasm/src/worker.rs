@@ -1,9 +1,8 @@
 use std::fmt::Debug;
 
-use js_sys::Array;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::{from_value, to_value};
+use serde_wasm_bindgen::to_value;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
@@ -11,6 +10,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::BroadcastChannel;
 
+use celestia_types::ExtendedHeader;
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::events::{EventSubscriber, NodeEventInfo};
 use lumina_node::node::{Node, SyncingInfo};
@@ -175,63 +175,45 @@ impl NodeWorkerInstance {
         Ok(())
     }
 
-    async fn request_header(&mut self, query: SingleHeaderQuery) -> Result<JsValue> {
-        let header = match query {
+    async fn request_header(&mut self, query: SingleHeaderQuery) -> Result<ExtendedHeader> {
+        Ok(match query {
             SingleHeaderQuery::Head => self.node.request_head_header().await,
             SingleHeaderQuery::ByHash(hash) => self.node.request_header_by_hash(&hash).await,
             SingleHeaderQuery::ByHeight(height) => self.node.request_header_by_height(height).await,
-        }?;
-        to_value(&header).context("could not serialise requested header")
+        }?)
     }
 
-    async fn get_header(&mut self, query: SingleHeaderQuery) -> Result<JsValue> {
-        let header = match query {
+    async fn get_header(&mut self, query: SingleHeaderQuery) -> Result<ExtendedHeader> {
+        Ok(match query {
             SingleHeaderQuery::Head => self.node.get_local_head_header().await,
             SingleHeaderQuery::ByHash(hash) => self.node.get_header_by_hash(&hash).await,
             SingleHeaderQuery::ByHeight(height) => self.node.get_header_by_height(height).await,
-        }?;
-        to_value(&header).context("could not serialise requested header")
+        }?)
     }
 
-    async fn get_verified_headers(&mut self, from: JsValue, amount: u64) -> Result<Array> {
-        let verified_headers = self
-            .node
-            .request_verified_headers(
-                &from_value(from).context("could not deserialise verified header")?,
-                amount,
-            )
-            .await?;
-        verified_headers
-            .iter()
-            .map(|h| to_value(&h))
-            .collect::<Result<Array, _>>()
-            .context("could not serialise fetched headers")
+    async fn get_verified_headers(
+        &mut self,
+        from: ExtendedHeader,
+        amount: u64,
+    ) -> Result<Vec<ExtendedHeader>> {
+        Ok(self.node.request_verified_headers(&from, amount).await?)
     }
 
     async fn get_headers_range(
         &mut self,
         start_height: Option<u64>,
         end_height: Option<u64>,
-    ) -> Result<Array> {
-        let headers = match (start_height, end_height) {
+    ) -> Result<Vec<ExtendedHeader>> {
+        Ok(match (start_height, end_height) {
             (None, None) => self.node.get_headers(..).await,
             (Some(start), None) => self.node.get_headers(start..).await,
             (None, Some(end)) => self.node.get_headers(..=end).await,
             (Some(start), Some(end)) => self.node.get_headers(start..=end).await,
-        }?;
-
-        headers
-            .iter()
-            .map(|h| to_value(&h))
-            .collect::<Result<Array, _>>()
-            .context("could not serialise fetched headers")
+        }?)
     }
 
-    async fn get_last_seen_network_head(&mut self) -> Result<JsValue> {
-        match self.node.get_network_head_header().await? {
-            Some(header) => to_value(&header).context("could not serialise head header"),
-            None => Ok(JsValue::UNDEFINED),
-        }
+    async fn get_last_seen_network_head(&mut self) -> Result<Option<ExtendedHeader>> {
+        Ok(self.node.get_network_head_header().await?)
     }
 
     async fn get_sampling_metadata(&mut self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -271,24 +253,18 @@ impl NodeWorkerInstance {
             }
             NodeCommand::GetListeners => WorkerResponse::Listeners(self.get_listeners().await),
             NodeCommand::RequestHeader(query) => {
-                WorkerResponse::Header(self.request_header(query).await.into())
+                WorkerResponse::Header(self.request_header(query).await)
             }
-            NodeCommand::GetHeader(query) => {
-                WorkerResponse::Header(self.get_header(query).await.into())
-            }
+            NodeCommand::GetHeader(query) => WorkerResponse::Header(self.get_header(query).await),
             NodeCommand::GetVerifiedHeaders { from, amount } => {
-                WorkerResponse::Headers(self.get_verified_headers(from, amount).await.into())
+                WorkerResponse::Headers(self.get_verified_headers(from, amount).await)
             }
             NodeCommand::GetHeadersRange {
                 start_height,
                 end_height,
-            } => WorkerResponse::Headers(
-                self.get_headers_range(start_height, end_height)
-                    .await
-                    .into(),
-            ),
+            } => WorkerResponse::Headers(self.get_headers_range(start_height, end_height).await),
             NodeCommand::LastSeenNetworkHead => {
-                WorkerResponse::LastSeenNetworkHead(self.get_last_seen_network_head().await.into())
+                WorkerResponse::LastSeenNetworkHead(self.get_last_seen_network_head().await)
             }
             NodeCommand::GetSamplingMetadata { height } => {
                 WorkerResponse::SamplingMetadata(self.get_sampling_metadata(height).await)

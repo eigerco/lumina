@@ -8,9 +8,7 @@ use gloo_timers::future::TimeoutFuture;
 use js_sys::{Math, Promise};
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
-use lumina_node::network;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use tracing::{info, warn};
 use tracing_subscriber::filter::LevelFilter;
@@ -23,6 +21,8 @@ use web_sys::{
     DedicatedWorkerGlobalScope, MessageEvent, Request, RequestInit, RequestMode, Response,
     ServiceWorker, ServiceWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker,
 };
+
+use lumina_node::network;
 
 use crate::error::{Context, Error, Result};
 
@@ -108,49 +108,6 @@ impl WorkerSelf for Worker {
 
 impl WorkerSelf for ServiceWorker {
     type GlobalScope = ServiceWorkerGlobalScope;
-}
-
-/// This type is useful in cases where we want to deal with de/serialising `Result<T, E>`, with
-/// [`serde_wasm_bindgen::preserve`] where `T` is a JavaScript object (which are not serializable by
-/// Rust standards, but can be passed through unchanged via cast as they implement [`JsCast`]).
-///
-/// [`serde_wasm_bindgen::preserve`]: https://docs.rs/serde-wasm-bindgen/latest/serde_wasm_bindgen/preserve
-/// [`JsCast`]: https://docs.rs/wasm-bindgen/latest/wasm_bindgen/trait.JsCast.html
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) enum JsResult<T, E>
-where
-    T: JsCast + Debug,
-    E: Debug,
-{
-    #[serde(with = "serde_wasm_bindgen::preserve")]
-    Ok(T),
-    Err(E),
-}
-
-impl<T, E> From<Result<T, E>> for JsResult<T, E>
-where
-    T: JsCast + Debug,
-    E: Serialize + DeserializeOwned + Debug,
-{
-    fn from(result: Result<T, E>) -> Self {
-        match result {
-            Ok(v) => JsResult::Ok(v),
-            Err(e) => JsResult::Err(e),
-        }
-    }
-}
-
-impl<T, E> From<JsResult<T, E>> for Result<T, E>
-where
-    T: JsCast + Debug,
-    E: Serialize + DeserializeOwned + Debug,
-{
-    fn from(result: JsResult<T, E>) -> Self {
-        match result {
-            JsResult::Ok(v) => Ok(v),
-            JsResult::Err(e) => Err(e),
-        }
-    }
 }
 
 pub(crate) trait MessageEventExt {

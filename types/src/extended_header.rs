@@ -7,11 +7,15 @@ use std::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use serde_wasm_bindgen::to_value;
 use tendermint::block::header::Header;
 use tendermint::block::{Commit, Height};
 use tendermint::chain::id::Id;
 use tendermint::{validator, Time};
 use tendermint_proto::Protobuf;
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::prelude::*;
 
 use crate::consts::appconsts::AppVersion;
 use crate::hash::Hash;
@@ -32,6 +36,48 @@ pub type ValidatorSet = validator::Set;
     feature = "wasm-bindgen"
 ))]
 const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
+
+// TODO: once https://github.com/rustwasm/wasm-bindgen/pull/4351 is merged,
+// this can be replaced with a single common type definition
+/// Block header together with the relevant Data Availability metadata.
+///
+/// [`ExtendedHeader`]s are used to announce and describe the blocks
+/// in the Celestia network.
+///
+/// Before being used, each header should be validated and verified with a header you trust.
+///
+/// # Example
+///
+/// ```
+/// # use celestia_types::ExtendedHeader;
+/// # fn trusted_genesis_header() -> ExtendedHeader {
+/// #     let s = include_str!("../test_data/chain1/extended_header_block_1.json");
+/// #     serde_json::from_str(s).unwrap()
+/// # }
+/// # fn some_untrusted_header() -> ExtendedHeader {
+/// #     let s = include_str!("../test_data/chain1/extended_header_block_27.json");
+/// #     serde_json::from_str(s).unwrap()
+/// # }
+/// let genesis_header = trusted_genesis_header();
+///
+/// // fetch new header
+/// let fetched_header = some_untrusted_header();
+///
+/// fetched_header.validate().expect("Invalid block header");
+/// genesis_header.verify(&fetched_header).expect("Malicious header received");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
+pub struct ExtendedHeader {
+    /// Tendermint block header.
+    pub header: Header,
+    /// Commit metadata and signatures from validators committing the block.
+    pub commit: Commit,
+    /// Information about the set of validators commiting the block.
+    pub validator_set: ValidatorSet,
+    /// Header of the block data availability.
+    pub dah: DataAvailabilityHeader,
+}
 
 /// Block header together with the relevant Data Availability metadata.
 ///
@@ -61,14 +107,20 @@ const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
 /// genesis_header.verify(&fetched_header).expect("Malicious header received");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
 pub struct ExtendedHeader {
     /// Tendermint block header.
+    #[wasm_bindgen(skip)]
     pub header: Header,
     /// Commit metadata and signatures from validators committing the block.
+    #[wasm_bindgen(skip)]
     pub commit: Commit,
     /// Information about the set of validators commiting the block.
+    #[wasm_bindgen(skip)]
     pub validator_set: ValidatorSet,
     /// Header of the block data availability.
+    #[wasm_bindgen(getter_with_clone)]
     pub dah: DataAvailabilityHeader,
 }
 
@@ -388,6 +440,70 @@ impl ExtendedHeader {
         }
 
         self.verify_range(untrusted)
+    }
+}
+
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+impl ExtendedHeader {
+    /// Tendermint block header.
+    #[wasm_bindgen(getter)]
+    pub fn header(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        to_value(&self.header)
+    }
+
+    /// Commit metadata and signatures from validators committing the block.
+    #[wasm_bindgen(getter)]
+    pub fn commit(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        to_value(&self.commit)
+    }
+
+    /// Information about the set of validators commiting the block.
+    #[wasm_bindgen(getter)]
+    pub fn validator_set(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        to_value(&self.validator_set)
+    }
+
+    /// Decode protobuf encoded header and then validate it.
+    #[wasm_bindgen(js_name = validate)]
+    pub fn js_validate(&self) -> Result<(), JsValue> {
+        Ok(self.validate()?)
+    }
+
+    /// Verify a chain of adjacent untrusted headers and make sure
+    /// they are adjacent to `self`.
+    ///
+    /// # Errors
+    ///
+    /// If verification fails, this function will return an error with a reason of failure.
+    /// This function will also return an error if untrusted headers and `self` don't form contiguous range
+    #[wasm_bindgen(js_name = verify)]
+    pub fn js_verify(&self, untrusted: &ExtendedHeader) -> Result<(), JsValue> {
+        Ok(self.verify(untrusted)?)
+    }
+
+    /// Verify a chain of adjacent untrusted headers.
+    ///
+    /// # Errors
+    ///
+    /// If verification fails, this function will return an error with a reason of failure.
+    /// This function will also return an error if untrusted headers are not adjacent
+    /// to each other.
+    #[wasm_bindgen(js_name = verify_range)]
+    pub fn js_verify_range(&self, untrusted: Vec<ExtendedHeader>) -> Result<(), JsValue> {
+        Ok(self.verify_range(&untrusted)?)
+    }
+
+    /// Verify a chain of adjacent untrusted headers and make sure
+    /// they are adjacent to `self`.
+    ///
+    /// # Errors
+    ///
+    /// If verification fails, this function will return an error with a reason of failure.
+    /// This function will also return an error if untrusted headers and `self` don't form contiguous range
+    #[wasm_bindgen(js_name = verify_adjacent_range)]
+    pub fn js_verify_adjacent_range(&self, untrusted: Vec<ExtendedHeader>) -> Result<(), JsValue> {
+        Ok(self.verify_adjacent_range(&untrusted)?)
     }
 }
 

@@ -4,15 +4,15 @@ use std::time::Duration;
 
 use js_sys::Array;
 use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::to_value;
 use tracing::{debug, error};
 use wasm_bindgen::prelude::*;
 use web_sys::BroadcastChannel;
 
+use celestia_types::ExtendedHeader;
 use lumina_node::blockstore::IndexedDbBlockstore;
 use lumina_node::network;
 use lumina_node::node::NodeBuilder;
-use lumina_node::store::IndexedDbStore;
+use lumina_node::store::{IndexedDbStore, SamplingMetadata};
 
 use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::error::{Context, Result};
@@ -200,12 +200,10 @@ impl NodeClient {
     /// Returns a javascript object with given structure:
     /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = requestHeadHeader)]
-    pub async fn request_head_header(&self) -> Result<JsValue> {
+    pub async fn request_head_header(&self) -> Result<ExtendedHeader> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::Head);
         let response = self.worker.exec(command).await?;
-        let header = response.into_header().check_variant()?;
-
-        header.into()
+        response.into_header().check_variant()?
     }
 
     /// Request a header for the block with a given hash from the network.
@@ -213,12 +211,10 @@ impl NodeClient {
     /// Returns a javascript object with given structure:
     /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = requestHeaderByHash)]
-    pub async fn request_header_by_hash(&self, hash: &str) -> Result<JsValue> {
+    pub async fn request_header_by_hash(&self, hash: &str) -> Result<ExtendedHeader> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHash(hash.parse()?));
         let response = self.worker.exec(command).await?;
-        let header = response.into_header().check_variant()?;
-
-        header.into()
+        response.into_header().check_variant()?
     }
 
     /// Request a header for the block with a given height from the network.
@@ -226,12 +222,10 @@ impl NodeClient {
     /// Returns a javascript object with given structure:
     /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = requestHeaderByHeight)]
-    pub async fn request_header_by_height(&self, height: u64) -> Result<JsValue> {
+    pub async fn request_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHeight(height));
         let response = self.worker.exec(command).await?;
-        let header = response.into_header().check_variant()?;
-
-        header.into()
+        response.into_header().check_variant()?
     }
 
     /// Request headers in range (from, from + amount] from the network.
@@ -243,17 +237,12 @@ impl NodeClient {
     #[wasm_bindgen(js_name = requestVerifiedHeaders)]
     pub async fn request_verified_headers(
         &self,
-        from_header: JsValue,
+        from: ExtendedHeader,
         amount: u64,
-    ) -> Result<Array> {
-        let command = NodeCommand::GetVerifiedHeaders {
-            from: from_header,
-            amount,
-        };
+    ) -> Result<Vec<ExtendedHeader>> {
+        let command = NodeCommand::GetVerifiedHeaders { from, amount };
         let response = self.worker.exec(command).await?;
-        let headers = response.into_headers().check_variant()?;
-
-        headers.into()
+        response.into_headers().check_variant()?
     }
 
     /// Get current header syncing info.
@@ -271,12 +260,10 @@ impl NodeClient {
     /// Returns a javascript object with given structure:
     /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getNetworkHeadHeader)]
-    pub async fn get_network_head_header(&self) -> Result<JsValue> {
+    pub async fn get_network_head_header(&self) -> Result<Option<ExtendedHeader>> {
         let command = NodeCommand::LastSeenNetworkHead;
         let response = self.worker.exec(command).await?;
-        let header = response.into_last_seen_network_head().check_variant()?;
-
-        header.into()
+        response.into_last_seen_network_head().check_variant()?
     }
 
     /// Get the latest locally synced header.
@@ -284,12 +271,10 @@ impl NodeClient {
     /// Returns a javascript object with given structure:
     /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getLocalHeadHeader)]
-    pub async fn get_local_head_header(&self) -> Result<JsValue> {
+    pub async fn get_local_head_header(&self) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::Head);
         let response = self.worker.exec(command).await?;
-        let header = response.into_header().check_variant()?;
-
-        header.into()
+        response.into_header().check_variant()?
     }
 
     /// Get a synced header for the block with a given hash.
@@ -297,12 +282,10 @@ impl NodeClient {
     /// Returns a javascript object with given structure:
     /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getHeaderByHash)]
-    pub async fn get_header_by_hash(&self, hash: &str) -> Result<JsValue> {
+    pub async fn get_header_by_hash(&self, hash: &str) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHash(hash.parse()?));
         let response = self.worker.exec(command).await?;
-        let header = response.into_header().check_variant()?;
-
-        header.into()
+        response.into_header().check_variant()?
     }
 
     /// Get a synced header for the block with a given height.
@@ -310,12 +293,10 @@ impl NodeClient {
     /// Returns a javascript object with given structure:
     /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getHeaderByHeight)]
-    pub async fn get_header_by_height(&self, height: u64) -> Result<JsValue> {
+    pub async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHeight(height));
         let response = self.worker.exec(command).await?;
-        let header = response.into_header().check_variant()?;
-
-        header.into()
+        response.into_header().check_variant()?
     }
 
     /// Get synced headers from the given heights range.
@@ -335,15 +316,13 @@ impl NodeClient {
         &self,
         start_height: Option<u64>,
         end_height: Option<u64>,
-    ) -> Result<Array> {
+    ) -> Result<Vec<ExtendedHeader>> {
         let command = NodeCommand::GetHeadersRange {
             start_height,
             end_height,
         };
         let response = self.worker.exec(command).await?;
-        let headers = response.into_headers().check_variant()?;
-
-        headers.into()
+        response.into_headers().check_variant()?
     }
 
     /// Get data sampling metadata of an already sampled height.
@@ -351,12 +330,10 @@ impl NodeClient {
     /// Returns a javascript object with given structure:
     /// https://docs.rs/lumina-node/latest/lumina_node/store/struct.SamplingMetadata.html
     #[wasm_bindgen(js_name = getSamplingMetadata)]
-    pub async fn get_sampling_metadata(&self, height: u64) -> Result<JsValue> {
+    pub async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         let command = NodeCommand::GetSamplingMetadata { height };
         let response = self.worker.exec(command).await?;
-        let metadata = response.into_sampling_metadata().check_variant()?;
-
-        Ok(to_value(&metadata?)?)
+        response.into_sampling_metadata().check_variant()?
     }
 
     /// Returns a [`BroadcastChannel`] for events generated by [`Node`].
@@ -438,7 +415,6 @@ mod tests {
     use gloo_timers::future::sleep;
     use libp2p::{multiaddr::Protocol, Multiaddr};
     use rexie::Rexie;
-    use serde_wasm_bindgen::from_value;
     use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
@@ -460,8 +436,7 @@ mod tests {
         assert_eq!(info.num_peers, 1);
 
         let bridge_head_header = rpc_client.header_network_head().await.unwrap();
-        let head_header: ExtendedHeader =
-            from_value(client.request_head_header().await.unwrap()).unwrap();
+        let head_header: ExtendedHeader = client.request_head_header().await.unwrap();
         assert_eq!(head_header, bridge_head_header);
         rpc_client
             .p2p_close_peer(&PeerId(
