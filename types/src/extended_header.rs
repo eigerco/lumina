@@ -120,7 +120,7 @@ pub struct ExtendedHeader {
     #[wasm_bindgen(skip)]
     pub validator_set: ValidatorSet,
     /// Header of the block data availability.
-    #[wasm_bindgen(skip)]
+    #[wasm_bindgen(getter_with_clone)]
     pub dah: DataAvailabilityHeader,
 }
 
@@ -464,28 +464,43 @@ impl ExtendedHeader {
         to_value(&self.validator_set)
     }
 
-    /// Header of the block data availability.
-    #[wasm_bindgen(getter)]
-    pub fn dah(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
-        to_value(&self.validator_set)
-    }
-
     /// Decode protobuf encoded header and then validate it.
     #[wasm_bindgen(js_name = validate)]
     pub fn js_validate(&self) -> Result<(), JsValue> {
         Ok(self.validate()?)
     }
 
+    /// Verify a chain of adjacent untrusted headers and make sure
+    /// they are adjacent to `self`.
+    ///
+    /// # Errors
+    ///
+    /// If verification fails, this function will return an error with a reason of failure.
+    /// This function will also return an error if untrusted headers and `self` don't form contiguous range
     #[wasm_bindgen(js_name = verify)]
     pub fn js_verify(&self, untrusted: &ExtendedHeader) -> Result<(), JsValue> {
         Ok(self.verify(untrusted)?)
     }
 
+    /// Verify a chain of adjacent untrusted headers.
+    ///
+    /// # Errors
+    ///
+    /// If verification fails, this function will return an error with a reason of failure.
+    /// This function will also return an error if untrusted headers are not adjacent
+    /// to each other.
     #[wasm_bindgen(js_name = verify_range)]
     pub fn js_verify_range(&self, untrusted: Vec<ExtendedHeader>) -> Result<(), JsValue> {
         Ok(self.verify_range(&untrusted)?)
     }
 
+    /// Verify a chain of adjacent untrusted headers and make sure
+    /// they are adjacent to `self`.
+    ///
+    /// # Errors
+    ///
+    /// If verification fails, this function will return an error with a reason of failure.
+    /// This function will also return an error if untrusted headers and `self` don't form contiguous range
     #[wasm_bindgen(js_name = verify_adjacent_range)]
     pub fn js_verify_adjacent_range(&self, untrusted: Vec<ExtendedHeader>) -> Result<(), JsValue> {
         Ok(self.verify_adjacent_range(&untrusted)?)
