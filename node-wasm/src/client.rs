@@ -549,7 +549,9 @@ mod tests {
             .start(&WasmNodeConfig {
                 network: Network::Private,
                 bootnodes,
+                use_persistent_memory: false,
                 custom_sampling_window_secs: None,
+                custom_pruning_delay_secs: None,
             })
             .await
             .unwrap();
