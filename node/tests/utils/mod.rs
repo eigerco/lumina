@@ -4,8 +4,8 @@ use std::env;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use celestia_rpc::{prelude::*, Client};
-use celestia_types::{Blob, TxConfig};
+use celestia_rpc::{prelude::*, Client, TxConfig};
+use celestia_types::Blob;
 use libp2p::{multiaddr::Protocol, Multiaddr, PeerId};
 use lumina_node::blockstore::InMemoryBlockstore;
 use lumina_node::events::EventSubscriber;

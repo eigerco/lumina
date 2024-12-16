@@ -5,8 +5,8 @@ A collection of traits for interacting with Celestia data availability nodes RPC
 This crate builds on top of the [`jsonrpsee`](https://docs.rs/jsonrpsee) clients.
 
 ```rust,no_run
-use celestia_rpc::{BlobClient, Client};
-use celestia_types::{AppVersion, Blob, TxConfig, nmt::Namespace};
+use celestia_rpc::{BlobClient, Client, TxConfig};
+use celestia_types::{AppVersion, Blob, nmt::Namespace};
 
 async fn submit_blob() {
     // create a client to the celestia node

@@ -1,9 +1,8 @@
+use celestia_types::state::AccAddress;
 use serde::{
     ser::{SerializeStruct, Serializer},
     Serialize,
 };
-
-use crate::state::AccAddress;
 
 /// [`TxConfig`] specifies additional options that are be applied to the Tx.
 ///
