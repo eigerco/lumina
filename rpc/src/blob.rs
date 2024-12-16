@@ -1,9 +1,11 @@
 //! celestia-node rpc types and methods related to blobs
 
 use celestia_types::nmt::{Namespace, NamespaceProof};
-use celestia_types::{Blob, Commitment, TxConfig};
+use celestia_types::{Blob, Commitment};
 use jsonrpsee::proc_macros::rpc;
 use serde::{Deserialize, Serialize};
+
+use crate::TxConfig;
 
 /// Response type for [`BlobClient::blob_subscribe`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
