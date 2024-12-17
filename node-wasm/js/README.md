@@ -1,7 +1,7 @@
 
 <a name="readmemd"></a>
 
-**lumina-node-wasm** • [**Docs**](#globalsmd)
+**lumina-node-wasm**
 
 ***
 
@@ -57,7 +57,7 @@ For comprehensive and fully typed interface documentation, see [lumina-node](htt
 
 <a name="classesblockrangemd"></a>
 
-[**lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd)
 
 ***
 
@@ -150,7 +150,7 @@ lumina\_node\_wasm.d.ts:39
 
 <a name="classesconnectioncounterssnapshotmd"></a>
 
-[**lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd)
 
 ***
 
@@ -301,7 +301,7 @@ lumina\_node\_wasm.d.ts:60
 
 <a name="classesnetworkinfosnapshotmd"></a>
 
-[**lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd)
 
 ***
 
@@ -394,7 +394,7 @@ lumina\_node\_wasm.d.ts:102
 
 <a name="classesnodeclientmd"></a>
 
-[**lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd)
 
 ***
 
@@ -418,7 +418,9 @@ expected to have `MessagePort`-like interface for sending and receiving messages
 
 ##### Parameters
 
-• **port**: `any`
+###### port
+
+`any`
 
 ##### Returns
 
@@ -438,7 +440,9 @@ Establish a new connection to the existing worker over provided port
 
 ##### Parameters
 
-• **port**: `any`
+###### port
+
+`any`
 
 ##### Returns
 
@@ -507,7 +511,9 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Parameters
 
-• **hash**: `string`
+###### hash
+
+`string`
 
 ##### Returns
 
@@ -530,7 +536,9 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Parameters
 
-• **height**: `bigint`
+###### height
+
+`bigint`
 
 ##### Returns
 
@@ -561,9 +569,13 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Parameters
 
-• **start\_height?**: `bigint`
+###### start\_height?
 
-• **end\_height?**: `bigint`
+`bigint`
+
+###### end\_height?
+
+`bigint`
 
 ##### Returns
 
@@ -624,7 +636,9 @@ https://docs.rs/lumina-node/latest/lumina_node/store/struct.SamplingMetadata.htm
 
 ##### Parameters
 
-• **height**: `bigint`
+###### height
+
+`bigint`
 
 ##### Returns
 
@@ -727,7 +741,9 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Parameters
 
-• **hash**: `string`
+###### hash
+
+`string`
 
 ##### Returns
 
@@ -750,7 +766,9 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Parameters
 
-• **height**: `bigint`
+###### height
+
+`bigint`
 
 ##### Returns
 
@@ -794,9 +812,13 @@ https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
 
 ##### Parameters
 
-• **from\_header**: `any`
+###### from\_header
 
-• **amount**: `bigint`
+`any`
+
+###### amount
+
+`bigint`
 
 ##### Returns
 
@@ -816,9 +838,13 @@ Trust or untrust the peer with a given ID.
 
 ##### Parameters
 
-• **peer\_id**: `string`
+###### peer\_id
 
-• **is\_trusted**: `boolean`
+`string`
+
+###### is\_trusted
+
+`boolean`
 
 ##### Returns
 
@@ -838,7 +864,9 @@ Start a node with the provided config, if it's not running
 
 ##### Parameters
 
-• **config**: [`NodeConfig`](#classesnodeconfigmd)
+###### config
+
+[`NodeConfig`](#classesnodeconfigmd)
 
 ##### Returns
 
@@ -913,7 +941,7 @@ lumina\_node\_wasm.d.ts:167
 
 <a name="classesnodeconfigmd"></a>
 
-[**lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd)
 
 ***
 
@@ -947,16 +975,42 @@ lumina\_node\_wasm.d.ts:322
 
 ***
 
-#### custom\_syncing\_window\_secs?
+#### custom\_pruning\_delay\_secs?
 
-> `optional` **custom\_syncing\_window\_secs**: `number`
+> `optional` **custom\_pruning\_delay\_secs**: `number`
 
-Syncing window size, defines maximum age of headers considered for syncing and sampling.
-Headers older than syncing window by more than an hour are eligible for pruning.
+Pruning delay defines how much time the pruner should wait after sampling window in
+order to prune the block.
+
+If this is not set, then default value will apply:
+
+* If `use_persistent_memory == true`, default value is 1 hour.
+* If `use_persistent_memory == false`, default value is 60 seconds.
+
+The minimum value that can be set is 60 seconds.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:327
+lumina\_node\_wasm.d.ts:334
+
+***
+
+#### custom\_sampling\_window\_secs?
+
+> `optional` **custom\_sampling\_window\_secs**: `number`
+
+Sampling window defines maximum age of a block considered for syncing and sampling.
+
+If this is not set, then default value will apply:
+
+* If `use_persistent_memory == true`, default value is 30 days.
+* If `use_persistent_memory == false`, default value is 60 seconds.
+
+The minimum value that can be set is 60 seconds.
+
+##### Defined in
+
+lumina\_node\_wasm.d.ts:345
 
 ***
 
@@ -968,7 +1022,21 @@ A network to connect to.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:331
+lumina\_node\_wasm.d.ts:349
+
+***
+
+#### use\_persistent\_memory
+
+> **use\_persistent\_memory**: `boolean`
+
+Whether to store data in persistent memory or not.
+
+**Default value:** true
+
+##### Defined in
+
+lumina\_node\_wasm.d.ts:355
 
 ### Methods
 
@@ -1026,7 +1094,9 @@ Get the configuration with default bootnodes for provided network
 
 ##### Parameters
 
-• **network**: [`Network`](#enumerationsnetworkmd)
+###### network
+
+[`Network`](#enumerationsnetworkmd)
 
 ##### Returns
 
@@ -1039,7 +1109,7 @@ lumina\_node\_wasm.d.ts:318
 
 <a name="classesnodeworkermd"></a>
 
-[**lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd)
 
 ***
 
@@ -1060,7 +1130,9 @@ them and sending a response back, as well as accepting new `NodeClient` connecti
 
 ##### Parameters
 
-• **port\_like\_object**: `any`
+###### port\_like\_object
+
+`any`
 
 ##### Returns
 
@@ -1068,7 +1140,7 @@ them and sending a response back, as well as accepting new `NodeClient` connecti
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:344
+lumina\_node\_wasm.d.ts:368
 
 ### Methods
 
@@ -1082,7 +1154,7 @@ lumina\_node\_wasm.d.ts:344
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:340
+lumina\_node\_wasm.d.ts:364
 
 ***
 
@@ -1096,12 +1168,12 @@ lumina\_node\_wasm.d.ts:340
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:348
+lumina\_node\_wasm.d.ts:372
 
 
 <a name="classespeertrackerinfosnapshotmd"></a>
 
-[**lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd)
 
 ***
 
@@ -1131,7 +1203,7 @@ Number of the connected peers.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:366
+lumina\_node\_wasm.d.ts:390
 
 ***
 
@@ -1143,7 +1215,7 @@ Number of the connected trusted peers.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:370
+lumina\_node\_wasm.d.ts:394
 
 ### Methods
 
@@ -1157,7 +1229,7 @@ lumina\_node\_wasm.d.ts:370
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:362
+lumina\_node\_wasm.d.ts:386
 
 ***
 
@@ -1173,7 +1245,7 @@ lumina\_node\_wasm.d.ts:362
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:357
+lumina\_node\_wasm.d.ts:381
 
 ***
 
@@ -1189,12 +1261,12 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:361
+lumina\_node\_wasm.d.ts:385
 
 
 <a name="classessyncinginfosnapshotmd"></a>
 
-[**lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd)
 
 ***
 
@@ -1224,7 +1296,7 @@ Ranges of headers that are already synchronised
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:388
+lumina\_node\_wasm.d.ts:412
 
 ***
 
@@ -1236,7 +1308,7 @@ Syncing target. The latest height seen in the network that was successfully veri
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:392
+lumina\_node\_wasm.d.ts:416
 
 ### Methods
 
@@ -1250,7 +1322,7 @@ lumina\_node\_wasm.d.ts:392
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:384
+lumina\_node\_wasm.d.ts:408
 
 ***
 
@@ -1266,7 +1338,7 @@ lumina\_node\_wasm.d.ts:384
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:379
+lumina\_node\_wasm.d.ts:403
 
 ***
 
@@ -1282,14 +1354,14 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:383
+lumina\_node\_wasm.d.ts:407
 
 # Enumerations
 
 
 <a name="enumerationsnetworkmd"></a>
 
-[**lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd)
 
 ***
 
@@ -1352,7 +1424,7 @@ lumina\_node\_wasm.d.ts:26
 
 <a name="functionssetup_loggingmd"></a>
 
-[**lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd)
 
 ***
 
@@ -1375,7 +1447,7 @@ lumina\_node\_wasm.d.ts:6
 
 <a name="globalsmd"></a>
 
-[**lumina-node-wasm**](#readmemd) • **Docs**
+[**lumina-node-wasm**](#readmemd)
 
 ***
 
