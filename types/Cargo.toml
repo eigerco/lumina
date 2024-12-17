@@ -40,7 +40,6 @@ serde_repr = { version = "0.1.19", optional = true }
 sha2 = "0.10.6"
 thiserror = "1.0.61"
 time = { version = "0.3.36", default-features = false }
-uniffi = { version = "0.28.0", optional = true }
 
 [dev-dependencies]
 ed25519-consensus = "2.1.0"
@@ -63,7 +62,6 @@ wasm-bindgen = ["time/wasm-bindgen"]
 [package.metadata.docs.rs]
 features = ["p2p", "test-utils"]
 rustdoc-args = ["--cfg", "docsrs"]
-uniffi = ["dep:uniffi"]
 
 [package.metadata.cargo-udeps.ignore]
 development = ["indoc"]

@@ -116,7 +116,7 @@ tempfile = "3.10.1"
 
 [features]
 test-utils = ["celestia-types/test-utils"]
-uniffi = ["dep:uniffi", "celestia-types/uniffi"] 
+uniffi = ["dep:uniffi"] 
 
 [package.metadata.docs.rs]
 features = ["test-utils"]

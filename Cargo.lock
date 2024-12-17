@@ -942,7 +942,6 @@ dependencies = [
  "tendermint-proto",
  "thiserror 1.0.69",
  "time",
- "uniffi",
  "wasm-bindgen-test",
 ]
 
