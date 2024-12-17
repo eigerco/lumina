@@ -3354,6 +3354,7 @@ version = "0.5.2"
 dependencies = [
  "anyhow",
  "axum",
+ "blockstore",
  "celestia-rpc",
  "celestia-types",
  "clap",
