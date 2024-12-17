@@ -4,124 +4,28 @@
 //! allowing it to be used from iOS and Android applications.
 #![cfg(not(target_arch = "wasm32"))]
 
+mod error;
 mod types;
 
 use celestia_types::ExtendedHeader;
-use libp2p::identity::Keypair;
+use error::{LuminaError, Result};
 use lumina_node::{
     blockstore::RedbBlockstore,
     events::{EventSubscriber, TryRecvError},
     network::Network,
     node::PeerTrackerInfo,
     store::RedbStore,
-    Node, NodeError,
+    Node,
 };
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc};
 use tendermint::hash::Hash;
-use thiserror::Error;
 use tokio::sync::Mutex;
-use types::{NetworkInfo, NodeEvent, PeerId, SyncingInfo};
+use types::{NetworkInfo, NodeEvent, NodeStartConfig, PeerId, SyncingInfo};
 use uniffi::Object;
 
 uniffi::setup_scaffolding!();
 
 lumina_node::uniffi_reexport_scaffolding!();
-
-/// Result type alias for LuminaNode operations that can fail with a LuminaError
-pub type Result<T> = std::result::Result<T, LuminaError>;
-
-/// Returns the platform-specific base path for storing Lumina data.
-///
-/// The function determines the base path based on the target operating system:
-/// - **iOS**: `~/Library/Application Support/lumina`
-/// - **Android**: Value of the `LUMINA_DATA_DIR` environment variable
-/// - **Other platforms**: Returns an error indicating unsupported platform.
-fn get_base_path() -> Result<PathBuf> {
-    #[cfg(target_os = "ios")]
-    {
-        std::env::var("HOME")
-            .map(PathBuf::from)
-            .map(|p| p.join("Library/Application Support/lumina"))
-            .map_err(|e| LuminaError::StorageError {
-                msg: format!("Could not get HOME directory: {}", e),
-            })
-    }
-
-    #[cfg(target_os = "android")]
-    {
-        std::env::var("LUMINA_DATA_DIR")
-            .map(PathBuf::from)
-            .map_err(|e| LuminaError::StorageError {
-                msg: format!("Could not get LUMINA_DATA_DIR: {}", e),
-            })
-    }
-
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
-    {
-        Err(LuminaError::StorageError {
-            msg: "Unsupported platform".to_string(),
-        })
-    }
-}
-
-/// Represents all possible errors that can occur in the LuminaNode.
-#[derive(Error, Debug, uniffi::Error)]
-pub enum LuminaError {
-    /// Error returned when trying to perform operations on a node that isn't running
-    #[error("Node is not running")]
-    NodeNotRunning,
-
-    /// Error returned when network operations fail
-    #[error("Network error: {msg}")]
-    NetworkError {
-        /// Description of the network error
-        msg: String,
-    },
-
-    /// Error returned when storage operations fail
-    #[error("Storage error: {msg}")]
-    StorageError {
-        /// Description of the storage error
-        msg: String,
-    },
-
-    /// Error returned when trying to start a node that's already running
-    #[error("Node is already running")]
-    AlreadyRunning,
-
-    /// Error returned when a mutex lock operation fails
-    #[error("Lock error")]
-    LockError,
-
-    /// Error returned when a hash string is invalid or malformed
-    #[error("Invalid hash format: {msg}")]
-    InvalidHash {
-        /// Description of why the hash is invalid
-        msg: String,
-    },
-
-    /// Error returned when a header is invalid or malformed
-    #[error("Invalid header format: {msg}")]
-    InvalidHeader {
-        /// Description of why the header is invalid
-        msg: String,
-    },
-
-    /// Error returned when storage initialization fails
-    #[error("Storage initialization failed: {msg}")]
-    StorageInit {
-        /// Description of why storage initialization failed
-        msg: String,
-    },
-}
-
-impl From<NodeError> for LuminaError {
-    fn from(error: NodeError) -> Self {
-        LuminaError::NetworkError {
-            msg: error.to_string(),
-        }
-    }
-}
 
 /// The main Lumina node that manages the connection to the Celestia network.
 #[derive(Object)]
@@ -143,47 +47,30 @@ impl LuminaNode {
         }))
     }
 
-    /// Starts the Lumina node. Returns true if successfully started.
+    /// Start the node without optional configuration.
+    /// UniFFI needs explicit handling for optional parameters to generate correct bindings for different languages.
     pub async fn start(&self) -> Result<bool> {
+        self.start_with_config(None).await
+    }
+
+    /// Start the node with specific configuration
+    pub async fn start_with_config(&self, config: Option<NodeStartConfig>) -> Result<bool> {
         let mut node_guard = self.node.lock().await;
 
         if node_guard.is_some() {
             return Err(LuminaError::AlreadyRunning);
         }
 
-        let network_id = self.network.id();
+        let config = config.unwrap_or_else(|| NodeStartConfig {
+            network: self.network.clone(),
+            bootnodes: None,
+            syncing_window_secs: None,
+            pruning_delay_secs: None,
+            batch_size: None,
+            ed25519_secret_key_bytes: None,
+        });
 
-        let base_path = get_base_path()?;
-
-        std::fs::create_dir_all(&base_path).map_err(|e| LuminaError::StorageError {
-            msg: format!("Failed to create data directory: {}", e),
-        })?;
-
-        let store_path = base_path.join(format!("store-{}", network_id));
-        let db = Arc::new(redb::Database::create(&store_path).map_err(|e| {
-            LuminaError::StorageInit {
-                msg: format!("Failed to create database: {}", e),
-            }
-        })?);
-
-        let store = RedbStore::new(db.clone())
-            .await
-            .map_err(|e| LuminaError::StorageInit {
-                msg: format!("Failed to initialize store: {}", e),
-            })?;
-
-        let blockstore = RedbBlockstore::new(db);
-
-        let p2p_bootnodes = self.network.canonical_bootnodes().collect::<Vec<_>>();
-        let p2p_local_keypair = Keypair::generate_ed25519();
-
-        let builder = Node::builder()
-            .store(store)
-            .blockstore(blockstore)
-            .network(self.network.clone())
-            .bootnodes(p2p_bootnodes)
-            .keypair(p2p_local_keypair)
-            .sync_batch_size(128);
+        let builder = config.into_node_builder().await?;
 
         let (new_node, subscriber) = builder
             .start_subscribed()
@@ -191,8 +78,8 @@ impl LuminaNode {
             .map_err(|e| LuminaError::NetworkError { msg: e.to_string() })?;
 
         let mut events_guard = self.events_subscriber.lock().await;
-        *events_guard = Some(subscriber);
 
+        *events_guard = Some(subscriber);
         *node_guard = Some(new_node);
         Ok(true)
     }
@@ -268,7 +155,7 @@ impl LuminaNode {
         let node = node_guard.as_ref().ok_or(LuminaError::NodeNotRunning)?;
         let peer_id = peer_id
             .to_libp2p()
-            .map_err(|e| LuminaError::NetworkError { msg: e })?;
+            .map_err(|e| LuminaError::NetworkError { msg: e.to_string() })?;
         Ok(node.set_peer_trust(peer_id, is_trusted).await?)
     }
 

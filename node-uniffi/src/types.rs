@@ -1,38 +1,153 @@
+use libp2p::identity::Keypair;
 use libp2p::swarm::ConnectionCounters as Libp2pConnectionCounters;
 use libp2p::swarm::NetworkInfo as Libp2pNetworkInfo;
 use libp2p::PeerId as Libp2pPeerId;
 use lumina_node::block_ranges::BlockRange as LuminaBlockRange;
 use lumina_node::events::{NodeEvent as LuminaNodeEvent, NodeEventInfo as LuminaNodeEventInfo};
 use lumina_node::node::SyncingInfo as LuminaSyncingInfo;
-use std::str::FromStr;
-use std::time::SystemTime;
+use lumina_node::{blockstore::RedbBlockstore, network, NodeBuilder};
+use std::sync::Arc;
+use std::{
+    path::PathBuf,
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
 use uniffi::Record;
+
+use lumina_node::store::RedbStore;
+
+use crate::{error::Result, LuminaError};
+
+#[cfg(target_os = "ios")]
+use directories::ProjectDirs;
+
+#[cfg(target_os = "ios")]
+/// Returns the platform-specific base path for storing on iOS.
+fn get_base_path_impl() -> Result<PathBuf> {
+    if let Some(proj_dirs) = ProjectDirs::from("com", "example", "Lumina") {
+        Ok(proj_dirs.data_dir().to_path_buf())
+    } else {
+        Err(LuminaError::StorageError {
+            msg: "Could not determine a platform-specific data directory".to_string(),
+        })
+    }
+}
+
+#[cfg(target_os = "android")]
+/// Returns the platform-specific base path for storing on Android.
+///
+/// On Android, this function attempts to read the `LUMINA_DATA_DIR` environment variable.
+/// If `LUMINA_DATA_DIR` is not set, it falls back to `/data/data/com.example.lumina/files`.
+fn get_base_path_impl() -> Result<PathBuf> {
+    match std::env::var("LUMINA_DATA_DIR") {
+        Ok(dir) => Ok(PathBuf::from(dir)),
+        Err(_) => {
+            let fallback = "/data/data/com.example.lumina/files";
+            Ok(PathBuf::from(fallback))
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+/// Returns an error for unsupported platforms.
+fn get_base_path_impl() -> Result<PathBuf> {
+    Err(LuminaError::StorageError {
+        msg: "Unsupported platform".to_string(),
+    })
+}
+
+/// Returns the platform-specific base path for storing Lumina data.
+///
+/// The function determines the base path based on the target operating system:
+/// - **iOS**: `~/Library/Application Support/lumina`
+/// - **Android**: Value of the `LUMINA_DATA_DIR` environment variable
+/// - **Other platforms**: Returns an error indicating unsupported platform.
+fn get_base_path() -> Result<PathBuf> {
+    get_base_path_impl()
+}
 
 /// Configuration options for the Lumina node
 #[derive(Debug, Clone, Record)]
 pub struct NodeStartConfig {
-    /// Custom syncing window in seconds, defines maximum age of headers
-    /// considered for syncing and sampling
+    /// Network to connect to
+    pub network: network::Network,
+    /// Custom list of bootstrap peers to connect to.
+    /// If None, uses the canonical bootnodes for the network.
+    pub bootnodes: Option<Vec<String>>,
+    /// Custom syncing window in seconds. Default is 30 days.
     pub syncing_window_secs: Option<u32>,
-
-    /// Custom pruning delay after the syncing window in seconds
+    /// Custom pruning delay after syncing window in seconds. Default is 1 hour.
     pub pruning_delay_secs: Option<u32>,
-
-    /// Maximum number of headers in batch while syncing
-    pub sync_batch_size: Option<u64>,
-
-    /// Whether to listen for incoming connections
-    pub enable_listener: bool,
+    /// Maximum number of headers in batch while syncing. Default is 128.
+    pub batch_size: Option<u64>,
+    /// Optional Set the keypair to be used as Node's identity. If None, generates a new Ed25519 keypair.
+    pub ed25519_secret_key_bytes: Option<Vec<u8>>,
 }
 
-impl Default for NodeStartConfig {
-    fn default() -> Self {
-        Self {
-            syncing_window_secs: None,
-            pruning_delay_secs: None,
-            sync_batch_size: None,
-            enable_listener: false,
+impl NodeStartConfig {
+    /// Convert into NodeBuilder for the implementation
+    pub(crate) async fn into_node_builder(self) -> Result<NodeBuilder<RedbBlockstore, RedbStore>> {
+        let base_path = get_base_path()?;
+        let network_id = self.network.id();
+        let store_path = base_path.join(format!("store-{}", network_id));
+        std::fs::create_dir_all(&base_path).map_err(|e| LuminaError::StorageError {
+            msg: format!("Failed to create data directory: {}", e),
+        })?;
+        let db = Arc::new(redb::Database::create(&store_path).map_err(|e| {
+            LuminaError::StorageInit {
+                msg: format!("Failed to create database: {}", e),
+            }
+        })?);
+
+        let store = RedbStore::new(db.clone())
+            .await
+            .map_err(|e| LuminaError::StorageInit {
+                msg: format!("Failed to initialize store: {}", e),
+            })?;
+
+        let blockstore = RedbBlockstore::new(db);
+
+        let bootnodes = if let Some(bootnodes) = self.bootnodes {
+            let mut resolved = Vec::with_capacity(bootnodes.len());
+            for addr in bootnodes {
+                resolved.push(addr.parse()?);
+            }
+            resolved
+        } else {
+            self.network.canonical_bootnodes().collect::<Vec<_>>()
+        };
+
+        let keypair = if let Some(key_bytes) = self.ed25519_secret_key_bytes {
+            if key_bytes.len() != 32 {
+                return Err(LuminaError::NetworkError {
+                    msg: "Ed25519 private key must be 32 bytes".into(),
+                });
+            }
+
+            Keypair::ed25519_from_bytes(key_bytes).map_err(|e| LuminaError::NetworkError {
+                msg: format!("Invalid Ed25519 key: {}", e),
+            })?
+        } else {
+            libp2p::identity::Keypair::generate_ed25519()
+        };
+
+        let mut builder = NodeBuilder::new()
+            .store(store)
+            .blockstore(blockstore)
+            .network(self.network)
+            .bootnodes(bootnodes)
+            .keypair(keypair)
+            .sync_batch_size(self.batch_size.unwrap_or(128));
+
+        if let Some(secs) = self.syncing_window_secs {
+            builder = builder.sampling_window(Duration::from_secs(secs.into()));
         }
+
+        if let Some(secs) = self.pruning_delay_secs {
+            builder = builder.pruning_delay(Duration::from_secs(secs.into()));
+        }
+
+        Ok(builder)
     }
 }
 
@@ -132,7 +247,7 @@ pub struct PeerId {
 }
 
 impl PeerId {
-    pub fn to_libp2p(&self) -> Result<Libp2pPeerId, String> {
+    pub fn to_libp2p(&self) -> std::result::Result<Libp2pPeerId, String> {
         Libp2pPeerId::from_str(&self.peer_id).map_err(|e| format!("Invalid peer ID format: {}", e))
     }
 

@@ -32,7 +32,8 @@ pub struct InvalidNetworkId(String);
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetworkId {
-    pub id: String, // / Rename from 0 to id since uniffi doesn't support tuple structs
+    /// The network identifier string
+    pub id: String,
 }
 
 impl NetworkId {

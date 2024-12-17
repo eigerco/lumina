@@ -3561,6 +3561,7 @@ name = "lumina-node-uniffi"
 version = "0.1.0"
 dependencies = [
  "celestia-types",
+ "directories",
  "libp2p",
  "lumina-node",
  "redb",

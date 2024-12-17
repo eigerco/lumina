@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cargo build -p native
+cargo build -p lumina-node-uniffi
 
 rustup target add \
     aarch64-linux-android \
@@ -16,4 +16,6 @@ cargo ndk -o ./app/src/main/jniLibs \
         -t x86_64 \
         build --release
 
-cargo run --bin uniffi-bindgen generate --library ../target/debug/libnative.dylib --language kotlin --out-dir ./app/src/main/java/tech/forgen/native/rust
+cargo run --bin uniffi-bindgen generate --library ../target/debug/liblumina_node_uniffi.dylib --language kotlin --out-dir ./app/src/main/java/tech/forgen/lumina_node_uniffi/rust
+
+echo "Android build complete"
