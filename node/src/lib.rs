@@ -21,5 +21,8 @@ mod utils;
 #[cfg(all(target_arch = "wasm32", test))]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();
+
 #[doc(inline)]
 pub use crate::node::{Node, NodeBuilder, NodeError, Result};
