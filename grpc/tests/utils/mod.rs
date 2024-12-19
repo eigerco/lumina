@@ -46,7 +46,6 @@ pub fn load_account() -> TestAccount {
 
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
-    use std::time::Duration;
     use std::{future::Future, sync::OnceLock};
 
     use celestia_grpc::{GrpcClient, TxClient};
@@ -85,10 +84,6 @@ mod imp {
         (lock, client)
     }
 
-    pub async fn sleep(duration: Duration) {
-        tokio::time::sleep(duration).await;
-    }
-
     pub fn spawn<F>(future: F) -> tokio::task::JoinHandle<()>
     where
         F: Future<Output = ()> + Send + 'static,
@@ -100,7 +95,6 @@ mod imp {
 #[cfg(target_arch = "wasm32")]
 mod imp {
     use std::future::Future;
-    use std::time::Duration;
 
     use celestia_grpc::{GrpcClient, TxClient};
     use tokio::sync::oneshot;
