@@ -3,11 +3,11 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use libp2p::identity;
 use lumina_node::{
     blockstore::RedbBlockstore,
     events::{EventSubscriber, NodeEvent},
-    node::{Node, NodeConfig},
+    network::Network,
+    node::Node,
     store::RedbStore,
 };
 use tempfile::tempdir;
@@ -66,16 +66,12 @@ async fn new_node(path: impl AsRef<Path>) -> (Node<RedbBlockstore, RedbStore>, E
 
     let (_, bridge_ma) = fetch_bridge_info().await;
 
-    Node::new_subscribed(NodeConfig {
-        network_id: "private".to_string(),
-        p2p_local_keypair: identity::Keypair::generate_ed25519(),
-        p2p_bootnodes: vec![bridge_ma],
-        p2p_listen_on: vec![],
-        sync_batch_size: 512,
-        blockstore,
-        store,
-        custom_syncing_window: None,
-    })
-    .await
-    .unwrap()
+    Node::builder()
+        .store(store)
+        .blockstore(blockstore)
+        .network(Network::custom("private").unwrap())
+        .bootnodes([bridge_ma])
+        .start_subscribed()
+        .await
+        .unwrap()
 }

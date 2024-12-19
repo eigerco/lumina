@@ -9,7 +9,7 @@ use utils::{load_account, TestAccount};
 
 pub mod utils;
 
-use crate::utils::{new_grpc_client, new_tx_client};
+use crate::utils::{new_grpc_client, new_tx_client, spawn};
 
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::test as async_test;
@@ -117,7 +117,7 @@ async fn submit_blobs_parallel() {
     let futs = (0..100)
         .map(|n| {
             let tx_client = tx_client.clone();
-            tokio::spawn(async move {
+            spawn(async move {
                 let namespace = Namespace::new_v0(&[1, 2, n]).unwrap();
                 let blobs =
                     vec![Blob::new(namespace, format!("bleb{n}").into(), AppVersion::V3).unwrap()];

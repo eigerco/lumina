@@ -4,29 +4,32 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
+use blockstore::EitherBlockstore;
 use celestia_rpc::prelude::*;
 use celestia_rpc::Client;
-use clap::Parser;
+use clap::{value_parser, Parser};
 use directories::ProjectDirs;
-use libp2p::{identity, multiaddr::Protocol, Multiaddr};
-use lumina_node::blockstore::RedbBlockstore;
+use libp2p::multiaddr::{Multiaddr, Protocol};
+use lumina_node::blockstore::{InMemoryBlockstore, RedbBlockstore};
 use lumina_node::events::NodeEvent;
-use lumina_node::network::{canonical_network_bootnodes, network_id, Network};
-use lumina_node::node::{Node, NodeConfig};
-use lumina_node::store::{RedbStore, Store};
+use lumina_node::network::Network;
+use lumina_node::node::{Node, MIN_PRUNING_DELAY, MIN_SAMPLING_WINDOW};
+use lumina_node::store::{EitherStore, InMemoryStore, RedbStore, Store as _};
 use tokio::task::spawn_blocking;
 use tracing::info;
 use tracing::warn;
 
-use crate::common::ArgNetwork;
-
 const CELESTIA_LOCAL_BRIDGE_RPC_ADDR: &str = "ws://localhost:36658";
+
+type Blockstore = EitherBlockstore<InMemoryBlockstore, RedbBlockstore>;
+type Store = EitherStore<InMemoryStore, RedbStore>;
 
 #[derive(Debug, Parser)]
 pub(crate) struct Params {
     /// Network to connect.
-    #[arg(short, long, value_enum, default_value_t)]
-    pub(crate) network: ArgNetwork,
+    #[arg(short, long)]
+    #[clap(value_parser = value_parser!(Network))]
+    pub(crate) network: Network,
 
     /// Listening addresses. Can be used multiple times.
     #[arg(short, long = "listen")]
@@ -37,55 +40,68 @@ pub(crate) struct Params {
     pub(crate) bootnodes: Vec<Multiaddr>,
 
     /// Persistent header store path.
-    #[arg(short, long = "store")]
+    #[arg(short, long)]
     pub(crate) store: Option<PathBuf>,
 
-    /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
-    /// Headers older than syncing window by more than an hour are eligible for pruning.
-    #[arg(long = "syncing-window", verbatim_doc_comment)]
+    /// Use in-memory store.
+    #[arg(long)]
+    pub(crate) in_memory_store: bool,
+
+    /// Sampling window defines maximum age of a block considered for syncing and sampling.
+    #[arg(long)]
     #[clap(value_parser = parse_duration::parse)]
-    pub(crate) custom_syncing_window: Option<Duration>,
+    pub(crate) sampling_window: Option<Duration>,
+
+    /// Pruning delay defines how much time the pruner should wait after sampling window in
+    /// order to prune the block.
+    #[arg(long)]
+    #[clap(value_parser = parse_duration::parse)]
+    pub(crate) pruning_delay: Option<Duration>,
 }
 
 pub(crate) async fn run(args: Params) -> Result<()> {
-    let network = args.network.into();
-    let p2p_local_keypair = identity::Keypair::generate_ed25519();
-
-    let p2p_bootnodes = if args.bootnodes.is_empty() {
-        match network {
-            Network::Private => fetch_bridge_multiaddrs(CELESTIA_LOCAL_BRIDGE_RPC_ADDR).await?,
-            network => canonical_network_bootnodes(network).collect(),
-        }
+    let (blockstore, store) = if args.in_memory_store {
+        open_in_memory_stores()
     } else {
-        args.bootnodes
+        open_db_stores(args.store, args.network.id()).await?
     };
 
-    let network_id = network_id(network).to_owned();
+    let mut node_builder = Node::builder()
+        .store(store)
+        .blockstore(blockstore)
+        .network(args.network.clone());
 
-    info!("Initializing store");
-    let db = open_db(args.store, &network_id).await?;
-    let store = RedbStore::new(db.clone()).await?;
-    let blockstore = RedbBlockstore::new(db);
-
-    let stored_ranges = store.get_stored_header_ranges().await?;
-    if stored_ranges.is_empty() {
-        info!("Initialised new store");
-    } else {
-        info!("Initialised store, present headers: {stored_ranges}");
+    if let Some(sampling_window) = args.sampling_window {
+        node_builder = node_builder.sampling_window(sampling_window);
+    } else if args.in_memory_store {
+        // In-memory stores are memory hungry, so we lower sampling window.
+        node_builder = node_builder.sampling_window(MIN_SAMPLING_WINDOW);
     }
 
-    let (_node, mut events) = Node::new_subscribed(NodeConfig {
-        network_id,
-        p2p_local_keypair,
-        p2p_bootnodes,
-        p2p_listen_on: args.listen_addrs,
-        sync_batch_size: 512,
-        custom_syncing_window: args.custom_syncing_window,
-        blockstore,
-        store,
-    })
-    .await
-    .context("Failed to start node")?;
+    if let Some(pruning_delay) = args.pruning_delay {
+        node_builder = node_builder.pruning_delay(pruning_delay);
+    } else if args.in_memory_store {
+        // In-memory stores are memory hungry, so we lower pruning window.
+        node_builder = node_builder.pruning_delay(MIN_PRUNING_DELAY);
+    }
+
+    if args.bootnodes.is_empty() {
+        if args.network.is_custom() {
+            let bootnodes = fetch_bridge_multiaddrs(CELESTIA_LOCAL_BRIDGE_RPC_ADDR).await?;
+            node_builder = node_builder.bootnodes(bootnodes);
+        }
+    } else {
+        node_builder = node_builder.bootnodes(args.bootnodes);
+    }
+
+    if !args.listen_addrs.is_empty() {
+        node_builder = node_builder.listen(args.listen_addrs);
+    }
+
+    let (_node, mut events) = node_builder
+        .start_subscribed()
+        .await
+        .context("Failed to start node")?;
 
     while let Ok(ev) = events.recv().await {
         match ev.event {
@@ -97,6 +113,32 @@ pub(crate) async fn run(args: Params) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn open_in_memory_stores() -> (Blockstore, Store) {
+    info!("Initializing in-memory store");
+    let store = InMemoryStore::new();
+    let blockstore = InMemoryBlockstore::new();
+    (EitherBlockstore::Left(blockstore), EitherStore::Left(store))
+}
+
+async fn open_db_stores(path: Option<PathBuf>, network_id: &str) -> Result<(Blockstore, Store)> {
+    info!("Initializing store");
+    let db = open_db(path, network_id).await?;
+    let store = RedbStore::new(db.clone()).await?;
+    let blockstore = RedbBlockstore::new(db);
+
+    let stored_ranges = store.get_stored_header_ranges().await?;
+    if stored_ranges.is_empty() {
+        info!("Initialised new store",);
+    } else {
+        info!("Initialised store, present headers: {stored_ranges}");
+    }
+
+    Ok((
+        EitherBlockstore::Right(blockstore),
+        EitherStore::Right(store),
+    ))
 }
 
 async fn open_db(path: Option<PathBuf>, network_id: &str) -> Result<Arc<redb::Database>> {

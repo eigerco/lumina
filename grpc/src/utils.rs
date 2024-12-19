@@ -27,7 +27,8 @@ mod imp {
 
 #[cfg(target_arch = "wasm32")]
 mod imp {
-    use gloo_timers::future::{IntervalStream, TimeoutFuture};
+    use futures::StreamExt;
+    use gloo_timers::future::IntervalStream;
     use send_wrapper::SendWrapper;
     use std::time::Duration;
 

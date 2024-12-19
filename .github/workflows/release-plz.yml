@@ -61,7 +61,7 @@ jobs:
             exit
           fi
           # Update the types definition for lumina-node
-          npm i
+          npm clean-install
           npm run tsc
           # Update the readme for lumina-node
           wasm-pack build ..

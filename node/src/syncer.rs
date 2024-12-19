@@ -35,8 +35,6 @@ use crate::utils::{FusedReusableFuture, OneshotSenderExt};
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
-/// Default maximum age of headers Lumina will synchronise and store
-pub const DEFAULT_SYNCING_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
 /// Representation of all the errors that can occur in `Syncer` component.
 #[derive(Debug, thiserror::Error)]
@@ -698,6 +696,7 @@ mod tests {
     use crate::block_ranges::{BlockRange, BlockRangeExt};
     use crate::events::EventChannel;
     use crate::node::HeaderExError;
+    use crate::node::DEFAULT_SAMPLING_WINDOW;
     use crate::p2p::header_session;
     use crate::store::InMemoryStore;
     use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
@@ -788,7 +787,7 @@ mod tests {
             store: Arc::new(InMemoryStore::new()),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SYNCING_WINDOW,
+            syncing_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 
@@ -936,7 +935,7 @@ mod tests {
             store: store.clone(),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SYNCING_WINDOW,
+            syncing_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 
@@ -1176,7 +1175,7 @@ mod tests {
             store: store.clone(),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SYNCING_WINDOW,
+            syncing_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 

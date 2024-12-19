@@ -27,6 +27,7 @@ tendermint-proto.workspace = true
 tendermint.workspace = true
 
 bytes = "1.8"
+futures = "0.3.30"
 hex = "0.4.3"
 http-body = "1"
 k256 = "0.13.4"
@@ -56,4 +57,5 @@ dotenvy = "0.15.7"
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-futures = "0.4.43"
 wasm-bindgen-test = "0.3.42"

@@ -46,8 +46,8 @@ pub fn load_account() -> TestAccount {
 
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
-    use std::sync::OnceLock;
     use std::time::Duration;
+    use std::{future::Future, sync::OnceLock};
 
     use celestia_grpc::{GrpcClient, TxClient};
     use tokio::sync::{Mutex, MutexGuard};
@@ -88,15 +88,24 @@ mod imp {
     pub async fn sleep(duration: Duration) {
         tokio::time::sleep(duration).await;
     }
+
+    pub fn spawn<F>(future: F) -> tokio::task::JoinHandle<()>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        tokio::spawn(future)
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
 mod imp {
+    use std::future::Future;
     use std::time::Duration;
 
     use celestia_grpc::{GrpcClient, TxClient};
-    use gloo_timers::future::TimeoutFuture;
+    use tokio::sync::oneshot;
     use tonic_web_wasm_client::Client;
+    use wasm_bindgen_futures::spawn_local;
 
     use super::*;
 
@@ -108,7 +117,7 @@ mod imp {
 
     pub async fn new_tx_client() -> ((), TxClient<Client, SigningKey>) {
         let creds = load_account();
-        let grpc_client = new_test_client();
+        let grpc_client = new_grpc_client();
         let client = TxClient::new(
             grpc_client,
             creds.signing_key,
@@ -121,9 +130,16 @@ mod imp {
         ((), client)
     }
 
-    pub async fn sleep(duration: Duration) {
-        let millis = u32::try_from(duration.as_millis().max(1)).unwrap_or(u32::MAX);
-        let delay = TimeoutFuture::new(millis);
-        delay.await;
+    pub fn spawn<F>(future: F) -> oneshot::Receiver<()>
+    where
+        F: Future<Output = ()> + 'static,
+    {
+        let (tx, rx) = oneshot::channel();
+        spawn_local(async move {
+            future.await;
+            let _ = tx.send(());
+        });
+
+        rx
     }
 }

@@ -15,6 +15,7 @@ use tendermint_proto::Protobuf;
 use thiserror::Error;
 
 pub use crate::block_ranges::{BlockRange, BlockRanges, BlockRangesError};
+pub use crate::store::either_store::EitherStore;
 pub use crate::store::utils::VerifiedExtendedHeaders;
 
 pub use in_memory_store::InMemoryStore;
@@ -23,6 +24,7 @@ pub use indexed_db_store::IndexedDbStore;
 #[cfg(not(target_arch = "wasm32"))]
 pub use redb_store::RedbStore;
 
+mod either_store;
 mod in_memory_store;
 #[cfg(target_arch = "wasm32")]
 mod indexed_db_store;

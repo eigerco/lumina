@@ -1,9 +1,11 @@
+use celestia_types::blob::RawBlob;
 use celestia_types::state::{
     AccAddress, Address, Balance, QueryDelegationResponse, QueryRedelegationsResponse,
     QueryUnbondingDelegationResponse, RawTxResponse, Uint, ValAddress,
 };
-use celestia_types::{blob::RawBlob, TxConfig};
 use jsonrpsee::proc_macros::rpc;
+
+use crate::TxConfig;
 
 #[rpc(client)]
 pub trait State {

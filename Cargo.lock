@@ -665,9 +665,9 @@ dependencies = [
 
 [[package]]
 name = "blockstore"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7679095248a6dc7555fae81154ed1baef264383c16621ef881a219576c72a9be"
+checksum = "0a8962daed8fb337472d9c4215006443acba1e40c6c91c9d4a3f440d1fb30436"
 dependencies = [
  "cid",
  "dashmap 6.0.1",
@@ -755,6 +755,7 @@ dependencies = [
  "celestia-proto",
  "celestia-types",
  "dotenvy",
+ "futures",
  "getrandom",
  "gloo-timers 0.3.0",
  "hex",
@@ -771,6 +772,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tonic-web-wasm-client",
+ "wasm-bindgen-futures",
  "wasm-bindgen-test",
 ]
 
@@ -3375,6 +3377,7 @@ version = "0.5.2"
 dependencies = [
  "anyhow",
  "axum",
+ "blockstore",
  "celestia-rpc",
  "celestia-types",
  "clap",
