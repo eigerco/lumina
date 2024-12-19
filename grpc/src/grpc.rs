@@ -1,5 +1,7 @@
 //! Types and client for the celestia grpc
 
+use std::fmt;
+
 use bytes::Bytes;
 use celestia_grpc_macros::grpc_method;
 use celestia_proto::celestia::blob::v1::query_client::QueryClient as BlobQueryClient;
@@ -160,6 +162,12 @@ impl GrpcClient<tonic_web_wasm_client::Client> {
         Self {
             transport: tonic_web_wasm_client::Client::new(url.into()),
         }
+    }
+}
+
+impl<T> fmt::Debug for GrpcClient<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("GrpcClient { .. }")
     }
 }
 

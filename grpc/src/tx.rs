@@ -1,3 +1,4 @@
+use std::fmt;
 use std::ops::Deref;
 use std::sync::{LazyLock, RwLock};
 use std::time::Duration;
@@ -472,6 +473,12 @@ impl<T, S> Deref for TxClient<T, S> {
 
     fn deref(&self) -> &Self::Target {
         &self.client
+    }
+}
+
+impl<T, S> fmt::Debug for TxClient<T, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("TxClient { .. }")
     }
 }
 
