@@ -532,7 +532,7 @@ fn estimate_gas(blobs: &[Blob], app_version: AppVersion, gas_multiplier: f64) ->
     let tx_size_cost_per_byte = appconsts::tx_size_cost_per_byte(app_version);
 
     let blobs_bytes =
-        blobs.iter().map(Blob::shares_count).sum::<usize>() as u64 * appconsts::SHARE_SIZE as u64;
+        blobs.iter().map(Blob::shares_len).sum::<usize>() as u64 * appconsts::SHARE_SIZE as u64;
 
     let gas = blobs_bytes * gas_per_blob_byte
         + (tx_size_cost_per_byte * BYTES_PER_BLOB_INFO * blobs.len() as u64)

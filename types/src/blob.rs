@@ -317,14 +317,14 @@ impl Blob {
     /// # use celestia_types::nmt::Namespace;
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let blob = Blob::new(namespace1, b"foo".to_vec(), AppVersion::V3).unwrap(),
-    /// let shares_count = blob.shares_count();
+    /// let blob = Blob::new(namespace1, b"foo".to_vec(), AppVersion::V3).unwrap();
+    /// let shares_len = blob.shares_len();
     ///
     /// let blob_shares = blob.to_shares();
     ///
-    /// assert_eq!(shares_count, blob_shares.len());
+    /// assert_eq!(shares_len, blob_shares.len());
     /// ```
-    pub fn shares_count(&self) -> usize {
+    pub fn shares_len(&self) -> usize {
         let Some(without_first_share) = self
             .data
             .len()
