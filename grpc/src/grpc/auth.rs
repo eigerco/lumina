@@ -10,9 +10,8 @@ use celestia_types::state::auth::{
 use celestia_types::state::Address;
 use tendermint_proto::google::protobuf::Any;
 
-use crate::types::make_empty_params;
-use crate::types::{FromGrpcResponse, IntoGrpcParam};
-use crate::Error;
+use crate::grpc::{make_empty_params, FromGrpcResponse, IntoGrpcParam};
+use crate::{Error, Result};
 
 /// Enum representing different types of account
 #[derive(Debug, PartialEq)]
@@ -23,18 +22,28 @@ pub enum Account {
     Module(ModuleAccount),
 }
 
-impl Account {
-    /// Return [`BaseAccount`] reference, if it exists, from either Base or Module account
-    pub fn base_account_ref(&self) -> Option<&BaseAccount> {
+impl std::ops::Deref for Account {
+    type Target = BaseAccount;
+
+    fn deref(&self) -> &Self::Target {
         match self {
-            Account::Base(acct) => Some(acct),
-            Account::Module(acct) => acct.base_account.as_ref(),
+            Account::Base(base) => base,
+            Account::Module(module) => &module.base_account,
+        }
+    }
+}
+
+impl std::ops::DerefMut for Account {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Account::Base(base) => base,
+            Account::Module(module) => &mut module.base_account,
         }
     }
 }
 
 impl FromGrpcResponse<AuthParams> for QueryAuthParamsResponse {
-    fn try_from_response(self) -> Result<AuthParams, Error> {
+    fn try_from_response(self) -> Result<AuthParams> {
         let params = self.params.ok_or(Error::FailedToParseResponse)?;
         Ok(AuthParams {
             max_memo_characters: params.max_memo_characters,
@@ -47,13 +56,13 @@ impl FromGrpcResponse<AuthParams> for QueryAuthParamsResponse {
 }
 
 impl FromGrpcResponse<Account> for QueryAccountResponse {
-    fn try_from_response(self) -> Result<Account, Error> {
+    fn try_from_response(self) -> Result<Account> {
         account_from_any(self.account.ok_or(Error::FailedToParseResponse)?)
     }
 }
 
 impl FromGrpcResponse<Vec<Account>> for QueryAccountsResponse {
-    fn try_from_response(self) -> Result<Vec<Account>, Error> {
+    fn try_from_response(self) -> Result<Vec<Account>> {
         self.accounts.into_iter().map(account_from_any).collect()
     }
 }
@@ -74,7 +83,7 @@ impl IntoGrpcParam<QueryAccountsRequest> for () {
     }
 }
 
-fn account_from_any(any: Any) -> Result<Account, Error> {
+fn account_from_any(any: Any) -> Result<Account> {
     let account = if any.type_url == RawBaseAccount::type_url() {
         let base_account =
             RawBaseAccount::decode(&*any.value).map_err(|_| Error::FailedToParseResponse)?;

@@ -122,18 +122,20 @@ pub mod appconsts {
     }
 
     /// Cost of each byte in a transaction (in units of gas).
-    pub const fn tx_size_cost_per_byte(app_version: AppVersion) -> Option<u64> {
+    pub const fn tx_size_cost_per_byte(app_version: AppVersion) -> u64 {
+        // v1 and v2 don't have this constant because it was taken from cosmos-sdk before.
+        // The value was the same as in v3 tho, so fall back to it.
         match app_version {
-            AppVersion::V1 | AppVersion::V2 => None,
-            AppVersion::V3 => Some(v3::TX_SIZE_COST_PER_BYTE),
+            AppVersion::V1 | AppVersion::V2 | AppVersion::V3 => v3::TX_SIZE_COST_PER_BYTE,
         }
     }
 
     /// Cost of each byte in blob (in units of gas).
-    pub const fn gas_per_blob_byte(app_version: AppVersion) -> Option<u64> {
+    pub const fn gas_per_blob_byte(app_version: AppVersion) -> u64 {
+        // In v1 and v2 this const was in appconsts/initial_consts.go rather than being versioned.
+        // The value was the same as in v3 tho, so fall back to it.
         match app_version {
-            AppVersion::V1 | AppVersion::V2 => None,
-            AppVersion::V3 => Some(v3::GAS_PER_BLOB_BYTE),
+            AppVersion::V1 | AppVersion::V2 | AppVersion::V3 => v3::GAS_PER_BLOB_BYTE,
         }
     }
 
