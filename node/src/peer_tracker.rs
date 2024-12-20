@@ -22,6 +22,7 @@ pub struct PeerTracker {
 }
 
 /// Statistics of the connected peers
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PeerTrackerInfo {
     /// Number of the connected peers.
