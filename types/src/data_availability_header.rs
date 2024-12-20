@@ -60,7 +60,10 @@ use crate::{
     try_from = "RawDataAvailabilityHeader",
     into = "RawDataAvailabilityHeader"
 )]
-#[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(inspectable)
+)]
 pub struct DataAvailabilityHeader {
     /// Merkle roots of the [`ExtendedDataSquare`] rows.
     row_roots: Vec<NamespacedHash>,

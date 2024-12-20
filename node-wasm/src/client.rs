@@ -196,9 +196,6 @@ impl NodeClient {
     }
 
     /// Request the head header from the network.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = requestHeadHeader)]
     pub async fn request_head_header(&self) -> Result<ExtendedHeader> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::Head);
@@ -207,9 +204,6 @@ impl NodeClient {
     }
 
     /// Request a header for the block with a given hash from the network.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = requestHeaderByHash)]
     pub async fn request_header_by_hash(&self, hash: &str) -> Result<ExtendedHeader> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHash(hash.parse()?));
@@ -218,9 +212,6 @@ impl NodeClient {
     }
 
     /// Request a header for the block with a given height from the network.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = requestHeaderByHeight)]
     pub async fn request_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHeight(height));
@@ -231,16 +222,16 @@ impl NodeClient {
     /// Request headers in range (from, from + amount] from the network.
     ///
     /// The headers will be verified with the `from` header.
-    ///
-    /// Returns an array of javascript objects with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = requestVerifiedHeaders)]
     pub async fn request_verified_headers(
         &self,
-        from: ExtendedHeader,
+        from: &ExtendedHeader,
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
-        let command = NodeCommand::GetVerifiedHeaders { from, amount };
+        let command = NodeCommand::GetVerifiedHeaders {
+            from: from.to_owned(),
+            amount,
+        };
         let response = self.worker.exec(command).await?;
         response.into_headers().check_variant()?
     }

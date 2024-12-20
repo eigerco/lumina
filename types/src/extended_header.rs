@@ -108,7 +108,7 @@ pub struct ExtendedHeader {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
-#[wasm_bindgen]
+#[wasm_bindgen(inspectable)]
 pub struct ExtendedHeader {
     /// Tendermint block header.
     #[wasm_bindgen(skip)]
@@ -446,21 +446,50 @@ impl ExtendedHeader {
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 #[wasm_bindgen]
 impl ExtendedHeader {
+    /// Get the block height.
+    #[wasm_bindgen(js_name = height)]
+    pub fn js_height(&self) -> u64 {
+        self.height().value()
+    }
+
+    /// Get the block time.
+    #[wasm_bindgen(js_name = time)]
+    pub fn js_time(&self) -> Result<f64, JsValue> {
+        Ok(self
+            .time()
+            .duration_since(Time::unix_epoch())
+            .map_err(|e| JsError::new(&e.to_string()))?
+            .as_secs_f64()
+            * 1000.0)
+    }
+
+    /// Get the block hash.
+    #[wasm_bindgen(js_name = hash)]
+    pub fn js_hash(&self) -> String {
+        self.hash().to_string()
+    }
+
+    /// Get the hash of the previous header.
+    #[wasm_bindgen(js_name = previous_header_hash)]
+    pub fn js_previous_header_hash(&self) -> String {
+        self.last_header_hash().to_string()
+    }
+
     /// Tendermint block header.
-    #[wasm_bindgen(getter)]
-    pub fn header(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+    #[wasm_bindgen(getter, js_name = header)]
+    pub fn js_header(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
         to_value(&self.header)
     }
 
     /// Commit metadata and signatures from validators committing the block.
-    #[wasm_bindgen(getter)]
-    pub fn commit(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+    #[wasm_bindgen(getter, js_name = commit)]
+    pub fn js_commit(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
         to_value(&self.commit)
     }
 
     /// Information about the set of validators commiting the block.
-    #[wasm_bindgen(getter)]
-    pub fn validator_set(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+    #[wasm_bindgen(getter, js_name = validator_set)]
+    pub fn js_validator_set(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
         to_value(&self.validator_set)
     }
 
