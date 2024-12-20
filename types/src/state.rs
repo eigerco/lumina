@@ -13,8 +13,8 @@ pub use self::query_delegation::{
     QueryDelegationResponse, QueryRedelegationsResponse, QueryUnbondingDelegationResponse,
 };
 pub use self::tx::{
-    AuthInfo, Coin, Fee, ModeInfo, RawTx, RawTxBody, RawTxResponse, SignerInfo, Sum, Tx, TxBody,
-    TxResponse, BOND_DENOM,
+    AuthInfo, Coin, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, RawTxResponse, SignerInfo, Sum, Tx,
+    TxBody, TxResponse, BOND_DENOM,
 };
 
 /// A 256-bit unsigned integer.

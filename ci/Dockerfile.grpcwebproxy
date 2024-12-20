@@ -1,0 +1,10 @@
+FROM docker.io/alpine:3.19.1
+
+RUN apk update && apk add --no-cache wget unzip
+
+RUN wget -O grpcwebproxy.zip https://github.com/improbable-eng/grpc-web/releases/download/v0.15.0/grpcwebproxy-v0.15.0-linux-x86_64.zip && \
+  unzip grpcwebproxy.zip && \
+  mv dist/grpcwebproxy* /usr/local/bin/grpcwebproxy && \
+  rm grpcwebproxy.zip
+
+ENTRYPOINT ["/usr/local/bin/grpcwebproxy"]

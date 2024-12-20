@@ -115,8 +115,13 @@ const PROTO_FILES: &[&str] = &[
     "vendor/celestia/blob/v1/tx.proto",
     "vendor/celestia/core/v1/da/data_availability_header.proto",
     "vendor/celestia/core/v1/proof/proof.proto",
+    "vendor/celestia/core/v1/tx/tx.proto",
     "vendor/cosmos/auth/v1beta1/auth.proto",
     "vendor/cosmos/auth/v1beta1/query.proto",
+    "vendor/cosmos/bank/v1beta1/bank.proto",
+    "vendor/cosmos/bank/v1beta1/genesis.proto",
+    "vendor/cosmos/bank/v1beta1/query.proto",
+    "vendor/cosmos/bank/v1beta1/tx.proto",
     "vendor/cosmos/base/abci/v1beta1/abci.proto",
     "vendor/cosmos/base/node/v1beta1/query.proto",
     "vendor/cosmos/base/tendermint/v1beta1/query.proto",
@@ -194,7 +199,6 @@ fn tonic_build(fds: FileDescriptorSet) {
         .include_file("mod.rs")
         .build_client(true)
         .build_server(false)
-        .client_mod_attribute(".", "#[cfg(not(target_arch=\"wasm32\"))]")
         .use_arc_self(true)
         .compile_well_known_types(true)
         .skip_protoc_run()
