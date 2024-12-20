@@ -1,5 +1,7 @@
 #!/bin/bash
 
+cargo build
+
 cd ..
 
 for TARGET in \
