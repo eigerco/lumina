@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use celestia_grpc::TxConfig;
+use celestia_grpc::{Error, TxConfig};
 use celestia_proto::cosmos::bank::v1beta1::MsgSend;
 use celestia_types::nmt::Namespace;
-use celestia_types::state::Coin;
+use celestia_types::state::{Coin, ErrorCode};
 use celestia_types::{AppVersion, Blob};
 use utils::{load_account, TestAccount};
 
@@ -144,15 +144,23 @@ async fn submit_blobs_insufficient_gas_price_and_limit() {
     let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
     let blobs = vec![Blob::new(namespace, "bleb".into(), AppVersion::V3).unwrap()];
 
-    tx_client
+    let err = tx_client
         .submit_blobs(&blobs, TxConfig::default().with_gas_limit(10000))
         .await
         .unwrap_err();
+    assert!(matches!(
+        err,
+        Error::TxBroadcastFailed(_, ErrorCode::OutOfGas, _, _)
+    ));
 
-    tx_client
+    let err = tx_client
         .submit_blobs(&blobs, TxConfig::default().with_gas_price(0.0005))
         .await
         .unwrap_err();
+    assert!(matches!(
+        err,
+        Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _, _)
+    ));
 }
 
 #[async_test]
@@ -165,10 +173,14 @@ async fn submit_blobs_gas_price_update() {
     tx_client.set_gas_price(0.0005);
 
     // if user also set gas price, no update should happen
-    tx_client
-        .submit_blobs(&blobs, TxConfig::default().with_gas_limit(10000))
+    let err = tx_client
+        .submit_blobs(&blobs, TxConfig::default().with_gas_price(0.0006))
         .await
         .unwrap_err();
+    assert!(matches!(
+        err,
+        Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _, _)
+    ));
     assert_eq!(tx_client.gas_price(), 0.0005);
 
     // with default config, gas price should be updated
@@ -176,7 +188,7 @@ async fn submit_blobs_gas_price_update() {
         .submit_blobs(&blobs, TxConfig::default())
         .await
         .unwrap();
-    assert_ne!(tx_client.gas_price(), 0.0005);
+    assert!(tx_client.gas_price() > 0.0005);
 }
 
 #[async_test]
@@ -219,15 +231,23 @@ async fn submit_message_insufficient_gas_price_and_limit() {
         amount: vec![amount.clone().into()],
     };
 
-    tx_client
+    let err = tx_client
         .submit_message(msg.clone(), TxConfig::default().with_gas_limit(10000))
         .await
         .unwrap_err();
+    assert!(matches!(
+        err,
+        Error::TxBroadcastFailed(_, ErrorCode::OutOfGas, _, _)
+    ));
 
-    tx_client
+    let err = tx_client
         .submit_message(msg, TxConfig::default().with_gas_price(0.0005))
         .await
         .unwrap_err();
+    assert!(matches!(
+        err,
+        Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _, _)
+    ));
 }
 
 #[async_test]
@@ -246,10 +266,14 @@ async fn submit_message_gas_price_update() {
     tx_client.set_gas_price(0.0005);
 
     // if user also set gas price, no update should happen
-    tx_client
-        .submit_message(msg.clone(), TxConfig::default().with_gas_limit(10000))
+    let err = tx_client
+        .submit_message(msg.clone(), TxConfig::default().with_gas_price(0.0006))
         .await
         .unwrap_err();
+    assert!(matches!(
+        err,
+        Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _, _)
+    ));
     assert_eq!(tx_client.gas_price(), 0.0005);
 
     // with default config, gas price should be updated
@@ -257,5 +281,5 @@ async fn submit_message_gas_price_update() {
         .submit_message(msg, TxConfig::default())
         .await
         .unwrap();
-    assert_ne!(tx_client.gas_price(), 0.0005);
+    assert!(tx_client.gas_price() > 0.0005);
 }
