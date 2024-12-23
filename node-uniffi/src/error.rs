@@ -13,14 +13,14 @@ pub enum LuminaError {
 
     /// Error returned when network operations fail
     #[error("Network error: {msg}")]
-    NetworkError {
+    Network {
         /// Description of the network error
         msg: String,
     },
 
     /// Error returned when storage operations fail
     #[error("Storage error: {msg}")]
-    StorageError {
+    Storage {
         /// Description of the storage error
         msg: String,
     },
@@ -31,7 +31,7 @@ pub enum LuminaError {
 
     /// Error returned when a mutex lock operation fails
     #[error("Lock error")]
-    LockError,
+    Lock,
 
     /// Error returned when a hash string is invalid or malformed
     #[error("Invalid hash format: {msg}")]
@@ -55,18 +55,36 @@ pub enum LuminaError {
     },
 }
 
+impl LuminaError {
+    pub fn network(msg: impl Into<String>) -> Self {
+        Self::Network { msg: msg.into() }
+    }
+
+    pub fn storage(msg: impl Into<String>) -> Self {
+        Self::Storage { msg: msg.into() }
+    }
+
+    pub fn invalid_hash(msg: impl Into<String>) -> Self {
+        Self::InvalidHash { msg: msg.into() }
+    }
+
+    pub fn invalid_header(msg: impl Into<String>) -> Self {
+        Self::InvalidHeader { msg: msg.into() }
+    }
+
+    pub fn storage_init(msg: impl Into<String>) -> Self {
+        Self::StorageInit { msg: msg.into() }
+    }
+}
+
 impl From<NodeError> for LuminaError {
     fn from(error: NodeError) -> Self {
-        LuminaError::NetworkError {
-            msg: error.to_string(),
-        }
+        LuminaError::network(error.to_string())
     }
 }
 
 impl From<libp2p::multiaddr::Error> for LuminaError {
     fn from(e: libp2p::multiaddr::Error) -> Self {
-        LuminaError::NetworkError {
-            msg: format!("Invalid multiaddr: {}", e),
-        }
+        LuminaError::network(format!("Invalid multiaddr: {}", e))
     }
 }

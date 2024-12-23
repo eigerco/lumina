@@ -35,14 +35,12 @@ impl NodeConfig {
         let store_path = base_path.join(format!("store-{}", network_id));
 
         spawn_blocking(move || {
-            std::fs::create_dir_all(&base_path).map_err(|e| LuminaError::StorageError {
-                msg: format!("Failed to create data directory: {}", e),
+            std::fs::create_dir_all(&base_path).map_err(|e| {
+                LuminaError::storage(format!("Failed to create base directory: {}", e))
             })
         })
         .await
-        .map_err(|e| LuminaError::StorageError {
-            msg: format!("Task join error: {}", e),
-        })??;
+        .map_err(|e| LuminaError::storage(format!("Failed to create base directory: {}", e)))??;
 
         let db = spawn_blocking(move || {
             redb::Database::create(&store_path)
@@ -52,15 +50,11 @@ impl NodeConfig {
                 })
         })
         .await
-        .map_err(|e| LuminaError::StorageError {
-            msg: format!("Task join error: {}", e),
-        })??;
+        .map_err(|e| LuminaError::storage(format!("Failed to create base directory: {}", e)))??;
 
         let store = RedbStore::new(db.clone())
             .await
-            .map_err(|e| LuminaError::StorageInit {
-                msg: format!("Failed to initialize store: {}", e),
-            })?;
+            .map_err(|e| LuminaError::storage_init(format!("Failed to initialize store: {}", e)))?;
 
         let blockstore = RedbBlockstore::new(db);
 
@@ -76,14 +70,11 @@ impl NodeConfig {
 
         let keypair = if let Some(key_bytes) = self.ed25519_secret_key_bytes {
             if key_bytes.len() != 32 {
-                return Err(LuminaError::NetworkError {
-                    msg: "Ed25519 private key must be 32 bytes".into(),
-                });
+                return Err(LuminaError::network("Ed25519 private key must be 32 bytes"));
             }
 
-            Keypair::ed25519_from_bytes(key_bytes).map_err(|e| LuminaError::NetworkError {
-                msg: format!("Invalid Ed25519 key: {}", e),
-            })?
+            Keypair::ed25519_from_bytes(key_bytes)
+                .map_err(|e| LuminaError::network(format!("Invalid Ed25519 key: {}", e)))?
         } else {
             libp2p::identity::Keypair::generate_ed25519()
         };

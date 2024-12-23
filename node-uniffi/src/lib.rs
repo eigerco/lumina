@@ -47,16 +47,11 @@ impl LuminaNode {
     pub async fn start(&self) -> Result<bool> {
         let mut node_lock = self.node.write().await;
         if node_lock.is_some() {
-            return Err(LuminaError::NetworkError {
-                msg: "Node is already running".to_string(),
-            });
+            return Err(LuminaError::network("Node is already running"));
         }
 
         let builder = self.config.clone().into_node_builder().await?;
-        let (new_node, subscriber) = builder
-            .start_subscribed()
-            .await
-            .map_err(|e| LuminaError::NetworkError { msg: e.to_string() })?;
+        let (new_node, subscriber) = builder.start_subscribed().await?;
 
         *self.events_subscriber.lock().await = Some(subscriber);
         *node_lock = Some(new_node);
@@ -71,9 +66,7 @@ impl LuminaNode {
             node.stop().await;
             Ok(())
         } else {
-            Err(LuminaError::NetworkError {
-                msg: "Node is already stopped".to_string(),
-            })
+            Err(LuminaError::network("Node is already stopped"))
         }
     }
 
@@ -85,45 +78,45 @@ impl LuminaNode {
     /// Gets the local peer ID as a string.
     pub async fn local_peer_id(&self) -> Result<String> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         Ok(node.local_peer_id().to_base58())
     }
 
     /// Gets information about connected peers.
     pub async fn peer_tracker_info(&self) -> Result<PeerTrackerInfo> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         Ok(node.peer_tracker_info())
     }
 
     /// Waits until the node is connected to at least one peer.
     pub async fn wait_connected(&self) -> Result<()> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         Ok(node.wait_connected().await?)
     }
 
     /// Waits until the node is connected to at least one trusted peer.
     pub async fn wait_connected_trusted(&self) -> Result<()> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         Ok(node.wait_connected_trusted().await?)
     }
 
     /// Gets current network information.
     pub async fn network_info(&self) -> Result<NetworkInfo> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         let info = node.network_info().await?;
         Ok(info.into())
     }
@@ -131,9 +124,9 @@ impl LuminaNode {
     /// Gets list of addresses the node is listening to.
     pub async fn listeners(&self) -> Result<Vec<String>> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         let listeners = node.listeners().await?;
         Ok(listeners.into_iter().map(|l| l.to_string()).collect())
     }
@@ -141,9 +134,9 @@ impl LuminaNode {
     /// Gets list of currently connected peer IDs.
     pub async fn connected_peers(&self) -> Result<Vec<PeerId>> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         let peers = node.connected_peers().await?;
         Ok(peers.into_iter().map(PeerId::from).collect())
     }
@@ -151,12 +144,10 @@ impl LuminaNode {
     /// Sets whether a peer with give ID is trusted.
     pub async fn set_peer_trust(&self, peer_id: PeerId, is_trusted: bool) -> Result<()> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
-        let peer_id = peer_id
-            .to_libp2p()
-            .map_err(|e| LuminaError::NetworkError { msg: e.to_string() })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
+        let peer_id = peer_id.to_libp2p().map_err(LuminaError::network)?;
         Ok(node.set_peer_trust(peer_id, is_trusted).await?)
     }
 
@@ -165,9 +156,9 @@ impl LuminaNode {
     /// Returns a serialized ExtendedHeader string.
     pub async fn request_head_header(&self) -> Result<String> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         let header = node.request_head_header().await?;
         Ok(header.to_string()) //if extended header is needed, we need a wrapper
     }
@@ -175,11 +166,10 @@ impl LuminaNode {
     /// Request a header for the block with a given hash from the network.
     pub async fn request_header_by_hash(&self, hash: String) -> Result<String> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
-        let hash =
-            Hash::from_str(&hash).map_err(|e| LuminaError::InvalidHash { msg: e.to_string() })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
+        let hash = Hash::from_str(&hash).map_err(|e| LuminaError::invalid_hash(e.to_string()))?;
         let header = node.request_header_by_hash(&hash).await?;
         Ok(header.to_string()) //if extended header is needed, we need a wrapper
     }
@@ -187,9 +177,9 @@ impl LuminaNode {
     /// Requests a header by its height.
     pub async fn request_header_by_height(&self, height: u64) -> Result<String> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         let header = node.request_header_by_height(height).await?;
         Ok(header.to_string())
     }
@@ -204,9 +194,9 @@ impl LuminaNode {
         amount: u64,
     ) -> Result<Vec<String>> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         let from: ExtendedHeader =
             serde_json::from_str(&from).map_err(|e| LuminaError::InvalidHeader {
                 msg: format!("Invalid header JSON: {}", e),
@@ -218,9 +208,9 @@ impl LuminaNode {
     /// Gets current syncing information.
     pub async fn syncer_info(&self) -> Result<SyncingInfo> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         let info = node.syncer_info().await?;
         Ok(info.into())
     }
@@ -228,15 +218,12 @@ impl LuminaNode {
     /// Gets the latest header announced in the network.
     pub async fn get_network_head_header(&self) -> Result<String> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         let header = node.get_network_head_header().await?;
         header.map_or(
-            // todo: better error handling, its undefined in wasm
-            Err(LuminaError::NetworkError {
-                msg: "No network head header available".to_string(),
-            }),
+            Err(LuminaError::network("No network head header available")),
             |h| Ok(h.to_string()),
         )
     }
@@ -244,9 +231,9 @@ impl LuminaNode {
     /// Gets the latest locally synced header.
     pub async fn get_local_head_header(&self) -> Result<String> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         let header = node.get_local_head_header().await?;
         Ok(header.to_string())
     }
@@ -254,11 +241,10 @@ impl LuminaNode {
     /// Get a synced header for the block with a given hash.
     pub async fn get_header_by_hash(&self, hash: String) -> Result<String> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
-        let hash =
-            Hash::from_str(&hash).map_err(|e| LuminaError::InvalidHash { msg: e.to_string() })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
+        let hash = Hash::from_str(&hash).map_err(|e| LuminaError::invalid_hash(e.to_string()))?;
         let header = node.get_header_by_hash(&hash).await?;
         Ok(header.to_string())
     }
@@ -266,9 +252,9 @@ impl LuminaNode {
     /// Get a synced header for the block with a given height.
     pub async fn get_header_by_height(&self, height: u64) -> Result<String> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
         let header = node.get_header_by_height(height).await?;
         Ok(header.to_string())
     }
@@ -286,9 +272,9 @@ impl LuminaNode {
         end_height: Option<u64>,
     ) -> Result<Vec<String>> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
 
         let headers = match (start_height, end_height) {
             (None, None) => node.get_headers(..).await,
@@ -305,9 +291,9 @@ impl LuminaNode {
     /// Returns serialized SamplingMetadata string if metadata exists for the height.
     pub async fn get_sampling_metadata(&self, height: u64) -> Result<Option<String>> {
         let node = self.node.read().await;
-        let node = node.as_ref().ok_or(LuminaError::NetworkError {
-            msg: "Node not initialized".to_string(),
-        })?;
+        let node = node
+            .as_ref()
+            .ok_or(LuminaError::network("Node not initialized"))?;
 
         let metadata = node.get_sampling_metadata(height).await?;
         Ok(metadata.map(|m| serde_json::to_string(&m).unwrap()))
@@ -319,11 +305,9 @@ impl LuminaNode {
         match events_subscriber.as_mut() {
             Some(subscriber) => match subscriber.try_recv() {
                 Ok(event) => Ok(Some(event.event.into())),
-                Err(e) => Err(LuminaError::NetworkError { msg: e.to_string() }),
+                Err(e) => Err(LuminaError::network(e.to_string())),
             },
-            None => Err(LuminaError::NetworkError {
-                msg: "Node is not running".to_string(),
-            }),
+            None => Err(LuminaError::network("Node is not running")),
         }
     }
 }
