@@ -41,7 +41,7 @@ pub struct RowNamespaceDataId {
 /// It is constructed out of the ExtendedDataSquare. If, for particular EDS, shares from the namespace span multiple rows,
 /// one needs multiple RowNamespaceData instances to cover the whole range.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(into = "RawRowNamespaceData")]
+#[serde(into = "RawRowNamespaceData", try_from = "RawRowNamespaceData")]
 pub struct RowNamespaceData {
     /// Proof of data inclusion
     pub proof: NamespaceProof,
@@ -169,6 +169,23 @@ impl From<RowNamespaceData> for RawRowNamespaceData {
                 .collect(),
             proof: Some(namespaced_data.proof.into()),
         }
+    }
+}
+
+impl TryFrom<RawRowNamespaceData> for RowNamespaceData {
+    type Error = Error;
+
+    fn try_from(value: RawRowNamespaceData) -> std::result::Result<Self, Self::Error> {
+        let Some(proof) = value.proof else {
+            return Err(Error::MissingProof);
+        };
+        let proof = proof.try_into()?;
+
+        let mut shares = Vec::with_capacity(value.shares.len());
+        for raw_share in value.shares {
+            shares.push(Share::try_from(raw_share)?);
+        }
+        Ok(RowNamespaceData { proof, shares })
     }
 }
 
