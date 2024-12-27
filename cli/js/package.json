@@ -10,6 +10,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "celestia-grpc": "file:../../grpc/pkg",
     "lumina-node": "file:../../node-wasm/js",
     "lumina-node-wasm": "file:../../node-wasm/pkg"
   },

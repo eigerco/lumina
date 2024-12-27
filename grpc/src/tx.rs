@@ -1,4 +1,5 @@
 use std::fmt;
+use std::future::Future;
 use std::ops::Deref;
 use std::sync::{LazyLock, RwLock};
 use std::time::Duration;
@@ -15,7 +16,7 @@ use celestia_types::state::{
 };
 use celestia_types::{AppVersion, Height};
 use http_body::Body;
-use k256::ecdsa::signature::Signer;
+use k256::ecdsa::signature::{Error as SignatureError, Signer};
 use k256::ecdsa::{Signature, VerifyingKey};
 use prost::{Message, Name};
 use regex::Regex;
@@ -95,6 +96,20 @@ impl TxConfig {
     }
 }
 
+pub trait AsyncSigner {
+    fn try_sign(&self, doc: SignDoc) -> impl Future<Output = Result<Signature, SignatureError>>;
+}
+
+impl<T> AsyncSigner for T
+where
+    T: Signer<Signature>,
+{
+    async fn try_sign(&self, doc: SignDoc) -> Result<Signature, SignatureError> {
+        let bytes = doc.encode_to_vec();
+        self.try_sign(&bytes)
+    }
+}
+
 /// A client for submitting messages and transactions to celestia.
 ///
 /// Client handles management of the accounts sequence (nonce), thus
@@ -121,7 +136,7 @@ where
     T::Error: Into<StdError>,
     T::ResponseBody: Body<Data = Bytes> + Send + 'static,
     <T::ResponseBody as Body>::Error: Into<StdError> + Send,
-    S: Signer<Signature>,
+    S: AsyncSigner,
 {
     /// Create a new transaction client.
     ///
@@ -317,14 +332,14 @@ where
         } else {
             // simulate the gas that would be used by transaction
             // fee should be at least 1 as it affects calculation
-            let tx = sign_tx(tx.clone(), 0, 1);
+            let tx = sign_tx(tx.clone(), 0, 1).await?;
             let gas_info = self.client.simulate(tx.encode_to_vec()).await?;
             (gas_info.gas_used as f64 * DEFAULT_GAS_MULTIPLIER) as u64
         };
 
         let gas_price = cfg.gas_price.unwrap_or(self.gas_price());
         let fee = (gas_limit as f64 * gas_price).ceil();
-        let tx = sign_tx(tx, gas_limit, fee as u64);
+        let tx = sign_tx(tx, gas_limit, fee as u64).await?;
 
         self.broadcast_tx_with_account(tx.encode_to_vec(), account, gas_limit)
             .await
@@ -358,6 +373,13 @@ where
             &self.signer,
             gas_limit,
             fee,
+        )
+        .await?;
+
+        println!(
+            "Signed tx; sequence: {}, signature: {:?}",
+            account.sequence,
+            tx.signatures.first().unwrap()
         );
 
         let blobs = blobs.into_iter().map(Into::into).collect();
@@ -483,15 +505,15 @@ impl<T, S> fmt::Debug for TxClient<T, S> {
 }
 
 /// Sign `tx_body` and the transaction metadata as the `base_account` using `signer`
-pub fn sign_tx(
+pub async fn sign_tx(
     tx_body: RawTxBody,
     chain_id: Id,
     base_account: &BaseAccount,
     verifying_key: &VerifyingKey,
-    signer: &impl Signer<Signature>,
+    signer: &impl AsyncSigner,
     gas_limit: u64,
     fee: u64,
-) -> RawTx {
+) -> Result<RawTx> {
     // From https://github.com/celestiaorg/cosmos-sdk/blob/v1.25.0-sdk-v0.46.16/proto/cosmos/tx/signing/v1beta1/signing.proto#L24
     const SIGNING_MODE_INFO: ModeInfo = ModeInfo {
         sum: Sum::Single { mode: 1 },
@@ -517,21 +539,20 @@ pub fn sign_tx(
         fee,
     };
 
-    let bytes_to_sign = SignDoc {
+    let doc = SignDoc {
         body_bytes: tx_body.encode_to_vec(),
         auth_info_bytes: auth_info.clone().encode_vec(),
         chain_id: chain_id.into(),
         account_number: base_account.account_number,
-    }
-    .encode_to_vec();
+    };
 
-    let signature = signer.sign(&bytes_to_sign);
+    let signature = signer.try_sign(doc).await?;
 
-    RawTx {
+    Ok(RawTx {
         auth_info: Some(auth_info.into()),
         body: Some(tx_body),
         signatures: vec![signature.to_bytes().to_vec()],
-    }
+    })
 }
 
 fn estimate_gas(blobs: &[Blob], app_version: AppVersion, gas_multiplier: f64) -> u64 {

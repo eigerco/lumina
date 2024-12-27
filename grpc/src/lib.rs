@@ -2,6 +2,8 @@
 
 mod error;
 pub mod grpc;
+#[cfg(target_arch = "wasm32")]
+mod js_client;
 mod tx;
 mod utils;
 

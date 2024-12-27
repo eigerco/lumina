@@ -1,4 +1,5 @@
 use celestia_types::{hash::Hash, state::ErrorCode};
+use k256::ecdsa::signature::Error as SignatureError;
 use tonic::Status;
 
 /// Alias for a `Result` with the error type [`celestia_tonic::Error`].
@@ -70,4 +71,15 @@ pub enum Error {
     /// Updating gas price failed
     #[error("Updating gas price failed: {0}")]
     UpdatingGasPriceFailed(String),
+
+    /// Signing error
+    #[error(transparent)]
+    SigningError(#[from] SignatureError),
+}
+
+#[cfg(target_arch = "wasm32")]
+impl From<Error> for wasm_bindgen::JsValue {
+    fn from(error: Error) -> wasm_bindgen::JsValue {
+        error.to_string().into()
+    }
 }

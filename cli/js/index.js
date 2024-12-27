@@ -1,6 +1,9 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
 import { NodeConfig, spawnNode } from "lumina-node";
+import { TxClient } from "celestia-grpc";
+
+window.createTxClient = TxClient;
 
 async function showStats(node) {
   if (!node || !await node.isRunning()) {

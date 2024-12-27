@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use celestia_grpc::{Error, TxConfig};
+use celestia_grpc::{Error, TxClient, TxConfig};
 use celestia_proto::cosmos::bank::v1beta1::MsgSend;
 use celestia_types::nmt::Namespace;
 use celestia_types::state::{Coin, ErrorCode};
@@ -95,15 +95,30 @@ async fn get_blob_params() {
 
 #[async_test]
 async fn submit_and_get_tx() {
-    let (_lock, tx_client) = new_tx_client().await;
+    // let (_lock, tx_client) = new_tx_client().await;
+    let leap_account = TestAccount::from_pk(
+        &hex::decode("4f8fae3480edef0a19d4d5228b09fb37f3dddb9813d6641efee4b1ef95b925c9").unwrap(),
+    );
+    let grpc_client = new_grpc_client();
+    let tx_client = TxClient::new(
+        grpc_client,
+        leap_account.signing_key,
+        &leap_account.address,
+        Some(leap_account.verifying_key),
+    )
+    .await
+    .unwrap();
 
-    let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
-    let blobs = vec![Blob::new(namespace, "bleb".into(), AppVersion::V3).unwrap()];
+    let ns = Namespace::new_v0(b"abc").unwrap();
+    let blob = Blob::new(ns, b"data".into(), AppVersion::V3).unwrap();
+    // let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
+    // let blobs = vec![Blob::new(namespace, "bleb".into(), AppVersion::V3).unwrap()];
 
     let tx = tx_client
-        .submit_blobs(&blobs, TxConfig::default())
+        .submit_blobs(&[blob], TxConfig::default())
         .await
         .unwrap();
+    panic!();
     let tx2 = tx_client.get_tx(tx.hash).await.unwrap();
 
     assert_eq!(tx.hash, tx2.tx_response.txhash);
@@ -200,7 +215,7 @@ async fn submit_message() {
 
     let msg = MsgSend {
         from_address: account.address.to_string(),
-        to_address: other_account.address.to_string(),
+        to_address: "celestia159edu39c3mmsudhg63dh4gph8ytpfdpff8q6ew".to_string(), // other_account.address.to_string(),
         amount: vec![amount.clone().into()],
     };
 
