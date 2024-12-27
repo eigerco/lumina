@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.8.0...lumina-node-v0.9.0) - 2024-12-27
+
+### Added
+
+- *(types,rpc)* [**breaking**] move TxConfig to celestia-rpc (#485)
+- *(node)* Implement `EitherStore` combinator struct (#484)
+- *(node)* [**breaking**] Implement `NodeBuilder` and remove `NodeConfig` (#472)
+
+### Other
+
+- *(node,node-wasm)* [**breaking**] Rename `syncing_window` to `sampling_window` (#477)
+
 ## [0.8.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.7.0...lumina-node-v0.8.0) - 2024-12-02
 
 ### Added

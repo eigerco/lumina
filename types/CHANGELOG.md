@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.9.0...celestia-types-v0.10.0) - 2024-12-27
+
+### Added
+
+- *(types,rpc)* [**breaking**] move TxConfig to celestia-rpc (#485)
+
+### Fixed
+
+- *(types)* RowNamespaceData binary deserialization (#493)
+
 ## [0.9.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.8.0...celestia-types-v0.9.0) - 2024-12-02
 
 ### Added
