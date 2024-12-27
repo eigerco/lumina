@@ -51,11 +51,11 @@ impl TestAuthInterceptor {
     }
 }
 
-fn env_or(var_name: &str, or_value: &str) -> String {
+pub fn env_or(var_name: &str, or_value: &str) -> String {
     env::var(var_name).unwrap_or_else(|_| or_value.to_owned())
 }
 
-pub(crate) async fn new_test_client() -> Result<GrpcClient<TestAuthInterceptor>> {
+pub async fn new_test_client() -> Result<GrpcClient<TestAuthInterceptor>> {
     let _ = dotenvy::dotenv();
     let url = env_or("CELESTIA_GRPC_URL", CELESTIA_GRPC_URL);
     let grpc_channel = Channel::from_shared(url)?.connect().await?;
@@ -64,7 +64,7 @@ pub(crate) async fn new_test_client() -> Result<GrpcClient<TestAuthInterceptor>>
     Ok(GrpcClient::new(grpc_channel, auth_interceptor))
 }
 
-pub(crate) fn load_account(path: &str) -> TestAccount {
+pub fn load_account(path: &str) -> TestAccount {
     let account_file = format!("{path}.addr");
     let key_file = format!("{path}.plaintext-key");
 
