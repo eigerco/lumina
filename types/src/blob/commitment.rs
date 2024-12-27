@@ -52,10 +52,13 @@ use crate::{InfoByte, Share};
 /// [`Nmt`]: crate::nmt::Nmt
 /// [`ExtendedDataSquare`]: crate::ExtendedDataSquare
 /// [`share commitment rules`]: https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/data_square_layout.md#blob-share-commitment-rules
-#[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(inspectable)
+)]
 pub struct Commitment {
-    ///  hash of the commitment
+    /// Hash of the commitment
     hash: merkle::Hash,
 }
 
@@ -115,7 +118,7 @@ impl Commitment {
         Ok(Commitment { hash })
     }
 
-    ///  hash of the commitment
+    /// Hash of the commitment
     pub fn hash(&self) -> &merkle::Hash {
         &self.hash
     }
@@ -124,7 +127,7 @@ impl Commitment {
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 #[wasm_bindgen]
 impl Commitment {
-    ///  hash of the commitment
+    /// Hash of the commitment
     #[wasm_bindgen(js_name = hash)]
     pub fn js_hash(&self) -> Vec<u8> {
         self.hash.to_vec()
