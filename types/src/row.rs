@@ -50,7 +50,7 @@ pub struct RowId {
 
 /// Row together with the data
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(into = "RawRow")]
+#[serde(into = "RawRow", try_from = "RawRow")]
 pub struct Row {
     /// Shares contained in the row
     pub shares: Vec<Share>,
@@ -164,6 +164,18 @@ impl From<Row> for RawRow {
             shares_half,
             half_side: RawHalfSide::Left.into(),
         }
+    }
+}
+
+impl TryFrom<RawRow> for Row {
+    type Error = Error;
+
+    fn try_from(raw: RawRow) -> std::result::Result<Self, Self::Error> {
+        let mut shares = Vec::with_capacity(raw.shares_half.len());
+        for shr in raw.shares_half {
+            shares.push(Share::try_from(shr)?);
+        }
+        Ok(Row { shares })
     }
 }
 

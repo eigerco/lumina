@@ -40,7 +40,7 @@ pub struct SampleId {
 
 /// Represents Sample, with proof of its inclusion
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(into = "RawSample")]
+#[serde(into = "RawSample", try_from = "RawSample")]
 pub struct Sample {
     /// Indication whether proving was done row or column-wise
     pub proof_type: AxisType,
@@ -207,6 +207,20 @@ impl From<Sample> for RawSample {
             proof: Some(sample.proof.into()),
             proof_type: sample.proof_type as i32,
         }
+    }
+}
+
+impl TryFrom<RawSample> for Sample {
+    type Error = Error;
+
+    fn try_from(raw: RawSample) -> std::result::Result<Self, Self::Error> {
+        let share = raw.share.ok_or(Error::MissingShares)?.try_into()?;
+        let proof = raw.proof.ok_or(Error::MissingProof)?.try_into()?;
+        Ok(Sample {
+            proof_type: AxisType::try_from(raw.proof_type)?,
+            share,
+            proof,
+        })
     }
 }
 

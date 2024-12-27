@@ -131,7 +131,7 @@ impl Display for AxisType {
 /// [`Share`]: crate::share::Share
 /// [`DataAvailabilityHeader`]: crate::DataAvailabilityHeader
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(into = "RawExtendedDataSquare")]
+#[serde(into = "RawExtendedDataSquare", try_from = "RawExtendedDataSquare")]
 pub struct ExtendedDataSquare {
     /// The raw data of the EDS.
     data_square: Vec<Share>,
@@ -465,6 +465,14 @@ impl From<ExtendedDataSquare> for RawExtendedDataSquare {
                 .collect(),
             codec: eds.codec,
         }
+    }
+}
+
+impl TryFrom<RawExtendedDataSquare> for ExtendedDataSquare {
+    type Error = Error;
+
+    fn try_from(raw: RawExtendedDataSquare) -> std::result::Result<Self, Self::Error> {
+        ExtendedDataSquare::from_raw(raw, AppVersion::V2)
     }
 }
 
