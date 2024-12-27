@@ -23,6 +23,9 @@ pub mod version {
 ///
 /// [`celestia-app`]: https://github.com/celestiaorg/celestia-app
 pub mod appconsts {
+    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+    use wasm_bindgen::prelude::*;
+
     pub use global_consts::*;
 
     // celestia-app/pkg/appconsts/v1/app_consts
@@ -100,6 +103,47 @@ pub mod appconsts {
         /// Returns the numeric value of App version.
         pub fn as_u64(&self) -> u64 {
             *self as u64
+        }
+    }
+
+    /// Enum with all valid App versions.
+    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    #[wasm_bindgen(js_name = AppVersion)]
+    pub enum JsAppVersion {
+        V1 = 1,
+        V2 = 2,
+        V3 = 3,
+    }
+
+    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+    #[wasm_bindgen(js_class = AppVersion)]
+    impl JsAppVersion {
+        /// Latest App version variant.
+        pub fn latest() -> JsAppVersion {
+            AppVersion::latest().into()
+        }
+    }
+
+    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+    impl From<JsAppVersion> for AppVersion {
+        fn from(js: JsAppVersion) -> AppVersion {
+            match js {
+                JsAppVersion::V1 => AppVersion::V1,
+                JsAppVersion::V2 => AppVersion::V2,
+                JsAppVersion::V3 => AppVersion::V3,
+            }
+        }
+    }
+
+    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+    impl From<AppVersion> for JsAppVersion {
+        fn from(js: AppVersion) -> JsAppVersion {
+            match js {
+                AppVersion::V1 => JsAppVersion::V1,
+                AppVersion::V2 => JsAppVersion::V2,
+                AppVersion::V3 => JsAppVersion::V3,
+            }
         }
     }
 

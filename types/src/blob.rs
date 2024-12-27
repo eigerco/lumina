@@ -27,7 +27,7 @@ use wasm_bindgen::prelude::*;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
-    wasm_bindgen(getter_with_clone)
+    wasm_bindgen(getter_with_clone, inspectable)
 )]
 pub struct Blob {
     /// A [`Namespace`] the [`Blob`] belongs to.
@@ -324,6 +324,20 @@ impl From<Blob> for RawBlob {
             share_version: value.share_version as u32,
             signer: Vec::new(),
         }
+    }
+}
+
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+impl Blob {
+    /// Create a new blob with the given data within the [`Namespace`].
+    #[wasm_bindgen(constructor)]
+    pub fn js_new(
+        namespace: Namespace,
+        data: Vec<u8>,
+        app_version: appconsts::JsAppVersion,
+    ) -> Result<Blob> {
+        Self::new(namespace, data, app_version.into())
     }
 }
 

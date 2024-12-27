@@ -93,7 +93,10 @@ pub type Proof = nmt_rs::simple_merkle::proof::Proof<NamespacedSha2Hasher>;
 ///  - secondary reserved namespaces - those use version `0xff` so they are always placed after
 ///    user-submitted data.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
-#[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(inspectable)
+)]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
 impl Namespace {
@@ -379,22 +382,106 @@ impl Namespace {
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 #[wasm_bindgen]
 impl Namespace {
+    /// Namespace size in bytes.
+    #[wasm_bindgen(js_name = NS_SIZE, getter)]
+    pub fn js_ns_size() -> usize {
+        NS_SIZE
+    }
+
+    /// Primary reserved [`Namespace`] for the compact `Share`s with `cosmos SDK` transactions.
+    #[wasm_bindgen(js_name = TRANSACTION, getter)]
+    pub fn js_transaction() -> Namespace {
+        Namespace::TRANSACTION
+    }
+
+    /// Primary reserved [`Namespace`] for the compact Shares with MsgPayForBlobs transactions.
+    #[wasm_bindgen(js_name = PAY_FOR_BLOB, getter)]
+    pub fn js_pay_for_blob() -> Namespace {
+        Namespace::PAY_FOR_BLOB
+    }
+
+    /// Primary reserved [`Namespace`] for the `Share`s used for padding.
+    ///
+    /// `Share`s with this namespace are inserted after other shares from primary reserved namespace
+    /// so that user-defined namespaces are correctly aligned in `ExtendedDataSquare`
+    #[wasm_bindgen(js_name = PRIMARY_RESERVED_PADDING, getter)]
+    pub fn js_primary_reserved_padding() -> Namespace {
+        Namespace::PRIMARY_RESERVED_PADDING
+    }
+
+    /// Maximal primary reserved [`Namespace`].
+    ///
+    /// Used to indicate the end of the primary reserved group.
+    #[wasm_bindgen(js_name = MAX_PRIMARY_RESERVED, getter)]
+    pub fn js_max_primary_reserved() -> Namespace {
+        Namespace::MAX_PRIMARY_RESERVED
+    }
+
+    /// Minimal secondary reserved [`Namespace`].
+    ///
+    /// Used to indicate the beginning of the secondary reserved group.
+    #[wasm_bindgen(js_name = MIN_SECONDARY_RESERVED, getter)]
+    pub fn js_min_secondary_reserved() -> Namespace {
+        Namespace::MIN_SECONDARY_RESERVED
+    }
+
+    /// Secondary reserved [`Namespace`] used for padding after the blobs.
+    ///
+    /// It is used to fill up the `original data square` after all user-submitted
+    /// blobs before the parity data is generated for the `ExtendedDataSquare`.
+    #[wasm_bindgen(js_name = TAIL_PADDING, getter)]
+    pub fn js_tail_padding() -> Namespace {
+        Namespace::TAIL_PADDING
+    }
+
+    /// The [`Namespace`] for `parity shares`.
+    ///
+    /// It is the namespace with which all the `parity shares` from
+    /// `ExtendedDataSquare` are inserted to the `Nmt` when computing
+    /// merkle roots.
+    #[wasm_bindgen(js_name = PARITY_SHARE, getter)]
+    pub fn js_parity_share() -> Namespace {
+        Namespace::PARITY_SHARE
+    }
+
+    /// Create a new [`Namespace`] version `0` with given id.
+    ///
+    /// Check [`Namespace::new_v0`] for more details.
+    ///
+    /// [`Namespace::new_v0`]: https://docs.rs/celestia-types/latest/celestia_types/nmt/struct.Namespace.html#method.new_v0
+    #[wasm_bindgen(js_name = newV0)]
+    pub fn js_new_v0(id: Vec<u8>) -> Result<Self> {
+        Self::new_v0(&id.to_vec())
+    }
+
+    /// Create a new [`Namespace`] from the raw bytes.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the slice length is different than
+    /// [`NS_SIZE`] or if the namespace is invalid. If you are constructing the
+    /// version `0` namespace, check [`newV0`].
+    #[wasm_bindgen(js_name = fromRaw)]
+    pub fn js_from_raw(raw: Vec<u8>) -> Result<Self> {
+        Self::from_raw(&raw.to_vec())
+    }
+
     /// Converts the [`Namespace`] to a byte slice.
-    #[wasm_bindgen(js_name = "asBytes")]
-    pub fn js_as_bytes(&self) -> js_sys::Uint8Array {
-        (&self.0 .0[..]).into()
+    #[wasm_bindgen(js_name = asBytes)]
+    pub fn js_as_bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
     }
 
     /// Returns the first byte indicating the version of the [`Namespace`].
-    #[wasm_bindgen(js_name = "version", getter)]
+    #[wasm_bindgen(js_name = version, getter)]
     pub fn js_version(&self) -> u8 {
-        self.as_bytes()[0]
+        self.version()
     }
 
     /// Returns the trailing 28 bytes indicating the id of the [`Namespace`].
-    #[wasm_bindgen(js_name = "id", getter)]
-    pub fn js_id(&self) -> js_sys::Uint8Array {
-        (&self.as_bytes()[1..]).into()
+    #[wasm_bindgen(js_name = id, getter)]
+    pub fn js_id(&self) -> Vec<u8> {
+        self.id().to_vec()
     }
 }
 
