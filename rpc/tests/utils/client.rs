@@ -3,9 +3,8 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use celestia_rpc::prelude::*;
-use celestia_rpc::Client;
+use celestia_rpc::{Client, TxConfig};
 use celestia_types::Blob;
-use celestia_types::TxConfig;
 use jsonrpsee::core::client::SubscriptionClientT;
 use jsonrpsee::core::ClientError;
 use tokio::sync::{Mutex, MutexGuard};

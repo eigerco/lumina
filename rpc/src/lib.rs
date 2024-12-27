@@ -9,6 +9,7 @@ mod header;
 mod p2p;
 pub mod share;
 mod state;
+mod tx_config;
 
 pub use crate::blob::BlobClient;
 #[cfg(any(
@@ -30,6 +31,7 @@ pub use crate::header::HeaderClient;
 pub use crate::p2p::P2PClient;
 pub use crate::share::ShareClient;
 pub use crate::state::StateClient;
+pub use crate::tx_config::TxConfig;
 
 /// Re-exports of all the RPC traits.
 pub mod prelude {

@@ -111,8 +111,11 @@ pub mod appconsts {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
     #[wasm_bindgen(js_name = AppVersion)]
     pub enum JsAppVersion {
+        /// App v1
         V1 = 1,
+        /// App v2
         V2 = 2,
+        /// App v3
         V3 = 3,
     }
 

@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use blockstore::EitherBlockstore;
 use celestia_types::nmt::Namespace;
 use celestia_types::Blob;
 use js_sys::Array;
@@ -11,10 +12,10 @@ use tracing::{debug, error};
 use wasm_bindgen::prelude::*;
 use web_sys::BroadcastChannel;
 
-use lumina_node::blockstore::IndexedDbBlockstore;
+use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::network;
-use lumina_node::node::NodeBuilder;
-use lumina_node::store::IndexedDbStore;
+use lumina_node::node::{NodeBuilder, MIN_PRUNING_DELAY, MIN_SAMPLING_WINDOW};
+use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore};
 
 use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::error::{Context, Result};
@@ -23,6 +24,7 @@ use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
     timeout, Network,
 };
+use crate::worker::{WasmBlockstore, WasmStore};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::wrapper::node::{PeerTrackerInfoSnapshot, SyncingInfoSnapshot};
 
@@ -35,9 +37,29 @@ pub struct WasmNodeConfig {
     /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
-    /// Syncing window size, defines maximum age of headers considered for syncing and sampling.
-    /// Headers older than syncing window by more than an hour are eligible for pruning.
-    pub custom_syncing_window_secs: Option<u32>,
+    /// Whether to store data in persistent memory or not.
+    ///
+    /// **Default value:** true
+    pub use_persistent_memory: bool,
+    /// Sampling window defines maximum age of a block considered for syncing and sampling.
+    ///
+    /// If this is not set, then default value will apply:
+    ///
+    /// * If `use_persistent_memory == true`, default value is 30 days.
+    /// * If `use_persistent_memory == false`, default value is 60 seconds.
+    ///
+    /// The minimum value that can be set is 60 seconds.
+    pub custom_sampling_window_secs: Option<u32>,
+    /// Pruning delay defines how much time the pruner should wait after sampling window in
+    /// order to prune the block.
+    ///
+    /// If this is not set, then default value will apply:
+    ///
+    /// * If `use_persistent_memory == true`, default value is 1 hour.
+    /// * If `use_persistent_memory == false`, default value is 60 seconds.
+    ///
+    /// The minimum value that can be set is 60 seconds.
+    pub custom_pruning_delay_secs: Option<u32>,
 }
 
 /// `NodeClient` is responsible for steering [`NodeWorker`] by sending it commands and receiving
@@ -402,28 +424,37 @@ impl WasmNodeConfig {
         WasmNodeConfig {
             network,
             bootnodes,
-            custom_syncing_window_secs: None,
+            use_persistent_memory: true,
+            custom_sampling_window_secs: None,
+            custom_pruning_delay_secs: None,
         }
     }
 
-    pub(crate) async fn into_node_builder(
-        self,
-    ) -> Result<NodeBuilder<IndexedDbBlockstore, IndexedDbStore>> {
+    pub(crate) async fn into_node_builder(self) -> Result<NodeBuilder<WasmBlockstore, WasmStore>> {
         let network = network::Network::from(self.network);
         let network_id = network.id();
 
-        let store = IndexedDbStore::new(network_id)
-            .await
-            .context("Failed to open the store")?;
-        let blockstore = IndexedDbBlockstore::new(&format!("{network_id}-blockstore"))
-            .await
-            .context("Failed to open the blockstore")?;
+        let mut builder = if self.use_persistent_memory {
+            let store = IndexedDbStore::new(network_id)
+                .await
+                .context("Failed to open the store")?;
+            let blockstore = IndexedDbBlockstore::new(&format!("{network_id}-blockstore"))
+                .await
+                .context("Failed to open the blockstore")?;
 
-        let mut builder = NodeBuilder::new()
-            .store(store)
-            .blockstore(blockstore)
-            .network(network)
-            .sync_batch_size(128);
+            NodeBuilder::new()
+                .store(EitherStore::Right(store))
+                .blockstore(EitherBlockstore::Right(blockstore))
+        } else {
+            NodeBuilder::new()
+                .store(EitherStore::Left(InMemoryStore::new()))
+                .blockstore(EitherBlockstore::Left(InMemoryBlockstore::new()))
+                // In-memory stores are memory hungry, so we lower sampling and pruining window.
+                .sampling_window(MIN_SAMPLING_WINDOW)
+                .pruning_delay(MIN_PRUNING_DELAY)
+        };
+
+        builder = builder.network(network).sync_batch_size(128);
 
         let mut bootnodes = Vec::with_capacity(self.bootnodes.len());
 
@@ -437,9 +468,14 @@ impl WasmNodeConfig {
 
         builder = builder.bootnodes(bootnodes);
 
-        if let Some(secs) = self.custom_syncing_window_secs {
+        if let Some(secs) = self.custom_sampling_window_secs {
             let dur = Duration::from_secs(secs.into());
-            builder = builder.syncing_window(dur);
+            builder = builder.sampling_window(dur);
+        }
+
+        if let Some(secs) = self.custom_pruning_delay_secs {
+            let dur = Duration::from_secs(secs.into());
+            builder = builder.pruning_delay(dur);
         }
 
         Ok(builder)
@@ -452,9 +488,9 @@ mod tests {
 
     use std::time::Duration;
 
-    use celestia_rpc::{prelude::*, Client};
+    use celestia_rpc::{prelude::*, Client, TxConfig};
     use celestia_types::p2p::PeerId;
-    use celestia_types::{AppVersion, ExtendedHeader, TxConfig};
+    use celestia_types::{AppVersion, ExtendedHeader};
     use gloo_timers::future::sleep;
     use libp2p::{multiaddr::Protocol, Multiaddr};
     use rexie::Rexie;
@@ -565,7 +601,9 @@ mod tests {
             .start(&WasmNodeConfig {
                 network: Network::Private,
                 bootnodes,
-                custom_syncing_window_secs: None,
+                use_persistent_memory: false,
+                custom_sampling_window_secs: None,
+                custom_pruning_delay_secs: None,
             })
             .await
             .unwrap();
