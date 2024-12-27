@@ -29,10 +29,6 @@ pub enum LuminaError {
     #[error("Node is already running")]
     AlreadyRunning,
 
-    /// Error returned when a mutex lock operation fails
-    #[error("Lock error")]
-    Lock,
-
     /// Error returned when a hash string is invalid or malformed
     #[error("Invalid hash format: {msg}")]
     InvalidHash {
