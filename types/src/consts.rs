@@ -106,22 +106,36 @@ pub mod appconsts {
         }
     }
 
-    /// Enum with all valid App versions.
+    // wasm-bindgen duplicates classes for `impl` blocks for enums
+    // so we can't export enum with additional methods
+    // https://github.com/rustwasm/wasm-bindgen/issues/1715
+    /// Version of the App
     #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
     #[wasm_bindgen(js_name = AppVersion)]
-    pub enum JsAppVersion {
-        /// App v1
-        V1 = 1,
-        /// App v2
-        V2 = 2,
-        /// App v3
-        V3 = 3,
-    }
+    pub struct JsAppVersion(AppVersion);
 
     #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
     #[wasm_bindgen(js_class = AppVersion)]
     impl JsAppVersion {
+        /// App v1
+        #[wasm_bindgen(js_name = V1, getter)]
+        pub fn v1() -> JsAppVersion {
+            JsAppVersion(AppVersion::V1)
+        }
+
+        /// App v2
+        #[wasm_bindgen(js_name = V2, getter)]
+        pub fn v2() -> JsAppVersion {
+            JsAppVersion(AppVersion::V2)
+        }
+
+        /// App v3
+        #[wasm_bindgen(js_name = V3, getter)]
+        pub fn v3() -> JsAppVersion {
+            JsAppVersion(AppVersion::V3)
+        }
+
         /// Latest App version variant.
         pub fn latest() -> JsAppVersion {
             AppVersion::latest().into()
@@ -130,23 +144,15 @@ pub mod appconsts {
 
     #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
     impl From<JsAppVersion> for AppVersion {
-        fn from(js: JsAppVersion) -> AppVersion {
-            match js {
-                JsAppVersion::V1 => AppVersion::V1,
-                JsAppVersion::V2 => AppVersion::V2,
-                JsAppVersion::V3 => AppVersion::V3,
-            }
+        fn from(value: JsAppVersion) -> AppVersion {
+            value.0
         }
     }
 
     #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
     impl From<AppVersion> for JsAppVersion {
-        fn from(js: AppVersion) -> JsAppVersion {
-            match js {
-                AppVersion::V1 => JsAppVersion::V1,
-                AppVersion::V2 => JsAppVersion::V2,
-                AppVersion::V3 => JsAppVersion::V3,
-            }
+        fn from(value: AppVersion) -> JsAppVersion {
+            JsAppVersion(value)
         }
     }
 
