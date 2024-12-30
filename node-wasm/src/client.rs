@@ -286,12 +286,12 @@ impl NodeClient {
     pub async fn request_all_blobs(
         &self,
         header: JsValue,
-        namespace: Namespace,
+        namespace: &Namespace,
         timeout_secs: Option<f64>,
     ) -> Result<Vec<Blob>> {
         let command = NodeCommand::RequestAllBlobs {
             header,
-            namespace,
+            namespace: *namespace,
             timeout_secs,
         };
         let response = self.worker.exec(command).await?;
@@ -574,7 +574,7 @@ mod tests {
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
         let mut blobs = client
-            .request_all_blobs(to_value(&header).unwrap(), namespace, None)
+            .request_all_blobs(to_value(&header).unwrap(), &namespace, None)
             .await
             .expect("to fetch blob");
 
