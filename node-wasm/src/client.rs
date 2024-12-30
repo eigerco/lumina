@@ -3,6 +3,8 @@
 use std::time::Duration;
 
 use blockstore::EitherBlockstore;
+use celestia_types::nmt::Namespace;
+use celestia_types::Blob;
 use js_sys::Array;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
@@ -278,6 +280,24 @@ impl NodeClient {
         headers.into()
     }
 
+    /// Request all blobs with provided namespace in the block corresponding to this header
+    /// using bitswap protocol.
+    #[wasm_bindgen(js_name = requestAllBlobs)]
+    pub async fn request_all_blobs(
+        &self,
+        header: JsValue,
+        namespace: &Namespace,
+        timeout_secs: Option<f64>,
+    ) -> Result<Vec<Blob>> {
+        let command = NodeCommand::RequestAllBlobs {
+            header,
+            namespace: *namespace,
+            timeout_secs,
+        };
+        let response = self.worker.exec(command).await?;
+        response.into_blobs().check_variant()?
+    }
+
     /// Get current header syncing info.
     #[wasm_bindgen(js_name = syncerInfo)]
     pub async fn syncer_info(&self) -> Result<SyncingInfoSnapshot> {
@@ -468,9 +488,9 @@ mod tests {
 
     use std::time::Duration;
 
-    use celestia_rpc::{prelude::*, Client};
+    use celestia_rpc::{prelude::*, Client, TxConfig};
     use celestia_types::p2p::PeerId;
-    use celestia_types::ExtendedHeader;
+    use celestia_types::{AppVersion, ExtendedHeader};
     use gloo_timers::future::sleep;
     use libp2p::{multiaddr::Protocol, Multiaddr};
     use rexie::Rexie;
@@ -530,6 +550,38 @@ mod tests {
             ))
             .await
             .unwrap();
+    }
+
+    #[wasm_bindgen_test]
+    async fn get_blob() {
+        remove_database().await.expect("failed to clear db");
+        let rpc_client = Client::new(WS_URL).await.unwrap();
+        let namespace = Namespace::new_v0(&[0xCD, 0xDC, 0xCD, 0xDC, 0xCD, 0xDC]).unwrap();
+        let data = b"Hello, World";
+        let blobs = vec![Blob::new(namespace, data.to_vec(), AppVersion::V3).unwrap()];
+
+        let submitted_height = rpc_client
+            .blob_submit(&blobs, TxConfig::default())
+            .await
+            .expect("successful submission");
+
+        let header = rpc_client
+            .header_get_by_height(submitted_height)
+            .await
+            .expect("header for blob");
+
+        let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
+        let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
+
+        let mut blobs = client
+            .request_all_blobs(to_value(&header).unwrap(), &namespace, None)
+            .await
+            .expect("to fetch blob");
+
+        assert_eq!(blobs.len(), 1);
+        let blob = blobs.pop().unwrap();
+        assert_eq!(blob.data, data);
+        assert_eq!(blob.namespace, namespace);
     }
 
     async fn spawn_connected_node(bootnodes: Vec<String>) -> NodeClient {

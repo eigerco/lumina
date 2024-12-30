@@ -41,7 +41,7 @@ pub struct RowNamespaceDataId {
 /// It is constructed out of the ExtendedDataSquare. If, for particular EDS, shares from the namespace span multiple rows,
 /// one needs multiple RowNamespaceData instances to cover the whole range.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(into = "RawRowNamespaceData")]
+#[serde(into = "RawRowNamespaceData", try_from = "RawRowNamespaceData")]
 pub struct RowNamespaceData {
     /// Proof of data inclusion
     pub proof: NamespaceProof,
@@ -169,6 +169,23 @@ impl From<RowNamespaceData> for RawRowNamespaceData {
                 .collect(),
             proof: Some(namespaced_data.proof.into()),
         }
+    }
+}
+
+impl TryFrom<RawRowNamespaceData> for RowNamespaceData {
+    type Error = Error;
+
+    fn try_from(value: RawRowNamespaceData) -> std::result::Result<Self, Self::Error> {
+        let Some(proof) = value.proof else {
+            return Err(Error::MissingProof);
+        };
+        let proof = proof.try_into()?;
+
+        let mut shares = Vec::with_capacity(value.shares.len());
+        for raw_share in value.shares {
+            shares.push(Share::try_from(raw_share)?);
+        }
+        Ok(RowNamespaceData { proof, shares })
     }
 }
 
@@ -457,5 +474,73 @@ mod tests {
                 assert_eq!(blobs.len(), 1);
             }
         }
+    }
+
+    #[test]
+    fn namespace_data_roundtrip() {
+        let proof = nmt_rs::nmt_proof::NamespaceProof::<
+            crate::nmt::NamespacedSha2Hasher,
+            { crate::nmt::NS_SIZE },
+        >::AbsenceProof {
+            proof: crate::nmt::Proof {
+                siblings: vec![
+                    nmt_rs::NamespacedHash::new(
+                        nmt_rs::NamespaceId([
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 4,
+                        ]),
+                        nmt_rs::NamespaceId([
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 4,
+                        ]),
+                        [
+                            180, 43, 29, 197, 134, 127, 103, 202, 217, 240, 11, 18, 15, 47, 140,
+                            136, 58, 134, 117, 174, 162, 95, 216, 114, 31, 71, 90, 238, 49, 228,
+                            95, 89,
+                        ],
+                    ),
+                    nmt_rs::NamespacedHash::new(
+                        nmt_rs::NamespaceId::MAX_ID,
+                        nmt_rs::NamespaceId::MAX_ID,
+                        [
+                            126, 112, 141, 49, 103, 177, 23, 186, 153, 245, 110, 62, 165, 4, 39,
+                            125, 171, 55, 116, 176, 36, 153, 101, 171, 25, 253, 200, 61, 226, 43,
+                            81, 52,
+                        ],
+                    ),
+                ],
+                range: 1..2,
+            },
+            ignore_max_ns: true,
+            leaf: Some(nmt_rs::NamespacedHash::new(
+                nmt_rs::NamespaceId([
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 115, 111, 118, 45,
+                    116, 101, 115, 116, 45, 112,
+                ]),
+                nmt_rs::NamespaceId([
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 115, 111, 118, 45,
+                    116, 101, 115, 116, 45, 112,
+                ]),
+                [
+                    132, 118, 183, 139, 217, 27, 43, 49, 209, 15, 142, 136, 209, 205, 230, 67, 247,
+                    102, 202, 206, 118, 16, 124, 41, 208, 225, 148, 103, 192, 184, 59, 155,
+                ],
+            )),
+        };
+
+        let row = RowNamespaceData {
+            proof: proof.into(),
+            shares: vec![],
+        };
+
+        // JSON works,
+        let row_j = serde_json::to_value(&row).unwrap();
+        let d_from_json: RowNamespaceData = serde_json::from_value(row_j).unwrap();
+        assert_eq!(d_from_json, row);
+
+        // And what about bincode?
+        let s_row = bincode::serialize(&row).unwrap();
+        let d_row: RowNamespaceData = bincode::deserialize(&s_row).unwrap();
+        assert_eq!(row, d_row);
     }
 }
