@@ -333,11 +333,11 @@ impl Blob {
     /// Create a new blob with the given data within the [`Namespace`].
     #[wasm_bindgen(constructor)]
     pub fn js_new(
-        namespace: Namespace,
+        namespace: &Namespace,
         data: Vec<u8>,
-        app_version: appconsts::JsAppVersion,
+        app_version: &appconsts::JsAppVersion,
     ) -> Result<Blob> {
-        Self::new(namespace, data, app_version.into())
+        Self::new(*namespace, data, (*app_version).into())
     }
 }
 
