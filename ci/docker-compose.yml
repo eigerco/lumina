@@ -20,7 +20,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.grpcwebproxy
-    command: --backend_addr=public-celestia-mocha4-consensus.numia.xyz:9090 --run_tls_server=false --allow_all_origins
+    command: --backend_addr=validator:9090 --run_tls_server=false --allow_all_origins
     ports:
       - 18080:8080
 

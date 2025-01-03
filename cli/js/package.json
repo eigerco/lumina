@@ -10,13 +10,15 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "elliptic": "^6.6.1",
+    "@cosmjs/proto-signing": "^0.32.4",
+    "@cosmjs/stargate": "^0.32.4",
     "@noble/curves": "^1.7.0",
+    "cosmjs-types": "^0.9.0",
+    "crypto-browserify": "^3.12.1",
     "lumina-node": "file:../../node-wasm/js",
     "lumina-node-wasm": "file:../../node-wasm/pkg"
   },
   "devDependencies": {
-    "@types/elliptic": "^6.4.18",
     "webpack": "^5.38.1",
     "webpack-cli": "^4.7.2"
   }

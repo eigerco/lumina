@@ -1,17 +1,20 @@
 use celestia_proto::cosmos::tx::v1beta1::SignDoc;
+use celestia_types::consts::appconsts::JsAppVersion;
 use celestia_types::Blob;
 use js_sys::{BigInt, Function, Promise, Uint8Array};
 use k256::ecdsa::signature::Error as SignatureError;
 use k256::ecdsa::{Signature, VerifyingKey};
 use prost::Message;
+use tendermint_proto::google::protobuf::Any;
 use tonic_web_wasm_client::Client;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 
-use crate::tx::{DocSigner, JsTxConfig, JsTxInfo};
+use crate::grpc::{JsAuthParams, JsBaseAccount, JsCoin};
+use crate::tx::{DocSigner, IntoAny, JsTxConfig, JsTxInfo};
 use crate::utils::make_object;
-use crate::{GrpcClient, Result, TxClient};
+use crate::{Result, TxClient};
 
 /// Celestia grpc transaction client.
 #[wasm_bindgen(js_name = "TxClient")]
@@ -68,7 +71,7 @@ impl JsClient {
         Ok(Self { client })
     }
 
-    /// Get current gas price of a client
+    /// Gas price of a client
     #[wasm_bindgen(js_name = gasPrice, getter)]
     pub fn get_gas_price(&self) -> f64 {
         self.client.gas_price()
@@ -80,11 +83,27 @@ impl JsClient {
         self.client.set_gas_price(price)
     }
 
+    /// Chain id of the client
+    #[wasm_bindgen(js_name = chainId, getter)]
+    pub fn chain_id(&self) -> String {
+        self.client.chain_id().to_string()
+    }
+
+    /// AppVersion of the client
+    #[wasm_bindgen(js_name = appVersion, getter)]
+    pub fn app_version(&self) -> JsAppVersion {
+        self.client.app_version().into()
+    }
+
     /// Submit blobs to celestia network.
     ///
     /// Provided blobs will be consumed by this method, meaning
     /// they will no longer be accessible. If this behavior is not desired,
     /// consider using `Blob.clone()`.
+    ///
+    /// When no `TxConfig` is provided, client will automatically calculate needed
+    /// gas and update the `gasPrice` if network agreed on a new minimal value.
+    /// To enforce specific values use a `TxConfig`.
     ///
     /// # Example
     /// ```js
@@ -93,15 +112,7 @@ impl JsClient {
     /// const blob = new Blob(ns, data, AppVersion.latest());
     ///
     /// const txInfo = await txClient.submitBlobs([blob]);
-    /// ```
-    ///
-    /// When no `TxConfig` is provided, client will automatically calculate needed
-    /// gas and update the `gasPrice` if network agreed on a new minimal value.
-    /// To enforce specific values use a `TxConfig`.
-    ///
-    /// # Example
-    /// ```js
-    /// const txInfo = await txClient.submitBlobs([blob], { gasLimit: 100000n, gasPrice: 0.02 });
+    /// await txClient.submitBlobs([blob], { gasLimit: 100000n, gasPrice: 0.02 });
     /// ```
     #[wasm_bindgen(js_name = submitBlobs)]
     pub async fn submit_blobs(
@@ -113,6 +124,111 @@ impl JsClient {
         let tx = self.client.submit_blobs(&blobs, tx_config).await?;
         Ok(tx.into())
     }
+
+    /// Submit message to celestia network.
+    ///
+    /// When no `TxConfig` is provided, client will automatically calculate needed
+    /// gas and update the `gasPrice` if network agreed on a new minimal value.
+    /// To enforce specific values use a `TxConfig`.
+    ///
+    /// # Example
+    /// ```js
+    /// import { Registry } from "@cosmjs/proto-signing";
+    ///
+    /// const registry = new Registry();
+    /// const sendMsg = {
+    ///   typeUrl: "/cosmos.bank.v1beta1.MsgSend",
+    ///   value: {
+    ///     fromAddress: "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm",
+    ///     toAddress: "celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9",
+    ///     amount: [{ denom: "utia", amount: "10000" }],
+    ///   },
+    /// };
+    /// const sendMsgAny = registry.encodeAsAny(sendMsg);
+    ///
+    /// const txInfo = await txClient.submitMessage(sendMsgAny);
+    /// ```
+    #[wasm_bindgen(js_name = submitMessage)]
+    pub async fn submit_message(
+        &self,
+        message: JsAny,
+        tx_config: Option<JsTxConfig>,
+    ) -> Result<JsTxInfo> {
+        let tx_config = tx_config.map(Into::into).unwrap_or_default();
+        let tx = self.client.submit_message(message, tx_config).await?;
+        Ok(tx.into())
+    }
+
+    // cosmos.auth
+
+    /// Get auth params
+    #[wasm_bindgen(js_name = getAuthParams)]
+    pub async fn get_auth_params(&self) -> Result<JsAuthParams> {
+        self.client.get_auth_params().await.map(Into::into)
+    }
+
+    /// Get account
+    #[wasm_bindgen(js_name = getAccount)]
+    pub async fn get_account(&self, account: String) -> Result<JsBaseAccount> {
+        self.client
+            .get_account(&account.parse()?)
+            .await
+            .map(Into::into)
+    }
+
+    /// Get accounts
+    #[wasm_bindgen(js_name = getAccounts)]
+    pub async fn get_accounts(&self) -> Result<Vec<JsBaseAccount>> {
+        self.client
+            .get_accounts()
+            .await
+            .map(|accs| accs.into_iter().map(Into::into).collect())
+    }
+
+    // cosmos.bank
+
+    /// Get balance of coins with given denom
+    #[wasm_bindgen(js_name = getBalance)]
+    pub async fn get_balance(&self, address: String, denom: String) -> Result<JsCoin> {
+        self.client
+            .get_balance(&address.parse()?, denom)
+            .await
+            .map(Into::into)
+    }
+
+    /// Get balance of all coins
+    #[wasm_bindgen(js_name = getAllBalances)]
+    pub async fn get_all_balances(&self, address: String) -> Result<Vec<JsCoin>> {
+        self.client
+            .get_all_balances(&address.parse()?)
+            .await
+            .map(|coins| coins.into_iter().map(Into::into).collect())
+    }
+
+    /// Get balance of all spendable coins
+    #[wasm_bindgen(js_name = getSpendableBalances)]
+    pub async fn get_spendable_balances(&self, address: String) -> Result<Vec<JsCoin>> {
+        self.client
+            .get_spendable_balances(&address.parse()?)
+            .await
+            .map(|coins| coins.into_iter().map(Into::into).collect())
+    }
+
+    /// Get total supply
+    #[wasm_bindgen(js_name = getTotalSupply)]
+    pub async fn get_total_supply(&self) -> Result<Vec<JsCoin>> {
+        self.client
+            .get_total_supply()
+            .await
+            .map(|coins| coins.into_iter().map(Into::into).collect())
+    }
+
+    // TODO:
+    //  - cosmos.base.node
+    //  - cosmos.base.tendermint
+    //  - cosmos.tx
+    //  - celestia.blob
+    //  - celestia.core.tx
 }
 
 /// A helper to encode the SignDoc with protobuf to get bytes to sign directly.
@@ -216,5 +332,37 @@ impl From<SignDoc> for JsSignDoc {
         );
 
         obj.unchecked_into()
+    }
+}
+
+#[wasm_bindgen(typescript_custom_section)]
+const _: &str = "
+/**
+ * Protobuf Any type
+ */
+export interface ProtoAny {
+  typeUrl: string;
+  value: Uint8Array;
+}
+";
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(typescript_type = "ProtoAny")]
+    pub type JsAny;
+
+    #[wasm_bindgen(method, getter, js_name = typeUrl)]
+    pub fn type_url(this: &JsAny) -> String;
+
+    #[wasm_bindgen(method, getter, js_name = value)]
+    pub fn value(this: &JsAny) -> Vec<u8>;
+}
+
+impl IntoAny for JsAny {
+    fn into_any(self) -> Any {
+        Any {
+            type_url: self.type_url(),
+            value: self.value(),
+        }
     }
 }

@@ -1,8 +1,7 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
 import { Namespace, Blob, AppVersion, TxClient, NodeConfig, protoEncodeSignDoc, spawnNode } from "lumina-node";
-
-//import { secp256k1 } from "@noble/curves/secp256k1";
+// import { secp256k1 } from "@noble/curves/secp256k1";
 
 // const address = "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm";
 // const privKey = "fdc8ac75dfa1c142dbcba77938a14dd03078052ce0b49a529dcf72a9885a3abb";
@@ -15,6 +14,20 @@ import { Namespace, Blob, AppVersion, TxClient, NodeConfig, protoEncodeSignDoc, 
 // };
 
 // window.txClient = await new TxClient("http://127.0.0.1:18080", address, pubKey, signer);
+
+// import { Registry } from "@cosmjs/proto-signing";
+
+// const registry = new Registry();
+// const sendMsg = {
+//   typeUrl: "/cosmos.bank.v1beta1.MsgSend",
+//   value: {
+//     fromAddress: address,
+//     toAddress: address,
+//     amount: [{ denom: "utia", amount: "10000" }],
+//   },
+// };
+// const sendMsgAny = registry.encodeAsAny(sendMsg);
+// const txInfo = await window.txClient.submitMessage(sendMsgAny);
 
 window.TxClient = TxClient;
 window.AppVersion = AppVersion;

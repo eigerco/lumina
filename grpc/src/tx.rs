@@ -16,8 +16,6 @@ use celestia_types::state::{
 };
 use celestia_types::{AppVersion, Height};
 use http_body::Body;
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-use js_sys::{BigInt, Uint8Array};
 use k256::ecdsa::signature::{Error as SignatureError, Signer};
 use k256::ecdsa::{Signature, VerifyingKey};
 use prost::{Message, Name};
@@ -103,7 +101,7 @@ impl From<TxInfo> for JsTxInfo {
     fn from(value: TxInfo) -> JsTxInfo {
         let obj = make_object!(
             "hash" => value.hash.to_string().into(),
-            "height" => BigInt::from(value.height.value())
+            "height" => js_sys::BigInt::from(value.height.value())
         );
 
         obj.unchecked_into()
@@ -180,6 +178,23 @@ where
     async fn try_sign(&self, doc: SignDoc) -> Result<Signature, SignatureError> {
         let bytes = doc.encode_to_vec();
         self.try_sign(&bytes)
+    }
+}
+
+/// Value convertion into protobuf's Any
+pub trait IntoAny {
+    fn into_any(self) -> Any;
+}
+
+impl<T> IntoAny for T
+where
+    T: Name,
+{
+    fn into_any(self) -> Any {
+        Any {
+            type_url: T::type_url(),
+            value: self.encode_to_vec(),
+        }
     }
 }
 
@@ -281,10 +296,10 @@ where
     /// ```
     pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
     where
-        M: Name,
+        M: IntoAny,
     {
         let tx_body = RawTxBody {
-            messages: vec![into_any(message)],
+            messages: vec![message.into_any()],
             ..RawTxBody::default()
         };
 
@@ -426,7 +441,7 @@ where
 
         let pfb = MsgPayForBlobs::new(&blobs, account.address.clone())?;
         let pfb = RawTxBody {
-            messages: vec![into_any(RawMsgPayForBlobs::from(pfb))],
+            messages: vec![RawMsgPayForBlobs::from(pfb).into_any()],
             ..RawTxBody::default()
         };
 
@@ -667,17 +682,6 @@ fn estimate_gas(blobs: &[Blob], app_version: AppVersion, gas_multiplier: f64) ->
         + (tx_size_cost_per_byte * BYTES_PER_BLOB_INFO * blobs.len() as u64)
         + PFB_GAS_FIXED_COST;
     (gas as f64 * gas_multiplier) as u64
-}
-
-// Any::from_msg is infallible, but it yet returns result
-fn into_any<M>(msg: M) -> Any
-where
-    M: Name,
-{
-    Any {
-        type_url: M::type_url(),
-        value: msg.encode_to_vec(),
-    }
 }
 
 fn parse_insufficient_gas_err(error: &str) -> Option<(f64, f64)> {
