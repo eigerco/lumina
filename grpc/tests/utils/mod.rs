@@ -57,10 +57,7 @@ mod imp {
     pub const CELESTIA_GRPC_URL: &str = "http://localhost:19090";
 
     pub fn new_grpc_client() -> GrpcClient<Channel> {
-        let _ = dotenvy::dotenv();
-        let url = std::env::var("CELESTIA_GRPC_URL").unwrap_or_else(|_| CELESTIA_GRPC_URL.into());
-
-        GrpcClient::with_url(url).expect("creating client failed")
+        GrpcClient::with_url(CELESTIA_GRPC_URL).expect("creating client failed")
     }
 
     // we have to sequence the tests which submits transactions.
@@ -72,11 +69,11 @@ mod imp {
 
         let creds = load_account();
         let grpc_client = new_grpc_client();
-        let client = TxClient::new(
-            grpc_client,
-            creds.signing_key,
+        let client = TxClient::with_url(
+            CELESTIA_GRPC_URL,
             &creds.address,
-            Some(creds.verifying_key),
+            creds.verifying_key,
+            creds.signing_key,
         )
         .await
         .unwrap();
@@ -111,12 +108,11 @@ mod imp {
 
     pub async fn new_tx_client() -> ((), TxClient<Client, SigningKey>) {
         let creds = load_account();
-        let grpc_client = new_grpc_client();
-        let client = TxClient::new(
-            grpc_client,
-            creds.signing_key,
+        let client = TxClient::with_grpcweb_url(
+            CELESTIA_GRPCWEB_PROXY_URL,
             &creds.address,
-            Some(creds.verifying_key),
+            creds.verifying_key,
+            creds.signing_key,
         )
         .await
         .unwrap();

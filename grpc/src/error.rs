@@ -15,6 +15,10 @@ pub enum Error {
     #[error(transparent)]
     TonicError(#[from] Status),
 
+    /// Transport error
+    #[error("Transport: {0}")]
+    TransportError(String),
+
     /// Tendermint Error
     #[error(transparent)]
     TendermintError(#[from] tendermint::Error),
@@ -55,17 +59,9 @@ pub enum Error {
     #[error("Transaction {0} wasn't found, it was likely rejected")]
     TxNotFound(Hash),
 
-    /// Unsupported key algorithm
-    #[error("Key algorithm not supported")]
-    KeyAlgorithmNotSupported,
-
     /// Provided public key differs from one associated with account
     #[error("Provided public key differs from one associated with account")]
     PublicKeyMismatch,
-
-    /// Public key not found in account and not provided
-    #[error("Public key not found in account and not provided")]
-    PublicKeyMissing,
 
     /// Updating gas price failed
     #[error("Updating gas price failed: {0}")]

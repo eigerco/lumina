@@ -53,7 +53,6 @@ tonic-web-wasm-client = "0.6"
 rand_core = "0.6.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-dotenvy = "0.15.7"
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
