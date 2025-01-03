@@ -763,7 +763,6 @@ dependencies = [
  "celestia-grpc-macros",
  "celestia-proto",
  "celestia-types",
- "console_error_panic_hook",
  "dotenvy",
  "futures",
  "getrandom",
@@ -777,8 +776,6 @@ dependencies = [
  "regex",
  "send_wrapper 0.6.0",
  "serde",
- "serde-wasm-bindgen",
- "serde_json",
  "tendermint",
  "tendermint-proto",
  "thiserror",
@@ -787,12 +784,9 @@ dependencies = [
  "tonic",
  "tonic-web-wasm-client",
  "tracing",
- "tracing-subscriber",
- "tracing-web",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
- "web-sys",
 ]
 
 [[package]]
@@ -3462,6 +3456,7 @@ version = "0.7.0"
 dependencies = [
  "anyhow",
  "blockstore",
+ "celestia-grpc",
  "celestia-rpc",
  "celestia-types",
  "console_error_panic_hook",

@@ -1,9 +1,25 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import { NodeConfig, spawnNode } from "lumina-node";
-import { TxClient } from "celestia-grpc";
+import { Namespace, Blob, AppVersion, TxClient, NodeConfig, protoEncodeSignDoc, spawnNode } from "lumina-node";
 
-window.createTxClient = TxClient;
+//import { secp256k1 } from "@noble/curves/secp256k1";
+
+// const address = "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm";
+// const privKey = "fdc8ac75dfa1c142dbcba77938a14dd03078052ce0b49a529dcf72a9885a3abb";
+// const pubKey = secp256k1.getPublicKey(privKey);
+
+// const signer = (signDoc) => {
+//   const bytes = protoEncodeSignDoc(signDoc);
+//   const sig = secp256k1.sign(bytes, privKey, { prehash: true });
+//   return sig.toCompactRawBytes();
+// };
+
+// window.txClient = await new TxClient("http://127.0.0.1:18080", address, pubKey, signer);
+
+window.TxClient = TxClient;
+window.AppVersion = AppVersion;
+window.Blob = Blob;
+window.Namespace = Namespace;
 
 async function showStats(node) {
   if (!node || !await node.isRunning()) {

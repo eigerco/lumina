@@ -77,7 +77,7 @@ pub enum Error {
     SigningError(#[from] SignatureError),
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 impl From<Error> for wasm_bindgen::JsValue {
     fn from(error: Error) -> wasm_bindgen::JsValue {
         error.to_string().into()

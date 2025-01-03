@@ -16,6 +16,8 @@ use celestia_types::state::{
 };
 use celestia_types::{AppVersion, Height};
 use http_body::Body;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use js_sys::{BigInt, Uint8Array};
 use k256::ecdsa::signature::{Error as SignatureError, Signer};
 use k256::ecdsa::{Signature, VerifyingKey};
 use prost::{Message, Name};
@@ -27,10 +29,14 @@ use tendermint_proto::Protobuf;
 use tokio::sync::{Mutex, MutexGuard};
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use wasm_bindgen::{prelude::*, JsCast};
 
 use crate::grpc::Account;
 use crate::grpc::TxStatus;
 use crate::grpc::{GrpcClient, StdError};
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use crate::utils::make_object;
 use crate::utils::Interval;
 use crate::{Error, Result};
 
@@ -73,10 +79,41 @@ pub struct TxInfo {
     pub height: Height,
 }
 
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen(typescript_custom_section)]
+const _: &str = "
+/**
+ * Transaction info
+ */
+export interface TxInfo {
+  hash: String;
+  height: BigInt;
+}
+";
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(typescript_type = "TxInfo")]
+    pub type JsTxInfo;
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+impl From<TxInfo> for JsTxInfo {
+    fn from(value: TxInfo) -> JsTxInfo {
+        let obj = make_object!(
+            "hash" => value.hash.to_string().into(),
+            "height" => BigInt::from(value.height.value())
+        );
+
+        obj.unchecked_into()
+    }
+}
+
 /// Configuration for the transaction.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct TxConfig {
-    /// Custom gas limit for the transaction.
+    /// Custom gas limit for the transaction (in `utia`).
     pub gas_limit: Option<u64>,
     /// Custom gas price for fee calculation.
     pub gas_price: Option<f64>,
@@ -96,11 +133,47 @@ impl TxConfig {
     }
 }
 
-pub trait AsyncSigner {
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen(typescript_custom_section)]
+const _: &str = "
+/**
+ * Transaction config.
+ */
+export interface TxConfig {
+  gasLimit?: BigInt; // utia
+  gasPrice?: number;
+}
+";
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(typescript_type = "TxConfig")]
+    pub type JsTxConfig;
+
+    #[wasm_bindgen(method, getter, js_name = gasLimit)]
+    pub fn gas_limit(this: &JsTxConfig) -> Option<u64>;
+
+    #[wasm_bindgen(method, getter, js_name = gasPrice)]
+    pub fn gas_price(this: &JsTxConfig) -> Option<f64>;
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+impl From<JsTxConfig> for TxConfig {
+    fn from(value: JsTxConfig) -> TxConfig {
+        TxConfig {
+            gas_limit: value.gas_limit(),
+            gas_price: value.gas_price(),
+        }
+    }
+}
+
+/// Signer capable of producing ecdsa signature using secp256k1 curve.
+pub trait DocSigner {
     fn try_sign(&self, doc: SignDoc) -> impl Future<Output = Result<Signature, SignatureError>>;
 }
 
-impl<T> AsyncSigner for T
+impl<T> DocSigner for T
 where
     T: Signer<Signature>,
 {
@@ -136,7 +209,7 @@ where
     T::Error: Into<StdError>,
     T::ResponseBody: Body<Data = Bytes> + Send + 'static,
     <T::ResponseBody as Body>::Error: Into<StdError> + Send,
-    S: AsyncSigner,
+    S: DocSigner,
 {
     /// Create a new transaction client.
     ///
@@ -376,12 +449,6 @@ where
         )
         .await?;
 
-        println!(
-            "Signed tx; sequence: {}, signature: {:?}",
-            account.sequence,
-            tx.signatures.first().unwrap()
-        );
-
         let blobs = blobs.into_iter().map(Into::into).collect();
         let blob_tx = RawBlobTx {
             tx: tx.encode_to_vec(),
@@ -510,7 +577,7 @@ pub async fn sign_tx(
     chain_id: Id,
     base_account: &BaseAccount,
     verifying_key: &VerifyingKey,
-    signer: &impl AsyncSigner,
+    signer: &impl DocSigner,
     gas_limit: u64,
     fee: u64,
 ) -> Result<RawTx> {
@@ -545,7 +612,6 @@ pub async fn sign_tx(
         chain_id: chain_id.into(),
         account_number: base_account.account_number,
     };
-
     let signature = signer.try_sign(doc).await?;
 
     Ok(RawTx {
