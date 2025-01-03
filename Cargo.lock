@@ -763,7 +763,6 @@ dependencies = [
  "celestia-grpc-macros",
  "celestia-proto",
  "celestia-types",
- "dotenvy",
  "futures",
  "getrandom",
  "gloo-timers 0.3.0",

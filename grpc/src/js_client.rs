@@ -61,11 +61,10 @@ impl JsClient {
         pubkey: Uint8Array,
         signer_fn: JsSignerFn,
     ) -> Result<JsClient> {
-        let grpc = GrpcClient::with_grpcweb_url(url);
         let signer = JsSigner { signer_fn };
         let address = bech32_address.parse()?;
         let pubkey = VerifyingKey::try_from(pubkey.to_vec().as_slice())?;
-        let client = TxClient::new(grpc, signer, &address, Some(pubkey)).await?;
+        let client = TxClient::with_grpcweb_url(url, &address, pubkey, signer).await?;
         Ok(Self { client })
     }
 

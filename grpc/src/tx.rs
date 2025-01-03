@@ -212,31 +212,18 @@ where
     S: DocSigner,
 {
     /// Create a new transaction client.
-    ///
-    /// Public key is optional if it can be retrieved from the account.
     pub async fn new(
-        client: GrpcClient<T>,
-        signer: S,
+        transport: T,
         account_address: &Address,
-        account_pubkey: Option<VerifyingKey>,
+        account_pubkey: VerifyingKey,
+        signer: S,
     ) -> Result<Self> {
+        let client = GrpcClient::new(transport);
         let account = client.get_account(account_address).await?;
-        let pubkey = match (account.pub_key, account_pubkey) {
-            (Some(fetched), Some(provided)) => {
-                if fetched != PublicKey::Secp256k1(provided) {
-                    return Err(Error::PublicKeyMismatch);
-                }
-                provided
+        if let Some(pubkey) = account.pub_key {
+            if pubkey != PublicKey::Secp256k1(account_pubkey) {
+                return Err(Error::PublicKeyMismatch);
             }
-            (Some(fetched), None) => {
-                if let PublicKey::Secp256k1(pubkey) = fetched {
-                    pubkey
-                } else {
-                    return Err(Error::KeyAlgorithmNotSupported);
-                }
-            }
-            (None, Some(provided)) => provided,
-            (None, None) => return Err(Error::PublicKeyMissing),
         };
         let account = Mutex::new(account);
 
@@ -250,7 +237,7 @@ where
             client,
             signer,
             account,
-            pubkey,
+            pubkey: account_pubkey,
             app_version,
             chain_id,
             gas_price: RwLock::new(DEFAULT_MIN_GAS_PRICE),
@@ -266,7 +253,7 @@ where
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{GrpcClient, TxClient, TxConfig};
+    /// use celestia_grpc::{TxClient, TxConfig};
     /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
     /// use celestia_types::state::{AccAddress, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
@@ -274,9 +261,9 @@ where
     /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
     /// let public_key = *signing_key.verifying_key();
     /// let address = AccAddress::new(public_key.into()).into();
-    /// let grpc = GrpcClient::with_url("celestia-app-grpc-url:9090").unwrap();
+    /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
-    /// let tx_client = TxClient::new(grpc, signing_key, &address, Some(public_key))
+    /// let tx_client = TxClient::with_url(grpc_url, &address, public_key, signing_key)
     ///     .await
     ///     .unwrap();
     ///
@@ -327,7 +314,7 @@ where
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{GrpcClient, TxClient, TxConfig};
+    /// use celestia_grpc::{TxClient, TxConfig};
     /// use celestia_types::state::{AccAddress, Coin};
     /// use celestia_types::{AppVersion, Blob};
     /// use celestia_types::nmt::Namespace;
@@ -336,9 +323,9 @@ where
     /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
     /// let public_key = *signing_key.verifying_key();
     /// let address = AccAddress::new(public_key.into()).into();
-    /// let grpc = GrpcClient::with_url("celestia-app-grpc-url:9090").unwrap();
+    /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
-    /// let tx_client = TxClient::new(grpc, signing_key, &address, Some(public_key))
+    /// let tx_client = TxClient::with_url(grpc_url, &address, public_key, signing_key)
     ///     .await
     ///     .unwrap();
     ///
@@ -384,6 +371,16 @@ where
     /// Set current gas price used by the client
     pub fn set_gas_price(&self, gas_price: f64) {
         *self.gas_price.write().expect("lock poisoned") = gas_price;
+    }
+
+    /// Get client's chain id
+    pub fn chain_id(&self) -> &Id {
+        &self.chain_id
+    }
+
+    /// Get client's app version
+    pub fn app_version(&self) -> AppVersion {
+        self.app_version
     }
 
     async fn sign_and_broadcast_tx(&self, tx: RawTxBody, cfg: TxConfig) -> Result<(Hash, u64)> {
@@ -554,6 +551,44 @@ where
 
         self.set_gas_price(new_gas_price.ceil());
         Ok(true)
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<S> TxClient<tonic::transport::Channel, S>
+where
+    S: DocSigner,
+{
+    /// Create a new client connected to the given `url` with default
+    /// settings of [`tonic::transport::Channel`].
+    pub async fn with_url(
+        url: impl Into<String>,
+        account_address: &Address,
+        account_pubkey: VerifyingKey,
+        signer: S,
+    ) -> Result<Self> {
+        let transport = tonic::transport::Endpoint::from_shared(url.into())
+            .map_err(|e| Error::TransportError(e.to_string()))?
+            .connect_lazy();
+        Self::new(transport, account_address, account_pubkey, signer).await
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl<S> TxClient<tonic_web_wasm_client::Client, S>
+where
+    S: DocSigner,
+{
+    /// Create a new client connected to the given `url` with default
+    /// settings of [`tonic_web_wasm_client::Client`].
+    pub async fn with_grpcweb_url(
+        url: impl Into<String>,
+        account_address: &Address,
+        account_pubkey: VerifyingKey,
+        signer: S,
+    ) -> Result<Self> {
+        let transport = tonic_web_wasm_client::Client::new(url.into());
+        Self::new(transport, account_address, account_pubkey, signer).await
     }
 }
 
