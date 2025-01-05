@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- *(node)* [**breaking**] Remove unneded idb dependency ([#380](https://github.com/eigerco/lumina/pull/380))
+- *(node)* [**breaking**] Remove unneeded idb dependency ([#380](https://github.com/eigerco/lumina/pull/380))
 
 ### Other
 
