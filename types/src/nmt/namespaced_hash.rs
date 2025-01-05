@@ -11,7 +11,7 @@ pub const HASH_SIZE: usize = 32;
 /// Byte representation of the [`NamespacedHash`].
 pub type RawNamespacedHash = [u8; NAMESPACED_HASH_SIZE];
 
-/// An extention trait for the [`NamespacedHash`] to perform additional actions.
+/// An extension trait for the [`NamespacedHash`] to perform additional actions.
 pub trait NamespacedHashExt {
     /// Get the hash of the root of an empty [`Nmt`].
     ///
