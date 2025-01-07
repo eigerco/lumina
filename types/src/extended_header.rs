@@ -519,6 +519,18 @@ impl ExtendedHeader {
 
     /// Verify a chain of adjacent untrusted headers.
     ///
+    /// # Note
+    ///
+    /// Provided headers will be consumed by this method, meaning
+    /// they will no longer be accessible. If this behavior is not desired,
+    /// consider using `ExtendedHeader.clone()`.
+    ///
+    /// ```js
+    /// const genesis = hdr0;
+    /// const headers = [hrd1, hdr2, hdr3];
+    /// genesis.verifyRange(headers.map(h => h.clone()));
+    /// ```
+    ///
     /// # Errors
     ///
     /// If verification fails, this function will return an error with a reason of failure.
