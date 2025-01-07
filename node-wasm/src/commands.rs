@@ -54,8 +54,7 @@ pub(crate) enum NodeCommand {
         height: u64,
     },
     RequestAllBlobs {
-        #[serde(with = "serde_wasm_bindgen::preserve")]
-        header: JsValue,
+        header: ExtendedHeader,
         namespace: Namespace,
         timeout_secs: Option<f64>,
     },

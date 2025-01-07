@@ -229,11 +229,10 @@ impl NodeWorkerInstance {
 
     async fn request_all_blobs(
         &mut self,
-        header: JsValue,
+        header: ExtendedHeader,
         namespace: Namespace,
         timeout_secs: Option<f64>,
     ) -> Result<Vec<Blob>> {
-        let header = from_value(header)?;
         let timeout = timeout_secs.map(Duration::from_secs_f64);
         Ok(self
             .node

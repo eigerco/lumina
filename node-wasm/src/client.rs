@@ -251,7 +251,7 @@ impl NodeClient {
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
         let command = NodeCommand::GetVerifiedHeaders {
-            from: from.to_owned(),
+            from: from.clone(),
             amount,
         };
         let response = self.worker.exec(command).await?;
@@ -263,12 +263,12 @@ impl NodeClient {
     #[wasm_bindgen(js_name = requestAllBlobs)]
     pub async fn request_all_blobs(
         &self,
-        header: JsValue,
+        header: &ExtendedHeader,
         namespace: &Namespace,
         timeout_secs: Option<f64>,
     ) -> Result<Vec<Blob>> {
         let command = NodeCommand::RequestAllBlobs {
-            header,
+            header: header.clone(),
             namespace: *namespace,
             timeout_secs,
         };
@@ -538,7 +538,7 @@ mod tests {
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
         let mut blobs = client
-            .request_all_blobs(to_value(&header).unwrap(), &namespace, None)
+            .request_all_blobs(&header, &namespace, None)
             .await
             .expect("to fetch blob");
 
