@@ -97,10 +97,6 @@ impl JsClient {
 
     /// Submit blobs to celestia network.
     ///
-    /// Provided blobs will be consumed by this method, meaning
-    /// they will no longer be accessible. If this behavior is not desired,
-    /// consider using `Blob.clone()`.
-    ///
     /// When no `TxConfig` is provided, client will automatically calculate needed
     /// gas and update the `gasPrice` if network agreed on a new minimal value.
     /// To enforce specific values use a `TxConfig`.
@@ -113,6 +109,17 @@ impl JsClient {
     ///
     /// const txInfo = await txClient.submitBlobs([blob]);
     /// await txClient.submitBlobs([blob], { gasLimit: 100000n, gasPrice: 0.02 });
+    /// ```
+    ///
+    /// # Note
+    ///
+    /// Provided blobs will be consumed by this method, meaning
+    /// they will no longer be accessible. If this behavior is not desired,
+    /// consider using `Blob.clone()`.
+    ///
+    /// ```js
+    /// const blobs = [blob1, blob2, blob3];
+    /// await txClient.submitBlobs(blobs.map(b => b.clone()));
     /// ```
     #[wasm_bindgen(js_name = submitBlobs)]
     pub async fn submit_blobs(
