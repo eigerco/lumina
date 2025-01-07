@@ -3,7 +3,8 @@
 use std::time::Duration;
 
 use blockstore::EitherBlockstore;
-use celestia_types::ExtendedHeader;
+use celestia_types::nmt::Namespace;
+use celestia_types::{Blob, ExtendedHeader};
 use js_sys::Array;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::network;
@@ -250,11 +251,29 @@ impl NodeClient {
         amount: u64,
     ) -> Result<Vec<ExtendedHeader>> {
         let command = NodeCommand::GetVerifiedHeaders {
-            from: from.to_owned(),
+            from: from.clone(),
             amount,
         };
         let response = self.worker.exec(command).await?;
         response.into_headers().check_variant()?
+    }
+
+    /// Request all blobs with provided namespace in the block corresponding to this header
+    /// using bitswap protocol.
+    #[wasm_bindgen(js_name = requestAllBlobs)]
+    pub async fn request_all_blobs(
+        &self,
+        header: &ExtendedHeader,
+        namespace: &Namespace,
+        timeout_secs: Option<f64>,
+    ) -> Result<Vec<Blob>> {
+        let command = NodeCommand::RequestAllBlobs {
+            header: header.clone(),
+            namespace: *namespace,
+            timeout_secs,
+        };
+        let response = self.worker.exec(command).await?;
+        response.into_blobs().check_variant()?
     }
 
     /// Get current header syncing info.
@@ -268,9 +287,6 @@ impl NodeClient {
     }
 
     /// Get the latest header announced in the network.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getNetworkHeadHeader)]
     pub async fn get_network_head_header(&self) -> Result<Option<ExtendedHeader>> {
         let command = NodeCommand::LastSeenNetworkHead;
@@ -279,9 +295,6 @@ impl NodeClient {
     }
 
     /// Get the latest locally synced header.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getLocalHeadHeader)]
     pub async fn get_local_head_header(&self) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::Head);
@@ -290,9 +303,6 @@ impl NodeClient {
     }
 
     /// Get a synced header for the block with a given hash.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getHeaderByHash)]
     pub async fn get_header_by_hash(&self, hash: &str) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHash(hash.parse()?));
@@ -301,9 +311,6 @@ impl NodeClient {
     }
 
     /// Get a synced header for the block with a given height.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getHeaderByHeight)]
     pub async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHeight(height));
@@ -320,9 +327,6 @@ impl NodeClient {
     /// # Errors
     ///
     /// If range contains a height of a header that is not found in the store.
-    ///
-    /// Returns an array of javascript objects with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getHeaders)]
     pub async fn get_headers(
         &self,
@@ -338,9 +342,6 @@ impl NodeClient {
     }
 
     /// Get data sampling metadata of an already sampled height.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/lumina-node/latest/lumina_node/store/struct.SamplingMetadata.html
     #[wasm_bindgen(js_name = getSamplingMetadata)]
     pub async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         let command = NodeCommand::GetSamplingMetadata { height };
@@ -435,9 +436,9 @@ mod tests {
 
     use std::time::Duration;
 
-    use celestia_rpc::{prelude::*, Client};
+    use celestia_rpc::{prelude::*, Client, TxConfig};
     use celestia_types::p2p::PeerId;
-    use celestia_types::ExtendedHeader;
+    use celestia_types::{AppVersion, ExtendedHeader};
     use gloo_timers::future::sleep;
     use libp2p::{multiaddr::Protocol, Multiaddr};
     use rexie::Rexie;
@@ -495,6 +496,38 @@ mod tests {
             ))
             .await
             .unwrap();
+    }
+
+    #[wasm_bindgen_test]
+    async fn get_blob() {
+        remove_database().await.expect("failed to clear db");
+        let rpc_client = Client::new(WS_URL).await.unwrap();
+        let namespace = Namespace::new_v0(&[0xCD, 0xDC, 0xCD, 0xDC, 0xCD, 0xDC]).unwrap();
+        let data = b"Hello, World";
+        let blobs = vec![Blob::new(namespace, data.to_vec(), AppVersion::V3).unwrap()];
+
+        let submitted_height = rpc_client
+            .blob_submit(&blobs, TxConfig::default())
+            .await
+            .expect("successful submission");
+
+        let header = rpc_client
+            .header_get_by_height(submitted_height)
+            .await
+            .expect("header for blob");
+
+        let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
+        let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
+
+        let mut blobs = client
+            .request_all_blobs(&header, &namespace, None)
+            .await
+            .expect("to fetch blob");
+
+        assert_eq!(blobs.len(), 1);
+        let blob = blobs.pop().unwrap();
+        assert_eq!(blob.data, data);
+        assert_eq!(blob.namespace, namespace);
     }
 
     async fn spawn_connected_node(bootnodes: Vec<String>) -> NodeClient {

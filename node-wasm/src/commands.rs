@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use celestia_types::nmt::Namespace;
+use celestia_types::Blob;
 use enum_as_inner::EnumAsInner;
 use libp2p::Multiaddr;
 use libp2p::PeerId;
@@ -51,6 +53,11 @@ pub(crate) enum NodeCommand {
     GetSamplingMetadata {
         height: u64,
     },
+    RequestAllBlobs {
+        header: ExtendedHeader,
+        namespace: Namespace,
+        timeout_secs: Option<f64>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -80,6 +87,7 @@ pub(crate) enum WorkerResponse {
     Headers(Result<Vec<ExtendedHeader>, Error>),
     LastSeenNetworkHead(Result<Option<ExtendedHeader>, Error>),
     SamplingMetadata(Result<Option<SamplingMetadata>>),
+    Blobs(Result<Vec<Blob>>),
 }
 
 pub(crate) trait CheckableResponseExt {

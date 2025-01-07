@@ -1,6 +1,9 @@
 use std::fmt::Debug;
+use std::time::Duration;
 
 use blockstore::EitherBlockstore;
+use celestia_types::nmt::Namespace;
+use celestia_types::Blob;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
@@ -224,6 +227,19 @@ impl NodeWorkerInstance {
         Ok(self.node.get_sampling_metadata(height).await?)
     }
 
+    async fn request_all_blobs(
+        &mut self,
+        header: ExtendedHeader,
+        namespace: Namespace,
+        timeout_secs: Option<f64>,
+    ) -> Result<Vec<Blob>> {
+        let timeout = timeout_secs.map(Duration::from_secs_f64);
+        Ok(self
+            .node
+            .request_all_blobs(&header, namespace, timeout)
+            .await?)
+    }
+
     async fn process_command(&mut self, command: NodeCommand) -> WorkerResponse {
         match command {
             NodeCommand::IsRunning => WorkerResponse::IsRunning(true),
@@ -273,6 +289,14 @@ impl NodeWorkerInstance {
             NodeCommand::GetSamplingMetadata { height } => {
                 WorkerResponse::SamplingMetadata(self.get_sampling_metadata(height).await)
             }
+            NodeCommand::RequestAllBlobs {
+                header,
+                namespace,
+                timeout_secs,
+            } => WorkerResponse::Blobs(
+                self.request_all_blobs(header, namespace, timeout_secs)
+                    .await,
+            ),
             NodeCommand::InternalPing => WorkerResponse::InternalPong,
         }
     }

@@ -8,6 +8,8 @@ use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tendermint::crypto::sha256::HASH_SIZE;
 use tendermint::{crypto, merkle};
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::prelude::*;
 
 use crate::consts::appconsts;
 use crate::nmt::{Namespace, NamespacedHashExt, NamespacedSha2Hasher, Nmt, RawNamespacedHash};
@@ -51,9 +53,21 @@ use crate::{InfoByte, Share};
 /// [`ExtendedDataSquare`]: crate::ExtendedDataSquare
 /// [`share commitment rules`]: https://github.com/celestiaorg/celestia-app/blob/main/specs/src/specs/data_square_layout.md#blob-share-commitment-rules
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Commitment(pub merkle::Hash);
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(inspectable)
+)]
+pub struct Commitment {
+    /// Hash of the commitment
+    hash: merkle::Hash,
+}
 
 impl Commitment {
+    /// Create a new commitment with hash
+    pub fn new(hash: merkle::Hash) -> Self {
+        Commitment { hash }
+    }
+
     /// Generate the share commitment from the given blob data.
     pub fn from_blob(
         namespace: Namespace,
@@ -101,7 +115,28 @@ impl Commitment {
 
         let hash = merkle::simple_hash_from_byte_vectors::<crypto::default::Sha256>(&subtree_roots);
 
-        Ok(Commitment(hash))
+        Ok(Commitment { hash })
+    }
+
+    /// Hash of the commitment
+    pub fn hash(&self) -> &merkle::Hash {
+        &self.hash
+    }
+}
+
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+impl Commitment {
+    /// Hash of the commitment
+    #[wasm_bindgen(js_name = hash)]
+    pub fn js_hash(&self) -> Vec<u8> {
+        self.hash.to_vec()
+    }
+}
+
+impl From<Commitment> for merkle::Hash {
+    fn from(commitment: Commitment) -> Self {
+        commitment.hash
     }
 }
 
@@ -110,7 +145,7 @@ impl Serialize for Commitment {
     where
         S: Serializer,
     {
-        let s = BASE64_STANDARD.encode(self.0);
+        let s = BASE64_STANDARD.encode(self.hash);
         serializer.serialize_str(&s)
     }
 }
@@ -133,7 +168,7 @@ impl<'de> Deserialize<'de> for Commitment {
             .try_into()
             .map_err(|_| serde::de::Error::custom("commitment is not a size of a sha256"))?;
 
-        Ok(Commitment(hash))
+        Ok(Commitment { hash })
     }
 }
 
