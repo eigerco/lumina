@@ -68,7 +68,6 @@ mod imp {
         let lock = LOCK.get_or_init(|| Mutex::new(())).lock().await;
 
         let creds = load_account();
-        let grpc_client = new_grpc_client();
         let client = TxClient::with_url(
             CELESTIA_GRPC_URL,
             &creds.address,
