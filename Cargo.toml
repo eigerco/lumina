@@ -3,7 +3,7 @@ resolver = "2"
 members = ["cli", "grpc", "node", "node-wasm", "proto", "rpc", "types"]
 
 [workspace.dependencies]
-blockstore = "0.7.0"
+blockstore = "0.7.1"
 lumina-node = { version = "0.8.0", path = "node" }
 lumina-node-wasm = { version = "0.7.0", path = "node-wasm" }
 celestia-proto = { version = "0.6.0", path = "proto" }

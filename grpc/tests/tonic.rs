@@ -101,7 +101,7 @@ async fn submit_blob() {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(8)).await;
 
     let _submitted_tx = client
         .get_tx(response.txhash)

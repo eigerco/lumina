@@ -471,7 +471,7 @@ mod tests {
     use super::*;
     use crate::events::{EventChannel, EventSubscriber};
     use crate::executor::sleep;
-    use crate::node::DEFAULT_SYNCING_WINDOW;
+    use crate::node::DEFAULT_SAMPLING_WINDOW;
     use crate::p2p::shwap::convert_cid;
     use crate::p2p::P2pCmd;
     use crate::store::InMemoryStore;
@@ -503,7 +503,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
-            sampling_window: DEFAULT_SYNCING_WINDOW,
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 
@@ -530,7 +530,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
-            sampling_window: DEFAULT_SYNCING_WINDOW,
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 
@@ -555,7 +555,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
-            sampling_window: DEFAULT_SYNCING_WINDOW,
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
         })
         .unwrap();
 

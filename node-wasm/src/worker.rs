@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use blockstore::EitherBlockstore;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
@@ -11,10 +12,10 @@ use wasm_bindgen_futures::spawn_local;
 use web_sys::BroadcastChannel;
 
 use celestia_types::ExtendedHeader;
-use lumina_node::blockstore::IndexedDbBlockstore;
+use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::events::{EventSubscriber, NodeEventInfo};
 use lumina_node::node::{Node, SyncingInfo};
-use lumina_node::store::{IndexedDbStore, SamplingMetadata};
+use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
 
 use crate::client::WasmNodeConfig;
 use crate::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
@@ -22,6 +23,9 @@ use crate::error::{Context, Error, Result};
 use crate::ports::{ClientMessage, WorkerServer};
 use crate::utils::random_id;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
+
+pub(crate) type WasmBlockstore = EitherBlockstore<InMemoryBlockstore, IndexedDbBlockstore>;
+pub(crate) type WasmStore = EitherStore<InMemoryStore, IndexedDbStore>;
 
 #[derive(Debug, Serialize, Deserialize, Error)]
 pub enum WorkerError {
@@ -53,7 +57,7 @@ pub struct NodeWorker {
 }
 
 struct NodeWorkerInstance {
-    node: Node<IndexedDbBlockstore, IndexedDbStore>,
+    node: Node<WasmBlockstore, WasmStore>,
     events_channel_name: String,
 }
 
