@@ -27,13 +27,9 @@ use tokio::sync::{Mutex, MutexGuard};
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
 
-use crate::grpc::Account;
-use crate::grpc::TxStatus;
-use crate::grpc::{GrpcClient, StdError};
+use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxStatus};
 use crate::utils::Interval;
 use crate::{Error, Result};
-
-pub use celestia_proto::cosmos::tx::v1beta1::BroadcastMode;
 
 // source https://github.com/celestiaorg/celestia-app/blob/v3.0.2/x/blob/types/payforblob.go#L21
 // PFBGasFixedCost is a rough estimate for the "fixed cost" in the gas cost
