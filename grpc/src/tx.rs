@@ -84,8 +84,8 @@ const _: &str = "
  * Transaction info
  */
 export interface TxInfo {
-  hash: String;
-  height: BigInt;
+  hash: string;
+  height: bigint;
 }
 ";
 
@@ -138,7 +138,7 @@ const _: &str = "
  * Transaction config.
  */
 export interface TxConfig {
-  gasLimit?: BigInt; // utia
+  gasLimit?: bigint; // utia
   gasPrice?: number;
 }
 ";
