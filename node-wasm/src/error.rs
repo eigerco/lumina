@@ -136,6 +136,7 @@ from_display! {
     tendermint::error::Error,
     libp2p::identity::ParseError,
     libp2p::multiaddr::Error,
+    celestia_types::Error,
     lumina_node::node::NodeError,
     lumina_node::store::StoreError,
     crate::worker::WorkerError,

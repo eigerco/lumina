@@ -26,8 +26,8 @@ async function showStats(node) {
     return;
   }
 
-  const squareRows = networkHead.dah.row_roots.length;
-  const squareCols = networkHead.dah.column_roots.length;
+  const squareRows = networkHead.dah.row_roots().length;
+  const squareCols = networkHead.dah.column_roots().length;
 
   document.getElementById("block-height").innerText = networkHead.header.height;
   document.getElementById("block-hash").innerText = networkHead.commit.block_id.hash;

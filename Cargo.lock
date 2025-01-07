@@ -852,6 +852,7 @@ dependencies = [
  "rand",
  "ruint",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "serde_repr",
  "sha2 0.10.8",
