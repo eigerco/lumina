@@ -231,7 +231,7 @@ impl DataAvailabilityHeader {
 #[wasm_bindgen]
 impl DataAvailabilityHeader {
     /// Merkle roots of the [`ExtendedDataSquare`] rows.
-    #[wasm_bindgen(js_name = row_roots)]
+    #[wasm_bindgen(js_name = rowRoots)]
     pub fn js_row_roots(&self) -> Result<js_sys::Array, serde_wasm_bindgen::Error> {
         self.row_roots()
             .iter()
@@ -240,7 +240,7 @@ impl DataAvailabilityHeader {
     }
 
     /// Merkle roots of the [`ExtendedDataSquare`] columns.
-    #[wasm_bindgen(js_name = column_roots)]
+    #[wasm_bindgen(js_name = columnRoots)]
     pub fn js_column_roots(&self) -> Result<js_sys::Array, serde_wasm_bindgen::Error> {
         self.column_roots()
             .iter()
@@ -249,13 +249,13 @@ impl DataAvailabilityHeader {
     }
 
     /// Get a root of the row with the given index.
-    #[wasm_bindgen(js_name = row_root)]
+    #[wasm_bindgen(js_name = rowRoot)]
     pub fn js_row_root(&self, row: u16) -> Result<JsValue, serde_wasm_bindgen::Error> {
         serde_wasm_bindgen::to_value(&self.row_root(row))
     }
 
     /// Get the a root of the column with the given index.
-    #[wasm_bindgen(js_name = column_root)]
+    #[wasm_bindgen(js_name = columnRoot)]
     pub fn js_column_root(&self, column: u16) -> Result<JsValue, serde_wasm_bindgen::Error> {
         serde_wasm_bindgen::to_value(&self.column_root(column))
     }
@@ -269,19 +269,9 @@ impl DataAvailabilityHeader {
     }
 
     /// Get the size of the [`ExtendedDataSquare`] for which this header was built.
-    #[wasm_bindgen(js_name = square_width)]
+    #[wasm_bindgen(js_name = squareWidth)]
     pub fn js_square_width(&self) -> u16 {
         self.square_width()
-    }
-
-    /// Get the size of the [`ExtendedDataSquare`] for which this header was built.
-    #[wasm_bindgen(js_name = row_proof)]
-    pub fn js_row_proof(&self, first_row: u16, last_row: u16) -> Result<JsValue, JsValue> {
-        if first_row > last_row {
-            return Err(js_sys::Error::new("invalid row range provided").into());
-        }
-        let row_proof = self.row_proof(first_row..=last_row)?;
-        Ok(serde_wasm_bindgen::to_value(&row_proof)?)
     }
 }
 

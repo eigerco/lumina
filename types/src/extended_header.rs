@@ -446,6 +446,12 @@ impl ExtendedHeader {
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 #[wasm_bindgen]
 impl ExtendedHeader {
+    /// Clone a header producing a deep copy of it.
+    #[wasm_bindgen(js_name = clone)]
+    pub fn js_clone(&self) -> Self {
+        self.clone()
+    }
+
     /// Get the block height.
     #[wasm_bindgen(js_name = height)]
     pub fn js_height(&self) -> u64 {
@@ -470,7 +476,7 @@ impl ExtendedHeader {
     }
 
     /// Get the hash of the previous header.
-    #[wasm_bindgen(js_name = previous_header_hash)]
+    #[wasm_bindgen(js_name = previousHeaderHash)]
     pub fn js_previous_header_hash(&self) -> String {
         self.last_header_hash().to_string()
     }
@@ -488,7 +494,7 @@ impl ExtendedHeader {
     }
 
     /// Information about the set of validators commiting the block.
-    #[wasm_bindgen(getter, js_name = validator_set)]
+    #[wasm_bindgen(getter, js_name = validatorSet)]
     pub fn js_validator_set(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
         to_value(&self.validator_set)
     }
@@ -518,7 +524,7 @@ impl ExtendedHeader {
     /// If verification fails, this function will return an error with a reason of failure.
     /// This function will also return an error if untrusted headers are not adjacent
     /// to each other.
-    #[wasm_bindgen(js_name = verify_range)]
+    #[wasm_bindgen(js_name = verifyRange)]
     pub fn js_verify_range(&self, untrusted: Vec<ExtendedHeader>) -> Result<(), JsValue> {
         Ok(self.verify_range(&untrusted)?)
     }
@@ -526,11 +532,23 @@ impl ExtendedHeader {
     /// Verify a chain of adjacent untrusted headers and make sure
     /// they are adjacent to `self`.
     ///
+    /// # Note
+    ///
+    /// Provided headers will be consumed by this method, meaning
+    /// they will no longer be accessible. If this behavior is not desired,
+    /// consider using `ExtendedHeader.clone()`.
+    ///
+    /// ```js
+    /// const genesis = hdr0;
+    /// const headers = [hrd1, hdr2, hdr3];
+    /// genesis.verifyAdjacentRange(headers.map(h => h.clone()));
+    /// ```
+    ///
     /// # Errors
     ///
     /// If verification fails, this function will return an error with a reason of failure.
     /// This function will also return an error if untrusted headers and `self` don't form contiguous range
-    #[wasm_bindgen(js_name = verify_adjacent_range)]
+    #[wasm_bindgen(js_name = verifyAdjacentRange)]
     pub fn js_verify_adjacent_range(&self, untrusted: Vec<ExtendedHeader>) -> Result<(), JsValue> {
         Ok(self.verify_adjacent_range(&untrusted)?)
     }
