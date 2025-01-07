@@ -7,11 +7,15 @@ use std::time::Duration;
 
 use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use serde_wasm_bindgen::to_value;
 use tendermint::block::header::Header;
 use tendermint::block::{Commit, Height};
 use tendermint::chain::id::Id;
 use tendermint::{validator, Time};
 use tendermint_proto::Protobuf;
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::prelude::*;
 
 use crate::consts::appconsts::AppVersion;
 use crate::hash::Hash;
@@ -32,6 +36,48 @@ pub type ValidatorSet = validator::Set;
     feature = "wasm-bindgen"
 ))]
 const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
+
+// TODO: once https://github.com/rustwasm/wasm-bindgen/pull/4351 is merged,
+// this can be replaced with a single common type definition
+/// Block header together with the relevant Data Availability metadata.
+///
+/// [`ExtendedHeader`]s are used to announce and describe the blocks
+/// in the Celestia network.
+///
+/// Before being used, each header should be validated and verified with a header you trust.
+///
+/// # Example
+///
+/// ```
+/// # use celestia_types::ExtendedHeader;
+/// # fn trusted_genesis_header() -> ExtendedHeader {
+/// #     let s = include_str!("../test_data/chain1/extended_header_block_1.json");
+/// #     serde_json::from_str(s).unwrap()
+/// # }
+/// # fn some_untrusted_header() -> ExtendedHeader {
+/// #     let s = include_str!("../test_data/chain1/extended_header_block_27.json");
+/// #     serde_json::from_str(s).unwrap()
+/// # }
+/// let genesis_header = trusted_genesis_header();
+///
+/// // fetch new header
+/// let fetched_header = some_untrusted_header();
+///
+/// fetched_header.validate().expect("Invalid block header");
+/// genesis_header.verify(&fetched_header).expect("Malicious header received");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
+pub struct ExtendedHeader {
+    /// Tendermint block header.
+    pub header: Header,
+    /// Commit metadata and signatures from validators committing the block.
+    pub commit: Commit,
+    /// Information about the set of validators commiting the block.
+    pub validator_set: ValidatorSet,
+    /// Header of the block data availability.
+    pub dah: DataAvailabilityHeader,
+}
 
 /// Block header together with the relevant Data Availability metadata.
 ///
@@ -61,14 +107,20 @@ const VERIFY_CLOCK_DRIFT: Duration = Duration::from_secs(10);
 /// genesis_header.verify(&fetched_header).expect("Malicious header received");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen(inspectable)]
 pub struct ExtendedHeader {
     /// Tendermint block header.
+    #[wasm_bindgen(skip)]
     pub header: Header,
     /// Commit metadata and signatures from validators committing the block.
+    #[wasm_bindgen(skip)]
     pub commit: Commit,
     /// Information about the set of validators commiting the block.
+    #[wasm_bindgen(skip)]
     pub validator_set: ValidatorSet,
     /// Header of the block data availability.
+    #[wasm_bindgen(getter_with_clone)]
     pub dah: DataAvailabilityHeader,
 }
 
@@ -388,6 +440,129 @@ impl ExtendedHeader {
         }
 
         self.verify_range(untrusted)
+    }
+}
+
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+impl ExtendedHeader {
+    /// Clone a header producing a deep copy of it.
+    #[wasm_bindgen(js_name = clone)]
+    pub fn js_clone(&self) -> Self {
+        self.clone()
+    }
+
+    /// Get the block height.
+    #[wasm_bindgen(js_name = height)]
+    pub fn js_height(&self) -> u64 {
+        self.height().value()
+    }
+
+    /// Get the block time.
+    #[wasm_bindgen(js_name = time)]
+    pub fn js_time(&self) -> Result<f64, JsValue> {
+        Ok(self
+            .time()
+            .duration_since(Time::unix_epoch())
+            .map_err(|e| JsError::new(&e.to_string()))?
+            .as_secs_f64()
+            * 1000.0)
+    }
+
+    /// Get the block hash.
+    #[wasm_bindgen(js_name = hash)]
+    pub fn js_hash(&self) -> String {
+        self.hash().to_string()
+    }
+
+    /// Get the hash of the previous header.
+    #[wasm_bindgen(js_name = previousHeaderHash)]
+    pub fn js_previous_header_hash(&self) -> String {
+        self.last_header_hash().to_string()
+    }
+
+    /// Tendermint block header.
+    #[wasm_bindgen(getter, js_name = header)]
+    pub fn js_header(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        to_value(&self.header)
+    }
+
+    /// Commit metadata and signatures from validators committing the block.
+    #[wasm_bindgen(getter, js_name = commit)]
+    pub fn js_commit(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        to_value(&self.commit)
+    }
+
+    /// Information about the set of validators commiting the block.
+    #[wasm_bindgen(getter, js_name = validatorSet)]
+    pub fn js_validator_set(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        to_value(&self.validator_set)
+    }
+
+    /// Decode protobuf encoded header and then validate it.
+    #[wasm_bindgen(js_name = validate)]
+    pub fn js_validate(&self) -> Result<(), JsValue> {
+        Ok(self.validate()?)
+    }
+
+    /// Verify a chain of adjacent untrusted headers and make sure
+    /// they are adjacent to `self`.
+    ///
+    /// # Errors
+    ///
+    /// If verification fails, this function will return an error with a reason of failure.
+    /// This function will also return an error if untrusted headers and `self` don't form contiguous range
+    #[wasm_bindgen(js_name = verify)]
+    pub fn js_verify(&self, untrusted: &ExtendedHeader) -> Result<(), JsValue> {
+        Ok(self.verify(untrusted)?)
+    }
+
+    /// Verify a chain of adjacent untrusted headers.
+    ///
+    /// # Note
+    ///
+    /// Provided headers will be consumed by this method, meaning
+    /// they will no longer be accessible. If this behavior is not desired,
+    /// consider using `ExtendedHeader.clone()`.
+    ///
+    /// ```js
+    /// const genesis = hdr0;
+    /// const headers = [hrd1, hdr2, hdr3];
+    /// genesis.verifyRange(headers.map(h => h.clone()));
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// If verification fails, this function will return an error with a reason of failure.
+    /// This function will also return an error if untrusted headers are not adjacent
+    /// to each other.
+    #[wasm_bindgen(js_name = verifyRange)]
+    pub fn js_verify_range(&self, untrusted: Vec<ExtendedHeader>) -> Result<(), JsValue> {
+        Ok(self.verify_range(&untrusted)?)
+    }
+
+    /// Verify a chain of adjacent untrusted headers and make sure
+    /// they are adjacent to `self`.
+    ///
+    /// # Note
+    ///
+    /// Provided headers will be consumed by this method, meaning
+    /// they will no longer be accessible. If this behavior is not desired,
+    /// consider using `ExtendedHeader.clone()`.
+    ///
+    /// ```js
+    /// const genesis = hdr0;
+    /// const headers = [hrd1, hdr2, hdr3];
+    /// genesis.verifyAdjacentRange(headers.map(h => h.clone()));
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// If verification fails, this function will return an error with a reason of failure.
+    /// This function will also return an error if untrusted headers and `self` don't form contiguous range
+    #[wasm_bindgen(js_name = verifyAdjacentRange)]
+    pub fn js_verify_adjacent_range(&self, untrusted: Vec<ExtendedHeader>) -> Result<(), JsValue> {
+        Ok(self.verify_adjacent_range(&untrusted)?)
     }
 }
 

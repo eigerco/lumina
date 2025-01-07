@@ -13,6 +13,8 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 use thiserror::Error;
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::prelude::*;
 
 pub use crate::block_ranges::{BlockRange, BlockRanges, BlockRangesError};
 pub use crate::store::either_store::EitherStore;
@@ -33,10 +35,13 @@ mod redb_store;
 
 pub(crate) mod utils;
 
+// TODO: once https://github.com/rustwasm/wasm-bindgen/pull/4351 is merged,
+// this can be replaced with a single common type definition
 /// Sampling metadata for a block.
 ///
 /// This struct persists DAS-ing information in a header store for future reference.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
 pub struct SamplingMetadata {
     /// Indicates whether this node was able to successfuly sample the block
     pub status: SamplingStatus,
@@ -46,8 +51,41 @@ pub struct SamplingMetadata {
     pub cids: Vec<Cid>,
 }
 
+/// Sampling metadata for a block.
+///
+/// This struct persists DAS-ing information in a header store for future reference.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+pub struct SamplingMetadata {
+    /// Indicates whether this node was able to successfuly sample the block
+    pub status: SamplingStatus,
+
+    /// List of CIDs used while sampling. Can be used to remove associated data
+    /// from Blockstore, when cleaning up the old ExtendedHeaders
+    #[wasm_bindgen(skip)]
+    pub cids: Vec<Cid>,
+}
+
+// TODO: once https://github.com/rustwasm/wasm-bindgen/pull/4351 is merged,
+// this can be replaced with a single common type definition
 /// Sampling status for a block.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
+pub enum SamplingStatus {
+    /// Sampling is not done.
+    #[default]
+    Unknown,
+    /// Sampling is done and block is accepted.
+    Accepted,
+    /// Sampling is done and block is rejected.
+    Rejected,
+}
+
+/// Sampling status for a block.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
 pub enum SamplingStatus {
     /// Sampling is not done.
     #[default]
@@ -240,6 +278,19 @@ impl From<Infallible> for StoreError {
     fn from(_: Infallible) -> Self {
         // Infallible should not be possible to construct
         unreachable!("Infallible failed")
+    }
+}
+
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+impl SamplingMetadata {
+    /// Return Array of cids
+    #[wasm_bindgen(getter)]
+    pub fn cids(&self) -> Vec<js_sys::Uint8Array> {
+        self.cids
+            .iter()
+            .map(|cid| js_sys::Uint8Array::from(cid.to_bytes().as_ref()))
+            .collect()
     }
 }
 

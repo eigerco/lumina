@@ -38,6 +38,7 @@ impl From<MessagePort> for MessagePortLike {
 #[derive(Debug, Clone, Copy)]
 pub struct ClientId(usize);
 
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum ClientMessage {
     Command { id: ClientId, command: NodeCommand },
     AddConnection(JsValue),
