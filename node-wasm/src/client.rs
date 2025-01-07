@@ -287,9 +287,6 @@ impl NodeClient {
     }
 
     /// Get the latest header announced in the network.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getNetworkHeadHeader)]
     pub async fn get_network_head_header(&self) -> Result<Option<ExtendedHeader>> {
         let command = NodeCommand::LastSeenNetworkHead;
@@ -298,9 +295,6 @@ impl NodeClient {
     }
 
     /// Get the latest locally synced header.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getLocalHeadHeader)]
     pub async fn get_local_head_header(&self) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::Head);
@@ -309,9 +303,6 @@ impl NodeClient {
     }
 
     /// Get a synced header for the block with a given hash.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getHeaderByHash)]
     pub async fn get_header_by_hash(&self, hash: &str) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHash(hash.parse()?));
@@ -320,9 +311,6 @@ impl NodeClient {
     }
 
     /// Get a synced header for the block with a given height.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getHeaderByHeight)]
     pub async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHeight(height));
@@ -339,9 +327,6 @@ impl NodeClient {
     /// # Errors
     ///
     /// If range contains a height of a header that is not found in the store.
-    ///
-    /// Returns an array of javascript objects with given structure:
-    /// https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
     #[wasm_bindgen(js_name = getHeaders)]
     pub async fn get_headers(
         &self,
@@ -357,9 +342,6 @@ impl NodeClient {
     }
 
     /// Get data sampling metadata of an already sampled height.
-    ///
-    /// Returns a javascript object with given structure:
-    /// https://docs.rs/lumina-node/latest/lumina_node/store/struct.SamplingMetadata.html
     #[wasm_bindgen(js_name = getSamplingMetadata)]
     pub async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         let command = NodeCommand::GetSamplingMetadata { height };
