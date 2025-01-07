@@ -40,7 +40,6 @@ tokio = { version = "1.38.0", features = ["sync"] }
 tonic = { version = "0.12.3", default-features = false, features = [
   "codegen", "prost"
 ]}
-tracing = "*"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.38.0", features = ["time"] }
@@ -51,7 +50,6 @@ futures = "0.3.30"
 getrandom = { version = "0.2.15", features = ["js"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 send_wrapper = { version = "0.6.0", features = ["futures"] }
-time = { version = "0.3.36", features = ["wasm-bindgen"] }
 tonic-web-wasm-client = "0.6"
 
 js-sys = { version = "0.3.70", optional = true }

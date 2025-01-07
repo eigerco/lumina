@@ -27,14 +27,10 @@ use tendermint_proto::Protobuf;
 use tokio::sync::{Mutex, MutexGuard};
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-use wasm_bindgen::{prelude::*, JsCast};
 
 use crate::grpc::Account;
 use crate::grpc::TxStatus;
 use crate::grpc::{GrpcClient, StdError};
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-use crate::utils::make_object;
 use crate::utils::Interval;
 use crate::{Error, Result};
 
@@ -67,136 +63,6 @@ const DEFAULT_MIN_GAS_PRICE: f64 = 0.002; // utia
 const DEFAULT_GAS_MULTIPLIER: f64 = 1.1;
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
 const BLOB_TX_TYPE_ID: &str = "BLOB";
-
-/// A result of correctly submitted transaction.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TxInfo {
-    /// Hash of the transaction.
-    pub hash: Hash,
-    /// Height at which transaction was submitted.
-    pub height: Height,
-}
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-#[wasm_bindgen(typescript_custom_section)]
-const _: &str = "
-/**
- * Transaction info
- */
-export interface TxInfo {
-  hash: string;
-  height: bigint;
-}
-";
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(typescript_type = "TxInfo")]
-    pub type JsTxInfo;
-}
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-impl From<TxInfo> for JsTxInfo {
-    fn from(value: TxInfo) -> JsTxInfo {
-        let obj = make_object!(
-            "hash" => value.hash.to_string().into(),
-            "height" => js_sys::BigInt::from(value.height.value())
-        );
-
-        obj.unchecked_into()
-    }
-}
-
-/// Configuration for the transaction.
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
-pub struct TxConfig {
-    /// Custom gas limit for the transaction (in `utia`).
-    pub gas_limit: Option<u64>,
-    /// Custom gas price for fee calculation.
-    pub gas_price: Option<f64>,
-}
-
-impl TxConfig {
-    /// Attach gas limit to this config.
-    pub fn with_gas_limit(mut self, gas_limit: u64) -> Self {
-        self.gas_limit = Some(gas_limit);
-        self
-    }
-
-    /// Attach gas price to this config.
-    pub fn with_gas_price(mut self, gas_price: f64) -> Self {
-        self.gas_price = Some(gas_price);
-        self
-    }
-}
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-#[wasm_bindgen(typescript_custom_section)]
-const _: &str = "
-/**
- * Transaction config.
- */
-export interface TxConfig {
-  gasLimit?: bigint; // utia
-  gasPrice?: number;
-}
-";
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(typescript_type = "TxConfig")]
-    pub type JsTxConfig;
-
-    #[wasm_bindgen(method, getter, js_name = gasLimit)]
-    pub fn gas_limit(this: &JsTxConfig) -> Option<u64>;
-
-    #[wasm_bindgen(method, getter, js_name = gasPrice)]
-    pub fn gas_price(this: &JsTxConfig) -> Option<f64>;
-}
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-impl From<JsTxConfig> for TxConfig {
-    fn from(value: JsTxConfig) -> TxConfig {
-        TxConfig {
-            gas_limit: value.gas_limit(),
-            gas_price: value.gas_price(),
-        }
-    }
-}
-
-/// Signer capable of producing ecdsa signature using secp256k1 curve.
-pub trait DocSigner {
-    fn try_sign(&self, doc: SignDoc) -> impl Future<Output = Result<Signature, SignatureError>>;
-}
-
-impl<T> DocSigner for T
-where
-    T: Signer<Signature>,
-{
-    async fn try_sign(&self, doc: SignDoc) -> Result<Signature, SignatureError> {
-        let bytes = doc.encode_to_vec();
-        self.try_sign(&bytes)
-    }
-}
-
-/// Value convertion into protobuf's Any
-pub trait IntoAny {
-    fn into_any(self) -> Any;
-}
-
-impl<T> IntoAny for T
-where
-    T: Name,
-{
-    fn into_any(self) -> Any {
-        Any {
-            type_url: T::type_url(),
-            value: self.encode_to_vec(),
-        }
-    }
-}
 
 /// A client for submitting messages and transactions to celestia.
 ///
@@ -618,6 +484,134 @@ impl<T, S> Deref for TxClient<T, S> {
 impl<T, S> fmt::Debug for TxClient<T, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("TxClient { .. }")
+    }
+}
+
+/// Signer capable of producing ecdsa signature using secp256k1 curve.
+pub trait DocSigner {
+    fn try_sign(&self, doc: SignDoc) -> impl Future<Output = Result<Signature, SignatureError>>;
+}
+
+impl<T> DocSigner for T
+where
+    T: Signer<Signature>,
+{
+    async fn try_sign(&self, doc: SignDoc) -> Result<Signature, SignatureError> {
+        let bytes = doc.encode_to_vec();
+        self.try_sign(&bytes)
+    }
+}
+
+/// Value convertion into protobuf's Any
+pub trait IntoAny {
+    fn into_any(self) -> Any;
+}
+
+impl<T> IntoAny for T
+where
+    T: Name,
+{
+    fn into_any(self) -> Any {
+        Any {
+            type_url: T::type_url(),
+            value: self.encode_to_vec(),
+        }
+    }
+}
+
+/// A result of correctly submitted transaction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TxInfo {
+    /// Hash of the transaction.
+    pub hash: Hash,
+    /// Height at which transaction was submitted.
+    pub height: Height,
+}
+
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+pub struct TxConfig {
+    /// Custom gas limit for the transaction (in `utia`).
+    pub gas_limit: Option<u64>,
+    /// Custom gas price for fee calculation.
+    pub gas_price: Option<f64>,
+}
+
+impl TxConfig {
+    /// Attach gas limit to this config.
+    pub fn with_gas_limit(mut self, gas_limit: u64) -> Self {
+        self.gas_limit = Some(gas_limit);
+        self
+    }
+
+    /// Attach gas price to this config.
+    pub fn with_gas_price(mut self, gas_price: f64) -> Self {
+        self.gas_price = Some(gas_price);
+        self
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use wbg::*;
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+mod wbg {
+    use wasm_bindgen::{prelude::*, JsCast};
+
+    use super::{TxConfig, TxInfo};
+    use crate::utils::make_object;
+
+    #[wasm_bindgen(typescript_custom_section)]
+    const _: &str = "
+    /**
+     * Transaction info
+     */
+    export interface TxInfo {
+      hash: string;
+      height: bigint;
+    }
+
+    /**
+     * Transaction config.
+     */
+    export interface TxConfig {
+      gasLimit?: bigint; // utia
+      gasPrice?: number;
+    }
+    ";
+
+    #[wasm_bindgen]
+    extern "C" {
+        #[wasm_bindgen(typescript_type = "TxInfo")]
+        pub type JsTxInfo;
+
+        #[wasm_bindgen(typescript_type = "TxConfig")]
+        pub type JsTxConfig;
+
+        #[wasm_bindgen(method, getter, js_name = gasLimit)]
+        pub fn gas_limit(this: &JsTxConfig) -> Option<u64>;
+
+        #[wasm_bindgen(method, getter, js_name = gasPrice)]
+        pub fn gas_price(this: &JsTxConfig) -> Option<f64>;
+    }
+
+    impl From<TxInfo> for JsTxInfo {
+        fn from(value: TxInfo) -> JsTxInfo {
+            let obj = make_object!(
+                "hash" => value.hash.to_string().into(),
+                "height" => js_sys::BigInt::from(value.height.value())
+            );
+
+            obj.unchecked_into()
+        }
+    }
+
+    impl From<JsTxConfig> for TxConfig {
+        fn from(value: JsTxConfig) -> TxConfig {
+            TxConfig {
+                gas_limit: value.gas_limit(),
+                gas_price: value.gas_price(),
+            }
+        }
     }
 }
 

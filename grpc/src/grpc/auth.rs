@@ -115,12 +115,12 @@ mod wbg {
     use super::Account;
 
     #[wasm_bindgen(typescript_custom_section)]
-    const _: &str = "
+    const _: &str = r#"
     /**
      * Public key
      */
     export interface PublicKey {
-      type: string,
+      type: "ed25519" | "secp256k1",
       value: Uint8Array
     }
 
@@ -144,7 +144,7 @@ mod wbg {
       sigVerifyCostEd25519: bigint,
       sigVerifyCostSecp256k1: bigint
     }
-    ";
+    "#;
 
     #[wasm_bindgen]
     extern "C" {
