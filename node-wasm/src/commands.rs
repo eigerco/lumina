@@ -1,23 +1,24 @@
 use std::fmt::Debug;
 
+use celestia_types::nmt::Namespace;
+use celestia_types::Blob;
 use enum_as_inner::EnumAsInner;
-use js_sys::Array;
 use libp2p::Multiaddr;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use tracing::error;
-use wasm_bindgen::{JsError, JsValue};
+use wasm_bindgen::JsError;
 
-use celestia_types::hash::Hash;
+use celestia_types::{hash::Hash, ExtendedHeader};
 use lumina_node::node::{PeerTrackerInfo, SyncingInfo};
 use lumina_node::store::SamplingMetadata;
 
 use crate::client::WasmNodeConfig;
 use crate::error::Error;
 use crate::error::Result;
-use crate::utils::JsResult;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NodeCommand {
     InternalPing,
@@ -40,8 +41,7 @@ pub(crate) enum NodeCommand {
     GetListeners,
     RequestHeader(SingleHeaderQuery),
     GetVerifiedHeaders {
-        #[serde(with = "serde_wasm_bindgen::preserve")]
-        from: JsValue,
+        from: ExtendedHeader,
         amount: u64,
     },
     GetHeadersRange {
@@ -52,6 +52,11 @@ pub(crate) enum NodeCommand {
     LastSeenNetworkHead,
     GetSamplingMetadata {
         height: u64,
+    },
+    RequestAllBlobs {
+        header: ExtendedHeader,
+        namespace: Namespace,
+        timeout_secs: Option<f64>,
     },
 }
 
@@ -78,10 +83,11 @@ pub(crate) enum WorkerResponse {
     SetPeerTrust(Result<()>),
     Connected(Result<()>),
     Listeners(Result<Vec<Multiaddr>>),
-    Header(JsResult<JsValue, Error>),
-    Headers(JsResult<Array, Error>),
-    LastSeenNetworkHead(JsResult<JsValue, Error>),
+    Header(Result<ExtendedHeader, Error>),
+    Headers(Result<Vec<ExtendedHeader>, Error>),
+    LastSeenNetworkHead(Result<Option<ExtendedHeader>, Error>),
     SamplingMetadata(Result<Option<SamplingMetadata>>),
+    Blobs(Result<Vec<Blob>>),
 }
 
 pub(crate) trait CheckableResponseExt {

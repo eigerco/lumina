@@ -578,6 +578,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bincode"
+version = "1.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -831,6 +840,7 @@ version = "0.9.0"
 dependencies = [
  "base64",
  "bech32",
+ "bincode",
  "bitvec",
  "blockstore",
  "bytes",
@@ -841,6 +851,7 @@ dependencies = [
  "enum_dispatch",
  "getrandom",
  "indoc",
+ "js-sys",
  "leopard-codec",
  "libp2p-identity",
  "multiaddr",
@@ -850,6 +861,7 @@ dependencies = [
  "rand",
  "ruint",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "serde_repr",
  "sha2 0.10.8",
@@ -857,6 +869,7 @@ dependencies = [
  "tendermint-proto",
  "thiserror",
  "time",
+ "wasm-bindgen",
  "wasm-bindgen-test",
 ]
 
