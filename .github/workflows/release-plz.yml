@@ -20,17 +20,16 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+      - name: Setup toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          version: "23.3"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          toolchain: stable
+          target: wasm32-unknown-unknown
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install wasm-pack
-        uses: jetli/wasm-pack-action@v0.4.0
+      - name: Install dependencies
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack@0.13.1
 
       - name: Run release-plz
         uses: MarcoIeni/release-plz-action@v0.5
@@ -128,17 +127,16 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+      - name: Setup toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          version: "23.3"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          toolchain: stable
+          target: wasm32-unknown-unknown
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install wasm-pack
-        uses: jetli/wasm-pack-action@v0.4.0
+      - name: Install dependencies
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack@0.13.1
 
       - name: Release to npm
         env:
