@@ -16,7 +16,7 @@ categories = ["encoding", "cryptography::cryptocurrencies"]
 [dependencies]
 blockstore.workspace = true
 celestia-proto.workspace = true
-nmt-rs.workspace = true
+nmt-rs = { workspace = true, features = ["serde"] }
 prost.workspace = true
 tendermint = { workspace = true, features = ["std", "rust-crypto", "secp256k1"] }
 tendermint-proto.workspace = true
