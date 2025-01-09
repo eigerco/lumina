@@ -6,7 +6,6 @@ mod imp {
     use tokio::time::interval;
     pub(crate) struct Interval(tokio::time::Interval);
 
-    #[cfg(not(target_arch = "wasm32"))]
     impl Interval {
         pub(crate) async fn new(dur: Duration) -> Self {
             let mut inner = interval(dur);
