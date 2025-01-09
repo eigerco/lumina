@@ -23,7 +23,6 @@ jobs:
       - name: Setup toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: stable
           target: wasm32-unknown-unknown
 
       - name: Install dependencies
@@ -130,7 +129,6 @@ jobs:
       - name: Setup toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: stable
           target: wasm32-unknown-unknown
 
       - name: Install dependencies

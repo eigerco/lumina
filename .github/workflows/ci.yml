@@ -32,7 +32,6 @@ jobs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         components: clippy
-        toolchain: stable
         rustflags: -D warnings
         target: wasm32-unknown-unknown
         cache-key: ${{ matrix.crate }}
@@ -69,7 +68,6 @@ jobs:
     - name: Setup toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
-        toolchain: stable
         cache-key: ${{ matrix.crate }}
 
     - name: Celestia devnet
@@ -111,7 +109,6 @@ jobs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         components: clippy
-        toolchain: stable
         rustflags: -D warnings
         target: wasm32-unknown-unknown
         cache-key: ${{ matrix.crate.name }}
