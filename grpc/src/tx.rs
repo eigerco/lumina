@@ -426,7 +426,7 @@ where
         let Error::TxBroadcastFailed(_, code, error, gas_limit) = err else {
             return Ok(false);
         };
-        // nothing to update if we didn't use our gas internal gas price
+        // nothing to update if we didn't use our internal gas price
         if cfg.gas_price.is_some() {
             return Ok(false);
         }
