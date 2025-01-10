@@ -395,16 +395,6 @@ where
             let tx_status = self.client.tx_status(hash).await?;
             match tx_status.status {
                 TxStatus::Pending => interval.tick().await,
-                TxStatus::Unknown => return Err(Error::TxNotFound(hash)),
-                TxStatus::Evicted => {
-                    // node will treat this transaction like if it never happened, so
-                    // we need to revert the account's sequence to the one of evicted tx.
-                    // all transactions that were already submitted after this one
-                    // will fail due to incorrect sequence number.
-                    let mut acc = self.account.lock().await;
-                    acc.sequence = sequence;
-                    return Err(Error::TxEvicted(hash));
-                }
                 TxStatus::Committed => {
                     if tx_status.execution_code == ErrorCode::Success {
                         return Ok(TxInfo {
@@ -418,6 +408,22 @@ where
                             tx_status.error,
                         ));
                     }
+                }
+                // node will treat this transaction like if it never happened, so
+                // we need to revert the account's sequence to the one of evicted tx.
+                // all transactions that were already submitted after this one will fail
+                // due to incorrect sequence number.
+                TxStatus::Evicted => {
+                    let mut acc = self.account.lock().await;
+                    acc.sequence = sequence;
+                    return Err(Error::TxEvicted(hash));
+                }
+                // this case should never happen for node that accepted a broadcast
+                // however we handle it the same as evicted for extra safety
+                TxStatus::Unknown => {
+                    let mut acc = self.account.lock().await;
+                    acc.sequence = sequence;
+                    return Err(Error::TxNotFound(hash));
                 }
             }
         }
