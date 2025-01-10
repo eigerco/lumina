@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use tendermint::merkle::simple_hash_from_byte_vectors;
 use tendermint_proto::Protobuf;
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::prelude::*;
 
 use crate::consts::appconsts::AppVersion;
 use crate::consts::data_availability_header::{
@@ -57,6 +59,10 @@ use crate::{
 #[serde(
     try_from = "RawDataAvailabilityHeader",
     into = "RawDataAvailabilityHeader"
+)]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(inspectable)
 )]
 pub struct DataAvailabilityHeader {
     /// Merkle roots of the [`ExtendedDataSquare`] rows.
@@ -218,6 +224,54 @@ impl DataAvailabilityHeader {
             start_row,
             end_row,
         })
+    }
+}
+
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[wasm_bindgen]
+impl DataAvailabilityHeader {
+    /// Merkle roots of the [`ExtendedDataSquare`] rows.
+    #[wasm_bindgen(js_name = rowRoots)]
+    pub fn js_row_roots(&self) -> Result<js_sys::Array, serde_wasm_bindgen::Error> {
+        self.row_roots()
+            .iter()
+            .map(|h| serde_wasm_bindgen::to_value(&h))
+            .collect()
+    }
+
+    /// Merkle roots of the [`ExtendedDataSquare`] columns.
+    #[wasm_bindgen(js_name = columnRoots)]
+    pub fn js_column_roots(&self) -> Result<js_sys::Array, serde_wasm_bindgen::Error> {
+        self.column_roots()
+            .iter()
+            .map(|h| serde_wasm_bindgen::to_value(&h))
+            .collect()
+    }
+
+    /// Get a root of the row with the given index.
+    #[wasm_bindgen(js_name = rowRoot)]
+    pub fn js_row_root(&self, row: u16) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        serde_wasm_bindgen::to_value(&self.row_root(row))
+    }
+
+    /// Get the a root of the column with the given index.
+    #[wasm_bindgen(js_name = columnRoot)]
+    pub fn js_column_root(&self, column: u16) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        serde_wasm_bindgen::to_value(&self.column_root(column))
+    }
+
+    /// Compute the combined hash of all rows and columns.
+    ///
+    /// This is the data commitment for the block.
+    #[wasm_bindgen(js_name = hash)]
+    pub fn js_hash(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
+        serde_wasm_bindgen::to_value(&self.hash())
+    }
+
+    /// Get the size of the [`ExtendedDataSquare`] for which this header was built.
+    #[wasm_bindgen(js_name = squareWidth)]
+    pub fn js_square_width(&self) -> u16 {
+        self.square_width()
     }
 }
 

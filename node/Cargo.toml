@@ -94,7 +94,7 @@ pin-project = "1.1.5"
 rexie = "0.6.2"
 send_wrapper = { version = "0.6.0", features = ["futures"] }
 serde-wasm-bindgen = "0.6.5"
-wasm-bindgen = "0.2.93"
+wasm-bindgen = "0.2.99"
 wasm-bindgen-futures = "0.4.43"
 libp2p-websocket-websys = "0.3.3"
 
@@ -116,7 +116,8 @@ tempfile = "3.10.1"
 
 [features]
 test-utils = ["celestia-types/test-utils"]
-uniffi = ["dep:uniffi"] 
+uniffi = ["dep:uniffi"]
+wasm-bindgen = []
 
 [package.metadata.docs.rs]
 features = ["test-utils"]

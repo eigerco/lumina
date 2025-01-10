@@ -23,6 +23,9 @@ pub mod version {
 ///
 /// [`celestia-app`]: https://github.com/celestiaorg/celestia-app
 pub mod appconsts {
+    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+    use wasm_bindgen::prelude::*;
+
     pub use global_consts::*;
 
     // celestia-app/pkg/appconsts/v1/app_consts
@@ -100,6 +103,56 @@ pub mod appconsts {
         /// Returns the numeric value of App version.
         pub fn as_u64(&self) -> u64 {
             *self as u64
+        }
+    }
+
+    // wasm-bindgen duplicates classes for `impl` blocks for enums
+    // so we can't export enum with additional methods
+    // https://github.com/rustwasm/wasm-bindgen/issues/1715
+    /// Version of the App
+    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    #[wasm_bindgen(js_name = AppVersion)]
+    pub struct JsAppVersion(AppVersion);
+
+    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+    #[wasm_bindgen(js_class = AppVersion)]
+    impl JsAppVersion {
+        /// App v1
+        #[wasm_bindgen(js_name = V1, getter)]
+        pub fn v1() -> JsAppVersion {
+            JsAppVersion(AppVersion::V1)
+        }
+
+        /// App v2
+        #[wasm_bindgen(js_name = V2, getter)]
+        pub fn v2() -> JsAppVersion {
+            JsAppVersion(AppVersion::V2)
+        }
+
+        /// App v3
+        #[wasm_bindgen(js_name = V3, getter)]
+        pub fn v3() -> JsAppVersion {
+            JsAppVersion(AppVersion::V3)
+        }
+
+        /// Latest App version variant.
+        pub fn latest() -> JsAppVersion {
+            AppVersion::latest().into()
+        }
+    }
+
+    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+    impl From<JsAppVersion> for AppVersion {
+        fn from(value: JsAppVersion) -> AppVersion {
+            value.0
+        }
+    }
+
+    #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+    impl From<AppVersion> for JsAppVersion {
+        fn from(value: AppVersion) -> JsAppVersion {
+            JsAppVersion(value)
         }
     }
 

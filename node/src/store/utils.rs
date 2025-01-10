@@ -55,7 +55,7 @@ impl From<ExtendedHeader> for VerifiedExtendedHeaders {
     }
 }
 
-impl From<&'_ ExtendedHeader> for VerifiedExtendedHeaders {
+impl From<&ExtendedHeader> for VerifiedExtendedHeaders {
     fn from(value: &ExtendedHeader) -> Self {
         Self(vec![value.to_owned()])
     }

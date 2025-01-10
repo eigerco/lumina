@@ -916,6 +916,7 @@ version = "0.9.0"
 dependencies = [
  "base64",
  "bech32",
+ "bincode",
  "bitvec",
  "blockstore",
  "bytes",
@@ -926,6 +927,7 @@ dependencies = [
  "enum_dispatch",
  "getrandom",
  "indoc",
+ "js-sys",
  "leopard-codec",
  "libp2p-identity",
  "multiaddr",
@@ -935,6 +937,7 @@ dependencies = [
  "rand",
  "ruint",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "serde_repr",
  "sha2 0.10.8",
@@ -942,6 +945,7 @@ dependencies = [
  "tendermint-proto",
  "thiserror 1.0.69",
  "time",
+ "wasm-bindgen",
  "wasm-bindgen-test",
 ]
 
