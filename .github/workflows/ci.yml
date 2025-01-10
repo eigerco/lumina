@@ -206,3 +206,21 @@ jobs:
 
     - name: Check for unused dependencies
       run: cargo udeps --all-targets --all-features
+
+  required:
+    runs-on: ubuntu-latest
+    name: Required checks
+    if: ${{ !cancelled() }}
+    needs:
+    - clippy
+    - test
+    - wasm-test
+    - build-wasm
+    - fmt
+    - docs
+    - unused-deps
+
+    steps:
+    - name: On failure
+      if: always() && contains(needs.*.result, 'failure')
+      run: exit 1
