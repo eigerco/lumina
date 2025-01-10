@@ -1,0 +1,45 @@
+name: Local celestia devnet
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # needed for the buildx in order to access gha cache
+    # https://github.com/docker/bake-action/issues/36#issuecomment-1103961612
+    - name: Expose github actions runtime
+      uses: crazy-max/ghaction-github-runtime@v1
+
+    - name: Build the docker-compose stack
+      shell: bash
+      run: |
+        cat > ci/cache.json <<EOF
+        {
+          "target": {
+            "validator": {
+              "cache-from": ["type=gha,scope=validator"],
+              "cache-to": ["type=gha,mode=max,scope=validator"],
+              "output": ["type=docker"]
+            },
+            "bridge-0": {
+              "cache-from": ["type=gha,scope=bridge-0"],
+              "cache-to": ["type=gha,mode=max,scope=bridge-0"],
+              "output": ["type=docker"]
+            },
+            "bridge-1": {
+              "cache-from": ["type=gha,scope=bridge-1"],
+              "cache-to": ["type=gha,mode=max,scope=bridge-1"],
+              "output": ["type=docker"]
+            }
+          }
+        }
+        EOF
+        cd ci && docker buildx bake --file docker-compose.yml --file cache.json --load
+
+    - name: Run the docker-compose stack
+      shell: bash
+      run: docker compose -f ci/docker-compose.yml up --no-build -d
+
+    - name: Generate auth tokens
+      shell: bash
+      run: ./tools/gen_auth_tokens.sh

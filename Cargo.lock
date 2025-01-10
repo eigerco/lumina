@@ -849,6 +849,7 @@ dependencies = [
  "celestia-proto",
  "celestia-types",
  "dotenvy",
+ "getrandom",
  "hex",
  "k256",
  "prost",
