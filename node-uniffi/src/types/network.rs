@@ -7,12 +7,12 @@ pub struct NetworkInfo {
     /// The total number of connected peers.
     pub num_peers: u32,
     /// Counters of ongoing network connections.
-    connection_counters: ConnectionCounters,
+    pub connection_counters: ConnectionCounters,
 }
 
 /// Counters of ongoing network connections.
 #[derive(Record)]
-struct ConnectionCounters {
+pub struct ConnectionCounters {
     /// The current number of connections.
     pub num_connections: u32,
     /// The current number of pending connections.
