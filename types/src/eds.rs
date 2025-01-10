@@ -198,7 +198,7 @@ impl ExtendedDataSquare {
                 Share::parity(&shares[idx])?
             };
 
-            if prev_ns.map_or(false, |prev_ns| share.namespace() < prev_ns) {
+            if prev_ns.is_some_and(|prev_ns| share.namespace() < prev_ns) {
                 let axis_idx = match axis {
                     AxisType::Row => row,
                     AxisType::Col => col,
