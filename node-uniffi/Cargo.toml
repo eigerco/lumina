@@ -1,0 +1,27 @@
+[package]
+name = "lumina-node-uniffi"
+version = "0.1.0"
+edition = "2021"
+description = "Mobile bindings for Lumina node"
+publish = false
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "./src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+lumina-node = { workspace = true, features = ["uniffi"] }
+celestia-types.workspace = true
+tendermint.workspace = true
+libp2p.workspace = true
+redb = "2.1.1"
+thiserror = "1.0.61"
+serde_json = "1.0.64"
+uniffi = { version = "0.28.3", features = ["bindgen", "tokio", "cli"] }
+tokio = { version = "1.38.0", features = ["macros", "sync"] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+directories = "5.0.1"
