@@ -35,57 +35,27 @@ mod redb_store;
 
 pub(crate) mod utils;
 
-// TODO: once https://github.com/rustwasm/wasm-bindgen/pull/4351 is merged,
-// this can be replaced with a single common type definition
 /// Sampling metadata for a block.
 ///
 /// This struct persists DAS-ing information in a header store for future reference.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-#[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
+#[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
 pub struct SamplingMetadata {
     /// Indicates whether this node was able to successfuly sample the block
     pub status: SamplingStatus,
 
     /// List of CIDs used while sampling. Can be used to remove associated data
     /// from Blockstore, when cleaning up the old ExtendedHeaders
+    #[cfg_attr(
+        all(feature = "wasm-bindgen", target_arch = "wasm32"),
+        wasm_bindgen(skip)
+    )]
     pub cids: Vec<Cid>,
-}
-
-/// Sampling metadata for a block.
-///
-/// This struct persists DAS-ing information in a header store for future reference.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
-#[wasm_bindgen]
-pub struct SamplingMetadata {
-    /// Indicates whether this node was able to successfuly sample the block
-    pub status: SamplingStatus,
-
-    /// List of CIDs used while sampling. Can be used to remove associated data
-    /// from Blockstore, when cleaning up the old ExtendedHeaders
-    #[wasm_bindgen(skip)]
-    pub cids: Vec<Cid>,
-}
-
-// TODO: once https://github.com/rustwasm/wasm-bindgen/pull/4351 is merged,
-// this can be replaced with a single common type definition
-/// Sampling status for a block.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg(not(all(feature = "wasm-bindgen", target_arch = "wasm32")))]
-pub enum SamplingStatus {
-    /// Sampling is not done.
-    #[default]
-    Unknown,
-    /// Sampling is done and block is accepted.
-    Accepted,
-    /// Sampling is done and block is rejected.
-    Rejected,
 }
 
 /// Sampling status for a block.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
-#[wasm_bindgen]
+#[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
 pub enum SamplingStatus {
     /// Sampling is not done.
     #[default]
