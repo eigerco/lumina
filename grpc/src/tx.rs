@@ -493,6 +493,7 @@ pub struct TxInfo {
     pub height: Height,
 }
 
+/// Configuration for the transaction.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct TxConfig {
     /// Custom gas limit for the transaction (in `utia`).
@@ -501,7 +502,6 @@ pub struct TxConfig {
     pub gas_price: Option<f64>,
 }
 
-/// Configuration for the transaction.
 impl TxConfig {
     /// Attach gas limit to this config.
     pub fn with_gas_limit(mut self, gas_limit: u64) -> Self {
