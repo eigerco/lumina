@@ -67,4 +67,4 @@ wasm-bindgen-test.workspace = true
 
 [features]
 default = []
-wasm-bindgen = ["dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
+wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
