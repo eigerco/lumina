@@ -71,16 +71,10 @@ impl JsClient {
         Ok(Self { client })
     }
 
-    /// Gas price of a client
-    #[wasm_bindgen(js_name = gasPrice, getter)]
-    pub fn get_gas_price(&self) -> f64 {
-        self.client.gas_price()
-    }
-
-    /// Set current gas price of a client
-    #[wasm_bindgen(js_name = gasPrice, setter)]
-    pub fn set_gas_price(&self, price: f64) {
-        self.client.set_gas_price(price)
+    /// Last gas price fetched by the client
+    #[wasm_bindgen(js_name = lastGasPrice)]
+    pub fn last_gas_price(&self) -> f64 {
+        self.client.last_gas_price()
     }
 
     /// Chain id of the client

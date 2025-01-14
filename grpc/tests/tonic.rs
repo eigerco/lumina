@@ -150,7 +150,11 @@ async fn submit_blobs_insufficient_gas_price_and_limit() {
         .unwrap_err();
     assert!(matches!(
         err,
+<<<<<<< HEAD
         Error::TxBroadcastFailed(_, ErrorCode::OutOfGas, _, _)
+=======
+        Error::TxBroadcastFailed(_, ErrorCode::OutOfGas, _)
+>>>>>>> main
     ));
 
     let err = tx_client
@@ -159,11 +163,16 @@ async fn submit_blobs_insufficient_gas_price_and_limit() {
         .unwrap_err();
     assert!(matches!(
         err,
+<<<<<<< HEAD
         Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _, _)
+=======
+        Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _)
+>>>>>>> main
     ));
 }
 
 #[async_test]
+<<<<<<< HEAD
 async fn submit_blobs_gas_price_update() {
     let (_lock, tx_client) = new_tx_client().await;
 
@@ -192,6 +201,8 @@ async fn submit_blobs_gas_price_update() {
 }
 
 #[async_test]
+=======
+>>>>>>> main
 async fn submit_message() {
     let account = load_account();
     let other_account = TestAccount::random();
@@ -237,7 +248,11 @@ async fn submit_message_insufficient_gas_price_and_limit() {
         .unwrap_err();
     assert!(matches!(
         err,
+<<<<<<< HEAD
         Error::TxBroadcastFailed(_, ErrorCode::OutOfGas, _, _)
+=======
+        Error::TxBroadcastFailed(_, ErrorCode::OutOfGas, _)
+>>>>>>> main
     ));
 
     let err = tx_client
@@ -246,6 +261,7 @@ async fn submit_message_insufficient_gas_price_and_limit() {
         .unwrap_err();
     assert!(matches!(
         err,
+<<<<<<< HEAD
         Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _, _)
     ));
 }
@@ -282,4 +298,8 @@ async fn submit_message_gas_price_update() {
         .await
         .unwrap();
     assert!(tx_client.gas_price() > 0.0005);
+=======
+        Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _)
+    ));
+>>>>>>> main
 }

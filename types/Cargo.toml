@@ -16,7 +16,7 @@ categories = ["encoding", "cryptography::cryptocurrencies"]
 [dependencies]
 blockstore.workspace = true
 celestia-proto.workspace = true
-nmt-rs.workspace = true
+nmt-rs = { workspace = true, features = ["serde"] }
 prost.workspace = true
 tendermint = { workspace = true, features = ["std", "rust-crypto", "secp256k1"] }
 tendermint-proto.workspace = true
@@ -44,7 +44,7 @@ time = { version = "0.3.36", default-features = false }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = { version = "0.3.76", optional = true }
 serde-wasm-bindgen = { version = "0.6.5", optional = true }
-wasm-bindgen = { version = "0.2.95", optional = true }
+wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
 ed25519-consensus = "2.1.0"
@@ -57,7 +57,7 @@ indoc = "2.0.5"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 getrandom = { version = "0.2.15", features = ["js"] }
-wasm-bindgen-test = "0.3.42"
+wasm-bindgen-test.workspace = true
 
 [features]
 default = ["p2p"]

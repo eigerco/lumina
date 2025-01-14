@@ -45,8 +45,8 @@ pub enum Error {
     TxEmptyBlobList,
 
     /// Broadcasting transaction failed
-    #[error("Broadcasting transaction {0} failed; code: {1}, error: {2}, gas limit: {3}")]
-    TxBroadcastFailed(Hash, ErrorCode, String, u64),
+    #[error("Broadcasting transaction {0} failed; code: {1}, error: {2}")]
+    TxBroadcastFailed(Hash, ErrorCode, String),
 
     /// Executing transaction failed
     #[error("Transaction {0} execution failed; code: {1}, error: {2}")]
@@ -63,10 +63,6 @@ pub enum Error {
     /// Provided public key differs from one associated with account
     #[error("Provided public key differs from one associated with account")]
     PublicKeyMismatch,
-
-    /// Updating gas price failed
-    #[error("Updating gas price failed: {0}")]
-    UpdatingGasPriceFailed(String),
 
     /// Signing error
     #[error(transparent)]

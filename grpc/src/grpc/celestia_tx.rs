@@ -20,7 +20,7 @@ pub struct TxStatusResponse {
     pub index: u32,
     /// Execution_code is returned when the transaction has been committed
     /// and returns whether it was successful or errored. A non zero
-    /// execution code indicated an error.
+    /// execution code indicates an error.
     pub execution_code: ErrorCode,
     /// Error log, if transaction failed.
     pub error: String,

@@ -1,7 +1,7 @@
 use std::fmt;
 use std::future::Future;
 use std::ops::Deref;
-use std::sync::{LazyLock, RwLock};
+use std::sync::RwLock;
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -19,7 +19,6 @@ use http_body::Body;
 use k256::ecdsa::signature::{Error as SignatureError, Signer};
 use k256::ecdsa::{Signature, VerifyingKey};
 use prost::{Message, Name};
-use regex::Regex;
 use tendermint::chain::Id;
 use tendermint::PublicKey;
 use tendermint_proto::google::protobuf::Any;
@@ -28,13 +27,9 @@ use tokio::sync::{Mutex, MutexGuard};
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
 
-use crate::grpc::Account;
-use crate::grpc::TxStatus;
-use crate::grpc::{GrpcClient, StdError};
+use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxStatus};
 use crate::utils::Interval;
 use crate::{Error, Result};
-
-pub use celestia_proto::cosmos::tx::v1beta1::BroadcastMode;
 
 // source https://github.com/celestiaorg/celestia-app/blob/v3.0.2/x/blob/types/payforblob.go#L21
 // PFBGasFixedCost is a rough estimate for the "fixed cost" in the gas cost
@@ -55,11 +50,6 @@ const PFB_GAS_FIXED_COST: u64 = 75000;
 // BytesPerBlobInfo is a rough estimation for the amount of extra bytes in
 // information a blob adds to the size of the underlying transaction.
 const BYTES_PER_BLOB_INFO: u64 = 70;
-// source https://github.com/celestiaorg/celestia-app/blob/v3.0.2/pkg/appconsts/initial_consts.go#L20
-// DefaultMinGasPrice is the default min gas price that gets set in the app.toml file.
-// The min gas price acts as a filter. Transactions below that limit will not pass
-// a nodes `CheckTx` and thus not be proposed by that node.
-const DEFAULT_MIN_GAS_PRICE: f64 = 0.002; // utia
 const DEFAULT_GAS_MULTIPLIER: f64 = 1.1;
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
 const BLOB_TX_TYPE_ID: &str = "BLOB";
@@ -107,6 +97,7 @@ where
             }
         };
         let account = Mutex::new(account);
+        let gas_price = client.get_min_gas_price().await?;
 
         let block = client.get_latest_block().await?;
         let app_version = block.header.version.app;
@@ -121,7 +112,7 @@ where
             pubkey: account_pubkey,
             app_version,
             chain_id,
-            gas_price: RwLock::new(DEFAULT_MIN_GAS_PRICE),
+            gas_price: RwLock::new(gas_price),
         })
     }
 
@@ -169,16 +160,15 @@ where
             ..RawTxBody::default()
         };
 
-        let mut is_retry = false;
+        let mut retries = 0;
         let (tx_hash, sequence) = loop {
             match self.sign_and_broadcast_tx(tx_body.clone(), cfg).await {
                 Ok(resp) => break resp,
-                Err(e) if !is_retry => {
-                    if self.maybe_update_gas_price(&e, cfg)? {
-                        is_retry = true;
-                        continue;
-                    }
-                    return Err(e);
+                Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _))
+                    if retries < 3 && cfg.gas_price.is_none() =>
+                {
+                    retries += 1;
+                    continue;
                 }
                 Err(e) => return Err(e),
             }
@@ -227,16 +217,15 @@ where
             blob.validate(self.app_version)?;
         }
 
-        let mut is_retry = false;
+        let mut retries = 0;
         let (tx_hash, sequence) = loop {
             match self.sign_and_broadcast_blobs(blobs.to_vec(), cfg).await {
                 Ok(resp) => break resp,
-                Err(e) if !is_retry => {
-                    if self.maybe_update_gas_price(&e, cfg)? {
-                        is_retry = true;
-                        continue;
-                    }
-                    return Err(e);
+                Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _))
+                    if retries < 3 && cfg.gas_price.is_none() =>
+                {
+                    retries += 1;
+                    continue;
                 }
                 Err(e) => return Err(e),
             }
@@ -244,14 +233,16 @@ where
         self.confirm_tx(tx_hash, sequence).await
     }
 
-    /// Get current gas price used by the client
-    pub fn gas_price(&self) -> f64 {
+    /// Get most recent minimal gas price seen by the client
+    pub fn last_gas_price(&self) -> f64 {
         *self.gas_price.read().expect("lock poisoned")
     }
 
     /// Set current gas price used by the client
-    pub fn set_gas_price(&self, gas_price: f64) {
+    async fn update_gas_price(&self) -> Result<f64> {
+        let gas_price = self.client.get_min_gas_price().await?;
         *self.gas_price.write().expect("lock poisoned") = gas_price;
+        Ok(gas_price)
     }
 
     /// Get client's chain id
@@ -288,11 +279,15 @@ where
             (gas_info.gas_used as f64 * DEFAULT_GAS_MULTIPLIER) as u64
         };
 
-        let gas_price = cfg.gas_price.unwrap_or(self.gas_price());
+        let gas_price = if let Some(gas_price) = cfg.gas_price {
+            gas_price
+        } else {
+            self.update_gas_price().await?
+        };
         let fee = (gas_limit as f64 * gas_price).ceil();
         let tx = sign_tx(tx, gas_limit, fee as u64).await?;
 
-        self.broadcast_tx_with_account(tx.encode_to_vec(), account, gas_limit)
+        self.broadcast_tx_with_account(tx.encode_to_vec(), account)
             .await
     }
 
@@ -314,7 +309,11 @@ where
         let gas_limit = cfg
             .gas_limit
             .unwrap_or_else(|| estimate_gas(&blobs, self.app_version, DEFAULT_GAS_MULTIPLIER));
-        let gas_price = cfg.gas_price.unwrap_or(self.gas_price());
+        let gas_price = if let Some(gas_price) = cfg.gas_price {
+            gas_price
+        } else {
+            self.update_gas_price().await?
+        };
         let fee = (gas_limit as f64 * gas_price).ceil() as u64;
         let tx = sign_tx(
             pfb,
@@ -334,7 +333,7 @@ where
             type_id: BLOB_TX_TYPE_ID.to_string(),
         };
 
-        self.broadcast_tx_with_account(blob_tx.encode_to_vec(), account, gas_limit)
+        self.broadcast_tx_with_account(blob_tx.encode_to_vec(), account)
             .await
     }
 
@@ -342,7 +341,6 @@ where
         &self,
         tx: Vec<u8>,
         mut account: MutexGuard<'_, Account>,
-        gas_limit: u64,
     ) -> Result<(Hash, u64)> {
         let resp = self.client.broadcast_tx(tx, BroadcastMode::Sync).await?;
 
@@ -351,7 +349,6 @@ where
                 resp.txhash,
                 resp.code,
                 resp.raw_log,
-                gas_limit,
             ));
         }
 
@@ -368,16 +365,6 @@ where
             let tx_status = self.client.tx_status(hash).await?;
             match tx_status.status {
                 TxStatus::Pending => interval.tick().await,
-                TxStatus::Unknown => return Err(Error::TxNotFound(hash)),
-                TxStatus::Evicted => {
-                    // node will treat this transaction like if it never happened, so
-                    // we need to revert the account's sequence to the one of evicted tx.
-                    // all transactions that were already submitted after this one
-                    // will fail due to incorrect sequence number.
-                    let mut acc = self.account.lock().await;
-                    acc.sequence = sequence;
-                    return Err(Error::TxEvicted(hash));
-                }
                 TxStatus::Committed => {
                     if tx_status.execution_code == ErrorCode::Success {
                         return Ok(TxInfo {
@@ -392,46 +379,24 @@ where
                         ));
                     }
                 }
+                // node will treat this transaction like if it never happened, so
+                // we need to revert the account's sequence to the one of evicted tx.
+                // all transactions that were already submitted after this one will fail
+                // due to incorrect sequence number.
+                TxStatus::Evicted => {
+                    let mut acc = self.account.lock().await;
+                    acc.sequence = sequence;
+                    return Err(Error::TxEvicted(hash));
+                }
+                // this case should never happen for node that accepted a broadcast
+                // however we handle it the same as evicted for extra safety
+                TxStatus::Unknown => {
+                    let mut acc = self.account.lock().await;
+                    acc.sequence = sequence;
+                    return Err(Error::TxNotFound(hash));
+                }
             }
         }
-    }
-
-    fn maybe_update_gas_price(&self, err: &Error, cfg: TxConfig) -> Result<bool> {
-        let Error::TxBroadcastFailed(_, code, error, gas_limit) = err else {
-            return Ok(false);
-        };
-        // nothing to update if we didn't use our gas internal gas price
-        if cfg.gas_price.is_some() {
-            return Ok(false);
-        }
-        if *code != ErrorCode::InsufficientFee {
-            return Ok(false);
-        }
-
-        let Some((got_fee, want_fee)) = parse_insufficient_gas_err(error) else {
-            return Err(Error::UpdatingGasPriceFailed(format!(
-                "Couldn't parse required fee from error: {err}"
-            )));
-        };
-        if want_fee == 0.0 {
-            return Err(Error::UpdatingGasPriceFailed(format!(
-                "Wanted fee is 0: {err}"
-            )));
-        }
-
-        let new_gas_price = if self.gas_price() == 0.0 || got_fee == 0.0 {
-            if *gas_limit == 0 {
-                return Err(Error::UpdatingGasPriceFailed(format!(
-                    "Cannot update gas price when gas price and limit are 0: {err}"
-                )));
-            }
-            want_fee / *gas_limit as f64
-        } else {
-            want_fee / got_fee * self.gas_price()
-        };
-
-        self.set_gas_price(new_gas_price.ceil());
-        Ok(true)
     }
 }
 
@@ -676,16 +641,4 @@ fn estimate_gas(blobs: &[Blob], app_version: AppVersion, gas_multiplier: f64) ->
         + (tx_size_cost_per_byte * BYTES_PER_BLOB_INFO * blobs.len() as u64)
         + PFB_GAS_FIXED_COST;
     (gas as f64 * gas_multiplier) as u64
-}
-
-fn parse_insufficient_gas_err(error: &str) -> Option<(f64, f64)> {
-    static RE: LazyLock<Regex> = LazyLock::new(|| {
-        // insufficient minimum gas price for this node; got: 50 required at least: 199.000000000000000000: insufficient fee
-        Regex::new(r".*got.*?(?P<got>[0-9.]+).*required.*?(?P<want>[0-9.]+)").expect("valid regex")
-    });
-    let caps = RE.captures(error)?;
-    let got: f64 = caps["got"].parse().ok()?;
-    let want: f64 = caps["want"].parse().ok()?;
-
-    Some((got, want))
 }

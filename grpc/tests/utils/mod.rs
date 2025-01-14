@@ -25,6 +25,7 @@ impl TestAccount {
             address: AccAddress::new(verifying_key.into()).into(),
             verifying_key,
             signing_key,
+<<<<<<< HEAD
         }
     }
 
@@ -36,6 +37,8 @@ impl TestAccount {
             address: AccAddress::new(verifying_key.into()).into(),
             verifying_key,
             signing_key,
+=======
+>>>>>>> main
         }
     }
 }
@@ -79,7 +82,10 @@ mod imp {
         let lock = LOCK.get_or_init(|| Mutex::new(())).lock().await;
 
         let creds = load_account();
+<<<<<<< HEAD
         let grpc_client = new_grpc_client();
+=======
+>>>>>>> main
         let client = TxClient::with_url(
             CELESTIA_GRPC_URL,
             &creds.address,
