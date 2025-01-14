@@ -313,6 +313,33 @@ impl Blob {
 
         Ok(blobs)
     }
+
+    /// Get the amount of shares needed to encode this blob.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::{AppVersion, Blob};
+    /// # use celestia_types::nmt::Namespace;
+    /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
+    ///
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V3).unwrap();
+    /// let shares_len = blob.shares_len();
+    ///
+    /// let blob_shares = blob.to_shares().unwrap();
+    ///
+    /// assert_eq!(shares_len, blob_shares.len());
+    /// ```
+    pub fn shares_len(&self) -> usize {
+        let Some(without_first_share) = self
+            .data
+            .len()
+            .checked_sub(appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE)
+        else {
+            return 1;
+        };
+        1 + without_first_share.div_ceil(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+    }
 }
 
 impl From<Blob> for RawBlob {

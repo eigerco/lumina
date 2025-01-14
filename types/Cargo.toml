@@ -36,7 +36,7 @@ multihash = "0.19.1"
 rand = { version = "0.8.5", optional = true }
 ruint = { version = "1.12.3", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
-serde_repr = { version = "0.1.19", optional = true }
+serde_repr = "0.1.19"
 sha2 = "0.10.6"
 thiserror = "1.0.61"
 time = { version = "0.3.36", default-features = false }
@@ -61,7 +61,7 @@ wasm-bindgen-test.workspace = true
 
 [features]
 default = ["p2p"]
-p2p = ["dep:libp2p-identity", "dep:multiaddr", "dep:serde_repr"]
+p2p = ["dep:libp2p-identity", "dep:multiaddr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
 tonic = ["celestia-proto/tonic"]
 wasm-bindgen = ["dep:js-sys", "dep:serde-wasm-bindgen", "dep:wasm-bindgen", "nmt-rs/serde", "time/wasm-bindgen"]

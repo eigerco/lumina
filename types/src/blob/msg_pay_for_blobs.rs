@@ -1,15 +1,13 @@
-use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
-use celestia_proto::cosmos::tx::v1beta1::TxBody as RawTxBody;
-use prost::Name;
 use serde::{Deserialize, Serialize};
 use tendermint::merkle::Hash;
-use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
 
 use crate::blob::{Blob, Commitment};
 use crate::nmt::Namespace;
 use crate::state::Address;
 use crate::{Error, Result};
+
+pub use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
 
 /// MsgPayForBlobs pays for the inclusion of a blob in the block.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,20 +52,6 @@ impl MsgPayForBlobs {
             share_commitments,
             share_versions,
         })
-    }
-}
-
-impl From<MsgPayForBlobs> for RawTxBody {
-    fn from(msg: MsgPayForBlobs) -> Self {
-        let msg_pay_for_blobs_as_any = Any {
-            type_url: RawMsgPayForBlobs::type_url(),
-            value: msg.encode_vec(),
-        };
-
-        RawTxBody {
-            messages: vec![msg_pay_for_blobs_as_any],
-            ..RawTxBody::default()
-        }
     }
 }
 

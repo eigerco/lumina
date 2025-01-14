@@ -30,6 +30,11 @@ runs:
               "cache-from": ["type=gha,scope=bridge-1"],
               "cache-to": ["type=gha,mode=max,scope=bridge-1"],
               "output": ["type=docker"]
+            },
+            "grpcwebproxy": {
+              "cache-from": ["type=gha,scope=grpcwebproxy"],
+              "cache-to": ["type=gha,mode=max,scope=grpcwebproxy"],
+              "output": ["type=docker"]
             }
           }
         }
