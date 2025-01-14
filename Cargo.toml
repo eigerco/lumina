@@ -18,7 +18,7 @@ nmt-rs = "0.2.1"
 prost = "0.13.3"
 prost-build = "0.13.3"
 prost-types = "0.13.3"
-wasm-bindgen = "0.2.99"
+wasm-bindgen = "0.2.100"
 wasm-bindgen-test = "0.3.49"
 
 [patch.crates-io]
