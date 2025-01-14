@@ -501,6 +501,7 @@ pub struct TxConfig {
     pub gas_price: Option<f64>,
 }
 
+/// Configuration for the transaction.
 impl TxConfig {
     /// Attach gas limit to this config.
     pub fn with_gas_limit(mut self, gas_limit: u64) -> Self {
