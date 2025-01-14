@@ -129,7 +129,7 @@ mod wbg {
      */
     export interface BaseAccount {
       address: string,
-      pubkey?: Uint8Array,
+      pubkey?: PublicKey,
       accountNumber: bigint,
       sequence: bigint
     }
