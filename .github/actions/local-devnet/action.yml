@@ -9,48 +9,35 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/.buildx-cache
-        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        key: ${{ runner.os }}-buildx-${{ hashFiles('./ci/Dockerfile*', './ci/*.yml', './ci/*.sh') }}
         restore-keys: |
           ${{ runner.os }}-buildx-
 
     - name: Build the docker-compose stack
       shell: bash
       run: |
+        mkdir -p ${{ runner.temp }}/.buildx-cache-new
         cache_from="type=local,src=${{ runner.temp }}/.buildx-cache"
-        cache_to="type=local,dest=${{ runner.temp }}/.buildx-cache-new,mode=max"
-        cat > ci/cache.json <<EOF
-        {
-          "target": {
-            "validator": {
-              "cache-from": ["$cache_from,scope=validator"],
-              "cache-to": ["$cache_to,scope=validator"],
-              "output": ["type=docker"]
-            },
-            "bridge-0": {
-              "cache-from": ["$cache_from,scope=bridge-0"],
-              "cache-to": ["$cache_to,scope=bridge-0"],
-              "output": ["type=docker"]
-            },
-            "bridge-1": {
-              "cache-from": ["$cache_from,scope=bridge-1"],
-              "cache-to": ["$cache_to,scope=bridge-1"],
-              "output": ["type=docker"]
-            },
-            "grpcwebproxy": {
-              "cache-from": ["$cache_from,scope=grpcwebproxy"],
-              "cache-to": ["$cache_to,scope=grpcwebproxy"],
-              "output": ["type=docker"]
-            }
-          }
-        }
-        EOF
-        cd ci && docker buildx bake --file docker-compose.yml --file cache.json --load
+        cache_to="type=local,dest=${{ runner.temp }}/.buildx-cache-new"
+        cd ci
+        for image in "validator" "bridge" "grpcwebproxy"; do
+          docker buildx build \
+            --file "Dockerfile.$image" \
+            --tag "$image" \
+            --load \
+            --cache-from="type=local,src=${{ runner.temp }}/.buildx-cache/$image" \
+            --cache-to="type=local,dest=${{ runner.temp }}/.buildx-cache-new/$image" \
+            . &
+        done
+        wait $(jobs -p)
 
-    # Needed because otherwise cache would grow indefinitely
+    # Needed because otherwise cache would grow infinitely
     # https://github.com/moby/buildkit/issues/1896
     - name: Overwrite cache
       shell: bash
-      run: mv ${{ runner.temp }}/.buildx-cache-new ${{ runner.temp }}/.buildx-cache
+      run: |
+        rm -rf ${{ runner.temp }}/.buildx-cache
+        mv ${{ runner.temp }}/.buildx-cache-new ${{ runner.temp }}/.buildx-cache
 
     - name: Run the docker-compose stack
       shell: bash
