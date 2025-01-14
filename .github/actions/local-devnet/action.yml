@@ -5,41 +5,52 @@ runs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    # needed for the buildx in order to access gha cache
-    # https://github.com/docker/bake-action/issues/36#issuecomment-1103961612
-    - name: Expose github actions runtime
-      uses: crazy-max/ghaction-github-runtime@v1
+    - name: Cache Docker layers
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
 
     - name: Build the docker-compose stack
       shell: bash
       run: |
+        cache_from="type=local,src=${{ runner.temp }}/.buildx-cache"
+        cache_to="type=local,dest=${{ runner.temp }}/.buildx-cache-new,mode=max"
         cat > ci/cache.json <<EOF
         {
           "target": {
             "validator": {
-              "cache-from": ["type=gha,scope=validator"],
-              "cache-to": ["type=gha,mode=max,scope=validator"],
+              "cache-from": ["$cache_from,scope=validator"],
+              "cache-to": ["$cache_to,scope=validator"],
               "output": ["type=docker"]
             },
             "bridge-0": {
-              "cache-from": ["type=gha,scope=bridge-0"],
-              "cache-to": ["type=gha,mode=max,scope=bridge-0"],
+              "cache-from": ["$cache_from,scope=bridge-0"],
+              "cache-to": ["$cache_to,scope=bridge-0"],
               "output": ["type=docker"]
             },
             "bridge-1": {
-              "cache-from": ["type=gha,scope=bridge-1"],
-              "cache-to": ["type=gha,mode=max,scope=bridge-1"],
+              "cache-from": ["$cache_from,scope=bridge-1"],
+              "cache-to": ["$cache_to,scope=bridge-1"],
               "output": ["type=docker"]
             },
             "grpcwebproxy": {
-              "cache-from": ["type=gha,scope=grpcwebproxy"],
-              "cache-to": ["type=gha,mode=max,scope=grpcwebproxy"],
+              "cache-from": ["$cache_from,scope=grpcwebproxy"],
+              "cache-to": ["$cache_to,scope=grpcwebproxy"],
               "output": ["type=docker"]
             }
           }
         }
         EOF
         cd ci && docker buildx bake --file docker-compose.yml --file cache.json --load
+
+    # Needed because otherwise cache would grow indefinitely
+    # https://github.com/moby/buildkit/issues/1896
+    - name: Overwrite cache
+      shell: bash
+      run: mv ${{ runner.temp }}/.buildx-cache-new ${{ runner.temp }}/.buildx-cache
 
     - name: Run the docker-compose stack
       shell: bash
