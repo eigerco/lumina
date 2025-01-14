@@ -857,7 +857,6 @@ dependencies = [
  "k256",
  "prost",
  "rand_core",
- "regex",
  "send_wrapper 0.6.0",
  "serde",
  "tendermint",
