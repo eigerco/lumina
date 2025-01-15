@@ -17,8 +17,6 @@ runs:
       shell: bash
       run: |
         mkdir -p ${{ runner.temp }}/.buildx-cache-new
-        cache_from="type=local,src=${{ runner.temp }}/.buildx-cache"
-        cache_to="type=local,dest=${{ runner.temp }}/.buildx-cache-new"
         cd ci
         for image in "validator" "bridge" "grpcwebproxy"; do
           docker buildx build \
