@@ -76,7 +76,7 @@ jobs:
       run: cargo test --all-features -p ${{ matrix.crate }}
 
 
-  wasm-test:
+  test-wasm:
     runs-on: ubuntu-latest
 
     strategy:
@@ -214,7 +214,7 @@ jobs:
     needs:
     - clippy
     - test
-    - wasm-test
+    - test-wasm
     - build-wasm
     - fmt
     - docs
