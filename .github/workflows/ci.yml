@@ -37,9 +37,6 @@ jobs:
         target: wasm32-unknown-unknown
         cache-key: ${{ matrix.crate }}
 
-    - name: Celestia devnet
-      uses: ./.github/actions/local-devnet
-
     - name: Run clippy for native
       run: cargo clippy --all-targets --all-features -p ${{ matrix.crate }} -- --no-deps
 
@@ -79,7 +76,7 @@ jobs:
       run: cargo test --all-features -p ${{ matrix.crate }}
 
 
-  wasm-test:
+  test-wasm:
     runs-on: ubuntu-latest
 
     strategy:
@@ -209,6 +206,7 @@ jobs:
     - name: Check for unused dependencies
       run: cargo udeps --all-targets --all-features
 
+
   required:
     runs-on: ubuntu-latest
     name: Required checks
@@ -216,7 +214,7 @@ jobs:
     needs:
     - clippy
     - test
-    - wasm-test
+    - test-wasm
     - build-wasm
     - fmt
     - docs
