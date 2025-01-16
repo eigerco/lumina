@@ -349,6 +349,7 @@ export interface ProtoAny {
 
 #[wasm_bindgen]
 extern "C" {
+    /// Protobuf Any exposed to javascript
     #[wasm_bindgen(typescript_type = "ProtoAny")]
     pub type JsAny;
 

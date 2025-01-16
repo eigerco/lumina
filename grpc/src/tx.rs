@@ -547,9 +547,11 @@ mod wbg {
 
     #[wasm_bindgen]
     extern "C" {
+        /// TxInfo exposed to javascript
         #[wasm_bindgen(typescript_type = "TxInfo")]
         pub type JsTxInfo;
 
+        /// TxConfig exposed to javascript
         #[wasm_bindgen(typescript_type = "TxConfig")]
         pub type JsTxConfig;
 

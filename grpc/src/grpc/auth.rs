@@ -148,12 +148,15 @@ mod wbg {
 
     #[wasm_bindgen]
     extern "C" {
+        /// Public key exposed to javascript.
         #[wasm_bindgen(typescript_type = "PublicKey")]
         pub type JsPublicKey;
 
+        /// BaseAccount exposed to javascript.
         #[wasm_bindgen(typescript_type = "BaseAccount")]
         pub type JsBaseAccount;
 
+        /// AuthParams exposed to javascript.
         #[wasm_bindgen(typescript_type = "AuthParams")]
         pub type JsAuthParams;
     }

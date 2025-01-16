@@ -107,6 +107,7 @@ mod wbg {
 
     #[wasm_bindgen]
     extern "C" {
+        /// Coin exposed to javascript
         #[wasm_bindgen(typescript_type = "Coin")]
         pub type JsCoin;
     }
