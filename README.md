@@ -1,6 +1,6 @@
 # Lumina
 
-Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in browser-based environments.
+Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) is able to run natively and in browser-based environments.
 
 Run Lumina now at [lumina.rs](https://lumina.rs/) and directly verify Celestia.
 
@@ -109,7 +109,7 @@ For security reasons, browsers only allow WebTransport to be used in [Secure Con
 Follow [this guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)
 to authorize yourself in github's container registry.
 
-Starting a Celestia network with single validator and bridge
+Starting a Celestia network with a single validator and bridge
 ```bash
 docker compose -f ci/docker-compose.yml up --build --force-recreate -d
 # and to stop it
