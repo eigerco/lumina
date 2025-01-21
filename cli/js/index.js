@@ -4,7 +4,6 @@ import { AppVersion, Blob, Namespace, NodeConfig, TxClient, protoEncodeSignDoc, 
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { Registry } from "@cosmjs/proto-signing";
 
-
 // Expose classes on window so they can be used from the console
 window.AppVersion = AppVersion;
 window.Blob = Blob;

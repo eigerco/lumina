@@ -89,10 +89,10 @@ impl JsClient {
         self.client.app_version().into()
     }
 
-    /// Submit blobs to celestia network.
+    /// Submit blobs to the celestia network.
     ///
     /// When no `TxConfig` is provided, client will automatically calculate needed
-    /// gas and update the `gasPrice` if network agreed on a new minimal value.
+    /// gas and update the `gasPrice`, if network agreed on a new minimal value.
     /// To enforce specific values use a `TxConfig`.
     ///
     /// # Example
@@ -126,10 +126,10 @@ impl JsClient {
         Ok(tx.into())
     }
 
-    /// Submit message to celestia network.
+    /// Submit message to the celestia network.
     ///
     /// When no `TxConfig` is provided, client will automatically calculate needed
-    /// gas and update the `gasPrice` if network agreed on a new minimal value.
+    /// gas and update the `gasPrice`, if network agreed on a new minimal value.
     /// To enforce specific values use a `TxConfig`.
     ///
     /// # Example
