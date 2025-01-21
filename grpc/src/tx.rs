@@ -234,7 +234,7 @@ where
     }
 
     /// Get most recent minimal gas price seen by the client
-    pub fn last_gas_price(&self) -> f64 {
+    pub fn last_seen_gas_price(&self) -> f64 {
         *self.gas_price.read().expect("lock poisoned")
     }
 
