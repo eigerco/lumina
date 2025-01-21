@@ -19,7 +19,7 @@ categories = [
 ]
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "lib"]
 
 [dependencies]
 celestia-grpc-macros = { version = "0.1.0", path = "grpc-macros" }
