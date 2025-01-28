@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.7.0...lumina-node-wasm-v0.8.0) - 2025-01-28
 
+Summary:
+
+- New options on `NodeConfig`, disabling usage of indexeddb with `usePersistentMemory` and pruning configuration with `customPruningDelaySecs`.
+- Added `AppVersion`, `Blob`, `Namespace` types and support for fetching blobs from network using `NodeClient.requestAllBlobs`.
+- Added grpc `TxClient` for blob and cosmos messages submission to the network, as well as basic queries for `auth` and `bank`.
+- `ExtendedHeader` and `DataAvailabilityHeader` are now exposed as classes from wasm instead of being used as jsons.
+  This means they now have methods and proper typescript support.
+
+For migration:
+
+- header.dah.columnRoot() and header.dah.rowRoot() are now methods that return `Uint8Array` instead of being
+  properties returning base64 `string`s
+- `NodeConfig.custom_syncing_window_secs` was renamed to `NodeConfig.customSamplingWindowSecs`
+
 ### Added
 
 - *(grpc,node-wasm)* add javascript bindings for tx client (#510)
