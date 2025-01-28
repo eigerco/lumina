@@ -38,6 +38,7 @@ pub struct WasmNodeConfig {
     /// Whether to store data in persistent memory or not.
     ///
     /// **Default value:** true
+    #[wasm_bindgen(js_name = usePersistentMemory)]
     pub use_persistent_memory: bool,
     /// Sampling window defines maximum age of a block considered for syncing and sampling.
     ///
@@ -47,6 +48,7 @@ pub struct WasmNodeConfig {
     /// * If `use_persistent_memory == false`, default value is 60 seconds.
     ///
     /// The minimum value that can be set is 60 seconds.
+    #[wasm_bindgen(js_name = customSamplingWindowSecs)]
     pub custom_sampling_window_secs: Option<u32>,
     /// Pruning delay defines how much time the pruner should wait after sampling window in
     /// order to prune the block.
@@ -57,6 +59,7 @@ pub struct WasmNodeConfig {
     /// * If `use_persistent_memory == false`, default value is 60 seconds.
     ///
     /// The minimum value that can be set is 60 seconds.
+    #[wasm_bindgen(js_name = customPruningDelaySecs)]
     pub custom_pruning_delay_secs: Option<u32>,
 }
 
