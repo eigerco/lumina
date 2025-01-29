@@ -18,7 +18,7 @@ Summary:
 
 For migration:
 
-- header.dah.columnRoot() and header.dah.rowRoot() are now methods that return `Uint8Array` instead of being
+- `header.dah.columnRoot()` and `header.dah.rowRoot()` are now methods that return `Uint8Array` instead of being
   properties returning base64 `string`s
 - `NodeConfig.custom_syncing_window_secs` was renamed to `NodeConfig.customSamplingWindowSecs`
 
