@@ -7,12 +7,14 @@
 mod error;
 mod types;
 
+use blockstore::EitherBlockstore;
 use celestia_types::ExtendedHeader;
 use error::{LuminaError, Result};
-use lumina_node::{
-    blockstore::RedbBlockstore, events::EventSubscriber, node::PeerTrackerInfo, store::RedbStore,
-    Node,
-};
+use lumina_node::blockstore::{InMemoryBlockstore, RedbBlockstore};
+use lumina_node::events::EventSubscriber;
+use lumina_node::node::PeerTrackerInfo;
+use lumina_node::store::{EitherStore, InMemoryStore, RedbStore};
+use lumina_node::Node;
 use std::str::FromStr;
 use tendermint::hash::Hash;
 use tokio::sync::{Mutex, RwLock};
@@ -23,10 +25,13 @@ uniffi::setup_scaffolding!();
 
 lumina_node::uniffi_reexport_scaffolding!();
 
+pub(crate) type Blockstore = EitherBlockstore<InMemoryBlockstore, RedbBlockstore>;
+pub(crate) type Store = EitherStore<InMemoryStore, RedbStore>;
+
 /// The main Lumina node that manages the connection to the Celestia network.
 #[derive(Object)]
 pub struct LuminaNode {
-    node: RwLock<Option<Node<RedbBlockstore, RedbStore>>>,
+    node: RwLock<Option<Node<Blockstore, Store>>>,
     events_subscriber: Mutex<Option<EventSubscriber>>,
     config: NodeConfig,
 }

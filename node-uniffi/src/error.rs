@@ -2,7 +2,7 @@ use lumina_node::NodeError;
 use thiserror::Error;
 
 /// Result type alias for LuminaNode operations that can fail with a LuminaError
-pub type Result<T> = std::result::Result<T, LuminaError>;
+pub type Result<T, E = LuminaError> = std::result::Result<T, E>;
 
 /// Represents all possible errors that can occur in the LuminaNode.
 #[derive(Error, Debug, uniffi::Error)]
