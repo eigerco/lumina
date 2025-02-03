@@ -1,3 +1,9 @@
 target
-
 /.env
+/.ccls-cache
+
+# devenv
+.devenv*
+devenv.local.nix
+.direnv
+.pre-commit-config.yaml
