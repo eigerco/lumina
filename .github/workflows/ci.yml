@@ -76,6 +76,36 @@ jobs:
       run: cargo test --all-features -p ${{ matrix.crate }}
 
 
+  test-bindings:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        bindings:
+          - name: uniffi-kotlin
+            run_sh: ./node-uniffi/tests/kotlin/run.sh
+          - name: uniffi-swift
+            run_sh: ./node-uniffi/tests/swift/run.sh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v26
+
+      - name: Setup devenv cache
+        uses: cachix/cachix-action@v14
+        with:
+          name: devenv
+
+      - name: Install devenv.sh
+        run: nix profile install nixpkgs#devenv
+
+      - name: Run ${{ matrix.bindings.name }} tests
+        run: ${{ matrix.bindings.run_sh }}
+
+
   test-wasm:
     runs-on: ubuntu-latest
 
