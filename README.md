@@ -12,14 +12,8 @@ Supported features:
 - Backward and forward Data Availability Sampling
 - Native and browser persistent storage
 - Streaming events happening on the node
-- Native and wasm library, embed the node anywhere
+- Native, wasm and uniffi libraries, embed the node anywhere
 - Integration tests with Go implementation
-
-> [!NOTE]
-> Lumina implements [`shwap`](https://github.com/celestiaorg/CIPs/blob/main/cips/cip-19.md) protocol to perform DASing,
-which is not yet enabled on all networks in the Go implementation. This means that even though Lumina will be sampling all
-blocks, the network is unlikely to provide the requested data yet. Shwap is going to become the main DASing protocol in
-the upcoming celestia-node versions.
 
 ## Installing the node
 
