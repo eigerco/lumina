@@ -5,7 +5,7 @@ work within a browser environment and be operable with javascript.
 
 # Changelog
 
-You can find about the latest changes [here](https://github.com/eigerco/lumina/node-wasm/CHANGELOG.md).
+You can find about the latest changes [here](https://github.com/eigerco/lumina/blob/main/node-wasm/CHANGELOG.md).
 
 # Example
 Starting lumina inside a dedicated worker
