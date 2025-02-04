@@ -18,8 +18,8 @@ rm -rf Sources/LuminaNodeHeaders
 rm -rf Sources/LuminaNode
 
 mkdir lib
-mkdir Sources/LuminaNodeHeaders
-mkdir Sources/LuminaNode
+mkdir -p Sources/LuminaNodeHeaders
+mkdir -p Sources/LuminaNode
 
 cp ../../../target/debug/liblumina_node_uniffi.a lib
 cp ../../../target/swift-uniffi-bindings/*.swift Sources/LuminaNode

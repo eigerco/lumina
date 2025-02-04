@@ -5,11 +5,11 @@ let
   # for Debian and make wrappers for it.
   swift = pkgs.stdenv.mkDerivation {
     pname = "swift";
-    version = "5.10.1";
+    version = "6.0.3";
 
     src = pkgs.fetchurl {
-      url = "https://download.swift.org/swift-5.10.1-release/debian12/swift-5.10.1-RELEASE/swift-5.10.1-RELEASE-debian12.tar.gz";
-      sha256 = "sha256-OkWi0xj4rjaOxslEtkAngd53XnxHkpGrK5T4ePyuV3A=";
+      url = "https://download.swift.org/swift-6.0.3-release/debian12/swift-6.0.3-RELEASE/swift-6.0.3-RELEASE-debian12.tar.gz";
+      sha256 = "sha256-b3ggPksAN8js+uiQlkM+sO8ZjSCuSy6/rfPAQgnSzeI=";
     };
 
     nativeBuildInputs = [ pkgs.makeWrapper ];

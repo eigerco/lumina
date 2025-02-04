@@ -8,7 +8,7 @@ final class LuminaNodeTests: XCTestCase {
                                 batchSize: nil, ed25519SecretKeyBytes: nil)
         let node = try LuminaNode(config: config)
 
-        try await node.start()
+        let _ = try await node.start()
         try await node.waitConnectedTrusted()
 
         let headStr = try await node.requestHeadHeader()
