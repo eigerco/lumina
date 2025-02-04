@@ -9,7 +9,7 @@ import uniffi.lumina_node.*
 
 class LibraryTest {
     @Test
-    fun someLibraryMethodReturnsTrue() = runTest {
+    fun testRequestHeader() = runTest {
         var config = NodeConfig(null, Network.Mainnet, null, null, null, null, null)
         var node = LuminaNode(config)
 
