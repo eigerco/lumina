@@ -19,6 +19,7 @@ let package = Package(
             name: "LuminaNode",
             dependencies: ["LuminaNodeHeaders"],
             linkerSettings: [
+                .linkedFramework("SystemConfiguration"),
                 .linkedLibrary("lumina_node_uniffi"),
                 .unsafeFlags(["-L", "./lib"])
             ]),
