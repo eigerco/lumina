@@ -3,6 +3,9 @@ import PackageDescription
 
 let package = Package(
     name: "LuminaNode",
+    platforms: [
+        .macOS(.v14)
+    ],
     products: [
         .library(
             name: "LuminaNode",
