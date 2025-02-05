@@ -245,6 +245,7 @@ jobs:
     - clippy
     - test
     - test-wasm
+    - test-bindings
     - build-wasm
     - fmt
     - docs
