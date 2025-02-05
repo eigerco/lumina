@@ -93,8 +93,6 @@ jobs:
 
       - name: Install nix
         uses: DeterminateSystems/nix-installer-action@v16
-      - name: Set up nix cache
-        uses: DeterminateSystems/flakehub-cache-action@main
 
       - name: Install devenv.sh
         run: nix profile install nixpkgs#devenv
