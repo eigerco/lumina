@@ -18,10 +18,10 @@ use crate::{nmt::Namespace, Error, Result};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawShareProof", into = "RawShareProof")]
 pub struct ShareProof {
-    data: Vec<[u8; SHARE_SIZE]>,
-    namespace_id: Namespace,
-    share_proofs: Vec<NamespaceProof>,
-    row_proof: RowProof,
+    pub data: Vec<[u8; SHARE_SIZE]>,
+    pub namespace_id: Namespace,
+    pub share_proofs: Vec<NamespaceProof>,
+    pub row_proof: RowProof,
 }
 
 impl ShareProof {
