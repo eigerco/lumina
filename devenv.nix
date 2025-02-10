@@ -43,6 +43,7 @@ in
     swift
   ];
 
+  cachix.enable = false;
   dotenv.enable = true;
 
   languages.rust = {
