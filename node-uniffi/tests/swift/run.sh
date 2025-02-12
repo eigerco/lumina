@@ -26,9 +26,16 @@ cp ../../../target/swift-uniffi-bindings/*.swift Sources/LuminaNode
 cp ../../../target/swift-uniffi-bindings/*.h Sources/LuminaNodeHeaders
 cat ../../../target/swift-uniffi-bindings/*.modulemap > Sources/LuminaNodeHeaders/module.modulemap
 
+if [ -n "${CI:-}" ]; then
+  # On CI there is an issue with permissions as runner has non-standard user & group ids
+  user=0:0
+else
+  user="$(id -u):$(id -g)"
+fi
+
 docker run \
   --rm \
-  --user "$(id -u):$(id -g)" \
+  --user "$user" \
   --volume "$PWD":/app \
   --workdir /app \
   swift:6.0.3 \
