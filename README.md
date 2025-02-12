@@ -159,19 +159,6 @@ How to upgrade:
 cargo update
 ```
 
-## Development environment
-
-This repository is mostly Rust based, however we provide bindings for other
-languages too: [JavaScript in browsers](./node-wasm/), [Kotlin and Swift via UniFFI](./node-uniffi/).
-
-Because of the bindings and the test cases of them, the setup of our developement
-environment became complex. To simplify it a bit we decided to use [devenv](https://devenv.sh/),
-which is based on [Nix](https://github.com/NixOS/nix).
-
-You can check how to intall and use devenv [here](https://devenv.sh/getting-started/).
-Note this is only needed if you plan to work on support of languages other than Rust,
-feel free to skip it otherwise.
-
 ## Frontend
 
 Check out the front end at [eigerco/lumina-front](https://github.com/eigerco/lumina-front)
