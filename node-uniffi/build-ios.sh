@@ -1,15 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -xeuo pipefail
+
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
 cargo build
 
 cd ..
 
-for TARGET in \
-        aarch64-apple-ios \
-        aarch64-apple-ios-sim
-do
-    rustup target add $TARGET
-    cargo build --release --target=$TARGET
+for target in aarch64-apple-ios aarch64-apple-ios-sim; do
+    cargo build --release --target="$target"
 done
 
 cd node-uniffi

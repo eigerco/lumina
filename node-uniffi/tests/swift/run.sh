@@ -26,4 +26,10 @@ cp ../../../target/swift-uniffi-bindings/*.swift Sources/LuminaNode
 cp ../../../target/swift-uniffi-bindings/*.h Sources/LuminaNodeHeaders
 cat ../../../target/swift-uniffi-bindings/*.modulemap > Sources/LuminaNodeHeaders/module.modulemap
 
-swift test
+docker run \
+  --rm \
+  --user "$(id -u):$(id -g)" \
+  --volume "$PWD":/app \
+  --workdir /app \
+  swift:6.0.3 \
+  swift test

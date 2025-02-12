@@ -22,4 +22,10 @@ mkdir -p lib/src/main/resources
 cp ../../../target/debug/liblumina_node_uniffi.so lib/src/main/resources
 cp -r ../../../target/kotlin-uniffi-bindings/uniffi lib/src/main/kotlin
 
-gradle test
+docker run \
+  --rm \
+  --user "$(id -u):$(id -g)" \
+  --volume "$PWD":/app \
+  --workdir /app \
+  gradle:8.12-jdk8 \
+  gradle test

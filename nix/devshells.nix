@@ -1,10 +1,11 @@
 # `self'` is our flake's outputs but with `system` pre-selected
-{ self', pkgs, ... }:
+{ inputs', pkgs, ... }:
 
 {
-  devShells.default = pkgs.mkShell.override { inherit (pkgs.llvm) stdenv; } {
+  devShells.default = pkgs.mkShell {
     packages = with pkgs; [
-      self'.packages.swift
+      # inputs'.swift-bin.packages.swift
+      pkgs.llvmPackages_17.clang
       pkg-config
       wasm-pack
     ];

@@ -2,6 +2,8 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
+    fenix.url = "github:nix-community/fenix";
+    fenix.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
@@ -12,6 +14,8 @@
         "aarch64-darwin"
         "x86_64-linux"
       ];
-      perSystem = import ./nix;
+      perSystem = {
+        imports = [ ./devshells.nix ];
+      };
     };
 }
