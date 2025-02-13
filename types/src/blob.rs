@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn reconstruct() {
         for _ in 0..10 {
-            let len = rand::random::<usize>() % 1024 * 1024;
+            let len = rand::random::<usize>() % (1024 * 1024) + 1;
             let data = random_bytes(len);
             let ns = Namespace::const_v0(rand::random());
             let blob = Blob::new(ns, data, AppVersion::V2).unwrap();
@@ -489,7 +489,7 @@ mod tests {
 
     #[test]
     fn reconstruct_not_sequence_start() {
-        let len = rand::random::<usize>() % 1024 * 1024;
+        let len = rand::random::<usize>() % (1024 * 1024) + 1;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
         let mut shares = Blob::new(ns, data, AppVersion::V2)
@@ -549,7 +549,7 @@ mod tests {
 
     #[test]
     fn reconstruct_inconsistent_share_version() {
-        let len = rand::random::<usize>() % 1024 * 1024 + 512;
+        let len = rand::random::<usize>() % (1024 * 1024) + 512;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
         let mut shares = Blob::new(ns, data, AppVersion::V2)
@@ -568,7 +568,7 @@ mod tests {
 
     #[test]
     fn reconstruct_inconsistent_namespace() {
-        let len = rand::random::<usize>() % 1024 * 1024 + 512;
+        let len = rand::random::<usize>() % (1024 * 1024) + 512;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
         let ns2 = Namespace::const_v0(rand::random());
@@ -588,7 +588,7 @@ mod tests {
 
     #[test]
     fn reconstruct_unexpected_sequence_start() {
-        let len = rand::random::<usize>() % 1024 * 1024 + 512;
+        let len = rand::random::<usize>() % (1024 * 1024) + 512;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
         let mut shares = Blob::new(ns, data, AppVersion::V2)
@@ -609,7 +609,7 @@ mod tests {
     fn reconstruct_all() {
         let blobs: Vec<_> = (0..rand::random::<usize>() % 16 + 3)
             .map(|_| {
-                let len = rand::random::<usize>() % 1024 * 1024 + 512;
+                let len = rand::random::<usize>() % (1024 * 1024) + 512;
                 let data = random_bytes(len);
                 let ns = Namespace::const_v0(rand::random());
                 Blob::new(ns, data, AppVersion::V2).unwrap()
