@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.8.0...lumina-node-wasm-v0.8.1) - 2025-02-13
+
+### Other
+
+- remove outdated shwap note and link to changelog for js (#536)
+
 ## [0.8.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.7.0...lumina-node-wasm-v0.8.0) - 2025-01-28
 
 Summary:
