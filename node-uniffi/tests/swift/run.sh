@@ -33,7 +33,13 @@ else
   user="$(id -u):$(id -g)"
 fi
 
-docker run \
+# if user doesn't belong to docker group, run docker with sudo
+SUDO=""
+if ! id -nG | grep -q docker; then
+  SUDO=sudo
+fi
+
+$SUDO docker run \
   --rm \
   --user "$user" \
   --volume "$PWD":/app \

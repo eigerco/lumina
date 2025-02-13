@@ -22,7 +22,13 @@ mkdir -p lib/src/main/resources
 cp ../../../target/debug/liblumina_node_uniffi.so lib/src/main/resources
 cp -r ../../../target/kotlin-uniffi-bindings/uniffi lib/src/main/kotlin
 
-docker run \
+# if user doesn't belong to docker group, run docker with sudo
+SUDO=""
+if ! id -nG | grep -q docker; then
+  SUDO=sudo
+fi
+
+$SUDO docker run \
   --rm \
   --user "$(id -u):$(id -g)" \
   --volume "$PWD":/app \
