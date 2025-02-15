@@ -76,6 +76,30 @@ jobs:
       run: cargo test --all-features -p ${{ matrix.crate }}
 
 
+  test-bindings:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        bindings:
+          - name: uniffi-kotlin
+            run: ./node-uniffi/tests/kotlin/run.sh
+          - name: uniffi-swift
+            run: ./node-uniffi/tests/swift/run.sh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache-key: ${{ matrix.crate.name }}
+
+      - name: Run ${{ matrix.bindings.name }} tests
+        run: ${{ matrix.bindings.run }}
+
+
   test-wasm:
     runs-on: ubuntu-latest
 
@@ -215,6 +239,7 @@ jobs:
     - clippy
     - test
     - test-wasm
+    - test-bindings
     - build-wasm
     - fmt
     - docs

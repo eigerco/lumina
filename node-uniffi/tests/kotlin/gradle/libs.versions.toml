@@ -1,0 +1,9 @@
+[libraries]
+jna = { module = "net.java.dev.jna:jna", version = "5.16.0" }
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version = "2.1.10" }
+kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version = "1.10.1" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version = "1.10.1" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.8.0" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version = "2.0.0" }
