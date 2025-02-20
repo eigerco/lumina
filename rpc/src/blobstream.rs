@@ -1,3 +1,5 @@
+//! celestia-node rpc types and methods related to blobstream
+
 use bytes::Bytes;
 use celestia_types::MerkleProof;
 use jsonrpsee::proc_macros::rpc;
