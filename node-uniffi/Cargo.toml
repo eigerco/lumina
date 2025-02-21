@@ -3,7 +3,6 @@ name = "lumina-node-uniffi"
 version = "0.1.0"
 edition = "2021"
 description = "Mobile bindings for Lumina node"
-publish = false
 
 [lib]
 crate-type = ["lib", "staticlib", "cdylib"]

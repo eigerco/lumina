@@ -13,6 +13,39 @@ jobs:
   release-plz:
     name: Release-plz
     runs-on: ubuntu-latest
+
+    outputs:
+      pr: ${{ steps.release-plz.outputs.pr }}
+      prs_created: ${{ steps.release-plz.outputs.prs_created }}
+      releases: ${{ steps.release-plz.outputs.releases }}
+      releases_created: ${{ steps.release-plz.outputs.releases_created }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+      - name: Setup toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Run release-plz
+        uses: MarcoIeni/release-plz-action@v0.5
+        id: release-plz
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  release-plz-pr-npm-update:
+    name: Update relaese PR for npm
+    runs-on: ubuntu-latest
+
+    needs:
+    - release-plz
+
+    if: success() && needs.release-plz.outputs.prs_created == 'true'
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,21 +63,13 @@ jobs:
         with:
           tool: wasm-pack@0.13.1
 
-      - name: Run release-plz
-        uses: MarcoIeni/release-plz-action@v0.5
-        id: release-plz
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
       - name: Bump lumina-node npm version
-        if: steps.release-plz.outputs.prs_created == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
         run: |
           set -eu
 
-          pr_branch_name="${{ fromJSON(steps.release-plz.outputs.pr).head_branch }}"
+          pr_branch_name="${{ fromJSON(needs.release-plz.outputs.pr).head_branch }}"
 
           # switch to the branch created by release-plz
           git fetch
@@ -119,6 +144,12 @@ jobs:
   release-npm:
     name: Release-npm
     runs-on: ubuntu-latest
+
+    needs:
+    - release-plz
+
+    if: success() && needs.release-plz.outputs.releases_created == 'true'
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -155,3 +186,68 @@ jobs:
           # publish lumina-node
           cd node-wasm/js
           npm publish --access public
+
+  release-uniffi:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+
+    runs-on: ${{ matrix.os }}
+
+    needs:
+    - release-plz
+
+    if: >-
+      ${{
+        success()
+        && contains(
+          fromJson(needs.release-plz.outputs.releases).*.package_name,
+          'lumina-node-uniffi'
+        )
+      }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: "\
+            aarch64-apple-ios,\
+            aarch64-apple-ios-sim,\
+            aarch64-linux-android,\
+            armv7-linux-androideabi,\
+            x86_64-linux-android,\
+            i686-linux-android"
+
+      - name: Install cargo-ndk
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cargo-ndk@3.5
+
+      - name: Build node-uniffi for ios
+        if: runner.os == 'macOS'
+        run: |
+          ./node-uniffi/build-ios.sh
+          tar -cvzf lumnia-node-uniffi-ios-macOS.tar.gz -C node-uniffi ios
+
+      - name: Build node-uniffi for android
+        run: |
+          ./node-uniffi/build-android.sh
+          tar -cvzf lumnia-node-uniffi-android-${{ runner.os }}.tar.gz -C node-uniffi app
+
+      - name: Publish artifacts to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          RELEASES: ${{ needs.release-plz.outputs.releases }}
+        run: |
+          set -xeuo pipefail
+
+          tag="$(echo "$RELEASES" | jq '.[] | select(.package_name == "lumina-node-uniffi").tag')"
+
+          sha256sum lumina-node-uniffi-* > lumina-node-uniffi-sha256-checksums-${{ runner.os }}.txt
+          gh release upload "$tag" lumina-node-uniffi-*
