@@ -42,7 +42,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
         run: |
-          set -eu
+          set -xeuo pipefail
 
           pr_branch_name="${{ fromJSON(steps.release-plz.outputs.pr).head_branch }}"
 
@@ -58,19 +58,23 @@ jobs:
             echo "Version up to date"
             exit
           fi
-          # Update the types definition for lumina-node
+
+          wasm-pack build ..
+
+          # Update lockfile with new node-wasm version
+          npm install --save ../pkg
           npm clean-install
+
+          # Update the types definition for lumina-node
           npm run tsc
           # Update the readme for lumina-node
-          wasm-pack build ..
           npm run update-readme
-          # Update the version of lumina-node-wasm dependency
-          npm pkg set "dependencies[lumina-node-wasm]=$node_wasm_version"
 
           # push a commit to release-plz's pr
           # prepare graphql query
           branch_sha="$(git rev-parse "$pr_branch_name")"
           package_json="$(base64 --wrap 0 package.json)"
+          package_lock_json="$(base64 --wrap 0 package-lock.json)"
           readme="$(base64 --wrap 0 README.md)"
           types_definitions="$(base64 --wrap 0 index.d.ts)"
           query='{"query": "mutation {
@@ -88,6 +92,10 @@ jobs:
                   {
                     path: \"node-wasm/js/package.json\",
                     contents: \"'"$package_json"'\"
+                  },
+                  {
+                    path: \"node-wasm/js/package-lock.json\",
+                    contents: \"'"$package_lock_json"'\"
                   },
                   {
                     path: \"node-wasm/js/README.md\",
@@ -140,6 +148,8 @@ jobs:
         env:
           NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
         run: |
+          set -xeuo pipefail
+
           published_version=$(npm show lumina-node-wasm version)
           local_version="$(cargo pkgid --manifest-path=node-wasm/Cargo.toml | cut -d@ -f 2)"
 
@@ -154,4 +164,6 @@ jobs:
 
           # publish lumina-node
           cd node-wasm/js
+          # replace dependency on node-wasm from path based to version in npm
+          npm pkg set "dependencies[lumina-node-wasm]=$local_version"
           npm publish --access public
