@@ -204,7 +204,7 @@ jobs:
       ${{
         success()
         && contains(
-          fromJson(needs.release-plz.outputs.releases).*.package_name,
+          fromJSON(needs.release-plz.outputs.releases).*.package_name,
           'lumina-node-uniffi'
         )
       }}
