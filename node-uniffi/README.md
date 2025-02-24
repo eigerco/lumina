@@ -1,4 +1,4 @@
-# Lumina node uniffi
+# Lumina node UniFFI
 
-A uniffi layer for the [`Lumina`](https://github.com/eigerco/lumina) node to
-interact with it from swift and kotlin
+A UniFFI layer for the [`Lumina`](https://github.com/eigerco/lumina) node to
+interact with it from Swift and Kotlin
