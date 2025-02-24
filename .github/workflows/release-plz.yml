@@ -53,6 +53,9 @@ jobs:
           node_wasm_version="$(cargo pkgid --manifest-path=node-wasm/Cargo.toml | cut -d@ -f 2)"
           cd node-wasm/js
 
+          # Update the version of lumina-node-wasm dependency
+          npm install "lumina-node-wasm@$node_wasm_version"
+
           # Update lumina-node version
           if ! npm version $node_wasm_version >/dev/null; then
             echo "Version up to date"
