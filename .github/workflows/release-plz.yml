@@ -204,17 +204,18 @@ jobs:
     name: Release-uniffi
     runs-on: macos-latest
 
-    needs:
-    - release-plz
+    # TODO: revert this after a successful run
+    # needs:
+    # - release-plz
 
-    if: >-
-      ${{
-        success()
-        && contains(
-          fromJSON(needs.release-plz.outputs.releases).*.package_name,
-          'lumina-node-uniffi'
-        )
-      }}
+    # if: >-
+    #   ${{
+    #     success()
+    #     && contains(
+    #       fromJSON(needs.release-plz.outputs.releases).*.package_name,
+    #       'lumina-node-uniffi'
+    #     )
+    #   }}
 
     steps:
       - name: Checkout repository
@@ -238,22 +239,25 @@ jobs:
 
       - name: Build node-uniffi for ios
         run: |
+          set -xeuo pipefail
           ./node-uniffi/build-ios.sh
-          tar -cvzf lumnia-node-uniffi-ios.tar.gz -C node-uniffi ios
+          tar -cvzf lumina-node-uniffi-ios.tar.gz -C node-uniffi ios
 
       - name: Build node-uniffi for android
         run: |
+          set -xeuo pipefail
           ./node-uniffi/build-android.sh
-          tar -cvzf lumnia-node-uniffi-android.tar.gz -C node-uniffi app
+          tar -cvzf lumina-node-uniffi-android.tar.gz -C node-uniffi app
 
       - name: Publish artifacts to release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-          RELEASES: ${{ needs.release-plz.outputs.releases }}
+          # RELEASES: ${{ needs.release-plz.outputs.releases }}
         run: |
           set -xeuo pipefail
 
-          tag="$(echo "$RELEASES" | jq '.[] | select(.package_name == "lumina-node-uniffi").tag')"
+          # tag="$(echo "$RELEASES" | jq '.[] | select(.package_name == "lumina-node-uniffi").tag')"
+          tag=lumina-node-uniffi-v0.1.0
 
           brew install coreutils
           sha256sum lumina-node-uniffi-* > lumina-node-uniffi-sha256-checksums.txt
