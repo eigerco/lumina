@@ -233,8 +233,8 @@ where
         call!(self, get_accepted_sampling_ranges())
     }
 
-    async fn remove_last(&self) -> Result<u64> {
-        call!(self, remove_last())
+    async fn remove_height(&self, height: u64) -> Result<()> {
+        call!(self, remove_height(height))
     }
 
     async fn close(self) -> Result<()> {

@@ -420,7 +420,7 @@ impl RedbStore {
         .await
     }
 
-    async fn remove_last(&self) -> Result<u64> {
+    async fn remove_height(&self, height: u64) -> Result<()> {
         self.write_tx(move |tx| {
             let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let mut headers_table = tx.open_table(HEADERS_TABLE)?;
@@ -428,9 +428,14 @@ impl RedbStore {
 
             let mut header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
 
-            let Some(height) = header_ranges.pop_tail() else {
+            if !header_ranges.contains(height) {
                 return Err(StoreError::NotFound);
-            };
+            }
+
+            header_ranges
+                .remove_relaxed(height..=height)
+                .expect("valid range never fails");
+
             set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
 
             let Some(header) = headers_table.remove(height)? else {
@@ -449,7 +454,7 @@ impl RedbStore {
                 )));
             }
 
-            Ok(height)
+            Ok(())
         })
         .await
     }
@@ -545,8 +550,8 @@ impl Store for RedbStore {
         self.get_sampling_ranges().await
     }
 
-    async fn remove_last(&self) -> Result<u64> {
-        self.remove_last().await
+    async fn remove_height(&self, height: u64) -> Result<()> {
+        self.remove_height(height).await
     }
 
     async fn close(mut self) -> Result<()> {
