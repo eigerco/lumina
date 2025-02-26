@@ -31,12 +31,6 @@ pub(crate) enum PrunerError {
     /// An error propagated from the [`Blockstore`] module.
     #[error("Blockstore: {0}")]
     Blockstore(#[from] blockstore::Error),
-
-    /// Pruner removed CIDs for the last header in the store, but the last header changed
-    /// before it could be removed (probably becasue of an insert of an older header).
-    /// Since pruning window is at least 1 minute behind sampling window, this should not happen.
-    #[error("Pruner detected invalid removal and will stop")]
-    WrongHeightRemoved,
 }
 
 pub(crate) struct Pruner {
@@ -166,11 +160,7 @@ where
                     self.blockstore.remove(&cid).await?;
                 }
 
-                let removed_height = self.store.remove_last().await?;
-                if header.height().value() != removed_height {
-                    return Err(PrunerError::WrongHeightRemoved);
-                }
-
+                self.store.remove_height(height).await?;
                 last_removed = Some(height);
             }
 

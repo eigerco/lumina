@@ -165,8 +165,8 @@ pub trait Store: Send + Sync + Debug {
     /// Returns a list of accepted sampling ranges currently held in store.
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges>;
 
-    /// Remove header with lowest height from the store.
-    async fn remove_last(&self) -> Result<u64>;
+    /// Remove header with given height from the store.
+    async fn remove_height(&self, height: u64) -> Result<()>;
 
     /// Close store.
     async fn close(self) -> Result<()>;
@@ -1062,7 +1062,7 @@ mod tests {
         store.insert(&headers[96..128]).await.unwrap();
         assert_store(&store, &headers, new_block_ranges([1..=64, 97..=128])).await;
 
-        assert_eq!(store.remove_last().await.unwrap(), 1);
+        store.remove_height(1).await.unwrap();
         assert_store(&store, &headers, new_block_ranges([2..=64, 97..=128])).await;
     }
 
@@ -1083,7 +1083,7 @@ mod tests {
         store.insert(&headers[65..128]).await.unwrap();
         assert_store(&store, &headers, new_block_ranges([1..=1, 66..=128])).await;
 
-        assert_eq!(store.remove_last().await.unwrap(), 1);
+        store.remove_height(1).await.unwrap();
         assert_store(&store, &headers, new_block_ranges([66..=128])).await;
     }
 
@@ -1104,13 +1104,8 @@ mod tests {
         assert_store(&store, &headers, new_block_ranges([1..=66])).await;
 
         for i in 1..=66 {
-            assert_eq!(store.remove_last().await.unwrap(), i);
+            store.remove_height(i).await.unwrap();
         }
-
-        assert!(matches!(
-            store.remove_last().await.unwrap_err(),
-            StoreError::NotFound
-        ));
 
         let stored_ranges = store.get_stored_header_ranges().await.unwrap();
         assert!(stored_ranges.is_empty());
@@ -1118,6 +1113,109 @@ mod tests {
         for h in 1..=66 {
             assert!(!store.has_at(h).await);
         }
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn head_removal_partial_range<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(128);
+
+        store.insert(&headers[0..64]).await.unwrap();
+        store.insert(&headers[96..128]).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=64, 97..=128])).await;
+
+        store.remove_height(128).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=64, 97..=127])).await;
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn head_removal_full_range<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(128);
+
+        store.insert(&headers[0..64]).await.unwrap();
+        store.insert(&headers[127..128]).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=64, 128..=128])).await;
+
+        store.remove_height(128).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=64])).await;
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn middle_removal<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(128);
+
+        store.insert(&headers[0..64]).await.unwrap();
+        store.insert(&headers[96..128]).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=64, 97..=128])).await;
+
+        store.remove_height(62).await.unwrap();
+        assert_store(
+            &store,
+            &headers,
+            new_block_ranges([1..=61, 63..=64, 97..=128]),
+        )
+        .await;
+
+        store.remove_height(64).await.unwrap();
+        assert_store(
+            &store,
+            &headers,
+            new_block_ranges([1..=61, 63..=63, 97..=128]),
+        )
+        .await;
+
+        store.remove_height(63).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=61, 97..=128])).await;
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn neighbor_removal<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(128);
+
+        store.insert(&headers[0..64]).await.unwrap();
+        store.insert(&headers[96..128]).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=64, 97..=128])).await;
+
+        store.remove_height(64).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=63, 97..=128])).await;
+
+        store.remove_height(97).await.unwrap();
+        assert_store(&store, &headers, new_block_ranges([1..=63, 98..=128])).await;
     }
 
     /// Fills an empty store
