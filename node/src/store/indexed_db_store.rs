@@ -296,11 +296,11 @@ impl IndexedDbStore {
         get_ranges(&store, ACCEPTED_SAMPLING_RANGES_KEY).await
     }
 
-    async fn remove_last(&self) -> Result<u64> {
+    async fn remove_height(&self, height: u64) -> Result<()> {
         self.write_tx(
             &[HEADER_STORE_NAME, RANGES_STORE_NAME],
-            remove_last_tx_op,
-            (),
+            remove_height_tx_op,
+            height,
         )
         .await
     }
@@ -422,8 +422,8 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn remove_last(&self) -> Result<u64> {
-        let fut = SendWrapper::new(self.remove_last());
+    async fn remove_height(&self, height: u64) -> Result<()> {
+        let fut = SendWrapper::new(self.remove_height(height));
         fut.await
     }
 
@@ -704,16 +704,20 @@ async fn update_sampling_metadata_tx_op(
     Ok(())
 }
 
-async fn remove_last_tx_op(tx: &Transaction, _: ()) -> Result<u64> {
+async fn remove_height_tx_op(tx: &Transaction, height: u64) -> Result<()> {
     let header_store = tx.store(HEADER_STORE_NAME)?;
     let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
     let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
 
-    let Some(height) = header_ranges.pop_tail() else {
+    if !header_ranges.contains(height) {
         return Err(StoreError::NotFound);
-    };
+    }
+
+    header_ranges
+        .remove_relaxed(height..=height)
+        .expect("valid range never fails");
     set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
 
     let jsvalue_height = to_value(&height).expect("to create jsvalue");
@@ -728,7 +732,7 @@ async fn remove_last_tx_op(tx: &Transaction, _: ()) -> Result<u64> {
 
     header_store.delete(id).await?;
 
-    Ok(height)
+    Ok(())
 }
 
 async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
