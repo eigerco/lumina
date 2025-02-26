@@ -165,7 +165,7 @@ pub trait Store: Send + Sync + Debug {
     /// Returns a list of accepted sampling ranges currently held in store.
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges>;
 
-    /// Remove header with lowest height from the store.
+    /// Remove header with given height from the store.
     async fn remove_height(&self, height: u64) -> Result<()>;
 
     /// Close store.
