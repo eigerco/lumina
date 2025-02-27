@@ -45,7 +45,7 @@ pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
     let client = Client::new(&url, token.as_deref()).await?;
 
     // minimum 2 blocks
-    client.header_wait_for_height(2).await?;
+    //client.header_wait_for_height(2).await?;
 
     Ok(client)
 }
