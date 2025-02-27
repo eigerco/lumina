@@ -1,8 +1,7 @@
 use js_sys::{Array, Function, Reflect};
-use serde::Serialize;
-use serde_wasm_bindgen::{from_value, to_value, Serializer};
-use tokio::sync::{mpsc, Mutex};
-use tracing::{error, info, trace};
+use serde_wasm_bindgen::{from_value, to_value};
+use tokio::sync::mpsc;
+use tracing::{error, info};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast, JsValue};
@@ -10,6 +9,7 @@ use web_sys::{MessageEvent, MessagePort};
 
 use crate::commands::{NodeCommand, WorkerResponse};
 use crate::error::{Context, Error, Result};
+use crate::oneshot_channel::{self, OneshotSender};
 use crate::utils::MessageEventExt;
 
 // Instead of supporting communication with just `MessagePort`, allow using any object which
@@ -35,12 +35,24 @@ impl From<MessagePort> for MessagePortLike {
     }
 }
 
+impl MessagePortLike {
+    fn new(object: JsValue) -> Result<MessagePortLike> {
+        let _post_message: Function = Reflect::get(&object, &"postMessage".into())?
+            .dyn_into()
+            .context("could not get object's postMessage")?;
+        Ok(MessagePortLike::from(object))
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ClientId(usize);
 
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum ClientMessage {
-    Command { id: ClientId, command: NodeCommand },
+    Command {
+        response_sender: OneshotSender<WorkerResponse>,
+        command: NodeCommand,
+    },
     AddConnection(JsValue),
 }
 
@@ -51,45 +63,36 @@ struct ClientConnection {
 
 impl ClientConnection {
     fn new(
-        id: ClientId,
+        cid: ClientId,
         port_like_object: JsValue,
         server_tx: mpsc::UnboundedSender<ClientMessage>,
     ) -> Result<Self> {
-        let onmessage = Closure::new(move |ev: MessageEvent| {
-            if let Some(port) = ev.get_port() {
-                if let Err(e) = server_tx.send(ClientMessage::AddConnection(port)) {
-                    error!("port forwarding channel closed, shouldn't happen: {e}");
+        let onmessage = Closure::new(error_logging_onmessage(
+            cid,
+            move |ev: MessageEvent| -> Result<()> {
+                let (response_sender, maybe_command_channel) = ev.get_command_ports()?;
+                if let Some(connection_port) = maybe_command_channel {
+                    server_tx
+                        .send(ClientMessage::AddConnection(connection_port))
+                        .context("adding client connection failed")?;
                 }
-            }
 
-            let command = match from_value(ev.data()) {
-                Ok(msg) => msg,
-                Err(e) => {
-                    error!("could not deserialise message from {id:?}: {e}");
-                    return;
-                }
-            };
+                let command = from_value(ev.data()).context("could not deserialize command")?;
 
-            if let Err(e) = server_tx.send(ClientMessage::Command { id, command }) {
-                error!("message forwarding channel closed, shouldn't happen: {e}");
-            }
-        });
+                server_tx
+                    .send(ClientMessage::Command {
+                        response_sender,
+                        command,
+                    })
+                    .context("forwarding command to worker failed, should not happen")?;
+                Ok(())
+            },
+        ));
 
         let port = prepare_message_port(port_like_object, &onmessage)
             .context("failed to setup port for ClientConnection")?;
 
         Ok(ClientConnection { port, onmessage })
-    }
-
-    fn send(&self, message: &WorkerResponse) -> Result<()> {
-        let serializer = Serializer::json_compatible();
-        let message_value = message
-            .serialize(&serializer)
-            .context("could not serialise message")?;
-        self.port
-            .post_message(&message_value)
-            .context("could not send command to worker")?;
-        Ok(())
     }
 }
 
@@ -116,7 +119,7 @@ impl WorkerServer {
         }
     }
 
-    pub async fn recv(&mut self) -> Result<(ClientId, NodeCommand)> {
+    pub async fn recv(&mut self) -> Result<(NodeCommand, OneshotSender<WorkerResponse>)> {
         loop {
             match self
                 .client_rx
@@ -124,8 +127,11 @@ impl WorkerServer {
                 .await
                 .expect("all of client connections should never close")
             {
-                ClientMessage::Command { id, command } => {
-                    return Ok((id, command));
+                ClientMessage::Command {
+                    response_sender,
+                    command,
+                } => {
+                    return Ok((command, response_sender));
                 }
                 ClientMessage::AddConnection(port) => {
                     let client_id = ClientId(self.ports.len());
@@ -143,98 +149,48 @@ impl WorkerServer {
     pub fn get_control_channel(&self) -> mpsc::UnboundedSender<ClientMessage> {
         self.client_tx.clone()
     }
-
-    pub fn respond_to(&self, client: ClientId, response: WorkerResponse) {
-        trace!("Responding to {client:?}");
-        if let Err(e) = self.ports[client.0].send(&response) {
-            error!("Failed to send response to client: {e}");
-        }
-    }
 }
 
 pub struct WorkerClient {
     port: MessagePortLike,
-    response_channel:
-        Mutex<mpsc::UnboundedReceiver<Result<WorkerResponse, serde_wasm_bindgen::Error>>>,
-    onmessage: Closure<dyn Fn(MessageEvent)>,
 }
 
 impl WorkerClient {
     pub fn new(object: JsValue) -> Result<Self> {
-        let (response_tx, response_rx) = mpsc::unbounded_channel();
-
-        let onmessage = Closure::new(move |ev: MessageEvent| {
-            if let Err(e) = response_tx.send(from_value(ev.data())) {
-                error!("message forwarding channel closed, should not happen: {e}");
-            }
-        });
-
-        let port = prepare_message_port(object, &onmessage)
-            .context("failed to setup port for WorkerClient")?;
-
         Ok(WorkerClient {
-            port,
-            response_channel: Mutex::new(response_rx),
-            onmessage,
+            port: MessagePortLike::new(object)?,
         })
     }
 
     pub(crate) async fn add_connection_to_worker(&self, port: &JsValue) -> Result<()> {
-        let mut response_channel = self.response_channel.lock().await;
+        let (response_sender, response_receiver) = oneshot_channel::new()?;
 
         let command_value =
             to_value(&NodeCommand::InternalPing).context("could not serialise message")?;
 
         self.port
-            .post_message_with_transferable(&command_value, &Array::of1(port))
+            .post_message_with_transferable(
+                &command_value,
+                &Array::of2(&response_sender.into_inner(), port),
+            )
             .context("could not transfer port")?;
 
-        let worker_response = response_channel
-            .recv()
-            .await
-            .expect("response channel should never drop")
-            .context("error adding connection")?;
-
-        if !worker_response.is_internal_pong() {
-            Err(Error::new(&format!(
-                "invalid response, expected InternalPong got {worker_response:?}"
-            )))
-        } else {
-            Ok(())
-        }
+        response_receiver.recv().await
     }
 
     pub(crate) async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse> {
-        let mut response_channel = self.response_channel.lock().await;
+        let (response_sender, response_receiver) = oneshot_channel::new()?;
+
         let command_value = to_value(&command).context("could not serialise message")?;
 
         self.port
-            .post_message(&command_value)
+            .post_message_with_transferable(
+                &command_value,
+                &Array::of1(&response_sender.into_inner()),
+            )
             .context("could not post message")?;
 
-        loop {
-            let worker_response = response_channel
-                .recv()
-                .await
-                .expect("response channel should never drop")
-                .context("error executing command")?;
-
-            // Skip InternalPong if requested command was not InternalPing.
-            // We use this because ping is meant to be used with timeout but the server might
-            // reply with pong after the timeout is reached.
-            if worker_response.is_internal_pong() && !matches!(&command, NodeCommand::InternalPing)
-            {
-                continue;
-            }
-
-            return Ok(worker_response);
-        }
-    }
-}
-
-impl Drop for WorkerClient {
-    fn drop(&mut self) {
-        unregister_on_message(&self.port, &self.onmessage);
+        response_receiver.recv().await
     }
 }
 
@@ -296,6 +252,17 @@ fn unregister_on_message(port: &MessagePortLike, callback: &Closure<dyn Fn(Messa
     }
 }
 
+fn error_logging_onmessage<F>(cid: ClientId, f: F) -> impl Fn(MessageEvent)
+where
+    F: Fn(MessageEvent) -> Result<()>,
+{
+    move |ev: MessageEvent| {
+        if let Err(e) = f(ev) {
+            error!("error in onmessage for client {cid:?}: {e}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,8 +287,8 @@ mod tests {
             assert!(matches!(response, WorkerResponse::IsRunning(true)));
         });
 
-        let (client, command) = server.recv().await.unwrap();
+        let (command, response_sender) = server.recv().await.unwrap();
         assert!(matches!(command, NodeCommand::IsRunning));
-        server.respond_to(client, WorkerResponse::IsRunning(true));
+        response_sender.send(WorkerResponse::IsRunning(true));
     }
 }

@@ -87,14 +87,13 @@ impl NodeWorker {
 
     pub async fn run(&mut self) -> Result<(), Error> {
         loop {
-            let (client_id, command) = self.request_server.recv().await?;
+            let (command, response_sender) = self.request_server.recv().await?;
 
             // StopNode needs special handling because `NodeWorkerInstance` needs to be consumed.
             if matches!(&command, NodeCommand::StopNode) {
                 if let Some(node) = self.node.take() {
                     node.stop().await;
-                    self.request_server
-                        .respond_to(client_id, WorkerResponse::NodeStopped(()));
+                    response_sender.send(WorkerResponse::NodeStopped(()));
                     continue;
                 }
             }
@@ -123,7 +122,7 @@ impl NodeWorker {
                 },
             };
 
-            self.request_server.respond_to(client_id, response);
+            response_sender.send(response);
         }
     }
 }

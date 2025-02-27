@@ -140,6 +140,13 @@ from_display! {
     lumina_node::node::NodeError,
     lumina_node::store::StoreError,
     crate::worker::WorkerError,
+    tokio::sync::oneshot::error::RecvError,
+}
+
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for Error {
+    fn from(value: tokio::sync::mpsc::error::SendError<T>) -> Error {
+        Error::from_display(value)
+    }
 }
 
 /// Utility to add more context to the [`Error`].

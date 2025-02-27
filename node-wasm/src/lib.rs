@@ -4,6 +4,7 @@
 pub mod client;
 mod commands;
 pub mod error;
+mod oneshot_channel;
 mod ports;
 pub mod utils;
 mod worker;

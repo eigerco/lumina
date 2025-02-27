@@ -24,7 +24,9 @@ use web_sys::{
 
 use lumina_node::network;
 
+use crate::commands::WorkerResponse;
 use crate::error::{Context, Error, Result};
+use crate::oneshot_channel::OneshotSender;
 
 /// Supported Celestia networks.
 #[wasm_bindgen]
@@ -111,19 +113,23 @@ impl WorkerSelf for ServiceWorker {
 }
 
 pub(crate) trait MessageEventExt {
-    fn get_port(&self) -> Option<JsValue>;
+    fn get_command_ports(&self) -> Result<(OneshotSender<WorkerResponse>, Option<JsValue>)>;
 }
 
 impl MessageEventExt for MessageEvent {
-    fn get_port(&self) -> Option<JsValue> {
-        let ports = self.ports();
-        if ports.is_array() {
-            let port = ports.get(0);
-            if !port.is_undefined() {
-                return Some(port);
-            }
-        }
-        None
+    /// Extract port objects from the Event. Convention is:
+    /// First port is a command response port to be used with OneshotSender.
+    /// Second port, if present, establishes a new worker client channel connection.
+    fn get_command_ports(&self) -> Result<(OneshotSender<WorkerResponse>, Option<JsValue>)> {
+        let mut ports = self.ports().into_iter();
+        let response_sender = OneshotSender::new(
+            ports
+                .next()
+                .ok_or(Error::new("Received command without a response sender"))?
+                .dyn_into()?,
+        );
+        let maybe_command_channel = ports.next();
+        Ok((response_sender, maybe_command_channel))
     }
 }
 
