@@ -3,6 +3,7 @@
 
 pub mod blob;
 pub mod client;
+mod das;
 mod error;
 mod header;
 #[cfg(feature = "p2p")]
@@ -24,6 +25,7 @@ pub use crate::blob::BlobClient;
     )))
 )]
 pub use crate::client::Client;
+pub use crate::das::DasClient;
 pub use crate::error::{Error, Result};
 pub use crate::header::HeaderClient;
 #[cfg(feature = "p2p")]
@@ -36,6 +38,7 @@ pub use crate::tx_config::TxConfig;
 /// Re-exports of all the RPC traits.
 pub mod prelude {
     pub use crate::BlobClient;
+    pub use crate::DasClient;
     pub use crate::HeaderClient;
     #[cfg(feature = "p2p")]
     pub use crate::P2PClient;
