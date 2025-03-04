@@ -1,3 +1,5 @@
+use std::fmt;
+
 use js_sys::{Array, Function, Reflect};
 use serde_wasm_bindgen::{from_value, to_value};
 use tokio::sync::mpsc;
@@ -46,6 +48,12 @@ impl MessagePortLike {
 
 #[derive(Debug, Clone, Copy)]
 pub struct ClientId(usize);
+
+impl fmt::Display for ClientId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "client({})", self.0)
+    }
+}
 
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum ClientMessage {
@@ -289,6 +297,8 @@ mod tests {
 
         let (command, response_sender) = server.recv().await.unwrap();
         assert!(matches!(command, NodeCommand::IsRunning));
-        response_sender.send(WorkerResponse::IsRunning(true));
+        response_sender
+            .send(WorkerResponse::IsRunning(true))
+            .unwrap();
     }
 }

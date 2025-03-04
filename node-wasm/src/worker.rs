@@ -93,7 +93,9 @@ impl NodeWorker {
             if matches!(&command, NodeCommand::StopNode) {
                 if let Some(node) = self.node.take() {
                     node.stop().await;
-                    response_sender.send(WorkerResponse::NodeStopped(()));
+                    if let Err(e) = response_sender.send(WorkerResponse::NodeStopped(())) {
+                        error!("Failed to send response: {e}");
+                    }
                     continue;
                 }
             }
@@ -122,7 +124,9 @@ impl NodeWorker {
                 },
             };
 
-            response_sender.send(response);
+            if let Err(e) = response_sender.send(response) {
+                error!("Failed to send response: {e}");
+            }
         }
     }
 }
