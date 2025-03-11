@@ -58,9 +58,14 @@ impl GrpcMethod {
         let method = quote! {
             #doc_hash #doc_group
             pub #signature {
+                // 256 mb, future proof as celesita blocks grow
+                const MAX_MSG_SIZE: usize = 256 * 1024 * 1024;
+
                 let mut client = #grpc_client_struct :: new(
                     self.transport.clone(),
-                );
+                )
+                .max_decoding_message_size(MAX_MSG_SIZE)
+                .max_encoding_message_size(MAX_MSG_SIZE / 2);
 
                 let param = crate::grpc::IntoGrpcParam::into_parameter(( #( #params ),* ));
                 let request = ::tonic::Request::new(param);
