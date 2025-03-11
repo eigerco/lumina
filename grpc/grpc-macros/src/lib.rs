@@ -65,7 +65,7 @@ impl GrpcMethod {
                     self.transport.clone(),
                 )
                 .max_decoding_message_size(MAX_MSG_SIZE)
-                .max_encoding_message_size(MAX_MSG_SIZE / 2);
+                .max_encoding_message_size(MAX_MSG_SIZE);
 
                 let param = crate::grpc::IntoGrpcParam::into_parameter(( #( #params ),* ));
                 let request = ::tonic::Request::new(param);
