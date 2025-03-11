@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile.validator
     environment:
       # provide amount of da nodes to provision (default: 1)
-      - NODE_COUNT=2
+      - NODE_COUNT=3
     ports:
       - 19090:9090
     volumes:
@@ -34,6 +34,7 @@ services:
       # provide an id for the da node (default: 0)
       # each node should have a next natural number starting from 0
       - NODE_ID=0
+      # provide a type of the node to run (default: bridge)
       # first node must be a bridge node
       - NODE_TYPE=bridge
       # setting SKIP_AUTH to true disables the use of JWT for authentication
@@ -53,7 +54,6 @@ services:
       dockerfile: Dockerfile.node
     environment:
       - NODE_ID=1
-      - NODE_TYPE=light
       - CELESTIA_ENABLE_QUIC=1
     ports:
       - 36658:26658
@@ -61,16 +61,33 @@ services:
       - credentials:/credentials
       - genesis:/genesis
 
+  node-2:
+    image: node
+    platform: "linux/amd64"
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+    environment:
+      - NODE_ID=2
+      - NODE_TYPE=light
+      - SKIP_AUTH=true
+      - CELESTIA_ENABLE_QUIC=1
+    ports:
+      - 46658:26658
+    volumes:
+      - credentials:/credentials
+      - genesis:/genesis
+
   # Uncomment for another nodes
   # remember to adjust services.validator.environment
-  # node-2:
+  # node-3:
   #   image: node
   #   platform: "linux/amd64"
   #   build:
   #     context: .
   #     dockerfile: Dockerfile.node
   #   environment:
-  #     - NODE_ID=2
+  #     - NODE_ID=3
   #     - CELESTIA_ENABLE_QUIC=1
   #   ports:
   #     - 46658:26658
