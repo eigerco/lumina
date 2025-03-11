@@ -106,7 +106,6 @@ wasm-bindgen-test.workspace = true
 bytes = "1.6.0"
 celestia-rpc = { workspace = true, features = ["p2p"] }
 celestia-types = { workspace = true, features = ["test-utils"] }
-dotenvy = "0.15.7"
 # required to have path based dependency here to allow `cargo publish` to work
 # https://github.com/rust-lang/cargo/pull/7333
 lumina-node = { path = ".", features = ["test-utils"] }
