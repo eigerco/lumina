@@ -8,8 +8,9 @@ use gloo_timers::future::TimeoutFuture;
 use js_sys::{Math, Promise};
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde_wasm_bindgen::Serializer;
 use tracing::{info, warn};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::time::UtcTime;
@@ -113,7 +114,6 @@ impl WorkerSelf for ServiceWorker {
 pub(crate) trait MessageEventExt {
     fn get_port(&self) -> Option<JsValue>;
 }
-
 impl MessageEventExt for MessageEvent {
     fn get_port(&self) -> Option<JsValue> {
         let ports = self.ports();
@@ -336,4 +336,10 @@ pub(crate) async fn timeout<F: Future>(millis: u32, fut: F) -> Result<F::Output,
         _ = timeout => Err(()),
         res = fut => Ok(res),
     }
+}
+
+pub fn to_json_value<T: Serialize + ?Sized>(
+    value: &T,
+) -> Result<JsValue, serde_wasm_bindgen::Error> {
+    value.serialize(&Serializer::json_compatible())
 }
