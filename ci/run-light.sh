@@ -75,7 +75,7 @@ main() {
   # Write the jwt token
   write_jwt_token
 	# give the bridge some time to start
-	sleep 15
+	sleep 20
 
 	peer_id=$(celestia p2p info --token 'foo' --url 'ws://bridge-0:26658' | jq -r '.result.id')
 	peer_addr="/dns/bridge-0/tcp/2121/p2p/$peer_id"
