@@ -85,7 +85,7 @@ main() {
   # Update the JWT token
   write_jwt_token
   # give validator some time to set up
-  sleep 4
+  sleep 8
   # each node without SKIP_AUTH connects to the one with, so that bridges can discover eachother
   if [ ! "$SKIP_AUTH" == "true" ] ; then
     connect_to_common_bridge &

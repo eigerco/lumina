@@ -8,6 +8,8 @@ services:
     environment:
       # provide amount of bridge nodes to provision (default: 2)
       - BRIDGE_COUNT=2
+      # provide amount of light nodes to provision (default: 1)
+      - LIGHT_COUNT=1
     ports:
       - 19090:9090
     volumes:
@@ -56,6 +58,23 @@ services:
       - CELESTIA_ENABLE_QUIC=1
     ports:
       - 36658:26658
+    volumes:
+      - credentials:/credentials
+      - genesis:/genesis
+
+  light-0:
+    image: light
+    platform: "linux/amd64"
+    build:
+      context: .
+      dockerfile: Dockerfile.light
+    environment:
+      # provide an id for the light node (default: 0)
+      # each node should have a next natural number starting from 0
+      - NODE_ID=0
+      - CELESTIA_ENABLE_QUIC=1
+    ports:
+      - 46658:26658
     volumes:
       - credentials:/credentials
       - genesis:/genesis

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
 /// Represents a worker responsible for DAS (Data Availability Sampling) jobs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DasWorker {
     /// Type of the job the worker is performing.
     pub job_type: String,
@@ -13,8 +13,8 @@ pub struct DasWorker {
     pub to: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
 /// Contains statistics related to the DAS process.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SamplingStats {
     /// The height of the most recently sampled block in the chain.
     pub head_of_sampled_chain: u64,
