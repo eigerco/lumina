@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Amount of da nodes to setup, taken from the first argument
+# Amount of DA nodes to setup, taken from the first argument
 # or 1 if not provided
 NODE_COUNT="${NODE_COUNT:-1}"
 # a private local network
@@ -50,12 +50,12 @@ provision_da_nodes() {
   local genesis_hash
   local last_node_idx=$((NODE_COUNT - 1))
 
-  # Save the genesis hash for the da node
+  # Save the genesis hash for the DA node
   genesis_hash=$(wait_for_block 1)
   echo "Saving a genesis hash to $GENESIS_HASH_FILE"
   echo "$genesis_hash" > "$GENESIS_HASH_FILE"
 
-  # Get or create the keys for da nodes
+  # Get or create the keys for DA nodes
   for node_idx in $(seq 0 "$last_node_idx"); do
     local node_name="node-$node_idx"
     local key_file="$CREDENTIALS_DIR/$node_name.key"
@@ -81,7 +81,7 @@ provision_da_nodes() {
     fi
   done
 
-  # Transfer the coins to da nodes addresses
+  # Transfer the coins to DA nodes addresses
   # Coins transfer need to be after validator registers EVM address, which happens in block 2.
   # see `setup_private_validator`
   local start_block=3

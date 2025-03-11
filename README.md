@@ -103,14 +103,14 @@ For security reasons, browsers only allow WebTransport to be used in [Secure Con
 Follow [this guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)
 to authorize yourself in github's container registry.
 
-Starting a Celestia network with single validator and some da nodes
+Starting a Celestia network with single validator and some DA nodes
 ```bash
 docker compose -f ci/docker-compose.yml up --build --force-recreate -d
 # and to stop it
 docker compose -f ci/docker-compose.yml down
 ```
 > **Note:**
-> You can run more da nodes by uncommenting/copying the node service definition in `ci/docker-compose.yml`.
+> You can run more DA nodes by uncommenting/copying the node service definition in `ci/docker-compose.yml`.
 
 To get a JWT token for a topped up account (coins will be transferred in block 2):
 ```bash
