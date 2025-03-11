@@ -114,7 +114,7 @@ docker compose -f ci/docker-compose.yml down
 
 To get a JWT token for a topped up account (coins will be transferred in block 2):
 ```bash
-export CELESTIA_NODE_AUTH_TOKEN=$(docker compose -f ci/docker-compose.yml exec node-1 celestia light auth admin --p2p.network private)
+export CELESTIA_NODE_AUTH_TOKEN=$(docker compose -f ci/docker-compose.yml exec node-1 celestia bridge auth admin --p2p.network private)
 ```
 
 Accessing json RPC api with Go `celestia` cli:
