@@ -9,11 +9,11 @@ window.AppVersion = AppVersion;
 window.Blob = Blob;
 window.Namespace = Namespace;
 
-// cat ci/credentials/bridge-0.address
-window.bridge0Address = "celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9";
+// cat ci/credentials/node-0.address
+window.node0Addr = "celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9";
 
 async function createTxClient() {
-  // cat ci/credentials/bridge-0.plaintext-key
+  // cat ci/credentials/node-0.plaintext-key
   const privKey = "393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839";
   const pubKey = secp256k1.getPublicKey(privKey);
 
@@ -25,7 +25,7 @@ async function createTxClient() {
 
   const txClient = await new TxClient(
     "http://127.0.0.1:18080",
-    window.bridge0Address,
+    window.node0Addr,
     pubKey,
     signer
   );
@@ -37,7 +37,7 @@ async function submitBankMsgSend(address, amount) {
   const sendMsg = {
     typeUrl: "/cosmos.bank.v1beta1.MsgSend",
     value: {
-      fromAddress: window.bridge0Address,
+      fromAddress: window.node0Addr,
       toAddress: address,
       amount: [{ denom: "utia", amount: amount.toString() }],
     },
@@ -163,7 +163,7 @@ async function main(document, window) {
   });
 
   // test submitting transfer
-  const txInfo = await submitBankMsgSend(window.bridge0Address, 10000);
+  const txInfo = await submitBankMsgSend(window.node0Addr, 10000);
   console.log("Submitting bank MsgSend successful", txInfo);
 }
 

@@ -55,6 +55,8 @@ in
       rustToolchain
       # rust - wasm
       binaryen # wasm-opt
+      chromedriver
+      geckodriver
       wasm-bindgen-cli_0_2_100
       wasm-pack
       # rust - other
@@ -69,5 +71,7 @@ in
       # go
       gopls
     ];
+
+    WASM_BINDGEN_TEST_TIMEOUT = 120;
   };
 }
