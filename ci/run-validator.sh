@@ -105,7 +105,36 @@ provision_da_nodes() {
       --fees 21000utia
   done
 
-  echo "Bridge node provisioning finished."
+  echo "Provisioning finished."
+}
+
+# Set up the validator for a private alone network.
+# Based on
+# https://github.com/celestiaorg/celestia-app/blob/main/scripts/single-node.sh
+setup_private_validator() {
+  local validator_addr
+
+  # Initialize the validator
+  celestia-appd init "$P2P_NETWORK" --chain-id "$P2P_NETWORK"
+  # Derive a new private key for the validator
+  celestia-appd keys add "$NODE_NAME" --keyring-backend="test"
+  validator_addr="$(celestia-appd keys show "$NODE_NAME" -a --keyring-backend="test")"
+  # Create a validator's genesis account for the genesis.json with an initial bag of coins
+  celestia-appd add-genesis-account "$validator_addr" "$VALIDATOR_COINS"
+  # Generate a genesis transaction that creates a validator with a self-delegation
+  celestia-appd gentx "$NODE_NAME" 5000000000utia \
+    --fees 500utia \
+    --keyring-backend="test" \
+    --chain-id "$P2P_NETWORK"
+  # Collect the genesis transactions and form a genesis.json
+  celestia-appd collect-gentxs
+
+  # Set proper defaults and change ports
+  # If you encounter: `sed: -I or -i may not be used with stdin` on MacOS you can mitigate by installing gnu-sed
+  # https://gist.github.com/andre3k1/e3a1a7133fded5de5a9ee99c87c6fa0d?permalink_comment_id=3082272#gistcomment-3082272
+  sed -i'.bak' 's|"tcp://127.0.0.1:26657"|"tcp://0.0.0.0:26657"|g' "$CONFIG_DIR/config/config.toml"
+  # enable transaction indexing
+  sed -i'.bak' 's|indexer = .*|indexer = "kv"|g' "$CONFIG_DIR/config/config.toml"
 }
 
 main() {
