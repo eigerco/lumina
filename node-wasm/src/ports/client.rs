@@ -108,7 +108,7 @@ where
                     return Ok(())
                 }
                 msg = self.incoming_responses.recv() => {
-                    let Some(MultiplexMessage {id, payload, }) = msg else {
+                    let Some(MultiplexMessage { id, payload }) = msg else {
                         return Err(Error::new("Incoming message channel closed, should not happen"));
                     };
                     self.handle_incoming_response(id, payload);
@@ -132,9 +132,7 @@ where
         // empty response means the responder on the server side was dropped, without
         // sending a response, so let's do the same here
         if let Some(response) = payload {
-            if response_sender.send(response).is_err() {
-                warn!("receiver for {id:?} dropped");
-            }
+            let _ = response_sender.send(response);
         }
     }
 

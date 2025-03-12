@@ -156,7 +156,7 @@ where
                     return Ok(())
                 }
                 msg = self.incoming_requests.recv() => {
-                    let Some(MultiplexMessage {id, payload, }) = msg else {
+                    let Some(MultiplexMessage { id, payload }) = msg else {
                         return Err(Error::new("Incoming message channel closed, should not happen"));
                     };
 
