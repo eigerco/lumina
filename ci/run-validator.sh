@@ -5,8 +5,6 @@ set -euo pipefail
 # Amount of bridge nodes to setup, taken from the first argument
 # or 1 if not provided
 BRIDGE_COUNT="${BRIDGE_COUNT:-1}"
-# Amount of light nodes to setup, taken from the second argument
-LIGHT_COUNT="${LIGHT_COUNT:-1}"
 # a private local network
 P2P_NETWORK="private"
 # a validator node configuration directory
@@ -15,7 +13,6 @@ CONFIG_DIR="$CELESTIA_HOME/.celestia-app"
 NODE_NAME=validator-0
 # amounts of the coins for the keys
 BRIDGE_COINS="200000000000000utia"
-LIGHT_COINS="200000000000000utia"
 VALIDATOR_COINS="1000000000000000utia"
 # a directory and the files shared with the bridge nodes
 CREDENTIALS_DIR="/credentials"
@@ -111,106 +108,11 @@ provision_bridge_nodes() {
   echo "Bridge node provisioning finished."
 }
 
-# Saves the hash of the genesis node and the keys funded with the coins
-# to the directory shared with the light node
-provision_light_nodes() {
-  local genesis_hash
-  local last_node_idx=$((LIGHT_COUNT - 1))
-
-  # Save the genesis hash for the bridge
-  genesis_hash=$(wait_for_block 1)
-  echo "Saving a genesis hash to $GENESIS_HASH_FILE"
-  echo "$genesis_hash" > "$GENESIS_HASH_FILE"
-
-  # Get or create the keys for light nodes
-  for node_idx in $(seq 0 "$last_node_idx"); do
-    local light_name="light-$node_idx"
-    local key_file="$CREDENTIALS_DIR/$light_name.key"
-    local plaintext_key_file="$CREDENTIALS_DIR/$light_name.plaintext-key"
-    local addr_file="$CREDENTIALS_DIR/$light_name.addr"
-
-    if [ ! -e "$key_file" ]; then
-      # if key don't exist yet, then create and export it
-      echo "Creating a new keys for the $light_name"
-      celestia-appd keys add "$light_name" --keyring-backend "test"
-      # export it
-      echo "password" | celestia-appd keys export "$light_name" 2> "$key_file.lock"
-      # export also plaintext key for convenience in tests
-      echo y | celestia-appd keys export "$light_name" --unsafe --unarmored-hex 2> "${plaintext_key_file}"
-      # the `.lock` file and `mv` ensures that readers read file only after finished writing
-      mv "$key_file.lock" "$key_file"
-      # export associated address
-      node_address "$light_name" > "$addr_file"
-    else
-      # otherwise, just import it
-      echo "password" | celestia-appd keys import "$light_name" "$key_file" \
-        --keyring-backend="test"
-    fi
-  done
-
-  # Transfer the coins to light nodes addresses
-  # Coins transfer need to be after validator registers EVM address, which happens in block 2.
-  # see `setup_private_validator`
-  local start_block=5
-
-  for node_idx in $(seq 0 "$last_node_idx"); do
-    # TODO: create an issue in celestia-app and link it here
-    # we need to transfer the coins for each node in separate
-    # block, or the signing of all but the first one will fail
-    wait_for_block $((start_block + node_idx))
-
-    local light_name="light-$node_idx"
-    local light_address
-
-    light_address=$(node_address "$light_name")
-
-    echo "Transfering $LIGHT_COINS coins to the $light_name"
-    echo "y" | celestia-appd tx bank send \
-      "$NODE_NAME" \
-      "$light_address" \
-      "$LIGHT_COINS" \
-      --fees 21000utia
-  done
-
-  echo "Light node provisioning finished."
-}
-
-# Set up the validator for a private alone network.
-# Based on
-# https://github.com/celestiaorg/celestia-app/blob/main/scripts/single-node.sh
-setup_private_validator() {
-  local validator_addr
-
-  # Initialize the validator
-  celestia-appd init "$P2P_NETWORK" --chain-id "$P2P_NETWORK"
-  # Derive a new private key for the validator
-  celestia-appd keys add "$NODE_NAME" --keyring-backend="test"
-  validator_addr="$(celestia-appd keys show "$NODE_NAME" -a --keyring-backend="test")"
-  # Create a validator's genesis account for the genesis.json with an initial bag of coins
-  celestia-appd add-genesis-account "$validator_addr" "$VALIDATOR_COINS"
-  # Generate a genesis transaction that creates a validator with a self-delegation
-  celestia-appd gentx "$NODE_NAME" 5000000000utia \
-    --fees 500utia \
-    --keyring-backend="test" \
-    --chain-id "$P2P_NETWORK"
-  # Collect the genesis transactions and form a genesis.json
-  celestia-appd collect-gentxs
-
-  # Set proper defaults and change ports
-  # If you encounter: `sed: -I or -i may not be used with stdin` on MacOS you can mitigate by installing gnu-sed
-  # https://gist.github.com/andre3k1/e3a1a7133fded5de5a9ee99c87c6fa0d?permalink_comment_id=3082272#gistcomment-3082272
-  sed -i'.bak' 's|"tcp://127.0.0.1:26657"|"tcp://0.0.0.0:26657"|g' "$CONFIG_DIR/config/config.toml"
-  # enable transaction indexing
-  sed -i'.bak' 's|indexer = .*|indexer = "kv"|g' "$CONFIG_DIR/config/config.toml"
-}
-
 main() {
   # Configure stuff
   setup_private_validator
   # Spawn a job to provision a bridge node later
   provision_bridge_nodes &
-  # Spawn a job to provision a light node later
-  provision_light_nodes &
   # Start the celestia-app
   echo "Configuration finished. Running a validator node..."
   celestia-appd start --api.enable --grpc.enable --force-no-bbr
