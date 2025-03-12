@@ -205,4 +205,14 @@ mod tests {
         assert_eq!(m.post_increment(), MessageId(1));
         assert_eq!(m.post_increment(), MessageId(2));
     }
+
+    #[wasm_bindgen_test]
+    fn message_id_overflow() {
+        let mut m = MessageId(u32::MAX - 2);
+        assert_eq!(m.post_increment(), MessageId(u32::MAX - 2));
+        assert_eq!(m.post_increment(), MessageId(u32::MAX - 1));
+        assert_eq!(m.post_increment(), MessageId(u32::MAX));
+        assert_eq!(m.post_increment(), MessageId(0));
+        assert_eq!(m.post_increment(), MessageId(1));
+    }
 }
