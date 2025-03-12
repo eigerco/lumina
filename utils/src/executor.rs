@@ -31,7 +31,7 @@ mod imp {
 
     pub use tokio::task::yield_now;
 
-    /// Spawn future using tokio executor
+    /// Spawn a future using tokio executor
     #[track_caller]
     pub fn spawn<F>(future: F) -> JoinHandle
     where
@@ -87,6 +87,7 @@ mod imp {
     use send_wrapper::SendWrapper;
     use wasm_bindgen::prelude::*;
 
+    /// Spawn a future using wasm_bindgen_futures
     pub fn spawn<F>(future: F) -> JoinHandle
     where
         F: Future<Output = ()> + 'static,

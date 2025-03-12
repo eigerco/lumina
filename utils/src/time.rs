@@ -37,13 +37,16 @@ mod imp {
     use std::task::{Context, Poll};
     use std::time::Duration;
 
+    use futures::StreamExt;
     use gloo_timers::future::{IntervalStream, TimeoutFuture};
     use pin_project::pin_project;
-    pub struct Interval(SendWrapper<IntervalStream>);
-    use futures::StreamExt;
     use send_wrapper::SendWrapper;
 
+    /// Type allowing to wait on a sequence of instants with a certain duration between each instant.
+    pub struct Interval(SendWrapper<IntervalStream>);
+
     impl Interval {
+        /// Create a new `Interval` with provided duration between firings
         pub async fn new(dur: Duration) -> Self {
             // If duration was less than a millisecond, then make
             // it 1 millisecond.
@@ -52,14 +55,17 @@ mod imp {
             Interval(SendWrapper::new(IntervalStream::new(millis)))
         }
 
+        /// Completes when the next instant in the interval has been reached.
         pub async fn tick(&mut self) {
             self.0.next().await;
         }
     }
 
+    /// This error is returned when a timeout expires before the function was able to finish.
     #[derive(Debug)]
     pub struct Elapsed;
 
+    /// Requires a Future to complete before the specified duration has elapsed.
     pub fn timeout<F>(duration: Duration, future: F) -> Timeout<F>
     where
         F: Future,
@@ -73,6 +79,7 @@ mod imp {
         }
     }
 
+    /// Waits until `duration` has elapsed
     pub async fn sleep(duration: Duration) {
         let millis = u32::try_from(duration.as_millis().max(1)).unwrap_or(u32::MAX);
         let delay = SendWrapper::new(TimeoutFuture::new(millis));
