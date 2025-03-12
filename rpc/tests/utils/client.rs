@@ -9,7 +9,8 @@ use jsonrpsee::core::client::SubscriptionClientT;
 use jsonrpsee::core::ClientError;
 use tokio::sync::{Mutex, MutexGuard};
 
-const CELESTIA_RPC_URL: &str = "ws://localhost:36658";
+//// Use node-2 (light node) as the default RPC URL
+const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
 
 async fn write_lock() -> MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
