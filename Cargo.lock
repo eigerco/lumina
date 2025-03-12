@@ -3532,7 +3532,6 @@ dependencies = [
  "celestia-types",
  "cid",
  "dashmap 5.5.3",
- "dotenvy",
  "function_name",
  "futures",
  "getrandom",

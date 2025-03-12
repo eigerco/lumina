@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use std::env;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -15,13 +14,10 @@ use lumina_node::test_utils::test_node_builder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
-const WS_URL: &str = "ws://localhost:36658";
+const WS_URL: &str = "ws://localhost:26658";
 
 pub async fn bridge_client() -> Client {
-    let _ = dotenvy::dotenv();
-
-    let auth_token = env::var("CELESTIA_NODE_AUTH_TOKEN_ADMIN").unwrap();
-    Client::new(WS_URL, Some(&auth_token)).await.unwrap()
+    Client::new(WS_URL, None).await.unwrap()
 }
 
 pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
