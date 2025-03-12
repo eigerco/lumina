@@ -7,12 +7,12 @@ use celestia_types::hash::Hash;
 use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use lumina_utils::time::timeout;
 use tokio::sync::{mpsc, watch};
 
 use crate::{
     block_ranges::{BlockRange, BlockRanges},
     blockstore::InMemoryBlockstore,
-    executor::timeout,
     network::Network,
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,

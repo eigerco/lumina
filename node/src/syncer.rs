@@ -17,6 +17,8 @@ use std::time::Duration;
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoffBuilder;
 use celestia_types::ExtendedHeader;
+use lumina_utils::executor::{spawn, JoinHandle};
+use lumina_utils::time::{sleep, Interval};
 use serde::{Deserialize, Serialize};
 use tendermint::Time;
 use tokio::select;
@@ -27,7 +29,6 @@ use web_time::Instant;
 
 use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
-use crate::executor::{sleep, spawn, Interval, JoinHandle};
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
 use crate::utils::{FusedReusableFuture, OneshotSenderExt};

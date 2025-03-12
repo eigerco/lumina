@@ -17,6 +17,7 @@ use libp2p::{
     },
     Multiaddr, PeerId, StreamProtocol,
 };
+use lumina_utils::time::timeout;
 use prost::Message;
 use tracing::{debug, instrument, warn};
 use web_time::{Duration, Instant};
@@ -25,7 +26,6 @@ mod client;
 mod server;
 pub(crate) mod utils;
 
-use crate::executor::timeout;
 use crate::p2p::header_ex::client::HeaderExClientHandler;
 use crate::p2p::header_ex::server::HeaderExServerHandler;
 use crate::p2p::P2pError;

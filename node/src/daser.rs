@@ -42,8 +42,9 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 use web_time::{Duration, Instant};
 
+use lumina_utils::executor::{spawn, JoinHandle};
+
 use crate::events::{EventPublisher, NodeEvent};
-use crate::executor::{spawn, JoinHandle};
 use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pError};
 use crate::store::{BlockRanges, SamplingStatus, Store, StoreError};
@@ -470,7 +471,6 @@ fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16,
 mod tests {
     use super::*;
     use crate::events::{EventChannel, EventSubscriber};
-    use crate::executor::sleep;
     use crate::node::DEFAULT_SAMPLING_WINDOW;
     use crate::p2p::shwap::convert_cid;
     use crate::p2p::P2pCmd;
@@ -483,6 +483,7 @@ mod tests {
     use celestia_types::test_utils::{generate_dummy_eds, ExtendedHeaderGenerator};
     use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
     use cid::Cid;
+    use lumina_utils::time::sleep;
     use prost::Message;
     use std::collections::HashMap;
     use std::time::Duration;

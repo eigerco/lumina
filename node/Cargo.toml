@@ -33,6 +33,7 @@ libp2p = { workspace = true, features = [
   "request-response",
   "kad",
 ] }
+lumina-utils = { workspace = true, features = ["executor", "token", "time"] }
 prost.workspace = true
 tendermint-proto.workspace = true
 tendermint.workspace = true

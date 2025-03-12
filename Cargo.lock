@@ -855,6 +855,7 @@ dependencies = [
  "http-body 1.0.1",
  "js-sys",
  "k256",
+ "lumina-utils",
  "prost",
  "rand_core",
  "send_wrapper 0.6.0",
@@ -3541,6 +3542,7 @@ dependencies = [
  "libp2p",
  "libp2p-websocket-websys 0.3.3",
  "lumina-node",
+ "lumina-utils",
  "pin-project",
  "prost",
  "rand",
@@ -3602,6 +3604,7 @@ dependencies = [
  "js-sys",
  "libp2p",
  "lumina-node",
+ "lumina-utils",
  "rexie",
  "serde",
  "serde-wasm-bindgen",
@@ -3618,6 +3621,22 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
+]
+
+[[package]]
+name = "lumina-utils"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "gloo-timers 0.3.0",
+ "pin-project",
+ "send_wrapper 0.6.0",
+ "tokio",
+ "tokio-util",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
+ "web-time",
 ]
 
 [[package]]

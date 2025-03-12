@@ -28,6 +28,7 @@ celestia-types.workspace = true
 prost.workspace = true
 tendermint-proto.workspace = true
 tendermint.workspace = true
+lumina-utils = { workspace = true, features = ["time"] }
 
 bytes = "1.8"
 hex = "0.4.3"

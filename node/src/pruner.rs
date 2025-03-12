@@ -3,13 +3,14 @@ use std::time::Duration;
 
 use blockstore::Blockstore;
 use celestia_types::ExtendedHeader;
+use lumina_utils::executor::{spawn, JoinHandle};
+use lumina_utils::time::sleep;
 use tendermint::Time;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 
 use crate::events::{EventPublisher, NodeEvent};
-use crate::executor::{sleep, spawn, JoinHandle};
 use crate::p2p::P2pError;
 use crate::store::{Store, StoreError};
 
