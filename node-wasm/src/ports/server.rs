@@ -156,9 +156,8 @@ where
                     return Ok(())
                 }
                 msg = self.incoming_requests.recv() => {
-                    let Some(MultiplexMessage { id, payload }) = msg else {
-                        return Err(Error::new("Incoming message channel closed, should not happen"));
-                    };
+                    let MultiplexMessage { id, payload } = msg
+                        .ok_or(Error::new("Incoming message channel closed, should not happen"))?;
 
                     match payload {
                         Some(request) =>
@@ -171,9 +170,8 @@ where
                     }
                 }
                 res = self.pending_responses_map.next(), if !self.pending_responses_map.is_empty() => {
-                    let Some((id, response) ) = res else {
-                    return Err(Error::new("Responses channel closed, should not happen"));
-                };
+                    let (id, response) = res
+                        .ok_or(Error::new("Responses channel closed, should not happen"))?;
                     self.handle_outgoing_response(id, response)?;
                 }
             }

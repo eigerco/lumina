@@ -108,15 +108,13 @@ where
                     return Ok(())
                 }
                 msg = self.incoming_responses.recv() => {
-                    let Some(MultiplexMessage { id, payload }) = msg else {
-                        return Err(Error::new("Incoming message channel closed, should not happen"));
-                    };
+                    let MultiplexMessage { id, payload } = msg
+                        .ok_or(Error::new("Incoming message channel closed, should not happen"))?;
                     self.handle_incoming_response(id, payload);
                 }
                 request = self.outgoing_requests.recv() => {
-                    let Some((msg, transferable, response_tx)) = request else {
-                        return Err(Error::new("Outgoing requests channel closed, should not happen"));
-                    };
+                    let (msg, transferable, response_tx) = request
+                        .ok_or(Error::new("Outgoing requests channel closed, should not happen"))?;
                     self.handle_outgoing_request(msg, transferable, response_tx)?;
                 }
             }

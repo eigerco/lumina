@@ -123,7 +123,11 @@ impl Port {
     /// Send a serialisable message over the port together with a object to transfer.
     /// No checking is performed whether receiver is able to correctly interpret the message, nor
     /// whether port can actually perform object transfer.
-    pub fn send_with_transferable<T: Serialize>(&self, msg: &T, transferable: JsValue) -> Result<()> {
+    pub fn send_with_transferable<T: Serialize>(
+        &self,
+        msg: &T,
+        transferable: JsValue,
+    ) -> Result<()> {
         let msg = to_json_value(msg).context("error converting to JsValue")?;
         self.port
             .post_message_with_transferable(&msg, &Array::of1(&transferable))
