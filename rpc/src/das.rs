@@ -1,3 +1,5 @@
+//! celestia-node rpc types and methods related to DAS (Data Availability Sampling)
+
 use jsonrpsee::proc_macros::rpc;
 use serde::{Deserialize, Serialize};
 
