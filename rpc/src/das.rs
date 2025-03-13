@@ -16,8 +16,9 @@ pub struct DasWorker {
     pub to: u64,
 }
 
-/// Response type for [`DasClient::SamplingStats`].
+/// Response type for [`DasClient::das_sampling_stats`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub struct SamplingStats {
     /// The height of the most recently sampled block in the chain.
     pub head_of_sampled_chain: u64,
