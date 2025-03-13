@@ -29,7 +29,6 @@ impl Token {
     }
 
     /// Returns if event is triggered or not.
-    #[allow(dead_code)]
     pub fn is_triggered(&self) -> bool {
         self.token.is_cancelled()
     }
@@ -54,7 +53,6 @@ pub struct TokenTriggerDropGuard {
 
 impl TokenTriggerDropGuard {
     /// Disarms the guard, making it so that dropping it won't trigger cancellation
-    #[allow(dead_code)]
     pub fn disarm(&mut self) {
         self.token.take();
     }

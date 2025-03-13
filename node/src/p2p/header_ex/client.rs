@@ -374,12 +374,12 @@ mod tests {
     use super::*;
     use crate::events::EventChannel;
     use crate::p2p::header_ex::utils::ExtendedHeaderExt;
-    use crate::test_utils::async_test;
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::consts::HASH_SIZE;
     use celestia_types::hash::Hash;
     use celestia_types::test_utils::{invalidate, unverify, ExtendedHeaderGenerator};
     use libp2p::swarm::ConnectionId;
+    use lumina_utils::test_utils::async_test;
     use lumina_utils::time::sleep;
     use std::collections::VecDeque;
     use std::future::poll_fn;

@@ -557,10 +557,10 @@ fn parse_header_request(buf: &[u8]) -> Option<HeaderRequest> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::async_test;
     use bytes::BytesMut;
     use celestia_proto::p2p::pb::header_request::Data;
     use futures::io::{Cursor, Error};
+    use lumina_utils::test_utils::async_test;
     use prost::encode_length_delimiter;
     use std::io::ErrorKind;
     use std::pin::Pin;

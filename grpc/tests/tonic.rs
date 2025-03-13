@@ -5,19 +5,12 @@ use celestia_proto::cosmos::bank::v1beta1::MsgSend;
 use celestia_types::nmt::Namespace;
 use celestia_types::state::{Coin, ErrorCode};
 use celestia_types::{AppVersion, Blob};
+use lumina_utils::test_utils::async_test;
 use utils::{load_account, TestAccount};
 
 pub mod utils;
 
 use crate::utils::{new_grpc_client, new_tx_client, spawn};
-
-#[cfg(not(target_arch = "wasm32"))]
-use tokio::test as async_test;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen_test::wasm_bindgen_test as async_test;
-
-#[cfg(target_arch = "wasm32")]
-wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[async_test]
 async fn get_auth_params() {

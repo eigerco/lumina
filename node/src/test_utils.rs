@@ -21,13 +21,6 @@ use crate::{
     NodeBuilder,
 };
 
-#[cfg(test)]
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) use tokio::test as async_test;
-#[cfg(test)]
-#[cfg(target_arch = "wasm32")]
-pub(crate) use wasm_bindgen_test::wasm_bindgen_test as async_test;
-
 /// Generate a store pre-filled with headers.
 pub async fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
     let s = InMemoryStore::new();

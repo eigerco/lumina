@@ -700,10 +700,11 @@ mod tests {
     use crate::node::DEFAULT_SAMPLING_WINDOW;
     use crate::p2p::header_session;
     use crate::store::InMemoryStore;
-    use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
+    use crate::test_utils::{gen_filled_store, MockP2pHandle};
     use crate::utils::OneshotResultSenderExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use libp2p::request_response::OutboundFailure;
+    use lumina_utils::test_utils::async_test;
 
     #[test]
     fn calculate_range_to_fetch_test_header_limit() {

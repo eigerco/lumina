@@ -355,11 +355,11 @@ mod tests {
     use crate::test_utils::ExtendedHeaderGeneratorExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::Height;
+    use lumina_utils::test_utils::async_test as test;
     use rstest::rstest;
 
     // rstest only supports attributes which last segment is `test`
     // https://docs.rs/rstest/0.18.2/rstest/attr.rstest.html#inject-test-attribute
-    use crate::test_utils::async_test as test;
     use crate::test_utils::new_block_ranges;
 
     #[test]

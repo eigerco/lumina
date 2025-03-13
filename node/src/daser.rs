@@ -475,7 +475,7 @@ mod tests {
     use crate::p2p::shwap::convert_cid;
     use crate::p2p::P2pCmd;
     use crate::store::InMemoryStore;
-    use crate::test_utils::{async_test, MockP2pHandle};
+    use crate::test_utils::MockP2pHandle;
     use bytes::BytesMut;
     use celestia_proto::bitswap::Block;
     use celestia_types::consts::appconsts::AppVersion;
@@ -483,6 +483,7 @@ mod tests {
     use celestia_types::test_utils::{generate_dummy_eds, ExtendedHeaderGenerator};
     use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
     use cid::Cid;
+    use lumina_utils::test_utils::async_test;
     use lumina_utils::time::sleep;
     use prost::Message;
     use std::collections::HashMap;

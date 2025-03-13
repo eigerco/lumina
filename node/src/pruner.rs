@@ -211,9 +211,8 @@ mod test {
     use crate::events::{EventChannel, TryRecvError};
     use crate::node::{DEFAULT_PRUNING_DELAY, DEFAULT_SAMPLING_WINDOW};
     use crate::store::{InMemoryStore, SamplingStatus};
-    use crate::test_utils::{
-        async_test, gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt,
-    };
+    use crate::test_utils::{gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt};
+    use lumina_utils::test_utils::async_test;
 
     const TEST_CODEC: u64 = 0x0D;
     const TEST_MH_CODE: u64 = 0x0D;
