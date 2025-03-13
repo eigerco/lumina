@@ -3,7 +3,7 @@
 
 pub mod blob;
 pub mod client;
-mod das;
+pub mod das;
 mod error;
 mod header;
 #[cfg(feature = "p2p")]
