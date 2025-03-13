@@ -19,6 +19,7 @@ categories = [
 ]
 
 [dependencies]
+das-types = { path = "./types" }
 celestia-types.workspace = true
 prost.workspace = true
 

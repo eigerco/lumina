@@ -1,4 +1,4 @@
-use celestia_types::SamplingStats;
+use das_types::SamplingStats;
 use jsonrpsee::proc_macros::rpc;
 
 /// The `Das` RPC trait provides methods for interacting with Data Availability Sampling.

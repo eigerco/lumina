@@ -904,6 +904,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "celestia-types",
+ "das-types",
  "dotenvy",
  "futures",
  "getrandom",
@@ -1258,6 +1259,27 @@ dependencies = [
  "rand_core",
  "subtle-ng",
  "zeroize",
+]
+
+[[package]]
+name = "das-types"
+version = "0.10.1"
+dependencies = [
+ "bincode",
+ "indoc",
+ "js-sys",
+ "libp2p-identity",
+ "multiaddr",
+ "nmt-rs",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "serde_repr",
+ "sha2 0.10.8",
+ "thiserror 1.0.69",
+ "time",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
 ]
 
 [[package]]
