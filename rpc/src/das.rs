@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use jsonrpsee::proc_macros::rpc;
+use serde::{Deserialize, Serialize};
 
 /// Represents a worker responsible for DAS (Data Availability Sampling) jobs.
 #[derive(Debug, Clone, Serialize, Deserialize)]

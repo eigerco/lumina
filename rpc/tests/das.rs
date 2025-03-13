@@ -1,7 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use celestia_rpc::prelude::*;
 use celestia_rpc::das::SamplingStats;
+use celestia_rpc::prelude::*;
 
 pub mod utils;
 
