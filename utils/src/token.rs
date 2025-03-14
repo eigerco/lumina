@@ -2,7 +2,7 @@ use std::fmt::{self, Debug};
 
 use tokio_util::sync::CancellationToken;
 
-/// A token which can be used to signal a cancellation request
+/// A token which can be used for signalling something exactly once
 #[derive(Clone, Default)]
 pub struct Token {
     token: CancellationToken,
@@ -46,13 +46,13 @@ impl Debug for Token {
     }
 }
 
-/// A wrapper for cancellation token which automatically cancels it on drop.
+/// A wrapper for a [`Token`], which triggers it when it's dropped
 pub struct TokenTriggerDropGuard {
     token: Option<CancellationToken>,
 }
 
 impl TokenTriggerDropGuard {
-    /// Disarms the guard, making it so that dropping it won't trigger cancellation
+    /// Disarms the guard, making it so that dropping it won't trigger the token
     pub fn disarm(&mut self) {
         self.token.take();
     }
