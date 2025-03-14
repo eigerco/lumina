@@ -110,11 +110,11 @@ pub(crate) fn get_block_container(expected_cid: &Cid, block: &[u8]) -> Result<Ve
 mod tests {
     use super::*;
     use crate::store::InMemoryStore;
-    use crate::test_utils::async_test;
     use bytes::BytesMut;
     use celestia_types::consts::appconsts::AppVersion;
     use celestia_types::test_utils::{generate_dummy_eds, ExtendedHeaderGenerator};
     use celestia_types::{AxisType, DataAvailabilityHeader};
+    use lumina_utils::test_utils::async_test;
 
     #[async_test]
     async fn hash() {
