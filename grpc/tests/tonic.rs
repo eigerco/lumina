@@ -12,6 +12,9 @@ pub mod utils;
 
 use crate::utils::{new_grpc_client, new_tx_client, spawn};
 
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
 #[async_test]
 async fn get_auth_params() {
     let client = new_grpc_client();

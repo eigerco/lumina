@@ -28,7 +28,7 @@ celestia-types.workspace = true
 prost.workspace = true
 tendermint-proto.workspace = true
 tendermint.workspace = true
-lumina-utils = { workspace = true, features = ["time", "test-utils"] }
+lumina-utils = { workspace = true, features = ["time"] }
 
 bytes = "1.8"
 hex = "0.4.3"
@@ -57,6 +57,7 @@ wasm-bindgen = { version = "0.2.93", optional = true }
 wasm-bindgen-futures = { version = "0.4.43", optional = true }
 
 [dev-dependencies]
+lumina-utils = { workspace = true, features = ["test-utils"] }
 rand_core = "0.6.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
