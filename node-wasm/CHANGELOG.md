@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.8.1...lumina-node-wasm-v0.8.2) - 2025-03-14
+
+### Added
+
+- *(ci)* allow other node types than bridge ([#562](https://github.com/eigerco/lumina/pull/562))
+
 ## [0.8.1](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.8.0...lumina-node-wasm-v0.8.1) - 2025-02-24
 
 ### Other

@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.9.1...celestia-rpc-v0.9.2) - 2025-03-14
+
+### Added
+
+- *(rpc)* add DAS module with sampling stats and catch-up methods ([#557](https://github.com/eigerco/lumina/pull/557))
+
 ## [0.9.1](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.9.0...celestia-rpc-v0.9.1) - 2025-02-24
 
 ### Other
