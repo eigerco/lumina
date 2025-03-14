@@ -6,6 +6,7 @@ use std::time::Duration;
 use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::prelude::*;
 use celestia_types::consts::appconsts::AppVersion;
+use celestia_types::state::Address;
 use celestia_types::{Blob, Commitment};
 use jsonrpsee::core::client::Subscription;
 
@@ -50,6 +51,28 @@ async fn blob_submit_and_get() {
     proofs[0]
         .verify_complete_namespace(&root_hash, &leaves, namespace.into())
         .unwrap();
+}
+
+#[tokio::test]
+async fn blob_submit_and_get_with_signer() {
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let Address::AccAddress(address) = client.state_account_address().await.unwrap() else {
+        panic!("must be acc addr");
+    };
+    let namespace = random_ns();
+    let data = random_bytes(5);
+    let blob = Blob::new_with_signer(namespace, data, address, AppVersion::V3).unwrap();
+    println!("{}", serde_json::to_string_pretty(&blob).unwrap());
+
+    let submitted_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
+
+    let received_blob = client
+        .blob_get(submitted_height, namespace, blob.commitment)
+        .await
+        .unwrap();
+
+    received_blob.validate(AppVersion::V3).unwrap();
+    assert_blob_equal_to_sent(&received_blob, &blob);
 }
 
 #[tokio::test]

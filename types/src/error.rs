@@ -248,6 +248,14 @@ pub enum Error {
     #[error("Invalid committment length")]
     InvalidComittmentLength,
 
+    /// Missing signer field in blob with share version 1
+    #[error("Missing signer field in blob")]
+    MissingSigner,
+
+    /// Signer is not supported in share version 0
+    #[error("Signer is not supported in share version 0")]
+    SignerNotSupported,
+
     /// Empty blob list provided when creating MsgPayForBlobs
     #[error("Empty blob list")]
     EmptyBlobList,

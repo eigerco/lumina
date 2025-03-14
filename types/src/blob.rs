@@ -8,8 +8,9 @@ mod commitment;
 mod msg_pay_for_blobs;
 
 use crate::consts::appconsts;
-use crate::consts::appconsts::{subtree_root_threshold, AppVersion};
+use crate::consts::appconsts::AppVersion;
 use crate::nmt::Namespace;
+use crate::state::{AccAddress, AddressTrait};
 use crate::{bail_validation, Error, Result, Share};
 
 pub use self::commitment::Commitment;
@@ -25,6 +26,7 @@ use wasm_bindgen::prelude::*;
 // becase JSON representation needs to have `commitment` field but
 // Protobuf definition doesn't.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "custom_serde::SerdeBlob", into = "custom_serde::SerdeBlob")]
 #[cfg_attr(
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
     wasm_bindgen(getter_with_clone, inspectable)
@@ -33,18 +35,16 @@ pub struct Blob {
     /// A [`Namespace`] the [`Blob`] belongs to.
     pub namespace: Namespace,
     /// Data stored within the [`Blob`].
-    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
     pub data: Vec<u8>,
     /// Version indicating the format in which [`Share`]s should be created from this [`Blob`].
-    ///
-    /// [`Share`]: crate::share::Share
     pub share_version: u8,
     /// A [`Commitment`] computed from the [`Blob`]s data.
     pub commitment: Commitment,
     /// Index of the blob's first share in the EDS. Only set for blobs retrieved from chain.
-    // note: celestia supports deserializing blobs without index, so we should too
-    #[serde(default, with = "index_serde")]
     pub index: Option<u64>,
+    /// A signer of the blob, i.e. address of the account which submitted the blob.
+    /// Should be `None` if `share_version` is `0`.
+    pub signer: Option<AccAddress>,
 }
 
 /// Params defines the parameters for the blob module.
@@ -84,36 +84,68 @@ impl Blob {
     /// );
     /// ```
     pub fn new(namespace: Namespace, data: Vec<u8>, app_version: AppVersion) -> Result<Blob> {
-        let subtree_root_threshold = subtree_root_threshold(app_version);
-        let commitment = Commitment::from_blob(namespace, &data[..], 0, subtree_root_threshold)?;
+        let share_version = appconsts::SHARE_VERSION_ZERO;
+        let commitment =
+            Commitment::from_blob(namespace, &data[..], share_version, &None, app_version)?;
 
         Ok(Blob {
             namespace,
             data,
-            share_version: 0,
+            share_version,
             commitment,
             index: None,
+            signer: None,
+        })
+    }
+
+    /// Create a new blob with the given data within the [`Namespace`] and with given signer.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any error from the [`Commitment`] creation. Also [`AppVersion`]
+    /// must be at least [`AppVersion::V3`].
+    pub fn new_with_signer(
+        namespace: Namespace,
+        data: Vec<u8>,
+        signer: AccAddress,
+        app_version: AppVersion,
+    ) -> Result<Blob> {
+        let signer = Some(signer);
+        let share_version = appconsts::SHARE_VERSION_ONE;
+        let commitment =
+            Commitment::from_blob(namespace, &data[..], share_version, &signer, app_version)?;
+
+        Ok(Blob {
+            namespace,
+            data,
+            share_version,
+            commitment,
+            index: None,
+            signer,
         })
     }
 
     /// Creates a `Blob` from [`RawBlob`] and an [`AppVersion`].
     pub fn from_raw(raw: RawBlob, app_version: AppVersion) -> Result<Blob> {
-        let subtree_root_threshold = subtree_root_threshold(app_version);
-
         let namespace = Namespace::new(raw.namespace_version as u8, &raw.namespace_id)?;
+        let share_version =
+            u8::try_from(raw.share_version).map_err(|_| Error::UnsupportedShareVersion(u8::MAX))?;
+        let signer = raw.signer.try_into().map(|id| AccAddress::new(id)).ok();
         let commitment = Commitment::from_blob(
             namespace,
             &raw.data[..],
-            raw.share_version as u8,
-            subtree_root_threshold,
+            share_version,
+            &signer,
+            app_version,
         )?;
 
         Ok(Blob {
             namespace,
             data: raw.data,
-            share_version: raw.share_version as u8,
+            share_version,
             commitment,
             index: None,
+            signer,
         })
     }
 
@@ -142,13 +174,12 @@ impl Blob {
     /// assert!(blob.validate(AppVersion::V2).is_err());
     /// ```
     pub fn validate(&self, app_version: AppVersion) -> Result<()> {
-        let subtree_root_threshold = subtree_root_threshold(app_version);
-
         let computed_commitment = Commitment::from_blob(
             self.namespace,
             &self.data,
             self.share_version,
-            subtree_root_threshold,
+            &self.signer,
+            app_version,
         )?;
 
         if self.commitment != computed_commitment {
@@ -184,7 +215,12 @@ impl Blob {
     /// [`Share`]: crate::share::Share
     /// [`InfoByte`]: crate::share::InfoByte
     pub fn to_shares(&self) -> Result<Vec<Share>> {
-        commitment::split_blob_to_shares(self.namespace, self.share_version, &self.data)
+        commitment::split_blob_to_shares(
+            self.namespace,
+            self.share_version,
+            &self.data,
+            &self.signer,
+        )
     }
 
     /// Reconstructs a blob from shares.
@@ -225,8 +261,9 @@ impl Blob {
             return Err(Error::UnexpectedReservedNamespace);
         }
         let share_version = first_share.info_byte().expect("non parity").version();
+        let signer = first_share.signer();
 
-        let shares_needed = shares_needed_for_blob(blob_len as usize);
+        let shares_needed = shares_needed_for_blob(blob_len as usize, signer.is_some());
         let mut data =
             Vec::with_capacity(shares_needed * appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE);
         data.extend_from_slice(first_share.payload().expect("non parity"));
@@ -256,7 +293,13 @@ impl Blob {
         // remove padding
         data.truncate(blob_len as usize);
 
-        Self::new(namespace, data, app_version)
+        if share_version == appconsts::SHARE_VERSION_ZERO {
+            Self::new(namespace, data, app_version)
+        } else if share_version == appconsts::SHARE_VERSION_ONE {
+            Self::new_with_signer(namespace, data, signer.expect("must be Some"), app_version)
+        } else {
+            Err(Error::UnsupportedShareVersion(share_version))
+        }
     }
 
     /// Reconstructs all the blobs from shares.
@@ -349,7 +392,10 @@ impl From<Blob> for RawBlob {
             namespace_version: value.namespace.version() as u32,
             data: value.data,
             share_version: value.share_version as u32,
-            signer: Vec::new(),
+            signer: value
+                .signer
+                .map(|addr| addr.as_bytes().to_vec())
+                .unwrap_or_default(),
         }
     }
 }
@@ -374,38 +420,129 @@ impl Blob {
     }
 }
 
-fn shares_needed_for_blob(blob_len: usize) -> usize {
-    let Some(without_first_share) =
-        blob_len.checked_sub(appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE)
-    else {
+fn shares_needed_for_blob(blob_len: usize, has_signer: bool) -> usize {
+    let mut first_share_content = appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE;
+    if has_signer {
+        first_share_content -= appconsts::SIGNER_SIZE;
+    }
+
+    let Some(without_first_share) = blob_len.checked_sub(first_share_content) else {
         return 1;
     };
     1 + without_first_share.div_ceil(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
 }
 
-mod index_serde {
-    use serde::ser::Error;
-    use serde::{Deserialize, Deserializer, Serializer};
+mod custom_serde {
+    use serde::de::Error as _;
+    use serde::ser::Error as _;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use tendermint_proto::serializers::bytes::base64string;
 
-    /// Serialize [`Option<u64>`] as `i64` with `None` represented as `-1`.
-    pub fn serialize<S>(value: &Option<u64>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let x = value
-            .map(i64::try_from)
-            .transpose()
-            .map_err(S::Error::custom)?
-            .unwrap_or(-1);
-        serializer.serialize_i64(x)
+    use crate::nmt::Namespace;
+    use crate::state::{AccAddress, AddressTrait};
+    use crate::{Error, Result};
+
+    use super::{commitment, Blob, Commitment};
+
+    mod index_serde {
+        use super::*;
+        /// Serialize [`Option<u64>`] as `i64` with `None` represented as `-1`.
+        pub fn serialize<S>(value: &Option<u64>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let x = value
+                .map(i64::try_from)
+                .transpose()
+                .map_err(S::Error::custom)?
+                .unwrap_or(-1);
+            serializer.serialize_i64(x)
+        }
+
+        /// Deserialize [`Option<u64>`] from `i64` with negative values as `None`.
+        pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            i64::deserialize(deserializer).map(|val| if val >= 0 { Some(val as u64) } else { None })
+        }
     }
 
-    /// Deserialize [`Option<u64>`] from `i64` with negative values as `None`.
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        i64::deserialize(deserializer).map(|val| if val >= 0 { Some(val as u64) } else { None })
+    mod signer_serde {
+        use super::*;
+
+        /// Serialize signer as optional base64 string
+        pub fn serialize<S>(value: &Option<AccAddress>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            if let Some(ref addr) = value.as_ref().map(|addr| addr.as_bytes()) {
+                base64string::serialize(addr, serializer)
+            } else {
+                serializer.serialize_none()
+            }
+        }
+
+        /// Deserialize signer from optional base64 string
+        pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<AccAddress>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let bytes: Vec<u8> = base64string::deserialize(deserializer)?;
+            if bytes.is_empty() {
+                Ok(None)
+            } else {
+                let addr = AccAddress::new(bytes.try_into().map_err(D::Error::custom)?);
+                Ok(Some(addr))
+            }
+        }
+    }
+
+    /// This is the copy of the `Blob` struct, to perform additional checks during deserialization
+    #[derive(Serialize, Deserialize)]
+    pub(super) struct SerdeBlob {
+        namespace: Namespace,
+        #[serde(with = "base64string")]
+        data: Vec<u8>,
+        share_version: u8,
+        commitment: Commitment,
+        // note: celestia supports deserializing blobs without index, so we should too
+        #[serde(default, with = "index_serde")]
+        index: Option<u64>,
+        #[serde(default, with = "signer_serde")]
+        signer: Option<AccAddress>,
+    }
+
+    impl From<Blob> for SerdeBlob {
+        fn from(value: Blob) -> Self {
+            Self {
+                namespace: value.namespace,
+                data: value.data,
+                share_version: value.share_version,
+                commitment: value.commitment,
+                index: value.index,
+                signer: value.signer,
+            }
+        }
+    }
+
+    impl TryFrom<SerdeBlob> for Blob {
+        type Error = Error;
+
+        fn try_from(value: SerdeBlob) -> Result<Self> {
+            // we don't need to require app version when deserializing because commitment is provided
+            // user can still verify commitment and app version compatibility using `Blob::validate`
+            commitment::validate_blob(value.share_version, value.signer.is_some(), None)?;
+
+            Ok(Blob {
+                namespace: value.namespace,
+                data: value.data,
+                share_version: value.share_version,
+                commitment: value.commitment,
+                index: value.index,
+                signer: value.signer,
+            })
+        }
     }
 }
 
@@ -431,8 +568,31 @@ mod tests {
         .unwrap()
     }
 
+    fn sample_blob_with_signer() -> Blob {
+        serde_json::from_str(
+            r#"{
+              "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAADCBNOWAP3dM=",
+              "data": "8fIMqAB+kQo7+LLmHaDya8oH73hxem6lQWX1",
+              "share_version": 1,
+              "commitment": "D6YGsPWdxR8ju2OcOspnkgPG2abD30pSHxsFdiPqnVk=",
+              "index": -1
+              "signer": "Yjc3XldhbdYke5i8aSlggYxCCLE="
+            }"#,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn create_from_raw() {
+        let expected = sample_blob();
+        let raw = RawBlob::from(expected.clone());
+        let created = Blob::from_raw(raw, AppVersion::V2).unwrap();
+
+        assert_eq!(created, expected);
+    }
+
+    #[test]
+    fn create_from_raw_with_signer() {
         let expected = sample_blob();
         let raw = RawBlob::from(expected.clone());
         let created = Blob::from_raw(raw, AppVersion::V2).unwrap();

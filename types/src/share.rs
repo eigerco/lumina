@@ -9,6 +9,7 @@ use crate::consts::appconsts;
 use crate::nmt::{
     Namespace, NamespacedSha2Hasher, NMT_CODEC, NMT_ID_SIZE, NMT_MULTIHASH_CODE, NS_SIZE,
 };
+use crate::state::AccAddress;
 use crate::{Error, Result};
 
 mod info_byte;
@@ -19,6 +20,7 @@ pub use info_byte::InfoByte;
 pub use proof::ShareProof;
 
 const SHARE_SEQUENCE_LENGTH_OFFSET: usize = NS_SIZE + appconsts::SHARE_INFO_BYTES;
+const SHARE_SIGNER_OFFSET: usize = SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES;
 
 /// A single fixed-size chunk of data which is used to form an [`ExtendedDataSquare`].
 ///
@@ -110,7 +112,7 @@ impl Share {
 
     /// Return Share's `InfoByte`
     ///
-    /// Returns None if share is within [`Namespace::PARITY_SHARE`].
+    /// Returns `None` if share is within [`Namespace::PARITY_SHARE`].
     pub fn info_byte(&self) -> Option<InfoByte> {
         if !self.is_parity() {
             Some(InfoByte::from_raw_unchecked(self.data[NS_SIZE]))
@@ -119,9 +121,7 @@ impl Share {
         }
     }
 
-    /// For first share in a sequence, return sequence length, None for continuation shares
-    ///
-    /// Returns None if share is within [`Namespace::PARITY_SHARE`].
+    /// For first share in a sequence, return sequence length, `None` for continuation shares
     pub fn sequence_length(&self) -> Option<u32> {
         if self.info_byte()?.is_sequence_start() {
             let sequence_length_bytes = &self.data[SHARE_SEQUENCE_LENGTH_OFFSET
@@ -134,16 +134,44 @@ impl Share {
         }
     }
 
+    /// Get the `signer` part of share if it's first in the sequence of sparse shares and `share_version` supprots
+    /// it. Otherwise returns `None`
+    pub fn signer(&self) -> Option<AccAddress> {
+        let info_byte = self.info_byte()?;
+        if info_byte.is_sequence_start()
+            && info_byte.version() == appconsts::SHARE_VERSION_ONE
+            && !self.namespace().is_reserved()
+        {
+            let signer_bytes =
+                &self.data[SHARE_SIGNER_OFFSET..SHARE_SIGNER_OFFSET + appconsts::SIGNER_SIZE];
+            Some(AccAddress::try_from(signer_bytes).expect("must have correct size"))
+        } else {
+            None
+        }
+    }
+
     /// Get the payload of the share.
     ///
     /// Payload is the data that shares contain after all its metadata,
     /// e.g. blob data in sparse shares.
     ///
-    /// Returns None if share is within [`Namespace::PARITY_SHARE`].
+    /// Returns `None` if share is within [`Namespace::PARITY_SHARE`].
     pub fn payload(&self) -> Option<&[u8]> {
-        let start = if self.info_byte()?.is_sequence_start() {
-            SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES
+        let info_byte = self.info_byte()?;
+
+        let start = if info_byte.is_sequence_start() {
+            if !self.namespace().is_reserved()
+                && info_byte.version() == appconsts::SHARE_VERSION_ONE
+            {
+                // in sparse share v1, last metadata in first share is signer
+                SHARE_SIGNER_OFFSET + appconsts::SIGNER_SIZE
+            } else {
+                // otherwise last metadata in first share is sequence len
+                // (we ignore reserved bytes of compact shares, they are treated as payload)
+                SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQUENCE_LEN_BYTES
+            }
         } else {
+            // or info byte in continuation shares
             SHARE_SEQUENCE_LENGTH_OFFSET
         };
         Some(&self.data[start..])
@@ -218,7 +246,7 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
     #[test]
-    fn share_structure() {
+    fn share_v0_structure() {
         let ns = Namespace::new_v0(b"foo").unwrap();
         let blob = Blob::new(ns, vec![7; 512], AppVersion::V2).unwrap();
 
@@ -235,10 +263,54 @@ mod tests {
         assert!(shares[0].info_byte().unwrap().is_sequence_start());
         assert!(!shares[1].info_byte().unwrap().is_sequence_start());
 
+        // share v0 doesn't have signer
+        assert!(shares[0].signer().is_none());
+        assert!(shares[1].signer().is_none());
+
         const BYTES_IN_SECOND: usize = 512 - appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE;
         assert_eq!(
             shares[0].payload().unwrap(),
             &[7; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE]
+        );
+        assert_eq!(
+            shares[1].payload().unwrap(),
+            &[
+                // rest of the blob
+                &[7; BYTES_IN_SECOND][..],
+                // padding
+                &[0; appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE - BYTES_IN_SECOND][..]
+            ]
+            .concat()
+        );
+    }
+
+    #[test]
+    fn share_v1_structure() {
+        let ns = Namespace::new_v0(b"foo").unwrap();
+        let blob = Blob::new_with_signer(ns, vec![7; 512], [5; 20].into(), AppVersion::V3).unwrap();
+
+        let shares = blob.to_shares().unwrap();
+
+        assert_eq!(shares.len(), 2);
+
+        assert_eq!(shares[0].namespace(), ns);
+        assert_eq!(shares[1].namespace(), ns);
+
+        assert_eq!(shares[0].info_byte().unwrap().version(), 1);
+        assert_eq!(shares[1].info_byte().unwrap().version(), 1);
+
+        assert!(shares[0].info_byte().unwrap().is_sequence_start());
+        assert!(!shares[1].info_byte().unwrap().is_sequence_start());
+
+        // share v0 doesn't have signer
+        assert_eq!(shares[0].signer().unwrap(), [5; 20].into());
+        assert!(shares[1].signer().is_none());
+
+        const BYTES_IN_SECOND: usize =
+            512 - appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE + appconsts::SIGNER_SIZE;
+        assert_eq!(
+            shares[0].payload().unwrap(),
+            &[7; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE - appconsts::SIGNER_SIZE]
         );
         assert_eq!(
             shares[1].payload().unwrap(),
