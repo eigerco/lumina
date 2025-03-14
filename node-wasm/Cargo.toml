@@ -28,6 +28,7 @@ celestia-grpc = { workspace = true, features = ["wasm-bindgen"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 libp2p = { workspace = true, features = ["serde"] }
 lumina-node = { workspace = true, features = ["wasm-bindgen"] }
+lumina-utils = { workspace = true, features = ["executor"] }
 tendermint.workspace = true
 
 anyhow = "1.0.86"

@@ -147,10 +147,10 @@ fn take_next_batch(range_to_fetch: &mut Option<BlockRange>, limit: u64) -> Optio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::spawn;
     use crate::p2p::{HeaderExError, P2p};
-    use crate::test_utils::async_test;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
+    use lumina_utils::executor::spawn;
+    use lumina_utils::test_utils::async_test;
 
     async fn test_batching(to_fetch: u64, batches: usize, batch_size: u64) {
         let (_p2p, mut p2p_mock) = P2p::mocked();

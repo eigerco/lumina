@@ -3,13 +3,14 @@ use std::time::Duration;
 
 use blockstore::Blockstore;
 use celestia_types::ExtendedHeader;
+use lumina_utils::executor::{spawn, JoinHandle};
+use lumina_utils::time::sleep;
 use tendermint::Time;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 
 use crate::events::{EventPublisher, NodeEvent};
-use crate::executor::{sleep, spawn, JoinHandle};
 use crate::p2p::P2pError;
 use crate::store::{Store, StoreError};
 
@@ -210,9 +211,8 @@ mod test {
     use crate::events::{EventChannel, TryRecvError};
     use crate::node::{DEFAULT_PRUNING_DELAY, DEFAULT_SAMPLING_WINDOW};
     use crate::store::{InMemoryStore, SamplingStatus};
-    use crate::test_utils::{
-        async_test, gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt,
-    };
+    use crate::test_utils::{gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt};
+    use lumina_utils::test_utils::async_test;
 
     const TEST_CODEC: u64 = 0x0D;
     const TEST_MH_CODE: u64 = 0x0D;
