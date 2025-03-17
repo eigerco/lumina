@@ -338,7 +338,7 @@ pub(crate) async fn timeout<F: Future>(millis: u32, fut: F) -> Result<F::Output,
     }
 }
 
-pub fn to_json_value<T: Serialize + ?Sized>(
+pub(crate) fn to_json_value<T: Serialize + ?Sized>(
     value: &T,
 ) -> Result<JsValue, serde_wasm_bindgen::Error> {
     value.serialize(&Serializer::json_compatible())
