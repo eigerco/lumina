@@ -2,12 +2,14 @@ use std::fmt::{self, Debug};
 
 use tokio_util::sync::CancellationToken;
 
-#[derive(Clone)]
+/// A token which can be used for signalling something exactly once
+#[derive(Clone, Default)]
 pub struct Token {
     token: CancellationToken,
 }
 
 impl Token {
+    /// Create a new token
     pub fn new() -> Token {
         Token {
             token: CancellationToken::new(),
@@ -27,7 +29,6 @@ impl Token {
     }
 
     /// Returns if event is triggered or not.
-    #[allow(dead_code)]
     pub fn is_triggered(&self) -> bool {
         self.token.is_cancelled()
     }
@@ -45,12 +46,13 @@ impl Debug for Token {
     }
 }
 
+/// A wrapper for a [`Token`], which triggers it when it's dropped
 pub struct TokenTriggerDropGuard {
     token: Option<CancellationToken>,
 }
 
 impl TokenTriggerDropGuard {
-    #[allow(dead_code)]
+    /// Disarms the guard, making it so that dropping it won't trigger the token
     pub fn disarm(&mut self) {
         self.token.take();
     }
@@ -73,8 +75,9 @@ impl Drop for TokenTriggerDropGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::{sleep, spawn};
+    use crate::executor::spawn;
     use crate::test_utils::async_test;
+    use crate::time::sleep;
     use std::time::Duration;
     use web_time::Instant;
 

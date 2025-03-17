@@ -17,6 +17,7 @@ use libp2p::{
     },
     Multiaddr, PeerId, StreamProtocol,
 };
+use lumina_utils::time::timeout;
 use prost::Message;
 use tracing::{debug, instrument, warn};
 use web_time::{Duration, Instant};
@@ -25,7 +26,6 @@ mod client;
 mod server;
 pub(crate) mod utils;
 
-use crate::executor::timeout;
 use crate::p2p::header_ex::client::HeaderExClientHandler;
 use crate::p2p::header_ex::server::HeaderExServerHandler;
 use crate::p2p::P2pError;
@@ -557,10 +557,10 @@ fn parse_header_request(buf: &[u8]) -> Option<HeaderRequest> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::async_test;
     use bytes::BytesMut;
     use celestia_proto::p2p::pb::header_request::Data;
     use futures::io::{Cursor, Error};
+    use lumina_utils::test_utils::async_test;
     use prost::encode_length_delimiter;
     use std::io::ErrorKind;
     use std::pin::Pin;

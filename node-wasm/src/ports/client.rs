@@ -13,7 +13,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::error::{Context, Error, Result};
 use crate::ports::common::{MessageId, MultiplexMessage, Port, Transferable};
-use lumina_node::executor::{spawn, JoinHandle};
+use lumina_utils::executor::{spawn, JoinHandle};
 
 /// Client responsible for sending `Request`s and receiving `Response`s to them over a port like
 /// object.

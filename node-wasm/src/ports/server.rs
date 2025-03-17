@@ -13,7 +13,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::error::{Context, Error, Result};
 use crate::ports::common::{MessageId, MultiplexMessage, Port};
-use lumina_node::executor::{spawn, JoinHandle};
+use lumina_utils::executor::{spawn, JoinHandle};
 
 /// `Server` aggregates multiple existing [`ServerConnection`]s, receiving `Request`s
 /// from the connected clients, as well as handles new [`Client`]s connecting.

@@ -17,6 +17,8 @@ use std::time::Duration;
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoffBuilder;
 use celestia_types::ExtendedHeader;
+use lumina_utils::executor::{spawn, JoinHandle};
+use lumina_utils::time::{sleep, Interval};
 use serde::{Deserialize, Serialize};
 use tendermint::Time;
 use tokio::select;
@@ -27,7 +29,6 @@ use web_time::Instant;
 
 use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
-use crate::executor::{sleep, spawn, Interval, JoinHandle};
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
 use crate::utils::{FusedReusableFuture, OneshotSenderExt};
@@ -699,10 +700,11 @@ mod tests {
     use crate::node::DEFAULT_SAMPLING_WINDOW;
     use crate::p2p::header_session;
     use crate::store::InMemoryStore;
-    use crate::test_utils::{async_test, gen_filled_store, MockP2pHandle};
+    use crate::test_utils::{gen_filled_store, MockP2pHandle};
     use crate::utils::OneshotResultSenderExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use libp2p::request_response::OutboundFailure;
+    use lumina_utils::test_utils::async_test;
 
     #[test]
     fn calculate_range_to_fetch_test_header_limit() {

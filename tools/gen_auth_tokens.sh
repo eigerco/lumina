@@ -41,8 +41,11 @@ ensure_dotenv_file() {
 
 generate_token() {
   local auth_level="$1"
-  docker compose -f "$DOCKER_COMPOSE_FILE" exec -T bridge-1 \
-    celestia bridge auth "$auth_level" --p2p.network private
+  local node_type
+  node_type="$(docker compose -f "$DOCKER_COMPOSE_FILE" exec -T node-1 \
+    ls -a /root | grep private | cut -d- -f 2)"
+  docker compose -f "$DOCKER_COMPOSE_FILE" exec -T node-1 \
+    celestia "$node_type" auth "$auth_level" --p2p.network private
 }
 
 write_token() {

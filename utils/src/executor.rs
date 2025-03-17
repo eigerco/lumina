@@ -4,15 +4,16 @@ use std::future::Future;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
-use crate::utils::Token;
+use crate::token::Token;
 
 #[allow(unused_imports)]
-pub use self::imp::{sleep, spawn, spawn_cancellable, timeout, yield_now, Elapsed, Interval};
+pub use self::imp::{spawn, spawn_cancellable, yield_now};
 
 /// Naive `JoinHandle` implementation.
 pub struct JoinHandle(Token);
 
 impl JoinHandle {
+    /// Await for the handle to return
     pub async fn join(&self) {
         self.0.triggered().await;
     }
@@ -27,11 +28,10 @@ impl Debug for JoinHandle {
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
     use super::*;
-    use std::time::Duration;
 
-    pub use tokio::time::error::Elapsed;
-    pub use tokio::time::{sleep, timeout};
+    pub use tokio::task::yield_now;
 
+    /// Spawn a future using tokio executor
     #[track_caller]
     pub fn spawn<F>(future: F) -> JoinHandle
     where
@@ -73,46 +73,21 @@ mod imp {
 
         JoinHandle(token)
     }
-
-    pub struct Interval(tokio::time::Interval);
-
-    impl Interval {
-        pub async fn new(dur: Duration) -> Self {
-            let mut inner = tokio::time::interval(dur);
-
-            // In Tokio the first tick returns immediately, so we
-            // consume to it to create an identical cross-platform
-            // behavior.
-            inner.tick().await;
-
-            Interval(inner)
-        }
-
-        pub async fn tick(&mut self) {
-            self.0.tick().await;
-        }
-    }
-
-    pub use tokio::task::yield_now;
 }
 
 #[cfg(target_arch = "wasm32")]
 mod imp {
+    use super::*;
+
     use std::cell::{Cell, RefCell};
     use std::future::poll_fn;
-    use std::pin::Pin;
     use std::rc::Rc;
-    use std::task::{Context, Poll, Waker};
-    use std::time::Duration;
+    use std::task::{Poll, Waker};
 
-    use futures::StreamExt;
-    use gloo_timers::future::{IntervalStream, TimeoutFuture};
-    use pin_project::pin_project;
     use send_wrapper::SendWrapper;
     use wasm_bindgen::prelude::*;
 
-    use super::*;
-
+    /// Spawn a future using wasm_bindgen_futures
     pub fn spawn<F>(future: F) -> JoinHandle
     where
         F: Future<Output = ()> + 'static,
@@ -151,74 +126,6 @@ mod imp {
         });
 
         JoinHandle(token)
-    }
-
-    pub struct Interval(SendWrapper<IntervalStream>);
-
-    impl Interval {
-        pub async fn new(dur: Duration) -> Self {
-            // If duration was less than a millisecond, then make
-            // it 1 millisecond.
-            let millis = u32::try_from(dur.as_millis().max(1)).unwrap_or(u32::MAX);
-
-            Interval(SendWrapper::new(IntervalStream::new(millis)))
-        }
-
-        pub async fn tick(&mut self) {
-            self.0.next().await;
-        }
-    }
-
-    #[derive(Debug)]
-    pub struct Elapsed;
-
-    pub fn timeout<F>(duration: Duration, future: F) -> Timeout<F>
-    where
-        F: Future,
-    {
-        let millis = u32::try_from(duration.as_millis().max(1)).unwrap_or(u32::MAX);
-        let delay = SendWrapper::new(TimeoutFuture::new(millis));
-
-        Timeout {
-            value: future,
-            delay,
-        }
-    }
-
-    pub async fn sleep(duration: Duration) {
-        let millis = u32::try_from(duration.as_millis().max(1)).unwrap_or(u32::MAX);
-        let delay = SendWrapper::new(TimeoutFuture::new(millis));
-        delay.await;
-    }
-
-    #[pin_project]
-    #[must_use = "futures do nothing unless you `.await` or poll them"]
-    #[derive(Debug)]
-    pub struct Timeout<T> {
-        #[pin]
-        value: T,
-        #[pin]
-        delay: SendWrapper<TimeoutFuture>,
-    }
-
-    impl<T> Future for Timeout<T>
-    where
-        T: Future,
-    {
-        type Output = Result<T::Output, Elapsed>;
-
-        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-            let me = self.project();
-
-            if let Poll::Ready(v) = me.value.poll(cx) {
-                return Poll::Ready(Ok(v));
-            }
-
-            match me.delay.poll(cx) {
-                Poll::Ready(()) => Poll::Ready(Err(Elapsed)),
-                Poll::Pending => Poll::Pending,
-            }
-        }
     }
 
     /// Yields execution back to JavaScript's event loop
@@ -299,6 +206,7 @@ mod imp {
 mod tests {
     use super::*;
     use crate::test_utils::async_test;
+    use crate::time::sleep;
     use std::time::Duration;
     use web_time::Instant;
 

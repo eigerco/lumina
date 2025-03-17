@@ -477,6 +477,11 @@ mod tests {
         let rpc_client = Client::new(WS_URL).await.unwrap();
         let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
 
+        // wait for other nodes to connect to bridge
+        while rpc_client.p2p_peers().await.unwrap().is_empty() {
+            sleep(Duration::from_millis(200)).await;
+        }
+
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
         let info = client.network_info().await.unwrap();
@@ -484,9 +489,8 @@ mod tests {
 
         sleep(Duration::from_millis(300)).await;
 
-        client.wait_connected().await.unwrap();
         let info = client.network_info().await.unwrap();
-        assert_eq!(info.num_peers, 2);
+        assert!(info.num_peers > 1);
         rpc_client
             .p2p_close_peer(&PeerId(
                 client.local_peer_id().await.unwrap().parse().unwrap(),
