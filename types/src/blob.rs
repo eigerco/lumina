@@ -79,7 +79,8 @@ impl Blob {
     ///       "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
     ///       "share_version": 0,
     ///       "commitment": "m0A4feU6Fqd5Zy9td3M7lntG8A3PKqe6YdugmAsWz28=",
-    ///       "index": -1
+    ///       "index": -1,
+    ///       "signer": null
     ///     }"#},
     /// );
     /// ```
@@ -571,11 +572,11 @@ mod tests {
     fn sample_blob_with_signer() -> Blob {
         serde_json::from_str(
             r#"{
-              "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAADCBNOWAP3dM=",
-              "data": "8fIMqAB+kQo7+LLmHaDya8oH73hxem6lQWX1",
+              "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAALwwSWpxCuQb5+A=",
+              "data": "lQnnMKE=",
               "share_version": 1,
-              "commitment": "D6YGsPWdxR8ju2OcOspnkgPG2abD30pSHxsFdiPqnVk=",
-              "index": -1
+              "commitment": "dujykaNN+Ey7ET3QNdPG0g2uveriBvZusA3fLSOdMKU=",
+              "index": -1,
               "signer": "Yjc3XldhbdYke5i8aSlggYxCCLE="
             }"#,
         )
@@ -593,9 +594,12 @@ mod tests {
 
     #[test]
     fn create_from_raw_with_signer() {
-        let expected = sample_blob();
+        let expected = sample_blob_with_signer();
+
         let raw = RawBlob::from(expected.clone());
-        let created = Blob::from_raw(raw, AppVersion::V2).unwrap();
+
+        Blob::from_raw(raw.clone(), AppVersion::V2).unwrap_err();
+        let created = Blob::from_raw(raw, AppVersion::V3).unwrap();
 
         assert_eq!(created, expected);
     }
@@ -603,6 +607,14 @@ mod tests {
     #[test]
     fn validate_blob() {
         sample_blob().validate(AppVersion::V2).unwrap();
+    }
+
+    #[test]
+    fn validate_blob_with_signer() {
+        sample_blob_with_signer()
+            .validate(AppVersion::V2)
+            .unwrap_err();
+        sample_blob_with_signer().validate(AppVersion::V3).unwrap();
     }
 
     #[test]
@@ -627,6 +639,32 @@ mod tests {
     }
 
     #[test]
+    fn deserialize_blob_with_share_version_and_signer_mismatch() {
+        // signer in v0
+        serde_json::from_str::<Blob>(
+            r#"{
+              "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAALwwSWpxCuQb5+A=",
+              "data": "lQnnMKE=",
+              "share_version": 0,
+              "commitment": "dujykaNN+Ey7ET3QNdPG0g2uveriBvZusA3fLSOdMKU=",
+              "signer": "Yjc3XldhbdYke5i8aSlggYxCCLE="
+            }"#,
+        )
+        .unwrap_err();
+
+        // no signer in v1
+        serde_json::from_str::<Blob>(
+            r#"{
+              "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAALwwSWpxCuQb5+A=",
+              "data": "lQnnMKE=",
+              "share_version": 1,
+              "commitment": "dujykaNN+Ey7ET3QNdPG0g2uveriBvZusA3fLSOdMKU=",
+            }"#,
+        )
+        .unwrap_err();
+    }
+
+    #[test]
     fn reconstruct() {
         for _ in 0..10 {
             let len = rand::random::<usize>() % (1024 * 1024) + 1;
@@ -636,6 +674,22 @@ mod tests {
 
             let shares = blob.to_shares().unwrap();
             assert_eq!(blob, Blob::reconstruct(&shares, AppVersion::V2).unwrap());
+        }
+    }
+
+    #[test]
+    fn reconstruct_with_signer() {
+        for _ in 0..10 {
+            let len = rand::random::<usize>() % (1024 * 1024) + 1;
+            let data = random_bytes(len);
+            let ns = Namespace::const_v0(rand::random());
+            let signer = rand::random::<[u8; 20]>().into();
+
+            let blob = Blob::new_with_signer(ns, data, signer, AppVersion::V3).unwrap();
+            let shares = blob.to_shares().unwrap();
+
+            Blob::reconstruct(&shares, AppVersion::V2).unwrap_err();
+            assert_eq!(blob, Blob::reconstruct(&shares, AppVersion::V3).unwrap());
         }
     }
 

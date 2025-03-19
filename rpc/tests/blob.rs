@@ -62,7 +62,6 @@ async fn blob_submit_and_get_with_signer() {
     let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new_with_signer(namespace, data, address, AppVersion::V3).unwrap();
-    println!("{}", serde_json::to_string_pretty(&blob).unwrap());
 
     let submitted_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
 

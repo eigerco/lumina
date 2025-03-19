@@ -5,7 +5,7 @@ use nmt_rs::simple_merkle::tree::MerkleHash;
 use nmt_rs::NamespaceMerkleHasher;
 use serde::{Deserialize, Serialize};
 
-use crate::consts::appconsts;
+use crate::consts::appconsts::{self, AppVersion};
 use crate::nmt::{
     Namespace, NamespacedSha2Hasher, NMT_CODEC, NMT_ID_SIZE, NMT_MULTIHASH_CODE, NS_SIZE,
 };
@@ -94,6 +94,17 @@ impl Share {
             data: data.try_into().unwrap(),
             is_parity: true,
         })
+    }
+
+    /// Check if share is valid in given [`AppVersion`]
+    pub fn validate(&self, app: AppVersion) -> Result<()> {
+        if self.info_byte().is_some_and(|info| {
+            info.version() == appconsts::SHARE_VERSION_ONE && app < AppVersion::V3
+        }) {
+            Err(Error::UnsupportedShareVersion(appconsts::SHARE_VERSION_ONE))
+        } else {
+            Ok(())
+        }
     }
 
     /// Returns true if share contains parity data.
@@ -325,6 +336,22 @@ mod tests {
     }
 
     #[test]
+    fn share_v1_no_signer_in_compact_shares() {
+        const DATA_LEN: usize = 5;
+        let data = &[
+            Namespace::PAY_FOR_BLOB.as_bytes(), // reserved namespace indicating compact share
+            &[InfoByte::from_raw(0b0000_0011).unwrap().as_u8()][..], // v1 + seq start
+            &[0, 0, 0, 5][..],                  // seq len
+            &[7; DATA_LEN][..],                 // data
+            &[0; appconsts::SHARE_SIZE - SHARE_SIGNER_OFFSET - DATA_LEN], // padding
+        ]
+        .concat();
+        let share = Share::from_raw(data).unwrap();
+
+        assert!(share.signer().is_none());
+    }
+
+    #[test]
     fn share_should_have_correct_len() {
         Share::from_raw(&[0; 0]).unwrap_err();
         Share::from_raw(&[0; 100]).unwrap_err();
@@ -333,6 +360,38 @@ mod tests {
         Share::from_raw(&[0; 2 * appconsts::SHARE_SIZE]).unwrap_err();
 
         Share::from_raw(&vec![0; appconsts::SHARE_SIZE]).unwrap();
+    }
+
+    #[test]
+    fn share_validate() {
+        let app_versions = [
+            AppVersion::V1,
+            AppVersion::V2,
+            AppVersion::V3,
+            AppVersion::latest(),
+        ];
+
+        // v0
+        let share = Share::from_raw(&[0; appconsts::SHARE_SIZE]).unwrap();
+
+        for app in app_versions {
+            share.validate(app).unwrap();
+        }
+
+        // v1
+        let mut data = [0; appconsts::SHARE_SIZE];
+        data[NS_SIZE] = InfoByte::new(appconsts::SHARE_VERSION_ONE, false)
+            .unwrap()
+            .as_u8();
+        let share = Share::from_raw(&data).unwrap();
+
+        for app in app_versions {
+            if app < AppVersion::V3 {
+                share.validate(app).unwrap_err();
+            } else {
+                share.validate(app).unwrap();
+            }
+        }
     }
 
     #[test]
