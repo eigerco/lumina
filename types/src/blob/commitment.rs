@@ -572,22 +572,32 @@ mod tests {
 
         let share_signer_required = appconsts::SHARE_VERSION_ONE;
         let share_signer_forbidden = appconsts::SHARE_VERSION_ZERO;
+        let share_version_unsupported = appconsts::MAX_SHARE_VERSION;
 
-        // todo, rewrite manually, without loop
-        for share_version in [share_signer_required, share_signer_forbidden] {
-            for app_version in [app_signer_allowed, app_signer_forbidden, app_unknown] {
-                for has_signer in [true, false] {
-                    let signer_required = share_version == share_signer_required
-                        && (app_version == app_signer_allowed || app_version == app_unknown);
-                    let signer_forbidden = share_version == share_signer_forbidden;
+        let with_signer = true;
+        let no_signer = false;
 
-                    if (signer_required && has_signer) || (signer_forbidden && !has_signer) {
-                        validate_blob(share_version, has_signer, app_version).unwrap();
-                    } else {
-                        validate_blob(share_version, has_signer, app_version).unwrap_err();
-                    }
-                }
-            }
-        }
+        // all good - no signer
+        validate_blob(share_signer_forbidden, no_signer, app_signer_allowed).unwrap();
+        validate_blob(share_signer_forbidden, no_signer, app_signer_forbidden).unwrap();
+        validate_blob(share_signer_forbidden, no_signer, app_unknown).unwrap();
+
+        // all good - with signer
+        validate_blob(share_signer_required, with_signer, app_signer_allowed).unwrap();
+        validate_blob(share_signer_required, with_signer, app_unknown).unwrap();
+
+        // unsupported app version
+        validate_blob(share_version_unsupported, no_signer, app_signer_allowed).unwrap_err();
+
+        // no signer when required
+        validate_blob(share_signer_required, no_signer, app_signer_forbidden).unwrap_err();
+        validate_blob(share_signer_required, no_signer, app_signer_allowed).unwrap_err();
+        validate_blob(share_signer_required, no_signer, app_unknown).unwrap_err();
+
+        // with signer when forbidden
+        validate_blob(share_signer_required, with_signer, app_signer_forbidden).unwrap_err();
+        validate_blob(share_signer_forbidden, with_signer, app_signer_forbidden).unwrap_err();
+        validate_blob(share_signer_forbidden, with_signer, app_signer_allowed).unwrap_err();
+        validate_blob(share_signer_forbidden, with_signer, app_unknown).unwrap_err();
     }
 }
