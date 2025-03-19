@@ -18,6 +18,7 @@ use celestia_types::{AppVersion, Height};
 use http_body::Body;
 use k256::ecdsa::signature::{Error as SignatureError, Signer};
 use k256::ecdsa::{Signature, VerifyingKey};
+use lumina_utils::time::Interval;
 use prost::{Message, Name};
 use tendermint::chain::Id;
 use tendermint::PublicKey;
@@ -28,7 +29,6 @@ use tonic::body::BoxBody;
 use tonic::client::GrpcService;
 
 use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxStatus};
-use crate::utils::Interval;
 use crate::{Error, Result};
 
 // source https://github.com/celestiaorg/celestia-app/blob/v3.0.2/x/blob/types/payforblob.go#L21

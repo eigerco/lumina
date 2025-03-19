@@ -7,12 +7,12 @@ use celestia_types::hash::Hash;
 use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use lumina_utils::time::timeout;
 use tokio::sync::{mpsc, watch};
 
 use crate::{
     block_ranges::{BlockRange, BlockRanges},
     blockstore::InMemoryBlockstore,
-    executor::timeout,
     network::Network,
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
@@ -20,13 +20,6 @@ use crate::{
     utils::OneshotResultSender,
     NodeBuilder,
 };
-
-#[cfg(test)]
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) use tokio::test as async_test;
-#[cfg(test)]
-#[cfg(target_arch = "wasm32")]
-pub(crate) use wasm_bindgen_test::wasm_bindgen_test as async_test;
 
 /// Generate a store pre-filled with headers.
 pub async fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {

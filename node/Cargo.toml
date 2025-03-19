@@ -33,6 +33,7 @@ libp2p = { workspace = true, features = [
   "request-response",
   "kad",
 ] }
+lumina-utils = { workspace = true, features = ["executor", "token", "time"] }
 prost.workspace = true
 tendermint-proto.workspace = true
 tendermint.workspace = true
@@ -103,6 +104,7 @@ function_name = "0.3.0"
 wasm-bindgen-test.workspace = true
 
 [dev-dependencies]
+lumina-utils = { workspace = true, features = ["test-utils"] }
 bytes = "1.6.0"
 celestia-rpc = { workspace = true, features = ["p2p"] }
 celestia-types = { workspace = true, features = ["test-utils"] }

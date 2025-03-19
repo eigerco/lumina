@@ -1,8 +1,8 @@
 use celestia_types::ExtendedHeader;
+use lumina_utils::executor::yield_now;
 #[cfg(not(target_arch = "wasm32"))]
 use tendermint_proto::Protobuf;
 
-use crate::executor::yield_now;
 use crate::store::Result;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::store::{SamplingMetadata, StoreError};
