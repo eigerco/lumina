@@ -132,7 +132,7 @@ impl Blob {
         let namespace = Namespace::new(raw.namespace_version as u8, &raw.namespace_id)?;
         let share_version =
             u8::try_from(raw.share_version).map_err(|_| Error::UnsupportedShareVersion(u8::MAX))?;
-        let signer = raw.signer.try_into().map(|id| AccAddress::new(id)).ok();
+        let signer = raw.signer.try_into().map(AccAddress::new).ok();
         let commitment = Commitment::from_blob(
             namespace,
             &raw.data[..],
