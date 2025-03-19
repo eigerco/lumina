@@ -43,7 +43,8 @@ pub struct Blob {
     /// Index of the blob's first share in the EDS. Only set for blobs retrieved from chain.
     pub index: Option<u64>,
     /// A signer of the blob, i.e. address of the account which submitted the blob.
-    /// Should be `None` if `share_version` is `0`.
+    ///
+    /// Must be present in `share_version 1` and absent otherwise.
     pub signer: Option<AccAddress>,
 }
 
