@@ -11,6 +11,8 @@ use crate::events::EventSubscriber;
 use crate::network::Network;
 use crate::node::{Node, NodeConfig, Result};
 use crate::store::{InMemoryStore, Store};
+#[cfg(target_arch = "wasm32")]
+use crate::utils::resolve_bootnode_addresses;
 
 const HOUR: u64 = 60 * 60;
 const DAY: u64 = 24 * HOUR;
@@ -56,6 +58,10 @@ pub enum NodeBuilderError {
     /// Pruning delay is smaller than [`MIN_PRUNING_DELAY`].
     #[error("Pruning delay is {0:?} but cannot be smaller than {MIN_PRUNING_DELAY:?}")]
     PruningDelayTooSmall(Duration),
+
+    /// Builder failed to resolve dnsaddr multiaddresses for bootnodes
+    #[error("Could not resolve bootnode addresses: {0}")]
+    FailedResolvingBootnodes(String),
 }
 
 impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
@@ -115,7 +121,7 @@ where
     /// Returns [`Node`] along with [`EventSubscriber`]. Use this to avoid missing
     /// any events that will be generated on the construction of the node.
     pub async fn start_subscribed(self) -> Result<(Node<B, S>, EventSubscriber)> {
-        let config = self.build_config()?;
+        let config = self.build_config().await?;
         Node::start(config).await
     }
 
@@ -240,7 +246,7 @@ where
         }
     }
 
-    fn build_config(self) -> Result<NodeConfig<B, S>, NodeBuilderError> {
+    async fn build_config(self) -> Result<NodeConfig<B, S>, NodeBuilderError> {
         let network = self.network.ok_or(NodeBuilderError::NetworkNotSpecified)?;
 
         let bootnodes = if self.bootnodes.is_empty() {
@@ -255,6 +261,11 @@ where
             // of that we display a warning.
             warn!("Node has empty bootnodes and listening addresses. It will never connect to another peer.");
         }
+
+        #[cfg(target_arch = "wasm32")]
+        let bootnodes = resolve_bootnode_addresses(bootnodes)
+            .await
+            .map_err(|e| NodeBuilderError::FailedResolvingBootnodes(e.to_string()))?;
 
         // `Node` is memory hungry when in-memory stores are used and the user may not
         // expect they should set a smaller sampling window to reduce that. For user-friendliness
