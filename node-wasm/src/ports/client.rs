@@ -37,7 +37,7 @@ where
 
         let _worker_join_handle = spawn(async move {
             if let Err(e) = worker.run().await {
-                error!("Worker stopped because of a fatal error: {e}");
+                error!("Client worker stopped because of a fatal error: {e}");
             }
         });
 
@@ -57,7 +57,7 @@ where
         let (tx, rx) = oneshot::channel();
         self.request_tx
             .send((request, transferable, tx))
-            .context("could not forward the request to Worker")?;
+            .context("could not forward the request to client worker")?;
         Ok(rx.map(|r| r.ok()))
     }
 }
