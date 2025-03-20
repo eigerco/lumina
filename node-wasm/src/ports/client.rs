@@ -33,11 +33,11 @@ where
     pub fn start(port: JsValue) -> Result<Client<Request, Response>> {
         let cancellation_token = CancellationToken::new();
         let (request_tx, request_rx) = mpsc::unbounded_channel();
-        let mut worker = ClientWorker::new(port, request_rx, cancellation_token.child_token())?;
+        let mut worker = Worker::new(port, request_rx, cancellation_token.child_token())?;
 
         let _worker_join_handle = spawn(async move {
             if let Err(e) = worker.run().await {
-                error!("ClientWorker stopped because of a fatal error: {e}");
+                error!("Worker stopped because of a fatal error: {e}");
             }
         });
 
@@ -57,12 +57,12 @@ where
         let (tx, rx) = oneshot::channel();
         self.request_tx
             .send((request, transferable, tx))
-            .context("could not forward the request to ClientWorker")?;
+            .context("could not forward the request to Worker")?;
         Ok(rx.map(|r| r.ok()))
     }
 }
 
-struct ClientWorker<Request, Response: Serialize> {
+struct Worker<Request, Response: Serialize> {
     /// Port over which communication takes place
     port: Port,
     /// Queued responses from the onmessage callback
@@ -77,7 +77,7 @@ struct ClientWorker<Request, Response: Serialize> {
     cancellation_token: CancellationToken,
 }
 
-impl<Request, Response> ClientWorker<Request, Response>
+impl<Request, Response> Worker<Request, Response>
 where
     Request: Serialize,
     Response: Serialize + DeserializeOwned + 'static,
@@ -86,12 +86,12 @@ where
         port: JsValue,
         request_tx: mpsc::UnboundedReceiver<(Request, Transferable, oneshot::Sender<Response>)>,
         cancellation_token: CancellationToken,
-    ) -> Result<ClientWorker<Request, Response>> {
+    ) -> Result<Worker<Request, Response>> {
         let (incoming_responses_tx, incoming_responses) = mpsc::unbounded_channel();
 
         let port = Port::new_with_channels(port, incoming_responses_tx, None)?;
 
-        Ok(ClientWorker {
+        Ok(Worker {
             port,
             incoming_responses,
             outgoing_requests: request_tx,

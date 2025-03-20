@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use futures::future::{FutureExt, LocalBoxFuture};
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde::de::DeserializeOwned;
@@ -13,12 +11,12 @@ use wasm_bindgen::prelude::*;
 
 use crate::error::{Context, Error, Result};
 use crate::ports::common::{MessageId, MultiplexMessage, Port};
-use lumina_utils::executor::{spawn, JoinHandle};
+use lumina_utils::executor::spawn;
 
 /// `Server` aggregates multiple existing [`ServerConnection`]s, receiving `Request`s
 /// from the connected clients, as well as handles new [`Client`]s connecting.
 pub struct Server<Request, Response> {
-    connections: Vec<ServerConnection<Request, Response>>,
+    connection_workers_drop_guards: Vec<DropGuard>,
     requests_tx: mpsc::UnboundedSender<(Request, oneshot::Sender<Response>)>,
     requests_rx: mpsc::UnboundedReceiver<(Request, oneshot::Sender<Response>)>,
     ports_tx: mpsc::UnboundedSender<JsValue>,
@@ -37,7 +35,7 @@ where
         let (ports_tx, ports_rx) = mpsc::unbounded_channel();
 
         Server {
-            connections: vec![],
+            connection_workers_drop_guards: vec![],
             requests_tx,
             requests_rx,
             ports_tx,
@@ -54,7 +52,7 @@ where
                     return Ok(request.expect("request channel should not drop"))
                 }
                 port = self.ports_rx.recv() => {
-                    if let Err(e) = self.add_connection(port.expect("port channel should not drop")) {
+                    if let Err(e) = self.spawn_connection_worker(port.expect("port channel should not drop")) {
                         error!("Failed to add new client connection: {e}");
                     }
                 }
@@ -62,10 +60,26 @@ where
         }
     }
 
-    fn add_connection(&mut self, port: JsValue) -> Result<()> {
-        let client_connection =
-            ServerConnection::start(port, self.requests_tx.clone(), self.ports_tx.clone())?;
-        self.connections.push(client_connection);
+    fn spawn_connection_worker(&mut self, port: JsValue) -> Result<()> {
+        // TODO: connection pruning: https://github.com/eigerco/lumina/issues/434
+
+        /*
+                let cancellation_token = CancellationToken::new();
+                let mut worker =
+                    ConnectionWorker::new(port, self.requests_tx.clone(), self.ports_tx.clone(), cancellation_token.child_token())?;
+
+                let _worker_join_handle = spawn(async move {
+                    if let Err(e) = worker.run().await {
+                        error!("Serverworker stopped because of a fatal error: {e}");
+                    }
+                });
+        */
+
+        let cancellation_token =
+            spawn_connection_worker(port, self.requests_tx.clone(), self.ports_tx.clone())?;
+        self.connection_workers_drop_guards
+            .push(cancellation_token.drop_guard());
+
         Ok(())
     }
 
@@ -75,44 +89,7 @@ where
     }
 }
 
-/// Represents a one to one connection with a [`Client`] over a js object with port-like semantics.
-pub struct ServerConnection<Request, Response> {
-    _worker_join_handle: JoinHandle,
-    _worker_drop_guard: DropGuard,
-    _transferred_types: PhantomData<(Request, Response)>,
-}
-
-impl<Request, Response> ServerConnection<Request, Response>
-where
-    Request: Serialize + DeserializeOwned + 'static,
-    Response: Serialize + 'static,
-{
-    /// Start a new client connection, spinning up background thread for forwarding messages from
-    /// the callback
-    pub fn start(
-        port: JsValue,
-        request_tx: mpsc::UnboundedSender<(Request, oneshot::Sender<Response>)>,
-        ports_tx: mpsc::UnboundedSender<JsValue>,
-    ) -> Result<ServerConnection<Request, Response>> {
-        let cancellation_token = CancellationToken::new();
-        let mut worker =
-            ServerWorker::new(port, request_tx, ports_tx, cancellation_token.child_token())?;
-
-        let _worker_join_handle = spawn(async move {
-            if let Err(e) = worker.run().await {
-                error!("Serverworker stopped because of a fatal error: {e}");
-            }
-        });
-
-        Ok(ServerConnection::<Request, Response> {
-            _worker_join_handle,
-            _worker_drop_guard: cancellation_token.drop_guard(),
-            _transferred_types: PhantomData,
-        })
-    }
-}
-
-struct ServerWorker<Request: Serialize, Response> {
+struct ConnectionWorker<Request: Serialize, Response> {
     /// Port over which communication takes place
     port: Port,
     /// Queued requests from the onmessage callback
@@ -125,7 +102,7 @@ struct ServerWorker<Request: Serialize, Response> {
     cancellation_token: CancellationToken,
 }
 
-impl<Request, Response> ServerWorker<Request, Response>
+impl<Request, Response> ConnectionWorker<Request, Response>
 where
     Request: Serialize + DeserializeOwned + 'static,
     Response: Serialize + 'static,
@@ -135,12 +112,12 @@ where
         request_tx: mpsc::UnboundedSender<(Request, oneshot::Sender<Response>)>,
         port_queue: mpsc::UnboundedSender<JsValue>,
         cancellation_token: CancellationToken,
-    ) -> Result<ServerWorker<Request, Response>> {
+    ) -> Result<ConnectionWorker<Request, Response>> {
         let (incoming_requests_tx, incoming_requests) = mpsc::unbounded_channel();
 
         let port = Port::new_with_channels(port, incoming_requests_tx, Some(port_queue))?;
 
-        Ok(ServerWorker {
+        Ok(ConnectionWorker {
             port,
             incoming_requests,
             pending_responses_map: Default::default(),
@@ -200,5 +177,113 @@ where
             .context("failed to send outgoing response ")?;
 
         Ok(())
+    }
+}
+
+fn spawn_connection_worker<Request, Response>(
+    port: JsValue,
+    request_tx: mpsc::UnboundedSender<(Request, oneshot::Sender<Response>)>,
+    ports_tx: mpsc::UnboundedSender<JsValue>,
+) -> Result<CancellationToken>
+where
+    Request: Serialize + DeserializeOwned + 'static,
+    Response: Serialize + 'static,
+{
+    let cancellation_token = CancellationToken::new();
+    let mut worker =
+        ConnectionWorker::new(port, request_tx, ports_tx, cancellation_token.child_token())?;
+
+    let _worker_join_handle = spawn(async move {
+        if let Err(e) = worker.run().await {
+            error!("Serverworker stopped because of a fatal error: {e}");
+        }
+    });
+    Ok(cancellation_token)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ports::client::Client;
+
+    use tokio::sync::mpsc;
+    use wasm_bindgen_test::wasm_bindgen_test;
+    use web_sys::MessageChannel;
+
+    #[wasm_bindgen_test]
+    async fn smoke_test() {
+        let channel = MessageChannel::new().unwrap();
+        let client = Client::<i32, i32>::start(channel.port1().into()).unwrap();
+
+        let (request_tx, mut request_rx) = mpsc::unbounded_channel();
+        let (port_tx, _) = mpsc::unbounded_channel();
+        let _worker_guard =
+            spawn_connection_worker::<i32, i32>(channel.port2().into(), request_tx, port_tx)
+                .unwrap()
+                .drop_guard();
+
+        let response = client.send(42, None).unwrap();
+
+        let (request, responder) = request_rx.recv().await.expect("failedd to recv");
+        assert_eq!(request, 42);
+        responder.send(43).unwrap();
+
+        assert_eq!(response.await.unwrap(), 43);
+    }
+
+    #[wasm_bindgen_test]
+    async fn response_channel_dropped() {
+        let channel = MessageChannel::new().unwrap();
+        let client = Client::<i32, i32>::start(channel.port1().into()).unwrap();
+
+        let (request_tx, mut request_rx) = mpsc::unbounded_channel();
+        let (port_tx, _) = mpsc::unbounded_channel();
+        let _worker_guard =
+            spawn_connection_worker::<i32, i32>(channel.port2().into(), request_tx, port_tx)
+                .unwrap()
+                .drop_guard();
+
+        let response = client.send(42, None).unwrap();
+
+        let (request, responder) = request_rx.recv().await.expect("failedd to recv");
+        assert_eq!(request, 42);
+        drop(responder);
+
+        assert_eq!(response.await, None);
+    }
+
+    #[wasm_bindgen_test]
+    async fn multiple_channels() {
+        let channel = MessageChannel::new().unwrap();
+        let client = Client::<i32, String>::start(channel.port1().into()).unwrap();
+
+        let (request_tx, mut request_rx) = mpsc::unbounded_channel();
+        let (port_tx, _) = mpsc::unbounded_channel();
+        let _worker_guard =
+            spawn_connection_worker::<i32, String>(channel.port2().into(), request_tx, port_tx)
+                .unwrap()
+                .drop_guard();
+
+        let mut responses = [
+            Some(client.send(0, None).unwrap()),
+            Some(client.send(1, None).unwrap()),
+            Some(client.send(2, None).unwrap()),
+            Some(client.send(3, None).unwrap()),
+            Some(client.send(4, None).unwrap()),
+            Some(client.send(5, None).unwrap()),
+        ];
+
+        for i in 0..=5 {
+            let (request, responder) = request_rx.recv().await.unwrap();
+            assert_eq!(i, request);
+            responder.send(format!("R:{request}")).unwrap();
+        }
+
+        for i in (0..=5).rev() {
+            assert_eq!(
+                responses[i].take().unwrap().await.unwrap(),
+                format!("R:{i}")
+            );
+        }
     }
 }

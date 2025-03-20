@@ -49,12 +49,12 @@ impl WorkerClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc;
+    use std::time::Duration;
     use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
 
-    use crate::ports::server::ServerConnection;
+    use lumina_utils::time::sleep;
 
     #[wasm_bindgen_test]
     async fn worker_client_server() {
@@ -74,6 +74,9 @@ mod tests {
             let (request, responder) = server.recv().await.unwrap();
             assert!(matches!(request, NodeCommand::IsRunning));
             responder.send(WorkerResponse::IsRunning(true)).unwrap();
+
+            // otherwise server is dropped too soon and last message does not make it
+            sleep(Duration::from_millis(100)).await;
         });
 
         port_channel.send(channel0.port1().into()).unwrap();
@@ -91,80 +94,6 @@ mod tests {
 
         let response = client1.exec(NodeCommand::IsRunning).await.unwrap();
         assert!(matches!(response, WorkerResponse::IsRunning(true)));
-    }
-
-    #[wasm_bindgen_test]
-    async fn smoke_test() {
-        let channel = MessageChannel::new().unwrap();
-        let client = Client::<i32, i32>::start(channel.port1().into()).unwrap();
-
-        let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-        let (port_tx, _) = mpsc::unbounded_channel();
-        let _server_connection =
-            ServerConnection::<i32, i32>::start(channel.port2().into(), request_tx, port_tx)
-                .unwrap();
-
-        let response = client.send(42, None).unwrap();
-
-        let (request, responder) = request_rx.recv().await.expect("failedd to recv");
-        assert_eq!(request, 42);
-        responder.send(43).unwrap();
-
-        assert_eq!(response.await.unwrap(), 43);
-    }
-
-    #[wasm_bindgen_test]
-    async fn response_channel_dropped() {
-        let channel = MessageChannel::new().unwrap();
-        let client = Client::<i32, i32>::start(channel.port1().into()).unwrap();
-
-        let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-        let (port_tx, _) = mpsc::unbounded_channel();
-        let _server_connection =
-            ServerConnection::<i32, i32>::start(channel.port2().into(), request_tx, port_tx)
-                .unwrap();
-
-        let response = client.send(42, None).unwrap();
-
-        let (request, responder) = request_rx.recv().await.expect("failedd to recv");
-        assert_eq!(request, 42);
-        drop(responder);
-
-        assert_eq!(response.await, None);
-    }
-
-    #[wasm_bindgen_test]
-    async fn multiple_channels() {
-        let channel = MessageChannel::new().unwrap();
-        let client = Client::<i32, String>::start(channel.port1().into()).unwrap();
-
-        let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-        let (port_tx, _) = mpsc::unbounded_channel();
-        let _server_connection =
-            ServerConnection::<i32, String>::start(channel.port2().into(), request_tx, port_tx)
-                .unwrap();
-
-        let mut responses = [
-            Some(client.send(0, None).unwrap()),
-            Some(client.send(1, None).unwrap()),
-            Some(client.send(2, None).unwrap()),
-            Some(client.send(3, None).unwrap()),
-            Some(client.send(4, None).unwrap()),
-            Some(client.send(5, None).unwrap()),
-        ];
-
-        for i in 0..=5 {
-            let (request, responder) = request_rx.recv().await.unwrap();
-            assert_eq!(i, request);
-            responder.send(format!("R:{request}")).unwrap();
-        }
-
-        for i in (0..=5).rev() {
-            assert_eq!(
-                responses[i].take().unwrap().await.unwrap(),
-                format!("R:{i}")
-            );
-        }
     }
 
     #[wasm_bindgen_test]
