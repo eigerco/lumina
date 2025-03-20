@@ -62,19 +62,6 @@ where
 
     fn spawn_connection_worker(&mut self, port: JsValue) -> Result<()> {
         // TODO: connection pruning: https://github.com/eigerco/lumina/issues/434
-
-        /*
-                let cancellation_token = CancellationToken::new();
-                let mut worker =
-                    ConnectionWorker::new(port, self.requests_tx.clone(), self.ports_tx.clone(), cancellation_token.child_token())?;
-
-                let _worker_join_handle = spawn(async move {
-                    if let Err(e) = worker.run().await {
-                        error!("Serverworker stopped because of a fatal error: {e}");
-                    }
-                });
-        */
-
         let cancellation_token =
             spawn_connection_worker(port, self.requests_tx.clone(), self.ports_tx.clone())?;
         self.connection_workers_drop_guards
@@ -174,7 +161,7 @@ where
 
         self.port
             .send(&message)
-            .context("failed to send outgoing response ")?;
+            .context("failed to send outgoing response")?;
 
         Ok(())
     }
@@ -195,7 +182,7 @@ where
 
     let _worker_join_handle = spawn(async move {
         if let Err(e) = worker.run().await {
-            error!("Serverworker stopped because of a fatal error: {e}");
+            error!("Server worker stopped because of a fatal error: {e}");
         }
     });
     Ok(cancellation_token)
@@ -224,7 +211,7 @@ mod tests {
 
         let response = client.send(42, None).unwrap();
 
-        let (request, responder) = request_rx.recv().await.expect("failedd to recv");
+        let (request, responder) = request_rx.recv().await.expect("failed to recv");
         assert_eq!(request, 42);
         responder.send(43).unwrap();
 
@@ -245,7 +232,7 @@ mod tests {
 
         let response = client.send(42, None).unwrap();
 
-        let (request, responder) = request_rx.recv().await.expect("failedd to recv");
+        let (request, responder) = request_rx.recv().await.expect("failed to recv");
         assert_eq!(request, 42);
         drop(responder);
 
