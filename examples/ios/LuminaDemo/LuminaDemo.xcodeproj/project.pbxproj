@@ -1,0 +1,582 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		FC92E19F2D5F9B1A00A25A9C /* lumina.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC92E19E2D5F9B1A00A25A9C /* lumina.xcframework */; };
+		FC92E1A22D5F9B2700A25A9C /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC92E1A12D5F9B2700A25A9C /* SystemConfiguration.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		FC92E17C2D5F9A6E00A25A9C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FC92E1632D5F9A6D00A25A9C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FC92E16A2D5F9A6D00A25A9C;
+			remoteInfo = LuminaDemo;
+		};
+		FC92E1862D5F9A6E00A25A9C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FC92E1632D5F9A6D00A25A9C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FC92E16A2D5F9A6D00A25A9C;
+			remoteInfo = LuminaDemo;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		FC92E16B2D5F9A6D00A25A9C /* LuminaDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LuminaDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FC92E17B2D5F9A6E00A25A9C /* LuminaDemoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LuminaDemoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FC92E1852D5F9A6E00A25A9C /* LuminaDemoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LuminaDemoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FC92E19E2D5F9B1A00A25A9C /* lumina.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = lumina.xcframework; sourceTree = "<group>"; };
+		FC92E1A12D5F9B2700A25A9C /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		FC92E16D2D5F9A6D00A25A9C /* LuminaDemo */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LuminaDemo;
+			sourceTree = "<group>";
+		};
+		FC92E17E2D5F9A6E00A25A9C /* LuminaDemoTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LuminaDemoTests;
+			sourceTree = "<group>";
+		};
+		FC92E1882D5F9A6E00A25A9C /* LuminaDemoUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LuminaDemoUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		FC92E1682D5F9A6D00A25A9C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FC92E1A22D5F9B2700A25A9C /* SystemConfiguration.framework in Frameworks */,
+				FC92E19F2D5F9B1A00A25A9C /* lumina.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FC92E1782D5F9A6E00A25A9C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FC92E1822D5F9A6E00A25A9C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		FC92E1622D5F9A6D00A25A9C = {
+			isa = PBXGroup;
+			children = (
+				FC92E16D2D5F9A6D00A25A9C /* LuminaDemo */,
+				FC92E17E2D5F9A6E00A25A9C /* LuminaDemoTests */,
+				FC92E1882D5F9A6E00A25A9C /* LuminaDemoUITests */,
+				FC92E16C2D5F9A6D00A25A9C /* Products */,
+				FC92E19E2D5F9B1A00A25A9C /* lumina.xcframework */,
+				FC92E1A02D5F9B2700A25A9C /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		FC92E16C2D5F9A6D00A25A9C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				FC92E16B2D5F9A6D00A25A9C /* LuminaDemo.app */,
+				FC92E17B2D5F9A6E00A25A9C /* LuminaDemoTests.xctest */,
+				FC92E1852D5F9A6E00A25A9C /* LuminaDemoUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		FC92E1A02D5F9B2700A25A9C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				FC92E1A12D5F9B2700A25A9C /* SystemConfiguration.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		FC92E16A2D5F9A6D00A25A9C /* LuminaDemo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FC92E18F2D5F9A6E00A25A9C /* Build configuration list for PBXNativeTarget "LuminaDemo" */;
+			buildPhases = (
+				FC92E1672D5F9A6D00A25A9C /* Sources */,
+				FC92E1682D5F9A6D00A25A9C /* Frameworks */,
+				FC92E1692D5F9A6D00A25A9C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				FC92E16D2D5F9A6D00A25A9C /* LuminaDemo */,
+			);
+			name = LuminaDemo;
+			packageProductDependencies = (
+			);
+			productName = LuminaDemo;
+			productReference = FC92E16B2D5F9A6D00A25A9C /* LuminaDemo.app */;
+			productType = "com.apple.product-type.application";
+		};
+		FC92E17A2D5F9A6E00A25A9C /* LuminaDemoTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FC92E1922D5F9A6E00A25A9C /* Build configuration list for PBXNativeTarget "LuminaDemoTests" */;
+			buildPhases = (
+				FC92E1772D5F9A6E00A25A9C /* Sources */,
+				FC92E1782D5F9A6E00A25A9C /* Frameworks */,
+				FC92E1792D5F9A6E00A25A9C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FC92E17D2D5F9A6E00A25A9C /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				FC92E17E2D5F9A6E00A25A9C /* LuminaDemoTests */,
+			);
+			name = LuminaDemoTests;
+			packageProductDependencies = (
+			);
+			productName = LuminaDemoTests;
+			productReference = FC92E17B2D5F9A6E00A25A9C /* LuminaDemoTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		FC92E1842D5F9A6E00A25A9C /* LuminaDemoUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FC92E1952D5F9A6E00A25A9C /* Build configuration list for PBXNativeTarget "LuminaDemoUITests" */;
+			buildPhases = (
+				FC92E1812D5F9A6E00A25A9C /* Sources */,
+				FC92E1822D5F9A6E00A25A9C /* Frameworks */,
+				FC92E1832D5F9A6E00A25A9C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FC92E1872D5F9A6E00A25A9C /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				FC92E1882D5F9A6E00A25A9C /* LuminaDemoUITests */,
+			);
+			name = LuminaDemoUITests;
+			packageProductDependencies = (
+			);
+			productName = LuminaDemoUITests;
+			productReference = FC92E1852D5F9A6E00A25A9C /* LuminaDemoUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		FC92E1632D5F9A6D00A25A9C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1620;
+				LastUpgradeCheck = 1620;
+				TargetAttributes = {
+					FC92E16A2D5F9A6D00A25A9C = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					FC92E17A2D5F9A6E00A25A9C = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = FC92E16A2D5F9A6D00A25A9C;
+					};
+					FC92E1842D5F9A6E00A25A9C = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = FC92E16A2D5F9A6D00A25A9C;
+					};
+				};
+			};
+			buildConfigurationList = FC92E1662D5F9A6D00A25A9C /* Build configuration list for PBXProject "LuminaDemo" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = FC92E1622D5F9A6D00A25A9C;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = FC92E16C2D5F9A6D00A25A9C /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				FC92E16A2D5F9A6D00A25A9C /* LuminaDemo */,
+				FC92E17A2D5F9A6E00A25A9C /* LuminaDemoTests */,
+				FC92E1842D5F9A6E00A25A9C /* LuminaDemoUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		FC92E1692D5F9A6D00A25A9C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FC92E1792D5F9A6E00A25A9C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FC92E1832D5F9A6E00A25A9C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		FC92E1672D5F9A6D00A25A9C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FC92E1772D5F9A6E00A25A9C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FC92E1812D5F9A6E00A25A9C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		FC92E17D2D5F9A6E00A25A9C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FC92E16A2D5F9A6D00A25A9C /* LuminaDemo */;
+			targetProxy = FC92E17C2D5F9A6E00A25A9C /* PBXContainerItemProxy */;
+		};
+		FC92E1872D5F9A6E00A25A9C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FC92E16A2D5F9A6D00A25A9C /* LuminaDemo */;
+			targetProxy = FC92E1862D5F9A6E00A25A9C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		FC92E18D2D5F9A6E00A25A9C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		FC92E18E2D5F9A6E00A25A9C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		FC92E1902D5F9A6E00A25A9C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"LuminaDemo/Preview Content\"";
+				DEVELOPMENT_TEAM = 772B362MTF;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.eiger.LuminaDemo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		FC92E1912D5F9A6E00A25A9C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"LuminaDemo/Preview Content\"";
+				DEVELOPMENT_TEAM = 772B362MTF;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.eiger.LuminaDemo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		FC92E1932D5F9A6E00A25A9C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 772B362MTF;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.eiger.LuminaDemoTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LuminaDemo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LuminaDemo";
+			};
+			name = Debug;
+		};
+		FC92E1942D5F9A6E00A25A9C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 772B362MTF;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.eiger.LuminaDemoTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LuminaDemo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LuminaDemo";
+			};
+			name = Release;
+		};
+		FC92E1962D5F9A6E00A25A9C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 772B362MTF;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.eiger.LuminaDemoUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = LuminaDemo;
+			};
+			name = Debug;
+		};
+		FC92E1972D5F9A6E00A25A9C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 772B362MTF;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.eiger.LuminaDemoUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = LuminaDemo;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		FC92E1662D5F9A6D00A25A9C /* Build configuration list for PBXProject "LuminaDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FC92E18D2D5F9A6E00A25A9C /* Debug */,
+				FC92E18E2D5F9A6E00A25A9C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FC92E18F2D5F9A6E00A25A9C /* Build configuration list for PBXNativeTarget "LuminaDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FC92E1902D5F9A6E00A25A9C /* Debug */,
+				FC92E1912D5F9A6E00A25A9C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FC92E1922D5F9A6E00A25A9C /* Build configuration list for PBXNativeTarget "LuminaDemoTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FC92E1932D5F9A6E00A25A9C /* Debug */,
+				FC92E1942D5F9A6E00A25A9C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FC92E1952D5F9A6E00A25A9C /* Build configuration list for PBXNativeTarget "LuminaDemoUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FC92E1962D5F9A6E00A25A9C /* Debug */,
+				FC92E1972D5F9A6E00A25A9C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = FC92E1632D5F9A6D00A25A9C /* Project object */;
+}
