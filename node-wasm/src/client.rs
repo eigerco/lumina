@@ -417,7 +417,7 @@ impl WasmNodeConfig {
         builder = builder
             .network(network)
             .sync_batch_size(128)
-            .bootnodes(bootnodes.into_iter());
+            .bootnodes(bootnodes);
 
         if let Some(secs) = self.custom_sampling_window_secs {
             let dur = Duration::from_secs(secs.into());
