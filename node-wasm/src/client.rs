@@ -88,12 +88,6 @@ impl NodeClient {
         let worker = WorkerClient::new(port)?;
 
         // keep pinging worker until it responds.
-        // NOTE: there is a possibility that worker can take longer than a timeout
-        // to send his response. Client will then send another ping and read previous
-        // response, leaving an extra pong on the wire. This would offset all future
-        // worker responses by 1.
-        // We workaround this in `WorkerClient::exec` dropping all `InternalPong`s there.
-        // TODO: refactor when oneshots are implemented
         loop {
             if timeout(100, worker.exec(NodeCommand::InternalPing))
                 .await
@@ -110,7 +104,7 @@ impl NodeClient {
 
     /// Establish a new connection to the existing worker over provided port
     #[wasm_bindgen(js_name = addConnectionToWorker)]
-    pub async fn add_connection_to_worker(&self, port: &JsValue) -> Result<()> {
+    pub async fn add_connection_to_worker(&self, port: JsValue) -> Result<()> {
         self.worker.add_connection_to_worker(port).await
     }
 
