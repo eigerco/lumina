@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.1.0...lumina-node-uniffi-v0.1.1) - 2025-03-20
+
+### Other
+
+- *(node-uniffi)* Add minimal test case in Kotlin and Swift ([#535](https://github.com/eigerco/lumina/pull/535))
+
 ## [0.1.0](https://github.com/eigerco/lumina/releases/tag/lumina-node-uniffi-v0.1.0) - 2025-02-24
 
 ### Added
