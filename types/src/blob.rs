@@ -303,7 +303,9 @@ impl Blob {
         if share_version == appconsts::SHARE_VERSION_ZERO {
             Self::new(namespace, data, app_version)
         } else if share_version == appconsts::SHARE_VERSION_ONE {
-            Self::new_with_signer(namespace, data, signer.expect("must be Some"), app_version)
+            // shouldn't happen as we have user namespace, seq start, and share v1
+            let signer = signer.ok_or(Error::MissingSigner)?;
+            Self::new_with_signer(namespace, data, signer, app_version)
         } else {
             Err(Error::UnsupportedShareVersion(share_version))
         }
