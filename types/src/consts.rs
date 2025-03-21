@@ -214,6 +214,9 @@ pub mod appconsts {
         /// The first share version format.
         pub const SHARE_VERSION_ZERO: u8 = 0;
 
+        /// The second share version format.
+        pub const SHARE_VERSION_ONE: u8 = 1;
+
         /// The number of bytes reserved for the location of the first unit (transaction, ISR) in a compact share.
         pub const COMPACT_SHARE_RESERVED_BYTES: usize = 4;
 
@@ -244,6 +247,9 @@ pub mod appconsts {
 
         /// The maximum value a share version can be.
         pub const MAX_SHARE_VERSION: u8 = 127;
+
+        /// The size of a signer field in share, in bytes
+        pub const SIGNER_SIZE: usize = 20;
     }
 }
 

@@ -1,5 +1,6 @@
 //! celestia-node rpc types and methods related to shares
 //!
+use std::fmt;
 use std::future::Future;
 use std::marker::{Send, Sync};
 
@@ -80,8 +81,7 @@ pub trait ShareClient: ClientT {
 
             let raw_eds = rpc::ShareClient::share_get_eds(self, root.height().value()).await?;
 
-            ExtendedDataSquare::from_raw(raw_eds, app_version)
-                .map_err(|e| Error::Custom(e.to_string()))
+            ExtendedDataSquare::from_raw(raw_eds, app_version).map_err(custom_client_error)
         }
     }
 
@@ -99,7 +99,17 @@ pub trait ShareClient: ClientT {
         'b: 'fut,
         Self: Sized + Sync + 'fut,
     {
-        rpc::ShareClient::share_get_range(self, root.height().value(), start, end)
+        async move {
+            let resp =
+                rpc::ShareClient::share_get_range(self, root.height().value(), start, end).await?;
+
+            let app = root.app_version().map_err(custom_client_error)?;
+            for share in &resp.shares {
+                share.validate(app).map_err(custom_client_error)?;
+            }
+
+            Ok(resp)
+        }
     }
 
     /// GetShare gets a Share by coordinates in EDS.
@@ -117,12 +127,17 @@ pub trait ShareClient: ClientT {
         async move {
             let share =
                 rpc::ShareClient::share_get_share(self, root.height().value(), row, col).await?;
-            if is_ods_square(row, col, root.dah.square_width()) {
+            let share = if is_ods_square(row, col, root.dah.square_width()) {
                 Share::from_raw(&share.data)
             } else {
                 Share::parity(&share.data)
             }
-            .map_err(|e| Error::Custom(e.to_string()))
+            .map_err(custom_client_error)?;
+
+            let app = root.app_version().map_err(custom_client_error)?;
+            share.validate(app).map_err(custom_client_error)?;
+
+            Ok(share)
         }
     }
 
@@ -141,7 +156,18 @@ pub trait ShareClient: ClientT {
         'b: 'fut,
         Self: Sized + Sync + 'fut,
     {
-        rpc::ShareClient::share_get_namespace_data(self, root.height().value(), namespace)
+        async move {
+            let ns_data =
+                rpc::ShareClient::share_get_namespace_data(self, root.height().value(), namespace)
+                    .await?;
+
+            let app = root.app_version().map_err(custom_client_error)?;
+            for shr in ns_data.rows.iter().flat_map(|row| &row.shares) {
+                shr.validate(app).map_err(custom_client_error)?;
+            }
+
+            Ok(ns_data)
+        }
     }
 
     /// SharesAvailable subjectively validates if Shares committed to the given Root are available on the Network.
@@ -162,4 +188,8 @@ impl<T> ShareClient for T where T: ClientT {}
 fn is_ods_square(row: u64, column: u64, square_width: u16) -> bool {
     let ods_width = square_width / 2;
     row < ods_width as u64 && column < ods_width as u64
+}
+
+fn custom_client_error<E: fmt::Display>(error: E) -> Error {
+    Error::Custom(error.to_string())
 }

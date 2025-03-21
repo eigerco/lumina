@@ -14,13 +14,14 @@ let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(),
     .expect("Failed to create a blob");
 
 assert_eq!(
-    &serde_json::to_string_pretty(&blob).unwrap(), 
+    &serde_json::to_string_pretty(&blob).unwrap(),
     indoc::indoc! {r#"{
       "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
       "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
       "share_version": 0,
       "commitment": "m0A4feU6Fqd5Zy9td3M7lntG8A3PKqe6YdugmAsWz28=",
-      "index": -1
+      "index": -1,
+      "signer": null
     }"#},
 );
 ```

@@ -5,7 +5,10 @@ use bech32::Hrp;
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
 use tendermint::account::Id;
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::prelude::*;
 
+use crate::consts::appconsts;
 use crate::consts::cosmos::*;
 use crate::{Error, Result};
 
@@ -67,6 +70,10 @@ pub enum Address {
 /// Address of an account.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(inspectable)
+)]
 pub struct AccAddress {
     id: Id,
 }
@@ -74,6 +81,10 @@ pub struct AccAddress {
 /// Address of a validator.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(inspectable)
+)]
 pub struct ValAddress {
     id: Id,
 }
@@ -81,6 +92,10 @@ pub struct ValAddress {
 /// Address of a consensus node.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(inspectable)
+)]
 pub struct ConsAddress {
     id: Id,
 }
@@ -157,173 +172,98 @@ impl From<Address> for Raw {
     }
 }
 
-impl AccAddress {
-    /// Create a new account address with given ID.
-    pub fn new(id: Id) -> Self {
-        AccAddress { id }
-    }
-}
-
-impl AddressTrait for AccAddress {
-    #[inline]
-    fn id_ref(&self) -> &Id {
-        &self.id
-    }
-
-    #[inline]
-    fn kind(&self) -> AddressKind {
-        AddressKind::Account
-    }
-}
-
-impl private::Sealed for AccAddress {}
-
-impl Display for AccAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = address_to_string(self);
-        f.write_str(&s)
-    }
-}
-
-impl FromStr for AccAddress {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (kind, id) = string_to_kind_and_id(s)?;
-
-        match kind {
-            AddressKind::Account => Ok(AccAddress::new(id)),
-            _ => Err(Error::InvalidAddressPrefix(kind.prefix().to_owned())),
+macro_rules! impl_address_type {
+    ($name:ident, $kind:ident) => {
+        impl $name {
+            /// Create a new address with given ID.
+            pub fn new(id: Id) -> Self {
+                $name { id }
+            }
         }
-    }
-}
 
-impl TryFrom<Raw> for AccAddress {
-    type Error = Error;
+        impl AddressTrait for $name {
+            #[inline]
+            fn id_ref(&self) -> &Id {
+                &self.id
+            }
 
-    fn try_from(value: Raw) -> Result<Self, Self::Error> {
-        value.addr.parse()
-    }
-}
-
-impl From<AccAddress> for Raw {
-    fn from(value: AccAddress) -> Self {
-        let addr = value.to_string();
-        Raw { addr }
-    }
-}
-
-impl ValAddress {
-    /// Create a new validator address with given ID.
-    pub fn new(id: Id) -> Self {
-        ValAddress { id }
-    }
-}
-
-impl AddressTrait for ValAddress {
-    #[inline]
-    fn id_ref(&self) -> &Id {
-        &self.id
-    }
-
-    #[inline]
-    fn kind(&self) -> AddressKind {
-        AddressKind::Validator
-    }
-}
-
-impl private::Sealed for ValAddress {}
-
-impl Display for ValAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = address_to_string(self);
-        f.write_str(&s)
-    }
-}
-
-impl FromStr for ValAddress {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (kind, id) = string_to_kind_and_id(s)?;
-
-        match kind {
-            AddressKind::Validator => Ok(ValAddress::new(id)),
-            _ => Err(Error::InvalidAddressPrefix(kind.prefix().to_owned())),
+            #[inline]
+            fn kind(&self) -> AddressKind {
+                AddressKind::$kind
+            }
         }
-    }
-}
 
-impl TryFrom<Raw> for ValAddress {
-    type Error = Error;
+        impl private::Sealed for $name {}
 
-    fn try_from(value: Raw) -> Result<Self, Self::Error> {
-        value.addr.parse()
-    }
-}
-
-impl From<ValAddress> for Raw {
-    fn from(value: ValAddress) -> Self {
-        let addr = value.to_string();
-        Raw { addr }
-    }
-}
-
-impl ConsAddress {
-    /// Create a new consensus address with given ID.
-    pub fn new(id: Id) -> Self {
-        ConsAddress { id }
-    }
-}
-
-impl AddressTrait for ConsAddress {
-    #[inline]
-    fn id_ref(&self) -> &Id {
-        &self.id
-    }
-
-    #[inline]
-    fn kind(&self) -> AddressKind {
-        AddressKind::Consensus
-    }
-}
-
-impl private::Sealed for ConsAddress {}
-
-impl Display for ConsAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = address_to_string(self);
-        f.write_str(&s)
-    }
-}
-
-impl FromStr for ConsAddress {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (kind, id) = string_to_kind_and_id(s)?;
-
-        match kind {
-            AddressKind::Consensus => Ok(ConsAddress::new(id)),
-            _ => Err(Error::InvalidAddressPrefix(kind.prefix().to_owned())),
+        impl Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                let s = address_to_string(self);
+                f.write_str(&s)
+            }
         }
-    }
+
+        impl FromStr for $name {
+            type Err = Error;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                let (kind, id) = string_to_kind_and_id(s)?;
+
+                match kind {
+                    AddressKind::$kind => Ok($name::new(id)),
+                    _ => Err(Error::InvalidAddressPrefix(kind.prefix().to_owned())),
+                }
+            }
+        }
+
+        impl TryFrom<Raw> for $name {
+            type Error = Error;
+
+            fn try_from(value: Raw) -> Result<Self, Self::Error> {
+                value.addr.parse()
+            }
+        }
+
+        impl From<$name> for Raw {
+            fn from(value: $name) -> Self {
+                let addr = value.to_string();
+                Raw { addr }
+            }
+        }
+
+        impl From<[u8; appconsts::SIGNER_SIZE]> for $name {
+            fn from(value: [u8; appconsts::SIGNER_SIZE]) -> Self {
+                Self::new(Id::new(value))
+            }
+        }
+
+        impl TryFrom<&[u8]> for $name {
+            type Error = Error;
+
+            fn try_from(value: &[u8]) -> Result<Self> {
+                let id = value
+                    .try_into()
+                    .map_err(|_| Error::InvalidAddressSize(value.len()))?;
+                Ok(Self::new(Id::new(id)))
+            }
+        }
+
+        impl TryFrom<Vec<u8>> for $name {
+            type Error = Error;
+
+            fn try_from(value: Vec<u8>) -> Result<Self> {
+                let len = value.len();
+                let id = value
+                    .try_into()
+                    .map_err(|_| Error::InvalidAddressSize(len))?;
+                Ok(Self::new(id))
+            }
+        }
+    };
 }
 
-impl TryFrom<Raw> for ConsAddress {
-    type Error = Error;
-
-    fn try_from(value: Raw) -> Result<Self, Self::Error> {
-        value.addr.parse()
-    }
-}
-
-impl From<ConsAddress> for Raw {
-    fn from(value: ConsAddress) -> Self {
-        let addr = value.to_string();
-        Raw { addr }
-    }
-}
+impl_address_type!(AccAddress, Account);
+impl_address_type!(ValAddress, Validator);
+impl_address_type!(ConsAddress, Consensus);
 
 fn address_to_string(addr: &impl AddressTrait) -> String {
     // We have full control of address length and prefix, so we know the following will not fail
