@@ -313,7 +313,7 @@ mod tests {
         assert!(shares[0].info_byte().unwrap().is_sequence_start());
         assert!(!shares[1].info_byte().unwrap().is_sequence_start());
 
-        // share v0 doesn't have signer
+        // share v1 has signer only if it's the first share of the sequence
         assert_eq!(shares[0].signer().unwrap(), [5; 20].into());
         assert!(shares[1].signer().is_none());
 

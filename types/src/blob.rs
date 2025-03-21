@@ -513,7 +513,7 @@ mod custom_serde {
         data: Vec<u8>,
         share_version: u8,
         commitment: Commitment,
-        // note: celestia supports deserializing blobs without index, so we should too
+        // NOTE: celestia supports deserializing blobs without index, so we should too
         #[serde(default, with = "index_serde")]
         index: Option<u64>,
         #[serde(default, with = "signer_serde")]
