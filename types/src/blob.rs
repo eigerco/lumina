@@ -88,7 +88,7 @@ impl Blob {
     pub fn new(namespace: Namespace, data: Vec<u8>, app_version: AppVersion) -> Result<Blob> {
         let share_version = appconsts::SHARE_VERSION_ZERO;
         let commitment =
-            Commitment::from_blob(namespace, &data[..], share_version, &None, app_version)?;
+            Commitment::from_blob(namespace, &data[..], share_version, None, app_version)?;
 
         Ok(Blob {
             namespace,
@@ -114,8 +114,13 @@ impl Blob {
     ) -> Result<Blob> {
         let signer = Some(signer);
         let share_version = appconsts::SHARE_VERSION_ONE;
-        let commitment =
-            Commitment::from_blob(namespace, &data[..], share_version, &signer, app_version)?;
+        let commitment = Commitment::from_blob(
+            namespace,
+            &data[..],
+            share_version,
+            signer.as_ref(),
+            app_version,
+        )?;
 
         Ok(Blob {
             namespace,
@@ -137,7 +142,7 @@ impl Blob {
             namespace,
             &raw.data[..],
             share_version,
-            &signer,
+            signer.as_ref(),
             app_version,
         )?;
 
@@ -180,7 +185,7 @@ impl Blob {
             self.namespace,
             &self.data,
             self.share_version,
-            &self.signer,
+            self.signer.as_ref(),
             app_version,
         )?;
 
@@ -221,7 +226,7 @@ impl Blob {
             self.namespace,
             self.share_version,
             &self.data,
-            &self.signer,
+            self.signer.as_ref(),
         )
     }
 

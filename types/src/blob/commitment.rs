@@ -74,7 +74,7 @@ impl Commitment {
         namespace: Namespace,
         blob_data: &[u8],
         share_version: u8,
-        signer: &Option<AccAddress>,
+        signer: Option<&AccAddress>,
         app_version: AppVersion,
     ) -> Result<Commitment> {
         validate_blob(share_version, signer.is_some(), Some(app_version))?;
@@ -205,7 +205,7 @@ pub(crate) fn split_blob_to_shares(
     namespace: Namespace,
     share_version: u8,
     blob_data: &[u8],
-    signer: &Option<AccAddress>,
+    signer: Option<&AccAddress>,
 ) -> Result<Vec<Share>> {
     let mut shares = Vec::new();
     let mut cursor = Cursor::new(blob_data);
@@ -221,7 +221,7 @@ pub(crate) fn split_blob_to_shares(
 fn build_sparse_share(
     namespace: Namespace,
     share_version: u8,
-    signer: &Option<AccAddress>,
+    signer: Option<&AccAddress>,
     data: &mut Cursor<impl AsRef<[u8]>>,
 ) -> Result<Share> {
     let is_first_share = data.position() == 0;
@@ -363,7 +363,7 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5, 6, 7];
         let mut cursor = Cursor::new(&data);
 
-        let share = build_sparse_share(namespace, 0, &None, &mut cursor).unwrap();
+        let share = build_sparse_share(namespace, 0, None, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
@@ -395,7 +395,7 @@ mod tests {
         let signer = AccAddress::from([9; appconsts::SIGNER_SIZE]);
         let mut cursor = Cursor::new(&data);
 
-        let share = build_sparse_share(namespace, 1, &Some(signer), &mut cursor).unwrap();
+        let share = build_sparse_share(namespace, 1, Some(&signer), &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
@@ -431,7 +431,7 @@ mod tests {
         let data = vec![7; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE + continuation_len];
         let mut cursor = Cursor::new(&data);
 
-        let first_share = build_sparse_share(namespace, 0, &None, &mut cursor).unwrap();
+        let first_share = build_sparse_share(namespace, 0, None, &mut cursor).unwrap();
 
         // check cursor
         assert_eq!(
@@ -458,7 +458,7 @@ mod tests {
         );
 
         // Continuation share
-        let continuation_share = build_sparse_share(namespace, 0, &None, &mut cursor).unwrap();
+        let continuation_share = build_sparse_share(namespace, 0, None, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
@@ -495,7 +495,7 @@ mod tests {
             0, 0, 0, 0, // sequence len
         ];
 
-        let share = build_sparse_share(namespace, 0, &None, &mut cursor).unwrap();
+        let share = build_sparse_share(namespace, 0, None, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
