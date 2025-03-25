@@ -31,16 +31,12 @@ async fn get_data_root_tuple_root_and_proof() {
 
     let leaf = encode_data_root_tuple(network_height, &data_root);
 
-    let root: [u8; 32] = tuple_root
-        .as_bytes()
-        .try_into()
-        .expect("root must be 32 bytes");
+    let mut root = [0u8; 32];
+    root.copy_from_slice(&tuple_root);
 
     proof
         .verify(leaf, root)
         .expect("failed to verify data root proof");
-
-    println!("data root tuple root: {:x?}", root);
 }
 
 pub fn encode_data_root_tuple(height: u64, data_root: &Hash) -> Vec<u8> {

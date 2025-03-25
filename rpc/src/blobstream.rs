@@ -1,7 +1,7 @@
 //! celestia-node rpc types and methods related to blobstream
-
-use celestia_types::{hash::Hash, MerkleProof};
+use celestia_types::MerkleProof;
 use jsonrpsee::proc_macros::rpc;
+use prost::bytes::Bytes;
 
 /// DataRootTupleInclusionProof is the binary merkle
 /// inclusion proof of a height to a data commitment.
@@ -15,7 +15,7 @@ pub trait Blobstream {
         &self,
         start: u64,
         end: u64,
-    ) -> Result<Hash, Error>;
+    ) -> Result<Bytes, Error>;
 
     /// GetDataRootTupleInclusionProof returns a data root tuple inclusion proof for a given height
     /// between a range from start to end
