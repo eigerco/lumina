@@ -22,6 +22,22 @@ pub struct GetRangeResponse {
     pub proof: ShareProof,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum HalfSide {
+    Left,
+    Right,
+}
+
+/// Response type for [`ShareClient::share_get_row`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GetRowResponse {
+    /// Shares contained in given range.
+    pub shares: Vec<Share>,
+    /// Proof of inclusion of the shares.
+    pub side: HalfSide,
+}
+
 mod rpc {
     use super::*;
     use celestia_types::eds::RawExtendedDataSquare;
@@ -38,6 +54,9 @@ mod rpc {
             start: u64,
             end: u64,
         ) -> Result<GetRangeResponse, Error>;
+
+        #[method(name = "share.GetRow")]
+        async fn share_get_row(&self, height: u64, row: u64) -> Result<GetRowResponse, Error>;
 
         #[method(name = "share.GetShare")]
         async fn share_get_share(&self, height: u64, row: u64, col: u64)
@@ -110,6 +129,20 @@ pub trait ShareClient: ClientT {
 
             Ok(resp)
         }
+    }
+
+    /// GetShare gets the list of shares in a single row.
+    fn share_get_row<'a, 'b, 'fut>(
+        &'a self,
+        root: &'b ExtendedHeader,
+        row: u64,
+    ) -> impl Future<Output = Result<GetRowResponse, Error>> + Send + 'fut
+    where
+        'a: 'fut,
+        'b: 'fut,
+        Self: Sized + Sync + 'fut,
+    {
+        rpc::ShareClient::share_get_row(self, root.height().value(), row)
     }
 
     /// GetShare gets a Share by coordinates in EDS.
