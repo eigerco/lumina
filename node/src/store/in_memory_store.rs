@@ -134,9 +134,9 @@ impl InMemoryStore {
         }
     }
 
-    async fn remove_last(&self) -> Result<u64> {
+    async fn remove_height(&self, height: u64) -> Result<()> {
         let mut inner = self.inner.write().await;
-        inner.remove_last()
+        inner.remove_height(height)
     }
 }
 
@@ -307,10 +307,10 @@ impl InMemoryStoreInner {
         Ok(Some(metadata.clone()))
     }
 
-    fn remove_last(&mut self) -> Result<u64> {
-        let Some(height) = self.header_ranges.tail() else {
+    fn remove_height(&mut self, height: u64) -> Result<()> {
+        if !self.header_ranges.contains(height) {
             return Err(StoreError::NotFound);
-        };
+        }
 
         let Entry::Occupied(height_to_hash) = self.height_to_hash.entry(height) else {
             return Err(StoreError::StoredDataError(format!(
@@ -331,9 +331,11 @@ impl InMemoryStoreInner {
         height_to_hash.remove_entry();
         header.remove_entry();
 
-        self.header_ranges.pop_tail();
+        self.header_ranges
+            .remove_relaxed(height..=height)
+            .expect("valid range never fails");
 
-        Ok(height)
+        Ok(())
     }
 }
 
@@ -427,8 +429,8 @@ impl Store for InMemoryStore {
         Ok(self.get_accepted_sampling_ranges().await)
     }
 
-    async fn remove_last(&self) -> Result<u64> {
-        self.remove_last().await
+    async fn remove_height(&self, height: u64) -> Result<()> {
+        self.remove_height(height).await
     }
 
     async fn close(self) -> Result<()> {

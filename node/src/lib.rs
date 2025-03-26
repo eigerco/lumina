@@ -5,7 +5,6 @@ pub mod block_ranges;
 pub mod blockstore;
 mod daser;
 pub mod events;
-mod executor;
 pub mod network;
 pub mod node;
 mod p2p;

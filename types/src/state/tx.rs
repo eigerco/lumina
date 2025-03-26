@@ -245,10 +245,10 @@ impl Coin {
 }
 
 /// Error codes associated with transaction responses.
-// source https://github.com/celestiaorg/cosmos-sdk/blob/v1.25.1-sdk-v0.46.16/types/errors/errors.go#L38
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
 pub enum ErrorCode {
+    // source https://github.com/celestiaorg/cosmos-sdk/blob/v1.25.1-sdk-v0.46.16/types/errors/errors.go#L38
     /// No error
     Success = 0,
     /// Cannot parse a transaction
@@ -333,6 +333,68 @@ pub enum ErrorCode {
     InvalidGasLimit = 41,
     /// Node recovered from panic
     Panic = 111222,
+
+    // source https://github.com/celestiaorg/celestia-app/blob/v3.0.2/x/blob/types/errors.go
+    /// cannot use reserved namespace IDs
+    ReservedNamespace = 11110,
+    /// invalid namespace length
+    InvalidNamespaceLen = 11111,
+    /// data must be multiple of shareSize
+    InvalidDataSize = 11112,
+    /// actual blob size differs from that specified in the MsgPayForBlob
+    BlobSizeMismatch = 11113,
+    /// committed to invalid square size: must be power of two
+    CommittedSquareSizeNotPowOf2 = 11114,
+    /// unexpected error calculating commitment for share
+    CalculateCommitment = 11115,
+    /// invalid commitment for share
+    InvalidShareCommitment = 11116,
+    /// cannot use parity shares namespace ID
+    ParitySharesNamespace = 11117,
+    /// cannot use tail padding namespace ID
+    TailPaddingNamespace = 11118,
+    /// cannot use transaction namespace ID
+    TxNamespace = 11119,
+    /// invalid share commitments: all relevant square sizes must be committed to
+    InvalidShareCommitments = 11122,
+    /// unsupported share version
+    UnsupportedShareVersion = 11123,
+    /// cannot use zero blob size
+    ZeroBlobSize = 11124,
+    /// mismatched number of blobs per MsgPayForBlob
+    MismatchedNumberOfPFBorBlob = 11125,
+    /// no MsgPayForBlobs found in blob transaction
+    NoPFB = 11126,
+    /// namespace of blob and its respective MsgPayForBlobs differ
+    NamespaceMismatch = 11127,
+    /// failure to parse a transaction from its protobuf representation
+    ProtoParsing = 11128,
+    /// not yet supported: multiple sdk.Msgs found in BlobTx
+    MultipleMsgsInBlobTx = 11129,
+    /// number of each component in a MsgPayForBlobs must be identical
+    MismatchedNumberOfPFBComponent = 11130,
+    /// no blobs provided
+    NoBlobs = 11131,
+    /// no namespaces provided
+    NoNamespaces = 11132,
+    /// no share versions provided
+    NoShareVersions = 11133,
+    /// no blob sizes provided
+    NoBlobSizes = 11134,
+    /// no share commitments provided
+    NoShareCommitments = 11135,
+    /// invalid namespace
+    InvalidNamespace = 11136,
+    /// invalid namespace version
+    InvalidNamespaceVersion = 11137,
+    /// total blob size too large
+    ///
+    /// TotalBlobSize is deprecated, use BlobsTooLarge instead.
+    TotalBlobSizeTooLarge = 11138,
+    /// blob(s) too large
+    BlobsTooLarge = 11139,
+    /// invalid blob signer
+    InvalidBlobSigner = 11140,
 }
 
 impl fmt::Display for ErrorCode {
@@ -346,6 +408,7 @@ impl TryFrom<u32> for ErrorCode {
 
     fn try_from(value: u32) -> Result<ErrorCode, Self::Error> {
         let error_code = match value {
+            // cosmos-sdk
             0 => ErrorCode::Success,
             2 => ErrorCode::TxDecode,
             3 => ErrorCode::InvalidSequence,
@@ -388,6 +451,36 @@ impl TryFrom<u32> for ErrorCode {
             40 => ErrorCode::AppConfig,
             41 => ErrorCode::InvalidGasLimit,
             111222 => ErrorCode::Panic,
+            // celestia-app blob
+            11110 => ErrorCode::ReservedNamespace,
+            11111 => ErrorCode::InvalidNamespaceLen,
+            11112 => ErrorCode::InvalidDataSize,
+            11113 => ErrorCode::BlobSizeMismatch,
+            11114 => ErrorCode::CommittedSquareSizeNotPowOf2,
+            11115 => ErrorCode::CalculateCommitment,
+            11116 => ErrorCode::InvalidShareCommitment,
+            11117 => ErrorCode::ParitySharesNamespace,
+            11118 => ErrorCode::TailPaddingNamespace,
+            11119 => ErrorCode::TxNamespace,
+            11122 => ErrorCode::InvalidShareCommitments,
+            11123 => ErrorCode::UnsupportedShareVersion,
+            11124 => ErrorCode::ZeroBlobSize,
+            11125 => ErrorCode::MismatchedNumberOfPFBorBlob,
+            11126 => ErrorCode::NoPFB,
+            11127 => ErrorCode::NamespaceMismatch,
+            11128 => ErrorCode::ProtoParsing,
+            11129 => ErrorCode::MultipleMsgsInBlobTx,
+            11130 => ErrorCode::MismatchedNumberOfPFBComponent,
+            11131 => ErrorCode::NoBlobs,
+            11132 => ErrorCode::NoNamespaces,
+            11133 => ErrorCode::NoShareVersions,
+            11134 => ErrorCode::NoBlobSizes,
+            11135 => ErrorCode::NoShareCommitments,
+            11136 => ErrorCode::InvalidNamespace,
+            11137 => ErrorCode::InvalidNamespaceVersion,
+            11138 => ErrorCode::TotalBlobSizeTooLarge,
+            11139 => ErrorCode::BlobsTooLarge,
+            11140 => ErrorCode::InvalidBlobSigner,
             _ => bail_validation!("error code ({}) unknown", value),
         };
         Ok(error_code)

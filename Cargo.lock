@@ -842,7 +842,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bytes",
  "celestia-grpc-macros",
@@ -855,6 +855,7 @@ dependencies = [
  "http-body 1.0.1",
  "js-sys",
  "k256",
+ "lumina-utils",
  "prost",
  "rand_core",
  "send_wrapper 0.6.0",
@@ -899,7 +900,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-rpc"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -923,7 +924,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "base64",
  "bech32",
@@ -2044,9 +2045,9 @@ checksum = "b07f60793ff0a4d9cef0f18e63b5357e06209987153a64648c972c1e5aff336f"
 
 [[package]]
 name = "hickory-proto"
-version = "0.24.2"
+version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "447afdcdb8afb9d0a852af6dc65d9b285ce720ed7a59e42a8bf2e931c67bc1b5"
+checksum = "2ad3d6d98c648ed628df039541a5577bee1a7c83e9e16fe3dbedeea4cdfeb971"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -3496,7 +3497,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-cli"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -3521,7 +3522,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "async-trait",
  "backoff",
@@ -3533,7 +3534,6 @@ dependencies = [
  "celestia-types",
  "cid",
  "dashmap 5.5.3",
- "dotenvy",
  "function_name",
  "futures",
  "getrandom",
@@ -3542,6 +3542,7 @@ dependencies = [
  "libp2p",
  "libp2p-websocket-websys 0.3.3",
  "lumina-node",
+ "lumina-utils",
  "pin-project",
  "prost",
  "rand",
@@ -3567,6 +3568,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
+ "web-sys",
  "web-time",
 ]
 
@@ -3588,7 +3590,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-wasm"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "anyhow",
  "blockstore",
@@ -3603,6 +3605,7 @@ dependencies = [
  "js-sys",
  "libp2p",
  "lumina-node",
+ "lumina-utils",
  "rexie",
  "serde",
  "serde-wasm-bindgen",
@@ -3612,6 +3615,8 @@ dependencies = [
  "thiserror 1.0.69",
  "time",
  "tokio",
+ "tokio-stream",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "tracing-web",
@@ -3619,6 +3624,22 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
+]
+
+[[package]]
+name = "lumina-utils"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "gloo-timers 0.3.0",
+ "pin-project",
+ "send_wrapper 0.6.0",
+ "tokio",
+ "tokio-util",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
+ "web-time",
 ]
 
 [[package]]
@@ -5232,9 +5253,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.133"
+version = "1.0.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7fceb2473b9166b2294ef05efcb65a3db80803f0b03ef86a5fc88a2b85ee377"
+checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
 dependencies = [
  "itoa",
  "memchr",
@@ -5786,6 +5807,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

@@ -103,29 +103,29 @@ For security reasons, browsers only allow WebTransport to be used in [Secure Con
 Follow [this guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)
 to authorize yourself in github's container registry.
 
-Starting a Celestia network with single validator and bridge
+Starting a Celestia network with single validator and some DA nodes
 ```bash
 docker compose -f ci/docker-compose.yml up --build --force-recreate -d
 # and to stop it
 docker compose -f ci/docker-compose.yml down
 ```
 > **Note:**
-> You can run more bridge nodes by uncommenting/copying the bridge service definition in `ci/docker-compose.yml`.
+> You can run more DA nodes by uncommenting/copying the node service definition in `ci/docker-compose.yml`.
 
 To get a JWT token for a topped up account (coins will be transferred in block 2):
 ```bash
-export CELESTIA_NODE_AUTH_TOKEN=$(docker compose -f ci/docker-compose.yml exec bridge-0 celestia bridge auth admin --p2p.network private)
+export CELESTIA_NODE_AUTH_TOKEN=$(docker compose -f ci/docker-compose.yml exec node-1 celestia bridge auth admin --p2p.network private)
 ```
 
 Accessing json RPC api with Go `celestia` cli:
 ```bash
-docker compose -f ci/docker-compose.yml exec bridge-0 \
+docker compose -f ci/docker-compose.yml exec node-1 \
     celestia blob submit 0x0c204d39600fddd3 '"Hello world"' --token "$CELESTIA_NODE_AUTH_TOKEN"
 ```
 
 Extracting blocks for test cases:
 ```bash
-docker compose -f ci/docker-compose.yml exec bridge-0 \
+docker compose -f ci/docker-compose.yml exec node-1 \
     celestia header get-by-height 27 --token "$CELESTIA_NODE_AUTH_TOKEN" | jq .result
 ```
 

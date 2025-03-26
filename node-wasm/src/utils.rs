@@ -1,30 +1,26 @@
 //! Various utilities for interacting with node from wasm.
-use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::future::Future;
-use std::net::{IpAddr, Ipv4Addr};
 
 use gloo_timers::future::TimeoutFuture;
-use js_sys::{Math, Promise};
-use libp2p::multiaddr::Protocol;
-use libp2p::{Multiaddr, PeerId};
-use serde::Deserialize;
+use js_sys::Math;
+use serde::Serialize;
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde_wasm_bindgen::Serializer;
 use tracing::{info, warn};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::prelude::*;
 use tracing_web::MakeConsoleWriter;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    DedicatedWorkerGlobalScope, MessageEvent, Request, RequestInit, RequestMode, Response,
-    ServiceWorker, ServiceWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker,
+    DedicatedWorkerGlobalScope, MessageEvent, ServiceWorker, ServiceWorkerGlobalScope,
+    SharedWorker, SharedWorkerGlobalScope, Worker,
 };
 
 use lumina_node::network;
 
-use crate::error::{Context, Error, Result};
+use crate::error::{Error, Result};
 
 /// Supported Celestia networks.
 #[wasm_bindgen]
@@ -113,7 +109,6 @@ impl WorkerSelf for ServiceWorker {
 pub(crate) trait MessageEventExt {
     fn get_port(&self) -> Option<JsValue>;
 }
-
 impl MessageEventExt for MessageEvent {
     fn get_port(&self) -> Option<JsValue> {
         let ports = self.ports();
@@ -216,124 +211,16 @@ pub(crate) fn random_id() -> u32 {
     (Math::random() * f64::from(u32::MAX)).floor() as u32
 }
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_name = fetch)]
-    fn fetch_with_request(input: &Request) -> Promise;
-}
-
-async fn fetch(url: &str, opts: &RequestInit, headers: &[(&str, &str)]) -> Result<Response, Error> {
-    let request = Request::new_with_str_and_init(url, opts)
-        .with_context(|| format!("failed to create a request to {url}"))?;
-
-    for (name, value) in headers {
-        request
-            .headers()
-            .set(name, value)
-            .with_context(|| format!("failed setting header: '{name}: {value}'"))?;
-    }
-
-    let fetch_promise = fetch_with_request(&request);
-
-    JsFuture::from(fetch_promise)
-        .await
-        .with_context(|| format!("failed fetching {url}"))?
-        .dyn_into()
-        .context("`response` is not `Response` type")
-}
-
-/// If provided multiaddress uses dnsaddr protocol, resolve it using dns-over-https.
-/// Otherwise returns the provided address.
-pub(crate) async fn resolve_dnsaddr_multiaddress(ma: Multiaddr) -> Result<Vec<Multiaddr>> {
-    const TXT_TYPE: u16 = 16;
-    // cloudflare dns
-    const DEFAULT_DNS_ADDR: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
-
-    #[derive(Debug, Deserialize)]
-    struct DohEntry {
-        r#type: u16,
-        data: String,
-    }
-
-    #[derive(Debug, Deserialize)]
-    #[serde(rename_all = "PascalCase")]
-    struct DohResponse {
-        answer: Vec<DohEntry>,
-    }
-
-    let Some(dnsaddr) = get_dnsaddr(&ma) else {
-        // not a dnsaddr multiaddr
-        return Ok(vec![ma]);
-    };
-    let Some(peer_id) = get_peer_id(&ma) else {
-        return Err(Error::new("Peer id not found"));
-    };
-
-    let opts = RequestInit::new();
-    opts.set_method("GET");
-    opts.set_mode(RequestMode::Cors);
-
-    let url =
-        format!("https://{DEFAULT_DNS_ADDR}/dns-query?type={TXT_TYPE}&name=_dnsaddr.{dnsaddr}");
-    let response = fetch(&url, &opts, &[("Accept", "application/dns-json")]).await?;
-
-    let json_promise = response.json().context("`Response::json()` failed")?;
-    let json = JsFuture::from(json_promise)
-        .await
-        .context("failed parsing response as json")?;
-
-    let doh_response: DohResponse = serde_wasm_bindgen::from_value(json)
-        .context("failed deserializing dns-over-https response")?;
-
-    let mut resolved_addrs = Vec::with_capacity(3);
-    for entry in doh_response.answer {
-        if entry.r#type == TXT_TYPE {
-            // we receive data as json encoded strings in this format:
-            // "data": "\"dnsaddr=/dns/da-bridge-1.celestia-arabica-11.com/tcp/2121/p2p/12D3KooWGqwzdEqM54Dce6LXzfFr97Bnhvm6rN7KM7MFwdomfm4S\""
-            let Ok(data) = serde_json::from_str::<String>(&entry.data) else {
-                continue;
-            };
-            let Some((_, ma)) = data.split_once('=') else {
-                continue;
-            };
-            let Ok(ma) = ma.parse() else {
-                continue;
-            };
-            // only take results with the same peer id
-            if Some(peer_id) == get_peer_id(&ma) {
-                // TODO: handle recursive dnsaddr queries
-                resolved_addrs.push(ma);
-            }
-        }
-    }
-
-    Ok(resolved_addrs)
-}
-
-fn get_peer_id(ma: &Multiaddr) -> Option<PeerId> {
-    ma.iter().find_map(|protocol| {
-        if let Protocol::P2p(peer_id) = protocol {
-            Some(peer_id)
-        } else {
-            None
-        }
-    })
-}
-
-fn get_dnsaddr(ma: &Multiaddr) -> Option<Cow<'_, str>> {
-    ma.iter().find_map(|protocol| {
-        if let Protocol::Dnsaddr(addr) = protocol {
-            Some(addr)
-        } else {
-            None
-        }
-    })
-}
-
 pub(crate) async fn timeout<F: Future>(millis: u32, fut: F) -> Result<F::Output, ()> {
     let timeout = TimeoutFuture::new(millis);
     tokio::select! {
         _ = timeout => Err(()),
         res = fut => Ok(res),
     }
+}
+
+pub(crate) fn to_json_value<T: Serialize + ?Sized>(
+    value: &T,
+) -> Result<JsValue, serde_wasm_bindgen::Error> {
+    value.serialize(&Serializer::json_compatible())
 }

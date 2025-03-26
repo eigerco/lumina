@@ -207,10 +207,11 @@ fn parse_request(request: HeaderRequest) -> Option<(u64, header_request::Data)> 
 mod tests {
     use super::{ResponseSender, *};
     use crate::store::InMemoryStore;
-    use crate::test_utils::{async_test, gen_filled_store};
+    use crate::test_utils::gen_filled_store;
     use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::ExtendedHeader;
+    use lumina_utils::test_utils::async_test;
     use std::future::poll_fn;
     use tendermint_proto::Protobuf;
     use tokio::select;

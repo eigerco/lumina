@@ -47,6 +47,9 @@ use libp2p::{
     },
     Multiaddr, PeerId,
 };
+use lumina_utils::executor::{spawn, JoinHandle};
+use lumina_utils::time::{self, Interval};
+use lumina_utils::token::Token;
 use smallvec::SmallVec;
 use tendermint_proto::Protobuf;
 use tokio::select;
@@ -62,7 +65,6 @@ mod swarm;
 
 use crate::block_ranges::BlockRange;
 use crate::events::{EventPublisher, NodeEvent};
-use crate::executor::{self, spawn, Interval, JoinHandle};
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
 use crate::p2p::shwap::{convert_cid, get_block_container, ShwapMultihasher};
@@ -72,7 +74,7 @@ use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::Store;
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
-    OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt, Token,
+    OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt,
 };
 
 pub use crate::p2p::header_ex::HeaderExError;
@@ -509,7 +511,7 @@ impl P2p {
         .await?;
 
         let data = match timeout {
-            Some(dur) => executor::timeout(dur, rx)
+            Some(dur) => time::timeout(dur, rx)
                 .await
                 .map_err(|_| P2pError::BitswapQueryTimeout)???,
             None => rx.await??,

@@ -41,8 +41,8 @@ impl TestAccount {
 }
 
 pub fn load_account() -> TestAccount {
-    let address = include_str!("../../../ci/credentials/bridge-0.addr");
-    let hex_key = include_str!("../../../ci/credentials/bridge-0.plaintext-key");
+    let address = include_str!("../../../ci/credentials/node-0.addr");
+    let hex_key = include_str!("../../../ci/credentials/node-0.plaintext-key");
 
     let signing_key =
         SigningKey::from_slice(&hex::decode(hex_key.trim()).expect("valid hex representation"))
