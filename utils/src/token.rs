@@ -2,39 +2,40 @@ use std::fmt::{self, Debug};
 
 use tokio_util::sync::CancellationToken;
 
-#[derive(Clone)]
-pub(crate) struct Token {
+/// A token which can be used for signalling something exactly once
+#[derive(Clone, Default)]
+pub struct Token {
     token: CancellationToken,
 }
 
 impl Token {
-    pub(crate) fn new() -> Token {
+    /// Create a new token
+    pub fn new() -> Token {
         Token {
             token: CancellationToken::new(),
         }
     }
 
     /// Trigger the event
-    pub(crate) fn trigger(&self) {
+    pub fn trigger(&self) {
         self.token.cancel();
     }
 
     /// Returns a guard that will trigger the token on drop.
-    pub(crate) fn trigger_drop_guard(&self) -> TokenTriggerDropGuard {
+    pub fn trigger_drop_guard(&self) -> TokenTriggerDropGuard {
         TokenTriggerDropGuard {
             token: Some(self.token.clone()),
         }
     }
 
     /// Returns if event is triggered or not.
-    #[allow(dead_code)]
-    pub(crate) fn is_triggered(&self) -> bool {
+    pub fn is_triggered(&self) -> bool {
         self.token.is_cancelled()
     }
 
     /// Returns when the token is triggered. If it was triggered before,
     /// it will return immediately.
-    pub(crate) async fn triggered(&self) {
+    pub async fn triggered(&self) {
         self.token.cancelled().await;
     }
 }
@@ -45,13 +46,14 @@ impl Debug for Token {
     }
 }
 
-pub(crate) struct TokenTriggerDropGuard {
+/// A wrapper for a [`Token`], which triggers it when it's dropped
+pub struct TokenTriggerDropGuard {
     token: Option<CancellationToken>,
 }
 
 impl TokenTriggerDropGuard {
-    #[allow(dead_code)]
-    pub(crate) fn disarm(&mut self) {
+    /// Disarms the guard, making it so that dropping it won't trigger the token
+    pub fn disarm(&mut self) {
         self.token.take();
     }
 }
@@ -73,8 +75,9 @@ impl Drop for TokenTriggerDropGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::{sleep, spawn};
+    use crate::executor::spawn;
     use crate::test_utils::async_test;
+    use crate::time::sleep;
     use std::time::Duration;
     use web_time::Instant;
 

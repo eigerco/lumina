@@ -12,11 +12,11 @@ use futures::future::{join_all, BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
 use libp2p::request_response::{OutboundFailure, OutboundRequestId};
 use libp2p::PeerId;
+use lumina_utils::executor::yield_now;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, instrument, trace};
 
-use crate::executor::yield_now;
 use crate::p2p::header_ex::utils::{HeaderRequestExt, HeaderResponseExt};
 use crate::p2p::header_ex::{HeaderExError, ReqRespBehaviour};
 use crate::p2p::P2pError;
@@ -373,14 +373,14 @@ async fn decode_and_verify_responses(
 mod tests {
     use super::*;
     use crate::events::EventChannel;
-    use crate::executor::sleep;
     use crate::p2p::header_ex::utils::ExtendedHeaderExt;
-    use crate::test_utils::async_test;
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::consts::HASH_SIZE;
     use celestia_types::hash::Hash;
     use celestia_types::test_utils::{invalidate, unverify, ExtendedHeaderGenerator};
     use libp2p::swarm::ConnectionId;
+    use lumina_utils::test_utils::async_test;
+    use lumina_utils::time::sleep;
     use std::collections::VecDeque;
     use std::future::poll_fn;
     use std::io;
