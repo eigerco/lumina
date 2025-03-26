@@ -9,7 +9,7 @@ pub mod utils;
 
 #[tokio::test]
 async fn info_test() {
-    let client = new_test_client(AuthLevel::Admin).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     client.p2p_info().await.expect("Failed to get node info");
 }
 
@@ -19,7 +19,7 @@ async fn add_remove_peer_test() {
     let addr_info = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
-    let client = new_test_client(AuthLevel::Admin).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
 
     let initial_peers = client
         .p2p_peers()
@@ -75,7 +75,7 @@ async fn protect_unprotect_test() {
     let addr_info = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
-    let client = new_test_client(AuthLevel::Admin).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
 
     client
         .p2p_connect(&addr_info)
@@ -125,7 +125,7 @@ async fn peer_block_unblock_test() {
     let addr_info = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
-    let client = new_test_client(AuthLevel::Admin).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
 
     let blocked_peers = client
         .p2p_list_blocked_peers()
@@ -162,7 +162,7 @@ async fn peer_block_unblock_test() {
 async fn bandwidth_stats_test() {
     // just check whether we can get the data without error, node could have been running any
     // amount of time, so any value should be valid.
-    let client = new_test_client(AuthLevel::Admin).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     client
         .p2p_bandwidth_stats()
         .await
@@ -174,7 +174,7 @@ async fn bandwidth_for_peer_test() {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = p2p::PeerId(PeerId::from(local_key.public()));
 
-    let client = new_test_client(AuthLevel::Admin).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let stats = client
         .p2p_bandwidth_for_peer(&local_peer_id)
         .await
@@ -189,7 +189,7 @@ async fn bandwidth_for_peer_test() {
 
 #[tokio::test]
 async fn bandwidth_for_protocol_test() {
-    let client = new_test_client(AuthLevel::Admin).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
 
     // query for nonsense protocol name so that we get all zeros in response
     // until we have better way of inducing traffic
@@ -206,7 +206,7 @@ async fn bandwidth_for_protocol_test() {
 #[tokio::test]
 async fn nat_status_test() {
     // just query for status and make sure no errors happen, since any value is potentially correct
-    let client = new_test_client(AuthLevel::Admin).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let _ = client
         .p2p_nat_status()
         .await
@@ -218,7 +218,7 @@ async fn peer_info_test() {
     let addr_info = utils::tiny_node::start_tiny_node()
         .await
         .expect("failed to spin up second node");
-    let client = new_test_client(AuthLevel::Admin).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
 
     client
         .p2p_connect(&addr_info)
@@ -242,7 +242,7 @@ async fn peer_info_test() {
 
 #[tokio::test]
 async fn pub_sub_peers_test() {
-    let client = new_test_client(AuthLevel::Admin).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let peers = client
         .p2p_pub_sub_peers("topic")
         .await
@@ -254,7 +254,7 @@ async fn pub_sub_peers_test() {
 #[tokio::test]
 async fn resource_state_test() {
     // cannot really test values here, just make sure it deserializes correctly
-    let client = new_test_client(AuthLevel::Admin).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     client
         .p2p_resource_state()
         .await
