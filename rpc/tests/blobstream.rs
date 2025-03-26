@@ -13,24 +13,29 @@ async fn get_data_root_tuple_root_and_proof() {
 
     let network_head = client.header_network_head().await.unwrap();
 
-    let data_root = network_head.dah.hash();
     let network_height = network_head.height().value();
+
+    let start_height = network_height - 2;
+    let target_height = network_height - 1;
     // Use network head for these tests
     let tuple_root = client
-        .blobstream_get_data_root_tuple_root(network_height - 2, network_height)
+        .blobstream_get_data_root_tuple_root(start_height, network_height)
         .await
         .unwrap();
 
     let proof = client
-        .blobstream_get_data_root_tuple_inclusion_proof(
-            network_height - 1,
-            network_height - 2,
-            network_height,
-        )
+        .blobstream_get_data_root_tuple_inclusion_proof(target_height, start_height, network_height)
         .await
         .unwrap();
 
-    let leaf = encode_data_root_tuple(network_height, &data_root);
+    let data_root = client
+        .header_get_by_height(target_height)
+        .await
+        .unwrap()
+        .dah
+        .hash();
+
+    let leaf = encode_data_root_tuple(target_height, &data_root);
 
     let mut root = [0u8; 32];
     root.copy_from_slice(&BASE64.decode(tuple_root.as_ref()).unwrap());
