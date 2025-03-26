@@ -1,5 +1,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use celestia_rpc::{blobstream::BlobstreamClient, HeaderClient};
 use celestia_types::hash::Hash;
 pub mod utils;
@@ -32,7 +33,7 @@ async fn get_data_root_tuple_root_and_proof() {
     let leaf = encode_data_root_tuple(network_height, &data_root);
 
     let mut root = [0u8; 32];
-    root.copy_from_slice(&tuple_root);
+    root.copy_from_slice(&BASE64.decode(tuple_root.as_ref()).unwrap());
 
     proof
         .verify(leaf, root)

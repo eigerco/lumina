@@ -903,6 +903,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64",
  "celestia-types",
  "dotenvy",
  "futures",
