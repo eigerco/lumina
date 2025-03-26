@@ -12,7 +12,7 @@ use crate::utils::{random_bytes, random_ns, random_ns_range};
 
 #[tokio::test]
 async fn get_share() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let header = client.header_network_head().await.unwrap();
     let square_width = header.dah.square_width() as u64;
 
@@ -28,7 +28,7 @@ async fn get_share() {
 
 #[tokio::test]
 async fn get_shares_by_namespace() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let namespace = random_ns();
     let blobs: Vec<_> = (0..4)
         .map(|_| {
@@ -57,7 +57,7 @@ async fn get_shares_by_namespace() {
 
 #[tokio::test]
 async fn get_shares_by_namespace_forbidden() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let header = client.header_network_head().await.unwrap();
 
     // those namespaces are forbidden in celestia-node's implementation
@@ -71,7 +71,7 @@ async fn get_shares_by_namespace_forbidden() {
 
 #[tokio::test]
 async fn get_shares_range() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
@@ -106,7 +106,7 @@ async fn get_shares_range() {
 
 #[tokio::test]
 async fn get_shares_range_not_existing() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let header = client.header_network_head().await.unwrap();
     let shares_in_block = header.dah.square_width().pow(2);
 
@@ -122,7 +122,7 @@ async fn get_shares_range_not_existing() {
 
 #[tokio::test]
 async fn get_shares_range_ignores_parity() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
 
     let namespace = random_ns();
     let data = random_bytes(100);
@@ -141,7 +141,7 @@ async fn get_shares_range_ignores_parity() {
 
 #[tokio::test]
 async fn get_shares_by_namespace_wrong_ns() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
@@ -182,7 +182,7 @@ async fn get_shares_by_namespace_wrong_ns() {
 
 #[tokio::test]
 async fn get_shares_by_namespace_wrong_ns_out_of_range() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
@@ -208,7 +208,7 @@ async fn get_shares_by_namespace_wrong_ns_out_of_range() {
 
 #[tokio::test]
 async fn get_shares_by_namespace_wrong_roots() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
     let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
@@ -227,7 +227,7 @@ async fn get_shares_by_namespace_wrong_roots() {
 
 #[tokio::test]
 async fn get_eds() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip, None).await.unwrap();
     let namespace = random_ns();
     let data = vec![1, 2, 3, 4];
     let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
