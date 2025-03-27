@@ -22,11 +22,16 @@ pub struct GetRangeResponse {
     pub proof: ShareProof,
 }
 
+/// Side of a row within the EDS.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
-pub enum HalfSide {
+pub enum RowSide {
+    /// The row data is on the left of the EDS (i.e. in the ODS).
     Left,
+    /// The row data is on the right of the EDS (i.e. it's parity data).
     Right,
+    /// The row contains both the original data and the parity data.
+    Both,
 }
 
 /// Response type for [`ShareClient::share_get_row`].
@@ -34,8 +39,8 @@ pub enum HalfSide {
 pub struct GetRowResponse {
     /// Shares contained in given range.
     pub shares: Vec<Share>,
-    /// Proof of inclusion of the shares.
-    pub side: HalfSide,
+    /// Side of the row within the EDS.
+    pub side: RowSide,
 }
 
 mod rpc {
