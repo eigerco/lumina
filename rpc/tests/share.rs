@@ -1,10 +1,9 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use celestia_rpc::prelude::*;
-use celestia_rpc::Client;
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
-use celestia_types::{consts, Blob};
+use celestia_types::Blob;
 
 pub mod utils;
 
