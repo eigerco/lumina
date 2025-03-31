@@ -1,5 +1,6 @@
 //! Utilities for writing tests.
 
+use std::ops::RangeInclusive;
 use std::time::Duration;
 
 use celestia_proto::p2p::pb::{header_request::Data, HeaderRequest};
@@ -7,12 +8,12 @@ use celestia_types::hash::Hash;
 use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
-use lumina_utils::time::timeout;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::{
     block_ranges::{BlockRange, BlockRanges},
     blockstore::InMemoryBlockstore,
+    daser::DaserCmd,
     network::Network,
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
@@ -198,6 +199,48 @@ impl MockP2pHandle {
         match self.expect_cmd().await {
             P2pCmd::GetShwapCid { cid, respond_to } => (cid, respond_to),
             cmd => panic!("Expecting GetShwapCid, but received: {cmd:?}"),
+        }
+    }
+}
+
+pub struct MockDaserHandle {
+    pub(crate) cmd_rx: mpsc::Receiver<DaserCmd>,
+}
+
+impl MockDaserHandle {
+    pub(crate) async fn try_recv_cmd(&mut self) -> Option<DaserCmd> {
+        timeout(Duration::from_millis(300), async move {
+            self.cmd_rx.recv().await.expect("Daser dropped")
+        })
+        .await
+        .ok()
+    }
+
+    pub(crate) async fn expect_cmd(&mut self) -> DaserCmd {
+        self.try_recv_cmd()
+            .await
+            .expect("Expecting DaserCmd, but timed-out")
+    }
+
+    pub async fn expect_no_cmd(&mut self) {
+        if let Some(cmd) = self.try_recv_cmd().await {
+            panic!("Expecting no DaserCmd, but received: {cmd:?}");
+        }
+    }
+
+    pub async fn expect_want_to_prune(&mut self) -> (u64, oneshot::Sender<bool>) {
+        match self.expect_cmd().await {
+            DaserCmd::WantToPrune { height, respond_to } => (height, respond_to),
+            #[allow(unreachable_patterns)]
+            cmd => panic!("Expecting WantToPrune, but received: {cmd:?}"),
+        }
+    }
+
+    pub async fn handle_want_to_prune(&mut self, range: RangeInclusive<u64>) {
+        for expected_height in range {
+            let (height, respond_to) = self.expect_want_to_prune().await;
+            assert_eq!(height, expected_height);
+            respond_to.send(true).unwrap();
         }
     }
 }

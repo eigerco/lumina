@@ -37,6 +37,8 @@ struct InMemoryStoreInner {
     sampling_data: HashMap<u64, SamplingMetadata>,
     /// Source of truth about accepted sampling ranges present in the db.
     accepted_sampling_ranges: BlockRanges,
+
+    pruned_ranges: BlockRanges,
 }
 
 impl InMemoryStoreInner {
@@ -47,6 +49,7 @@ impl InMemoryStoreInner {
             header_ranges: BlockRanges::default(),
             sampling_data: HashMap::new(),
             accepted_sampling_ranges: BlockRanges::default(),
+            pruned_ranges: BlockRanges::default(),
         }
     }
 }
@@ -119,11 +122,15 @@ impl InMemoryStore {
     }
 
     async fn get_stored_ranges(&self) -> BlockRanges {
-        self.inner.read().await.get_stored_ranges()
+        self.inner.read().await.header_ranges.clone()
     }
 
     async fn get_accepted_sampling_ranges(&self) -> BlockRanges {
-        self.inner.read().await.get_accepted_sampling_ranges()
+        self.inner.read().await.accepted_sampling_ranges.clone()
+    }
+
+    async fn get_pruned_ranges(&self) -> BlockRanges {
+        self.inner.read().await.pruned_ranges.clone()
     }
 
     /// Clone the store and all its contents. Async fn due to internal use of async mutex.
@@ -141,14 +148,6 @@ impl InMemoryStore {
 }
 
 impl InMemoryStoreInner {
-    fn get_stored_ranges(&self) -> BlockRanges {
-        self.header_ranges.clone()
-    }
-
-    fn get_accepted_sampling_ranges(&self) -> BlockRanges {
-        self.accepted_sampling_ranges.clone()
-    }
-
     #[inline]
     fn get_head_height(&self) -> Result<u64> {
         self.header_ranges.head().ok_or(StoreError::NotFound)
@@ -212,7 +211,10 @@ impl InMemoryStoreInner {
         }
 
         self.header_ranges
-            .insert_relaxed(headers_range)
+            .insert_relaxed(&headers_range)
+            .expect("invalid range");
+        self.pruned_ranges
+            .remove_relaxed(&headers_range)
             .expect("invalid range");
 
         Ok(())
@@ -333,7 +335,10 @@ impl InMemoryStoreInner {
 
         self.header_ranges
             .remove_relaxed(height..=height)
-            .expect("valid range never fails");
+            .expect("invalid height");
+        self.pruned_ranges
+            .insert_relaxed(height..=height)
+            .expect("invalid height");
 
         Ok(())
     }
@@ -427,6 +432,10 @@ impl Store for InMemoryStore {
 
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         Ok(self.get_accepted_sampling_ranges().await)
+    }
+
+    async fn get_pruned_ranges(&self) -> Result<BlockRanges> {
+        Ok(self.get_pruned_ranges().await)
     }
 
     async fn remove_height(&self, height: u64) -> Result<()> {

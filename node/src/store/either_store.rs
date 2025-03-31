@@ -233,6 +233,10 @@ where
         call!(self, get_accepted_sampling_ranges())
     }
 
+    async fn get_pruned_ranges(&self) -> Result<BlockRanges> {
+        call!(self, get_pruned_ranges())
+    }
+
     async fn remove_height(&self, height: u64) -> Result<()> {
         call!(self, remove_height(height))
     }

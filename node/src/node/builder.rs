@@ -22,10 +22,10 @@ pub const DEFAULT_SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
 /// Minimum configurable sampling window that can be used in [`NodeBuilder`].
 pub const MIN_SAMPLING_WINDOW: Duration = Duration::from_secs(60);
 
-/// Default delay after the sampling window before [`Node`] prunes the block.
-pub const DEFAULT_PRUNING_DELAY: Duration = Duration::from_secs(HOUR);
-/// Minimum pruning delay that can be used in [`NodeBuilder`].
-pub const MIN_PRUNING_DELAY: Duration = Duration::from_secs(60);
+/// Default maximum age of blocks before they get pruned.
+pub const DEFAULT_PRUNING_WINDOW: Duration = Duration::from_secs(30 * DAY + HOUR);
+/// Minimum pruning window that can be used in [`NodeBuilder`].
+pub const MIN_PRUNING_WINDOW: Duration = Duration::from_secs(60);
 
 /// [`Node`] builder.
 pub struct NodeBuilder<B, S>
@@ -41,7 +41,7 @@ where
     listen: Vec<Multiaddr>,
     sync_batch_size: Option<u64>,
     sampling_window: Option<Duration>,
-    pruning_delay: Option<Duration>,
+    pruning_window: Option<Duration>,
 }
 
 /// Representation of all the errors that can occur when interacting with the [`NodeBuilder`].
@@ -55,9 +55,9 @@ pub enum NodeBuilderError {
     #[error("Sampling window is {0:?} but cannot be smaller than {MIN_SAMPLING_WINDOW:?}")]
     SamplingWindowTooSmall(Duration),
 
-    /// Pruning delay is smaller than [`MIN_PRUNING_DELAY`].
-    #[error("Pruning delay is {0:?} but cannot be smaller than {MIN_PRUNING_DELAY:?}")]
-    PruningDelayTooSmall(Duration),
+    /// Pruning window is smaller than [`MIN_PRUNING_WINDOW`].
+    #[error("Pruning window is {0:?} but cannot be smaller than {MIN_PRUNING_WINDOW:?}")]
+    PruningWindowTooSmall(Duration),
 
     /// Builder failed to resolve dnsaddr multiaddresses for bootnodes
     #[error("Could not resolve bootnode addresses: {0}")]
@@ -94,7 +94,7 @@ impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
             listen: Vec::new(),
             sync_batch_size: None,
             sampling_window: None,
-            pruning_delay: None,
+            pruning_window: None,
         }
     }
 }
@@ -141,7 +141,7 @@ where
             listen: self.listen,
             sync_batch_size: self.sync_batch_size,
             sampling_window: self.sampling_window,
-            pruning_delay: self.pruning_delay,
+            pruning_window: self.pruning_window,
         }
     }
 
@@ -161,7 +161,7 @@ where
             listen: self.listen,
             sync_batch_size: self.sync_batch_size,
             sampling_window: self.sampling_window,
-            pruning_delay: self.pruning_delay,
+            pruning_window: self.pruning_window,
         }
     }
 
@@ -221,7 +221,6 @@ where
     ///
     /// Sampling window defines maximum age of a block considered for syncing and sampling.
     ///
-    /// **Default if [`InMemoryStore`]/[`InMemoryBlockstore`] are used:** 60 seconds.\
     /// **Default:** 30 days.\
     /// **Minimum:** 60 seconds.
     pub fn sampling_window(self, dur: Duration) -> Self {
@@ -231,17 +230,20 @@ where
         }
     }
 
-    /// Set pruning delay.
+    /// Set pruning window.
     ///
-    /// Pruning delay defines how much time the pruner should wait after sampling window in
-    /// order to prune the block.
+    /// Pruning window defines maximum age of a block considered to be kept in store.
+    ///
+    /// If pruning window is smaller than syncing window then blocks will be pruned
+    /// exactly after they get sampled. This is useful when you want to keep low
+    /// memory footprint but still validate the blockchain.
     ///
     /// **Default if [`InMemoryStore`]/[`InMemoryBlockstore`] are used:** 60 seconds.\
-    /// **Default:** 1 hour.\
+    /// **Default:** 30 days plus 1 hour.\
     /// **Minimum:** 60 seconds.
-    pub fn pruning_delay(self, dur: Duration) -> Self {
+    pub fn pruning_window(self, dur: Duration) -> Self {
         NodeBuilder {
-            pruning_delay: Some(dur),
+            pruning_window: Some(dur),
             ..self
         }
     }
@@ -276,31 +278,23 @@ where
         let in_memory_stores_used = TypeId::of::<S>() == TypeId::of::<InMemoryStore>()
             || TypeId::of::<B>() == TypeId::of::<InMemoryBlockstore>();
 
-        let sampling_window = if let Some(dur) = self.sampling_window {
-            dur
-        } else if in_memory_stores_used {
-            MIN_SAMPLING_WINDOW
-        } else {
-            DEFAULT_SAMPLING_WINDOW
-        };
-
-        let pruning_delay = if let Some(dur) = self.pruning_delay {
-            dur
-        } else if in_memory_stores_used {
-            MIN_PRUNING_DELAY
-        } else {
-            DEFAULT_PRUNING_DELAY
-        };
+        let sampling_window = self.sampling_window.unwrap_or(DEFAULT_SAMPLING_WINDOW);
 
         if sampling_window < MIN_SAMPLING_WINDOW {
             return Err(NodeBuilderError::SamplingWindowTooSmall(sampling_window));
         }
 
-        if pruning_delay < MIN_PRUNING_DELAY {
-            return Err(NodeBuilderError::PruningDelayTooSmall(pruning_delay));
-        }
+        let pruning_window = if let Some(dur) = self.pruning_window {
+            dur
+        } else if in_memory_stores_used {
+            MIN_PRUNING_WINDOW
+        } else {
+            DEFAULT_PRUNING_WINDOW
+        };
 
-        let pruning_window = sampling_window.saturating_add(pruning_delay);
+        if pruning_window < MIN_PRUNING_WINDOW {
+            return Err(NodeBuilderError::PruningWindowTooSmall(pruning_window));
+        }
 
         info!("Sampling window: {sampling_window:?}, Pruning window: {pruning_window:?}",);
 

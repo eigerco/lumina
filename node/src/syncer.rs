@@ -36,6 +36,7 @@ use crate::utils::{FusedReusableFuture, OneshotSenderExt};
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
+const SLOW_SYNC_MIN_THRESHOLD: u64 = 50;
 
 /// Representation of all the errors that can occur in `Syncer` component.
 #[derive(Debug, thiserror::Error)]
@@ -100,6 +101,7 @@ where
     pub(crate) batch_size: u64,
     /// Syncing window
     pub(crate) syncing_window: Duration,
+    pub(crate) pruning_window: Duration,
 }
 
 #[derive(Debug)]
@@ -200,9 +202,11 @@ where
     store: Arc<S>,
     header_sub_rx: Option<mpsc::Receiver<ExtendedHeader>>,
     subjective_head_height: Option<u64>,
+    highest_prunable_height: Option<u64>,
     batch_size: u64,
     ongoing_batch: Ongoing,
     syncing_window: Duration,
+    pruning_window: Duration,
 }
 
 struct Ongoing {
@@ -227,12 +231,14 @@ where
             store: args.store,
             header_sub_rx: None,
             subjective_head_height: None,
+            highest_prunable_height: None,
             batch_size: args.batch_size,
             ongoing_batch: Ongoing {
                 range: None,
                 task: FusedReusableFuture::terminated(),
             },
             syncing_window: args.syncing_window,
+            pruning_window: args.pruning_window,
         })
     }
 
@@ -461,16 +467,40 @@ where
         };
 
         let store_ranges = self.store.get_stored_header_ranges().await?;
+        let pruned_ranges = self.store.get_pruned_ranges().await?;
+
+        // Pruner removes already sampled headers and creates "holes" in the ranges.
+        // Those holes should not be fetched again.
+        let synced_ranges = pruned_ranges + &store_ranges;
 
         let next_batch = calculate_range_to_fetch(
             subjective_head_height,
-            store_ranges.as_ref(),
+            synced_ranges.as_ref(),
             self.batch_size,
         );
 
         if next_batch.is_empty() {
             // no headers to fetch
             return Ok(());
+        }
+
+        // If all heights of next batch is within the slow sync range
+        if self
+            .highest_prunable_height
+            .is_some_and(|height| *next_batch.end() <= height)
+        {
+            // Threshold is the half of batch size but it should be at least 50.
+            let threshold = (self.batch_size / 2).max(SLOW_SYNC_MIN_THRESHOLD);
+
+            // Calculate how many headers are locally available for sampling.
+            let sampled_ranges = self.store.get_accepted_sampling_ranges().await?;
+            let available_for_sampling = (store_ranges - sampled_ranges).len();
+
+            // Do not fetch next batch if we have more headers than the threshold.
+            if available_for_sampling > threshold {
+                // NOTE: Recheck will happen when we receive a header from header sub (~6 secs).
+                return Ok(());
+            }
         }
 
         // make sure we're inside the syncing window before we start
@@ -536,6 +566,30 @@ where
             }
         };
 
+        let pruning_cutoff = Time::now()
+            .checked_sub(self.pruning_window)
+            .unwrap_or_else(Time::unix_epoch);
+
+        // Iterate headers from highest to lowest and check if there is
+        // a new highest prunable height.
+        for header in headers.iter().rev() {
+            if self
+                .highest_prunable_height
+                .is_some_and(|height| header.height().value() <= height)
+            {
+                // `highest_prunable_height` is already higher than `header`
+                // so we don't need to check anything else.
+                break;
+            }
+
+            // If `header` is after the pruning edge, we mark it as the
+            // `highest_prunable_height` and we stop checking lower headers.
+            if header.time() <= pruning_cutoff {
+                self.highest_prunable_height = Some(header.height().value());
+                break;
+            }
+        }
+
         if let Err(e) = self.store.insert(headers).await {
             if e.is_fatal() {
                 return Err(e.into());
@@ -573,31 +627,31 @@ where
     }
 }
 
-/// based on the stored headers and current network head height, calculate range of headers that
-/// should be fetched from the network, anchored on already existing header range in store
+/// based on the synced headers and current network head height, calculate range of headers that
+/// should be fetched from the network, anchored on already synced header range
 fn calculate_range_to_fetch(
     subjective_head_height: u64,
-    store_headers: &[BlockRange],
+    synced_headers: &[BlockRange],
     limit: u64,
 ) -> BlockRange {
-    let mut store_headers_iter = store_headers.iter().rev();
+    let mut synced_headers_iter = synced_headers.iter().rev();
 
-    let Some(store_head_range) = store_headers_iter.next() else {
-        // empty store, we're missing everything
+    let Some(synced_head_range) = synced_headers_iter.next() else {
+        // empty synced ranges, we're missing everything
         let range = 1..=subjective_head_height;
         return range.truncate_right(limit);
     };
 
-    if store_head_range.end() < &subjective_head_height {
+    if synced_head_range.end() < &subjective_head_height {
         // if we haven't caught up with the network head, start from there
-        let range = store_head_range.end() + 1..=subjective_head_height;
+        let range = synced_head_range.end() + 1..=subjective_head_height;
         return range.truncate_right(limit);
     }
 
     // there exists a range contiguous with network head. inspect previous range end
-    let penultimate_range_end = store_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
+    let penultimate_range_end = synced_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
 
-    let range = penultimate_range_end + 1..=store_head_range.start().saturating_sub(1);
+    let range = penultimate_range_end + 1..=synced_head_range.start().saturating_sub(1);
     range.truncate_left(limit)
 }
 
@@ -790,6 +844,7 @@ mod tests {
             event_pub: events.publisher(),
             batch_size: 512,
             syncing_window: DEFAULT_SAMPLING_WINDOW,
+            pruning_window: DEFAULT_SAMPLING_WINDOW, // todo
         })
         .unwrap();
 
@@ -938,6 +993,7 @@ mod tests {
             event_pub: events.publisher(),
             batch_size: 512,
             syncing_window: DEFAULT_SAMPLING_WINDOW,
+            pruning_window: DEFAULT_SAMPLING_WINDOW, // todo
         })
         .unwrap();
 
@@ -1178,6 +1234,7 @@ mod tests {
             event_pub: events.publisher(),
             batch_size: 512,
             syncing_window: DEFAULT_SAMPLING_WINDOW,
+            pruning_window: DEFAULT_SAMPLING_WINDOW, // todo
         })
         .unwrap();
 

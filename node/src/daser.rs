@@ -38,6 +38,7 @@ use futures::{FutureExt, StreamExt};
 use rand::Rng;
 use tendermint::Time;
 use tokio::select;
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 use web_time::{Duration, Instant};
@@ -48,9 +49,10 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pError};
 use crate::store::{BlockRanges, SamplingStatus, Store, StoreError};
+use crate::utils::OneshotSenderExt;
 
 const MAX_SAMPLES_NEEDED: usize = 16;
-const GET_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
+const GET_SAMPLE_MIN_TIMEOUT: Duration = Duration::from_secs(10);
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
 
@@ -64,10 +66,25 @@ pub enum DaserError {
     /// An error propagated from the [`Store`] component.
     #[error("Store: {0}")]
     Store(#[from] StoreError),
+
+    /// The worker has died.
+    #[error("Worker died")]
+    WorkerDied,
+
+    /// Channel closed unexpectedly.
+    #[error("Channel closed unexpectedly")]
+    ChannelClosedUnexpectedly,
+}
+
+impl From<oneshot::error::RecvError> for DaserError {
+    fn from(_value: oneshot::error::RecvError) -> Self {
+        DaserError::ChannelClosedUnexpectedly
+    }
 }
 
 /// Component responsible for data availability sampling of blocks from the network.
 pub(crate) struct Daser {
+    cmd_tx: mpsc::Sender<DaserCmd>,
     cancellation_token: CancellationToken,
     join_handle: JoinHandle,
 }
@@ -87,6 +104,17 @@ where
     pub(crate) sampling_window: Duration,
 }
 
+#[derive(Debug)]
+pub(crate) enum DaserCmd {
+    /// Used by Pruner to tell Daser about a block that is going to be pruned.
+    /// Daser then replies with `true` if Pruner can do it. This is needed to
+    /// avoid race conditions between them when Daser has as ongoing sampling.
+    WantToPrune {
+        height: u64,
+        respond_to: oneshot::Sender<bool>,
+    },
+}
+
 impl Daser {
     /// Create and start the [`Daser`].
     pub(crate) fn start<S>(args: DaserArgs<S>) -> Result<Self>
@@ -95,7 +123,8 @@ impl Daser {
     {
         let cancellation_token = CancellationToken::new();
         let event_pub = args.event_pub.clone();
-        let mut worker = Worker::new(args, cancellation_token.child_token())?;
+        let (cmd_tx, cmd_rx) = mpsc::channel(16);
+        let mut worker = Worker::new(args, cancellation_token.child_token(), cmd_rx)?;
 
         let join_handle = spawn(async move {
             if let Err(e) = worker.run().await {
@@ -108,9 +137,29 @@ impl Daser {
         });
 
         Ok(Daser {
+            cmd_tx,
             cancellation_token,
             join_handle,
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn mocked() -> (Self, crate::test_utils::MockDaserHandle) {
+        let (cmd_tx, cmd_rx) = mpsc::channel(16);
+        let cancellation_token = CancellationToken::new();
+
+        // Just a fake join_handle
+        let join_handle = spawn(async {});
+
+        let daser = Daser {
+            cmd_tx,
+            cancellation_token,
+            join_handle,
+        };
+
+        let mock_handle = crate::test_utils::MockDaserHandle { cmd_rx };
+
+        (daser, mock_handle)
     }
 
     /// Stop the worker.
@@ -122,6 +171,25 @@ impl Daser {
     /// Wait until worker is completely stopped.
     pub(crate) async fn join(&self) {
         self.join_handle.join().await;
+    }
+
+    async fn send_command(&self, cmd: DaserCmd) -> Result<()> {
+        self.cmd_tx
+            .send(cmd)
+            .await
+            .map_err(|_| DaserError::WorkerDied)
+    }
+
+    pub(crate) async fn want_to_prune(&self, height: u64) -> Result<bool> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(DaserCmd::WantToPrune {
+            height,
+            respond_to: tx,
+        })
+        .await?;
+
+        Ok(rx.await?)
     }
 }
 
@@ -135,6 +203,7 @@ struct Worker<S>
 where
     S: Store + 'static,
 {
+    cmd_rx: mpsc::Receiver<DaserCmd>,
     cancellation_token: CancellationToken,
     event_pub: EventPublisher,
     p2p: Arc<P2p>,
@@ -144,6 +213,7 @@ where
     queue: BlockRanges,
     done: BlockRanges,
     ongoing: BlockRanges,
+    will_be_pruned: BlockRanges,
     prev_head: Option<u64>,
     sampling_window: Duration,
 }
@@ -152,8 +222,13 @@ impl<S> Worker<S>
 where
     S: Store,
 {
-    fn new(args: DaserArgs<S>, cancellation_token: CancellationToken) -> Result<Worker<S>> {
+    fn new(
+        args: DaserArgs<S>,
+        cancellation_token: CancellationToken,
+        cmd_rx: mpsc::Receiver<DaserCmd>,
+    ) -> Result<Worker<S>> {
         Ok(Worker {
+            cmd_rx,
             cancellation_token,
             event_pub: args.event_pub,
             p2p: args.p2p,
@@ -163,6 +238,7 @@ where
             queue: BlockRanges::default(),
             done: BlockRanges::default(),
             ongoing: BlockRanges::default(),
+            will_be_pruned: BlockRanges::default(),
             prev_head: None,
             sampling_window: args.sampling_window,
         })
@@ -207,6 +283,7 @@ where
                         break;
                     }
                 }
+                Some(cmd) = self.cmd_rx.recv() => self.on_cmd(cmd).await,
             }
         }
     }
@@ -255,20 +332,17 @@ where
                         break;
                     }
                 }
+                Some(cmd) = self.cmd_rx.recv() => self.on_cmd(cmd).await,
                 Some(res) = self.sampling_futs.next() => {
                     // Beetswap only returns fatal errors that are not related
                     // to P2P nor networking.
                     let (height, accepted) = res?;
 
-                    let status = if accepted {
-                        SamplingStatus::Accepted
-                    } else {
-                        SamplingStatus::Rejected
-                    };
-
-                    self.store
-                        .update_sampling_metadata(height, status, Vec::new())
-                        .await?;
+                    if accepted {
+                        self.store
+                            .update_sampling_metadata(height, SamplingStatus::Accepted, Vec::new())
+                            .await?;
+                    }
 
                     self.ongoing.remove_relaxed(height..=height).expect("invalid height");
                     self.done.insert_relaxed(height..=height).expect("invalid height");
@@ -287,6 +361,33 @@ where
         self.prev_head = None;
 
         Ok(())
+    }
+
+    async fn on_cmd(&mut self, cmd: DaserCmd) {
+        match cmd {
+            DaserCmd::WantToPrune { height, respond_to } => {
+                let res = self.on_want_to_prune(height).await;
+                respond_to.maybe_send(res);
+            }
+        }
+    }
+
+    async fn on_want_to_prune(&mut self, height: u64) -> bool {
+        // Pruner should not remove headers that are related to an ongoing sampling.
+        if self.ongoing.contains(height) {
+            return false;
+        }
+
+        // Header will be pruned, so we remove it from the queue to avoid race conditions.
+        self.queue
+            .remove_relaxed(height..=height)
+            .expect("invalid height");
+        // We also make sure `populate_queue` will not put it back.
+        self.will_be_pruned
+            .insert_relaxed(height..=height)
+            .expect("invalid height");
+
+        true
     }
 
     async fn schedule_next_sample_block(&mut self) -> Result<()> {
@@ -333,15 +434,15 @@ where
             .map(|(row, col)| sample_cid(*row, *col, height))
             .collect::<Result<Vec<_>, _>>()?;
 
-        // NOTE: Pruning window is always 1 hour bigger than sampling
-        // window, so after `in_sampling_window` if statement we shouldn't
-        // care about `StoreError::NotFound` anymore.
+        // TODO: There is a race condition if sampling_window and purning_window is the same
+        // which will cause this to return NotFound.
         self.store
             .update_sampling_metadata(height, SamplingStatus::Unknown, cids)
             .await?;
 
         let p2p = self.p2p.clone();
         let event_pub = self.event_pub.clone();
+        let sampling_window = self.sampling_window;
 
         // Schedule retrival of the CIDs. This will be run later on in the `select!` loop.
         let fut = async move {
@@ -353,6 +454,8 @@ where
                 shares: share_indexes.iter().copied().collect(),
             });
 
+            let timeout = calc_timeout(header.time(), Time::now(), sampling_window);
+
             // Initialize all futures
             let mut futs = share_indexes
                 .into_iter()
@@ -360,9 +463,7 @@ where
                     let p2p = p2p.clone();
 
                     async move {
-                        let res = p2p
-                            .get_sample(row, col, height, Some(GET_SAMPLE_TIMEOUT))
-                            .await;
+                        let res = p2p.get_sample(row, col, height, Some(timeout)).await;
                         (row, col, res)
                     }
                 })
@@ -393,6 +494,7 @@ where
                 });
             }
 
+            // TODO: if timeout is reached, do we generate other event?
             event_pub.send(NodeEvent::SamplingFinished {
                 height,
                 accepted: block_accepted,
@@ -421,7 +523,7 @@ where
         let stored = self.store.get_stored_header_ranges().await?;
         let accepted = self.store.get_accepted_sampling_ranges().await?;
 
-        self.queue = stored - accepted - &self.done - &self.ongoing;
+        self.queue = stored - accepted - &self.done - &self.ongoing - &self.will_be_pruned;
 
         Ok(())
     }
@@ -441,6 +543,19 @@ where
 
         age <= self.sampling_window
     }
+}
+
+fn calc_timeout(header_time: Time, now: Time, sampling_window: Duration) -> Duration {
+    let sampling_window_end = now.checked_sub(sampling_window).unwrap_or_else(|| {
+        warn!("underflow when computing sampling window, defaulting to unix epoch");
+        Time::unix_epoch()
+    });
+
+    let timeout = header_time
+        .duration_since(sampling_window_end)
+        .unwrap_or(GET_SAMPLE_MIN_TIMEOUT);
+
+    timeout.max(GET_SAMPLE_MIN_TIMEOUT)
 }
 
 /// Returns unique and random indexes that will be used for sampling.
@@ -493,6 +608,64 @@ mod tests {
     //
     // NOTE: The smallest block has 4 shares, so a 2nd request will always happen.
     const INVALID_SHARE_REQ_NUM: usize = 2;
+
+    #[async_test]
+    async fn check_calc_timeout() {
+        let now = Time::now();
+        let sampling_window = Duration::from_secs(60);
+
+        let header_time = now;
+        assert_eq!(
+            calc_timeout(header_time, now, sampling_window),
+            Duration::from_secs(60)
+        );
+
+        let header_time = now.checked_sub(Duration::from_secs(1)).unwrap();
+        assert_eq!(
+            calc_timeout(header_time, now, sampling_window),
+            Duration::from_secs(59)
+        );
+
+        let header_time = now.checked_sub(Duration::from_secs(49)).unwrap();
+        assert_eq!(
+            calc_timeout(header_time, now, sampling_window),
+            Duration::from_secs(11)
+        );
+
+        let header_time = now.checked_sub(Duration::from_secs(50)).unwrap();
+        assert_eq!(
+            calc_timeout(header_time, now, sampling_window),
+            Duration::from_secs(10)
+        );
+
+        // minimum timeout edge 1
+        let header_time = now.checked_sub(Duration::from_secs(51)).unwrap();
+        assert_eq!(
+            calc_timeout(header_time, now, sampling_window),
+            GET_SAMPLE_MIN_TIMEOUT
+        );
+
+        // minimum timeout edge 2
+        let header_time = now.checked_sub(Duration::from_secs(60)).unwrap();
+        assert_eq!(
+            calc_timeout(header_time, now, sampling_window),
+            GET_SAMPLE_MIN_TIMEOUT
+        );
+
+        // header outside of the sampling window
+        let header_time = now.checked_sub(Duration::from_secs(61)).unwrap();
+        assert_eq!(
+            calc_timeout(header_time, now, sampling_window),
+            GET_SAMPLE_MIN_TIMEOUT
+        );
+
+        // header from the "future"
+        let header_time = now.checked_add(Duration::from_secs(1)).unwrap();
+        assert_eq!(
+            calc_timeout(header_time, now, sampling_window),
+            Duration::from_secs(61)
+        );
+    }
 
     #[async_test]
     async fn received_valid_samples() {

@@ -10,9 +10,10 @@ use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 
+use crate::daser::{Daser, DaserError};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::P2pError;
-use crate::store::{Store, StoreError};
+use crate::store::{SamplingMetadata, SamplingStatus, Store, StoreError};
 
 pub const DEFAULT_PRUNING_INTERVAL: Duration = Duration::from_secs(12);
 
@@ -32,6 +33,10 @@ pub(crate) enum PrunerError {
     /// An error propagated from the [`Blockstore`] module.
     #[error("Blockstore: {0}")]
     Blockstore(#[from] blockstore::Error),
+
+    /// An error propagated from the `Daser` component.
+    #[error("Daser: {0}")]
+    Daser(#[from] DaserError),
 }
 
 pub(crate) struct Pruner {
@@ -44,6 +49,7 @@ where
     S: Store,
     B: Blockstore,
 {
+    pub daser: Arc<Daser>,
     /// Headers storage.
     pub store: Arc<S>,
     /// Block storage.
@@ -54,6 +60,8 @@ where
     pub pruning_interval: Duration,
     /// Size of pruning window
     pub pruning_window: Duration,
+    /// Size of sampling window
+    pub sampling_window: Duration,
 }
 
 impl Pruner {
@@ -106,12 +114,14 @@ where
     S: Store + 'static,
     B: Blockstore + 'static,
 {
+    daser: Arc<Daser>,
     cancellation_token: CancellationToken,
     event_pub: EventPublisher,
     store: Arc<S>,
     blockstore: Arc<B>,
     pruning_interval: Duration,
     pruning_window: Duration,
+    sampling_window: Duration,
 }
 
 impl<S, B> Worker<S, B>
@@ -127,47 +137,50 @@ where
             blockstore: args.blockstore,
             pruning_interval: args.pruning_interval,
             pruning_window: args.pruning_window,
+            sampling_window: args.sampling_window,
+            daser: args.daser,
         }
     }
 
     async fn run(&mut self) -> Result<()> {
-        let mut last_reported = None;
         let mut last_removed = None;
+        let mut last_reported = None;
 
         loop {
-            let pruning_window_end =
-                Time::now()
-                    .checked_sub(self.pruning_window)
-                    .unwrap_or_else(|| {
-                        warn!(
-                        "underflow when computing pruning window start, defaulting to unix epoch"
-                    );
-                        Time::unix_epoch()
-                    });
+            let now = Time::now();
 
-            while let Some(header) = self.get_tail_header_to_prune(&pruning_window_end).await? {
+            let sampling_window_end = now.checked_sub(self.sampling_window).unwrap_or_else(|| {
+                warn!("underflow when computing sampling window, defaulting to unix epoch");
+                Time::unix_epoch()
+            });
+
+            let pruning_window_end = now.checked_sub(self.pruning_window).unwrap_or_else(|| {
+                warn!("underflow when computing pruning window, defaulting to unix epoch");
+                Time::unix_epoch()
+            });
+
+            while let Some((header, sampling_metadata)) = self
+                .get_next_header_to_prune(sampling_window_end, pruning_window_end)
+                .await?
+            {
                 if self.cancellation_token.is_cancelled() {
                     break;
                 }
-                let height = header.height().value();
 
-                let cids = self
-                    .store
-                    .get_sampling_metadata(height)
-                    .await?
-                    .map(|m| m.cids)
-                    .unwrap_or_default();
-                for cid in cids {
+                for cid in sampling_metadata.cids {
                     self.blockstore.remove(&cid).await?;
                 }
 
+                let height = header.height().value();
                 self.store.remove_height(height).await?;
                 last_removed = Some(height);
             }
 
             if last_reported != last_removed {
                 last_reported = last_removed;
+
                 self.event_pub.send(NodeEvent::PrunedHeaders {
+                    // TODO: This does not represent the current pruning algorithm
                     to_height: last_removed.expect("last removed height to be set"),
                 });
             }
@@ -182,20 +195,63 @@ where
         Ok(())
     }
 
-    /// Get oldest header from the store to be pruned or None if there's nothing to prune
-    async fn get_tail_header_to_prune(&self, cutoff: &Time) -> Result<Option<ExtendedHeader>> {
-        let Some(current_tail_height) = self.store.get_stored_header_ranges().await?.tail() else {
-            // empty store == nothing to prune
-            return Ok(None);
-        };
+    /// Get next header from the store to be pruned or None if there's nothing to prune
+    async fn get_next_header_to_prune(
+        &self,
+        sampling_cutoff: Time,
+        pruning_cutoff: Time,
+    ) -> Result<Option<(ExtendedHeader, SamplingMetadata)>> {
+        let stored_ranges = self.store.get_stored_header_ranges().await?;
+        let pruned_ranges = self.store.get_pruned_ranges().await?;
 
-        let header = self.store.get_by_height(current_tail_height).await?;
+        // All synced heights (stored + pruned)
+        let synced_ranges = pruned_ranges + &stored_ranges;
+        // Edges of the synced ranges
+        let edges = synced_ranges.edges();
 
-        if &header.time() > cutoff {
-            Ok(None)
-        } else {
-            Ok(Some(header))
+        // Iterate from the oldest height to the newest.
+        for height in stored_ranges {
+            let header = self.store.get_by_height(height).await?;
+
+            // Heights in `stored_ranges` are ordered, so if a height didn't
+            // reach the pruning cutoff, so are the next ones.
+            // In other words, we have nothing to prune for now.
+            if header.time() > pruning_cutoff {
+                return Ok(None);
+            }
+
+            let sampling_metadata = self
+                .store
+                .get_sampling_metadata(height)
+                .await?
+                .unwrap_or_default();
+
+            let needs_pruning = if header.time() <= sampling_cutoff {
+                // If height is outside of sampling window then we need to prune it.
+                // However Daser must allow us first. We do this to avoid race conditions
+                // and other edge cases between Pruner and Daser.
+                self.daser.want_to_prune(height).await?
+            } else if edges.contains(height) {
+                // If height in inside the sampling window and an edge, then we keep it.
+                // We need it to verify missing neighbors later on.
+                false
+            } else if sampling_metadata.status == SamplingStatus::Accepted {
+                // If height is inside the sampling window, not an edge, and got sampled,
+                // then we prune it.
+                true
+            } else {
+                // If height is inside the sampling window, not an edge, and not sampled,
+                // then we keep it.
+                false
+            };
+
+            // All constrains are met and we are allowed to prune this block.
+            if needs_pruning {
+                return Ok(Some((header, sampling_metadata)));
+            }
         }
+
+        Ok(None)
     }
 }
 
@@ -209,15 +265,14 @@ mod test {
     use super::*;
     use crate::blockstore::InMemoryBlockstore;
     use crate::events::{EventChannel, TryRecvError};
-    use crate::node::{DEFAULT_PRUNING_DELAY, DEFAULT_SAMPLING_WINDOW};
+    use crate::node::{DEFAULT_PRUNING_WINDOW, DEFAULT_SAMPLING_WINDOW};
     use crate::store::{InMemoryStore, SamplingStatus};
     use crate::test_utils::{gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt};
     use lumina_utils::test_utils::async_test;
 
     const TEST_CODEC: u64 = 0x0D;
     const TEST_MH_CODE: u64 = 0x0D;
-    const TEST_PRUNING_WINDOW: Duration =
-        DEFAULT_SAMPLING_WINDOW.saturating_add(DEFAULT_PRUNING_DELAY);
+    const TEST_PRUNING_WINDOW: Duration = DEFAULT_PRUNING_WINDOW;
 
     #[async_test]
     async fn empty_store() {
@@ -225,17 +280,21 @@ mod test {
         let store = Arc::new(InMemoryStore::new());
         let blockstore = Arc::new(InMemoryBlockstore::new());
         let mut event_subscriber = events.subscribe();
+        let (daser, mut daser_handle) = Daser::mocked();
 
         let pruner = Pruner::start(PrunerArgs {
+            daser: Arc::new(daser),
             store,
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
             pruning_window: TEST_PRUNING_WINDOW,
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
 
+        daser_handle.expect_no_cmd().await;
         pruner.stop();
 
         sleep(Duration::from_secs(1)).await;
@@ -253,17 +312,21 @@ mod test {
         let store = Arc::new(store);
         let blockstore = Arc::new(InMemoryBlockstore::new());
         let mut event_subscriber = events.subscribe();
+        let (daser, mut daser_handle) = Daser::mocked();
 
         let pruner = Pruner::start(PrunerArgs {
+            daser: Arc::new(daser),
             store: store.clone(),
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
             pruning_window: TEST_PRUNING_WINDOW,
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
 
+        daser_handle.expect_no_cmd().await;
         pruner.stop();
 
         sleep(Duration::from_secs(1)).await;
@@ -279,13 +342,14 @@ mod test {
     }
 
     #[async_test]
-    async fn prune_large_tail_with_cids() {
+    async fn prune_large_tail_with_cids_and_sampling_smaller_than_pruning_window() {
         let events = EventChannel::new();
         let store = Arc::new(InMemoryStore::new());
         let mut gen = ExtendedHeaderGenerator::new();
 
         let blockstore = Arc::new(InMemoryBlockstore::new());
         let mut event_subscriber = events.subscribe();
+        let (daser, mut daser_handle) = Daser::mocked();
 
         let first_header_time =
             (Time::now() - (TEST_PRUNING_WINDOW + Duration::from_secs(30 * 24 * 60 * 60))).unwrap();
@@ -315,14 +379,16 @@ mod test {
         }
 
         let pruner = Pruner::start(PrunerArgs {
+            daser: Arc::new(daser),
             store: store.clone(),
             blockstore: blockstore.clone(),
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
             pruning_window: TEST_PRUNING_WINDOW,
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
-        sleep(Duration::from_secs(1)).await;
+        daser_handle.handle_want_to_prune(1..=1000).await;
 
         let pruner_event = event_subscriber.recv().await.unwrap().event;
         assert!(matches!(
@@ -339,6 +405,7 @@ mod test {
             assert!(!blockstore.has(cid).await.unwrap());
         }
 
+        daser_handle.expect_no_cmd().await;
         pruner.stop();
 
         assert!(matches!(
@@ -348,7 +415,7 @@ mod test {
     }
 
     #[async_test]
-    async fn prune_tail() {
+    async fn prune_tail_sampling_smaller_than_pruning_window() {
         const BLOCK_TIME: Duration = Duration::from_millis(10);
 
         let events = EventChannel::new();
@@ -356,6 +423,7 @@ mod test {
         let mut gen = ExtendedHeaderGenerator::new();
         let blockstore = Arc::new(InMemoryBlockstore::new());
         let mut event_subscriber = events.subscribe();
+        let (daser, mut daser_handle) = Daser::mocked();
 
         // 50 headers before pruning window edge
         let before_pruning_edge = (Time::now() - (TEST_PRUNING_WINDOW + BLOCK_TIME * 100)).unwrap();
@@ -372,14 +440,16 @@ mod test {
         store.insert(gen.next_many_verified(10)).await.unwrap();
 
         let pruner = Pruner::start(PrunerArgs {
+            daser: Arc::new(daser),
             store: store.clone(),
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
             pruning_window: TEST_PRUNING_WINDOW,
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
-        sleep(Duration::from_secs(1)).await;
+        daser_handle.handle_want_to_prune(1..=50).await;
 
         let pruner_event = event_subscriber.recv().await.unwrap().event;
         assert!(matches!(
@@ -391,9 +461,11 @@ mod test {
             new_block_ranges([51..=70])
         );
 
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(1)).await;
 
-        let pruner_event = event_subscriber.try_recv().unwrap().event;
+        daser_handle.handle_want_to_prune(51..=60).await;
+
+        let pruner_event = event_subscriber.recv().await.unwrap().event;
         assert!(matches!(
             pruner_event,
             NodeEvent::PrunedHeaders { to_height: 60 }
@@ -403,7 +475,9 @@ mod test {
             new_block_ranges([61..=70])
         );
 
+        daser_handle.expect_no_cmd().await;
         pruner.stop();
+
         assert!(matches!(
             event_subscriber.try_recv().unwrap_err(),
             TryRecvError::Empty

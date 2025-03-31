@@ -9,7 +9,7 @@ use js_sys::Array;
 use libp2p::Multiaddr;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::network;
-use lumina_node::node::{NodeBuilder, MIN_PRUNING_DELAY, MIN_SAMPLING_WINDOW};
+use lumina_node::node::{NodeBuilder, MIN_PRUNING_WINDOW};
 use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
@@ -50,6 +50,11 @@ pub struct WasmNodeConfig {
     /// The minimum value that can be set is 60 seconds.
     #[wasm_bindgen(js_name = customSamplingWindowSecs)]
     pub custom_sampling_window_secs: Option<u32>,
+
+    #[wasm_bindgen(js_name = customPruningDelaySecs)]
+    pub custom_pruning_window_secs: Option<u32>,
+    /*
+
     /// Pruning delay defines how much time the pruner should wait after sampling window in
     /// order to prune the block.
     ///
@@ -59,8 +64,8 @@ pub struct WasmNodeConfig {
     /// * If `use_persistent_memory == false`, default value is 60 seconds.
     ///
     /// The minimum value that can be set is 60 seconds.
-    #[wasm_bindgen(js_name = customPruningDelaySecs)]
     pub custom_pruning_delay_secs: Option<u32>,
+    */
 }
 
 /// `NodeClient` is responsible for steering [`NodeWorker`] by sending it commands and receiving
@@ -371,7 +376,7 @@ impl WasmNodeConfig {
             bootnodes,
             use_persistent_memory: true,
             custom_sampling_window_secs: None,
-            custom_pruning_delay_secs: None,
+            custom_pruning_window_secs: None,
         }
     }
 
@@ -394,9 +399,8 @@ impl WasmNodeConfig {
             NodeBuilder::new()
                 .store(EitherStore::Left(InMemoryStore::new()))
                 .blockstore(EitherBlockstore::Left(InMemoryBlockstore::new()))
-                // In-memory stores are memory hungry, so we lower sampling and pruining window.
-                .sampling_window(MIN_SAMPLING_WINDOW)
-                .pruning_delay(MIN_PRUNING_DELAY)
+                // In-memory stores are memory hungry, so we prune blocks as soon as possible.
+                .pruning_window(MIN_PRUNING_WINDOW)
         };
 
         let bootnodes = self
@@ -418,9 +422,9 @@ impl WasmNodeConfig {
             builder = builder.sampling_window(dur);
         }
 
-        if let Some(secs) = self.custom_pruning_delay_secs {
+        if let Some(secs) = self.custom_pruning_window_secs {
             let dur = Duration::from_secs(secs.into());
-            builder = builder.pruning_delay(dur);
+            builder = builder.pruning_window(dur);
         }
 
         Ok(builder)
@@ -550,7 +554,7 @@ mod tests {
                 bootnodes,
                 use_persistent_memory: false,
                 custom_sampling_window_secs: None,
-                custom_pruning_delay_secs: None,
+                custom_pruning_window_secs: None,
             })
             .await
             .unwrap();

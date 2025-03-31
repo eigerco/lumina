@@ -229,6 +229,10 @@ impl BlockRanges {
         self.0.iter().any(|r| r.contains(&height))
     }
 
+    pub fn len(&self) -> u64 {
+        self.0.iter().map(|r| r.len()).sum()
+    }
+
     /// Return whether range is empty.
     pub fn is_empty(&self) -> bool {
         self.0.iter().all(|r| r.is_empty())
@@ -443,6 +447,24 @@ impl BlockRanges {
         }
 
         Ok(())
+    }
+
+    pub(crate) fn edges(&self) -> BlockRanges {
+        let mut edges = BlockRanges::new();
+
+        for range in self.0.iter() {
+            let start = *range.start();
+            let end = *range.end();
+
+            edges
+                .insert_relaxed(start..=start)
+                .expect("BlockRanges always holds valid ranges");
+            edges
+                .insert_relaxed(end..=end)
+                .expect("BlockRanges always holds valid ranges");
+        }
+
+        edges
     }
 }
 
@@ -1103,5 +1125,56 @@ mod tests {
         let mut r = new_block_ranges([1..=u64::MAX]);
         r.remove_relaxed(u64::MAX..=u64::MAX).unwrap();
         assert_eq!(&r.0[..], &[1..=u64::MAX - 1][..]);
+    }
+
+    #[test]
+    fn edges() {
+        let r = BlockRanges::default();
+        let edges = r.edges();
+        assert!(edges.is_empty());
+
+        let r = new_block_ranges([6..=6, 8..=100, 200..=201, 300..=310]);
+        let edges = r.edges();
+        assert_eq!(
+            &edges.0[..],
+            &[6..=6, 8..=8, 100..=100, 200..=201, 300..=300, 310..=310][..]
+        );
+    }
+
+    #[test]
+    fn block_ranges_len() {
+        let r = BlockRanges::default();
+        assert!(r.is_empty());
+        assert_eq!(r.len(), 0);
+        assert_eq!(r.count(), 0);
+
+        let r = new_block_ranges([4..=4]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 1);
+
+        let r = new_block_ranges([4..=4, 100..=101]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 3);
+        assert_eq!(r.count(), 3);
+
+        let r = new_block_ranges([250..=300]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 51);
+        assert_eq!(r.count(), 51);
+
+        let r = new_block_ranges([4..=4, 100..=101, 250..=300]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 54);
+        assert_eq!(r.count(), 54);
+
+        let r = new_block_ranges([4..=10, 100..=101, 250..=300]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 60);
+        assert_eq!(r.count(), 60);
+
+        let r = new_block_ranges([4..=4, 100..=101, 250..=300, 500..=500]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 55);
+        assert_eq!(r.count(), 55);
     }
 }

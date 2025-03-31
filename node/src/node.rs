@@ -33,8 +33,8 @@ use crate::syncer::{Syncer, SyncerArgs};
 mod builder;
 
 pub use self::builder::{
-    NodeBuilder, NodeBuilderError, DEFAULT_PRUNING_DELAY, DEFAULT_SAMPLING_WINDOW,
-    MIN_PRUNING_DELAY, MIN_SAMPLING_WINDOW,
+    NodeBuilder, NodeBuilderError, DEFAULT_PRUNING_WINDOW, DEFAULT_SAMPLING_WINDOW,
+    MIN_PRUNING_WINDOW, MIN_SAMPLING_WINDOW,
 };
 pub use crate::daser::DaserError;
 pub use crate::p2p::{HeaderExError, P2pError};
@@ -140,6 +140,8 @@ where
         let store = Arc::new(config.store);
         let blockstore = Arc::new(config.blockstore);
 
+        //reset_rejected_samples(&blockstore, &store).await?;
+
         let p2p = Arc::new(
             P2p::start(P2pArgs {
                 network_id: config.network_id,
@@ -161,6 +163,7 @@ where
             // We sync only what we need to sample. So syncing_window is
             // the same as sampling_window.
             syncing_window: config.sampling_window,
+            pruning_window: config.pruning_window,
         })?);
 
         let daser = Arc::new(Daser::start(DaserArgs {
@@ -171,11 +174,13 @@ where
         })?);
 
         let pruner = Arc::new(Pruner::start(PrunerArgs {
+            daser: daser.clone(),
             store: store.clone(),
             blockstore: blockstore.clone(),
             event_pub: event_channel.publisher(),
             pruning_interval: DEFAULT_PRUNING_INTERVAL,
             pruning_window: config.pruning_window,
+            sampling_window: config.sampling_window,
         }));
 
         let tasks_cancellation_token = CancellationToken::new();
@@ -493,3 +498,29 @@ where
         }
     }
 }
+
+/*
+async fn reset_rejected_samples<B, S>(blockstore: &B, store: &S) -> Result<()>
+where
+    B: Blockstore,
+    S: Store,
+{
+    let stored = store.get_stored_header_ranges().await?;
+    let accepted = store.get_accepted_sampling_ranges().await?;
+
+    // TODO: maybe introduce rejected samples in store?
+    for height in (stored - accepted) {
+        if let Some(meta) = store.get_sampling_metadata(height).await? {
+            for cid in meta.cids {
+                blockstore.remove(&cid).await?;
+            }
+
+            store
+                .update_sampling_metadata(height, SamplingStatus::Unknown, Vec::new())
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+*/

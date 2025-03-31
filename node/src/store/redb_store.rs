@@ -40,6 +40,7 @@ const RANGES_TABLE: TableDefinition<'static, &str, Vec<(u64, u64)>> =
 
 const ACCEPTED_SAMPING_RANGES_KEY: &str = "KEY.ACCEPTED_SAMPING_RANGES";
 const HEADER_RANGES_KEY: &str = "KEY.HEADER_RANGES";
+const PRUNED_RANGES_KEY: &str = "KEY.PRUNED_RANGES";
 
 /// A [`Store`] implementation based on a [`redb`] database.
 #[derive(Debug)]
@@ -420,6 +421,14 @@ impl RedbStore {
         .await
     }
 
+    async fn get_pruned_ranges(&self) -> Result<BlockRanges> {
+        self.read_tx(|tx| {
+            let table = tx.open_table(RANGES_TABLE)?;
+            get_ranges(&table, PRUNED_RANGES_KEY)
+        })
+        .await
+    }
+
     async fn remove_height(&self, height: u64) -> Result<()> {
         self.write_tx(move |tx| {
             let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
@@ -548,6 +557,10 @@ impl Store for RedbStore {
 
     async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
         self.get_sampling_ranges().await
+    }
+
+    async fn get_pruned_ranges(&self) -> Result<BlockRanges> {
+        self.get_pruned_ranges().await
     }
 
     async fn remove_height(&self, height: u64) -> Result<()> {
