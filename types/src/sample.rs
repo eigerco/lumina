@@ -14,7 +14,7 @@ use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
 use prost::Message;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::eds::{AxisType, ExtendedDataSquare};
 use crate::nmt::NamespaceProof;
@@ -39,7 +39,7 @@ pub struct SampleId {
 }
 
 /// Represents Sample, with proof of its inclusion
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(into = "RawSample")]
 pub struct Sample {
     /// Indication whether proving was done row or column-wise

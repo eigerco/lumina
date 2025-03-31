@@ -14,7 +14,7 @@ use celestia_proto::shwap::{row::HalfSide as RawHalfSide, Row as RawRow, Share a
 use cid::CidGeneric;
 use multihash::Multihash;
 use prost::Message;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::consts::appconsts::SHARE_SIZE;
 use crate::eds::ExtendedDataSquare;
@@ -49,7 +49,7 @@ pub struct RowId {
 }
 
 /// Row together with the data
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(into = "RawRow")]
 pub struct Row {
     /// Shares contained in the row
