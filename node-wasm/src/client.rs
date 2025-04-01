@@ -6,6 +6,7 @@ use blockstore::EitherBlockstore;
 use celestia_types::nmt::Namespace;
 use celestia_types::{Blob, ExtendedHeader};
 use js_sys::Array;
+use libp2p::Multiaddr;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::network;
 use lumina_node::node::{NodeBuilder, MIN_PRUNING_DELAY, MIN_SAMPLING_WINDOW};
@@ -19,8 +20,7 @@ use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::error::{Context, Result};
 use crate::ports::WorkerClient;
 use crate::utils::{
-    is_safari, js_value_from_display, request_storage_persistence, resolve_dnsaddr_multiaddress,
-    timeout, Network,
+    is_safari, js_value_from_display, request_storage_persistence, timeout, Network,
 };
 use crate::worker::{WasmBlockstore, WasmStore};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -88,12 +88,6 @@ impl NodeClient {
         let worker = WorkerClient::new(port)?;
 
         // keep pinging worker until it responds.
-        // NOTE: there is a possibility that worker can take longer than a timeout
-        // to send his response. Client will then send another ping and read previous
-        // response, leaving an extra pong on the wire. This would offset all future
-        // worker responses by 1.
-        // We workaround this in `WorkerClient::exec` dropping all `InternalPong`s there.
-        // TODO: refactor when oneshots are implemented
         loop {
             if timeout(100, worker.exec(NodeCommand::InternalPing))
                 .await
@@ -110,7 +104,7 @@ impl NodeClient {
 
     /// Establish a new connection to the existing worker over provided port
     #[wasm_bindgen(js_name = addConnectionToWorker)]
-    pub async fn add_connection_to_worker(&self, port: &JsValue) -> Result<()> {
+    pub async fn add_connection_to_worker(&self, port: JsValue) -> Result<()> {
         self.worker.add_connection_to_worker(port).await
     }
 
@@ -405,19 +399,19 @@ impl WasmNodeConfig {
                 .pruning_delay(MIN_PRUNING_DELAY)
         };
 
-        builder = builder.network(network).sync_batch_size(128);
+        let bootnodes = self
+            .bootnodes
+            .into_iter()
+            .map(|addr| {
+                addr.parse()
+                    .with_context(|| format!("invalid multiaddr: {addr}"))
+            })
+            .collect::<Result<Vec<Multiaddr>, _>>()?;
 
-        let mut bootnodes = Vec::with_capacity(self.bootnodes.len());
-
-        for addr in self.bootnodes {
-            let addr = addr
-                .parse()
-                .with_context(|| format!("invalid multiaddr: '{addr}"))?;
-            let resolved_addrs = resolve_dnsaddr_multiaddress(addr).await?;
-            bootnodes.extend(resolved_addrs.into_iter());
-        }
-
-        builder = builder.bootnodes(bootnodes);
+        builder = builder
+            .network(network)
+            .sync_batch_size(128)
+            .bootnodes(bootnodes);
 
         if let Some(secs) = self.custom_sampling_window_secs {
             let dur = Duration::from_secs(secs.into());
