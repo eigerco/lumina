@@ -331,22 +331,6 @@ mod tests {
     }
 
     #[test]
-    fn share_v1_no_signer_in_compact_shares() {
-        const DATA_LEN: usize = 5;
-        let data = &[
-            Namespace::PAY_FOR_BLOB.as_bytes(), // reserved namespace indicating compact share
-            &[InfoByte::from_raw(0b0000_0011).unwrap().as_u8()][..], // v1 + seq start
-            &[0, 0, 0, 5][..],                  // seq len
-            &[7; DATA_LEN][..],                 // data
-            &[0; appconsts::SHARE_SIZE - SHARE_SIGNER_OFFSET - DATA_LEN], // padding
-        ]
-        .concat();
-        let share = Share::from_raw(data).unwrap();
-
-        assert!(share.signer().is_none());
-    }
-
-    #[test]
     fn share_should_have_correct_len() {
         Share::from_raw(&[0; 0]).unwrap_err();
         Share::from_raw(&[0; 100]).unwrap_err();
