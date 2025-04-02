@@ -197,6 +197,7 @@ impl ExtendedDataSquare {
             } else {
                 Share::parity(&shares[idx])?
             };
+            share.validate(app_version)?;
 
             if prev_ns.is_some_and(|prev_ns| share.namespace() < prev_ns) {
                 let axis_idx = match axis {
@@ -482,7 +483,9 @@ fn flatten_index(row: u16, col: u16, square_width: u16) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{test_utils::generate_eds, Blob, ExtendedHeader};
+    use crate::consts::appconsts;
+    use crate::test_utils::generate_eds;
+    use crate::{Blob, ExtendedHeader};
 
     #[test]
     fn axis_type_serialization() {
@@ -853,6 +856,15 @@ mod tests {
             AppVersion::V2,
         )
         .unwrap_err();
+
+        // unsupported share version
+        let mut shr = share(1);
+        shr[NS_SIZE] = InfoByte::new(appconsts::SHARE_VERSION_ONE, false)
+            .unwrap()
+            .as_u8();
+        let shares = vec![shr, share(1), share(1), share(1)];
+        ExtendedDataSquare::new(shares.clone(), "fake".to_string(), AppVersion::V2).unwrap_err();
+        ExtendedDataSquare::new(shares, "fake".to_string(), AppVersion::V3).unwrap();
     }
 
     #[test]
