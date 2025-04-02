@@ -207,15 +207,14 @@ jobs:
     needs:
     - release-plz
 
-    # TODO: revert all changes after release
-    # if: >-
-    #   ${{
-    #     success()
-    #     && contains(
-    #       fromJSON(needs.release-plz.outputs.releases).*.package_name,
-    #       'lumina-node-uniffi'
-    #     )
-    #   }}
+    if: >-
+      ${{
+        success()
+        && contains(
+          fromJSON(needs.release-plz.outputs.releases).*.package_name,
+          'lumina-node-uniffi'
+        )
+      }}
 
     steps:
       - name: Checkout repository
@@ -252,12 +251,11 @@ jobs:
       - name: Publish artifacts to release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-          # RELEASES: ${{ needs.release-plz.outputs.releases }}
+          RELEASES: ${{ needs.release-plz.outputs.releases }}
         run: |
           set -xeuo pipefail
 
-          # tag="$(echo "$RELEASES" | jq '.[] | select(.package_name == "lumina-node-uniffi").tag')"
-          tag=lumina-node-uniffi-v0.1.1
+          tag="$(echo "$RELEASES" | jq -r '.[] | select(.package_name == "lumina-node-uniffi").tag')"
 
           brew install coreutils
           sha256sum lumina-node-uniffi-* > lumina-node-uniffi-sha256-checksums.txt
