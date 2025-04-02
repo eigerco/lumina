@@ -38,16 +38,26 @@ fn env_or(var_name: &str, or_value: &str) -> String {
     env::var(var_name).unwrap_or_else(|_| or_value.to_owned())
 }
 
-pub async fn new_test_client(
+pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
+    let _ = dotenvy::dotenv();
+    let token = token_from_env(auth_level)?;
+    let url = env_or("CELESTIA_RPC_URL", CELESTIA_RPC_URL);
+
+    let client = Client::new(&url, token.as_deref()).await?;
+
+    // minimum 2 blocks
+    client.header_wait_for_height(2).await?;
+
+    Ok(client)
+}
+
+pub async fn new_test_client_with_url(
     auth_level: AuthLevel,
-    celestia_rpc_url: Option<&str>,
+    celestia_rpc_url: &str
 ) -> Result<Client> {
     let _ = dotenvy::dotenv();
     let token = token_from_env(auth_level)?;
-    let url = env_or(
-        "CELESTIA_RPC_URL",
-        celestia_rpc_url.unwrap_or(CELESTIA_RPC_URL),
-    );
+    let url = env_or("CELESTIA_RPC_URL", celestia_rpc_url);
 
     let client = Client::new(&url, token.as_deref()).await?;
 

@@ -6,7 +6,7 @@ use celestia_types::Blob;
 
 pub mod utils;
 
-use crate::utils::client::{blob_submit, new_test_client, AuthLevel};
+use crate::utils::client::{blob_submit, new_test_client_with_url, AuthLevel};
 use crate::utils::{random_bytes, random_ns};
 
 // Use node-1 (bridge node) as the RPC URL
@@ -14,7 +14,7 @@ const CELESTIA_BRIDGE_RPC_URL: &str = "ws://localhost:36658";
 
 #[tokio::test]
 async fn blob_submit_and_get_using_bridge_node() {
-    let client = new_test_client(AuthLevel::Write, Some(CELESTIA_BRIDGE_RPC_URL))
+    let client = new_test_client_with_url(AuthLevel::Write, CELESTIA_BRIDGE_RPC_URL)
         .await
         .unwrap();
     let namespace = random_ns();
