@@ -53,7 +53,7 @@ pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
 
 pub async fn new_test_client_with_url(
     auth_level: AuthLevel,
-    celestia_rpc_url: &str
+    celestia_rpc_url: &str,
 ) -> Result<Client> {
     let _ = dotenvy::dotenv();
     let token = token_from_env(auth_level)?;
