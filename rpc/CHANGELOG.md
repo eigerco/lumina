@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.9.1...celestia-rpc-v0.10.0) - 2025-04-02
+
+### Added
+
+- *(types)* [**breaking**] add support for share v1 and signer in blob ([#574](https://github.com/eigerco/lumina/pull/574))
+- *(rpc)* add DAS module with sampling stats and catch-up methods ([#557](https://github.com/eigerco/lumina/pull/557))
+
 ## [0.9.1](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.9.0...celestia-rpc-v0.9.1) - 2025-02-24
 
 ### Other
