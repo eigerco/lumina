@@ -32,6 +32,7 @@ wait_for_provision() {
 
 # Import the test account key shared by the validator
 import_shared_key() {
+	ls /credentials
 	echo "FFF=IMPORT=start"
   cel-key --help
 
