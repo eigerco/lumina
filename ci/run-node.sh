@@ -32,10 +32,12 @@ wait_for_provision() {
 
 # Import the test account key shared by the validator
 import_shared_key() {
+	echo "IMPORTING"
   echo "password" | cel-key import "$NODE_NAME" "$NODE_KEY_FILE" \
     --keyring-backend="test" \
     --p2p.network "$P2P_NETWORK" \
     --node.type "$NODE_TYPE"
+  echo "IMPORTED"
 }
 
 add_trusted_genesis() {
