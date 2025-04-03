@@ -1,5 +1,7 @@
 use std::env;
 use std::sync::OnceLock;
+use std::thread::sleep;
+use std::time::Duration;
 
 use anyhow::Result;
 use celestia_rpc::prelude::*;
@@ -45,8 +47,9 @@ pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
 
     let client = Client::new(&url, token.as_deref()).await?;
 
-    // minimum 2 blocks
-    client.header_wait_for_height(2).await?;
+    while client.header_network_head().await?.height().value() < 2 {
+        sleep(Duration::from_secs(1));
+    }
 
     Ok(client)
 }

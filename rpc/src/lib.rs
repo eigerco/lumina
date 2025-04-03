@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod blob;
+pub mod blobstream;
 pub mod client;
 pub mod das;
 mod error;
