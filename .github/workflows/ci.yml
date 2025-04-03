@@ -5,6 +5,13 @@ on:
       - main
   pull_request:
 
+# Automatically cancels a job if a new commit is pushed to the same PR, branch, or tag.
+# Source: <https://stackoverflow.com/a/72408109/5148606>
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Allow CI to run for each commit on main
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   WASM_BINDGEN_TEST_TIMEOUT: 120
 
