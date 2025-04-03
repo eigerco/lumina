@@ -41,9 +41,8 @@ pub(crate) mod utils;
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
 pub struct SamplingMetadata {
-    /// Indicates whether this node was able to successfuly sample the block
-    pub status: SamplingStatus,
-
+    // /// Indicates whether this node was able to successfuly sample the block
+    //pub status: SamplingStatus,
     /// List of CIDs used while sampling. Can be used to remove associated data
     /// from Blockstore, when cleaning up the old ExtendedHeaders
     #[cfg_attr(
@@ -131,16 +130,11 @@ pub trait Store: Send + Sync + Debug {
     /// Returns true if height exists in the store.
     async fn has_at(&self, height: u64) -> bool;
 
-    /// Sets or updates sampling result for the header.
+    /// Sets or updates sampling metadata for the header.
     ///
     /// In case of update, provided CID list is appended onto the existing one, as not to lose
     /// references to previously sampled blocks.
-    async fn update_sampling_metadata(
-        &self,
-        height: u64,
-        status: SamplingStatus,
-        cids: Vec<Cid>,
-    ) -> Result<()>;
+    async fn update_sampling_metadata(&self, height: u64, cids: Vec<Cid>) -> Result<()>;
 
     /// Gets the sampling metadata for the height.
     ///
@@ -149,6 +143,8 @@ pub trait Store: Send + Sync + Debug {
     ///
     /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
+
+    async fn set_sampled(&self, height: u64) -> Result<()>;
 
     /// Insert a range of headers into the store.
     ///
@@ -162,8 +158,8 @@ pub trait Store: Send + Sync + Debug {
     /// Returns a list of header ranges currenty held in store.
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges>;
 
-    /// Returns a list of accepted sampling ranges currently held in store.
-    async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges>;
+    /// Returns a list of sampled ranges which their header is currenty held in store.
+    async fn get_sampled_ranges(&self) -> Result<BlockRanges>;
 
     async fn get_pruned_ranges(&self) -> Result<BlockRanges>;
 

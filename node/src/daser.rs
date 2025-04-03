@@ -434,8 +434,6 @@ where
             .map(|(row, col)| sample_cid(*row, *col, height))
             .collect::<Result<Vec<_>, _>>()?;
 
-        // TODO: There is a race condition if sampling_window and purning_window is the same
-        // which will cause this to return NotFound.
         self.store
             .update_sampling_metadata(height, SamplingStatus::Unknown, cids)
             .await?;
@@ -851,7 +849,7 @@ mod tests {
         sampling_metadata.cids.sort();
 
         if simulate_invalid_sampling {
-            assert_eq!(sampling_metadata.status, SamplingStatus::Rejected);
+            assert_eq!(sampling_metadata.status, SamplingStatus::Unknown);
         } else {
             assert_eq!(sampling_metadata.status, SamplingStatus::Accepted);
         }

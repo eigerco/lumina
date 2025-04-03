@@ -24,7 +24,7 @@ use crate::store::{
 };
 
 /// indexeddb version, needs to be incremented on every schema schange
-const DB_VERSION: u32 = 4;
+const DB_VERSION: u32 = 5;
 
 // Data stores (SQL table analogue) used in IndexedDb
 const HEADER_STORE_NAME: &str = "headers";
@@ -91,6 +91,7 @@ impl IndexedDbStore {
                 }
 
                 migrate_older_to_v4(&rexie).await?;
+                migrate_v4_to_v5(&rexie).await?;
             }
             None => {
                 // New database
@@ -736,10 +737,9 @@ async fn remove_height_tx_op(tx: &Transaction, height: u64) -> Result<()> {
 }
 
 async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
-    let Some(version) = detect_schema_version(db).await? else {
-        // New database.
-        return Ok(());
-    };
+    let version = detect_schema_version(db)
+        .await?
+        .expect("migrations never run on new db");
 
     if version >= 4 {
         // Nothing to migrate.
@@ -780,6 +780,32 @@ async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
     Ok(())
 }
 
+async fn migrate_v4_to_v5(db: &Rexie) -> Result<()> {
+    let Some(version) = detect_schema_version(db).await? else {
+        // New database.
+        return Ok(());
+    };
+
+    if version >= 5 {
+        // Nothing to migrate.
+        return Ok(());
+    }
+
+    debug_assert_eq!(version, 4);
+    warn!("Migrating DB schema from v4 to v5");
+
+    // v5 just removes SamplingStatus but it doesn't affect us if it is
+    // present on older entries because we discard it on deserialization.
+    //
+    // Because of that, for faster migration we just increase only the
+    // version without modifing older entries.
+    set_schema_version(&schema_store, 5).await?;
+
+    tx.commit().await?;
+
+    Ok(())
+}
+
 mod v2 {
     use super::*;
 
@@ -813,6 +839,32 @@ mod v3 {
         }
 
         Ok(ranges)
+    }
+}
+
+mod v4 {
+    use super::*;
+    use js_sys::{Object, Reflect};
+
+    pub(crate) fn unset_status(raw_metadata: &JsValue) -> bool {
+        let obj = Object::from(raw_metadata.clone());
+
+        obj.set
+    }
+
+    pub(crate) fn get_status(raw_metadata: &JsValue) -> Option<String> {
+        Reflect::get(value, &JsValue::from_str("status"))
+            .ok()?
+            .as_str()
+    }
+
+    pub(crate) fn set_status(raw_metadata: &JsValue, status: &str) -> bool {
+        Reflect::set(
+            value,
+            &JsValue::from_str("status"),
+            &JsValue::from_str(status),
+        )
+        .unwrap_or(false)
     }
 }
 

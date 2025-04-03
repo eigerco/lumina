@@ -8,6 +8,7 @@ use celestia_types::hash::Hash;
 use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use lumina_utils::time::timeout;
 use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::{

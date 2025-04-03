@@ -203,6 +203,7 @@ where
     ) -> Result<Option<(ExtendedHeader, SamplingMetadata)>> {
         let stored_ranges = self.store.get_stored_header_ranges().await?;
         let pruned_ranges = self.store.get_pruned_ranges().await?;
+        let sampled_ranges = self.store.get_accepted_sampling_ranges().await?;
 
         // All synced heights (stored + pruned)
         let synced_ranges = pruned_ranges + &stored_ranges;
@@ -235,7 +236,7 @@ where
                 // If height in inside the sampling window and an edge, then we keep it.
                 // We need it to verify missing neighbors later on.
                 false
-            } else if sampling_metadata.status == SamplingStatus::Accepted {
+            } else if sampled_ranges.contains(height) {
                 // If height is inside the sampling window, not an edge, and got sampled,
                 // then we prune it.
                 true
