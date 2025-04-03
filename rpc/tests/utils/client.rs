@@ -39,16 +39,7 @@ fn env_or(var_name: &str, or_value: &str) -> String {
 }
 
 pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
-    let _ = dotenvy::dotenv();
-    let token = token_from_env(auth_level)?;
-    let url = env_or("CELESTIA_RPC_URL", CELESTIA_RPC_URL);
-
-    let client = Client::new(&url, token.as_deref()).await?;
-
-    // minimum 2 blocks
-    client.header_wait_for_height(2).await?;
-
-    Ok(client)
+    new_test_client_with_url(auth_level, CELESTIA_RPC_URL).await
 }
 
 pub async fn new_test_client_with_url(
