@@ -32,11 +32,12 @@ wait_for_provision() {
 
 # Import the test account key shared by the validator
 import_shared_key() {
-	ls /credentials
 	echo "FFF=IMPORT=start"
   cel-key --help
+
   echo §§§§§§§
-  cat $NODE_KEY_FILE
+  echo "))))) $NODE_KEY_FILE"
+  ls /credentials
   echo §§§§§§§
 
   echo "cel-key import \"$NODE_NAME\" \"$NODE_KEY_FILE\" --keyring-backend=\"test\" --p2p.network \"$P2P_NETWORK\" --node.type \"$NODE_TYPE\" "
