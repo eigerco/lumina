@@ -123,8 +123,7 @@ impl Row {
             }
             RawHalfSide::Right => {
                 // We have parity data, recompute original shares
-                let mut shares: Vec<_> = iter::repeat(vec![])
-                    .take(data_shares)
+                let mut shares: Vec<_> = iter::repeat_n(vec![], data_shares)
                     .chain(row.shares_half.into_iter().map(|shr| shr.data))
                     .collect();
                 leopard_codec::reconstruct(&mut shares, data_shares)?;
