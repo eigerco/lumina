@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/eigerco/lumina/compare/celestia-grpc-macros-v0.2.0...celestia-grpc-macros-v0.2.1) - 2025-04-02
+
+### Added
+
+- *(grpc)* increase max message size to handle big celestia blocks ([#559](https://github.com/eigerco/lumina/pull/559))
+
 ## [0.2.0](https://github.com/eigerco/lumina/compare/celestia-grpc-macros-v0.1.0...celestia-grpc-macros-v0.2.0) - 2025-01-28
 
 ### Added
