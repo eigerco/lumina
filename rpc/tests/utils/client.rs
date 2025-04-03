@@ -38,10 +38,6 @@ fn env_or(var_name: &str, or_value: &str) -> String {
     env::var(var_name).unwrap_or_else(|_| or_value.to_owned())
 }
 
-pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
-    new_test_client_with_url(auth_level, CELESTIA_RPC_URL).await
-}
-
 pub async fn new_test_client_with_url(
     auth_level: AuthLevel,
     celestia_rpc_url: &str,
@@ -56,6 +52,11 @@ pub async fn new_test_client_with_url(
     client.header_wait_for_height(2).await?;
 
     Ok(client)
+}
+
+pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
+    let url = env_or("CELESTIA_RPC_URL", CELESTIA_RPC_URL);
+    new_test_client_with_url(auth_level, &url).await
 }
 
 pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, ClientError>
