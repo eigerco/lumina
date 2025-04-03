@@ -20,7 +20,8 @@ wait_for_docker_setup() {
   # wait for the service to start
   while :; do
     curl http://127.0.0.1:36658 > /dev/null 2>&1 && break
-    sleep 1
+    docker logs ci-node-1-1
+    sleep 10
   done
 }
 
