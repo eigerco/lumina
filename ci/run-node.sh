@@ -32,12 +32,12 @@ wait_for_provision() {
 
 # Import the test account key shared by the validator
 import_shared_key() {
-	echo "IMPORTING"
+	echo "FFF=IMPORT=start"
   echo "password" | cel-key import "$NODE_NAME" "$NODE_KEY_FILE" \
     --keyring-backend="test" \
     --p2p.network "$P2P_NETWORK" \
     --node.type "$NODE_TYPE"
-  echo "IMPORTED"
+      echo "FFF=IMPORT=end"
 }
 
 add_trusted_genesis() {
@@ -74,14 +74,19 @@ common_node_addr() {
 }
 
 main() {
+	echo "FFT=1"
   # Initialize data availability node
   celestia "$NODE_TYPE" init --p2p.network "$P2P_NETWORK"
+	echo "FFT=2"
   # don't allow banning nodes we create in tests by pubsub ip counting
   whitelist_localhost_nodes
+	echo "FFT=3"
   # Wait for a validator
   wait_for_provision
+	echo "FFT=4"
   # Import the key with the coins
   import_shared_key
+	echo "FFT=5"
   # Trust the private blockchain
   add_trusted_genesis
   # Update the JWT token
