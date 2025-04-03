@@ -58,8 +58,7 @@ pub async fn new_test_client_with_url(
 }
 
 pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
-    let url = env_or("CELESTIA_RPC_URL", CELESTIA_RPC_URL);
-    new_test_client_with_url(auth_level, &url).await
+    new_test_client_with_url(auth_level, CELESTIA_RPC_URL).await
 }
 
 pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, ClientError>
