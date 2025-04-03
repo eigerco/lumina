@@ -33,6 +33,11 @@ wait_for_provision() {
 # Import the test account key shared by the validator
 import_shared_key() {
 	echo "FFF=IMPORT=start"
+  cel-key import "$NODE_NAME" "$NODE_KEY_FILE" \
+    --keyring-backend="test" \
+    --p2p.network "$P2P_NETWORK" \
+    --node.type "$NODE_TYPE"
+	echo "FFF=IMPORT=mid"
   echo "password" | cel-key import "$NODE_NAME" "$NODE_KEY_FILE" \
     --keyring-backend="test" \
     --p2p.network "$P2P_NETWORK" \
@@ -80,7 +85,7 @@ md5sum /root/.celestia-bridge-private/keys/* || true
   # Initialize data availability node
   celestia "$NODE_TYPE" init --p2p.network "$P2P_NETWORK"
   ls -lar /root/.celestia-bridge-private/ || true 
-md5sum /root/.celestia-bridge-private/keys/* || true 
+  md5sum /root/.celestia-bridge-private/keys/* || true 
 	echo "FFT=2"
   # don't allow banning nodes we create in tests by pubsub ip counting
   whitelist_localhost_nodes
