@@ -77,6 +77,7 @@ main() {
 	echo "FFT=1"
   # Initialize data availability node
   celestia "$NODE_TYPE" init --p2p.network "$P2P_NETWORK"
+  ls -la /root/.celestia-bridge-private/
 	echo "FFT=2"
   # don't allow banning nodes we create in tests by pubsub ip counting
   whitelist_localhost_nodes
