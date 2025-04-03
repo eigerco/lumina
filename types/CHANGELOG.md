@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1](https://github.com/eigerco/lumina/compare/celestia-types-v0.11.0...celestia-types-v0.11.1) - 2025-04-03
+
+### Fixed
+
+- *(types)* Fix clippy issues ([#594](https://github.com/eigerco/lumina/pull/594))
+
 ## [0.11.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.10.1...celestia-types-v0.11.0) - 2025-04-02
 
 ### Added
