@@ -16,7 +16,7 @@ wait_for_docker_setup() {
 
   echo "===="
     docker logs ci-validator-1
-    md5sum ./ci/credentials/*
+    md5sum ./ci/credentials/* || true
   echo "===="
 
   # wait for the service to start
