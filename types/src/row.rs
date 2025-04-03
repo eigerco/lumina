@@ -14,7 +14,7 @@ use celestia_proto::shwap::{row::HalfSide as RawHalfSide, Row as RawRow, Share a
 use cid::CidGeneric;
 use multihash::Multihash;
 use prost::Message;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::consts::appconsts::SHARE_SIZE;
 use crate::eds::ExtendedDataSquare;
@@ -49,7 +49,7 @@ pub struct RowId {
 }
 
 /// Row together with the data
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(into = "RawRow")]
 pub struct Row {
     /// Shares contained in the row
@@ -123,8 +123,7 @@ impl Row {
             }
             RawHalfSide::Right => {
                 // We have parity data, recompute original shares
-                let mut shares: Vec<_> = iter::repeat(vec![])
-                    .take(data_shares)
+                let mut shares: Vec<_> = iter::repeat_n(vec![], data_shares)
                     .chain(row.shares_half.into_iter().map(|shr| shr.data))
                     .collect();
                 leopard_codec::reconstruct(&mut shares, data_shares)?;

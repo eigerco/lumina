@@ -13,7 +13,8 @@ use wasm_bindgen::prelude::*;
 
 use crate::consts::appconsts;
 use crate::nmt::{Namespace, NamespacedHashExt, NamespacedSha2Hasher, Nmt, RawNamespacedHash};
-use crate::{Error, Result};
+use crate::state::{AccAddress, AddressTrait};
+use crate::{AppVersion, Error, Result};
 use crate::{InfoByte, Share};
 
 /// A merkle hash used to identify the [`Blob`]s data.
@@ -73,22 +74,25 @@ impl Commitment {
         namespace: Namespace,
         blob_data: &[u8],
         share_version: u8,
-        subtree_root_threshold: u64,
+        signer: Option<&AccAddress>,
+        app_version: AppVersion,
     ) -> Result<Commitment> {
-        let shares = split_blob_to_shares(namespace, share_version, blob_data)?;
-        Self::from_shares(namespace, &shares, subtree_root_threshold)
+        validate_blob(share_version, signer.is_some(), Some(app_version))?;
+        let shares = split_blob_to_shares(namespace, share_version, blob_data, signer)?;
+        Self::from_shares(namespace, &shares, app_version)
     }
 
     /// Generate the commitment from the given shares.
     pub fn from_shares(
         namespace: Namespace,
         mut shares: &[Share],
-        subtree_root_threshold: u64,
+        app_version: AppVersion,
     ) -> Result<Commitment> {
         // the commitment is the root of a merkle mountain range with max tree size
         // determined by the number of roots required to create a share commitment
         // over that blob. The size of the tree is only increased if the number of
         // subtree roots surpasses a constant threshold.
+        let subtree_root_threshold = appconsts::subtree_root_threshold(app_version);
         let subtree_width = subtree_width(shares.len() as u64, subtree_root_threshold);
         let tree_sizes = merkle_mountain_range_sizes(shares.len() as u64, subtree_width);
 
@@ -172,29 +176,52 @@ impl<'de> Deserialize<'de> for Commitment {
     }
 }
 
+/// Check if the combination of share_verison and signer (and app version, in case it's known in
+/// this context) is valid, and return appropriate error otherwise
+pub(crate) fn validate_blob(
+    share_version: u8,
+    has_signer: bool,
+    app_version: Option<AppVersion>,
+) -> Result<()> {
+    if ![appconsts::SHARE_VERSION_ZERO, appconsts::SHARE_VERSION_ONE].contains(&share_version) {
+        return Err(Error::UnsupportedShareVersion(share_version));
+    }
+    if share_version == appconsts::SHARE_VERSION_ZERO && has_signer {
+        return Err(Error::SignerNotSupported);
+    }
+    if share_version == appconsts::SHARE_VERSION_ONE && !has_signer {
+        return Err(Error::MissingSigner);
+    }
+    if app_version
+        .is_some_and(|app| share_version == appconsts::SHARE_VERSION_ONE && app < AppVersion::V3)
+    {
+        return Err(Error::UnsupportedShareVersion(share_version));
+    }
+    Ok(())
+}
+
 /// Splits blob's data to the sequence of shares
 pub(crate) fn split_blob_to_shares(
     namespace: Namespace,
     share_version: u8,
     blob_data: &[u8],
+    signer: Option<&AccAddress>,
 ) -> Result<Vec<Share>> {
-    if share_version != appconsts::SHARE_VERSION_ZERO {
-        return Err(Error::UnsupportedShareVersion(share_version));
-    }
-
     let mut shares = Vec::new();
     let mut cursor = Cursor::new(blob_data);
 
     while cursor.has_remaining() {
-        let share = build_sparse_share_v0(namespace, &mut cursor)?;
+        let share = build_sparse_share(namespace, share_version, signer, &mut cursor)?;
         shares.push(share);
     }
     Ok(shares)
 }
 
 /// Build a sparse share from a cursor over data
-fn build_sparse_share_v0(
+fn build_sparse_share(
     namespace: Namespace,
+    share_version: u8,
+    signer: Option<&AccAddress>,
     data: &mut Cursor<impl AsRef<[u8]>>,
 ) -> Result<Share> {
     let is_first_share = data.position() == 0;
@@ -204,7 +231,7 @@ fn build_sparse_share_v0(
     // Write the namespace
     bytes.put_slice(namespace.as_bytes());
     // Write the info byte
-    let info_byte = InfoByte::new(appconsts::SHARE_VERSION_ZERO, is_first_share)?;
+    let info_byte = InfoByte::new(share_version, is_first_share)?;
     bytes.put_u8(info_byte.as_u8());
 
     // If this share is first in the sequence, write the bytes len of the sequence
@@ -213,6 +240,11 @@ fn build_sparse_share_v0(
             .try_into()
             .map_err(|_| Error::ShareSequenceLenExceeded(data_len))?;
         bytes.put_u32(data_len);
+        // additionally, if share_version is 1, put the signer after sequence len
+        if share_version == appconsts::SHARE_VERSION_ONE {
+            let signer = signer.as_ref().ok_or(Error::MissingSigner)?;
+            bytes.put_slice(signer.as_bytes());
+        }
     }
 
     // Calculate amount of bytes to read
@@ -326,12 +358,12 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
     #[test]
-    fn test_single_sparse_share() {
+    fn test_single_sparse_share_v0() {
         let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();
         let data = vec![1, 2, 3, 4, 5, 6, 7];
         let mut cursor = Cursor::new(&data);
 
-        let share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
+        let share = build_sparse_share(namespace, 0, None, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
@@ -357,13 +389,49 @@ mod tests {
     }
 
     #[test]
-    fn test_sparse_share_with_continuation() {
+    fn test_single_sparse_share_v1() {
+        let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();
+        let data = vec![1, 2, 3, 4, 5, 6, 7];
+        let signer = AccAddress::from([9; appconsts::SIGNER_SIZE]);
+        let mut cursor = Cursor::new(&data);
+
+        let share = build_sparse_share(namespace, 1, Some(&signer), &mut cursor).unwrap();
+
+        // check cursor
+        assert!(!cursor.has_remaining());
+
+        // check namespace
+        let (share_ns, share_data) = share.as_ref().split_at(appconsts::NAMESPACE_SIZE);
+        assert_eq!(share_ns, namespace.as_bytes());
+
+        // check data
+        let expected_share_start: &[u8] = &[
+            0b00000011, // info byte
+            0, 0, 0, 7, // sequence len
+            9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, // signer
+            1, 2, 3, 4, 5, 6, 7, // data
+        ];
+        let (share_data, share_padding) = share_data.split_at(expected_share_start.len());
+        assert_eq!(share_data, expected_share_start);
+
+        // check padding
+        assert_eq!(
+            share_padding,
+            &vec![
+                0;
+                appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE - appconsts::SIGNER_SIZE - data.len()
+            ],
+        );
+    }
+
+    #[test]
+    fn test_sparse_share_v0_with_continuation() {
         let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();
         let continuation_len = 7;
         let data = vec![7; appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE + continuation_len];
         let mut cursor = Cursor::new(&data);
 
-        let first_share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
+        let first_share = build_sparse_share(namespace, 0, None, &mut cursor).unwrap();
 
         // check cursor
         assert_eq!(
@@ -390,7 +458,7 @@ mod tests {
         );
 
         // Continuation share
-        let continuation_share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
+        let continuation_share = build_sparse_share(namespace, 0, None, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
@@ -418,7 +486,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sparse_share_empty_data() {
+    fn test_sparse_share_v0_empty_data() {
         let namespace = Namespace::new(0, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).unwrap();
         let data = vec![];
         let mut cursor = Cursor::new(&data);
@@ -427,7 +495,7 @@ mod tests {
             0, 0, 0, 0, // sequence len
         ];
 
-        let share = build_sparse_share_v0(namespace, &mut cursor).unwrap();
+        let share = build_sparse_share(namespace, 0, None, &mut cursor).unwrap();
 
         // check cursor
         assert!(!cursor.has_remaining());
@@ -494,5 +562,42 @@ mod tests {
                 case.expected,
             );
         }
+    }
+
+    #[test]
+    fn blob_validation() {
+        let app_signer_allowed = Some(AppVersion::V3);
+        let app_signer_forbidden = Some(AppVersion::V2);
+        let app_unknown = None;
+
+        let share_signer_required = appconsts::SHARE_VERSION_ONE;
+        let share_signer_forbidden = appconsts::SHARE_VERSION_ZERO;
+        let share_version_unsupported = appconsts::MAX_SHARE_VERSION;
+
+        let with_signer = true;
+        let no_signer = false;
+
+        // all good - no signer
+        validate_blob(share_signer_forbidden, no_signer, app_signer_allowed).unwrap();
+        validate_blob(share_signer_forbidden, no_signer, app_signer_forbidden).unwrap();
+        validate_blob(share_signer_forbidden, no_signer, app_unknown).unwrap();
+
+        // all good - with signer
+        validate_blob(share_signer_required, with_signer, app_signer_allowed).unwrap();
+        validate_blob(share_signer_required, with_signer, app_unknown).unwrap();
+
+        // unsupported app version
+        validate_blob(share_version_unsupported, no_signer, app_signer_allowed).unwrap_err();
+
+        // no signer when required
+        validate_blob(share_signer_required, no_signer, app_signer_forbidden).unwrap_err();
+        validate_blob(share_signer_required, no_signer, app_signer_allowed).unwrap_err();
+        validate_blob(share_signer_required, no_signer, app_unknown).unwrap_err();
+
+        // with signer when forbidden
+        validate_blob(share_signer_required, with_signer, app_signer_forbidden).unwrap_err();
+        validate_blob(share_signer_forbidden, with_signer, app_signer_forbidden).unwrap_err();
+        validate_blob(share_signer_forbidden, with_signer, app_signer_allowed).unwrap_err();
+        validate_blob(share_signer_forbidden, with_signer, app_unknown).unwrap_err();
     }
 }

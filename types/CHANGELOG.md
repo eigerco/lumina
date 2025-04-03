@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.10.1...celestia-types-v0.11.0) - 2025-04-02
+
+### Added
+
+- *(types)* [**breaking**] add support for share v1 and signer in blob ([#574](https://github.com/eigerco/lumina/pull/574))
+- *(types)* remove Deserialize from Row & Sample ([#580](https://github.com/eigerco/lumina/pull/580))
+- *(types)* [**breaking**] add state error codes related to blob submission ([#560](https://github.com/eigerco/lumina/pull/560))
+
+### Other
+
+- *(types)* fix flaky blob reconstruct when len == 0 ([#541](https://github.com/eigerco/lumina/pull/541))
+
 ## [0.10.1](https://github.com/eigerco/lumina/compare/celestia-types-v0.10.0...celestia-types-v0.10.1) - 2025-02-24
 
 ### Added
