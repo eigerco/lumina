@@ -74,10 +74,13 @@ common_node_addr() {
 }
 
 main() {
+md5sum /root/.celestia-bridge-private/keys/*
+  ls -lar /root/.celestia-bridge-private/
 	echo "FFT=1"
   # Initialize data availability node
   celestia "$NODE_TYPE" init --p2p.network "$P2P_NETWORK"
-  ls -la /root/.celestia-bridge-private/
+  ls -lar /root/.celestia-bridge-private/
+md5sum /root/.celestia-bridge-private/keys/*
 	echo "FFT=2"
   # don't allow banning nodes we create in tests by pubsub ip counting
   whitelist_localhost_nodes
