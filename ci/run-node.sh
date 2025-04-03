@@ -74,8 +74,8 @@ common_node_addr() {
 }
 
 main() {
-md5sum /root/.celestia-bridge-private/keys/*
-  ls -lar /root/.celestia-bridge-private/
+md5sum /root/.celestia-bridge-private/keys/* || true 
+  ls -lar /root/.celestia-bridge-private/ || true 
 	echo "FFT=1"
   # Initialize data availability node
   celestia "$NODE_TYPE" init --p2p.network "$P2P_NETWORK"
