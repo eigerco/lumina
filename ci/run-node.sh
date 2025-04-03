@@ -22,6 +22,9 @@ GENESIS_HASH_FILE="$GENESIS_DIR/genesis_hash"
 # Wait for the validator to set up and provision us via shared dir
 wait_for_provision() {
   echo "Waiting for the validator node to start"
+    docker logs ci-validator-1
+  echo "Waiting for the validator node to start"
+
   while [[ ! ( -e "$GENESIS_HASH_FILE" && -e "$NODE_KEY_FILE" ) ]]; do
     sleep 0.1
   done
