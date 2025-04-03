@@ -11,6 +11,8 @@ wait_for_docker_setup() {
 
   services_expected="$(docker compose -f "$DOCKER_COMPOSE_FILE" config --services | wc -l)"
   services_running="$(docker compose -f "$DOCKER_COMPOSE_FILE" ps --services | wc -l)"
+  
+docker compose -f "$DOCKER_COMPOSE_FILE" ps -a
 
   if [[ "$services_running" != "$services_expected" ]]; then
     echo "Not all required services running, expected $services_expected, found $services_running" >&2
