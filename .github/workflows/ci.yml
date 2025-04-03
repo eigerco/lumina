@@ -5,7 +5,7 @@ on:
       - main
   pull_request:
 
-# Automatically cancels a job if a new commit if pushed to the same PR, branch, or tag.
+# Automatically cancels a job if a new commit is pushed to the same PR, branch, or tag.
 # Source: <https://stackoverflow.com/a/72408109/5148606>
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
