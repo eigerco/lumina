@@ -11,20 +11,20 @@ use crate::utils::client::{new_test_client, AuthLevel};
 
 #[tokio::test]
 async fn account_address() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let _addr = client.state_account_address().await.unwrap();
 }
 
 #[tokio::test]
 async fn balance() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let balance = client.state_balance().await.unwrap();
     assert_eq!(balance.denom, "utia");
 }
 
 #[tokio::test]
 async fn balance_for_address() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     let my_addr = client.state_account_address().await.unwrap();
     let my_balance = client.state_balance().await.unwrap();
@@ -35,7 +35,7 @@ async fn balance_for_address() {
 
 #[tokio::test]
 async fn submit_pay_for_blob() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();

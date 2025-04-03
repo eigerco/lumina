@@ -21,7 +21,7 @@ async fn write_lock() -> MutexGuard<'static, ()> {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum AuthLevel {
-    Public,
+    Skip,
     Read,
     Write,
     Admin,
@@ -29,7 +29,7 @@ pub enum AuthLevel {
 
 fn token_from_env(auth_level: AuthLevel) -> Result<Option<String>> {
     match auth_level {
-        AuthLevel::Public => Ok(None),
+        AuthLevel::Skip => Ok(None),
         AuthLevel::Read => Ok(Some(env::var("CELESTIA_NODE_AUTH_TOKEN_READ")?)),
         AuthLevel::Write => Ok(Some(env::var("CELESTIA_NODE_AUTH_TOKEN_WRITE")?)),
         AuthLevel::Admin => Ok(Some(env::var("CELESTIA_NODE_AUTH_TOKEN_ADMIN")?)),
@@ -40,10 +40,13 @@ fn env_or(var_name: &str, or_value: &str) -> String {
     env::var(var_name).unwrap_or_else(|_| or_value.to_owned())
 }
 
-pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
+pub async fn new_test_client_with_url(
+    auth_level: AuthLevel,
+    celestia_rpc_url: &str,
+) -> Result<Client> {
     let _ = dotenvy::dotenv();
     let token = token_from_env(auth_level)?;
-    let url = env_or("CELESTIA_RPC_URL", CELESTIA_RPC_URL);
+    let url = env_or("CELESTIA_RPC_URL", celestia_rpc_url);
 
     let client = Client::new(&url, token.as_deref()).await?;
 
@@ -52,6 +55,10 @@ pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
     }
 
     Ok(client)
+}
+
+pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
+    new_test_client_with_url(auth_level, CELESTIA_RPC_URL).await
 }
 
 pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, ClientError>

@@ -8,7 +8,7 @@ use crate::utils::client::{new_test_client, AuthLevel};
 
 #[tokio::test]
 async fn local_head() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     let local_head = client.header_local_head().await.unwrap();
 
@@ -26,7 +26,7 @@ async fn local_head() {
 
 #[tokio::test]
 async fn get_by_height() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     let genesis_header = client.header_get_by_height(1).await.unwrap();
     let second_header = client.header_get_by_height(2).await.unwrap();
@@ -37,14 +37,14 @@ async fn get_by_height() {
 
 #[tokio::test]
 async fn get_by_height_non_existent() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     client.header_get_by_height(999_999_999).await.unwrap_err();
 }
 
 #[tokio::test]
 async fn get_by_hash() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     let genesis_header = client.header_get_by_height(1).await.unwrap();
     let genesis_header2 = client
@@ -57,7 +57,7 @@ async fn get_by_hash() {
 
 #[tokio::test]
 async fn get_range_by_height() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     let genesis_header = client.header_get_by_height(1).await.unwrap();
     let second_header = client.header_get_by_height(2).await.unwrap();
@@ -73,7 +73,7 @@ async fn get_range_by_height() {
 
 #[tokio::test]
 async fn network_head() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     let network_head = client.header_network_head().await.unwrap();
 
@@ -90,7 +90,7 @@ async fn network_head() {
 
 #[tokio::test]
 async fn subscribe() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     let genesis_header = client.header_get_by_height(1).await.unwrap();
 
@@ -104,7 +104,7 @@ async fn subscribe() {
 
 #[tokio::test]
 async fn sync_state() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     let state1 = client.header_sync_state().await.unwrap();
 
