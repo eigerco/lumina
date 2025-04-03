@@ -35,6 +35,9 @@ import_shared_key() {
 	ls /credentials
 	echo "FFF=IMPORT=start"
   cel-key --help
+  echo §§§§§§§
+  cat $NODE_KEY_FILE
+  echo §§§§§§§
 
   echo "cel-key import \"$NODE_NAME\" \"$NODE_KEY_FILE\" --keyring-backend=\"test\" --p2p.network \"$P2P_NETWORK\" --node.type \"$NODE_TYPE\" "
   echo "FFF=IMPORT=mid"
