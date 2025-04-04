@@ -38,7 +38,7 @@ import_shared_key() {
   echo §§§§§§§
   echo "))))) $NODE_KEY_FILE"
   ls /credentials
-  readlink -f $NODE_KEY_FILE
+  wc $NODE_KEY_FILE
   echo §§§§§§§
 
   echo "cel-key import \"$NODE_NAME\" \"$NODE_KEY_FILE\" --keyring-backend=\"test\" --p2p.network \"$P2P_NETWORK\" --node.type \"$NODE_TYPE\" "
