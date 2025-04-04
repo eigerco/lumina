@@ -493,7 +493,7 @@ where
             let threshold = (self.batch_size / 2).max(SLOW_SYNC_MIN_THRESHOLD);
 
             // Calculate how many headers are locally available for sampling.
-            let sampled_ranges = self.store.get_accepted_sampling_ranges().await?;
+            let sampled_ranges = self.store.get_sampled_ranges().await?;
             let available_for_sampling = (store_ranges - sampled_ranges).len();
 
             // Do not fetch next batch if we have more headers than the threshold.

@@ -19,9 +19,7 @@ use wasm_bindgen::JsValue;
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
-use crate::store::{
-    Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
-};
+use crate::store::{Result, SamplingMetadata, Store, StoreError, StoreInsertionError};
 
 /// indexeddb version, needs to be incremented on every schema schange
 const DB_VERSION: u32 = 5;
@@ -36,8 +34,9 @@ const SCHEMA_STORE_NAME: &str = "schema";
 const HASH_INDEX_NAME: &str = "hash";
 const HEIGHT_INDEX_NAME: &str = "height";
 
-const ACCEPTED_SAMPLING_RANGES_KEY: &str = "accepted_sampling_ranges";
 const HEADER_RANGES_KEY: &str = "header_ranges";
+const SAMPLED_RANGES_KEY: &str = "accepted_sampling_ranges";
+const PRUNED_RANGES_KEY: &str = "pruned_ranges";
 const VERSION_KEY: &str = "version";
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -254,20 +253,13 @@ impl IndexedDbStore {
         stored_ranges.contains(height)
     }
 
-    async fn update_sampling_metadata(
-        &self,
-        height: u64,
-        status: SamplingStatus,
-        cids: Vec<Cid>,
-    ) -> Result<()> {
+    async fn update_sampling_metadata(&self, height: u64, cids: Vec<Cid>) -> Result<()> {
         self.write_tx(
             &[SAMPLING_STORE_NAME, RANGES_STORE_NAME],
             update_sampling_metadata_tx_op,
-            (height, status, cids),
+            (height, cids),
         )
-        .await?;
-
-        Ok(())
+        .await
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -288,13 +280,27 @@ impl IndexedDbStore {
         Ok(Some(from_value(sampling_entry)?))
     }
 
-    async fn get_sampling_ranges(&self) -> Result<BlockRanges> {
+    async fn mark_sampled(&self, height: u64) -> Result<()> {
+        self.write_tx(&[RANGES_STORE_NAME], mark_sampled_tx_op, height)
+            .await
+    }
+
+    async fn get_sampled_ranges(&self) -> Result<BlockRanges> {
         let tx = self
             .db
-            .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadWrite)?;
+            .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)?;
         let store = tx.store(RANGES_STORE_NAME)?;
 
-        get_ranges(&store, ACCEPTED_SAMPLING_RANGES_KEY).await
+        get_ranges(&store, SAMPLED_RANGES_KEY).await
+    }
+
+    async fn get_pruned_ranges(&self) -> Result<BlockRanges> {
+        let tx = self
+            .db
+            .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)?;
+        let store = tx.store(RANGES_STORE_NAME)?;
+
+        get_ranges(&store, PRUNED_RANGES_KEY).await
     }
 
     async fn remove_height(&self, height: u64) -> Result<()> {
@@ -389,13 +395,8 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn update_sampling_metadata(
-        &self,
-        height: u64,
-        status: SamplingStatus,
-        cids: Vec<Cid>,
-    ) -> Result<()> {
-        let fut = SendWrapper::new(self.update_sampling_metadata(height, status, cids));
+    async fn update_sampling_metadata(&self, height: u64, cids: Vec<Cid>) -> Result<()> {
+        let fut = SendWrapper::new(self.update_sampling_metadata(height, cids));
         fut.await
     }
 
@@ -413,13 +414,23 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
+    async fn mark_sampled(&self, height: u64) -> Result<()> {
+        let fut = SendWrapper::new(self.mark_sampled(height));
+        fut.await
+    }
+
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges> {
         let fut = SendWrapper::new(self.get_stored_header_ranges());
         fut.await
     }
 
-    async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
-        let fut = SendWrapper::new(self.get_sampling_ranges());
+    async fn get_sampled_ranges(&self) -> Result<BlockRanges> {
+        let fut = SendWrapper::new(self.get_sampled_ranges());
+        fut.await
+    }
+
+    async fn get_pruned_ranges(&self) -> Result<BlockRanges> {
+        let fut = SendWrapper::new(self.get_pruned_ranges());
         fut.await
     }
 
@@ -604,6 +615,8 @@ async fn insert_tx_op(
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
     let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+    let mut sampled_ranges = get_ranges(&ranges_store, SAMPLED_RANGES_KEY).await?;
+    let mut pruned_ranges = get_ranges(&ranges_store, PRUNED_RANGES_KEY).await?;
 
     let headers_range = head.height().value()..=tail.height().value();
     let (prev_exists, next_exists) = header_ranges
@@ -644,20 +657,27 @@ async fn insert_tx_op(
     header_ranges
         .insert_relaxed(headers_range)
         .expect("invalid range");
+    sampled_ranges
+        .remove_relaxed(headers_range)
+        .expect("invalid range");
+    pruned_ranges
+        .remove_relaxed(headers_range)
+        .expect("invalid range");
+
     set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
+    set_ranges(&ranges_store, SAMPLED_RANGES_KEY, &sampled_ranges).await?;
+    set_ranges(&ranges_store, PRUNED_RANGES_KEY, &pruned_ranges).await?;
 
     Ok(tail)
 }
 
 async fn update_sampling_metadata_tx_op(
     tx: &Transaction,
-    (height, status, cids): (u64, SamplingStatus, Vec<Cid>),
+    (height, cids): (u64, Vec<Cid>),
 ) -> Result<()> {
     let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
-
     let header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
-    let mut accepted_ranges = get_ranges(&ranges_store, ACCEPTED_SAMPLING_RANGES_KEY).await?;
 
     if !header_ranges.contains(height) {
         return Err(StoreError::NotFound);
@@ -668,8 +688,6 @@ async fn update_sampling_metadata_tx_op(
         Some(previous_entry) => {
             let mut value: SamplingMetadata = from_value(previous_entry)?;
 
-            value.status = status;
-
             for cid in cids {
                 if !value.cids.contains(&cid) {
                     value.cids.push(cid);
@@ -678,7 +696,7 @@ async fn update_sampling_metadata_tx_op(
 
             value
         }
-        None => SamplingMetadata { status, cids },
+        None => SamplingMetadata { cids },
     };
 
     let metadata_jsvalue = to_value(&new_entry)?;
@@ -686,21 +704,23 @@ async fn update_sampling_metadata_tx_op(
         .put(&metadata_jsvalue, Some(&height_key))
         .await?;
 
-    match status {
-        SamplingStatus::Accepted => accepted_ranges
-            .insert_relaxed(height..=height)
-            .expect("invalid height"),
-        _ => accepted_ranges
-            .remove_relaxed(height..=height)
-            .expect("invalid height"),
+    Ok(())
+}
+
+async fn mark_sampled_tx_op(tx: &Transaction, height: u64) -> Result<()> {
+    let ranges_store = tx.store(RANGES_STORE_NAME)?;
+    let header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+    let mut sampled_ranges = get_ranges(&ranges_store, SAMPLED_RANGES_KEY).await?;
+
+    if !header_ranges.contains(height) {
+        return Err(StoreError::NotFound);
     }
 
-    set_ranges(
-        &ranges_store,
-        ACCEPTED_SAMPLING_RANGES_KEY,
-        &accepted_ranges,
-    )
-    .await?;
+    sampled_ranges
+        .insert_relaxed(height..=height)
+        .expect("invalid height");
+
+    set_ranges(&ranges_store, SAMPLED_RANGES_KEY, &sampled_ranges).await?;
 
     Ok(())
 }
@@ -711,15 +731,12 @@ async fn remove_height_tx_op(tx: &Transaction, height: u64) -> Result<()> {
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
     let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+    let mut sampled_ranges = get_ranges(&ranges_store, SAMPLED_RANGES_KEY).await?;
+    let mut pruned_ranges = get_ranges(&ranges_store, PRUNED_RANGES_KEY).await?;
 
     if !header_ranges.contains(height) {
         return Err(StoreError::NotFound);
     }
-
-    header_ranges
-        .remove_relaxed(height..=height)
-        .expect("valid range never fails");
-    set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
 
     let jsvalue_height = to_value(&height).expect("to create jsvalue");
     let Some(header) = height_index.get(jsvalue_height).await? else {
@@ -732,6 +749,20 @@ async fn remove_height_tx_op(tx: &Transaction, height: u64) -> Result<()> {
         .map_err(|_| StoreError::StoredDataError("could not get header's DB id".into()))?;
 
     header_store.delete(id).await?;
+
+    header_ranges
+        .remove_relaxed(headers_range)
+        .expect("invalid range");
+    sampled_ranges
+        .remove_relaxed(headers_range)
+        .expect("invalid range");
+    pruned_ranges
+        .insert_relaxed(headers_range)
+        .expect("invalid range");
+
+    set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
+    set_ranges(&ranges_store, SAMPLED_RANGES_KEY, &sampled_ranges).await?;
+    set_ranges(&ranges_store, PRUNED_RANGES_KEY, &pruned_ranges).await?;
 
     Ok(())
 }
@@ -794,7 +825,10 @@ async fn migrate_v4_to_v5(db: &Rexie) -> Result<()> {
     debug_assert_eq!(version, 4);
     warn!("Migrating DB schema from v4 to v5");
 
-    // v5 just removes SamplingStatus but it doesn't affect us if it is
+    let tx = db.transaction(&[SCHEMA_STORE_NAME], TransactionMode::ReadWrite)?;
+    let schema_store = tx.store(SCHEMA_STORE_NAME)?;
+
+    // v5 just removes `SamplingStatus` but it doesn't affect us if it is
     // present on older entries because we discard it on deserialization.
     //
     // Because of that, for faster migration we just increase only the
@@ -839,32 +873,6 @@ mod v3 {
         }
 
         Ok(ranges)
-    }
-}
-
-mod v4 {
-    use super::*;
-    use js_sys::{Object, Reflect};
-
-    pub(crate) fn unset_status(raw_metadata: &JsValue) -> bool {
-        let obj = Object::from(raw_metadata.clone());
-
-        obj.set
-    }
-
-    pub(crate) fn get_status(raw_metadata: &JsValue) -> Option<String> {
-        Reflect::get(value, &JsValue::from_str("status"))
-            .ok()?
-            .as_str()
-    }
-
-    pub(crate) fn set_status(raw_metadata: &JsValue, status: &str) -> bool {
-        Reflect::set(
-            value,
-            &JsValue::from_str("status"),
-            &JsValue::from_str(status),
-        )
-        .unwrap_or(false)
     }
 }
 

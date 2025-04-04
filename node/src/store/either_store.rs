@@ -6,9 +6,7 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
 
-use crate::store::{
-    BlockRanges, Result, SamplingMetadata, SamplingStatus, Store, VerifiedExtendedHeaders,
-};
+use crate::store::{BlockRanges, Result, SamplingMetadata, Store, VerifiedExtendedHeaders};
 
 /// Struct that can be used to build combinations of different [`Store`] types.
 ///
@@ -204,17 +202,16 @@ where
         call!(self, has_at(height))
     }
 
-    async fn update_sampling_metadata(
-        &self,
-        height: u64,
-        status: SamplingStatus,
-        cids: Vec<Cid>,
-    ) -> Result<()> {
-        call!(self, update_sampling_metadata(height, status, cids))
+    async fn update_sampling_metadata(&self, height: u64, cids: Vec<Cid>) -> Result<()> {
+        call!(self, update_sampling_metadata(height, cids))
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         call!(self, get_sampling_metadata(height))
+    }
+
+    async fn mark_sampled(&self, height: u64) -> Result<()> {
+        call!(self, mark_sampled(height))
     }
 
     async fn insert<H>(&self, headers: H) -> Result<()>
@@ -229,8 +226,8 @@ where
         call!(self, get_stored_header_ranges())
     }
 
-    async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
-        call!(self, get_accepted_sampling_ranges())
+    async fn get_sampled_ranges(&self) -> Result<BlockRanges> {
+        call!(self, get_sampled_ranges())
     }
 
     async fn get_pruned_ranges(&self) -> Result<BlockRanges> {

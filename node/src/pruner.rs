@@ -13,7 +13,7 @@ use tracing::{debug, error, warn};
 use crate::daser::{Daser, DaserError};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::P2pError;
-use crate::store::{SamplingMetadata, SamplingStatus, Store, StoreError};
+use crate::store::{Store, StoreError};
 
 pub const DEFAULT_PRUNING_INTERVAL: Duration = Duration::from_secs(12);
 
@@ -159,7 +159,7 @@ where
                 Time::unix_epoch()
             });
 
-            while let Some((header, sampling_metadata)) = self
+            while let Some(header) = self
                 .get_next_header_to_prune(sampling_window_end, pruning_window_end)
                 .await?
             {
@@ -167,11 +167,18 @@ where
                     break;
                 }
 
+                let height = header.height().value();
+
+                let sampling_metadata = self
+                    .store
+                    .get_sampling_metadata(height)
+                    .await?
+                    .unwrap_or_default();
+
                 for cid in sampling_metadata.cids {
                     self.blockstore.remove(&cid).await?;
                 }
 
-                let height = header.height().value();
                 self.store.remove_height(height).await?;
                 last_removed = Some(height);
             }
@@ -200,10 +207,10 @@ where
         &self,
         sampling_cutoff: Time,
         pruning_cutoff: Time,
-    ) -> Result<Option<(ExtendedHeader, SamplingMetadata)>> {
+    ) -> Result<Option<ExtendedHeader>> {
         let stored_ranges = self.store.get_stored_header_ranges().await?;
         let pruned_ranges = self.store.get_pruned_ranges().await?;
-        let sampled_ranges = self.store.get_accepted_sampling_ranges().await?;
+        let sampled_ranges = self.store.get_sampled_ranges().await?;
 
         // All synced heights (stored + pruned)
         let synced_ranges = pruned_ranges + &stored_ranges;
@@ -220,12 +227,6 @@ where
             if header.time() > pruning_cutoff {
                 return Ok(None);
             }
-
-            let sampling_metadata = self
-                .store
-                .get_sampling_metadata(height)
-                .await?
-                .unwrap_or_default();
 
             let needs_pruning = if header.time() <= sampling_cutoff {
                 // If height is outside of sampling window then we need to prune it.
@@ -248,7 +249,7 @@ where
 
             // All constrains are met and we are allowed to prune this block.
             if needs_pruning {
-                return Ok(Some((header, sampling_metadata)));
+                return Ok(Some(header));
             }
         }
 
@@ -267,7 +268,7 @@ mod test {
     use crate::blockstore::InMemoryBlockstore;
     use crate::events::{EventChannel, TryRecvError};
     use crate::node::{DEFAULT_PRUNING_WINDOW, DEFAULT_SAMPLING_WINDOW};
-    use crate::store::{InMemoryStore, SamplingStatus};
+    use crate::store::{InMemoryStore};
     use crate::test_utils::{gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt};
     use lumina_utils::test_utils::async_test;
 
@@ -359,22 +360,25 @@ mod test {
         let blocks_with_sampling = (1..=1000)
             .map(|height| {
                 let block = TestBlock::from(height);
-                let sampling_status = match height % 3 {
-                    0 => SamplingStatus::Unknown,
-                    1 => SamplingStatus::Accepted,
-                    2 => SamplingStatus::Accepted,
-                    _ => unreachable!(),
+                let sampled = match height % 3 {
+                    0 => false,
+                    _ => true,
                 };
-                (height, block, block.cid().unwrap(), sampling_status)
+                (height, block, block.cid().unwrap(), sampled)
             })
             .collect::<Vec<_>>();
 
         store.insert(gen.next_many_verified(1_000)).await.unwrap();
 
-        for (height, block, cid, status) in &blocks_with_sampling {
+        for (height, block, cid, sampled) in &blocks_with_sampling {
             blockstore.put_keyed(cid, block.data()).await.unwrap();
+
+            if *sampled {
+                store.mark_sampled(*height).await.unwrap();
+            }
+
             store
-                .update_sampling_metadata(*height, *status, vec![*cid])
+                .update_sampling_metadata(*height, vec![*cid])
                 .await
                 .unwrap()
         }

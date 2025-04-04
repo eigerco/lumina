@@ -20,9 +20,7 @@ use tracing::{debug, trace};
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
-use crate::store::{
-    Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
-};
+use crate::store::{Result, SamplingMetadata, Store, StoreError, StoreInsertionError};
 use crate::utils::Counter;
 
 use super::utils::{deserialize_extended_header, deserialize_sampling_metadata};
@@ -349,7 +347,7 @@ impl RedbStore {
     async fn update_sampling_metadata(&self, height: u64, cids: Vec<Cid>) -> Result<()> {
         self.write_tx(move |tx| {
             let mut sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
-            let mut ranges_table = tx.open_table(RANGES_TABLE)?;
+            let ranges_table = tx.open_table(RANGES_TABLE)?;
 
             let header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
 
@@ -380,22 +378,21 @@ impl RedbStore {
         .await
     }
 
-    async fn set_sampled(&self, height: u64, sampled: bool) -> Result<()> {
+    async fn mark_sampled(&self, height: u64) -> Result<()> {
         self.write_tx(move |tx| {
             let mut ranges_table = tx.open_table(RANGES_TABLE)?;
+            let header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
             let mut sampled_ranges = get_ranges(&ranges_table, SAMPLED_RANGES_KEY)?;
 
-            if sampled {
-                sampling_ranges
-                    .insert_relaxed(height..=height)
-                    .expect("invalid height");
-            } else {
-                sampling_ranges
-                    .remove_relaxed(height..=height)
-                    .expect("invalid height");
+            if !header_ranges.contains(height) {
+                return Err(StoreError::NotFound);
             }
 
-            set_ranges(&mut ranges_table, SAMPLED_RANGES_KEY, &sampling_ranges)?;
+            sampled_ranges
+                .insert_relaxed(height..=height)
+                .expect("invalid height");
+
+            set_ranges(&mut ranges_table, SAMPLED_RANGES_KEY, &sampled_ranges)?;
 
             Ok(())
         })
@@ -563,8 +560,8 @@ impl Store for RedbStore {
         self.update_sampling_metadata(height, cids).await
     }
 
-    async fn set_sampled(&self, height: u64, sampled: bool) -> Result<()> {
-        self.set_sampled(height, sampled).await
+    async fn mark_sampled(&self, height: u64) -> Result<()> {
+        self.mark_sampled(height).await
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -803,7 +800,7 @@ fn migrate_v2_to_v3(
     debug_assert_eq!(version, 2);
     warn!("Migrating DB schema from v2 to v3");
 
-    // v3 just removes SamplingStatus but it doesn't affect us if it is
+    // v3 just removes `SamplingStatus` but it doesn't affect us if it is
     // present on older entries because we discard it on deserialization.
     //
     // Because of that, for faster migration we just increase only the

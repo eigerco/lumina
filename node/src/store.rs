@@ -41,8 +41,6 @@ pub(crate) mod utils;
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
 pub struct SamplingMetadata {
-    // /// Indicates whether this node was able to successfuly sample the block
-    //pub status: SamplingStatus,
     /// List of CIDs used while sampling. Can be used to remove associated data
     /// from Blockstore, when cleaning up the old ExtendedHeaders
     #[cfg_attr(
@@ -50,19 +48,6 @@ pub struct SamplingMetadata {
         wasm_bindgen(skip)
     )]
     pub cids: Vec<Cid>,
-}
-
-/// Sampling status for a block.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
-pub enum SamplingStatus {
-    /// Sampling is not done.
-    #[default]
-    Unknown,
-    /// Sampling is done and block is accepted.
-    Accepted,
-    /// Sampling is done and block is rejected.
-    Rejected,
 }
 
 type Result<T, E = StoreError> = std::result::Result<T, E>;
@@ -144,7 +129,7 @@ pub trait Store: Send + Sync + Debug {
     /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 
-    async fn set_sampled(&self, height: u64) -> Result<()>;
+    async fn mark_sampled(&self, height: u64) -> Result<()>;
 
     /// Insert a range of headers into the store.
     ///
@@ -264,14 +249,10 @@ impl SamplingMetadata {
 
 #[derive(Message)]
 struct RawSamplingMetadata {
-    #[prost(bool, tag = "1")]
-    accepted: bool,
-
+    // Tags 1 and 3 are reseerved because they were used in previous versions
+    // of this struct.
     #[prost(message, repeated, tag = "2")]
     cids: Vec<Vec<u8>>,
-
-    #[prost(bool, tag = "3")]
-    unknown: bool,
 }
 
 impl Protobuf<RawSamplingMetadata> for SamplingMetadata {}
@@ -280,14 +261,6 @@ impl TryFrom<RawSamplingMetadata> for SamplingMetadata {
     type Error = cid::Error;
 
     fn try_from(item: RawSamplingMetadata) -> Result<Self, Self::Error> {
-        let status = if item.unknown {
-            SamplingStatus::Unknown
-        } else if item.accepted {
-            SamplingStatus::Accepted
-        } else {
-            SamplingStatus::Rejected
-        };
-
         let cids = item
             .cids
             .iter()
@@ -297,7 +270,7 @@ impl TryFrom<RawSamplingMetadata> for SamplingMetadata {
             })
             .collect::<Result<_, _>>()?;
 
-        Ok(SamplingMetadata { status, cids })
+        Ok(SamplingMetadata { cids })
     }
 }
 
@@ -305,17 +278,7 @@ impl From<SamplingMetadata> for RawSamplingMetadata {
     fn from(item: SamplingMetadata) -> Self {
         let cids = item.cids.iter().map(|cid| cid.to_bytes()).collect();
 
-        let (accepted, unknown) = match item.status {
-            SamplingStatus::Unknown => (false, true),
-            SamplingStatus::Accepted => (true, false),
-            SamplingStatus::Rejected => (false, false),
-        };
-
-        RawSamplingMetadata {
-            accepted,
-            unknown,
-            cids,
-        }
+        RawSamplingMetadata { cids }
     }
 }
 
@@ -719,19 +682,119 @@ mod tests {
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
+    async fn check_pruned_ranges<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(10);
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        let pruned_ranges = store.get_pruned_ranges().await.unwrap();
+        assert!(stored_ranges.is_empty());
+        assert!(pruned_ranges.is_empty());
+
+        store.insert(&headers[..]).await.unwrap();
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        let pruned_ranges = store.get_pruned_ranges().await.unwrap();
+        assert_eq!(stored_ranges, new_block_ranges([1..=10]));
+        assert!(pruned_ranges.is_empty());
+
+        store.remove_height(4).await.unwrap();
+        store.remove_height(9).await.unwrap();
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        let pruned_ranges = store.get_pruned_ranges().await.unwrap();
+        assert_eq!(stored_ranges, new_block_ranges([1..=3, 5..=8, 10..=10]));
+        assert_eq!(pruned_ranges, new_block_ranges([4..=4, 9..=9]));
+
+        // Put back height 9
+        store.insert(&headers[8]).await.unwrap();
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        let pruned_ranges = store.get_pruned_ranges().await.unwrap();
+        assert_eq!(stored_ranges, new_block_ranges([1..=3, 5..=10]));
+        assert_eq!(pruned_ranges, new_block_ranges([4..=4]));
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn check_sampled_ranges<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let headers = ExtendedHeaderGenerator::new().next_many(10);
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+        assert!(stored_ranges.is_empty());
+        assert!(sampled_ranges.is_empty());
+
+        store.insert(&headers[..]).await.unwrap();
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+        assert_eq!(stored_ranges, new_block_ranges([1..=10]));
+        assert!(sampled_ranges.is_empty());
+
+        store.mark_sampled(4).await.unwrap();
+        store.mark_sampled(9).await.unwrap();
+
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+        assert_eq!(sampled_ranges, new_block_ranges([4..=4, 9..=9]));
+
+        // Remove header of sampled height
+        store.remove_height(4).await.unwrap();
+
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+        assert_eq!(stored_ranges, new_block_ranges([1..=3, 5..=10]));
+        assert_eq!(sampled_ranges, new_block_ranges([9..=9]));
+
+        // We do not allow marking when header is missing
+        assert!(matches!(store.mark_sampled(9).await, Err(StoreError::NotFound)));
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
     async fn test_sampling_height_empty_store<S: Store>(
         #[case]
         #[future(awt)]
         store: S,
     ) {
-        store
-            .update_sampling_metadata(0, SamplingStatus::Accepted, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![])
-            .await
-            .unwrap_err();
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+
+        assert_eq!(stored_ranges.len(), 0);
+        assert_eq!(sampled_ranges.len(), 0);
+
+        assert!(matches!(
+            store.mark_sampled(0).await,
+            Err(StoreError::NotFound)
+        ));
+        assert!(matches!(
+            store.mark_sampled(1).await,
+            Err(StoreError::NotFound)
+        ));
+
+        assert!(matches!(
+            store.update_sampling_metadata(0, vec![]).await,
+            Err(StoreError::NotFound)
+        ));
+        assert!(matches!(
+            store.update_sampling_metadata(1, vec![]).await,
+            Err(StoreError::NotFound)
+        ));
     }
 
     #[rstest]
@@ -745,64 +808,42 @@ mod tests {
         s: S,
     ) {
         let mut store = s;
-        fill_store(&mut store, 9).await;
 
-        store
-            .update_sampling_metadata(0, SamplingStatus::Accepted, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(2, SamplingStatus::Accepted, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(3, SamplingStatus::Rejected, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(4, SamplingStatus::Accepted, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(5, SamplingStatus::Rejected, vec![])
-            .await
-            .unwrap();
-        store
-            .update_sampling_metadata(6, SamplingStatus::Rejected, vec![])
-            .await
-            .unwrap();
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+        assert!(!sampled_ranges.contains(1));
 
-        store
-            .update_sampling_metadata(8, SamplingStatus::Accepted, vec![])
-            .await
-            .unwrap();
+        fill_store(&mut store, 1).await;
 
-        store
-            .update_sampling_metadata(7, SamplingStatus::Accepted, vec![])
-            .await
-            .unwrap();
+        assert!(matches!(store.mark_sampled(2).await, Err(StoreError::NotFound)));
+        assert!(matches!(
+            store.update_sampling_metadata(2, vec![]).await,
+            Err(StoreError::NotFound)
+        ));
 
-        store
-            .update_sampling_metadata(9, SamplingStatus::Accepted, vec![])
-            .await
-            .unwrap();
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+        assert!(!sampled_ranges.contains(1));
 
-        store
-            .update_sampling_metadata(10, SamplingStatus::Accepted, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(10, SamplingStatus::Rejected, vec![])
-            .await
-            .unwrap_err();
-        store
-            .update_sampling_metadata(20, SamplingStatus::Accepted, vec![])
-            .await
-            .unwrap_err();
+        // Updating of sampling metadata should not mark height as sampled
+        store.update_sampling_metadata(1, vec![]).await.unwrap();
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+        assert!(!sampled_ranges.contains(1));
+
+        store.mark_sampled(1).await.unwrap();
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+        assert!(sampled_ranges.contains(1));
+
+        store.remove_height(1).await.unwrap();
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+        assert!(!sampled_ranges.contains(1));
+
+        assert!(matches!(
+            store.mark_sampled(1).await,
+            Err(StoreError::NotFound)
+        ));
+        assert!(matches!(
+            store.update_sampling_metadata(1, vec![]).await,
+            Err(StoreError::NotFound)
+        ));
     }
 
     #[rstest]
@@ -828,36 +869,13 @@ mod tests {
             .parse()
             .unwrap();
 
-        store
-            .update_sampling_metadata(1, SamplingStatus::Rejected, vec![cid0])
-            .await
-            .unwrap();
-
-        store
-            .update_sampling_metadata(1, SamplingStatus::Rejected, vec![])
-            .await
-            .unwrap();
-
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert_eq!(sampling_data.status, SamplingStatus::Rejected);
         assert_eq!(sampling_data.cids, vec![cid0]);
 
-        store
-            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![cid1])
-            .await
-            .unwrap();
-
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
         assert_eq!(sampling_data.cids, vec![cid0, cid1]);
 
-        store
-            .update_sampling_metadata(1, SamplingStatus::Accepted, vec![cid0, cid2])
-            .await
-            .unwrap();
-
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
         assert_eq!(sampling_data.cids, vec![cid0, cid1, cid2]);
     }
 
@@ -885,39 +903,32 @@ mod tests {
         .collect();
 
         store
-            .update_sampling_metadata(1, SamplingStatus::Accepted, cids.clone())
+            .update_sampling_metadata(1, cids.clone())
             .await
             .unwrap();
         store
-            .update_sampling_metadata(2, SamplingStatus::Accepted, cids[0..1].to_vec())
+            .update_sampling_metadata(2, cids[0..1].to_vec())
             .await
             .unwrap();
         store
-            .update_sampling_metadata(4, SamplingStatus::Rejected, cids[3..].to_vec())
+            .update_sampling_metadata(4, cids[3..].to_vec())
             .await
             .unwrap();
-        store
-            .update_sampling_metadata(5, SamplingStatus::Rejected, vec![])
-            .await
-            .unwrap();
+        store.update_sampling_metadata(5, vec![]).await.unwrap();
 
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids, cids);
-        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
 
         let sampling_data = store.get_sampling_metadata(2).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids, cids[0..1]);
-        assert_eq!(sampling_data.status, SamplingStatus::Accepted);
 
         assert!(store.get_sampling_metadata(3).await.unwrap().is_none());
 
         let sampling_data = store.get_sampling_metadata(4).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids, cids[3..]);
-        assert_eq!(sampling_data.status, SamplingStatus::Rejected);
 
         let sampling_data = store.get_sampling_metadata(5).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids, vec![]);
-        assert_eq!(sampling_data.status, SamplingStatus::Rejected);
 
         assert!(matches!(
             store.get_sampling_metadata(0).await,

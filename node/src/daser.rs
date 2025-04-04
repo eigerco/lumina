@@ -48,7 +48,7 @@ use lumina_utils::executor::{spawn, JoinHandle};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pError};
-use crate::store::{BlockRanges, SamplingStatus, Store, StoreError};
+use crate::store::{BlockRanges, Store, StoreError};
 use crate::utils::OneshotSenderExt;
 
 const MAX_SAMPLES_NEEDED: usize = 16;
@@ -339,9 +339,7 @@ where
                     let (height, accepted) = res?;
 
                     if accepted {
-                        self.store
-                            .update_sampling_metadata(height, SamplingStatus::Accepted, Vec::new())
-                            .await?;
+                        self.store.mark_sampled(height).await?;
                     }
 
                     self.ongoing.remove_relaxed(height..=height).expect("invalid height");
@@ -433,10 +431,7 @@ where
             .iter()
             .map(|(row, col)| sample_cid(*row, *col, height))
             .collect::<Result<Vec<_>, _>>()?;
-
-        self.store
-            .update_sampling_metadata(height, SamplingStatus::Unknown, cids)
-            .await?;
+        self.store.update_sampling_metadata(height, cids).await?;
 
         let p2p = self.p2p.clone();
         let event_pub = self.event_pub.clone();
@@ -519,9 +514,9 @@ where
     /// failed is via timeout.
     async fn populate_queue(&mut self) -> Result<()> {
         let stored = self.store.get_stored_header_ranges().await?;
-        let accepted = self.store.get_accepted_sampling_ranges().await?;
+        let sampled = self.store.get_sampled_ranges().await?;
 
-        self.queue = stored - accepted - &self.done - &self.ongoing - &self.will_be_pruned;
+        self.queue = stored - sampled - &self.done - &self.ongoing - &self.will_be_pruned;
 
         Ok(())
     }
@@ -602,10 +597,10 @@ mod tests {
     use std::collections::HashMap;
     use std::time::Duration;
 
-    // Request number for which tests will simulate invalid sampling
+    // Request number for which tests will simulate sampling timeout
     //
     // NOTE: The smallest block has 4 shares, so a 2nd request will always happen.
-    const INVALID_SHARE_REQ_NUM: usize = 2;
+    const REQ_TIMEOUT_SHARE_NUM: usize = 2;
 
     #[async_test]
     async fn check_calc_timeout() {
@@ -693,7 +688,7 @@ mod tests {
     }
 
     #[async_test]
-    async fn received_invalid_sample() {
+    async fn sampling_timeout() {
         let (mock, mut handle) = P2p::mocked();
         let store = Arc::new(InMemoryStore::new());
         let events = EventChannel::new();
@@ -833,7 +828,7 @@ mod tests {
         store: &InMemoryStore,
         event_sub: &mut EventSubscriber,
         square_width: usize,
-        simulate_invalid_sampling: bool,
+        simulate_sampling_timeout: bool,
     ) {
         let eds = generate_dummy_eds(square_width, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
@@ -842,19 +837,16 @@ mod tests {
 
         store.insert(header).await.unwrap();
 
-        let cids = handle_get_shwap_cid(handle, height, &eds, simulate_invalid_sampling).await;
+        let cids = handle_get_shwap_cid(handle, height, &eds, simulate_sampling_timeout).await;
         handle.expect_no_cmd().await;
 
+        // Check if block was sampled or timed-out.
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+        assert_eq!(sampled_ranges.contains(height), !simulate_sampling_timeout);
+
+        // Check if CIDs we requested successfully made it in the store
         let mut sampling_metadata = store.get_sampling_metadata(height).await.unwrap().unwrap();
         sampling_metadata.cids.sort();
-
-        if simulate_invalid_sampling {
-            assert_eq!(sampling_metadata.status, SamplingStatus::Unknown);
-        } else {
-            assert_eq!(sampling_metadata.status, SamplingStatus::Accepted);
-        }
-
-        // Check if CIDs we received successfully made it in the store
         assert_eq!(&sampling_metadata.cids, &cids);
 
         // Check if we received `SamplingStarted` event
@@ -888,13 +880,15 @@ mod tests {
                     square_width,
                     row,
                     column,
+                    // TODO: `accepted` doesn't make sense now. Should we have
+                    // `NodeEvent::ShareSamplingFinished` and `NodeEvent::ShareSamplingTimedOut`?
                     accepted,
                 } => {
                     assert_eq!(ev_height, height);
                     assert_eq!(square_width, eds.square_width());
                     assert_eq!(
                         accepted,
-                        !(simulate_invalid_sampling && i == INVALID_SHARE_REQ_NUM)
+                        !(simulate_sampling_timeout && i == REQ_TIMEOUT_SHARE_NUM)
                     );
                     // Make sure it is in the list and remove it
                     assert!(remaining_shares.remove(&(row, column)));
@@ -913,7 +907,7 @@ mod tests {
                 took,
             } => {
                 assert_eq!(ev_height, height);
-                assert_eq!(accepted, !simulate_invalid_sampling);
+                assert_eq!(accepted, !simulate_sampling_timeout);
                 assert_ne!(took, Duration::default());
             }
             ev => panic!("Unexpected event: {ev}"),
@@ -929,14 +923,14 @@ mod tests {
     ) -> Vec<Cid> {
         struct Info<'a> {
             eds: &'a ExtendedDataSquare,
-            simulate_invalid_sampling: bool,
+            simulate_sampling_timeout: bool,
             needed_samples: usize,
             requests_count: usize,
         }
 
         let mut infos = handling_args
             .into_iter()
-            .map(|(height, eds, simulate_invalid_sampling)| {
+            .map(|(height, eds, simulate_sampling_timeout)| {
                 let square_width = eds.square_width() as usize;
                 let needed_samples = (square_width * square_width).min(MAX_SAMPLES_NEEDED);
 
@@ -944,7 +938,7 @@ mod tests {
                     height,
                     Info {
                         eds,
-                        simulate_invalid_sampling,
+                        simulate_sampling_timeout,
                         needed_samples,
                         requests_count: 0,
                     },
@@ -966,8 +960,8 @@ mod tests {
 
             info.requests_count += 1;
 
-            // Simulate invalid sample by triggering BitswapQueryTimeout
-            if info.simulate_invalid_sampling && info.requests_count == INVALID_SHARE_REQ_NUM {
+            // Simulate sampling timeout
+            if info.simulate_sampling_timeout && info.requests_count == REQ_TIMEOUT_SHARE_NUM {
                 respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
                 continue;
             }
@@ -985,9 +979,9 @@ mod tests {
         handle: &mut MockP2pHandle,
         height: u64,
         eds: &ExtendedDataSquare,
-        simulate_invalid_sampling: bool,
+        simulate_sampling_timeout: bool,
     ) -> Vec<Cid> {
-        handle_concurrent_get_shwap_cid(handle, [(height, eds, simulate_invalid_sampling)]).await
+        handle_concurrent_get_shwap_cid(handle, [(height, eds, simulate_sampling_timeout)]).await
     }
 
     async fn gen_sample_of_cid(sample_id: SampleId, eds: &ExtendedDataSquare) -> Vec<u8> {

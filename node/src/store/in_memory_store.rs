@@ -12,9 +12,7 @@ use tracing::debug;
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
-use crate::store::{
-    Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
-};
+use crate::store::{Result, SamplingMetadata, Store, StoreError, StoreInsertionError};
 
 /// A non-persistent in memory [`Store`] implementation.
 #[derive(Debug)]
@@ -116,11 +114,15 @@ impl InMemoryStore {
         self.inner.read().await.get_sampling_metadata(height).await
     }
 
+    async fn mark_sampled(&self, height: u64) -> Result<()> {
+        self.inner.write().await.mark_sampled(height).await
+    }
+
     async fn get_stored_ranges(&self) -> BlockRanges {
         self.inner.read().await.header_ranges.clone()
     }
 
-    async fn get_accepted_sampling_ranges(&self) -> BlockRanges {
+    async fn get_sampled_ranges(&self) -> BlockRanges {
         self.inner.read().await.sampled_ranges.clone()
     }
 
@@ -265,6 +267,8 @@ impl InMemoryStoreInner {
                 entry.insert(SamplingMetadata { cids });
             }
             Entry::Occupied(mut entry) => {
+                let metadata = entry.get_mut();
+
                 for cid in cids {
                     if !metadata.cids.contains(&cid) {
                         metadata.cids.push(cid);
@@ -288,20 +292,14 @@ impl InMemoryStoreInner {
         Ok(Some(metadata.clone()))
     }
 
-    async fn set_sampled(&self, height: u64, sampled: bool) -> Result<()> {
+    async fn mark_sampled(&mut self, height: u64) -> Result<()> {
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
         }
 
-        if sampled {
-            self.sampled_ranges
-                .insert_relaxed(height..=height)
-                .expect("invalid height");
-        } else {
-            self.sampled_ranges
-                .remove_relaxed(height..=height)
-                .expect("invalid height");
-        }
+        self.sampled_ranges
+            .insert_relaxed(height..=height)
+            .expect("invalid height");
 
         Ok(())
     }
@@ -417,8 +415,8 @@ impl Store for InMemoryStore {
         self.update_sampling_metadata(height, cids).await
     }
 
-    async fn set_sampled(&self, height: u64, sampled: bool) -> Result<()> {
-        self.set_sampled_block(height, sampled).await
+    async fn mark_sampled(&self, height: u64) -> Result<()> {
+        self.mark_sampled(height).await
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
