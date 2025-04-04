@@ -23,7 +23,7 @@ GENESIS_HASH_FILE="$GENESIS_DIR/genesis_hash"
 wait_for_provision() {
   echo "Waiting for the validator node to start"
 
-  while [[ ! ( -e "$GENESIS_HASH_FILE" && -e "$NODE_KEY_FILE" ) ]]; do
+  while [[ ! ( -s "$GENESIS_HASH_FILE" && -s "$NODE_KEY_FILE" ) ]]; do
     sleep 0.1
   done
 
