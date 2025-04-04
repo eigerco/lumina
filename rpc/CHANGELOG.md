@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.10.0...celestia-rpc-v0.10.1) - 2025-04-04
+
+### Added
+
+- *(rpc)* Add Blobstream API ([#543](https://github.com/eigerco/lumina/pull/543))
+
+### Other
+
+- *(rpc)* Use `AuthLevel::Skip` and provide `new_test_client_with_url` ([#582](https://github.com/eigerco/lumina/pull/582))
+
 ## [0.10.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.9.1...celestia-rpc-v0.10.0) - 2025-04-02
 
 ### Added
