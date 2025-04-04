@@ -22,8 +22,7 @@ GENESIS_HASH_FILE="$GENESIS_DIR/genesis_hash"
 # Wait for the validator to set up and provision us via shared dir
 wait_for_provision() {
   echo "Waiting for the validator node to start"
-
-  while [[ ! ( -s "$GENESIS_HASH_FILE" && -s "$NODE_KEY_FILE" ) ]]; do
+  while [[ ! ( -e "$GENESIS_HASH_FILE" && -e "$NODE_KEY_FILE" ) ]]; do
     sleep 0.1
   done
 
@@ -32,23 +31,10 @@ wait_for_provision() {
 
 # Import the test account key shared by the validator
 import_shared_key() {
-	echo "FFF=IMPORT=start"
-  cel-key --help
-
-  echo §§§§§§§
-  echo "))))) $NODE_KEY_FILE"
-  ls /credentials
-  wc $NODE_KEY_FILE
-  echo §§§§§§§
-
-  echo "cel-key import \"$NODE_NAME\" \"$NODE_KEY_FILE\" --keyring-backend=\"test\" --p2p.network \"$P2P_NETWORK\" --node.type \"$NODE_TYPE\" "
-  echo "FFF=IMPORT=mid"
-
   echo "password" | cel-key import "$NODE_NAME" "$NODE_KEY_FILE" \
     --keyring-backend="test" \
     --p2p.network "$P2P_NETWORK" \
     --node.type "$NODE_TYPE"
-      echo "FFF=IMPORT=end"
 }
 
 add_trusted_genesis() {
@@ -85,23 +71,14 @@ common_node_addr() {
 }
 
 main() {
-md5sum /root/.celestia-bridge-private/keys/* || true 
-  ls -lar /root/.celestia-bridge-private/ || true 
-	echo "FFT=1"
   # Initialize data availability node
   celestia "$NODE_TYPE" init --p2p.network "$P2P_NETWORK"
-  ls -lar /root/.celestia-bridge-private/ || true 
-  md5sum /root/.celestia-bridge-private/keys/* || true 
-	echo "FFT=2"
   # don't allow banning nodes we create in tests by pubsub ip counting
   whitelist_localhost_nodes
-	echo "FFT=3"
   # Wait for a validator
   wait_for_provision
-	echo "FFT=4"
   # Import the key with the coins
   import_shared_key
-	echo "FFT=5"
   # Trust the private blockchain
   add_trusted_genesis
   # Update the JWT token

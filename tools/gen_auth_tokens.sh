@@ -11,28 +11,17 @@ wait_for_docker_setup() {
 
   services_expected="$(docker compose -f "$DOCKER_COMPOSE_FILE" config --services | wc -l)"
   services_running="$(docker compose -f "$DOCKER_COMPOSE_FILE" ps --services | wc -l)"
-  
-  docker compose -f "$DOCKER_COMPOSE_FILE" ps -a
-
-  echo "===="
-    docker logs ci-validator-1
-    md5sum ./ci/credentials/* || true
-  echo "===="
-
-  # wait for the service to start
-  while :; do
-    curl http://127.0.0.1:36658 > /dev/null 2>&1 && break
-    echo NODE:
-    docker logs ci-node-1-1
-    echo VALIDATOR:
-    docker logs ci-validator-1
-    sleep 10
-  done
 
   if [[ "$services_running" != "$services_expected" ]]; then
     echo "Not all required services running, expected $services_expected, found $services_running" >&2
     exit 1
   fi
+
+  # wait for the service to start
+  while :; do
+    curl http://127.0.0.1:36658 > /dev/null 2>&1 && break
+    sleep 1
+  done
 }
 
 ensure_dotenv_file() {
