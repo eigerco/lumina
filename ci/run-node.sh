@@ -43,6 +43,7 @@ import_shared_key() {
 
   echo "cel-key import \"$NODE_NAME\" \"$NODE_KEY_FILE\" --keyring-backend=\"test\" --p2p.network \"$P2P_NETWORK\" --node.type \"$NODE_TYPE\" "
   echo "FFF=IMPORT=mid"
+
   echo "password" | cel-key import "$NODE_NAME" "$NODE_KEY_FILE" \
     --keyring-backend="test" \
     --p2p.network "$P2P_NETWORK" \
