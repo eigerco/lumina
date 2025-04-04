@@ -210,8 +210,8 @@ where
         call!(self, get_sampling_metadata(height))
     }
 
-    async fn mark_sampled(&self, height: u64) -> Result<()> {
-        call!(self, mark_sampled(height))
+    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
+        call!(self, mark_as_sampled(height))
     }
 
     async fn insert<H>(&self, headers: H) -> Result<()>

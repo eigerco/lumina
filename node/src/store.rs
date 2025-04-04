@@ -129,7 +129,7 @@ pub trait Store: Send + Sync + Debug {
     /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 
-    async fn mark_sampled(&self, height: u64) -> Result<()>;
+    async fn mark_as_sampled(&self, height: u64) -> Result<()>;
 
     /// Insert a range of headers into the store.
     ///
@@ -744,8 +744,8 @@ mod tests {
         assert_eq!(stored_ranges, new_block_ranges([1..=10]));
         assert!(sampled_ranges.is_empty());
 
-        store.mark_sampled(4).await.unwrap();
-        store.mark_sampled(9).await.unwrap();
+        store.mark_as_sampled(4).await.unwrap();
+        store.mark_as_sampled(9).await.unwrap();
 
         let sampled_ranges = store.get_sampled_ranges().await.unwrap();
         assert_eq!(sampled_ranges, new_block_ranges([4..=4, 9..=9]));
@@ -759,7 +759,10 @@ mod tests {
         assert_eq!(sampled_ranges, new_block_ranges([9..=9]));
 
         // We do not allow marking when header is missing
-        assert!(matches!(store.mark_sampled(9).await, Err(StoreError::NotFound)));
+        assert!(matches!(
+            store.mark_as_sampled(9).await,
+            Err(StoreError::NotFound)
+        ));
     }
 
     #[rstest]
@@ -779,11 +782,11 @@ mod tests {
         assert_eq!(sampled_ranges.len(), 0);
 
         assert!(matches!(
-            store.mark_sampled(0).await,
+            store.mark_as_sampled(0).await,
             Err(StoreError::NotFound)
         ));
         assert!(matches!(
-            store.mark_sampled(1).await,
+            store.mark_as_sampled(1).await,
             Err(StoreError::NotFound)
         ));
 
@@ -814,7 +817,10 @@ mod tests {
 
         fill_store(&mut store, 1).await;
 
-        assert!(matches!(store.mark_sampled(2).await, Err(StoreError::NotFound)));
+        assert!(matches!(
+            store.mark_as_sampled(2).await,
+            Err(StoreError::NotFound)
+        ));
         assert!(matches!(
             store.update_sampling_metadata(2, vec![]).await,
             Err(StoreError::NotFound)
@@ -828,7 +834,7 @@ mod tests {
         let sampled_ranges = store.get_sampled_ranges().await.unwrap();
         assert!(!sampled_ranges.contains(1));
 
-        store.mark_sampled(1).await.unwrap();
+        store.mark_as_sampled(1).await.unwrap();
         let sampled_ranges = store.get_sampled_ranges().await.unwrap();
         assert!(sampled_ranges.contains(1));
 
@@ -837,7 +843,7 @@ mod tests {
         assert!(!sampled_ranges.contains(1));
 
         assert!(matches!(
-            store.mark_sampled(1).await,
+            store.mark_as_sampled(1).await,
             Err(StoreError::NotFound)
         ));
         assert!(matches!(

@@ -339,7 +339,7 @@ where
                     let (height, accepted) = res?;
 
                     if accepted {
-                        self.store.mark_sampled(height).await?;
+                        self.store.mark_as_sampled(height).await?;
                     }
 
                     self.ongoing.remove_relaxed(height..=height).expect("invalid height");

@@ -268,7 +268,7 @@ mod test {
     use crate::blockstore::InMemoryBlockstore;
     use crate::events::{EventChannel, TryRecvError};
     use crate::node::{DEFAULT_PRUNING_WINDOW, DEFAULT_SAMPLING_WINDOW};
-    use crate::store::{InMemoryStore};
+    use crate::store::InMemoryStore;
     use crate::test_utils::{gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt};
     use lumina_utils::test_utils::async_test;
 
@@ -374,7 +374,7 @@ mod test {
             blockstore.put_keyed(cid, block.data()).await.unwrap();
 
             if *sampled {
-                store.mark_sampled(*height).await.unwrap();
+                store.mark_as_sampled(*height).await.unwrap();
             }
 
             store

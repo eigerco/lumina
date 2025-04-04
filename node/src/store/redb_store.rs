@@ -378,7 +378,7 @@ impl RedbStore {
         .await
     }
 
-    async fn mark_sampled(&self, height: u64) -> Result<()> {
+    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
         self.write_tx(move |tx| {
             let mut ranges_table = tx.open_table(RANGES_TABLE)?;
             let header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
@@ -560,8 +560,8 @@ impl Store for RedbStore {
         self.update_sampling_metadata(height, cids).await
     }
 
-    async fn mark_sampled(&self, height: u64) -> Result<()> {
-        self.mark_sampled(height).await
+    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
+        self.mark_as_sampled(height).await
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {

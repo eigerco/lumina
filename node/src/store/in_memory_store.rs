@@ -114,8 +114,8 @@ impl InMemoryStore {
         self.inner.read().await.get_sampling_metadata(height).await
     }
 
-    async fn mark_sampled(&self, height: u64) -> Result<()> {
-        self.inner.write().await.mark_sampled(height).await
+    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
+        self.inner.write().await.mark_as_sampled(height).await
     }
 
     async fn get_stored_ranges(&self) -> BlockRanges {
@@ -292,7 +292,7 @@ impl InMemoryStoreInner {
         Ok(Some(metadata.clone()))
     }
 
-    async fn mark_sampled(&mut self, height: u64) -> Result<()> {
+    async fn mark_as_sampled(&mut self, height: u64) -> Result<()> {
         if !self.contains_height(height) {
             return Err(StoreError::NotFound);
         }
@@ -415,8 +415,8 @@ impl Store for InMemoryStore {
         self.update_sampling_metadata(height, cids).await
     }
 
-    async fn mark_sampled(&self, height: u64) -> Result<()> {
-        self.mark_sampled(height).await
+    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
+        self.mark_as_sampled(height).await
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {

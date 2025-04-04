@@ -280,8 +280,8 @@ impl IndexedDbStore {
         Ok(Some(from_value(sampling_entry)?))
     }
 
-    async fn mark_sampled(&self, height: u64) -> Result<()> {
-        self.write_tx(&[RANGES_STORE_NAME], mark_sampled_tx_op, height)
+    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
+        self.write_tx(&[RANGES_STORE_NAME], mark_as_sampled_tx_op, height)
             .await
     }
 
@@ -414,8 +414,8 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn mark_sampled(&self, height: u64) -> Result<()> {
-        let fut = SendWrapper::new(self.mark_sampled(height));
+    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
+        let fut = SendWrapper::new(self.mark_as_sampled(height));
         fut.await
     }
 
@@ -707,7 +707,7 @@ async fn update_sampling_metadata_tx_op(
     Ok(())
 }
 
-async fn mark_sampled_tx_op(tx: &Transaction, height: u64) -> Result<()> {
+async fn mark_as_sampled_tx_op(tx: &Transaction, height: u64) -> Result<()> {
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
     let header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
     let mut sampled_ranges = get_ranges(&ranges_store, SAMPLED_RANGES_KEY).await?;
