@@ -173,6 +173,17 @@ jobs:
     - name: Build demo webpage
       run: cd cli/js && npm ci && npm run build
 
+  build-ios:
+    runs-on: macos-latest
+    steps: 
+    - uses: mxcl/xcodebuild
+      with: 
+        action: none
+      run : |
+        ./node-uniffi/build-ios.sh
+        ./examples/ios/LuminaDemo/copy_bindings.sh
+        xcodebuild clean build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+        xcodebuild -scheme LuminaDemo -sdk iphonesimulator -destination "platform=iOS Simulator,name=iPhone 16" test
 
   fmt:
     runs-on: ubuntu-latest
@@ -241,6 +252,7 @@ jobs:
     - test-wasm
     - test-bindings
     - build-wasm
+    - build-ios
     - fmt
     - docs
     - unused-deps
