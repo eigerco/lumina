@@ -143,22 +143,6 @@ Run tests
 cargo test
 ```
 
-## Upgrading dependencies
-
-Some of our users use `celestia-types` with [risc0](https://github.com/risc0)
-zkVM, which applies some acceleration on dependencies related to cryptography.
-Such dependency is `sha2`.
-
-Because of that we created `./tools/upgrade-deps.sh` script which upgrades all
-dependencies in `Cargo.toml` except the ones that are patched by risc0.
-
-How to upgrade:
-
-```bash
-./tools/upgrade-deps.sh -i  # `-i` upgrades incompatible versions too
-cargo update
-```
-
 ## Frontend
 
 Check out the front end at [eigerco/lumina-front](https://github.com/eigerco/lumina-front)
