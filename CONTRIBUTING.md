@@ -1,6 +1,6 @@
 # Contributing to Lumina
 
-First off, thanks for taking the time to contribute! ❤️ We appreciate all the effort to help Lumina and the Celestia ecosystem.
+First off, thanks for taking the time to contribute! ❤️ We appreciate all the efforts to help Lumina and the Celestia ecosystem.
 
 
 Below are few requirements we have for incoming submissions.
