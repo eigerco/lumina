@@ -176,14 +176,27 @@ jobs:
   build-ios:
     runs-on: macos-latest
     steps: 
-    - uses: mxcl/xcodebuild
+    - uses: actions/checkout@v4
+
+    - name: Setup toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        target: 'aarch64-apple-ios aarch64-apple-ios-sim'
+
+    - uses: mxcl/xcodebuild@v3
       with: 
         action: none
-    - run: |
+        xcode: ^16
+    - name: build and copy bindings
+      run: |
         ./node-uniffi/build-ios.sh
         ./examples/ios/LuminaDemo/copy_bindings.sh
-        xcodebuild clean build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
-        xcodebuild -scheme LuminaDemo -sdk iphonesimulator -destination "platform=iOS Simulator,name=iPhone 16" test
+    - name: xcode clean build
+      working-directory: examples/ios/LuminaDemo
+      run: xcodebuild clean build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+    - name: xcode sim test
+      working-directory: examples/ios/LuminaDemo
+      run: xcodebuild -scheme LuminaDemo -sdk iphonesimulator -destination "platform=iOS Simulator,name=iPhone 16" test
 
   fmt:
     runs-on: ubuntu-latest
