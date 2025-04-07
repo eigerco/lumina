@@ -4,10 +4,16 @@
 //! the latest header returned by at least two of them as the initial synchronization target
 //! called `subjective_head`.
 //!
-//! Then it starts synchronizing from the genesis header up to the target requesting headers
-//! on the `header-ex` p2p protocol. In the meantime, it constantly checks for the latest
-//! headers announced on the `header-sub` p2p protocol to keep the `subjective_head` as close
-//! to the `network_head` as possible.
+//! The it starts synchronizing backwards from head until we reach the end of the syncing
+//! window. The syncing is done by requesting headers on the `header-ex` P2P protocol. In
+//! the meantime, it constantly checks for the latest headers announced on the `header-sub`
+//! P2P protocol to keep the `subjective_head` as close to the `network_head` as possible.
+//!
+//! When sampling window is bigger than the pruning window that means `Daser` will sample
+//! blocks after the pruning window and `Pruner` will delete them only if they are sampled
+//! or passed sampling window. This scenario is used when user wants a smaller memory footprint
+//! without sacrificing data sampling. Because of that `Syncer` fetches the next batch of headers
+//! only if `Daser` is close to our currently synced tail. This behaviour is called "slow sync".
 
 use std::marker::PhantomData;
 use std::pin::pin;
@@ -202,7 +208,7 @@ where
     store: Arc<S>,
     header_sub_rx: Option<mpsc::Receiver<ExtendedHeader>>,
     subjective_head_height: Option<u64>,
-    highest_prunable_height: Option<u64>,
+    highest_slow_sync_height: Option<u64>,
     batch_size: u64,
     ongoing_batch: Ongoing,
     syncing_window: Duration,
@@ -231,7 +237,7 @@ where
             store: args.store,
             header_sub_rx: None,
             subjective_head_height: None,
-            highest_prunable_height: None,
+            highest_slow_sync_height: None,
             batch_size: args.batch_size,
             ongoing_batch: Ongoing {
                 range: None,
@@ -469,8 +475,8 @@ where
         let store_ranges = self.store.get_stored_header_ranges().await?;
         let pruned_ranges = self.store.get_pruned_ranges().await?;
 
-        // Pruner removes already sampled headers and creates "holes" in the ranges.
-        // Those holes should not be fetched again.
+        // Pruner removes already sampled headers and creates gaps in the ranges.
+        // Syncer must ignore those gaps.
         let synced_ranges = pruned_ranges + &store_ranges;
 
         let next_batch = calculate_range_to_fetch(
@@ -486,7 +492,7 @@ where
 
         // If all heights of next batch is within the slow sync range
         if self
-            .highest_prunable_height
+            .highest_slow_sync_height
             .is_some_and(|height| *next_batch.end() <= height)
         {
             // Threshold is the half of batch size but it should be at least 50.
@@ -571,21 +577,21 @@ where
             .unwrap_or_else(Time::unix_epoch);
 
         // Iterate headers from highest to lowest and check if there is
-        // a new highest prunable height.
+        // a new highest "slow sync" height.
         for header in headers.iter().rev() {
             if self
-                .highest_prunable_height
+                .highest_slow_sync_height
                 .is_some_and(|height| header.height().value() <= height)
             {
-                // `highest_prunable_height` is already higher than `header`
+                // `highest_slow_sync_height` is already higher than `header`
                 // so we don't need to check anything else.
                 break;
             }
 
             // If `header` is after the pruning edge, we mark it as the
-            // `highest_prunable_height` and we stop checking lower headers.
+            // `highest_slow_sync_height` and we stop checking lower headers.
             if header.time() <= pruning_cutoff {
-                self.highest_prunable_height = Some(header.height().value());
+                self.highest_slow_sync_height = Some(header.height().value());
                 break;
             }
         }
