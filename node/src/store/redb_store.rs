@@ -25,7 +25,7 @@ use crate::utils::Counter;
 
 use super::utils::{deserialize_extended_header, deserialize_sampling_metadata};
 
-const SCHEMA_VERSION: u64 = 2;
+const SCHEMA_VERSION: u64 = 3;
 
 const HEIGHTS_TABLE: TableDefinition<'static, &[u8], u64> = TableDefinition::new("STORE.HEIGHTS");
 const HEADERS_TABLE: TableDefinition<'static, u64, &[u8]> = TableDefinition::new("STORE.HEADERS");
@@ -36,7 +36,6 @@ const SCHEMA_VERSION_TABLE: TableDefinition<'static, (), u64> =
 const RANGES_TABLE: TableDefinition<'static, &str, Vec<(u64, u64)>> =
     TableDefinition::new("STORE.RANGES");
 
-// TODO: Rename to SAMPLED_RANGES
 const SAMPLED_RANGES_KEY: &str = "KEY.ACCEPTED_SAMPING_RANGES";
 const HEADER_RANGES_KEY: &str = "KEY.HEADER_RANGES";
 const PRUNED_RANGES_KEY: &str = "KEY.PRUNED_RANGES";

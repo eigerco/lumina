@@ -760,7 +760,7 @@ mod tests {
 
         // We do not allow marking when header is missing
         assert!(matches!(
-            store.mark_as_sampled(9).await,
+            store.mark_as_sampled(4).await,
             Err(StoreError::NotFound)
         ));
     }
@@ -805,58 +805,6 @@ mod tests {
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
     #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
-    async fn test_sampling_height<S: Store>(
-        #[case]
-        #[future(awt)]
-        s: S,
-    ) {
-        let mut store = s;
-
-        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
-        assert!(!sampled_ranges.contains(1));
-
-        fill_store(&mut store, 1).await;
-
-        assert!(matches!(
-            store.mark_as_sampled(2).await,
-            Err(StoreError::NotFound)
-        ));
-        assert!(matches!(
-            store.update_sampling_metadata(2, vec![]).await,
-            Err(StoreError::NotFound)
-        ));
-
-        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
-        assert!(!sampled_ranges.contains(1));
-
-        // Updating of sampling metadata should not mark height as sampled
-        store.update_sampling_metadata(1, vec![]).await.unwrap();
-        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
-        assert!(!sampled_ranges.contains(1));
-
-        store.mark_as_sampled(1).await.unwrap();
-        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
-        assert!(sampled_ranges.contains(1));
-
-        store.remove_height(1).await.unwrap();
-        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
-        assert!(!sampled_ranges.contains(1));
-
-        assert!(matches!(
-            store.mark_as_sampled(1).await,
-            Err(StoreError::NotFound)
-        ));
-        assert!(matches!(
-            store.update_sampling_metadata(1, vec![]).await,
-            Err(StoreError::NotFound)
-        ));
-    }
-
-    #[rstest]
-    #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
-    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
-    #[self::test]
     async fn test_sampling_merge<S: Store>(
         #[case]
         #[future(awt)]
@@ -875,14 +823,39 @@ mod tests {
             .parse()
             .unwrap();
 
+        // Sampling metadata is not initialized
+        assert!(store.get_sampling_metadata(1).await.unwrap().is_none());
+
+        // Sampling metadata is initialized but empty
+        store.update_sampling_metadata(1, vec![]).await.unwrap();
+        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
+        assert_eq!(sampling_data.cids, vec![]);
+
+        store.update_sampling_metadata(1, vec![cid0]).await.unwrap();
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids, vec![cid0]);
 
+        store.update_sampling_metadata(1, vec![cid1]).await.unwrap();
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids, vec![cid0, cid1]);
 
+        store.update_sampling_metadata(1, vec![cid2]).await.unwrap();
         let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
         assert_eq!(sampling_data.cids, vec![cid0, cid1, cid2]);
+
+        // Updating with empty new CIDs should not change saved CIDs
+        store.update_sampling_metadata(1, vec![]).await.unwrap();
+        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
+        assert_eq!(sampling_data.cids, vec![cid0, cid1, cid2]);
+
+        // Updating with an already existing CIDs should not change saved CIDs
+        store.update_sampling_metadata(1, vec![cid1]).await.unwrap();
+        let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
+        assert_eq!(sampling_data.cids, vec![cid0, cid1, cid2]);
+
+        // Updating of sampling metadata should not mark height as sampled
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+        assert!(!sampled_ranges.contains(1));
     }
 
     #[rstest]
