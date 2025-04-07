@@ -3,8 +3,7 @@
 First off, thanks for taking the time to contribute! ❤️ We appreciate all the efforts to help Lumina and the Celestia ecosystem.
 
 
-Below are few requirements we have for incoming submissions.
-
+Below are a few requirements we have for incoming submissions.
 ## Signed Commits
 
 All commits need to be signed before PR can be merged, to ensure integrity
