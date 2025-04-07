@@ -234,7 +234,7 @@ where
     ///
     /// Pruning window defines maximum age of a block considered to be kept in store.
     ///
-    /// If pruning window is smaller than syncing window then blocks will be pruned
+    /// If pruning window is smaller than sampling window then blocks will be pruned
     /// exactly after they get sampled. This is useful when you want to keep low
     /// memory footprint but still validate the blockchain.
     ///

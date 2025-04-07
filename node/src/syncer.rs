@@ -4,16 +4,17 @@
 //! the latest header returned by at least two of them as the initial synchronization target
 //! called `subjective_head`.
 //!
-//! The it starts synchronizing backwards from head until we reach the end of the syncing
+//! The it starts synchronizing backwards from head until we reach the end of the sampling
 //! window. The syncing is done by requesting headers on the `header-ex` P2P protocol. In
 //! the meantime, it constantly checks for the latest headers announced on the `header-sub`
 //! P2P protocol to keep the `subjective_head` as close to the `network_head` as possible.
 //!
-//! When sampling window is bigger than the pruning window that means `Daser` will sample
-//! blocks after the pruning window and `Pruner` will delete them only if they are sampled
-//! or passed sampling window. This scenario is used when user wants a smaller memory footprint
-//! without sacrificing data sampling. Because of that `Syncer` fetches the next batch of headers
-//! only if `Daser` is close to our currently synced tail. This behaviour is called "slow sync".
+//! When `Node` is configured with sampling window is bigger than the pruning window that
+//! means `Daser` will continue sampling blocks after even after the pruning window and
+//! `Pruner` will delete them only if they are sampled or beyond the sampling window.
+//! This scenario is used when user wants a low memory footprint without sacrificing
+//! data sampling. Because of that `Syncer` fetches the next batch of headers only if
+//! `Daser` is close to our currently synced tail. This behaviour is called "slow sync".
 
 use std::marker::PhantomData;
 use std::pin::pin;
@@ -105,8 +106,8 @@ where
     pub(crate) event_pub: EventPublisher,
     /// Batch size.
     pub(crate) batch_size: u64,
-    /// Syncing window
-    pub(crate) syncing_window: Duration,
+    /// Sampling window
+    pub(crate) sampling_window: Duration,
     pub(crate) pruning_window: Duration,
 }
 
@@ -211,7 +212,7 @@ where
     highest_slow_sync_height: Option<u64>,
     batch_size: u64,
     ongoing_batch: Ongoing,
-    syncing_window: Duration,
+    sampling_window: Duration,
     pruning_window: Duration,
 }
 
@@ -243,7 +244,7 @@ where
                 range: None,
                 task: FusedReusableFuture::terminated(),
             },
-            syncing_window: args.syncing_window,
+            sampling_window: args.sampling_window,
             pruning_window: args.pruning_window,
         })
     }
@@ -509,10 +510,10 @@ where
             }
         }
 
-        // make sure we're inside the syncing window before we start
+        // make sure we're inside the sampling window before we start
         match self.store.get_by_height(next_batch.end() + 1).await {
             Ok(known_header) => {
-                if !self.in_syncing_window(&known_header) {
+                if !self.in_sampling_window(&known_header) {
                     return Ok(());
                 }
             }
@@ -618,18 +619,15 @@ where
         Ok(())
     }
 
-    fn in_syncing_window(&self, header: &ExtendedHeader) -> bool {
-        let syncing_window_start =
-            Time::now()
-                .checked_sub(self.syncing_window)
-                .unwrap_or_else(|| {
-                    warn!(
-                        "underflow when computing syncing window start, defaulting to unix epoch"
-                    );
-                    Time::unix_epoch()
-                });
+    fn in_sampling_window(&self, header: &ExtendedHeader) -> bool {
+        let sampling_window_start = Time::now()
+            .checked_sub(self.sampling_window)
+            .unwrap_or_else(|| {
+                warn!("underflow when computing sampling window start, defaulting to unix epoch");
+                Time::unix_epoch()
+            });
 
-        header.time().after(syncing_window_start)
+        header.time().after(sampling_window_start)
     }
 }
 
@@ -756,8 +754,8 @@ mod tests {
     use super::*;
     use crate::block_ranges::{BlockRange, BlockRangeExt};
     use crate::events::EventChannel;
-    use crate::node::HeaderExError;
     use crate::node::DEFAULT_SAMPLING_WINDOW;
+    use crate::node::{HeaderExError, DEFAULT_PRUNING_WINDOW};
     use crate::p2p::header_session;
     use crate::store::InMemoryStore;
     use crate::test_utils::{gen_filled_store, MockP2pHandle};
@@ -849,7 +847,7 @@ mod tests {
             store: Arc::new(InMemoryStore::new()),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
             pruning_window: DEFAULT_SAMPLING_WINDOW, // todo
         })
         .unwrap();
@@ -957,6 +955,11 @@ mod tests {
     }
 
     #[async_test]
+    async fn slow_sync() {
+        //
+    }
+
+    #[async_test]
     async fn window_edge() {
         let month_and_day_ago = Duration::from_secs(31 * 24 * 60 * 60);
         let mut gen = ExtendedHeaderGenerator::new();
@@ -975,7 +978,7 @@ mod tests {
         handle_session_batch(&mut p2p_mock, &headers, 1537..=2048, true).await;
         assert_syncing(&syncer, &store, &[1537..=2049], 2049).await;
 
-        // Syncer requested the second batch hitting the syncing window
+        // Syncer requested the second batch hitting the sampling window
         handle_session_batch(&mut p2p_mock, &headers, 1025..=1536, true).await;
         assert_syncing(&syncer, &store, &[1025..=2049], 2049).await;
 
@@ -998,7 +1001,7 @@ mod tests {
             store: store.clone(),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
             pruning_window: DEFAULT_SAMPLING_WINDOW, // todo
         })
         .unwrap();
@@ -1230,6 +1233,14 @@ mod tests {
     async fn initialized_syncer(
         head: ExtendedHeader,
     ) -> (Syncer<InMemoryStore>, Arc<InMemoryStore>, MockP2pHandle) {
+        initialized_syncer_with_windows(head, DEFAULT_SAMPLING_WINDOW, DEFAULT_PRUNING_WINDOW)
+    }
+
+    async fn initialized_syncer_with_windows(
+        head: ExtendedHeader,
+        sampling_window: Duration,
+        pruning_window: Duration,
+    ) -> (Syncer<InMemoryStore>, Arc<InMemoryStore>, MockP2pHandle) {
         let events = EventChannel::new();
         let (mock, mut handle) = P2p::mocked();
         let store = Arc::new(InMemoryStore::new());
@@ -1239,8 +1250,8 @@ mod tests {
             store: store.clone(),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SAMPLING_WINDOW,
-            pruning_window: DEFAULT_SAMPLING_WINDOW, // todo
+            sampling_window,
+            pruning_window,
         })
         .unwrap();
 

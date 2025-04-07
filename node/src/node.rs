@@ -160,9 +160,7 @@ where
             p2p: p2p.clone(),
             event_pub: event_channel.publisher(),
             batch_size: config.sync_batch_size,
-            // We sync only what we need to sample. So syncing_window is
-            // the same as sampling_window.
-            syncing_window: config.sampling_window,
+            sampling_window: config.sampling_window,
             pruning_window: config.pruning_window,
         })?);
 
@@ -179,8 +177,8 @@ where
             blockstore: blockstore.clone(),
             event_pub: event_channel.publisher(),
             pruning_interval: DEFAULT_PRUNING_INTERVAL,
-            pruning_window: config.pruning_window,
             sampling_window: config.sampling_window,
+            pruning_window: config.pruning_window,
         }));
 
         let tasks_cancellation_token = CancellationToken::new();
