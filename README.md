@@ -1,6 +1,6 @@
-# Lumina
-
 <div align="center">
+
+# Lumina
 
 <a href="https://github.com/eigerco/lumina/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/eigerco/lumina/actions/workflows/ci.yml/badge.svg?branch=main" alt="Build Status" /></a>
 <a href="https://lumina.rs"><img src="https://img.shields.io/website?url=https%3A%2F%2Flumina.rs&label=lumina.rs" alt="lumina.rs"></a>  
