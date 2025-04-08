@@ -116,6 +116,8 @@ enum SyncerCmd {
     GetInfo {
         respond_to: oneshot::Sender<SyncingInfo>,
     },
+    #[cfg(test)]
+    TriggerFetchNextBatch,
 }
 
 /// Status of the synchronization.
@@ -186,6 +188,11 @@ where
             .await?;
 
         Ok(rx.await?)
+    }
+
+    #[cfg(test)]
+    async fn trigger_fetch_next_batch(&self) -> Result<()> {
+        self.send_command(SyncerCmd::TriggerFetchNextBatch).await
     }
 }
 
@@ -408,6 +415,10 @@ where
             SyncerCmd::GetInfo { respond_to } => {
                 let info = self.syncing_info().await?;
                 respond_to.maybe_send(info);
+            }
+            #[cfg(test)]
+            SyncerCmd::TriggerFetchNextBatch => {
+                self.fetch_next_batch().await?;
             }
         }
 
@@ -955,7 +966,53 @@ mod tests {
 
     #[async_test]
     async fn slow_sync() {
-        //
+        let pruning_window = Duration::from_secs(600);
+        let sampling_window = DEFAULT_SAMPLING_WINDOW;
+
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        // Generate back in time 4 batches of 512 messages (= 2048 headers).
+        let first_header_time = (Time::now() - Duration::from_secs(2048)).unwrap();
+        gen.set_time(first_header_time, Duration::from_secs(1));
+        let headers = gen.next_many(2048);
+
+        let (syncer, store, mut p2p_mock) =
+            initialized_syncer_with_windows(headers[2047].clone(), sampling_window, pruning_window)
+                .await;
+        assert_syncing(&syncer, &store, &[2048..=2048], 2048).await;
+
+        // The whole 1st batch does not reach the pruning edge.
+        handle_session_batch(&mut p2p_mock, &headers, 1536..=2047, true).await;
+        assert_syncing(&syncer, &store, &[1536..=2048], 2048).await;
+
+        // 2nd batch is partially within pruning window, so fast sync applies.
+        handle_session_batch(&mut p2p_mock, &headers, 1024..=1535, true).await;
+        assert_syncing(&syncer, &store, &[1024..=2048], 2048).await;
+
+        // The whole 3rd batch is beyond pruning edge. So now slow sync applies.
+        // In order for the Syncer to send requests, more than a half of the previous
+        // batch needs to be sampled.
+        syncer.trigger_fetch_next_batch().await.unwrap();
+        p2p_mock.expect_no_cmd().await;
+
+        // After marking the 1st and more than of the 2nd batch, syncer
+        // will finally request the 3rd batch.
+        for height in 1250..=2048 {
+            // Simulate Daser
+            store.mark_as_sampled(height).await.unwrap();
+        }
+        for height in 1300..=1450 {
+            // Simulate Pruner
+            store.remove_height(height).await.unwrap();
+        }
+        syncer.trigger_fetch_next_batch().await.unwrap();
+        handle_session_batch(&mut p2p_mock, &headers, 512..=1023, true).await;
+        assert_syncing(&syncer, &store, &[512..=1299, 1451..=2048], 2048).await;
+
+        // Syncer should not request the 4th batch since there are plenty
+        // of blocks to be sampled.
+        syncer.trigger_fetch_next_batch().await.unwrap();
+        p2p_mock.expect_no_cmd().await;
     }
 
     #[async_test]
