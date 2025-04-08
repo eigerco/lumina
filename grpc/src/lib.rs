@@ -9,4 +9,4 @@ mod utils;
 
 pub use crate::error::{Error, Result};
 pub use crate::grpc::GrpcClient;
-pub use crate::tx::{TxClient, TxConfig};
+pub use crate::tx::{DocSigner, IntoAny, TxClient, TxConfig};
