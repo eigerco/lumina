@@ -1,5 +1,7 @@
 # Lumina
 
+<div align="center">
+
 <a href="https://github.com/eigerco/lumina/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/eigerco/lumina/actions/workflows/ci.yml/badge.svg?branch=main" alt="Build Status" /></a>
 <a href="https://lumina.rs"><img src="https://img.shields.io/website?url=https%3A%2F%2Flumina.rs&label=lumina.rs" alt="lumina.rs"></a>  
 <a href="https://crates.io/crates/lumina-cli"><img src="https://img.shields.io/crates/v/lumina-cli?label=lumina-cli" alt="crates.io lumina-cli"></a>
@@ -10,6 +12,8 @@
 <a href="https://crates.io/crates/celestia-proto"><img src="https://img.shields.io/crates/v/celestia-proto?label=celestia-proto" alt="crates.io celestia-proto"></a>
 <a href="https://crates.io/crates/celestia-rpc"><img src="https://img.shields.io/crates/v/celestia-rpc?label=celestia-rpc" alt="crates.io celestia-rpc"></a>
 <a href="https://crates.io/crates/celestia-grpc"><img src="https://img.shields.io/crates/v/celestia-grpc?label=celestia-grpc" alt="crates.io celestia-grpc"></a>
+
+</div>
 
 
 Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in browser-based environments.
