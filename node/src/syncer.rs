@@ -1006,6 +1006,7 @@ mod tests {
             store.remove_height(height).await.unwrap();
         }
         syncer.trigger_fetch_next_batch().await.unwrap();
+        // Syncer should not request the pruned range
         handle_session_batch(&mut p2p_mock, &headers, 512..=1023, true).await;
         assert_syncing(&syncer, &store, &[512..=1299, 1451..=2048], 2048).await;
 
