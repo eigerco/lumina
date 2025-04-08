@@ -336,9 +336,9 @@ where
                 Some(res) = self.sampling_futs.next() => {
                     // Beetswap only returns fatal errors that are not related
                     // to P2P nor networking.
-                    let (height, accepted) = res?;
+                    let (height, timed_out) = res?;
 
-                    if accepted {
+                    if !timed_out {
                         self.store.mark_as_sampled(height).await?;
                     }
 
@@ -447,6 +447,7 @@ where
                 shares: share_indexes.iter().copied().collect(),
             });
 
+            // We set the timeout high enough until block goes out of sampling window.
             let timeout = calc_timeout(header.time(), Time::now(), sampling_window);
 
             // Initialize all futures
@@ -462,39 +463,40 @@ where
                 })
                 .collect::<FuturesUnordered<_>>();
 
-            let mut block_accepted = true;
+            let mut sampling_timed_out = false;
 
             // Run futures to completion
             while let Some((row, column, res)) = futs.next().await {
-                let share_accepted = match res {
-                    Ok(_) => true,
+                let timed_out = match res {
+                    Ok(_) => false,
                     // Validation is done at Bitswap level, through `ShwapMultihasher`.
                     // If the sample is not valid, it will never be delivered to us
                     // as the data of the CID. Because of that, the only signal
                     // that data sampling verification failed is query timing out.
-                    Err(P2pError::BitswapQueryTimeout) => false,
+                    Err(P2pError::BitswapQueryTimeout) => true,
                     Err(e) => return Err(e.into()),
                 };
 
-                block_accepted &= share_accepted;
+                if timed_out {
+                    sampling_timed_out = true;
+                }
 
                 event_pub.send(NodeEvent::ShareSamplingResult {
                     height,
                     square_width,
                     row,
                     column,
-                    accepted: share_accepted,
+                    timed_out,
                 });
             }
 
-            // TODO: if timeout is reached, do we generate other event?
-            event_pub.send(NodeEvent::SamplingFinished {
+            event_pub.send(NodeEvent::SamplingResult {
                 height,
-                accepted: block_accepted,
+                timed_out: sampling_timed_out,
                 took: now.elapsed(),
             });
 
-            Ok((height, block_accepted))
+            Ok((height, sampling_timed_out))
         }
         .boxed();
 
@@ -880,15 +882,13 @@ mod tests {
                     square_width,
                     row,
                     column,
-                    // TODO: `accepted` doesn't make sense now. Should we have
-                    // `NodeEvent::ShareSamplingFinished` and `NodeEvent::ShareSamplingTimedOut`?
-                    accepted,
+                    timed_out,
                 } => {
                     assert_eq!(ev_height, height);
                     assert_eq!(square_width, eds.square_width());
                     assert_eq!(
-                        accepted,
-                        !(simulate_sampling_timeout && i == REQ_TIMEOUT_SHARE_NUM)
+                        timed_out,
+                        simulate_sampling_timeout && i == REQ_TIMEOUT_SHARE_NUM
                     );
                     // Make sure it is in the list and remove it
                     assert!(remaining_shares.remove(&(row, column)));
@@ -901,13 +901,13 @@ mod tests {
 
         // Check if we received `SamplingFinished` for each share
         match event_sub.try_recv().unwrap().event {
-            NodeEvent::SamplingFinished {
+            NodeEvent::SamplingResult {
                 height: ev_height,
-                accepted,
+                timed_out,
                 took,
             } => {
                 assert_eq!(ev_height, height);
-                assert_eq!(accepted, !simulate_sampling_timeout);
+                assert_eq!(timed_out, simulate_sampling_timeout);
                 assert_ne!(took, Duration::default());
             }
             ev => panic!("Unexpected event: {ev}"),

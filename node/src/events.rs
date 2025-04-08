@@ -193,7 +193,7 @@ pub enum NodeEvent {
         shares: Vec<(u16, u16)>,
     },
 
-    /// A share was sampled.
+    /// Share sampling result.
     ShareSamplingResult {
         /// The block height of the share.
         height: u64,
@@ -203,16 +203,16 @@ pub enum NodeEvent {
         row: u16,
         /// The column of the share.
         column: u16,
-        /// The result of the sampling of the share.
-        accepted: bool,
+        /// Sampling of the share timed out.
+        timed_out: bool,
     },
 
-    /// Sampling just finished.
-    SamplingFinished {
+    /// Sampling result.
+    SamplingResult {
         /// The block height that was sampled.
         height: u64,
-        /// The overall result of the sampling.
-        accepted: bool,
+        /// Sampling timed out.
+        timed_out: bool,
         /// How much time sampling took.
         took: Duration,
     },
@@ -314,7 +314,7 @@ impl NodeEvent {
             | NodeEvent::PeerDisconnected { .. }
             | NodeEvent::SamplingStarted { .. }
             | NodeEvent::ShareSamplingResult { .. }
-            | NodeEvent::SamplingFinished { .. }
+            | NodeEvent::SamplingResult { .. }
             | NodeEvent::AddedHeaderFromHeaderSub { .. }
             | NodeEvent::FetchingHeadHeaderStarted
             | NodeEvent::FetchingHeadHeaderFinished { .. }
@@ -357,17 +357,22 @@ impl fmt::Display for NodeEvent {
                 height,
                 row,
                 column,
-                accepted,
+                timed_out,
                 ..
             } => {
-                let acc = if *accepted { "accepted" } else { "rejected" };
+                let s = if *timed_out { "timed out" } else { "finished" };
                 write!(
                     f,
-                    "Sampling for share [{row}, {column}] of block {height} was {acc}"
+                    "Sampling for share [{row}, {column}] of block {height} {s}"
                 )
             }
-            NodeEvent::SamplingFinished { height, took, .. } => {
-                write!(f, "Sampling of block {height} finished. Took: {took:?}")
+            NodeEvent::SamplingResult {
+                height,
+                timed_out,
+                took,
+            } => {
+                let s = if *timed_out { "timed out" } else { "finished" };
+                write!(f, "Sampling of block {height} {s}. Took: {took:?}")
             }
             NodeEvent::FatalDaserError { error } => {
                 write!(f, "Daser stopped because of a fatal error: {error}")

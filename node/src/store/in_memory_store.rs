@@ -33,7 +33,7 @@ struct InMemoryStoreInner {
     header_ranges: BlockRanges,
     /// Maps header height to the header sampling metadata
     sampling_data: HashMap<u64, SamplingMetadata>,
-    /// Source of truth about accepted sampling ranges present in the db.
+    /// Source of truth about sampled ranges present in the db.
     sampled_ranges: BlockRanges,
 
     pruned_ranges: BlockRanges,

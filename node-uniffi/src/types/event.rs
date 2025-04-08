@@ -62,7 +62,7 @@ pub enum NodeEvent {
         /// The coordinates of the shares that will be sampled.
         shares: Vec<ShareCoordinate>,
     },
-    /// A share was sampled.
+    /// Share sampling result.
     ShareSamplingResult {
         /// The block height of the share.
         height: u64,
@@ -72,15 +72,15 @@ pub enum NodeEvent {
         row: u16,
         /// The column of the share.
         column: u16,
-        /// The result of the sampling of the share.
-        accepted: bool,
+        /// Sampling of the share timed out.
+        timed_out: bool,
     },
-    /// Sampling just finished.
-    SamplingFinished {
+    /// Sampling result.
+    SamplingResult {
         /// The block height that was sampled.
         height: u64,
-        /// The overall result of the sampling.
-        accepted: bool,
+        /// Sampling timed out.
+        timed_out: bool,
         /// How much time sampling took in milliseconds.
         took_ms: u64,
     },
@@ -185,21 +185,21 @@ impl From<LuminaNodeEvent> for NodeEvent {
                 square_width,
                 row,
                 column,
-                accepted,
+                timed_out,
             } => NodeEvent::ShareSamplingResult {
                 height,
                 square_width,
                 row,
                 column,
-                accepted,
+                timed_out,
             },
-            LuminaNodeEvent::SamplingFinished {
+            LuminaNodeEvent::SamplingResult {
                 height,
-                accepted,
+                timed_out,
                 took,
-            } => NodeEvent::SamplingFinished {
+            } => NodeEvent::SamplingResult {
                 height,
-                accepted,
+                timed_out,
                 took_ms: took.as_millis() as u64,
             },
             LuminaNodeEvent::FatalDaserError { error } => NodeEvent::FatalDaserError { error },

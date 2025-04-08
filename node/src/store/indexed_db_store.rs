@@ -655,13 +655,13 @@ async fn insert_tx_op(
     }
 
     header_ranges
-        .insert_relaxed(headers_range)
+        .insert_relaxed(&headers_range)
         .expect("invalid range");
     sampled_ranges
-        .remove_relaxed(headers_range)
+        .remove_relaxed(&headers_range)
         .expect("invalid range");
     pruned_ranges
-        .remove_relaxed(headers_range)
+        .remove_relaxed(&headers_range)
         .expect("invalid range");
 
     set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
@@ -751,13 +751,13 @@ async fn remove_height_tx_op(tx: &Transaction, height: u64) -> Result<()> {
     header_store.delete(id).await?;
 
     header_ranges
-        .remove_relaxed(headers_range)
+        .remove_relaxed(height..=height)
         .expect("invalid range");
     sampled_ranges
-        .remove_relaxed(headers_range)
+        .remove_relaxed(height..=height)
         .expect("invalid range");
     pruned_ranges
-        .insert_relaxed(headers_range)
+        .insert_relaxed(height..=height)
         .expect("invalid range");
 
     set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
