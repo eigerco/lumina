@@ -454,6 +454,7 @@ impl<T, S> fmt::Debug for TxClient<T, S> {
 
 /// Signer capable of producing ecdsa signature using secp256k1 curve.
 pub trait DocSigner {
+    /// Try to sign the provided sign doc.
     fn try_sign(&self, doc: SignDoc) -> impl Future<Output = Result<Signature, SignatureError>>;
 }
 
@@ -469,6 +470,7 @@ where
 
 /// Value convertion into protobuf's Any
 pub trait IntoAny {
+    /// Converts itself into protobuf's Any type
     fn into_any(self) -> Any;
 }
 
