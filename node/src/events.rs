@@ -276,9 +276,11 @@ pub enum NodeEvent {
         error: String,
     },
 
-    /// Pruned headers up to and including specified height.
+    /// Range of headers that were pruned.
     PrunedHeaders {
-        /// Last header height that was pruned
+        /// Start of the range.
+        from_height: u64,
+        /// End of the range (included).
         to_height: u64,
     },
 
@@ -431,8 +433,15 @@ impl fmt::Display for NodeEvent {
             NodeEvent::FatalSyncerError { error } => {
                 write!(f, "Syncer stopped because of a fatal error: {error}")
             }
-            Self::PrunedHeaders { to_height } => {
-                write!(f, "Pruned headers up to and including {to_height}")
+            Self::PrunedHeaders {
+                from_height,
+                to_height,
+            } => {
+                if from_height == to_height {
+                    write!(f, "Header of block {from_height} was pruned")
+                } else {
+                    write!(f, "Headers of blocks {from_height}-{to_height} were pruned")
+                }
             }
             NodeEvent::FatalPrunerError { error } => {
                 write!(f, "Pruner stopped because of a fatal error: {error}")

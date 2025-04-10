@@ -143,8 +143,7 @@ where
     }
 
     async fn run(&mut self) -> Result<()> {
-        let mut last_removed = None;
-        let mut last_reported = None;
+        let mut removed_range = None;
 
         loop {
             let now = Time::now();
@@ -180,15 +179,27 @@ where
                 }
 
                 self.store.remove_height(height).await?;
-                last_removed = Some(height);
+
+                removed_range = match removed_range.take() {
+                    Some((from_height, to_height)) => {
+                        if to_height == height - 1 {
+                            Some((from_height, height))
+                        } else {
+                            self.event_pub.send(NodeEvent::PrunedHeaders {
+                                from_height,
+                                to_height,
+                            });
+                            Some((height, height))
+                        }
+                    }
+                    None => Some((height, height)),
+                }
             }
 
-            if last_reported != last_removed {
-                last_reported = last_removed;
-
+            if let Some((from_height, to_height)) = removed_range.take() {
                 self.event_pub.send(NodeEvent::PrunedHeaders {
-                    // TODO: This does not represent the current pruning algorithm
-                    to_height: last_removed.expect("last removed height to be set"),
+                    from_height,
+                    to_height,
                 });
             }
 
@@ -196,6 +207,13 @@ where
                 _ = self.cancellation_token.cancelled() => break,
                 _ = sleep(self.pruning_interval) => ()
             }
+        }
+
+        if let Some((from_height, to_height)) = removed_range.take() {
+            self.event_pub.send(NodeEvent::PrunedHeaders {
+                from_height,
+                to_height,
+            });
         }
 
         debug!("Pruner stopped");
@@ -269,11 +287,12 @@ mod test {
 
     use super::*;
     use crate::blockstore::InMemoryBlockstore;
-    use crate::events::{EventChannel, TryRecvError};
+    use crate::events::{EventChannel, EventSubscriber, TryRecvError};
     use crate::node::{DEFAULT_PRUNING_WINDOW, DEFAULT_SAMPLING_WINDOW};
     use crate::store::InMemoryStore;
     use crate::test_utils::{gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt};
     use lumina_utils::test_utils::async_test;
+    use lumina_utils::time::timeout;
 
     const TEST_CODEC: u64 = 0x0D;
     const TEST_MH_CODE: u64 = 0x0D;
@@ -300,8 +319,7 @@ mod test {
 
         daser_handle.expect_no_cmd().await;
         pruner.stop();
-
-        sleep(Duration::from_secs(1)).await;
+        pruner.join().await;
 
         assert!(matches!(
             event_subscriber.try_recv().unwrap_err(),
@@ -332,8 +350,7 @@ mod test {
 
         daser_handle.expect_no_cmd().await;
         pruner.stop();
-
-        sleep(Duration::from_secs(1)).await;
+        pruner.join().await;
 
         assert!(matches!(
             event_subscriber.try_recv().unwrap_err(),
@@ -397,12 +414,8 @@ mod test {
         });
 
         daser_handle.handle_want_to_prune(1..=1000).await;
+        assert_pruned_headers_event(&mut event_subscriber, 1, 1000).await;
 
-        let pruner_event = event_subscriber.recv().await.unwrap().event;
-        assert!(matches!(
-            pruner_event,
-            NodeEvent::PrunedHeaders { to_height: 1_000 }
-        ));
         assert!(store.get_stored_header_ranges().await.unwrap().is_empty());
 
         for (height, _, cid, _) in &blocks_with_sampling {
@@ -415,6 +428,7 @@ mod test {
 
         daser_handle.expect_no_cmd().await;
         pruner.stop();
+        pruner.join().await;
 
         assert!(matches!(
             event_subscriber.try_recv().unwrap_err(),
@@ -461,11 +475,7 @@ mod test {
 
         daser_handle.handle_want_to_prune(1..=50).await;
 
-        let pruner_event = event_subscriber.recv().await.unwrap().event;
-        assert!(matches!(
-            pruner_event,
-            NodeEvent::PrunedHeaders { to_height: 50 }
-        ));
+        assert_pruned_headers_event(&mut event_subscriber, 1, 50).await;
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
             new_block_ranges([51..=70])
@@ -475,11 +485,7 @@ mod test {
 
         daser_handle.handle_want_to_prune(51..=60).await;
 
-        let pruner_event = event_subscriber.recv().await.unwrap().event;
-        assert!(matches!(
-            pruner_event,
-            NodeEvent::PrunedHeaders { to_height: 60 }
-        ));
+        assert_pruned_headers_event(&mut event_subscriber, 51, 60).await;
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
             new_block_ranges([61..=70])
@@ -487,6 +493,7 @@ mod test {
 
         daser_handle.expect_no_cmd().await;
         pruner.stop();
+        pruner.join().await;
 
         assert!(matches!(
             event_subscriber.try_recv().unwrap_err(),
@@ -587,9 +594,10 @@ mod test {
         );
 
         let events = EventChannel::new();
+        let mut event_subscriber = events.subscribe();
         let (daser, mut daser_handle) = Daser::mocked();
 
-        let _pruner = Pruner::start(PrunerArgs {
+        let pruner = Pruner::start(PrunerArgs {
             daser: Arc::new(daser),
             store: store.clone(),
             blockstore,
@@ -648,7 +656,11 @@ mod test {
         assert_eq!(want_to_prune, 102);
         respond_to.send(true).unwrap();
 
-        sleep(Duration::from_millis(100)).await;
+        // Pruner generates the event for 1-100 pruned range because
+        // 102 is not continuous to it. We will receive the 102 event
+        // after the next prune.
+        assert_pruned_headers_event(&mut event_subscriber, 1, 100).await;
+
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
             new_block_ranges([
@@ -672,6 +684,9 @@ mod test {
         assert_eq!(want_to_prune, 101);
         respond_to.send(true).unwrap();
 
+        assert_pruned_headers_event(&mut event_subscriber, 102, 102).await;
+        assert_pruned_headers_event(&mut event_subscriber, 101, 101).await;
+
         // Because Pruner runs in parallel with this test and we don't
         // expect any other commands towards Daser, we need to check
         // the final state.
@@ -679,12 +694,17 @@ mod test {
         // We expect Pruner to do the following:
         //
         // - Consider blocks 188, 189, 192 as synced because they exists in pruned ranges.
-        // - Remove 103-120, 147-154, 167-174, 187-195.
+        // - Remove 103-120, 147-154, 167-174, 187, 190-191, 193-195.
         // - Keep 146, 155, 166, 175, 186 blocks because they are
         //   edges (i.e. the blocks that are neightbors of non-synced ranges).
         // - Keep 196-199 because they are in sampling window and not sampled yet.
         // - Keep 202-260 because they are in pruning window.
-        sleep(Duration::from_millis(100)).await;
+        assert_pruned_headers_event(&mut event_subscriber, 103, 120).await;
+        assert_pruned_headers_event(&mut event_subscriber, 147, 154).await;
+        assert_pruned_headers_event(&mut event_subscriber, 167, 174).await;
+        assert_pruned_headers_event(&mut event_subscriber, 187, 187).await;
+        assert_pruned_headers_event(&mut event_subscriber, 190, 191).await;
+        assert_pruned_headers_event(&mut event_subscriber, 193, 195).await;
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
             new_block_ranges([
@@ -703,6 +723,36 @@ mod test {
         );
 
         daser_handle.expect_no_cmd().await;
+        pruner.stop();
+        pruner.join().await;
+
+        assert!(matches!(
+            event_subscriber.try_recv().unwrap_err(),
+            TryRecvError::Empty
+        ));
+    }
+
+    async fn assert_pruned_headers_event(
+        subscriber: &mut EventSubscriber,
+        from_height: u64,
+        to_height: u64,
+    ) {
+        let event = timeout(Duration::from_secs(1), subscriber.recv())
+            .await
+            .expect("Expecting PrunedHeaders event but nothing is received")
+            .unwrap()
+            .event;
+
+        match event {
+            NodeEvent::PrunedHeaders {
+                from_height: from,
+                to_height: to,
+            } => {
+                assert_eq!(from, from_height);
+                assert_eq!(to, to_height);
+            }
+            ev => panic!("Expecting PrunedHeaders event, but received: {ev:?}"),
+        }
     }
 
     #[derive(Debug, PartialEq, Clone, Copy)]

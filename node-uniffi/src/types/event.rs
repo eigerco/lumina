@@ -135,9 +135,11 @@ pub enum NodeEvent {
         /// A human readable error.
         error: String,
     },
-    /// Pruned headers up to and including specified height.
+    /// Range of headers that were pruned.
     PrunedHeaders {
-        /// Last header height that was pruned
+        /// Start of the range.
+        from_height: u64,
+        /// End of the range (included).
         to_height: u64,
     },
     /// Pruning fatal error.
@@ -241,7 +243,13 @@ impl From<LuminaNodeEvent> for NodeEvent {
                 took_ms: took.as_millis() as u64,
             },
             LuminaNodeEvent::FatalSyncerError { error } => NodeEvent::FatalSyncerError { error },
-            LuminaNodeEvent::PrunedHeaders { to_height } => NodeEvent::PrunedHeaders { to_height },
+            LuminaNodeEvent::PrunedHeaders {
+                from_height,
+                to_height,
+            } => NodeEvent::PrunedHeaders {
+                from_height,
+                to_height,
+            },
             LuminaNodeEvent::FatalPrunerError { error } => NodeEvent::FatalPrunerError { error },
             LuminaNodeEvent::NetworkCompromised => NodeEvent::NetworkCompromised,
             LuminaNodeEvent::NodeStopped => NodeEvent::NodeStopped,
