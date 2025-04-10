@@ -537,8 +537,8 @@ mod test {
         gen.skip(10);
         // 186 - 199
         store.insert(gen.next_many_verified(14)).await.unwrap();
-        // 200 - 201, We skip those because they are the edge of pruning window.
-        // Pruner uses `Time::now` and we want to make the tests more predictable.
+        // 200 - 201, We skip these because they are the edge of pruning window.
+        // Pruner is using `Time::now` and we want to make the tests more predictable.
         gen.skip(2);
         // 202 - 260
         store.insert(gen.next_many_verified(59)).await.unwrap();
