@@ -229,20 +229,21 @@ where
             }
 
             let needs_pruning = if header.time() <= sampling_cutoff {
-                // If height is outside of sampling window then we need to prune it.
-                // However Daser must allow us first. We do this to avoid race conditions
-                // and other edge cases between Pruner and Daser.
-                self.daser.want_to_prune(height).await?
+                // If block is outside of sampling window then we need to prune it.
+                // If it wasn't sampled yet, then Daser must allow us first. We do
+                // this to avoid race conditions and other edge cases between Pruner
+                // and Daser.
+                sampled_ranges.contains(height) || self.daser.want_to_prune(height).await?
             } else if edges.contains(height) {
-                // If height in inside the sampling window and an edge, then we keep it.
+                // If block in inside the sampling window and an edge, then we keep it.
                 // We need it to verify missing neighbors later on.
                 false
             } else if sampled_ranges.contains(height) {
-                // If height is inside the sampling window, not an edge, and got sampled,
+                // If block is inside the sampling window, not an edge, and got sampled,
                 // then we prune it.
                 true
             } else {
-                // If height is inside the sampling window, not an edge, and not sampled,
+                // If block is inside the sampling window, not an edge, and not sampled,
                 // then we keep it.
                 false
             };
@@ -259,6 +260,8 @@ where
 
 #[cfg(test)]
 mod test {
+    use std::time::Duration;
+
     use blockstore::block::{Block, CidError};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use cid::multihash::Multihash;
@@ -274,7 +277,6 @@ mod test {
 
     const TEST_CODEC: u64 = 0x0D;
     const TEST_MH_CODE: u64 = 0x0D;
-    const TEST_PRUNING_WINDOW: Duration = DEFAULT_PRUNING_WINDOW;
 
     #[async_test]
     async fn empty_store() {
@@ -290,7 +292,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            pruning_window: TEST_PRUNING_WINDOW,
+            pruning_window: DEFAULT_PRUNING_WINDOW,
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
@@ -322,7 +324,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            pruning_window: TEST_PRUNING_WINDOW,
+            pruning_window: DEFAULT_PRUNING_WINDOW,
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
@@ -344,7 +346,7 @@ mod test {
     }
 
     #[async_test]
-    async fn prune_large_tail_with_cids_and_sampling_smaller_than_pruning_window() {
+    async fn prune_large_tail_with_cids() {
         let events = EventChannel::new();
         let store = Arc::new(InMemoryStore::new());
         let mut gen = ExtendedHeaderGenerator::new();
@@ -353,8 +355,9 @@ mod test {
         let mut event_subscriber = events.subscribe();
         let (daser, mut daser_handle) = Daser::mocked();
 
-        let first_header_time =
-            (Time::now() - (TEST_PRUNING_WINDOW + Duration::from_secs(30 * 24 * 60 * 60))).unwrap();
+        let first_header_time = (Time::now()
+            - (DEFAULT_PRUNING_WINDOW + Duration::from_secs(30 * 24 * 60 * 60)))
+        .unwrap();
         gen.set_time(first_header_time, Duration::from_secs(1));
 
         let blocks_with_sampling = (1..=1000)
@@ -389,7 +392,7 @@ mod test {
             blockstore: blockstore.clone(),
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            pruning_window: TEST_PRUNING_WINDOW,
+            pruning_window: DEFAULT_PRUNING_WINDOW,
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
@@ -420,7 +423,7 @@ mod test {
     }
 
     #[async_test]
-    async fn prune_tail_sampling_smaller_than_pruning_window() {
+    async fn prune_tail() {
         const BLOCK_TIME: Duration = Duration::from_millis(10);
 
         let events = EventChannel::new();
@@ -431,12 +434,14 @@ mod test {
         let (daser, mut daser_handle) = Daser::mocked();
 
         // 50 headers before pruning window edge
-        let before_pruning_edge = (Time::now() - (TEST_PRUNING_WINDOW + BLOCK_TIME * 100)).unwrap();
+        let before_pruning_edge =
+            (Time::now() - (DEFAULT_PRUNING_WINDOW + BLOCK_TIME * 100)).unwrap();
         gen.set_time(before_pruning_edge, BLOCK_TIME);
         store.insert(gen.next_many_verified(50)).await.unwrap();
 
         // 10 headers within 1sec of pruning window edge
-        let after_pruning_edge = (Time::now() - (TEST_PRUNING_WINDOW - BLOCK_TIME * 10)).unwrap();
+        let after_pruning_edge =
+            (Time::now() - (DEFAULT_PRUNING_WINDOW - BLOCK_TIME * 10)).unwrap();
         gen.set_time(after_pruning_edge, BLOCK_TIME);
         store.insert(gen.next_many_verified(10)).await.unwrap();
 
@@ -450,7 +455,7 @@ mod test {
             blockstore,
             event_pub: events.publisher(),
             pruning_interval: Duration::from_secs(1),
-            pruning_window: TEST_PRUNING_WINDOW,
+            pruning_window: DEFAULT_PRUNING_WINDOW,
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
@@ -491,6 +496,213 @@ mod test {
             store.get_stored_header_ranges().await.unwrap(),
             new_block_ranges([61..=70])
         );
+    }
+
+    #[async_test]
+    async fn sampling_window_bigger_than_pruning_window() {
+        let pruning_window = Duration::from_secs(60);
+        let sampling_window = Duration::from_secs(120);
+
+        let mut gen = ExtendedHeaderGenerator::new();
+        let store = Arc::new(InMemoryStore::new());
+        let blockstore = Arc::new(InMemoryBlockstore::new());
+
+        // Start header creating from 260 seconds in the past, with block time of 1 seconds.
+        // Since pruning window is 60s and sampling window is 120s, this means:
+        //
+        // +---------------------------------------------------------+
+        // |       1 - 140        |  141 - 200   |      201 - 260    |
+        // +----------------------+--------------+-------------------+
+        // <---------Prunable area-------------->|<--Pruning window-->
+        //                        <----------Sampling window--------->
+        //
+        // NOTE 1: Pruning window is actually "keep in store" window. We kept that name
+        // because this is how it meantioned in CIP-4.
+        //
+        // NOTE 2: Since `Time::now` in Pruner is changing, the edges may vary.
+        let first_header_time = (Time::now() - Duration::from_secs(260)).unwrap();
+        gen.set_time(first_header_time, Duration::from_secs(1));
+
+        // 1 - 120
+        store.insert(gen.next_many_verified(120)).await.unwrap();
+        // 121 - 145
+        gen.skip(25);
+        // 146 - 155
+        store.insert(gen.next_many_verified(10)).await.unwrap();
+        // 156 - 165
+        gen.skip(10);
+        // 166 - 175
+        store.insert(gen.next_many_verified(10)).await.unwrap();
+        // 176 - 185
+        gen.skip(10);
+        // 186 - 199
+        store.insert(gen.next_many_verified(14)).await.unwrap();
+        // 200 - 201, We skip those because they are the edge of pruning window.
+        // Pruner uses `Time::now` and we want to make the tests more predictable.
+        gen.skip(2);
+        // 202 - 260
+        store.insert(gen.next_many_verified(59)).await.unwrap();
+
+        // Create gaps by pruning. We do this to test that Pruner takes them
+        // into account when it calculates the edges of synced block ranges.
+        store.remove_height(188).await.unwrap();
+        store.remove_height(189).await.unwrap();
+        store.remove_height(192).await.unwrap();
+
+        for height in (1..=100).chain(103..=195).chain(199..=210) {
+            // We ignore the error because we want to get makred only
+            // those that are in store.
+            let _ = store.mark_as_sampled(height).await;
+        }
+
+        assert_eq!(
+            store.get_stored_header_ranges().await.unwrap(),
+            new_block_ranges([
+                1..=120,
+                146..=155,
+                166..=175,
+                186..=187,
+                190..=191,
+                193..=199,
+                202..=260
+            ])
+        );
+        assert_eq!(
+            store.get_sampled_ranges().await.unwrap(),
+            new_block_ranges([
+                1..=100,
+                103..=120,
+                146..=155,
+                166..=175,
+                186..=187,
+                190..=191,
+                193..=195,
+                199..=199,
+                202..=210
+            ])
+        );
+        assert_eq!(
+            store.get_pruned_ranges().await.unwrap(),
+            new_block_ranges([188..=189, 192..=192])
+        );
+
+        let events = EventChannel::new();
+        let (daser, mut daser_handle) = Daser::mocked();
+
+        let _pruner = Pruner::start(PrunerArgs {
+            daser: Arc::new(daser),
+            store: store.clone(),
+            blockstore,
+            event_pub: events.publisher(),
+            pruning_interval: Duration::from_secs(1),
+            pruning_window,
+            sampling_window,
+        });
+
+        // Pruner removed all headers until 100 (included), because they were sampled.
+        sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            store.get_stored_header_ranges().await.unwrap(),
+            new_block_ranges([
+                101..=120,
+                146..=155,
+                166..=175,
+                186..=187,
+                190..=191,
+                193..=199,
+                202..=260
+            ])
+        );
+        assert_eq!(
+            store.get_pruned_ranges().await.unwrap(),
+            new_block_ranges([1..=100, 188..=189, 192..=192])
+        );
+
+        // Pruner asks for Daser if it can remove block 101.
+        // We simulate that Daser does not allow it.
+        let (want_to_prune, respond_to) = daser_handle.expect_want_to_prune().await;
+        assert_eq!(want_to_prune, 101);
+        respond_to.send(false).unwrap();
+
+        sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            store.get_stored_header_ranges().await.unwrap(),
+            new_block_ranges([
+                101..=120,
+                146..=155,
+                166..=175,
+                186..=187,
+                190..=191,
+                193..=199,
+                202..=260
+            ])
+        );
+        assert_eq!(
+            store.get_pruned_ranges().await.unwrap(),
+            new_block_ranges([1..=100, 188..=189, 192..=192])
+        );
+
+        // Because Daser didn't allow it, Pruner will ask for the next one.
+        // We simulate that Daser allows pruning of 102.
+        let (want_to_prune, respond_to) = daser_handle.expect_want_to_prune().await;
+        assert_eq!(want_to_prune, 102);
+        respond_to.send(true).unwrap();
+
+        sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            store.get_stored_header_ranges().await.unwrap(),
+            new_block_ranges([
+                101..=101,
+                103..=120,
+                146..=155,
+                166..=175,
+                186..=187,
+                190..=191,
+                193..=199,
+                202..=260
+            ])
+        );
+        assert_eq!(
+            store.get_pruned_ranges().await.unwrap(),
+            new_block_ranges([1..=100, 102..=102, 188..=189, 192..=192])
+        );
+
+        // Now Pruner will ask again for 101, but this time we allow it.
+        let (want_to_prune, respond_to) = daser_handle.expect_want_to_prune().await;
+        assert_eq!(want_to_prune, 101);
+        respond_to.send(true).unwrap();
+
+        // Because Pruner runs in parallel with this test and we don't
+        // expect any other commands towards Daser, we need to check
+        // the final state.
+        //
+        // We expect Pruner to do the following:
+        //
+        // - Consider blocks 188, 189, 192 as synced because they exists in pruned ranges.
+        // - Remove 103-120, 147-154, 167-174, 187-195.
+        // - Keep 146, 155, 166, 175, 186 blocks because they are
+        //   edges (i.e. the blocks that are neightbors of non-synced ranges).
+        // - Keep 196-199 because they are in sampling window and not sampled yet.
+        // - Keep 202-260 because they are in pruning window.
+        sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            store.get_stored_header_ranges().await.unwrap(),
+            new_block_ranges([
+                146..=146,
+                155..=155,
+                166..=166,
+                175..=175,
+                186..=186,
+                196..=199,
+                202..=260
+            ])
+        );
+        assert_eq!(
+            store.get_pruned_ranges().await.unwrap(),
+            new_block_ranges([1..=120, 147..=154, 167..=174, 187..=195])
+        );
+
+        daser_handle.expect_no_cmd().await;
     }
 
     #[derive(Debug, PartialEq, Clone, Copy)]
