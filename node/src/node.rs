@@ -496,29 +496,3 @@ where
         }
     }
 }
-
-/*
-async fn reset_rejected_samples<B, S>(blockstore: &B, store: &S) -> Result<()>
-where
-    B: Blockstore,
-    S: Store,
-{
-    let stored = store.get_stored_header_ranges().await?;
-    let accepted = store.get_accepted_sampling_ranges().await?;
-
-    // TODO: maybe introduce rejected samples in store?
-    for height in (stored - accepted) {
-        if let Some(meta) = store.get_sampling_metadata(height).await? {
-            for cid in meta.cids {
-                blockstore.remove(&cid).await?;
-            }
-
-            store
-                .update_sampling_metadata(height, SamplingStatus::Unknown, Vec::new())
-                .await?;
-        }
-    }
-
-    Ok(())
-}
-*/
