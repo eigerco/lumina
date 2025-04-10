@@ -182,6 +182,9 @@ where
 
                 removed_range = match removed_range.take() {
                     Some((from_height, to_height)) => {
+                        // If `height` is a neightbor to previously removed heaaders then
+                        // we update the `removed_range`, otherwise we create an event
+                        // for the previous headers.
                         if to_height == height - 1 {
                             Some((from_height, height))
                         } else {
@@ -403,6 +406,8 @@ mod test {
                 .unwrap()
         }
 
+        let sampled_ranges = store.get_sampled_ranges().await.unwrap();
+
         let pruner = Pruner::start(PrunerArgs {
             daser: Arc::new(daser),
             store: store.clone(),
@@ -413,7 +418,15 @@ mod test {
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
-        daser_handle.handle_want_to_prune(1..=1000).await;
+        for height in 1..=1000 {
+            // If a block is not sampled, Pruner asks Daser for permission to prune it.
+            if !sampled_ranges.contains(height) {
+                let (want_to_prune, respond_to) = daser_handle.expect_want_to_prune().await;
+                assert_eq!(want_to_prune, height);
+                respond_to.send(true).unwrap();
+            }
+        }
+
         assert_pruned_headers_event(&mut event_subscriber, 1, 1000).await;
 
         assert!(store.get_stored_header_ranges().await.unwrap().is_empty());
@@ -739,7 +752,9 @@ mod test {
     ) {
         let event = timeout(Duration::from_secs(1), subscriber.recv())
             .await
-            .expect("Expecting PrunedHeaders event but nothing is received")
+            .unwrap_or_else(|_| {
+                panic!("Expecting PrunedHeaders({from_height}-{to_height}) event but nothing is received")
+            })
             .unwrap()
             .event;
 
@@ -748,10 +763,11 @@ mod test {
                 from_height: from,
                 to_height: to,
             } => {
-                assert_eq!(from, from_height);
-                assert_eq!(to, to_height);
+                assert_eq!((from, to), (from_height, to_height));
             }
-            ev => panic!("Expecting PrunedHeaders event, but received: {ev:?}"),
+            ev => panic!(
+                "Expecting PrunedHeaders({from_height}-{to_height}) event, but received: {ev:?}"
+            ),
         }
     }
 
