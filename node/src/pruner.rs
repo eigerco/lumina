@@ -507,17 +507,17 @@ mod test {
         let store = Arc::new(InMemoryStore::new());
         let blockstore = Arc::new(InMemoryBlockstore::new());
 
-        // Start header creating from 260 seconds in the past, with block time of 1 seconds.
+        // Start header creation 260 seconds in the past, with block time of 1 second.
         // Since pruning window is 60s and sampling window is 120s, this means:
         //
         // +---------------------------------------------------------+
-        // |       1 - 140        |  141 - 200   |      201 - 260    |
-        // +----------------------+--------------+-------------------+
-        // <---------Prunable area-------------->|<--Pruning window-->
-        //                        <----------Sampling window--------->
+        // |       1 - 140       |   141 - 200   |      201 - 260    |
+        // +---------------------+---------------+-------------------+
+        // <----------Prunable area------------->|<--Pruning window-->
+        //                       <-----------Sampling window--------->
         //
-        // NOTE 1: Pruning window is actually "keep in store" window. We kept that name
-        // because this is how it meantioned in CIP-4.
+        // NOTE 1: Pruning window is actually "keep in store" window. Even if its name
+        // can be confusing, we kept it because this is how it meantioned in CIP-4.
         //
         // NOTE 2: Since `Time::now` in Pruner is changing, the edges may vary.
         let first_header_time = (Time::now() - Duration::from_secs(260)).unwrap();
