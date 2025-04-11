@@ -245,3 +245,43 @@ async fn get_eds() {
         assert_eq!(column_root, header.dah.column_root(i).unwrap());
     }
 }
+
+#[tokio::test]
+async fn get_shares_by_row() {
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
+    let namespace = random_ns();
+    let data = random_bytes(1024);
+    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let commitment = blob.commitment;
+
+    let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
+
+    let header = client.header_get_by_height(submitted_height).await.unwrap();
+    let blob_on_chain = client
+        .blob_get(submitted_height, namespace, commitment)
+        .await
+        .unwrap();
+    let blob_index = blob_on_chain.index.unwrap() as usize;
+    let shares = blob_on_chain.to_shares().unwrap();
+
+    let ods_width = (header.dah.square_width() / 2) as usize;
+    let row_index = blob_index / ods_width;
+    let index_in_row = (blob_index % ods_width) as usize;
+
+    let n_rows_to_fetch = (index_in_row + shares.len() + ods_width - 1) / ods_width;
+    let mut rows = Vec::with_capacity(n_rows_to_fetch);
+    for i in 0..n_rows_to_fetch {
+        let row = client
+            .share_get_row(&header, (row_index + i) as u64)
+            .await
+            .unwrap();
+        rows.push(row);
+    }
+
+    for i in 0..shares.len() {
+        let row_index = (blob_index + i) / ods_width;
+        let index_in_row = (blob_index + i) % ods_width;
+
+        assert_eq!(shares[i], rows[row_index].shares[index_in_row]);
+    }
+}
