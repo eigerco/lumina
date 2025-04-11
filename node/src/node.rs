@@ -23,7 +23,9 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::blockstore::InMemoryBlockstore;
-use crate::daser::{Daser, DaserArgs};
+use crate::daser::{
+    Daser, DaserArgs, DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY, DEFAULT_CONCURENCY_LIMIT,
+};
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
 use crate::p2p::{P2p, P2pArgs};
 use crate::pruner::{Pruner, PrunerArgs, DEFAULT_PRUNING_INTERVAL};
@@ -140,8 +142,6 @@ where
         let store = Arc::new(config.store);
         let blockstore = Arc::new(config.blockstore);
 
-        //reset_rejected_samples(&blockstore, &store).await?;
-
         let p2p = Arc::new(
             P2p::start(P2pArgs {
                 network_id: config.network_id,
@@ -169,6 +169,8 @@ where
             store: store.clone(),
             event_pub: event_channel.publisher(),
             sampling_window: config.sampling_window,
+            concurrency_limit: DEFAULT_CONCURENCY_LIMIT,
+            additional_headersub_concurrency: DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY,
         })?);
 
         let pruner = Arc::new(Pruner::start(PrunerArgs {

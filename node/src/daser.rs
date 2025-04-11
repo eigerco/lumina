@@ -54,6 +54,9 @@ use crate::utils::OneshotSenderExt;
 const MAX_SAMPLES_NEEDED: usize = 16;
 const GET_SAMPLE_MIN_TIMEOUT: Duration = Duration::from_secs(10);
 
+pub(crate) const DEFAULT_CONCURENCY_LIMIT: usize = 10;
+pub(crate) const DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY: usize = 5;
+
 type Result<T, E = DaserError> = std::result::Result<T, E>;
 
 /// Representation of all the errors that can occur in `Daser` component.
@@ -102,6 +105,10 @@ where
     pub(crate) event_pub: EventPublisher,
     /// Size of the sampling window.
     pub(crate) sampling_window: Duration,
+    /// How many blocks can be data sampled at the same time.
+    pub(crate) concurrency_limit: usize,
+    /// How many additional blocks can be data sampled if they are from HeaderSub.
+    pub(crate) additional_headersub_concurrency: usize,
 }
 
 #[derive(Debug)]
@@ -216,6 +223,8 @@ where
     will_be_pruned: BlockRanges,
     prev_head: Option<u64>,
     sampling_window: Duration,
+    concurrency_limit: usize,
+    additional_headersub_concurency: usize,
 }
 
 impl<S> Worker<S>
@@ -241,6 +250,8 @@ where
             will_be_pruned: BlockRanges::default(),
             prev_head: None,
             sampling_window: args.sampling_window,
+            concurrency_limit: args.concurrency_limit,
+            additional_headersub_concurency: args.additional_headersub_concurrency,
         })
     }
 
@@ -309,18 +320,8 @@ where
         self.populate_queue().await?;
 
         loop {
-            // If we have a new HEAD queued, schedule it now!
-            if let Some(queue_head) = self.queue.head() {
-                if queue_head > self.prev_head.unwrap_or(0) {
-                    self.schedule_next_sample_block().await?;
-                    self.prev_head = Some(queue_head);
-                }
-            }
-
-            // If there is no ongoing data sampling, schedule the next one.
-            if self.sampling_futs.is_empty() {
-                self.schedule_next_sample_block().await?;
-            }
+            // Start as many data sampling we are allowed.
+            while self.schedule_next_sample_block().await? {}
 
             select! {
                 _ = self.cancellation_token.cancelled() => {
@@ -388,12 +389,32 @@ where
         true
     }
 
-    async fn schedule_next_sample_block(&mut self) -> Result<()> {
+    async fn schedule_next_sample_block(&mut self) -> Result<bool> {
         // Schedule the most recent un-sampled block.
         let header = loop {
             let Some(height) = self.queue.pop_head() else {
-                return Ok(());
+                return Ok(false);
             };
+
+            // NOTE: This function runs on every iteration of Worker's main loop, so checking the
+            // concurrency limit should be fast and without accessing the store. This is why we
+            // do the calculation and the check here.
+            //
+            // Also, we do not update `self.prev_head` since `get_by_height` in this loop can fail.
+            // We update it after the loop instead.
+            let concurrency_limit = if self.prev_head.is_none_or(|prev_head| prev_head < height) {
+                self.concurrency_limit + self.additional_headersub_concurency
+            } else {
+                self.concurrency_limit
+            };
+
+            if self.sampling_futs.len() >= concurrency_limit {
+                // Put back the height we popped.
+                self.queue
+                    .insert_relaxed(height..=height)
+                    .expect("invalid height");
+                return Ok(false);
+            }
 
             match self.store.get_by_height(height).await {
                 Ok(header) => break header,
@@ -409,6 +430,11 @@ where
         let height = header.height().value();
         let square_width = header.dah.square_width();
 
+        // New head found (check also the logic above).
+        if self.prev_head.is_none_or(|prev_head| prev_head < height) {
+            self.prev_head = Some(height);
+        }
+
         // Make sure that the block is still in the sampling window.
         if !self.in_sampling_window(header.time()) {
             // As soon as we reach a block that is not in the sampling
@@ -419,7 +445,7 @@ where
             self.done
                 .insert_relaxed(1..=height)
                 .expect("invalid height");
-            return Ok(());
+            return Ok(false);
         }
 
         // Select random shares to be sampled
@@ -505,7 +531,7 @@ where
             .insert_relaxed(height..=height)
             .expect("invalid height");
 
-        Ok(())
+        Ok(true)
     }
 
     /// Add to the queue the blocks that need to be sampled.
@@ -674,6 +700,8 @@ mod tests {
             p2p: Arc::new(mock),
             store: store.clone(),
             sampling_window: DEFAULT_SAMPLING_WINDOW,
+            concurrency_limit: 1,
+            additional_headersub_concurrency: DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY,
         })
         .unwrap();
 
@@ -701,6 +729,8 @@ mod tests {
             p2p: Arc::new(mock),
             store: store.clone(),
             sampling_window: DEFAULT_SAMPLING_WINDOW,
+            concurrency_limit: 1,
+            additional_headersub_concurrency: DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY,
         })
         .unwrap();
 
@@ -726,6 +756,8 @@ mod tests {
             p2p: Arc::new(mock),
             store: store.clone(),
             sampling_window: DEFAULT_SAMPLING_WINDOW,
+            concurrency_limit: 1,
+            additional_headersub_concurrency: DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY,
         })
         .unwrap();
 
