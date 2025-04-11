@@ -268,7 +268,7 @@ async fn get_shares_by_row() {
     let row_index = blob_index / ods_width;
     let index_in_row = (blob_index % ods_width) as usize;
 
-    let n_rows_to_fetch = (index_in_row + shares.len() + ods_width - 1) / ods_width;
+    let n_rows_to_fetch = (index_in_row + shares.len()).div_ceil(ods_width);
     let mut rows = Vec::with_capacity(n_rows_to_fetch);
     for i in 0..n_rows_to_fetch {
         let row = client
@@ -278,10 +278,10 @@ async fn get_shares_by_row() {
         rows.push(row);
     }
 
-    for i in 0..shares.len() {
+    for (i, share) in shares.iter().enumerate() {
         let row_index = (blob_index + i) / ods_width;
         let index_in_row = (blob_index + i) % ods_width;
 
-        assert_eq!(shares[i], rows[row_index].shares[index_in_row]);
+        assert_eq!(share, &rows[row_index].shares[index_in_row]);
     }
 }
