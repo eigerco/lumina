@@ -726,6 +726,8 @@ dependencies = [
 [[package]]
 name = "blockstore"
 version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a8962daed8fb337472d9c4215006443acba1e40c6c91c9d4a3f440d1fb30436"
 dependencies = [
  "cid",
  "dashmap 6.1.0",

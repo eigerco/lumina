@@ -329,7 +329,7 @@ where
             while self.schedule_next_sample_block().await? {}
 
             if first_report {
-                self.report();
+                self.report().await?;
                 first_report = false;
             }
 
@@ -343,7 +343,7 @@ where
                         break;
                     }
                 }
-                _ = report_interval.tick() => self.report(),
+                _ = report_interval.tick() => self.report().await?,
                 Some(cmd) = self.cmd_rx.recv() => self.on_cmd(cmd).await,
                 Some(res) = self.sampling_futs.next() => {
                     // Beetswap only returns fatal errors that are not related
@@ -374,8 +374,15 @@ where
     }
 
     #[instrument(skip_all)]
-    fn report(&mut self) {
-        info!("data sampling: ongoing blocks: {}", &self.ongoing);
+    async fn report(&mut self) -> Result<()> {
+        let sampled = self.store.get_sampled_ranges().await?;
+
+        info!(
+            "data sampling: stored and sampled blocks: {}, ongoing blocks: {}",
+            sampled, &self.ongoing,
+        );
+
+        Ok(())
     }
 
     async fn on_cmd(&mut self, cmd: DaserCmd) {
