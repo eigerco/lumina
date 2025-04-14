@@ -17,6 +17,8 @@ pub enum Network {
     Mainnet,
     /// Arabica testnet.
     Arabica,
+    /// Mammoth testnet.
+    Mammoth,
     /// Mocha testnet.
     Mocha,
     /// Custom network.
@@ -91,6 +93,7 @@ impl Network {
         match self {
             Network::Mainnet => "celestia",
             Network::Arabica => "arabica-11",
+            Network::Mammoth => "mamo-1",
             Network::Mocha => "mocha-4",
             Network::Custom(ref s) => &s.id,
         }
@@ -111,6 +114,9 @@ impl Network {
             Network::Arabica => &[
                 "/dnsaddr/da-bridge-1.celestia-arabica-11.com/p2p/12D3KooWGqwzdEqM54Dce6LXzfFr97Bnhvm6rN7KM7MFwdomfm4S",
                 "/dnsaddr/da-full-1.celestia-arabica-11.com/p2p/12D3KooWCMGM5eZWVfCN9ZLAViGfLUWAfXP5pCm78NFKb9jpBtua",
+            ],
+            Network::Mammoth => &[
+                "/dnsaddr/da-bridge-0.par.mamochain.com/p2p/12D3KooWNc3hDtzLvyKj8xbcE3SFMRy4uX5EojCScCuqYRrz4tzS",
             ],
             Network::Mocha => &[
                 "/dnsaddr/da-bridge-1-mocha-4.celestia-mocha.com/p2p/12D3KooWCBAbQbJSpCpCGKzqz3rAN4ixYbc63K68zJg9aisuAajg",
@@ -134,6 +140,7 @@ impl FromStr for Network {
         match value {
             "Mainnet" | "MainNet" | "mainnet" | "celestia" => Ok(Network::Mainnet),
             "Arabica" | "arabica" | "arabica-11" => Ok(Network::Arabica),
+            "Mammoth" | "mammoth" | "mamo-1" => Ok(Network::Mammoth),
             "Mocha" | "mocha" | "mocha-4" => Ok(Network::Mocha),
             custom_id => Network::custom(custom_id),
         }
@@ -145,6 +152,7 @@ impl fmt::Display for Network {
         let s = match self {
             Network::Mainnet => "Mainnet",
             Network::Arabica => "Arabica",
+            Network::Mammoth => "Mammoth",
             Network::Mocha => "Mocha",
             Network::Custom(ref s) => s,
         };
@@ -208,6 +216,9 @@ mod tests {
 
         let arabica = Network::Arabica.canonical_bootnodes();
         assert_ne!(arabica.count(), 0);
+
+        let mammoth = Network::Mammoth.canonical_bootnodes();
+        assert_ne!(mammoth.count(), 0);
 
         let mocha = Network::Mocha.canonical_bootnodes();
         assert_ne!(mocha.count(), 0);

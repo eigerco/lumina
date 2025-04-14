@@ -3475,9 +3475,21 @@ lumina\_node\_wasm.d.ts:18
 
 ***
 
+#### Mammoth
+
+> **Mammoth**: `2`
+
+Mammoth testnet.
+
+##### Defined in
+
+TODO: Ask the Eiger team.
+
+***
+
 #### Mocha
 
-> **Mocha**: `2`
+> **Mocha**: `3`
 
 Mocha testnet.
 
@@ -3489,7 +3501,7 @@ lumina\_node\_wasm.d.ts:26
 
 #### Private
 
-> **Private**: `3`
+> **Private**: `4`
 
 Private local network.
 

@@ -31,6 +31,8 @@ pub enum Network {
     Mainnet,
     /// Arabica testnet.
     Arabica,
+    /// Mammoth testnet.
+    Mammoth,
     /// Mocha testnet.
     Mocha,
     /// Private local network.
@@ -56,6 +58,7 @@ impl From<Network> for network::Network {
         match network {
             Network::Mainnet => network::Network::Mainnet,
             Network::Arabica => network::Network::Arabica,
+            Network::Mammoth => network::Network::Mammoth,
             Network::Mocha => network::Network::Mocha,
             Network::Private => network::Network::custom("private").expect("invalid network id"),
         }
@@ -69,6 +72,7 @@ impl TryFrom<network::Network> for Network {
         match network {
             network::Network::Mainnet => Ok(Network::Mainnet),
             network::Network::Arabica => Ok(Network::Arabica),
+            network::Network::Mammoth => Ok(Network::Mammoth),
             network::Network::Mocha => Ok(Network::Mocha),
             network::Network::Custom(id) => match id.as_ref() {
                 "private" => Ok(Network::Private),
