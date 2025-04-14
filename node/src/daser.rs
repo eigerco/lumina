@@ -40,10 +40,11 @@ use tendermint::Time;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, instrument, warn};
 use web_time::{Duration, Instant};
 
 use lumina_utils::executor::{spawn, JoinHandle};
+use lumina_utils::time::Interval;
 
 use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::shwap::sample_cid;
@@ -54,7 +55,8 @@ use crate::utils::OneshotSenderExt;
 const MAX_SAMPLES_NEEDED: usize = 16;
 const GET_SAMPLE_MIN_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub(crate) const DEFAULT_CONCURENCY_LIMIT: usize = 10;
+// TODO: Increase this when cberner/redb#970 is fixed
+pub(crate) const DEFAULT_CONCURENCY_LIMIT: usize = 1;
 pub(crate) const DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY: usize = 5;
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;
@@ -302,6 +304,7 @@ where
     async fn connected_event_loop(&mut self) -> Result<()> {
         debug!("Entering connected_event_loop");
 
+        let mut report_interval = Interval::new(Duration::from_secs(60)).await;
         let mut peer_tracker_info_watcher = self.p2p.peer_tracker_info_watcher();
 
         // Check if connection status changed before the watcher was created
@@ -319,9 +322,16 @@ where
 
         self.populate_queue().await?;
 
+        let mut first_report = true;
+
         loop {
             // Start as many data sampling we are allowed.
             while self.schedule_next_sample_block().await? {}
+
+            if first_report {
+                self.report();
+                first_report = false;
+            }
 
             select! {
                 _ = self.cancellation_token.cancelled() => {
@@ -333,6 +343,7 @@ where
                         break;
                     }
                 }
+                _ = report_interval.tick() => self.report(),
                 Some(cmd) = self.cmd_rx.recv() => self.on_cmd(cmd).await,
                 Some(res) = self.sampling_futs.next() => {
                     // Beetswap only returns fatal errors that are not related
@@ -360,6 +371,11 @@ where
         self.prev_head = None;
 
         Ok(())
+    }
+
+    #[instrument(skip_all)]
+    fn report(&mut self) {
+        info!("data sampling: ongoing blocks: {}", &self.ongoing);
     }
 
     async fn on_cmd(&mut self, cmd: DaserCmd) {
