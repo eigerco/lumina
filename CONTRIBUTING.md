@@ -18,7 +18,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 specification when writing commits messages. Consistency helps with readability
 of git history, additionally we use it to generate our changelog.
 
-## Upgrading dependencies (should you need to)
+## Upgrading dependencies (if you need to)
 
 Some of our users use `celestia-types` with [risc0](https://github.com/risc0)
 zkVM, which offers [precompiles](https://dev.risczero.com/api/zkvm/precompiles)
