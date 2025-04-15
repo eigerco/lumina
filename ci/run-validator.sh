@@ -135,6 +135,10 @@ setup_private_validator() {
   sed -i'.bak' 's|"tcp://127.0.0.1:26657"|"tcp://0.0.0.0:26657"|g' "$CONFIG_DIR/config/config.toml"
   # enable transaction indexing
   sed -i'.bak' 's|indexer = .*|indexer = "kv"|g' "$CONFIG_DIR/config/config.toml"
+
+  # enable grpc-web
+  dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable
+  dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable-unsafe-cors
 }
 
 main() {
