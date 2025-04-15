@@ -1,0 +1,10 @@
+.DS_Store
+build
+
+# TODO: not sure if we can gitignore those, but they refer to my macOS user
+**/xcuserdata
+
+# artifacts that we build from node-uniffi
+lumina.xcframework
+LuminaDemo/lumina_node.swift
+LuminaDemo/lumina_node_uniffi.swift

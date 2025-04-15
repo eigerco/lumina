@@ -6,6 +6,7 @@ use std::time::Duration;
 use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::prelude::*;
 use celestia_types::consts::appconsts::AppVersion;
+use celestia_types::state::Address;
 use celestia_types::{Blob, Commitment};
 use jsonrpsee::core::client::Subscription;
 
@@ -16,7 +17,7 @@ use crate::utils::{random_bytes, random_bytes_array, random_ns};
 
 #[tokio::test]
 async fn blob_submit_and_get() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
@@ -53,8 +54,29 @@ async fn blob_submit_and_get() {
 }
 
 #[tokio::test]
-async fn blob_submit_and_get_all() {
+async fn blob_submit_and_get_with_signer() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let Address::AccAddress(address) = client.state_account_address().await.unwrap() else {
+        panic!("must be acc addr");
+    };
+    let namespace = random_ns();
+    let data = random_bytes(5);
+    let blob = Blob::new_with_signer(namespace, data, address, AppVersion::V3).unwrap();
+
+    let submitted_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
+
+    let received_blob = client
+        .blob_get(submitted_height, namespace, blob.commitment)
+        .await
+        .unwrap();
+
+    received_blob.validate(AppVersion::V3).unwrap();
+    assert_blob_equal_to_sent(&received_blob, &blob);
+}
+
+#[tokio::test]
+async fn blob_submit_and_get_all() {
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespaces = &[random_ns(), random_ns()];
 
     let blobs = &[
@@ -89,7 +111,7 @@ async fn blob_submit_and_get_all() {
 
 #[tokio::test]
 async fn blob_submit_and_get_large() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024 * 1024);
     let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
@@ -120,7 +142,7 @@ async fn blob_submit_and_get_large() {
 
 #[tokio::test]
 async fn blob_subscribe() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
 
     let mut incoming_blobs = client.blob_subscribe(namespace).await.unwrap();
@@ -160,7 +182,7 @@ async fn blob_subscribe() {
 
 #[tokio::test]
 async fn blob_submit_too_large() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5 * 1024 * 1024);
     let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
@@ -170,7 +192,7 @@ async fn blob_submit_too_large() {
 
 #[tokio::test]
 async fn blob_get_get_proof_wrong_ns() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
@@ -190,7 +212,7 @@ async fn blob_get_get_proof_wrong_ns() {
 
 #[tokio::test]
 async fn blob_get_get_proof_wrong_commitment() {
-    let client = new_test_client(AuthLevel::Write).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
@@ -211,7 +233,7 @@ async fn blob_get_get_proof_wrong_commitment() {
 
 #[tokio::test]
 async fn blob_get_all_with_no_blobs() {
-    let client = new_test_client(AuthLevel::Read).await.unwrap();
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     let blobs = client.blob_get_all(3, &[random_ns()]).await.unwrap();
 

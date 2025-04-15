@@ -255,7 +255,7 @@ jobs:
         run: |
           set -xeuo pipefail
 
-          tag="$(echo "$RELEASES" | jq '.[] | select(.package_name == "lumina-node-uniffi").tag')"
+          tag="$(echo "$RELEASES" | jq -r '.[] | select(.package_name == "lumina-node-uniffi").tag')"
 
           brew install coreutils
           sha256sum lumina-node-uniffi-* > lumina-node-uniffi-sha256-checksums.txt
