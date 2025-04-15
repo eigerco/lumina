@@ -130,11 +130,14 @@ setup_private_validator() {
   celestia-appd collect-gentxs
 
   # Set proper defaults and change ports
-  # If you encounter: `sed: -I or -i may not be used with stdin` on MacOS you can mitigate by installing gnu-sed
-  # https://gist.github.com/andre3k1/e3a1a7133fded5de5a9ee99c87c6fa0d?permalink_comment_id=3082272#gistcomment-3082272
-  sed -i'.bak' 's|"tcp://127.0.0.1:26657"|"tcp://0.0.0.0:26657"|g' "$CONFIG_DIR/config/config.toml"
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://0.0.0.0:26657' rpc.laddr
   # enable transaction indexing
-  sed -i'.bak' 's|indexer = .*|indexer = "kv"|g' "$CONFIG_DIR/config/config.toml"
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'kv' tx_index.indexer
+
+  # enable grpc-web
+  dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable
+  # enable unsafe CORS since we don't do security properly in CI
+  dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable-unsafe-cors
 }
 
 main() {
