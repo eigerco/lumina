@@ -1,4 +1,20 @@
+<div align="center">
+
 # Lumina
+
+<a href="https://github.com/eigerco/lumina/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/eigerco/lumina/actions/workflows/ci.yml/badge.svg?branch=main" alt="Build Status" /></a>
+<a href="https://lumina.rs"><img src="https://img.shields.io/website?url=https%3A%2F%2Flumina.rs&label=lumina.rs" alt="lumina.rs"></a>  
+<a href="https://crates.io/crates/lumina-cli"><img src="https://img.shields.io/crates/v/lumina-cli?label=lumina-cli" alt="crates.io lumina-cli"></a>
+<a href="https://crates.io/crates/lumina-node"><img src="https://img.shields.io/crates/v/lumina-node?label=lumina-node" alt="crates.io lumina-node"></a>
+<a href="https://crates.io/crates/lumina-node-uniffi"><img src="https://img.shields.io/crates/v/lumina-node-uniffi?label=lumina-node-uniffi" alt="crates.io lumina-node-uniffi"></a>
+<a href="https://crates.io/crates/lumina-node-wasm"><img src="https://img.shields.io/crates/v/lumina-node-wasm?label=lumina-node-wasm" alt="crates.io lumina-node-wasm"></a>  
+<a href="https://crates.io/crates/celestia-types"><img src="https://img.shields.io/crates/v/celestia-types?label=celestia-types" alt="crates.io celestia-types"></a>
+<a href="https://crates.io/crates/celestia-proto"><img src="https://img.shields.io/crates/v/celestia-proto?label=celestia-proto" alt="crates.io celestia-proto"></a>
+<a href="https://crates.io/crates/celestia-rpc"><img src="https://img.shields.io/crates/v/celestia-rpc?label=celestia-rpc" alt="crates.io celestia-rpc"></a>
+<a href="https://crates.io/crates/celestia-grpc"><img src="https://img.shields.io/crates/v/celestia-grpc?label=celestia-grpc" alt="crates.io celestia-grpc"></a>
+
+</div>
+
 
 Rust implementation of Celestia's [data availability node](https://github.com/celestiaorg/celestia-node) able to run natively and in browser-based environments.
 
@@ -141,22 +157,6 @@ Generate authentication tokens
 Run tests
 ```bash
 cargo test
-```
-
-## Upgrading dependencies
-
-Some of our users use `celestia-types` with [risc0](https://github.com/risc0)
-zkVM, which applies some acceleration on dependencies related to cryptography.
-Such dependency is `sha2`.
-
-Because of that we created `./tools/upgrade-deps.sh` script which upgrades all
-dependencies in `Cargo.toml` except the ones that are patched by risc0.
-
-How to upgrade:
-
-```bash
-./tools/upgrade-deps.sh -i  # `-i` upgrades incompatible versions too
-cargo update
 ```
 
 ## Frontend
