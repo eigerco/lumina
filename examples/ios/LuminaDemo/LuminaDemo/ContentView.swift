@@ -17,27 +17,27 @@ class LuminaViewModel: ObservableObject {
     @Published var trustedPeers: UInt64 = 0
     @Published var maybeNetworkHeight: UInt64?
     @Published var syncedRanges: [BlockRange] = []
-    
+
     private var node: LuminaNode?
     private var statsTimer: Timer?
-    
+
     deinit {
         statsTimer?.invalidate()
     }
-    
+
     func startNode(_ network: Network) async {
         isStarting = true;
-        
+
         let paths = FileManager.default.urls(
             for: .cachesDirectory, in: .userDomainMask)
         let cacheDir = paths[0].path
-        
+
         let config = NodeConfig(
             basePath: cacheDir,
             network: network,
             bootnodes: nil,
             syncingWindowSecs: nil,
-            pruningDelaySecs: nil,
+            pruningWindowSecs: nil,
             batchSize: nil,
             ed25519SecretKeyBytes: nil
         )
@@ -45,26 +45,26 @@ class LuminaViewModel: ObservableObject {
             node = try LuminaNode(config: config)
             let _ = try await node!.start()
             isRunning = await node!.isRunning();
-            
+
             statsTimer = pollStats()
         } catch {
             isStarting = false;
             self.error = error
         }
     }
-    
+
     func stopNode() async {
         statsTimer?.invalidate()
         statsTimer = nil
-        
+
         isStarting = false;
         isRunning = false
         connectedPeers = 0
         trustedPeers = 0
-        
+
         maybeNetworkHeight = nil
         syncedRanges = []
-        
+
         do {
             try await node?.stop()
             node = nil
@@ -72,16 +72,16 @@ class LuminaViewModel: ObservableObject {
             self.error = error
         }
     }
-    
+
     private func updateStats() async {
         do {
             if let peerInfo = try await node?.peerTrackerInfo() {
                 connectedPeers = peerInfo.numConnectedPeers
                 trustedPeers = peerInfo.numConnectedTrustedPeers
             }
-            
+
             if let syncInfo = try await node?.syncerInfo() {
-                
+
                 maybeNetworkHeight = syncInfo.subjectiveHead
                 syncedRanges = syncInfo.storedHeaders
             }
@@ -89,7 +89,7 @@ class LuminaViewModel: ObservableObject {
             self.error = error
         }
     }
-    
+
     private func pollStats() -> Timer {
         return Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) {
             [weak self] _ in
@@ -98,7 +98,7 @@ class LuminaViewModel: ObservableObject {
             }
         }
     }
-    
+
     func refreshRunningState() async {
         isRunning = await node?.isRunning() ?? false
     }
@@ -106,10 +106,10 @@ class LuminaViewModel: ObservableObject {
 
 struct ContentView: View {
     @StateObject private var viewModel = LuminaViewModel()
-    
+
     var body: some View {
         VStack(spacing: 20) {
-            
+
             if let error = viewModel.error {
                 Text("Error: \(error.localizedDescription)")
                     .foregroundColor(.red)
@@ -117,7 +117,7 @@ struct ContentView: View {
                     .background(Color(.systemGray6))
                     .cornerRadius(10)
             }
-            
+
             if !viewModel.isRunning {
                 if viewModel.isStarting {
                     // hide the network selection when waiting for the node to start up
@@ -138,7 +138,7 @@ struct ContentView: View {
                         network: viewModel.network,
                         syncedRanges: viewModel.syncedRanges
                     )
-                    
+
                     HStack(spacing: 20) {
                         Button("Stop") {
                             Task {
@@ -163,7 +163,7 @@ struct StatusCard: View {
     let maybeNetworkHeight: UInt64?
     let network: Network
     let syncedRanges: [BlockRange]
-    
+
     var body: some View {
         VStack(spacing: 12) {
             HStack {
@@ -173,7 +173,7 @@ struct StatusCard: View {
                 Text("\(connectedPeers)")
                     .fontWeight(.medium)
             }
-            
+
             HStack {
                 Text("Trusted Peers")
                     .foregroundColor(.secondary)
@@ -215,7 +215,7 @@ struct StatusCard: View {
 
 struct NetworkSelection: View {
     @ObservedObject var viewModel: LuminaViewModel
-    
+
     var body: some View {
         List {
             ForEach(

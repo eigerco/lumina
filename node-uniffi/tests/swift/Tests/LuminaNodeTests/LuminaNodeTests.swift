@@ -4,7 +4,7 @@ import XCTest
 final class LuminaNodeTests: XCTestCase {
     func testRequestHeader() async throws {
         let config = NodeConfig(basePath: nil, network: .mainnet, bootnodes: nil,
-                                syncingWindowSecs: nil, pruningDelaySecs: nil,
+                                syncingWindowSecs: nil, pruningWindowSecs: nil,
                                 batchSize: nil, ed25519SecretKeyBytes: nil)
         let node = try LuminaNode(config: config)
 
