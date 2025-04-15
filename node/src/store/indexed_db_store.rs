@@ -901,9 +901,10 @@ pub mod tests {
             .expect("inserting test data failed");
 
         for h in 1..=expected_height {
-            s.update_sampling_metadata(h, SamplingStatus::Accepted, vec![])
+            s.mark_as_sampled(h).await.expect("marking sampled failed");
+            s.update_sampling_metadata(h, vec![])
                 .await
-                .expect("marking sampled failed");
+                .expect("updating sampling metadata failed");
         }
 
         assert_eq!(s.get_head().unwrap().height().value(), expected_height);
@@ -1062,13 +1063,6 @@ pub mod tests {
                 let sampling_data = store.get_sampling_metadata(height).await.unwrap();
                 assert!(sampling_data.is_none());
             }
-
-            store
-                .update_sampling_metadata(1, SamplingStatus::Accepted, vec![])
-                .await
-                .unwrap();
-            let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-            assert_eq!(sampling_data.status, SamplingStatus::Accepted);
         }
     }
 

@@ -167,19 +167,20 @@ where
                 }
 
                 let height = header.height().value();
-
-                let sampling_metadata = self
+                let cids = self
                     .store
                     .get_sampling_metadata(height)
                     .await?
+                    .map(|m| m.cids)
                     .unwrap_or_default();
 
-                for cid in sampling_metadata.cids {
+                for cid in cids {
                     self.blockstore.remove(&cid).await?;
                 }
 
                 self.store.remove_height(height).await?;
 
+                // Update `removed_range` and send event if needed.
                 removed_range = match removed_range.take() {
                     Some((from_height, to_height)) => {
                         // If `height` is a neightbor to previously removed heaaders then
@@ -256,7 +257,7 @@ where
                 // and Daser.
                 sampled_ranges.contains(height) || self.daser.want_to_prune(height).await?
             } else if edges.contains(height) {
-                // If block in inside the sampling window and an edge, then we keep it.
+                // If block is inside the sampling window and an edge, then we keep it.
                 // We need it to verify missing neighbors later on.
                 false
             } else if sampled_ranges.contains(height) {
@@ -383,10 +384,7 @@ mod test {
         let blocks_with_sampling = (1..=1000)
             .map(|height| {
                 let block = TestBlock::from(height);
-                let sampled = match height % 3 {
-                    0 => false,
-                    _ => true,
-                };
+                let sampled = height % 3 == 0;
                 (height, block, block.cid().unwrap(), sampled)
             })
             .collect::<Vec<_>>();
@@ -486,7 +484,11 @@ mod test {
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
-        daser_handle.handle_want_to_prune(1..=50).await;
+        for expected_height in 1..=50 {
+            let (height, respond_to) = daser_handle.expect_want_to_prune().await;
+            assert_eq!(height, expected_height);
+            respond_to.send(true).unwrap();
+        }
 
         assert_pruned_headers_event(&mut event_subscriber, 1, 50).await;
         assert_eq!(
@@ -496,7 +498,11 @@ mod test {
 
         sleep(Duration::from_secs(1)).await;
 
-        daser_handle.handle_want_to_prune(51..=60).await;
+        for expected_height in 51..=60 {
+            let (height, respond_to) = daser_handle.expect_want_to_prune().await;
+            assert_eq!(height, expected_height);
+            respond_to.send(true).unwrap();
+        }
 
         assert_pruned_headers_event(&mut event_subscriber, 51, 60).await;
         assert_eq!(

@@ -229,6 +229,7 @@ impl BlockRanges {
         self.0.iter().any(|r| r.contains(&height))
     }
 
+    /// Return how many blocks exist in `BlockRanges`.
     pub fn len(&self) -> u64 {
         self.0.iter().map(|r| r.len()).sum()
     }

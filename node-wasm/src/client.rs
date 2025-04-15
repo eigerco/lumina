@@ -32,14 +32,17 @@ use crate::wrapper::node::{PeerTrackerInfoSnapshot, SyncingInfoSnapshot};
 pub struct WasmNodeConfig {
     /// A network to connect to.
     pub network: Network,
+
     /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
+
     /// Whether to store data in persistent memory or not.
     ///
     /// **Default value:** true
     #[wasm_bindgen(js_name = usePersistentMemory)]
     pub use_persistent_memory: bool,
+
     /// Sampling window defines maximum age of a block considered for syncing and sampling.
     ///
     /// If this is not set, then default value will apply:
@@ -51,21 +54,20 @@ pub struct WasmNodeConfig {
     #[wasm_bindgen(js_name = customSamplingWindowSecs)]
     pub custom_sampling_window_secs: Option<u32>,
 
-    #[wasm_bindgen(js_name = customPruningDelaySecs)]
-    pub custom_pruning_window_secs: Option<u32>,
-    /*
-
-    /// Pruning delay defines how much time the pruner should wait after sampling window in
-    /// order to prune the block.
+    /// Pruning window defines maximum age of a block considered to be kept in store.
+    ///
+    /// If pruning window is smaller than sampling window then blocks will be pruned
+    /// exactly after they get sampled. This is useful when you want to keep low
+    /// memory footprint but still validate the blockchain.
     ///
     /// If this is not set, then default value will apply:
     ///
-    /// * If `use_persistent_memory == true`, default value is 1 hour.
+    /// * If `use_persistent_memory == true`, default value is 30 days plus 1 hour.
     /// * If `use_persistent_memory == false`, default value is 60 seconds.
     ///
     /// The minimum value that can be set is 60 seconds.
-    pub custom_pruning_delay_secs: Option<u32>,
-    */
+    #[wasm_bindgen(js_name = customPruningWindowSecs)]
+    pub custom_pruning_window_secs: Option<u32>,
 }
 
 /// `NodeClient` is responsible for steering [`NodeWorker`] by sending it commands and receiving

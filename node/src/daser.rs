@@ -954,7 +954,7 @@ mod tests {
 
         assert!(remaining_shares.is_empty());
 
-        // Check if we received `SamplingFinished` for each share
+        // Check if we received `SamplingResult` for the block
         match event_sub.try_recv().unwrap().event {
             NodeEvent::SamplingResult {
                 height: ev_height,

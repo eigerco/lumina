@@ -1,6 +1,5 @@
 //! Utilities for writing tests.
 
-use std::ops::RangeInclusive;
 use std::time::Duration;
 
 use celestia_proto::p2p::pb::{header_request::Data, HeaderRequest};
@@ -204,6 +203,7 @@ impl MockP2pHandle {
     }
 }
 
+/// Mock handle for `Daser`.
 pub struct MockDaserHandle {
     pub(crate) cmd_rx: mpsc::Receiver<DaserCmd>,
 }
@@ -223,25 +223,19 @@ impl MockDaserHandle {
             .expect("Expecting DaserCmd, but timed-out")
     }
 
+    /// Assert that no command was sent to the `Daser` worker.
     pub async fn expect_no_cmd(&mut self) {
         if let Some(cmd) = self.try_recv_cmd().await {
             panic!("Expecting no DaserCmd, but received: {cmd:?}");
         }
     }
 
+    /// Assert that `DaserCmd::WantToPrune` was send to `Daser` and obtain a response channel.
     pub async fn expect_want_to_prune(&mut self) -> (u64, oneshot::Sender<bool>) {
         match self.expect_cmd().await {
             DaserCmd::WantToPrune { height, respond_to } => (height, respond_to),
             #[allow(unreachable_patterns)]
             cmd => panic!("Expecting WantToPrune, but received: {cmd:?}"),
-        }
-    }
-
-    pub async fn handle_want_to_prune(&mut self, range: RangeInclusive<u64>) {
-        for expected_height in range {
-            let (height, respond_to) = self.expect_want_to_prune().await;
-            assert_eq!(height, expected_height);
-            respond_to.send(true).unwrap();
         }
     }
 }

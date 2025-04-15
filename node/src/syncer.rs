@@ -108,6 +108,7 @@ where
     pub(crate) batch_size: u64,
     /// Sampling window
     pub(crate) sampling_window: Duration,
+    /// Pruning window
     pub(crate) pruning_window: Duration,
 }
 

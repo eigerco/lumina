@@ -129,6 +129,7 @@ pub trait Store: Send + Sync + Debug {
     /// `Ok(None)` indicates that header is in the store but sampling metadata is not set yet.
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>>;
 
+    /// Mark block as sampled.
     async fn mark_as_sampled(&self, height: u64) -> Result<()>;
 
     /// Insert a range of headers into the store.
@@ -143,9 +144,10 @@ pub trait Store: Send + Sync + Debug {
     /// Returns a list of header ranges currenty held in store.
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges>;
 
-    /// Returns a list of sampled ranges which their header is currenty held in store.
+    /// Returns a list of blocks that were sampled and their header is currenty held in store.
     async fn get_sampled_ranges(&self) -> Result<BlockRanges>;
 
+    /// Returns a list of headers that were pruned until now.
     async fn get_pruned_ranges(&self) -> Result<BlockRanges>;
 
     /// Remove header with given height from the store.
