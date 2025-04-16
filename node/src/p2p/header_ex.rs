@@ -18,9 +18,9 @@ use libp2p::{
     Multiaddr, PeerId, StreamProtocol,
 };
 use lumina_utils::time::timeout;
+use lumina_utils::time::{Duration, Instant};
 use prost::Message;
 use tracing::{debug, instrument, warn};
-use web_time::{Duration, Instant};
 
 mod client;
 mod server;

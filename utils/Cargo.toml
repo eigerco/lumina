@@ -22,6 +22,9 @@ send_wrapper = { optional = true, version = "0.6.0", features = ["futures"] }
 wasm-bindgen-test = { optional = true, workspace = true }
 web-time = { optional = true, version = "1.1.0" }
 
+[dev-dependencies]
+web-time = "1.1.0"
+
 [features]
 default = []
 executor = ["token", "dep:tokio-util", "dep:tokio", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:send_wrapper"]
