@@ -205,6 +205,34 @@ jobs:
       working-directory: examples/ios/LuminaDemo
       run: xcodebuild -scheme LuminaDemo -sdk iphonesimulator -destination "platform=iOS Simulator,name=iPhone 16" test
 
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Java JDK
+      uses: actions/setup-java@v4.0.0
+      with:
+        java-version: '17'
+        distribution: 'adopt'
+
+    - name: Setup toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+
+    - name: build and copy bindings
+      run: |
+        ./node-uniffi/build-android.sh
+        ./examples/android/copy_bindings.sh
+
+    - name: Gradle build
+      working-directory: examples/android
+      run: ./gradlew build
+
+    - name: Gradle test
+      working-directory: examples/android
+      run: ./gradlew test
+
+
   fmt:
     runs-on: ubuntu-latest
     steps:
