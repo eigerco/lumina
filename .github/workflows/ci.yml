@@ -229,14 +229,14 @@ jobs:
     - name: build and copy bindings
       run: |
         ./node-uniffi/build-android.sh
-        ./examples/android/copy_bindings.sh
+        ./examples/android/LuminaDemo/copy_bindings.sh
 
     - name: Gradle build
-      working-directory: examples/android
+      working-directory: examples/android/LuminaDemo
       run: ./gradlew build
 
     - name: Gradle test
-      working-directory: examples/android
+      working-directory: examples/android/LuminaDemo
       run: ./gradlew test
 
 
