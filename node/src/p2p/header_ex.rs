@@ -1,6 +1,7 @@
 use std::io;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
@@ -17,8 +18,7 @@ use libp2p::{
     },
     Multiaddr, PeerId, StreamProtocol,
 };
-use lumina_utils::time::timeout;
-use lumina_utils::time::{Duration, Instant};
+use lumina_utils::time::{timeout, Instant};
 use prost::Message;
 use tracing::{debug, instrument, warn};
 
