@@ -3,7 +3,7 @@
 - Create a new kotlin project in xcode
 - make sure you have aarch64-apple-ios target installed + simulator
 ```
-rustup target add armv7-linux-androideabi
+rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android thumbv7em-none-eabihf wasm32-unknown-unknown x86_64-linux-android
 ```
 
 ...
