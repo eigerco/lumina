@@ -46,7 +46,7 @@ libp2p = { workspace = true, features = [
 ] }
 nmt-rs.workspace = true
 rand = "0.8.5"
-tokio = { version = "1.38.0", features = ["rt", "macros"] }
+tokio = { version = "1.43.1", features = ["rt", "macros"] }
 tracing = "0.1.40"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
