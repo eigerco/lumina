@@ -44,7 +44,7 @@ serde-wasm-bindgen = "0.6.5"
 serde_repr = "0.1.19"
 thiserror = "1.0.61"
 time = { version = "0.3.36", features = ["wasm-bindgen"] }
-tokio = { version = "1.38.0", features = ["sync"] }
+tokio = { version = "1.43.1", features = ["sync"] }
 tokio-stream = { version = "0.1.17", features = ["sync"] }
 tokio-util = "0.7.11"
 tracing = "0.1.40"
