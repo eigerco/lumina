@@ -218,6 +218,8 @@ jobs:
 
     - name: Setup toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        target: 'armv7-linux-androideabi'
 
     - name: Install cargo-ndk
       uses: taiki-e/cache-cargo-install-action@v2
