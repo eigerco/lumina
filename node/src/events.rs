@@ -5,9 +5,9 @@ use std::panic::Location;
 use std::time::Duration;
 
 use libp2p::PeerId;
+use lumina_utils::time::SystemTime;
 use serde::Serialize;
 use tokio::sync::broadcast;
-use web_time::SystemTime;
 
 const EVENT_CHANNEL_CAPACITY: usize = 1024;
 
