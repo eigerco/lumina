@@ -18,14 +18,13 @@ use backoff::backoff::Backoff;
 use backoff::ExponentialBackoffBuilder;
 use celestia_types::ExtendedHeader;
 use lumina_utils::executor::{spawn, JoinHandle};
-use lumina_utils::time::{sleep, Interval};
+use lumina_utils::time::{sleep, Instant, Interval};
 use serde::{Deserialize, Serialize};
 use tendermint::Time;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
-use web_time::Instant;
 
 use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};

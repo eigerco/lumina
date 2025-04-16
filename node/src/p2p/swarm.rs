@@ -1,6 +1,6 @@
 use libp2p::identity::Keypair;
 use libp2p::swarm::{NetworkBehaviour, Swarm};
-use web_time::Duration;
+use std::time::Duration;
 
 use crate::p2p::{P2pError, Result};
 
