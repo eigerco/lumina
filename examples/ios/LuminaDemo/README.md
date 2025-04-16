@@ -6,8 +6,7 @@
 - the project is created at this point
 - make sure you have aarch64-apple-ios target installed + simulator
 ```
-rustup target add aarch64-apple-ios
-rustup target add aarch64-apple-ios-sim
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 ```
 - build the ios artifacts `./node-uniffi/build-ios.sh`
 - `cp ./node-uniffi/ios/lumina.xcframework $YOUR_IOS_PROJECT_DIR`
