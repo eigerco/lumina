@@ -9,7 +9,7 @@ rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-andro
 ...
 
 - build the Android artifacts `./node-uniffi/build-android.sh`
-- `cp -rv node-uniffi/app examples/android/`
+- `cp -rv node-uniffi/app examples/android/LuminaDemo`
 - add imports to `build.gradle.kt`
 ```
 implementation("net.java.dev.jna:jna:5.7.0@aar")
