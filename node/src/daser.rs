@@ -951,7 +951,7 @@ mod tests {
             sleep(Duration::from_millis(10)).await;
         }
 
-        for i in 0..(additional_headersub_concurrency * shares_per_block) {
+        for _ in 0..(additional_headersub_concurrency * shares_per_block) {
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
             hold_respond_channels.push((cid, respond_to));
         }
@@ -965,7 +965,7 @@ mod tests {
         // we generated above.
         stop_sampling_for(&mut hold_respond_channels, 28);
 
-        for i in 0..shares_per_block {
+        for _ in 0..shares_per_block {
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
             hold_respond_channels.push((cid, respond_to));
         }
