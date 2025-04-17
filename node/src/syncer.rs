@@ -858,7 +858,7 @@ mod tests {
             event_pub: events.publisher(),
             batch_size: 512,
             sampling_window: DEFAULT_SAMPLING_WINDOW,
-            pruning_window: DEFAULT_SAMPLING_WINDOW, // todo
+            pruning_window: DEFAULT_PRUNING_WINDOW,
         })
         .unwrap();
 
@@ -1059,7 +1059,7 @@ mod tests {
             event_pub: events.publisher(),
             batch_size: 512,
             sampling_window: DEFAULT_SAMPLING_WINDOW,
-            pruning_window: DEFAULT_SAMPLING_WINDOW, // todo
+            pruning_window: DEFAULT_PRUNING_WINDOW,
         })
         .unwrap();
 

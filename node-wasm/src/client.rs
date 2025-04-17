@@ -45,12 +45,8 @@ pub struct WasmNodeConfig {
 
     /// Sampling window defines maximum age of a block considered for syncing and sampling.
     ///
-    /// If this is not set, then default value will apply:
-    ///
-    /// * If `use_persistent_memory == true`, default value is 30 days.
-    /// * If `use_persistent_memory == false`, default value is 60 seconds.
-    ///
-    /// The minimum value that can be set is 60 seconds.
+    /// **Default value:** 2592000 seconds (30 days)\
+    /// **Minimum:** 60 seconds
     #[wasm_bindgen(js_name = customSamplingWindowSecs)]
     pub custom_sampling_window_secs: Option<u32>,
 
