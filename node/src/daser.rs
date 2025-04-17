@@ -420,7 +420,7 @@ where
 
             // NOTE: This function runs on every iteration of Worker's main loop, so checking the
             // concurrency limit should be fast and without accessing the store. This is why we
-            // do the calculation and the check here.
+            // do calculate and check here.
             //
             // Also, we do not update `self.prev_head` since `get_by_height` in this loop can fail.
             // We update it after the loop instead.
@@ -633,7 +633,8 @@ mod tests {
     use crate::p2p::shwap::convert_cid;
     use crate::p2p::P2pCmd;
     use crate::store::InMemoryStore;
-    use crate::test_utils::MockP2pHandle;
+    use crate::test_utils::{ExtendedHeaderGeneratorExt, MockP2pHandle};
+    use crate::utils::OneshotResultSender;
     use bytes::BytesMut;
     use celestia_proto::bitswap::Block;
     use celestia_types::consts::appconsts::AppVersion;
@@ -876,6 +877,122 @@ mod tests {
         handle_get_shwap_cid(&mut handle, 21, &eds, false).await;
 
         handle.expect_no_cmd().await;
+    }
+
+    #[async_test]
+    async fn concurrency_limits() {
+        let (mock, mut handle) = P2p::mocked();
+        let store = Arc::new(InMemoryStore::new());
+        let events = EventChannel::new();
+
+        // Concurrency limit
+        let concurrency_limit = 10;
+        // Additional concurrency limit for heads.
+        // In other words concurrency limit becames 15.
+        let additional_headersub_concurrency = 5;
+        // Default number of shares that ExtendedHeaderGenerator
+        // generates per block.
+        let shares_per_block = 4;
+
+        let mut gen = ExtendedHeaderGenerator::new();
+        store.insert(gen.next_many_verified(30)).await.unwrap();
+
+        let _daser = Daser::start(DaserArgs {
+            event_pub: events.publisher(),
+            p2p: Arc::new(mock),
+            store: store.clone(),
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            concurrency_limit,
+            additional_headersub_concurrency,
+        })
+        .unwrap();
+
+        handle.expect_no_cmd().await;
+        handle.announce_peer_connected();
+
+        let mut hold_respond_channels = Vec::new();
+
+        for _ in 0..(concurrency_limit * shares_per_block) {
+            let (cid, respond_to) = handle.expect_get_shwap_cid().await;
+            hold_respond_channels.push((cid, respond_to));
+        }
+
+        // Concurrency limit reached
+        handle.expect_no_cmd().await;
+
+        // However a new head will be allowed because additional limit is applied
+        store.insert(gen.next_many_verified(2)).await.unwrap();
+
+        for _ in 0..shares_per_block {
+            let (cid, respond_to) = handle.expect_get_shwap_cid().await;
+            hold_respond_channels.push((cid, respond_to));
+        }
+        handle.expect_no_cmd().await;
+
+        // Now 11 blocks are ongoing. In order for Daser to schedule the next
+        // one, 2 blocks need to finish.
+        // We stop sampling for blocks 29 and 30 in order to simulate this.
+        stop_sampling_for(&mut hold_respond_channels, 29);
+        stop_sampling_for(&mut hold_respond_channels, 30);
+
+        // Now Daser will schedule the next block.
+        for _ in 0..shares_per_block {
+            let (cid, respond_to) = handle.expect_get_shwap_cid().await;
+            hold_respond_channels.push((cid, respond_to));
+        }
+
+        // And... concurrency limit is reached again.
+        handle.expect_no_cmd().await;
+
+        // Generate 5 more heads
+        for _ in 0..additional_headersub_concurrency {
+            store.insert(gen.next_many_verified(1)).await.unwrap();
+            // Give some time for Daser to shedule it
+            sleep(Duration::from_millis(10)).await;
+        }
+
+        for i in 0..(additional_headersub_concurrency * shares_per_block) {
+            let (cid, respond_to) = handle.expect_get_shwap_cid().await;
+            hold_respond_channels.push((cid, respond_to));
+        }
+
+        // Concurrency limit for heads is reached
+        handle.expect_no_cmd().await;
+        store.insert(gen.next_many_verified(1)).await.unwrap();
+        handle.expect_no_cmd().await;
+
+        // Now we stop 1 block and Daser will schedule the head
+        // we generated above.
+        stop_sampling_for(&mut hold_respond_channels, 28);
+
+        for i in 0..shares_per_block {
+            let (cid, respond_to) = handle.expect_get_shwap_cid().await;
+            hold_respond_channels.push((cid, respond_to));
+        }
+
+        // Concurrency limit for heads is reached again
+        handle.expect_no_cmd().await;
+        store.insert(gen.next_many_verified(1)).await.unwrap();
+        handle.expect_no_cmd().await;
+    }
+
+    fn stop_sampling_for(
+        responders: &mut Vec<(Cid, OneshotResultSender<Vec<u8>, P2pError>)>,
+        height: u64,
+    ) {
+        let mut indexes = Vec::new();
+
+        for (idx, (cid, _)) in responders.iter().enumerate() {
+            let sample_id: SampleId = cid.try_into().unwrap();
+            if sample_id.block_height() == height {
+                indexes.push(idx)
+            }
+        }
+
+        for idx in indexes.into_iter().rev() {
+            let (_cid, respond_to) = responders.remove(idx);
+            respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
+        }
     }
 
     async fn gen_and_sample_block(
