@@ -12,10 +12,10 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawMerkleProof", into = "RawMerkleProof")]
 pub struct MerkleProof {
-    index: usize,
-    total: usize,
-    leaf_hash: Hash,
-    aunts: Vec<Hash>,
+    pub index: usize,
+    pub total: usize,
+    pub leaf_hash: Hash,
+    pub aunts: Vec<Hash>,
 }
 
 impl MerkleProof {
