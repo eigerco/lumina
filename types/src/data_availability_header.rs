@@ -346,7 +346,7 @@ impl ValidateBasicWithAppVersion for DataAvailabilityHeader {
 #[serde(try_from = "RawRowProof", into = "RawRowProof")]
 pub struct RowProof {
     row_roots: Vec<NamespacedHash>,
-    proofs: Vec<MerkleProof>,
+    pub proofs: Vec<MerkleProof>,
     start_row: u16,
     end_row: u16,
 }
