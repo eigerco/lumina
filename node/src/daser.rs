@@ -54,8 +54,7 @@ use crate::utils::OneshotSenderExt;
 const MAX_SAMPLES_NEEDED: usize = 16;
 const GET_SAMPLE_MIN_TIMEOUT: Duration = Duration::from_secs(10);
 
-// TODO: Increase this when cberner/redb#970 is fixed
-pub(crate) const DEFAULT_CONCURENCY_LIMIT: usize = 1;
+pub(crate) const DEFAULT_CONCURENCY_LIMIT: usize = 10;
 pub(crate) const DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY: usize = 5;
 
 type Result<T, E = DaserError> = std::result::Result<T, E>;

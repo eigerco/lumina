@@ -70,7 +70,7 @@ libp2p = { workspace = true, features = [
   "websocket",
   "quic",
 ] }
-redb = "2.4.0"
+redb = "2.5.0"
 rustls-pemfile = "2.1.2"
 rustls-pki-types = "1.7.0"
 
