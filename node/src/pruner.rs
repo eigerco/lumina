@@ -1,3 +1,5 @@
+//! Component responsible for removing blocks that aren't needed anymore.
+
 use std::sync::Arc;
 use std::time::Duration;
 

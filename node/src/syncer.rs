@@ -1,20 +1,4 @@
 //! Component responsible for synchronizing block headers announced in the Celestia network.
-//!
-//! It starts by asking the trusted peers for their current head headers and picks
-//! the latest header returned by at least two of them as the initial synchronization target
-//! called `subjective_head`.
-//!
-//! The it starts synchronizing backwards from head until we reach the end of the sampling
-//! window. The syncing is done by requesting headers on the `header-ex` P2P protocol. In
-//! the meantime, it constantly checks for the latest headers announced on the `header-sub`
-//! P2P protocol to keep the `subjective_head` as close to the `network_head` as possible.
-//!
-//! When `Node` is configured with sampling window is bigger than the pruning window that
-//! means `Daser` will continue sampling blocks after even after the pruning window and
-//! `Pruner` will delete them only if they are sampled or beyond the sampling window.
-//! This scenario is used when user wants a low memory footprint without sacrificing
-//! data sampling. Because of that `Syncer` fetches the next batch of headers only if
-//! `Daser` is close to our currently synced tail. This behaviour is called "slow sync".
 
 use std::marker::PhantomData;
 use std::pin::pin;

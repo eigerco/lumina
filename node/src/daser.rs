@@ -1,33 +1,5 @@
 //! Component responsible for data availability sampling of the already synchronized block
 //! headers announced on the Celestia network.
-//!
-//! Sampling procedure comprises the following steps:
-//!
-//! 1. Daser waits for at least one peer to connect.
-//! 2. Daser iterates in descending order over all the headers stored in the [`Store`].
-//!     - If a block has not been sampled or it was rejected, Daser will queue it for sampling.
-//!       Rejected blocks are resampled because their rejection could be caused by
-//!       edge-cases unrelated to data availability, such as network issues.
-//!     - If a block is not within the sampling window, it is not queued.
-//!     - Queue is always sorted in descending order to give priority to latest blocks.
-//! 3. As new headers become available in the [`Store`], Daser adds them to the queue if
-//!    they are within the sampling window.
-//! 4. If at any point new HEAD is queued, it is scheduled immediately and concurrently. Otherwise
-//!    Daser waits for any ongoing sampling to finish and schedules a next block from the queue.
-//!    Daser executes the following procedure for every scheduled block:
-//!     - It makes sure that the block is still within the sampling window.
-//!     - It selects which random shares are going to be sampled and generates their Shwap CIDs.
-//!     - It updates [`Store`] with the CIDs that are going to be sampled. Tracking of the the CIDs
-//!       is needed for pruning them later on. This is done before retrival of CIDs is started because
-//!       otherwise user could stop the node after Bitswap stores the block in the blockstore, but before
-//!       we can record that in the [`Store`], causing a leak.
-//!     - Initiates Bitswap retrival requests for the specified CIDs.
-//!     - If all CIDs are received, then the block is considered sampled and accepted.
-//!     - If we reach a timeout of 10 seconds and at least one of the CIDs is not received, then
-//!       block is considered sampled and rejected.
-//!     - [`Store`] is updated with the sampling result.
-//! 5. Steps 3 and 4 are repeated concurently, unless we detect that all peers have disconnected.
-//!    At that point Daser cleans the queue and moves back to step 1.
 
 use std::collections::HashSet;
 use std::sync::Arc;
