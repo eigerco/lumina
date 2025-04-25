@@ -15,7 +15,9 @@ use tracing::{debug, error, warn};
 use crate::daser::{Daser, DaserError};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::P2pError;
-use crate::store::{Store, StoreError};
+use crate::store::{BlockRanges, Store, StoreError};
+
+const MAX_BATCH_SIZE: u64 = 512;
 
 type Result<T, E = PrunerError> = std::result::Result<T, E>;
 
@@ -145,9 +147,11 @@ where
     }
 
     async fn run(&mut self) -> Result<()> {
-        let mut removed_range = None;
-
         loop {
+            if self.cancellation_token.is_cancelled() {
+                break;
+            }
+
             let now = Time::now();
 
             let sampling_window_end = now.checked_sub(self.sampling_window).unwrap_or_else(|| {
@@ -160,66 +164,48 @@ where
                 Time::unix_epoch()
             });
 
-            while let Some(header) = self
-                .get_next_header_to_prune(sampling_window_end, pruning_window_end)
-                .await?
-            {
-                if self.cancellation_token.is_cancelled() {
-                    break;
+            let prunable_batch = self
+                .get_next_prunable_batch(sampling_window_end, pruning_window_end)
+                .await?;
+
+            if prunable_batch.is_empty() {
+                select! {
+                    _ = self.cancellation_token.cancelled() => break,
+                    _ = sleep(self.block_time) => continue,
                 }
+            }
 
-                let height = header.height().value();
-                let cids = self
-                    .store
-                    .get_sampling_metadata(height)
-                    .await?
-                    .map(|m| m.cids)
-                    .unwrap_or_default();
+            for range in prunable_batch.into_inner() {
+                let from_height = *range.start();
+                let mut to_height = None;
 
-                for cid in cids {
-                    self.blockstore.remove(&cid).await?;
-                }
-
-                self.store.remove_height(height).await?;
-
-                // Update `removed_range` and send event if needed.
-                removed_range = match removed_range.take() {
-                    Some((from_height, to_height)) => {
-                        // If `height` is a neightbor to previously removed heaaders then
-                        // we update the `removed_range`, otherwise we create an event
-                        // for the previous headers.
-                        if from_height == height + 1 {
-                            Some((height, to_height))
-                        } else {
-                            self.event_pub.send(NodeEvent::PrunedHeaders {
-                                from_height,
-                                to_height,
-                            });
-                            Some((height, height))
-                        }
+                for height in range.clone() {
+                    if self.cancellation_token.is_cancelled() {
+                        break;
                     }
-                    None => Some((height, height)),
+
+                    let cids = self
+                        .store
+                        .get_sampling_metadata(height)
+                        .await?
+                        .map(|m| m.cids)
+                        .unwrap_or_default();
+
+                    for cid in cids {
+                        self.blockstore.remove(&cid).await?;
+                    }
+
+                    self.store.remove_height(height).await?;
+                    to_height = Some(height);
+                }
+
+                if let Some(to_height) = to_height {
+                    self.event_pub.send(NodeEvent::PrunedHeaders {
+                        from_height,
+                        to_height,
+                    });
                 }
             }
-
-            if let Some((from_height, to_height)) = removed_range.take() {
-                self.event_pub.send(NodeEvent::PrunedHeaders {
-                    from_height,
-                    to_height,
-                });
-            }
-
-            select! {
-                _ = self.cancellation_token.cancelled() => break,
-                _ = sleep(self.block_time) => ()
-            }
-        }
-
-        if let Some((from_height, to_height)) = removed_range.take() {
-            self.event_pub.send(NodeEvent::PrunedHeaders {
-                from_height,
-                to_height,
-            });
         }
 
         debug!("Pruner stopped");
@@ -227,17 +213,17 @@ where
     }
 
     /// Get next header from the store to be pruned or None if there's nothing to prune
-    async fn get_next_header_to_prune(
+    async fn get_next_prunable_batch(
         &mut self,
         sampling_cutoff: Time,
         pruning_cutoff: Time,
-    ) -> Result<Option<ExtendedHeader>> {
+    ) -> Result<BlockRanges> {
         let mut stored_ranges = self.store.get_stored_header_ranges().await?;
         let pruned_ranges = self.store.get_pruned_ranges().await?;
         let sampled_ranges = self.store.get_sampled_ranges().await?;
 
         let Some(stored_head_height) = stored_ranges.head() else {
-            return Ok(None);
+            return Ok(BlockRanges::new());
         };
 
         // All synced heights (stored + pruned)
@@ -265,8 +251,14 @@ where
             .remove_relaxed(estimated_prunable_height + 1..=u64::MAX)
             .expect("never fails");
 
+        let mut batch = BlockRanges::new();
+
         // Iterate from the newest height to the oldest.
         for height in stored_ranges.rev() {
+            if self.cancellation_token.is_cancelled() {
+                break;
+            }
+
             let header = self.store.get_by_height(height).await?;
 
             let needs_pruning = if header.time() > pruning_cutoff {
@@ -294,11 +286,15 @@ where
 
             // All constrains are met and we are allowed to prune this block.
             if needs_pruning {
-                return Ok(Some(header));
+                batch.insert_relaxed(height..=height).expect("never fails");
+
+                if batch.len() >= MAX_BATCH_SIZE {
+                    break;
+                }
             }
         }
 
-        Ok(None)
+        Ok(batch)
     }
 }
 
