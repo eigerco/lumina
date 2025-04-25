@@ -28,7 +28,7 @@ use crate::daser::{
 };
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
 use crate::p2p::{P2p, P2pArgs};
-use crate::pruner::{Pruner, PrunerArgs, DEFAULT_PRUNING_INTERVAL};
+use crate::pruner::{Pruner, PrunerArgs};
 use crate::store::{InMemoryStore, SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs};
 
@@ -42,6 +42,8 @@ pub use crate::daser::DaserError;
 pub use crate::p2p::{HeaderExError, P2pError};
 pub use crate::peer_tracker::PeerTrackerInfo;
 pub use crate::syncer::{SyncerError, SyncingInfo};
+
+const DEFAULT_BLOCK_TIME: Duration = Duration::from_secs(6);
 
 /// Alias of [`Result`] with [`NodeError`] error type
 ///
@@ -178,7 +180,7 @@ where
             store: store.clone(),
             blockstore: blockstore.clone(),
             event_pub: event_channel.publisher(),
-            pruning_interval: DEFAULT_PRUNING_INTERVAL,
+            block_time: DEFAULT_BLOCK_TIME,
             sampling_window: config.sampling_window,
             pruning_window: config.pruning_window,
         }));

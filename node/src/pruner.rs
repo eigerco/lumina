@@ -17,8 +17,6 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::P2pError;
 use crate::store::{Store, StoreError};
 
-pub const DEFAULT_PRUNING_INTERVAL: Duration = Duration::from_secs(12);
-
 type Result<T, E = PrunerError> = std::result::Result<T, E>;
 
 /// Representation of all the errors that can occur when interacting with the [`Pruner`].
@@ -58,8 +56,8 @@ where
     pub blockstore: Arc<B>,
     /// Event publisher.
     pub event_pub: EventPublisher,
-    /// interval at which pruner will run
-    pub pruning_interval: Duration,
+    /// After how much time a new block is produced.
+    pub block_time: Duration,
     /// Size of pruning window
     pub pruning_window: Duration,
     /// Size of sampling window
@@ -121,9 +119,10 @@ where
     event_pub: EventPublisher,
     store: Arc<S>,
     blockstore: Arc<B>,
-    pruning_interval: Duration,
+    block_time: Duration,
     pruning_window: Duration,
     sampling_window: Duration,
+    cached_head: Option<ExtendedHeader>,
 }
 
 impl<S, B> Worker<S, B>
@@ -137,10 +136,11 @@ where
             event_pub: args.event_pub,
             store: args.store,
             blockstore: args.blockstore,
-            pruning_interval: args.pruning_interval,
+            block_time: args.block_time,
             pruning_window: args.pruning_window,
             sampling_window: args.sampling_window,
             daser: args.daser,
+            cached_head: None,
         }
     }
 
@@ -188,8 +188,8 @@ where
                         // If `height` is a neightbor to previously removed heaaders then
                         // we update the `removed_range`, otherwise we create an event
                         // for the previous headers.
-                        if to_height == height - 1 {
-                            Some((from_height, height))
+                        if from_height == height + 1 {
+                            Some((height, to_height))
                         } else {
                             self.event_pub.send(NodeEvent::PrunedHeaders {
                                 from_height,
@@ -211,7 +211,7 @@ where
 
             select! {
                 _ = self.cancellation_token.cancelled() => break,
-                _ = sleep(self.pruning_interval) => ()
+                _ = sleep(self.block_time) => ()
             }
         }
 
@@ -228,47 +228,67 @@ where
 
     /// Get next header from the store to be pruned or None if there's nothing to prune
     async fn get_next_header_to_prune(
-        &self,
+        &mut self,
         sampling_cutoff: Time,
         pruning_cutoff: Time,
     ) -> Result<Option<ExtendedHeader>> {
-        let stored_ranges = self.store.get_stored_header_ranges().await?;
+        let mut stored_ranges = self.store.get_stored_header_ranges().await?;
         let pruned_ranges = self.store.get_pruned_ranges().await?;
         let sampled_ranges = self.store.get_sampled_ranges().await?;
+
+        let Some(stored_head_height) = stored_ranges.head() else {
+            return Ok(None);
+        };
 
         // All synced heights (stored + pruned)
         let synced_ranges = pruned_ranges + &stored_ranges;
         // Edges of the synced ranges
         let edges = synced_ranges.edges();
 
-        // Iterate from the oldest height to the newest.
-        for height in stored_ranges {
+        if self
+            .cached_head
+            .as_ref()
+            .is_none_or(|header| header.height().value() != stored_head_height)
+        {
+            self.cached_head = Some(self.store.get_by_height(stored_head_height).await?);
+        }
+
+        let estimated_prunable_height = estimate_highest_prunable_height(
+            self.cached_head.as_ref().unwrap(),
+            pruning_cutoff,
+            self.block_time,
+        );
+
+        // We do not need to check any blocks that is higher than the
+        // estimated prunable height.
+        stored_ranges
+            .remove_relaxed(estimated_prunable_height + 1..=u64::MAX)
+            .expect("never fails");
+
+        // Iterate from the newest height to the oldest.
+        for height in stored_ranges.rev() {
             let header = self.store.get_by_height(height).await?;
 
-            // Heights in `stored_ranges` are ordered, so if a height didn't
-            // reach the pruning cutoff, so are the next ones.
-            // In other words, we have nothing to prune for now.
-            if header.time() > pruning_cutoff {
-                return Ok(None);
-            }
-
-            let needs_pruning = if header.time() <= sampling_cutoff {
-                // If block is outside of sampling window then we need to prune it.
-                // If it wasn't sampled yet, then Daser must allow us first. We do
-                // this to avoid race conditions and other edge cases between Pruner
-                // and Daser.
+            let needs_pruning = if header.time() > pruning_cutoff {
+                // If block is inside pruning window, then we keep it.
+                false
+            } else if header.time() <= sampling_cutoff {
+                // If block is outside of pruning window and sampling window then
+                // we need to prune it. If it wasn't sampled yet, then Daser must
+                // allow us first. We do this to avoid race conditions and other
+                // edge cases between Pruner and Daser.
                 sampled_ranges.contains(height) || self.daser.want_to_prune(height).await?
             } else if edges.contains(height) {
-                // If block is inside the sampling window and an edge, then we keep it.
-                // We need it to verify missing neighbors later on.
+                // If block is outside of pruning window, inside the sampling window,
+                // and an edge, then we keep it. We need it to verify missing neighbors later on.
                 false
             } else if sampled_ranges.contains(height) {
-                // If block is inside the sampling window, not an edge, and got sampled,
-                // then we prune it.
+                // If block is outside of pruning window, inside the sampling window,
+                // not an edge, and got sampled, then we prune it.
                 true
             } else {
-                // If block is inside the sampling window, not an edge, and not sampled,
-                // then we keep it.
+                // If block is outside the pruning_window, inside the sampling window,
+                // not an edge, and not sampled, then we keep it.
                 false
             };
 
@@ -280,6 +300,22 @@ where
 
         Ok(None)
     }
+}
+
+fn estimate_highest_prunable_height(
+    stored_head: &ExtendedHeader,
+    pruning_cutoff: Time,
+    block_time: Duration,
+) -> u64 {
+    let blocks_until_cutoff = if pruning_cutoff < stored_head.time() {
+        let time_until_cutoff = stored_head.time().duration_since(pruning_cutoff).unwrap();
+        let blocks_until_cutoff = time_until_cutoff.as_nanos() / block_time.as_nanos();
+        u64::try_from(blocks_until_cutoff).expect("unrealistic block time")
+    } else {
+        0
+    };
+
+    stored_head.height().value() - blocks_until_cutoff
 }
 
 #[cfg(test)]
@@ -303,6 +339,34 @@ mod test {
     const TEST_CODEC: u64 = 0x0D;
     const TEST_MH_CODE: u64 = 0x0D;
 
+    #[test]
+    fn estimate_prunable_height() {
+        let now = Time::now();
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        let first_header_time = (now - Duration::from_secs(3 * 60)).unwrap();
+        gen.set_time(first_header_time, Duration::from_secs(6));
+
+        let headers = gen.next_many(30);
+        let head = headers.last().unwrap();
+        let pruning_cutoff = now.checked_sub(Duration::from_secs(60)).unwrap();
+
+        let mut found_height = None;
+
+        for h in headers.iter().rev() {
+            if h.time() <= pruning_cutoff {
+                found_height = Some(h.height().value());
+                break;
+            }
+        }
+
+        let found_height = found_height.expect("Highest prunable height not found");
+        let estimated_height =
+            estimate_highest_prunable_height(head, pruning_cutoff, Duration::from_secs(6));
+
+        assert!(estimated_height.abs_diff(found_height) <= 1);
+    }
+
     #[async_test]
     async fn empty_store() {
         let events = EventChannel::new();
@@ -316,7 +380,7 @@ mod test {
             store,
             blockstore,
             event_pub: events.publisher(),
-            pruning_interval: Duration::from_secs(1),
+            block_time: Duration::from_secs(1),
             pruning_window: DEFAULT_PRUNING_WINDOW,
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
@@ -347,7 +411,7 @@ mod test {
             store: store.clone(),
             blockstore,
             event_pub: events.publisher(),
-            pruning_interval: Duration::from_secs(1),
+            block_time: Duration::from_secs(1),
             pruning_window: DEFAULT_PRUNING_WINDOW,
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
@@ -413,7 +477,7 @@ mod test {
             store: store.clone(),
             blockstore: blockstore.clone(),
             event_pub: events.publisher(),
-            pruning_interval: Duration::from_secs(1),
+            block_time: Duration::from_secs(1),
             pruning_window: DEFAULT_PRUNING_WINDOW,
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
@@ -481,7 +545,7 @@ mod test {
             store: store.clone(),
             blockstore,
             event_pub: events.publisher(),
-            pruning_interval: Duration::from_secs(1),
+            block_time: BLOCK_TIME,
             pruning_window: DEFAULT_PRUNING_WINDOW,
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
@@ -623,7 +687,7 @@ mod test {
             store: store.clone(),
             blockstore,
             event_pub: events.publisher(),
-            pruning_interval: Duration::from_secs(1),
+            block_time: Duration::from_secs(1),
             pruning_window,
             sampling_window,
         });
