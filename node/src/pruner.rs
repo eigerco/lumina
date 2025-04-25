@@ -753,76 +753,53 @@ mod test {
             sampling_window,
         });
 
-        // Pruner removed all headers until 100 (included), because they were sampled.
-        sleep(Duration::from_millis(100)).await;
-        assert_eq!(
-            store.get_stored_header_ranges().await.unwrap(),
-            new_block_ranges([
-                101..=120,
-                146..=155,
-                166..=175,
-                186..=187,
-                190..=191,
-                193..=199,
-                202..=260
-            ])
-        );
-        assert_eq!(
-            store.get_pruned_ranges().await.unwrap(),
-            new_block_ranges([1..=100, 188..=189, 192..=192])
-        );
+        // Pruner asks from Daser if it can remove block 102.
+        // We simulate that Daser allows it.
+        let (want_to_prune, respond_to) = daser_handle.expect_want_to_prune().await;
+        assert_eq!(want_to_prune, 102);
+        respond_to.send(true).unwrap();
 
-        // Pruner asks for Daser if it can remove block 101.
+        // Pruner asks from Daser if it can remove block 101.
         // We simulate that Daser does not allow it.
         let (want_to_prune, respond_to) = daser_handle.expect_want_to_prune().await;
         assert_eq!(want_to_prune, 101);
         respond_to.send(false).unwrap();
 
+        // Because Pruner runs in parallel with this test and removes in
+        // batches, we expect the following:
+        //
+        // - Removes 102 because Daser allowed it.
+        // - Keeps 101 because Daser didn't allow it.
+        // - Consider blocks 188, 189, 192 as synced because they exists in pruned ranges.
+        // - Remove 103-120, 147-154, 167-174, 187, 190-191, 193-195.
+        // - Keep 146, 155, 166, 175, 186 blocks because they are edges
+        //   (i.e. the blocks that are neightbors of non-synced ranges).
+        // - Keep 196-199 because they are in sampling window and not sampled yet.
+        // - Keep 202-260 because they are in pruning window.
         sleep(Duration::from_millis(100)).await;
-        assert_eq!(
-            store.get_stored_header_ranges().await.unwrap(),
-            new_block_ranges([
-                101..=120,
-                146..=155,
-                166..=175,
-                186..=187,
-                190..=191,
-                193..=199,
-                202..=260
-            ])
-        );
-        assert_eq!(
-            store.get_pruned_ranges().await.unwrap(),
-            new_block_ranges([1..=100, 188..=189, 192..=192])
-        );
-
-        // Because Daser didn't allow it, Pruner will ask for the next one.
-        // We simulate that Daser allows pruning of 102.
-        let (want_to_prune, respond_to) = daser_handle.expect_want_to_prune().await;
-        assert_eq!(want_to_prune, 102);
-        respond_to.send(true).unwrap();
-
-        // Pruner generates the event for 1-100 pruned range because
-        // 102 is not continuous to it. We will receive the 102 event
-        // after the next prune.
         assert_pruned_headers_event(&mut event_subscriber, 1, 100).await;
-
+        assert_pruned_headers_event(&mut event_subscriber, 102, 120).await;
+        assert_pruned_headers_event(&mut event_subscriber, 147, 154).await;
+        assert_pruned_headers_event(&mut event_subscriber, 167, 174).await;
+        assert_pruned_headers_event(&mut event_subscriber, 187, 187).await;
+        assert_pruned_headers_event(&mut event_subscriber, 190, 191).await;
+        assert_pruned_headers_event(&mut event_subscriber, 193, 195).await;
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
             new_block_ranges([
                 101..=101,
-                103..=120,
-                146..=155,
-                166..=175,
-                186..=187,
-                190..=191,
-                193..=199,
+                146..=146,
+                155..=155,
+                166..=166,
+                175..=175,
+                186..=186,
+                196..=199,
                 202..=260
             ])
         );
         assert_eq!(
             store.get_pruned_ranges().await.unwrap(),
-            new_block_ranges([1..=100, 102..=102, 188..=189, 192..=192])
+            new_block_ranges([1..=100, 102..=120, 147..=154, 167..=174, 187..=195])
         );
 
         // Now Pruner will ask again for 101, but this time we allow it.
@@ -830,27 +807,7 @@ mod test {
         assert_eq!(want_to_prune, 101);
         respond_to.send(true).unwrap();
 
-        assert_pruned_headers_event(&mut event_subscriber, 102, 102).await;
         assert_pruned_headers_event(&mut event_subscriber, 101, 101).await;
-
-        // Because Pruner runs in parallel with this test and we don't
-        // expect any other commands towards Daser, we need to check
-        // the final state.
-        //
-        // We expect Pruner to do the following:
-        //
-        // - Consider blocks 188, 189, 192 as synced because they exists in pruned ranges.
-        // - Remove 103-120, 147-154, 167-174, 187, 190-191, 193-195.
-        // - Keep 146, 155, 166, 175, 186 blocks because they are
-        //   edges (i.e. the blocks that are neightbors of non-synced ranges).
-        // - Keep 196-199 because they are in sampling window and not sampled yet.
-        // - Keep 202-260 because they are in pruning window.
-        assert_pruned_headers_event(&mut event_subscriber, 103, 120).await;
-        assert_pruned_headers_event(&mut event_subscriber, 147, 154).await;
-        assert_pruned_headers_event(&mut event_subscriber, 167, 174).await;
-        assert_pruned_headers_event(&mut event_subscriber, 187, 187).await;
-        assert_pruned_headers_event(&mut event_subscriber, 190, 191).await;
-        assert_pruned_headers_event(&mut event_subscriber, 193, 195).await;
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
             new_block_ranges([
