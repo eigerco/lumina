@@ -490,7 +490,8 @@ mod test {
         .unwrap();
         gen.set_time(first_header_time, Duration::from_secs(1));
 
-        let blocks_with_sampling = (1..=1000)
+        let blocks_with_sampling = (1..=500)
+            .chain(601..=1000)
             .map(|height| {
                 let block = TestBlock::from(height);
                 let sampled = height % 3 == 0;
@@ -498,7 +499,9 @@ mod test {
             })
             .collect::<Vec<_>>();
 
-        store.insert(gen.next_many_verified(1_000)).await.unwrap();
+        store.insert(gen.next_many_verified(500)).await.unwrap();
+        gen.skip(100);
+        store.insert(gen.next_many_verified(400)).await.unwrap();
 
         for (height, block, cid, sampled) in &blocks_with_sampling {
             blockstore.put_keyed(cid, block.data()).await.unwrap();
@@ -510,9 +513,10 @@ mod test {
             store
                 .update_sampling_metadata(*height, vec![*cid])
                 .await
-                .unwrap()
+                .unwrap();
         }
 
+        let stored_ranges = store.get_stored_header_ranges().await.unwrap();
         let sampled_ranges = store.get_sampled_ranges().await.unwrap();
 
         let pruner = Pruner::start(PrunerArgs {
@@ -525,7 +529,9 @@ mod test {
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
-        for height in 1..=1000 {
+        for height in (601..=1000).rev().chain((1..=500).rev()) {
+            assert!(stored_ranges.contains(height));
+
             // If a block is not sampled, Pruner asks Daser for permission to prune it.
             if !sampled_ranges.contains(height) {
                 let (want_to_prune, respond_to) = daser_handle.expect_want_to_prune().await;
@@ -534,7 +540,11 @@ mod test {
             }
         }
 
-        assert_pruned_headers_event(&mut event_subscriber, 1, 1000).await;
+        daser_handle.expect_no_cmd().await;
+
+        assert_pruned_headers_event(&mut event_subscriber, 389, 500).await;
+        assert_pruned_headers_event(&mut event_subscriber, 601, 1000).await;
+        assert_pruned_headers_event(&mut event_subscriber, 1, 388).await;
 
         assert!(store.get_stored_header_ranges().await.unwrap().is_empty());
 
@@ -546,7 +556,6 @@ mod test {
             assert!(!blockstore.has(cid).await.unwrap());
         }
 
-        daser_handle.expect_no_cmd().await;
         pruner.stop();
         pruner.join().await;
 
