@@ -17,7 +17,7 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::P2pError;
 use crate::store::{BlockRanges, Store, StoreError};
 
-const MAX_BATCH_SIZE: u64 = 512;
+const MAX_PRUNABLE_BATCH_SIZE: u64 = 512;
 
 type Result<T, E = PrunerError> = std::result::Result<T, E>;
 
@@ -219,17 +219,10 @@ where
         pruning_cutoff: Time,
     ) -> Result<BlockRanges> {
         let mut stored_ranges = self.store.get_stored_header_ranges().await?;
-        let pruned_ranges = self.store.get_pruned_ranges().await?;
-        let sampled_ranges = self.store.get_sampled_ranges().await?;
 
         let Some(stored_head_height) = stored_ranges.head() else {
             return Ok(BlockRanges::new());
         };
-
-        // All synced heights (stored + pruned)
-        let synced_ranges = pruned_ranges + &stored_ranges;
-        // Edges of the synced ranges
-        let edges = synced_ranges.edges();
 
         if self
             .cached_head
@@ -239,19 +232,29 @@ where
             self.cached_head = Some(self.store.get_by_height(stored_head_height).await?);
         }
 
-        let estimated_prunable_height = estimate_highest_prunable_height(
-            self.cached_head.as_ref().unwrap(),
-            pruning_cutoff,
-            self.block_time,
-        );
+        let head = self.cached_head.as_ref().unwrap();
 
-        // We do not need to check any blocks that is higher than the
+        let Some(estimated_prunable_height) =
+            estimate_highest_prunable_height(head, pruning_cutoff, self.block_time)
+        else {
+            return Ok(BlockRanges::new());
+        };
+
+        // We do not need to check any blocks that are higher than the
         // estimated prunable height.
         stored_ranges
             .remove_relaxed(estimated_prunable_height + 1..=u64::MAX)
             .expect("never fails");
 
-        let mut batch = BlockRanges::new();
+        let pruned_ranges = self.store.get_pruned_ranges().await?;
+        let sampled_ranges = self.store.get_sampled_ranges().await?;
+
+        // All synced heights (stored + pruned)
+        let synced_ranges = pruned_ranges + &stored_ranges;
+        // Edges of the synced ranges
+        let edges = synced_ranges.edges();
+
+        let mut prunable_batch = BlockRanges::new();
 
         // Iterate from the newest height to the oldest.
         for height in stored_ranges.rev() {
@@ -286,15 +289,17 @@ where
 
             // All constrains are met and we are allowed to prune this block.
             if needs_pruning {
-                batch.insert_relaxed(height..=height).expect("never fails");
+                prunable_batch
+                    .insert_relaxed(height..=height)
+                    .expect("never fails");
 
-                if batch.len() >= MAX_BATCH_SIZE {
+                if prunable_batch.len() >= MAX_PRUNABLE_BATCH_SIZE {
                     break;
                 }
             }
         }
 
-        Ok(batch)
+        Ok(prunable_batch)
     }
 }
 
@@ -302,7 +307,7 @@ fn estimate_highest_prunable_height(
     stored_head: &ExtendedHeader,
     pruning_cutoff: Time,
     block_time: Duration,
-) -> u64 {
+) -> Option<u64> {
     let blocks_until_cutoff = if pruning_cutoff < stored_head.time() {
         let time_until_cutoff = stored_head.time().duration_since(pruning_cutoff).unwrap();
         let blocks_until_cutoff = time_until_cutoff.as_nanos() / block_time.as_nanos();
@@ -311,7 +316,10 @@ fn estimate_highest_prunable_height(
         0
     };
 
-    stored_head.height().value() - blocks_until_cutoff
+    stored_head
+        .height()
+        .value()
+        .checked_sub(blocks_until_cutoff)
 }
 
 #[cfg(test)]
@@ -358,9 +366,47 @@ mod test {
 
         let found_height = found_height.expect("Highest prunable height not found");
         let estimated_height =
-            estimate_highest_prunable_height(head, pruning_cutoff, Duration::from_secs(6));
+            estimate_highest_prunable_height(head, pruning_cutoff, Duration::from_secs(6)).unwrap();
 
         assert!(estimated_height.abs_diff(found_height) <= 1);
+    }
+
+    #[test]
+    fn estimate_prunable_height_beyond_genesis() {
+        let now = Time::now();
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        let first_header_time = (now - Duration::from_secs(3 * 60)).unwrap();
+        gen.set_time(first_header_time, Duration::from_secs(6));
+
+        let headers = gen.next_many(30);
+        let head = headers.last().unwrap();
+        let pruning_cutoff = now.checked_sub(Duration::from_secs(5 * 60)).unwrap();
+
+        // Pruning cutoff is beyond genesis
+        assert_eq!(
+            estimate_highest_prunable_height(head, pruning_cutoff, Duration::from_secs(6)),
+            None
+        );
+    }
+
+    #[test]
+    fn estimate_prunable_height_after_head() {
+        let now = Time::now();
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        let first_header_time = (now - Duration::from_secs(3 * 60)).unwrap();
+        gen.set_time(first_header_time, Duration::from_secs(6));
+
+        let headers = gen.next_many(30);
+        let head = headers.last().unwrap();
+        let pruning_cutoff = now.checked_add(Duration::from_secs(1)).unwrap();
+
+        // Pruning cutoff is after head
+        assert_eq!(
+            estimate_highest_prunable_height(head, pruning_cutoff, Duration::from_secs(6)),
+            Some(head.height().value()),
+        );
     }
 
     #[async_test]
