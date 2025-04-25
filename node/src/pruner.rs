@@ -179,7 +179,7 @@ where
                 let from_height = *range.start();
                 let mut to_height = None;
 
-                for height in range.clone() {
+                for height in range {
                     if self.cancellation_token.is_cancelled() {
                         break;
                     }
@@ -324,6 +324,7 @@ fn estimate_highest_prunable_height(
 
 #[cfg(test)]
 mod test {
+    use std::iter;
     use std::time::Duration;
 
     use blockstore::block::{Block, CidError};
@@ -557,7 +558,9 @@ mod test {
 
     #[async_test]
     async fn prune_tail() {
-        const BLOCK_TIME: Duration = Duration::from_millis(10);
+        let block_time = Duration::from_millis(10);
+        let pruning_window = Duration::from_millis(2000);
+        let sampling_window = Duration::from_millis(600);
 
         let events = EventChannel::new();
         let store = Arc::new(InMemoryStore::new());
@@ -566,33 +569,36 @@ mod test {
         let mut event_subscriber = events.subscribe();
         let (daser, mut daser_handle) = Daser::mocked();
 
-        // 50 headers before pruning window edge
-        let before_pruning_edge =
-            (Time::now() - (DEFAULT_PRUNING_WINDOW + BLOCK_TIME * 100)).unwrap();
-        gen.set_time(before_pruning_edge, BLOCK_TIME);
+        let first_header_time = (Time::now() - Duration::from_millis(3000)).unwrap();
+        gen.set_time(first_header_time, block_time);
+
+        // Tail
         store.insert(gen.next_many_verified(50)).await.unwrap();
-
+        // Gap
+        gen.skip(90);
         // 10 headers within 1sec of pruning window edge
-        let after_pruning_edge =
-            (Time::now() - (DEFAULT_PRUNING_WINDOW - BLOCK_TIME * 10)).unwrap();
-        gen.set_time(after_pruning_edge, BLOCK_TIME);
+        store.insert(gen.next_many_verified(10)).await.unwrap();
+        // Gap
+        gen.skip(140);
+        // 10 headers at the current time
         store.insert(gen.next_many_verified(10)).await.unwrap();
 
-        // 50 headers at current time
-        gen.set_time(Time::now(), BLOCK_TIME);
-        store.insert(gen.next_many_verified(10)).await.unwrap();
+        assert_eq!(
+            store.get_stored_header_ranges().await.unwrap(),
+            new_block_ranges([1..=50, 141..=150, 291..=300]),
+        );
 
         let pruner = Pruner::start(PrunerArgs {
             daser: Arc::new(daser),
             store: store.clone(),
             blockstore,
             event_pub: events.publisher(),
-            block_time: BLOCK_TIME,
-            pruning_window: DEFAULT_PRUNING_WINDOW,
-            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            block_time,
+            pruning_window,
+            sampling_window,
         });
 
-        for expected_height in 1..=50 {
+        for expected_height in (1..=50).rev() {
             let (height, respond_to) = daser_handle.expect_want_to_prune().await;
             assert_eq!(height, expected_height);
             respond_to.send(true).unwrap();
@@ -601,21 +607,25 @@ mod test {
         assert_pruned_headers_event(&mut event_subscriber, 1, 50).await;
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
-            new_block_ranges([51..=70])
+            new_block_ranges([141..=150, 291..=300]),
         );
 
         sleep(Duration::from_secs(1)).await;
 
-        for expected_height in 51..=60 {
+        // Pruner will generate 2 batches because 141 block will reach the
+        // pruning edge first. The rest will reach pruning edge while 141
+        // waits a response from Daser.
+        for expected_height in iter::once(141).chain((142..=150).rev()) {
             let (height, respond_to) = daser_handle.expect_want_to_prune().await;
             assert_eq!(height, expected_height);
             respond_to.send(true).unwrap();
         }
 
-        assert_pruned_headers_event(&mut event_subscriber, 51, 60).await;
+        assert_pruned_headers_event(&mut event_subscriber, 141, 141).await;
+        assert_pruned_headers_event(&mut event_subscriber, 142, 150).await;
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
-            new_block_ranges([61..=70])
+            new_block_ranges([291..=300]),
         );
 
         daser_handle.expect_no_cmd().await;
@@ -628,7 +638,7 @@ mod test {
         ));
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
-            new_block_ranges([61..=70])
+            new_block_ranges([291..=300])
         );
     }
 
