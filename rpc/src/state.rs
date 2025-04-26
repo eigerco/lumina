@@ -7,14 +7,14 @@ use jsonrpsee::proc_macros::rpc;
 
 use crate::TxConfig;
 
-#[rpc(client)]
+#[rpc(client, namespace = "state", namespace_separator = ".")]
 pub trait State {
     /// AccountAddress retrieves the address of the node's account/signer
-    #[method(name = "state.AccountAddress")]
+    #[method(name = "AccountAddress")]
     async fn state_account_address(&self) -> Result<Address, Error>;
 
     /// Balance retrieves the Celestia coin balance for the node's account/signer and verifies it against the corresponding block's AppHash.
-    #[method(name = "state.Balance")]
+    #[method(name = "Balance")]
     async fn state_balance(&self) -> Result<Balance, Error>;
 
     /// BalanceForAddress retrieves the Celestia coin balance for the given address and verifies the returned balance against the corresponding block's AppHash.
@@ -22,11 +22,11 @@ pub trait State {
     /// # NOTE
     ///
     /// The balance returned is the balance reported by the block right before the node's current head (head-1). This is due to the fact that for block N, the block's `AppHash` is the result of applying the previous block's transaction list.
-    #[method(name = "state.BalanceForAddress")]
+    #[method(name = "BalanceForAddress")]
     async fn state_balance_for_address(&self, addr: &Address) -> Result<Balance, Error>;
 
     /// BeginRedelegate sends a user's delegated tokens to a new validator for redelegation.
-    #[method(name = "state.BeginRedelegate")]
+    #[method(name = "BeginRedelegate")]
     async fn state_begin_redelegate(
         &self,
         src: &ValAddress,
@@ -36,7 +36,7 @@ pub trait State {
     ) -> Result<RawTxResponse, Error>;
 
     /// CancelUnbondingDelegation cancels a user's pending undelegation from a validator.
-    #[method(name = "state.CancelUnbondingDelegation")]
+    #[method(name = "CancelUnbondingDelegation")]
     async fn state_cancel_unbonding_delegation(
         &self,
         addr: &ValAddress,
@@ -46,7 +46,7 @@ pub trait State {
     ) -> Result<RawTxResponse, Error>;
 
     /// Delegate sends a user's liquid tokens to a validator for delegation.
-    #[method(name = "state.Delegate")]
+    #[method(name = "Delegate")]
     async fn state_delegate(
         &self,
         addr: &ValAddress,
@@ -55,18 +55,18 @@ pub trait State {
     ) -> Result<RawTxResponse, Error>;
 
     /// IsStopped checks if the Module's context has been stopped.
-    #[method(name = "state.IsStopped")]
+    #[method(name = "IsStopped")]
     async fn state_is_stopped(&self) -> Result<bool, Error>;
 
     /// QueryDelegation retrieves the delegation information between a delegator and a validator.
-    #[method(name = "state.QueryDelegation")]
+    #[method(name = "QueryDelegation")]
     async fn state_query_delegation(
         &self,
         addr: &ValAddress,
     ) -> Result<QueryDelegationResponse, Error>;
 
     /// QueryRedelegations retrieves the status of the redelegations between a delegator and a validator.
-    #[method(name = "state.QueryRedelegations")]
+    #[method(name = "QueryRedelegations")]
     async fn state_query_redelegations(
         &self,
         src: &ValAddress,
@@ -74,14 +74,14 @@ pub trait State {
     ) -> Result<QueryRedelegationsResponse, Error>;
 
     /// QueryUnbonding retrieves the unbonding status between a delegator and a validator.
-    #[method(name = "state.QueryUnbonding")]
+    #[method(name = "QueryUnbonding")]
     async fn state_query_unbonding(
         &self,
         addr: &ValAddress,
     ) -> Result<QueryUnbondingDelegationResponse, Error>;
 
     /// SubmitPayForBlob builds, signs and submits a PayForBlob transaction.
-    #[method(name = "state.SubmitPayForBlob")]
+    #[method(name = "SubmitPayForBlob")]
     async fn state_submit_pay_for_blob(
         &self,
         blobs: &[RawBlob],
@@ -89,7 +89,7 @@ pub trait State {
     ) -> Result<RawTxResponse, Error>;
 
     /// Transfer sends the given amount of coins from default wallet of the node to the given account address.
-    #[method(name = "state.Transfer")]
+    #[method(name = "Transfer")]
     async fn state_transfer(
         &self,
         to: &AccAddress,

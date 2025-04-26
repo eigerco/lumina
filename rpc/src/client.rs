@@ -15,7 +15,6 @@ mod native {
     use std::fmt;
     use std::result::Result;
 
-    use async_trait::async_trait;
     use celestia_types::consts::appconsts::{self, SHARE_SIZE};
     use http::{header, HeaderValue};
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
@@ -85,7 +84,6 @@ mod native {
         }
     }
 
-    #[async_trait]
     impl ClientT for Client {
         async fn notification<Params>(
             &self,
@@ -126,7 +124,6 @@ mod native {
         }
     }
 
-    #[async_trait]
     impl SubscriptionClientT for Client {
         async fn subscribe<'a, N, Params>(
             &self,
