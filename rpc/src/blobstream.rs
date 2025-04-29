@@ -7,10 +7,10 @@ use prost::bytes::Bytes;
 /// inclusion proof of a height to a data commitment.
 pub type DataRootTupleInclusionProof = MerkleProof;
 
-#[rpc(client)]
+#[rpc(client, namespace = "blobstream", namespace_separator = ".")]
 pub trait Blobstream {
     /// GetDataRootTupleRoot retrieves the data root tuple root for a given range from start to end
-    #[method(name = "blobstream.GetDataRootTupleRoot")]
+    #[method(name = "GetDataRootTupleRoot")]
     async fn blobstream_get_data_root_tuple_root(
         &self,
         start: u64,
@@ -19,7 +19,7 @@ pub trait Blobstream {
 
     /// GetDataRootTupleInclusionProof returns a data root tuple inclusion proof for a given height
     /// between a range from start to end
-    #[method(name = "blobstream.GetDataRootTupleInclusionProof")]
+    #[method(name = "GetDataRootTupleInclusionProof")]
     async fn blobstream_get_data_root_tuple_inclusion_proof(
         &self,
         height: u64,
