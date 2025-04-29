@@ -149,9 +149,9 @@ mod native {
             }
         }
 
-        async fn subscribe_to_method<'a, N>(
+        async fn subscribe_to_method<N>(
             &self,
-            method: &'a str,
+            method: &str,
         ) -> Result<Subscription<N>, ClientError>
         where
             N: DeserializeOwned,
