@@ -36,13 +36,13 @@ http-body = "1"
 k256 = "0.13.4"
 serde = "1.0.215"
 thiserror = "1.0.61"
-tokio = { version = "1.38.0", features = ["sync"] }
+tokio = { version = "1.43.1", features = ["sync"] }
 tonic = { version = "0.12.3", default-features = false, features = [
   "codegen", "prost"
 ]}
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1.38.0", features = ["time"] }
+tokio = { version = "1.43.1", features = ["time"] }
 tonic = { version = "0.12.3", default-features = false, features = [ "transport" ] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
