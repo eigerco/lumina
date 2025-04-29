@@ -249,10 +249,7 @@ mod wasm {
                 .await
         }
 
-        async fn subscribe_to_method<'a, N>(
-            &self,
-            method: &'a str,
-        ) -> Result<Subscription<N>, ClientError>
+        async fn subscribe_to_method<N>(&self, method: &str) -> Result<Subscription<N>, ClientError>
         where
             N: DeserializeOwned,
         {
