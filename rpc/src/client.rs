@@ -149,10 +149,7 @@ mod native {
             }
         }
 
-        async fn subscribe_to_method<N>(
-            &self,
-            method: &str,
-        ) -> Result<Subscription<N>, ClientError>
+        async fn subscribe_to_method<N>(&self, method: &str) -> Result<Subscription<N>, ClientError>
         where
             N: DeserializeOwned,
         {
@@ -168,7 +165,6 @@ mod native {
 mod wasm {
     use std::{fmt, result::Result};
 
-    use async_trait::async_trait;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
