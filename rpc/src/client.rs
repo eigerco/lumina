@@ -206,7 +206,6 @@ mod wasm {
         }
     }
 
-    #[async_trait]
     impl ClientT for Client {
         async fn notification<Params>(
             &self,
@@ -238,7 +237,6 @@ mod wasm {
         }
     }
 
-    #[async_trait]
     impl SubscriptionClientT for Client {
         async fn subscribe<'a, N, Params>(
             &self,
