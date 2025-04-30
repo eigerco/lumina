@@ -330,7 +330,7 @@ pub fn unverify(header: &mut ExtendedHeader) {
     let key = SigningKey::new(rand::thread_rng());
     let pub_key_bytes = key.verification_key().to_bytes();
     let pub_key = PublicKey::from_raw_ed25519(&pub_key_bytes).unwrap();
-    let validator_address = tendermint::account::Id::new(rand::random());
+    let validator_address = tendermint::account::Id::from(pub_key);
 
     header.header.proposer_address = validator_address;
 
@@ -478,7 +478,7 @@ fn generate_new(
 
     let pub_key_bytes = signing_key.verification_key().to_bytes();
     let pub_key = PublicKey::from_raw_ed25519(&pub_key_bytes).unwrap();
-    let validator_address = tendermint::account::Id::new(rand::random());
+    let validator_address = tendermint::account::Id::from(pub_key);
 
     let last_block_id = if height == GENESIS_HEIGHT {
         None
