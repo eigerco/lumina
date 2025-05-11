@@ -30,7 +30,6 @@ services:
       - NODE_TYPE=bridge
       # setting SKIP_AUTH to true disables the use of JWT for authentication
       - SKIP_AUTH=true
-      - CELESTIA_ENABLE_QUIC=1
     ports:
       - 26658:26658
     volumes:
@@ -45,7 +44,6 @@ services:
       dockerfile: Dockerfile.node
     environment:
       - NODE_ID=1
-      - CELESTIA_ENABLE_QUIC=1
     ports:
       - 36658:26658
     volumes:
@@ -62,7 +60,6 @@ services:
       - NODE_ID=2
       - NODE_TYPE=light
       - SKIP_AUTH=true
-      - CELESTIA_ENABLE_QUIC=1
     ports:
       - 46658:26658
     volumes:
@@ -79,7 +76,6 @@ services:
   #     dockerfile: Dockerfile.node
   #   environment:
   #     - NODE_ID=3
-  #     - CELESTIA_ENABLE_QUIC=1
   #   ports:
   #     - 46658:26658
   #   volumes:
