@@ -90,6 +90,10 @@ fun LuminaUi(modifier: Modifier, dbPath : String) {
         Log.d("MAIN", "Clicked Config: $config")
     }
 
+    val resetConfig = {
+        config = null
+    }
+
     if (config == null) {
         Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Select network", style = TextStyle(fontSize = 20.sp), modifier = Modifier.padding(20.dp))
@@ -100,17 +104,18 @@ fun LuminaUi(modifier: Modifier, dbPath : String) {
             }
         }
     } else {
-        LuminaStatus(config!!, modifier)
+        LuminaStatus(config!!, resetConfig, modifier)
     }
 }
 
 @Composable
 fun LuminaStatus(
     config: NodeConfig,
+    resetConfig: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
-    var lumina: LuminaNode?
+    var lumina by remember { mutableStateOf<LuminaNode?>(null) }
     var luminaStats by remember { mutableStateOf<LuminaStats?>(null) }
 
     LaunchedEffect(config) {
@@ -178,6 +183,14 @@ fun LuminaStatus(
                 Text(it.start.toString(), modifier = Modifier.weight(1f), textAlign = TextAlign.Right)
                 Text(" - ", modifier = Modifier.weight(0.1f), textAlign = TextAlign.Center)
                 Text(it.end.toString(), modifier = Modifier.weight(1f), textAlign = TextAlign.Left)
+            }
+        }
+
+        Row(modifier = rowModifier, horizontalArrangement = Arrangement.Center) {
+            Button(onClick = {
+                coroutineScope.launch(Dispatchers.Main) { lumina?.stop(); resetConfig() }
+            }) {
+                Text(text = "Stop Node")
             }
         }
     }
