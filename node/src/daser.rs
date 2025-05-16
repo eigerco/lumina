@@ -21,10 +21,11 @@ use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pError};
 use crate::store::{BlockRanges, Store, StoreError};
-use crate::utils::OneshotSenderExt;
+use crate::utils::{OneshotSenderExt, TimeExt};
 
 const MAX_SAMPLES_NEEDED: usize = 16;
 const GET_SAMPLE_MIN_TIMEOUT: Duration = Duration::from_secs(10);
+const PRUNER_THRESHOLD: u64 = 512;
 
 pub(crate) const DEFAULT_CONCURENCY_LIMIT: usize = 3;
 pub(crate) const DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY: usize = 5;
@@ -85,6 +86,14 @@ where
 
 #[derive(Debug)]
 pub(crate) enum DaserCmd {
+    UpdateHighestPrunableHeight {
+        value: u64,
+    },
+
+    UpdateNumberOfPrunableBlocks {
+        value: u64,
+    },
+
     /// Used by Pruner to tell Daser about a block that is going to be pruned.
     /// Daser then replies with `true` if Pruner can do it. This is needed to
     /// avoid race conditions between them when Daser has as ongoing sampling.
@@ -170,6 +179,16 @@ impl Daser {
 
         Ok(rx.await?)
     }
+
+    pub(crate) async fn update_highest_prunable_block(&self, value: u64) -> Result<()> {
+        self.send_command(DaserCmd::UpdateHighestPrunableHeight { value })
+            .await
+    }
+
+    pub(crate) async fn update_number_of_prunable_blocks(&self, value: u64) -> Result<()> {
+        self.send_command(DaserCmd::UpdateNumberOfPrunableBlocks { value })
+            .await
+    }
 }
 
 impl Drop for Daser {
@@ -193,10 +212,12 @@ where
     done: BlockRanges,
     ongoing: BlockRanges,
     will_be_pruned: BlockRanges,
-    prev_head: Option<u64>,
     sampling_window: Duration,
     concurrency_limit: usize,
     additional_headersub_concurency: usize,
+    head_height: Option<u64>,
+    highest_prunable_height: Option<u64>,
+    num_of_prunable_blocks: u64,
 }
 
 impl<S> Worker<S>
@@ -220,10 +241,12 @@ where
             done: BlockRanges::default(),
             ongoing: BlockRanges::default(),
             will_be_pruned: BlockRanges::default(),
-            prev_head: None,
             sampling_window: args.sampling_window,
             concurrency_limit: args.concurrency_limit,
             additional_headersub_concurency: args.additional_headersub_concurrency,
+            head_height: None,
+            highest_prunable_height: None,
+            num_of_prunable_blocks: 0,
         })
     }
 
@@ -290,7 +313,7 @@ where
         let store = self.store.clone();
         let mut wait_new_head = store.wait_new_head();
 
-        self.populate_queue().await?;
+        self.update_queue().await?;
 
         let mut first_report = true;
 
@@ -329,7 +352,7 @@ where
                 },
                 _ = &mut wait_new_head => {
                     wait_new_head = store.wait_new_head();
-                    self.populate_queue().await?;
+                    self.update_queue().await?;
                 }
             }
         }
@@ -338,7 +361,7 @@ where
         self.queue = BlockRanges::default();
         self.ongoing = BlockRanges::default();
         self.done = BlockRanges::default();
-        self.prev_head = None;
+        self.head_height = None;
 
         Ok(())
     }
@@ -360,6 +383,12 @@ where
             DaserCmd::WantToPrune { height, respond_to } => {
                 let res = self.on_want_to_prune(height).await;
                 respond_to.maybe_send(res);
+            }
+            DaserCmd::UpdateHighestPrunableHeight { value } => {
+                self.highest_prunable_height = Some(value);
+            }
+            DaserCmd::UpdateNumberOfPrunableBlocks { value } => {
+                self.num_of_prunable_blocks = value;
             }
         }
     }
@@ -389,13 +418,13 @@ where
                 return Ok(false);
             };
 
-            // NOTE: This function runs on every iteration of Worker's main loop, so checking the
-            // concurrency limit should be fast and without accessing the store. This is why we
-            // do calculate and check here.
-            //
-            // Also, we do not update `self.prev_head` since `get_by_height` in this loop can fail.
-            // We update it after the loop instead.
-            let concurrency_limit = if self.prev_head.is_none_or(|prev_head| prev_head < height) {
+            let concurrency_limit = if height <= self.highest_prunable_height.unwrap_or(0)
+                && self.num_of_prunable_blocks > PRUNER_THRESHOLD
+            {
+                // If a block is in the prunable area and Pruner has a lot of blocks
+                // to prune, then we pause sampling.
+                0
+            } else if height == self.head_height.unwrap_or(0) {
                 self.concurrency_limit + self.additional_headersub_concurency
             } else {
                 self.concurrency_limit
@@ -414,7 +443,7 @@ where
                 Err(StoreError::NotFound) => {
                     // Height was pruned and our queue is inconsistent.
                     // Repopulate queue and try again.
-                    self.populate_queue().await?;
+                    self.update_queue().await?;
                 }
                 Err(e) => return Err(e.into()),
             }
@@ -422,11 +451,6 @@ where
 
         let height = header.height().value();
         let square_width = header.dah.square_width();
-
-        // New head found (check also the logic above).
-        if self.prev_head.is_none_or(|prev_head| prev_head < height) {
-            self.prev_head = Some(height);
-        }
 
         // Make sure that the block is still in the sampling window.
         if !self.in_sampling_window(header.time()) {
@@ -528,16 +552,12 @@ where
     }
 
     /// Add to the queue the blocks that need to be sampled.
-    ///
-    /// NOTE: We resample rejected blocks, because rejection can happen
-    /// in some unrelated edge-cases, such us network issues. This is a Shwap
-    /// limitation that's coming from bitswap: only way for us to know if sampling
-    /// failed is via timeout.
-    async fn populate_queue(&mut self) -> Result<()> {
+    async fn update_queue(&mut self) -> Result<()> {
         let stored = self.store.get_stored_header_ranges().await?;
         let sampled = self.store.get_sampled_ranges().await?;
 
-        self.queue = stored - sampled - &self.done - &self.ongoing - &self.will_be_pruned;
+        self.head_height = stored.head();
+        self.queue = stored - &sampled - &self.done - &self.ongoing - &self.will_be_pruned;
 
         Ok(())
     }
@@ -560,16 +580,12 @@ where
 }
 
 fn calc_timeout(header_time: Time, now: Time, sampling_window: Duration) -> Duration {
-    let sampling_window_end = now.checked_sub(sampling_window).unwrap_or_else(|| {
-        warn!("underflow when computing sampling window, defaulting to unix epoch");
-        Time::unix_epoch()
-    });
+    let sampling_window_end = now.saturating_sub(sampling_window);
 
-    let timeout = header_time
+    header_time
         .duration_since(sampling_window_end)
-        .unwrap_or(GET_SAMPLE_MIN_TIMEOUT);
-
-    timeout.max(GET_SAMPLE_MIN_TIMEOUT)
+        .unwrap_or(GET_SAMPLE_MIN_TIMEOUT)
+        .max(GET_SAMPLE_MIN_TIMEOUT)
 }
 
 /// Returns unique and random indexes that will be used for sampling.
@@ -946,6 +962,13 @@ mod tests {
         store.insert(gen.next_many_verified(1)).await.unwrap();
         handle.expect_no_cmd().await;
     }
+
+    /*
+    #[async_test]
+    async fn ratelimit() {
+        todo!();
+    }
+    */
 
     fn stop_sampling_for(
         responders: &mut Vec<(Cid, OneshotResultSender<Vec<u8>, P2pError>)>,

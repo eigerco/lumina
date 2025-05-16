@@ -6,16 +6,17 @@ use std::time::Duration;
 use blockstore::Blockstore;
 use celestia_types::ExtendedHeader;
 use lumina_utils::executor::{spawn, JoinHandle};
-use lumina_utils::time::sleep;
+use lumina_utils::time::{sleep, Instant};
 use tendermint::Time;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 use crate::daser::{Daser, DaserError};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::P2pError;
 use crate::store::{BlockRanges, Store, StoreError};
+use crate::utils::TimeExt;
 
 const MAX_PRUNABLE_BATCH_SIZE: u64 = 512;
 
@@ -124,7 +125,17 @@ where
     block_time: Duration,
     pruning_window: Duration,
     sampling_window: Duration,
-    cached_head: Option<ExtendedHeader>,
+    prev_num_of_prunable_blocks: u64,
+    cache: Cache,
+}
+
+struct Cache {
+    /// When Cache was updated.
+    updated_at: Option<Instant>,
+    /// The first known height that is after the pruning window.
+    after_pruning_window: Option<u64>,
+    /// The first known height that is after the sampling window.
+    after_sampling_window: Option<u64>,
 }
 
 impl<S, B> Worker<S, B>
@@ -142,7 +153,12 @@ where
             pruning_window: args.pruning_window,
             sampling_window: args.sampling_window,
             daser: args.daser,
-            cached_head: None,
+            prev_num_of_prunable_blocks: 0,
+            cache: Cache {
+                updated_at: None,
+                after_pruning_window: None,
+                after_sampling_window: None,
+            },
         }
     }
 
@@ -153,16 +169,8 @@ where
             }
 
             let now = Time::now();
-
-            let sampling_window_end = now.checked_sub(self.sampling_window).unwrap_or_else(|| {
-                warn!("underflow when computing sampling window, defaulting to unix epoch");
-                Time::unix_epoch()
-            });
-
-            let pruning_window_end = now.checked_sub(self.pruning_window).unwrap_or_else(|| {
-                warn!("underflow when computing pruning window, defaulting to unix epoch");
-                Time::unix_epoch()
-            });
+            let sampling_window_end = now.saturating_sub(self.sampling_window);
+            let pruning_window_end = now.saturating_sub(self.pruning_window);
 
             let prunable_batch = self
                 .get_next_prunable_batch(sampling_window_end, pruning_window_end)
@@ -212,120 +220,190 @@ where
         Ok(())
     }
 
+    async fn update_cached_data(
+        &mut self,
+        stored_blocks: &BlockRanges,
+        sampling_cutoff: &Time,
+        pruning_cutoff: &Time,
+    ) -> Result<()> {
+        let update_afer = Duration::from_secs(1).min(self.block_time);
+
+        if self
+            .cache
+            .updated_at
+            .is_some_and(|updated_at| updated_at.elapsed() < update_afer)
+        {
+            // No need to update cached values
+            return Ok(());
+        }
+
+        let after_sampling_window =
+            find_height_after_window(&*self.store, stored_blocks, sampling_cutoff).await?;
+        let after_pruning_window =
+            find_height_after_window(&*self.store, stored_blocks, pruning_cutoff).await?;
+
+        if self.cache.after_sampling_window < after_sampling_window {
+            self.cache.after_sampling_window = after_sampling_window;
+        }
+
+        if self.cache.after_pruning_window < after_pruning_window {
+            self.cache.after_pruning_window = after_pruning_window;
+
+            // Send an update to Daser
+            if let Some(height) = after_pruning_window {
+                self.daser.update_highest_prunable_block(height).await?;
+            }
+        }
+
+        self.cache.updated_at = Some(Instant::now());
+
+        Ok(())
+    }
+
     /// Get next header from the store to be pruned or None if there's nothing to prune
     async fn get_next_prunable_batch(
         &mut self,
         sampling_cutoff: Time,
         pruning_cutoff: Time,
     ) -> Result<BlockRanges> {
-        let mut stored_ranges = self.store.get_stored_header_ranges().await?;
-
-        let Some(stored_head_height) = stored_ranges.head() else {
-            return Ok(BlockRanges::new());
-        };
-
-        if self
-            .cached_head
-            .as_ref()
-            .is_none_or(|header| header.height().value() != stored_head_height)
-        {
-            self.cached_head = Some(self.store.get_by_height(stored_head_height).await?);
-        }
-
-        let head = self.cached_head.as_ref().unwrap();
-
-        let Some(estimated_prunable_height) =
-            estimate_highest_prunable_height(head, pruning_cutoff, self.block_time)
-        else {
-            return Ok(BlockRanges::new());
-        };
-
-        // We do not need to check any blocks that are higher than the
-        // estimated prunable height.
-        stored_ranges
-            .remove_relaxed(estimated_prunable_height + 1..=u64::MAX)
-            .expect("never fails");
-
+        let stored_ranges = self.store.get_stored_header_ranges().await?;
         let pruned_ranges = self.store.get_pruned_ranges().await?;
         let sampled_ranges = self.store.get_sampled_ranges().await?;
+
+        self.update_cached_data(&stored_ranges, &sampling_cutoff, &pruning_cutoff)
+            .await?;
+
+        let non_sampling_area = self
+            .cache
+            .after_sampling_window
+            .map(|height| BlockRanges::try_from(1..=height).expect("never fails"))
+            .unwrap_or_default();
+
+        let prunable_area = self
+            .cache
+            .after_pruning_window
+            .map(|height| BlockRanges::try_from(1..=height).expect("never fails"))
+            .unwrap_or_default();
 
         // All synced heights (stored + pruned)
         let synced_ranges = pruned_ranges + &stored_ranges;
         // Edges of the synced ranges
         let edges = synced_ranges.edges();
+        // Add heights that are stored and after pruning window
+        let prune_candidates = stored_ranges & &prunable_area;
 
-        let mut prunable_batch = BlockRanges::new();
+        let after_sampling_window = prune_candidates.clone() & &non_sampling_area;
+        let prunable_and_sampled =
+            (prune_candidates.clone() - &after_sampling_window - &edges) & &sampled_ranges;
 
-        // Iterate from the newest height to the oldest.
-        for height in stored_ranges.rev() {
-            if self.cancellation_token.is_cancelled() {
+        let num_of_prunable_blocks = after_sampling_window.len() + prunable_and_sampled.len();
+
+        // Send and update to Daser
+        if self.prev_num_of_prunable_blocks != num_of_prunable_blocks {
+            self.daser
+                .update_number_of_prunable_blocks(num_of_prunable_blocks)
+                .await?;
+            self.prev_num_of_prunable_blocks = num_of_prunable_blocks;
+        }
+
+        let mut prunable_batch = prunable_and_sampled.keep_head(MAX_PRUNABLE_BATCH_SIZE);
+
+        for height in after_sampling_window.rev() {
+            if prunable_batch.len() == MAX_PRUNABLE_BATCH_SIZE {
                 break;
             }
 
-            let header = self.store.get_by_height(height).await?;
-
-            let needs_pruning = if header.time() > pruning_cutoff {
-                // If block is inside pruning window, then we keep it.
-                false
-            } else if header.time() <= sampling_cutoff {
-                // If block is outside of pruning window and sampling window then
-                // we need to prune it. If it wasn't sampled yet, then Daser must
-                // allow us first. We do this to avoid race conditions and other
-                // edge cases between Pruner and Daser.
-                sampled_ranges.contains(height) || self.daser.want_to_prune(height).await?
-            } else if edges.contains(height) {
-                // If block is outside of pruning window, inside the sampling window,
-                // and an edge, then we keep it. We need it to verify missing neighbors later on.
-                false
-            } else if sampled_ranges.contains(height) {
-                // If block is outside of pruning window, inside the sampling window,
-                // not an edge, and got sampled, then we prune it.
-                true
-            } else {
-                // If block is outside the pruning_window, inside the sampling window,
-                // not an edge, and not sampled, then we keep it.
-                false
-            };
-
-            // All constrains are met and we are allowed to prune this block.
-            if needs_pruning {
+            if sampled_ranges.contains(height) || self.daser.want_to_prune(height).await? {
                 prunable_batch
                     .insert_relaxed(height..=height)
                     .expect("never fails");
-
-                if prunable_batch.len() >= MAX_PRUNABLE_BATCH_SIZE {
-                    break;
-                }
             }
         }
+
+        /*
+            for height in prune_candidates.rev() {
+                if self.cancellation_token.is_cancelled() {
+                    break;
+                }
+
+                let needs_pruning = if after_sampling_window.contains(height) {
+                    sampled_ranges.contains(height) || self.daser.want_to_prune(height).await?
+                } else {
+                    prunable_and_sampled.contains(height)
+                };
+
+                /*
+                let needs_pruning = if after_sampling_window.contains(height) {
+                    // If block is outside of both, pruning window and sampling window,
+                    // then we need to prune it. If it wasn't sampled yet, then Daser
+                    // must allow us first. We do this to avoid race conditions and other
+                    // edge cases between Pruner and Daser.
+                    sampled_ranges.contains(height) || self.daser.want_to_prune(height).await?
+                } else if edges.contains(height) {
+                    // If block is outside of pruning window, inside the sampling window,
+                    // and an edge, then we keep it. We need it to verify missing neighbors later on.
+                    false
+                } else if sampled_ranges.contains(height) {
+                    // If block is outside of pruning window, inside the sampling window,
+                    // not an edge, and got sampled, then we prune it.
+                    true
+                } else {
+                    // If block is outside the pruning_window, inside the sampling window,
+                    // not an edge, and not sampled, then we keep it.
+                    false
+                };
+                */
+
+                // All constrains are met and we are allowed to prune this block.
+                if needs_pruning {
+                    prunable_batch
+                        .insert_relaxed(height..=height)
+                        .expect("never fails");
+
+                    if prunable_batch.len() >= MAX_PRUNABLE_BATCH_SIZE {
+                        break;
+                    }
+                }
+            }
+        */
 
         Ok(prunable_batch)
     }
 }
 
-fn estimate_highest_prunable_height(
-    stored_head: &ExtendedHeader,
-    pruning_cutoff: Time,
-    block_time: Duration,
-) -> Option<u64> {
-    let blocks_until_cutoff = if pruning_cutoff < stored_head.time() {
-        let time_until_cutoff = stored_head.time().duration_since(pruning_cutoff).unwrap();
-        let blocks_until_cutoff = time_until_cutoff.as_nanos() / block_time.as_nanos();
-        u64::try_from(blocks_until_cutoff).expect("unrealistic block time")
-    } else {
-        0
-    };
+async fn find_height_after_window<S>(
+    store: &S,
+    stored_headers: &BlockRanges,
+    cutoff: &Time,
+) -> Result<Option<u64>>
+where
+    S: Store,
+{
+    let mut ranges = stored_headers.to_owned();
+    let mut highest: Option<ExtendedHeader> = None;
 
-    stored_head
-        .height()
-        .value()
-        .checked_sub(blocks_until_cutoff)
+    while let Some((left, middle, right)) = ranges.partitions() {
+        let middle_header = store.get_by_height(middle).await?;
+
+        if middle_header.time() < *cutoff {
+            if highest
+                .as_ref()
+                .is_none_or(|highest| highest.time() < middle_header.time())
+            {
+                highest = Some(middle_header);
+            }
+
+            ranges = right;
+        } else {
+            ranges = left;
+        }
+    }
+
+    Ok(highest.map(|header| header.height().value()))
 }
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
-
     use blockstore::block::{Block, CidError};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use cid::multihash::Multihash;
@@ -343,17 +421,19 @@ mod test {
     const TEST_CODEC: u64 = 0x0D;
     const TEST_MH_CODE: u64 = 0x0D;
 
-    #[test]
-    fn estimate_prunable_height() {
+    /*
+    #[async_test]
+    async fn estimate_prunable_height() {
         let now = Time::now();
         let mut gen = ExtendedHeaderGenerator::new();
 
-        let first_header_time = (now - Duration::from_secs(3 * 60)).unwrap();
+        let first_header_time = (now - Duration::from_secs(100 * 60)).unwrap();
         gen.set_time(first_header_time, Duration::from_secs(6));
 
-        let headers = gen.next_many(30);
+        let headers = gen.next_many(1000);
         let head = headers.last().unwrap();
-        let pruning_cutoff = now.checked_sub(Duration::from_secs(60)).unwrap();
+        let pruning_window = Duration::from_secs(600 * 2);
+        let pruning_cutoff = now.checked_sub(pruning_window).unwrap();
 
         let mut found_height = None;
 
@@ -365,14 +445,24 @@ mod test {
         }
 
         let found_height = found_height.expect("Highest prunable height not found");
-        let estimated_height =
-            estimate_highest_prunable_height(head, pruning_cutoff, Duration::from_secs(6)).unwrap();
 
-        assert!(estimated_height.abs_diff(found_height) <= 1);
+        let store = InMemoryStore::new();
+        store.insert(headers).await.unwrap();
+
+        dbg!(found_height);
+
+        //estimate_height_of_window_end(head, pruning_cutoff, Duration::from_secs(6)).unwrap();
+
+        assert_eq!(
+            find_highest_prunable_height(&store, pruning_window)
+                .await
+                .unwrap(),
+            Some(found_height)
+        );
     }
 
-    #[test]
-    fn estimate_prunable_height_beyond_genesis() {
+    #[async_test]
+    async fn estimate_prunable_height_beyond_genesis() {
         let now = Time::now();
         let mut gen = ExtendedHeaderGenerator::new();
 
@@ -381,33 +471,20 @@ mod test {
 
         let headers = gen.next_many(30);
         let head = headers.last().unwrap();
-        let pruning_cutoff = now.checked_sub(Duration::from_secs(5 * 60)).unwrap();
+        let pruning_window = Duration::from_secs(5 * 60);
+
+        let store = InMemoryStore::new();
+        store.insert(headers).await.unwrap();
 
         // Pruning cutoff is beyond genesis
         assert_eq!(
-            estimate_highest_prunable_height(head, pruning_cutoff, Duration::from_secs(6)),
+            find_highest_prunable_height(&store, pruning_window)
+                .await
+                .unwrap(),
             None
         );
     }
-
-    #[test]
-    fn estimate_prunable_height_after_head() {
-        let now = Time::now();
-        let mut gen = ExtendedHeaderGenerator::new();
-
-        let first_header_time = (now - Duration::from_secs(3 * 60)).unwrap();
-        gen.set_time(first_header_time, Duration::from_secs(6));
-
-        let headers = gen.next_many(30);
-        let head = headers.last().unwrap();
-        let pruning_cutoff = now.checked_add(Duration::from_secs(1)).unwrap();
-
-        // Pruning cutoff is after head
-        assert_eq!(
-            estimate_highest_prunable_height(head, pruning_cutoff, Duration::from_secs(6)),
-            Some(head.height().value()),
-        );
-    }
+    */
 
     #[async_test]
     async fn empty_store() {
@@ -528,8 +605,25 @@ mod test {
             sampling_window: DEFAULT_SAMPLING_WINDOW,
         });
 
+        assert_eq!(
+            daser_handle.expect_update_highest_prunable_block().await,
+            1000
+        );
+        assert_eq!(
+            daser_handle.expect_update_number_of_prunable_blocks().await,
+            900
+        );
+
         for height in (601..=1000).rev().chain((1..=500).rev()) {
             assert!(stored_ranges.contains(height));
+
+            // At height 388 a second batch starts and Pruner sends an update to Daser
+            if height == 388 {
+                assert_eq!(
+                    daser_handle.expect_update_number_of_prunable_blocks().await,
+                    388
+                );
+            }
 
             // If a block is not sampled, Pruner asks Daser for permission to prune it.
             if !sampled_ranges.contains(height) {
@@ -538,6 +632,11 @@ mod test {
                 respond_to.send(true).unwrap();
             }
         }
+
+        assert_eq!(
+            daser_handle.expect_update_number_of_prunable_blocks().await,
+            0
+        );
 
         daser_handle.expect_no_cmd().await;
 
@@ -606,11 +705,25 @@ mod test {
             sampling_window,
         });
 
+        assert_eq!(
+            daser_handle.expect_update_highest_prunable_block().await,
+            10
+        );
+        assert_eq!(
+            daser_handle.expect_update_number_of_prunable_blocks().await,
+            10
+        );
+
         for expected_height in (1..=10).rev() {
             let (height, respond_to) = daser_handle.expect_want_to_prune().await;
             assert_eq!(height, expected_height);
             respond_to.send(true).unwrap();
         }
+
+        assert_eq!(
+            daser_handle.expect_update_number_of_prunable_blocks().await,
+            0
+        );
 
         assert_pruned_headers_event(&mut event_subscriber, 1, 10).await;
         assert_eq!(
@@ -620,33 +733,46 @@ mod test {
 
         sleep(Duration::from_millis(1500)).await;
 
-        // Because Pruner runs in parallel it can generate 1 or 2 batches. The first
-        // one will be the blocks that reached pruning edge while `sleep` is still running.
-        //
-        // Unfortunately we can not reliably predict the height that splits whose two
-        // ranges, but it will be first one Pruner will send `WantToPrune` message.
-        let (split_batch_height, respond_to) = daser_handle.expect_want_to_prune().await;
-        respond_to.send(true).unwrap();
+        // Because Pruner runs in parallel, it generates 2 batches. The first one will
+        // be the blocks that reached pruning edge while `sleep` is still running.
+        let batch1_high_height = daser_handle.expect_update_highest_prunable_block().await;
+        assert!(batch1_high_height >= 2491 && batch1_high_height <= 2493);
+
+        let batch1_num_of_prunable_blocks =
+            daser_handle.expect_update_number_of_prunable_blocks().await;
+        assert!(batch1_num_of_prunable_blocks >= 1 && batch1_num_of_prunable_blocks <= 3);
 
         // 1st batch
-        for expected_height in (2491..=split_batch_height - 1).rev() {
+        for expected_height in (2491..=batch1_high_height).rev() {
             let (height, respond_to) = daser_handle.expect_want_to_prune().await;
             assert_eq!(height, expected_height);
             respond_to.send(true).unwrap();
         }
+
+        assert_pruned_headers_event(&mut event_subscriber, 2491, batch1_high_height).await;
 
         // 2nd batch
-        for expected_height in (split_batch_height + 1..=2500).rev() {
+        assert_eq!(
+            daser_handle.expect_update_highest_prunable_block().await,
+            2500
+        );
+        assert_eq!(
+            daser_handle.expect_update_number_of_prunable_blocks().await,
+            10 - batch1_num_of_prunable_blocks
+        );
+
+        for expected_height in (batch1_high_height + 1..=2500).rev() {
             let (height, respond_to) = daser_handle.expect_want_to_prune().await;
             assert_eq!(height, expected_height);
             respond_to.send(true).unwrap();
         }
 
-        assert_pruned_headers_event(&mut event_subscriber, 2491, split_batch_height).await;
-        // If it had a 2nd batch
-        if split_batch_height < 2500 {
-            assert_pruned_headers_event(&mut event_subscriber, split_batch_height + 1, 2500).await;
-        }
+        assert_eq!(
+            daser_handle.expect_update_number_of_prunable_blocks().await,
+            0
+        );
+
+        assert_pruned_headers_event(&mut event_subscriber, batch1_high_height + 1, 2500).await;
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
             new_block_ranges([4991..=5000]),
@@ -768,6 +894,15 @@ mod test {
             sampling_window,
         });
 
+        assert_eq!(
+            daser_handle.expect_update_highest_prunable_block().await,
+            199
+        );
+        assert_eq!(
+            daser_handle.expect_update_number_of_prunable_blocks().await,
+            142
+        );
+
         // Pruner asks from Daser if it can remove block 102.
         // We simulate that Daser allows it.
         let (want_to_prune, respond_to) = daser_handle.expect_want_to_prune().await;
@@ -816,11 +951,20 @@ mod test {
             store.get_pruned_ranges().await.unwrap(),
             new_block_ranges([1..=100, 102..=120, 147..=154, 167..=174, 187..=195])
         );
+        assert_eq!(
+            daser_handle.expect_update_number_of_prunable_blocks().await,
+            1
+        );
 
         // Now Pruner will ask again for 101, but this time we allow it.
         let (want_to_prune, respond_to) = daser_handle.expect_want_to_prune().await;
         assert_eq!(want_to_prune, 101);
         respond_to.send(true).unwrap();
+
+        assert_eq!(
+            daser_handle.expect_update_number_of_prunable_blocks().await,
+            0
+        );
 
         assert_pruned_headers_event(&mut event_subscriber, 101, 101).await;
         assert_eq!(

@@ -234,8 +234,21 @@ impl MockDaserHandle {
     pub async fn expect_want_to_prune(&mut self) -> (u64, oneshot::Sender<bool>) {
         match self.expect_cmd().await {
             DaserCmd::WantToPrune { height, respond_to } => (height, respond_to),
-            #[allow(unreachable_patterns)]
             cmd => panic!("Expecting WantToPrune, but received: {cmd:?}"),
+        }
+    }
+
+    pub async fn expect_update_highest_prunable_block(&mut self) -> u64 {
+        match self.expect_cmd().await {
+            DaserCmd::UpdateHighestPrunableHeight { value } => value,
+            cmd => panic!("Expecting UpdateHighestPrunableHeight, but received: {cmd:?}"),
+        }
+    }
+
+    pub async fn expect_update_number_of_prunable_blocks(&mut self) -> u64 {
+        match self.expect_cmd().await {
+            DaserCmd::UpdateNumberOfPrunableBlocks { value } => value,
+            cmd => panic!("Expecting UpdateNumberOfPrunableBlocks, but received: {cmd:?}"),
         }
     }
 }

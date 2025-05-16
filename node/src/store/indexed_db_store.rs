@@ -305,7 +305,7 @@ impl IndexedDbStore {
 
     async fn remove_height(&self, height: u64) -> Result<()> {
         self.write_tx(
-            &[HEADER_STORE_NAME, RANGES_STORE_NAME],
+            &[HEADER_STORE_NAME, SAMPLING_STORE_NAME, RANGES_STORE_NAME],
             remove_height_tx_op,
             height,
         )
@@ -729,6 +729,7 @@ async fn remove_height_tx_op(tx: &Transaction, height: u64) -> Result<()> {
     let header_store = tx.store(HEADER_STORE_NAME)?;
     let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
+    let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
 
     let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
     let mut sampled_ranges = get_ranges(&ranges_store, SAMPLED_RANGES_KEY).await?;
@@ -739,7 +740,8 @@ async fn remove_height_tx_op(tx: &Transaction, height: u64) -> Result<()> {
     }
 
     let jsvalue_height = to_value(&height).expect("to create jsvalue");
-    let Some(header) = height_index.get(jsvalue_height).await? else {
+
+    let Some(header) = height_index.get(jsvalue_height.clone()).await? else {
         return Err(StoreError::StoredDataError(
             "inconsistency between headers and ranges table".into(),
         ));
@@ -749,6 +751,8 @@ async fn remove_height_tx_op(tx: &Transaction, height: u64) -> Result<()> {
         .map_err(|_| StoreError::StoredDataError("could not get header's DB id".into()))?;
 
     header_store.delete(id).await?;
+
+    sampling_store.delete(jsvalue_height).await?;
 
     header_ranges
         .remove_relaxed(height..=height)

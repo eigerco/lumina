@@ -441,6 +441,7 @@ impl RedbStore {
             let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let mut headers_table = tx.open_table(HEADERS_TABLE)?;
             let mut ranges_table = tx.open_table(RANGES_TABLE)?;
+            let mut sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
 
             let mut header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
             let mut sampled_ranges = get_ranges(&ranges_table, SAMPLED_RANGES_KEY)?;
@@ -465,6 +466,8 @@ impl RedbStore {
                     "inconsistency between header and height_to_hash tables, hash {hash}"
                 )));
             }
+
+            sampling_metadata_table.remove(height)?;
 
             header_ranges
                 .remove_relaxed(height..=height)

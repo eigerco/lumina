@@ -21,7 +21,7 @@ use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
-use crate::utils::{FusedReusableFuture, OneshotSenderExt};
+use crate::utils::{FusedReusableFuture, OneshotSenderExt, TimeExt};
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
@@ -568,9 +568,7 @@ where
             }
         };
 
-        let pruning_cutoff = Time::now()
-            .checked_sub(self.pruning_window)
-            .unwrap_or_else(Time::unix_epoch);
+        let pruning_cutoff = Time::now().saturating_sub(self.pruning_window);
 
         // Iterate headers from highest to lowest and check if there is
         // a new highest "slow sync" height.
@@ -615,14 +613,8 @@ where
     }
 
     fn in_sampling_window(&self, header: &ExtendedHeader) -> bool {
-        let sampling_window_start = Time::now()
-            .checked_sub(self.sampling_window)
-            .unwrap_or_else(|| {
-                warn!("underflow when computing sampling window start, defaulting to unix epoch");
-                Time::unix_epoch()
-            });
-
-        header.time().after(sampling_window_start)
+        let sampling_window_end = Time::now().saturating_sub(self.sampling_window);
+        header.time().after(sampling_window_end)
     }
 }
 
@@ -638,20 +630,20 @@ fn calculate_range_to_fetch(
     let Some(synced_head_range) = synced_headers_iter.next() else {
         // empty synced ranges, we're missing everything
         let range = 1..=subjective_head_height;
-        return range.truncate_right(limit);
+        return range.keep_tail(limit);
     };
 
     if synced_head_range.end() < &subjective_head_height {
         // if we haven't caught up with the network head, start from there
         let range = synced_head_range.end() + 1..=subjective_head_height;
-        return range.truncate_right(limit);
+        return range.keep_tail(limit);
     }
 
     // there exists a range contiguous with network head. inspect previous range end
     let penultimate_range_end = synced_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
 
     let range = penultimate_range_end + 1..=synced_head_range.start().saturating_sub(1);
-    range.truncate_left(limit)
+    range.keep_head(limit)
 }
 
 #[instrument(skip_all)]

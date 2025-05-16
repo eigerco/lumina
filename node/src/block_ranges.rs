@@ -537,6 +537,7 @@ impl BlockRanges {
         truncated
     }
 
+    #[allow(unused)]
     pub(crate) fn keep_tail(&self, limit: u64) -> BlockRanges {
         let mut truncated = BlockRanges::new();
         let mut len = 0;
