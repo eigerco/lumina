@@ -2,7 +2,9 @@
 
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
-use std::ops::{Add, RangeInclusive, Sub};
+use std::ops::{
+    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, RangeInclusive, Sub, SubAssign,
+};
 
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -43,8 +45,8 @@ pub(crate) trait BlockRangeExt {
     fn is_adjacent(&self, other: &BlockRange) -> bool;
     fn is_overlapping(&self, other: &BlockRange) -> bool;
     fn left_of(&self, other: &BlockRange) -> bool;
-    fn truncate_left(&self, limit: u64) -> Self;
-    fn truncate_right(&self, limit: u64) -> Self;
+    fn keep_head(&self, limit: u64) -> Self;
+    fn keep_tail(&self, limit: u64) -> Self;
 }
 
 pub(crate) struct BlockRangeDisplay<'a>(&'a RangeInclusive<u64>);
@@ -144,8 +146,8 @@ impl BlockRangeExt for BlockRange {
         self.end() < other.start()
     }
 
-    /// Truncate the range so that it contains at most `limit` elements, removing from the left
-    fn truncate_left(&self, limit: u64) -> Self {
+    /// Truncate the range so that it contains at most `limit` elements, removing from the tail
+    fn keep_head(&self, limit: u64) -> Self {
         if self.is_empty() {
             return RangeInclusive::new(1, 0);
         }
@@ -160,8 +162,8 @@ impl BlockRangeExt for BlockRange {
         u64::max(start, adjusted_start)..=end
     }
 
-    /// Truncate the range so that it contains at most `limit` elements, removing from the right
-    fn truncate_right(&self, limit: u64) -> Self {
+    /// Truncate the range so that it contains at most `limit` elements, removing from the head
+    fn keep_tail(&self, limit: u64) -> Self {
         if self.is_empty() {
             return RangeInclusive::new(1, 0);
         }
@@ -467,6 +469,120 @@ impl BlockRanges {
 
         edges
     }
+
+    pub(crate) fn partitions(&self) -> Option<(BlockRanges, u64, BlockRanges)> {
+        let len = self.len();
+
+        if len == 0 {
+            return None;
+        }
+
+        let mut left = BlockRanges::new();
+        let mut right = BlockRanges::new();
+
+        let middle = len / 2;
+        let mut left_len = 0;
+
+        for range in self.0.iter() {
+            let range_len = range.len();
+
+            if left_len + range_len <= middle {
+                left.insert_relaxed(range.to_owned()).unwrap();
+                left_len += range_len;
+            } else if left_len < middle {
+                let start = *range.start();
+                let end = *range.end();
+
+                let left_end = start + middle - left_len;
+                let left_range = start..=left_end;
+
+                left_len += left_range.len();
+                left.insert_relaxed(left_range).unwrap();
+
+                if left_end < end {
+                    right.insert_relaxed(left_end + 1..=end).unwrap();
+                }
+            } else {
+                right.insert_relaxed(range.to_owned()).unwrap();
+            }
+        }
+
+        let middle_height = if left_len < right.len() {
+            right.pop_tail()?
+        } else {
+            left.pop_head()?
+        };
+
+        Some((left, middle_height, right))
+    }
+
+    pub(crate) fn keep_head(&self, limit: u64) -> BlockRanges {
+        let mut truncated = BlockRanges::new();
+        let mut len = 0;
+
+        for range in self.0.iter().rev() {
+            if len == limit {
+                break;
+            }
+
+            let r = range.keep_head(limit - len);
+
+            len += r.len();
+            truncated.insert_relaxed(r).unwrap();
+
+            debug_assert_eq!(truncated.len(), len);
+            debug_assert!(len <= limit);
+        }
+
+        truncated
+    }
+
+    pub(crate) fn keep_tail(&self, limit: u64) -> BlockRanges {
+        let mut truncated = BlockRanges::new();
+        let mut len = 0;
+
+        for range in self.0.iter() {
+            if len == limit {
+                break;
+            }
+
+            let r = range.keep_tail(limit - len);
+
+            len += r.len();
+            truncated.insert_relaxed(r).unwrap();
+
+            debug_assert_eq!(truncated.len(), len);
+            debug_assert!(len <= limit);
+        }
+
+        truncated
+    }
+}
+
+impl TryFrom<RangeInclusive<u64>> for BlockRanges {
+    type Error = BlockRangesError;
+
+    fn try_from(value: RangeInclusive<u64>) -> Result<Self, Self::Error> {
+        let mut ranges = BlockRanges::new();
+        ranges.insert_relaxed(value)?;
+        Ok(ranges)
+    }
+}
+
+impl<const N: usize> TryFrom<[RangeInclusive<u64>; N]> for BlockRanges {
+    type Error = BlockRangesError;
+
+    fn try_from(value: [RangeInclusive<u64>; N]) -> Result<Self, Self::Error> {
+        BlockRanges::from_vec(value.into_iter().collect())
+    }
+}
+
+impl TryFrom<&[RangeInclusive<u64>]> for BlockRanges {
+    type Error = BlockRangesError;
+
+    fn try_from(value: &[RangeInclusive<u64>]) -> Result<Self, Self::Error> {
+        BlockRanges::from_vec(value.iter().cloned().collect())
+    }
 }
 
 impl AsRef<[RangeInclusive<u64>]> for BlockRanges {
@@ -475,11 +591,27 @@ impl AsRef<[RangeInclusive<u64>]> for BlockRanges {
     }
 }
 
+impl AddAssign for BlockRanges {
+    fn add_assign(&mut self, rhs: BlockRanges) {
+        self.add_assign(&rhs);
+    }
+}
+
+impl AddAssign<&BlockRanges> for BlockRanges {
+    fn add_assign(&mut self, rhs: &BlockRanges) {
+        for range in rhs.0.iter() {
+            self.insert_relaxed(range)
+                .expect("BlockRanges always holds valid ranges");
+        }
+    }
+}
+
 impl Add for BlockRanges {
     type Output = Self;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        self.add(&rhs)
+    fn add(mut self, rhs: BlockRanges) -> Self::Output {
+        self.add_assign(&rhs);
+        self
     }
 }
 
@@ -487,19 +619,32 @@ impl Add<&BlockRanges> for BlockRanges {
     type Output = Self;
 
     fn add(mut self, rhs: &BlockRanges) -> Self::Output {
+        self.add_assign(rhs);
+        self
+    }
+}
+
+impl SubAssign for BlockRanges {
+    fn sub_assign(&mut self, rhs: BlockRanges) {
+        self.sub_assign(&rhs);
+    }
+}
+
+impl SubAssign<&BlockRanges> for BlockRanges {
+    fn sub_assign(&mut self, rhs: &BlockRanges) {
         for range in rhs.0.iter() {
-            self.insert_relaxed(range)
+            self.remove_relaxed(range)
                 .expect("BlockRanges always holds valid ranges");
         }
-        self
     }
 }
 
 impl Sub for BlockRanges {
     type Output = Self;
 
-    fn sub(self, rhs: Self) -> Self::Output {
-        self.sub(&rhs)
+    fn sub(mut self, rhs: BlockRanges) -> Self::Output {
+        self.sub_assign(&rhs);
+        self
     }
 }
 
@@ -507,10 +652,88 @@ impl Sub<&BlockRanges> for BlockRanges {
     type Output = Self;
 
     fn sub(mut self, rhs: &BlockRanges) -> Self::Output {
-        for range in rhs.0.iter() {
-            self.remove_relaxed(range)
+        self.sub_assign(rhs);
+        self
+    }
+}
+
+impl Not for BlockRanges {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        let mut inverse = BlockRanges::new();
+
+        // Start with full range
+        inverse.insert_relaxed(1..=u64::MAX).expect("valid ranges");
+
+        // And remove whatever we have
+        for range in self.0.iter() {
+            inverse
+                .remove_relaxed(range)
                 .expect("BlockRanges always holds valid ranges");
         }
+
+        inverse
+    }
+}
+
+impl BitOrAssign for BlockRanges {
+    fn bitor_assign(&mut self, rhs: BlockRanges) {
+        self.add_assign(&rhs);
+    }
+}
+
+impl BitOrAssign<&BlockRanges> for BlockRanges {
+    fn bitor_assign(&mut self, rhs: &BlockRanges) {
+        self.add_assign(rhs);
+    }
+}
+
+impl BitOr for BlockRanges {
+    type Output = Self;
+
+    fn bitor(mut self, rhs: BlockRanges) -> Self::Output {
+        self.add_assign(&rhs);
+        self
+    }
+}
+
+impl BitOr<&BlockRanges> for BlockRanges {
+    type Output = Self;
+
+    fn bitor(mut self, rhs: &BlockRanges) -> Self::Output {
+        self.add_assign(rhs);
+        self
+    }
+}
+
+impl BitAndAssign for BlockRanges {
+    fn bitand_assign(&mut self, rhs: BlockRanges) {
+        self.bitand_assign(&rhs);
+    }
+}
+
+impl BitAndAssign<&BlockRanges> for BlockRanges {
+    fn bitand_assign(&mut self, rhs: &BlockRanges) {
+        // !(!A | !B) == (A & B)
+        *self = !(!self.clone() | !rhs.clone());
+    }
+}
+
+impl BitAnd for BlockRanges {
+    type Output = Self;
+
+    fn bitand(mut self, rhs: BlockRanges) -> Self::Output {
+        self.bitand_assign(&rhs);
+        self
+    }
+}
+
+impl BitAnd<&BlockRanges> for BlockRanges {
+    type Output = Self;
+
+    fn bitand(mut self, rhs: &BlockRanges) -> Self::Output {
+        self.bitand_assign(rhs);
         self
     }
 }
@@ -853,30 +1076,142 @@ mod tests {
     }
 
     #[test]
-    fn truncate_left() {
-        assert_eq!((1..=10).truncate_left(u64::MAX), 1..=10);
-        assert_eq!((1..=10).truncate_left(20), 1..=10);
-        assert_eq!((1..=10).truncate_left(10), 1..=10);
-        assert_eq!((1..=10).truncate_left(5), 6..=10);
-        assert_eq!((1..=10).truncate_left(1), 10..=10);
-        assert!((1..=10).truncate_left(0).is_empty());
+    fn keep_head() {
+        assert_eq!((1..=10).keep_head(u64::MAX), 1..=10);
+        assert_eq!((1..=10).keep_head(20), 1..=10);
+        assert_eq!((1..=10).keep_head(10), 1..=10);
+        assert_eq!((1..=10).keep_head(5), 6..=10);
+        assert_eq!((1..=10).keep_head(1), 10..=10);
+        assert!((1..=10).keep_head(0).is_empty());
 
-        assert_eq!((0..=u64::MAX).truncate_left(u64::MAX), 1..=u64::MAX);
-        assert_eq!((0..=u64::MAX).truncate_left(1), u64::MAX..=u64::MAX);
-        assert!((0..=u64::MAX).truncate_left(0).is_empty());
+        assert_eq!((0..=u64::MAX).keep_head(u64::MAX), 1..=u64::MAX);
+        assert_eq!((0..=u64::MAX).keep_head(1), u64::MAX..=u64::MAX);
+        assert!((0..=u64::MAX).keep_head(0).is_empty());
+
+        assert_eq!(
+            new_block_ranges([1..=10]).keep_head(u64::MAX),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).keep_head(20),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).keep_head(10),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).keep_head(5),
+            new_block_ranges([6..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).keep_head(1),
+            new_block_ranges([10..=10])
+        );
+        assert!(new_block_ranges([1..=10]).keep_head(0).is_empty());
+
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_head(u64::MAX),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_head(20),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_head(10),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_head(4),
+            new_block_ranges([11..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_head(5),
+            new_block_ranges([10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_head(6),
+            new_block_ranges([5..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_head(7),
+            new_block_ranges([4..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_head(1),
+            new_block_ranges([14..=14])
+        );
+        assert!(new_block_ranges([1..=5, 10..=14]).keep_head(0).is_empty());
     }
 
     #[test]
-    fn truncate_right() {
-        assert_eq!((1..=10).truncate_right(20), 1..=10);
-        assert_eq!((1..=10).truncate_right(10), 1..=10);
-        assert_eq!((1..=10).truncate_right(5), 1..=5);
-        assert_eq!((1..=10).truncate_right(1), 1..=1);
-        assert!((1..=10).truncate_right(0).is_empty());
+    fn keep_tail() {
+        assert_eq!((1..=10).keep_tail(20), 1..=10);
+        assert_eq!((1..=10).keep_tail(10), 1..=10);
+        assert_eq!((1..=10).keep_tail(5), 1..=5);
+        assert_eq!((1..=10).keep_tail(1), 1..=1);
+        assert!((1..=10).keep_tail(0).is_empty());
 
-        assert_eq!((0..=u64::MAX).truncate_right(u64::MAX), 0..=(u64::MAX - 1));
-        assert_eq!((0..=u64::MAX).truncate_right(1), 0..=0);
-        assert!((0..=u64::MAX).truncate_right(0).is_empty());
+        assert_eq!((0..=u64::MAX).keep_tail(u64::MAX), 0..=(u64::MAX - 1));
+        assert_eq!((0..=u64::MAX).keep_tail(1), 0..=0);
+        assert!((0..=u64::MAX).keep_tail(0).is_empty());
+
+        assert_eq!(
+            new_block_ranges([1..=10]).keep_tail(u64::MAX),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).keep_tail(20),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).keep_tail(10),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).keep_tail(5),
+            new_block_ranges([1..=5])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).keep_tail(1),
+            new_block_ranges([1..=1])
+        );
+        assert!(new_block_ranges([1..=10]).keep_tail(0).is_empty());
+
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_tail(u64::MAX),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_tail(20),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_tail(10),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_tail(4),
+            new_block_ranges([1..=4])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_tail(5),
+            new_block_ranges([1..=5])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_tail(6),
+            new_block_ranges([1..=5, 10..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_tail(7),
+            new_block_ranges([1..=5, 10..=11])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).keep_tail(1),
+            new_block_ranges([1..=1])
+        );
+        assert!(new_block_ranges([1..=5, 10..=14]).keep_tail(0).is_empty());
     }
 
     #[test]
@@ -1140,6 +1475,154 @@ mod tests {
             &edges.0[..],
             &[6..=6, 8..=8, 100..=100, 200..=201, 300..=300, 310..=310][..]
         );
+    }
+
+    #[test]
+    fn inverse() {
+        let inverse = !BlockRanges::new();
+        assert_eq!(&inverse.0[..], &[1..=u64::MAX][..]);
+
+        let inverse = !new_block_ranges([1..=u64::MAX]);
+        assert!(inverse.is_empty());
+
+        let inverse = !new_block_ranges([10..=u64::MAX]);
+        assert_eq!(&inverse.0[..], &[1..=9][..]);
+
+        let inverse = !new_block_ranges([1..=9]);
+        assert_eq!(&inverse.0[..], &[10..=u64::MAX][..]);
+
+        let inverse = !new_block_ranges([10..=100, 200..=200, 400..=600, 700..=800, 900..=900]);
+        assert_eq!(
+            &inverse.0[..],
+            &[
+                1..=9,
+                101..=199,
+                201..=399,
+                601..=699,
+                801..=899,
+                901..=u64::MAX
+            ][..]
+        );
+        assert_eq!(
+            &(!inverse).0[..],
+            &[10..=100, 200..=200, 400..=600, 700..=800, 900..=900][..]
+        );
+
+        let inverse = !new_block_ranges([1..=100, 200..=200, 400..=600, 700..=800, 900..=900]);
+        assert_eq!(
+            &inverse.0[..],
+            &[101..=199, 201..=399, 601..=699, 801..=899, 901..=u64::MAX][..]
+        );
+        assert_eq!(
+            &(!inverse).0[..],
+            &[1..=100, 200..=200, 400..=600, 700..=800, 900..=900][..]
+        );
+
+        let inverse = !new_block_ranges([2..=100, 400..=600, 700..=(u64::MAX - 1)]);
+        assert_eq!(
+            &inverse.0[..],
+            &[1..=1, 101..=399, 601..=699, u64::MAX..=u64::MAX][..]
+        );
+        assert_eq!(
+            &(!inverse).0[..],
+            &[2..=100, 400..=600, 700..=(u64::MAX - 1)][..]
+        );
+    }
+
+    #[test]
+    fn bitwise_and() {
+        let a = new_block_ranges([10..=100, 200..=200, 400..=600, 700..=800, 900..=900]);
+        let b = new_block_ranges([50..=50, 55..=250, 300..=750, 800..=1000]);
+
+        assert_eq!(
+            a & b,
+            new_block_ranges([
+                50..=50,
+                55..=100,
+                200..=200,
+                400..=600,
+                700..=750,
+                800..=800,
+                900..=900
+            ])
+        );
+    }
+
+    #[test]
+    fn partition() {
+        assert!(BlockRanges::new().partitions().is_none());
+
+        let ranges = new_block_ranges([1..=101]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([1..=50]));
+        assert_eq!(middle, 51);
+        assert_eq!(right, new_block_ranges([52..=101]));
+
+        let ranges = new_block_ranges([10..=10]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert!(left.is_empty());
+        assert_eq!(middle, 10);
+        assert!(right.is_empty());
+
+        let ranges = new_block_ranges([10..=14, 20..=24, 100..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=23]));
+        assert_eq!(middle, 24);
+        assert_eq!(right, new_block_ranges([100..=109]));
+
+        let ranges = new_block_ranges([10..=19, 90..=94, 100..=104]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=18]));
+        assert_eq!(middle, 19);
+        assert_eq!(right, new_block_ranges([90..=94, 100..=104]));
+
+        let ranges = new_block_ranges([10..=14, 20..=25, 100..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=24]));
+        assert_eq!(middle, 25);
+        assert_eq!(right, new_block_ranges([100..=109]));
+
+        let ranges = new_block_ranges([10..=14, 20..=24, 99..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=24]));
+        assert_eq!(middle, 99);
+        assert_eq!(right, new_block_ranges([100..=109]));
+
+        let ranges = new_block_ranges([10..=14, 20..=24, 30..=30, 100..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=24]));
+        assert_eq!(middle, 30);
+        assert_eq!(right, new_block_ranges([100..=109]));
+
+        let ranges = new_block_ranges([10..=19, 30..=30, 90..=94, 100..=104]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=19]));
+        assert_eq!(middle, 30);
+        assert_eq!(right, new_block_ranges([90..=94, 100..=104]));
+
+        let ranges = new_block_ranges([10..=14, 20..=24, 30..=31, 100..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=24, 30..=30]));
+        assert_eq!(middle, 31);
+        assert_eq!(right, new_block_ranges([100..=109]));
+
+        let ranges = new_block_ranges([10..=19, 30..=31, 90..=94, 100..=104]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=19, 30..=30]));
+        assert_eq!(middle, 31);
+        assert_eq!(right, new_block_ranges([90..=94, 100..=104]));
+
+        let ranges = new_block_ranges([10..=14, 20..=24, 30..=32, 100..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=24, 30..=30]));
+        assert_eq!(middle, 31);
+        assert_eq!(right, new_block_ranges([32..=32, 100..=109]));
+
+        let ranges = new_block_ranges([10..=19, 30..=32, 90..=94, 100..=104]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=19, 30..=30]));
+        assert_eq!(middle, 31);
+        assert_eq!(right, new_block_ranges([32..=32, 90..=94, 100..=104]));
     }
 
     #[test]
