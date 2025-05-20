@@ -337,7 +337,6 @@ where
         // for it in Daser. We do this by sending `WantToPrune` message to `Daser`
         // and receiving back `true`. This mechanism exists to avoid race conditions
         // between Pruner and Daser.
-        //
         let after_sampling_window = prune_candidates.clone() & &non_sampling_area;
         let prunable_and_sampled =
             (prune_candidates.clone() - &after_sampling_window - &edges) & &sampled_ranges;

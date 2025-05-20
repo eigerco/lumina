@@ -419,7 +419,7 @@ where
             };
 
             let concurrency_limit = if height <= self.highest_prunable_height.unwrap_or(0)
-                && self.num_of_prunable_blocks > PRUNER_THRESHOLD
+                && self.num_of_prunable_blocks >= PRUNER_THRESHOLD
             {
                 // If a block is in the prunable area and Pruner has a lot of blocks
                 // to prune, then we pause sampling.
@@ -963,12 +963,104 @@ mod tests {
         handle.expect_no_cmd().await;
     }
 
-    /*
     #[async_test]
     async fn ratelimit() {
-        todo!();
+        let (mock, mut handle) = P2p::mocked();
+        let store = Arc::new(InMemoryStore::new());
+        let events = EventChannel::new();
+        let mut event_sub = events.subscribe();
+
+        let daser = Daser::start(DaserArgs {
+            event_pub: events.publisher(),
+            p2p: Arc::new(mock),
+            store: store.clone(),
+            sampling_window: Duration::from_secs(60),
+            concurrency_limit: 1,
+            additional_headersub_concurrency: DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY,
+        })
+        .unwrap();
+
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        let now = Time::now();
+        let first_header_time = (now - Duration::from_secs(1024)).unwrap();
+        gen.set_time(first_header_time, Duration::from_secs(1));
+        store.insert(gen.next_many(990)).await.unwrap();
+
+        let mut edses = HashMap::new();
+
+        for height in 991..=1000 {
+            let eds = generate_dummy_eds(2, AppVersion::V2);
+            let dah = DataAvailabilityHeader::from_eds(&eds);
+            let header = gen.next_with_dah(dah);
+
+            edses.insert(height, eds);
+            store.insert(header).await.unwrap();
+        }
+
+        // Assume that Pruner reports the following
+        daser.update_highest_prunable_block(1000).await.unwrap();
+        daser.update_number_of_prunable_blocks(1000).await.unwrap();
+
+        handle.expect_no_cmd().await;
+        handle.announce_peer_connected();
+
+        // Blocks that are currently stored are ratelimited, so we shouldn't get any command.
+        handle.expect_no_cmd().await;
+
+        // Any blocks above 1000 are not limited because they are not in prunable area
+        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 2, false).await;
+        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 2, false).await;
+
+        // Again back to ratelimited
+        handle.expect_no_cmd().await;
+
+        // Now Pruner reports that number of prunable blocks is lower that the threshold
+        daser
+            .update_number_of_prunable_blocks(PRUNER_THRESHOLD - 1)
+            .await
+            .unwrap();
+
+        // Sample blocks that are in prunable area
+        sample_block(
+            &mut handle,
+            &store,
+            &mut event_sub,
+            edses.get(&1000).unwrap(),
+            1000,
+            false,
+        )
+        .await;
+        sample_block(
+            &mut handle,
+            &store,
+            &mut event_sub,
+            edses.get(&999).unwrap(),
+            999,
+            false,
+        )
+        .await;
+
+        // Now pruner reports prunable blocks reached the threshold again
+        daser
+            .update_number_of_prunable_blocks(PRUNER_THRESHOLD)
+            .await
+            .unwrap();
+
+        // But sampling of 998 block was already scheduled, so we need to handle it
+        sample_block(
+            &mut handle,
+            &store,
+            &mut event_sub,
+            edses.get(&998).unwrap(),
+            998,
+            false,
+        )
+        .await;
+
+        // Daser is ratelimited again
+        handle.expect_no_cmd().await;
     }
-    */
 
     fn stop_sampling_for(
         responders: &mut Vec<(Cid, OneshotResultSender<Vec<u8>, P2pError>)>,
@@ -1004,8 +1096,34 @@ mod tests {
 
         store.insert(header).await.unwrap();
 
-        let cids = handle_get_shwap_cid(handle, height, &eds, simulate_sampling_timeout).await;
+        sample_block(
+            handle,
+            store,
+            event_sub,
+            &eds,
+            height,
+            simulate_sampling_timeout,
+        )
+        .await;
+
+        // `gen_and_sample_block` is only used in cases where Daser doesn't have
+        // anything else to schedule.
         handle.expect_no_cmd().await;
+        assert!(event_sub.try_recv().is_err());
+    }
+
+    async fn sample_block(
+        handle: &mut MockP2pHandle,
+        store: &InMemoryStore,
+        event_sub: &mut EventSubscriber,
+        eds: &ExtendedDataSquare,
+        height: u64,
+        simulate_sampling_timeout: bool,
+    ) {
+        let cids = handle_get_shwap_cid(handle, height, &eds, simulate_sampling_timeout).await;
+
+        // Wait to be sampled
+        sleep(Duration::from_millis(100)).await;
 
         // Check if block was sampled or timed-out.
         let sampled_ranges = store.get_sampled_ranges().await.unwrap();
@@ -1077,8 +1195,6 @@ mod tests {
             }
             ev => panic!("Unexpected event: {ev}"),
         }
-
-        assert!(event_sub.try_recv().is_err());
     }
 
     /// Responds to get_shwap_cid and returns all CIDs that were requested
