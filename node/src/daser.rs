@@ -1120,7 +1120,7 @@ mod tests {
         height: u64,
         simulate_sampling_timeout: bool,
     ) {
-        let cids = handle_get_shwap_cid(handle, height, &eds, simulate_sampling_timeout).await;
+        let cids = handle_get_shwap_cid(handle, height, eds, simulate_sampling_timeout).await;
 
         // Wait to be sampled
         sleep(Duration::from_millis(100)).await;

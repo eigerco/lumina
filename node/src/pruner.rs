@@ -755,11 +755,11 @@ mod test {
         // Because Pruner runs in parallel, it generates 2 batches. The first one will
         // be the blocks that reached pruning edge while `sleep` is still running.
         let batch1_high_height = daser_handle.expect_update_highest_prunable_block().await;
-        assert!(batch1_high_height >= 2491 && batch1_high_height <= 2493);
+        assert!((2491..=2493).contains(&batch1_high_height));
 
         let batch1_num_of_prunable_blocks =
             daser_handle.expect_update_number_of_prunable_blocks().await;
-        assert!(batch1_num_of_prunable_blocks >= 1 && batch1_num_of_prunable_blocks <= 3);
+        assert!((1..=3).contains(&batch1_num_of_prunable_blocks));
 
         // 1st batch
         for expected_height in (2491..=batch1_high_height).rev() {
