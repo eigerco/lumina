@@ -230,7 +230,7 @@ impl MockDaserHandle {
         }
     }
 
-    /// Assert that `DaserCmd::WantToPrune` was send to `Daser` and obtain a response channel.
+    /// Assert that `DaserCmd::WantToPrune` was sent to `Daser` and obtain a response channel.
     pub async fn expect_want_to_prune(&mut self) -> (u64, oneshot::Sender<bool>) {
         match self.expect_cmd().await {
             DaserCmd::WantToPrune { height, respond_to } => (height, respond_to),
@@ -238,6 +238,7 @@ impl MockDaserHandle {
         }
     }
 
+    /// Assert that `DaserCmd::UpdateHighestPrunableHeight` was sent to `Daser`.
     pub async fn expect_update_highest_prunable_block(&mut self) -> u64 {
         match self.expect_cmd().await {
             DaserCmd::UpdateHighestPrunableHeight { value } => value,
@@ -245,6 +246,7 @@ impl MockDaserHandle {
         }
     }
 
+    /// Assert that `DaserCmd::UpdateNumberOfPrunableBlocks` was sent to `Daser`.
     pub async fn expect_update_number_of_prunable_blocks(&mut self) -> u64 {
         match self.expect_cmd().await {
             DaserCmd::UpdateNumberOfPrunableBlocks { value } => value,
