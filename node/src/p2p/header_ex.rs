@@ -386,7 +386,7 @@ impl Codec for HeaderCodec {
             //
             // 1. The request is invalid
             // 2. The request is incomplete because of the size limit or time limit
-            io::Error::new(io::ErrorKind::Other, "invalid or incomplete request")
+            io::Error::other("invalid or incomplete request")
         })
     }
 
@@ -417,10 +417,7 @@ impl Codec for HeaderCodec {
             //
             // 1. The response is invalid
             // 2. The response is incomplete because of the size limit or time limit
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "invalid or incomplete response",
-            ));
+            return Err(io::Error::other("invalid or incomplete response"));
         }
 
         Ok(msgs)
@@ -441,7 +438,7 @@ impl Codec for HeaderCodec {
 
         timeout(REQUEST_TIME_LIMIT, io.write_all(&buf))
             .await
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "writing request timed out"))??;
+            .map_err(|_| io::Error::other("writing request timed out"))??;
 
         Ok(())
     }
@@ -468,7 +465,7 @@ impl Codec for HeaderCodec {
 
         timeout(RESPONSE_TIME_LIMIT, io.write_all(&buf))
             .await
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "writing response timed out"))??;
+            .map_err(|_| io::Error::other("writing response timed out"))??;
 
         Ok(())
     }
