@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.10.0...celestia-rpc-v0.11.0) - 2025-05-21
+
+### Added
+
+- *(rpc)* [**breaking**] update jsonrpsee to version 0.25.1 and refactor RPC methods ([#620](https://github.com/eigerco/lumina/pull/620))
+- *(rpc)* support the share.GetRow RPC endpoint ([#583](https://github.com/eigerco/lumina/pull/583))
+- *(rpc)* Add Blobstream API ([#543](https://github.com/eigerco/lumina/pull/543))
+
+### Other
+
+- *(rpc)* Use `AuthLevel::Skip` and provide `new_test_client_with_url` ([#582](https://github.com/eigerco/lumina/pull/582))
+
 ## [0.10.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.9.1...celestia-rpc-v0.10.0) - 2025-04-02
 
 ### Added
