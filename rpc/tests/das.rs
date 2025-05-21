@@ -8,7 +8,7 @@ pub mod utils;
 use crate::utils::client::{new_test_client, AuthLevel};
 
 #[tokio::test]
-async fn das_sampling_stats() {
+async fn sampling_stats() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     let stats1 = client.das_sampling_stats().await.unwrap();
@@ -24,7 +24,7 @@ async fn das_sampling_stats() {
 }
 
 #[tokio::test]
-async fn das_wait_catch_up() {
+async fn wait_catch_up() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
     client.das_wait_catch_up().await.unwrap();

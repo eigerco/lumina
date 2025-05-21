@@ -17,10 +17,10 @@ pub struct BlobsAtHeight {
     pub height: u64,
 }
 
-#[rpc(client)]
+#[rpc(client, namespace = "blob", namespace_separator = ".")]
 pub trait Blob {
     /// Get retrieves the blob by commitment under the given namespace and height.
-    #[method(name = "blob.Get")]
+    #[method(name = "Get")]
     async fn blob_get(
         &self,
         height: u64,
@@ -29,7 +29,7 @@ pub trait Blob {
     ) -> Result<Blob, Error>;
 
     /// GetAll returns all blobs under the given namespaces and height.
-    #[method(name = "blob.GetAll")]
+    #[method(name = "GetAll")]
     async fn blob_get_all(
         &self,
         height: u64,
@@ -37,7 +37,7 @@ pub trait Blob {
     ) -> Result<Option<Vec<Blob>>, Error>;
 
     /// GetProof retrieves proofs in the given namespaces at the given height by commitment.
-    #[method(name = "blob.GetProof")]
+    #[method(name = "GetProof")]
     async fn blob_get_proof(
         &self,
         height: u64,
@@ -46,7 +46,7 @@ pub trait Blob {
     ) -> Result<Vec<NamespaceProof>, Error>;
 
     /// Included checks whether a blob's given commitment(Merkle subtree root) is included at given height and under the namespace.
-    #[method(name = "blob.Included")]
+    #[method(name = "Included")]
     async fn blob_included(
         &self,
         height: u64,
@@ -56,7 +56,7 @@ pub trait Blob {
     ) -> Result<bool, Error>;
 
     /// Submit sends Blobs and reports the height in which they were included. Allows sending multiple Blobs atomically synchronously. Uses default wallet registered on the Node.
-    #[method(name = "blob.Submit")]
+    #[method(name = "Submit")]
     async fn blob_submit(&self, blobs: &[Blob], opts: TxConfig) -> Result<u64, Error>;
 
     /// Subscribe to published blobs from the given namespace as they are included.
@@ -64,6 +64,6 @@ pub trait Blob {
     /// # Notes
     ///
     /// Unsubscribe is not implemented by Celestia nodes.
-    #[subscription(name = "blob.Subscribe", unsubscribe = "blob.Unsubscribe", item = BlobsAtHeight)]
+    #[subscription(name = "Subscribe", unsubscribe = "Unsubscribe", item = BlobsAtHeight)]
     async fn blob_subscribe(&self, namespace: Namespace) -> SubcriptionResult;
 }

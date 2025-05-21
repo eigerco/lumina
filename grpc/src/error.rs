@@ -14,7 +14,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum Error {
     /// Tonic error
     #[error(transparent)]
-    TonicError(#[from] Status),
+    TonicError(Box<Status>),
 
     /// Transport error
     #[error("Transport: {0}")]
@@ -67,6 +67,12 @@ pub enum Error {
     /// Signing error
     #[error(transparent)]
     SigningError(#[from] SignatureError),
+}
+
+impl From<Status> for Error {
+    fn from(value: Status) -> Self {
+        Error::TonicError(Box::new(value))
+    }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
