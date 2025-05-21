@@ -185,6 +185,8 @@ where
 
             for range in prunable_batch.into_inner() {
                 let from_height = *range.start();
+                // Because of `cancellation_token` we need to track up to which
+                // height we removed.
                 let mut to_height = None;
 
                 for height in range {
@@ -260,12 +262,54 @@ where
         Ok(())
     }
 
-    /// Get next header from the store to be pruned or None if there's nothing to prune
+    /// Returns a batch of at most 512 blocks that are needed to be pruned.
     async fn get_next_prunable_batch(
         &mut self,
         sampling_cutoff: Time,
         pruning_cutoff: Time,
     ) -> Result<BlockRanges> {
+        // We need to be able to handle two cases:
+        //
+        // Case 1 - Pruning window is equal or bigger than sampling window
+        //
+        // +------------------------+---------------+-------------------+
+        // |         1 - 140        |   141 - 200   |      201 - 260    |
+        // +------------------------+---------------+-------------------+
+        // <-----Prunable area----->|<-----------Pruning window--------->
+        // <-----------Non sampling area----------->|<--Sampling window->
+        //
+        // This case is straight forward: we just remove whatever is after
+        // the pruning window, or in other words, inside the prunable area.
+        //
+        //
+        // Case 2 - Pruning window is smaller than sampling window
+        //
+        // +------------------------+---------------+-------------------+
+        // |         1 - 140        |   141 - 200   |      201 - 260    |
+        // +------------------------+---------------+-------------------+
+        // <----------Prunable area---------------->|<--Pruning window-->
+        // <---Non sampling area--->|<----------Sampling window--------->
+        //
+        // This case is a bit more complicated: The real use case of having pruning
+        // window smaller than sampling window is when you want to prune blocks
+        // that are after the pruning window as soon as they are sampled. This
+        // is mainly used when you want small storage footprint but still validate
+        // the blockchain.
+        //
+        // In this case when something is after the pruning window but within the
+        // sampling window can it can be removed if both of these constraints are met:
+        //
+        // 1. Block was sampled
+        // 2. Block header will not be needed in the future for verifying insertion
+        //    of currently missing block headers. We call these needed headers "edges".
+        //
+        // If the block is after the pruning window and after the sampling window
+        // then it can be removed as long as there isn't an ongoing data sampling
+        // for it in Daser. We check this by sending `WantToPrune` message to `Daser`
+        // and receiving back `true`. This mechanism exists to avoid race conditions
+        // between Pruner and Daser.
+        //
+        // The following algorithm covers both cases.
         let stored_ranges = self.store.get_stored_header_ranges().await?;
         let pruned_ranges = self.store.get_pruned_ranges().await?;
         let sampled_ranges = self.store.get_sampled_ranges().await?;
@@ -273,12 +317,14 @@ where
         self.update_cached_data(&stored_ranges, &sampling_cutoff, &pruning_cutoff)
             .await?;
 
+        // All heights after the sampling window
         let non_sampling_area = self
             .cache
             .after_sampling_window
             .map(|height| BlockRanges::try_from(1..=height).expect("never fails"))
             .unwrap_or_default();
 
+        // All heights after the pruning window
         let prunable_area = self
             .cache
             .after_pruning_window
@@ -292,51 +338,6 @@ where
         // All heights that are stored and after pruning window
         let prune_candidates = stored_ranges & &prunable_area;
 
-        // We need to be able to handle two cases:
-        //
-        // Case 1 - Pruning window is equal or bigger than sampling window
-        //
-        // +------------------------+---------------+-------------------+
-        // |         1 - 140        |   141 - 200   |      201 - 260    |
-        // +------------------------+---------------+-------------------+
-        // <-----Prunable area----->|<-----------Pruning window--------->
-        // <-----------Non sampling area----------->|<--Sampling window->
-        //
-        // This case is straight forward: we just remove whatever is inside
-        // the prunable area.
-        //
-        // NOTE: I'm using "inside the prunable are" instead of "outside the
-        // pruning window" because in reality "pruning window" has a reverse
-        // meaning. "pruning window" really means "retention window". We kept
-        // the original term in our code because of CIP-004.
-        //
-        //
-        // Case 2 - Pruning window is smaller than sampling window
-        //
-        // +------------------------+---------------+-------------------+
-        // |         1 - 140        |   141 - 200   |      201 - 260    |
-        // +------------------------+---------------+-------------------+
-        // <----------Prunable area---------------->|<--Pruning window-->
-        // <---Non sampling area--->|<----------Sampling window--------->
-        //
-        // This case is a bit complicated: The real use case of having pruning
-        // window smaller than sampling window is when you want to prune blocks
-        // that are inside the prunable area as soon as they are sampled. This
-        // is mainly used when you want small storage footprint but still validate
-        // the blockchain.
-        //
-        // In this case when something is inside the prunable area and sampling area
-        // it can be removed if both of these constraints are met:
-        //
-        // 1. Block was sampled
-        // 2. Block header will not be needed in the future for verifying insertion
-        //    of currently missing block headers. We call these blocks "edges".
-        //
-        // If the block is inside the prunable area and outside of sampling area
-        // then it can be removed as long as there isn't an ongoing data sampling
-        // for it in Daser. We do this by sending `WantToPrune` message to `Daser`
-        // and receiving back `true`. This mechanism exists to avoid race conditions
-        // between Pruner and Daser.
         let after_sampling_window = prune_candidates.clone() & &non_sampling_area;
         let prunable_and_sampled =
             (prune_candidates.clone() - &after_sampling_window - &edges) & &sampled_ranges;
@@ -353,6 +354,7 @@ where
 
         let mut prunable_batch = prunable_and_sampled.keep_head(MAX_PRUNABLE_BATCH_SIZE);
 
+        // Daser needs to allow us to remove anything beyond sampling and pruning window.
         for height in after_sampling_window.rev() {
             if prunable_batch.len() == MAX_PRUNABLE_BATCH_SIZE {
                 break;
@@ -369,6 +371,7 @@ where
     }
 }
 
+/// Use binary search and find the first header that is after the window cutoff
 async fn find_height_after_window<S>(
     store: &S,
     stored_headers: &BlockRanges,
@@ -429,8 +432,7 @@ mod test {
         let first_header_time = (now - Duration::from_secs(120)).unwrap();
         gen.set_time(first_header_time, Duration::from_secs(1));
 
-        let headers = gen.next_many(120);
-        store.insert(headers).await.unwrap();
+        store.insert(gen.next_many(120)).await.unwrap();
 
         let stored_headers = store.get_stored_header_ranges().await.unwrap();
         let pruning_cutoff = now.saturating_sub(pruning_window);

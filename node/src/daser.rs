@@ -425,13 +425,15 @@ where
                 // to prune, then we pause sampling.
                 0
             } else if height == self.head_height.unwrap_or(0) {
+                // For head we allow additional concurrency
                 self.concurrency_limit + self.additional_headersub_concurency
             } else {
                 self.concurrency_limit
             };
 
             if self.sampling_futs.len() >= concurrency_limit {
-                // Put back the height we popped.
+                // If concurrency limit is reached, then we pause sampling
+                // and we put back the height we previously popped.
                 self.queue
                     .insert_relaxed(height..=height)
                     .expect("invalid height");
