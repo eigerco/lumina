@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D14DFDE92DD4890700F311BE /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = D14DFDE82DD4890700F311BE /* Logging */; };
 		FC92E19F2D5F9B1A00A25A9C /* lumina.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC92E19E2D5F9B1A00A25A9C /* lumina.xcframework */; };
 		FC92E1A22D5F9B2700A25A9C /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC92E1A12D5F9B2700A25A9C /* SystemConfiguration.framework */; };
 /* End PBXBuildFile section */
@@ -36,9 +37,22 @@
 		FC92E1A12D5F9B2700A25A9C /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D14DFDE62DD38AC500F311BE /* Exceptions for "LuminaDemo" folder in "LuminaDemo" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = FC92E16A2D5F9A6D00A25A9C /* LuminaDemo */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		FC92E16D2D5F9A6D00A25A9C /* LuminaDemo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D14DFDE62DD38AC500F311BE /* Exceptions for "LuminaDemo" folder in "LuminaDemo" target */,
+			);
 			path = LuminaDemo;
 			sourceTree = "<group>";
 		};
@@ -59,6 +73,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D14DFDE92DD4890700F311BE /* Logging in Frameworks */,
 				FC92E1A22D5F9B2700A25A9C /* SystemConfiguration.framework in Frameworks */,
 				FC92E19F2D5F9B1A00A25A9C /* lumina.xcframework in Frameworks */,
 			);
@@ -131,6 +146,7 @@
 			);
 			name = LuminaDemo;
 			packageProductDependencies = (
+				D14DFDE82DD4890700F311BE /* Logging */,
 			);
 			productName = LuminaDemo;
 			productReference = FC92E16B2D5F9A6D00A25A9C /* LuminaDemo.app */;
@@ -214,6 +230,9 @@
 			);
 			mainGroup = FC92E1622D5F9A6D00A25A9C;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D14DFDE72DD4890700F311BE /* XCRemoteSwiftPackageReference "swift-log" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FC92E16C2D5F9A6D00A25A9C /* Products */;
 			projectDirPath = "";
@@ -418,11 +437,13 @@
 				DEVELOPMENT_TEAM = 772B362MTF;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LuminaDemo/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -447,11 +468,13 @@
 				DEVELOPMENT_TEAM = 772B362MTF;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LuminaDemo/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -577,6 +600,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D14DFDE72DD4890700F311BE /* XCRemoteSwiftPackageReference "swift-log" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-log.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.6.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D14DFDE82DD4890700F311BE /* Logging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D14DFDE72DD4890700F311BE /* XCRemoteSwiftPackageReference "swift-log" */;
+			productName = Logging;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = FC92E1632D5F9A6D00A25A9C /* Project object */;
 }

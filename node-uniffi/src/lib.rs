@@ -5,6 +5,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 mod error;
+pub mod grpc;
 mod types;
 
 use blockstore::EitherBlockstore;
@@ -24,6 +25,8 @@ use uniffi::Object;
 uniffi::setup_scaffolding!();
 
 lumina_node::uniffi_reexport_scaffolding!();
+celestia_types::uniffi_reexport_scaffolding!();
+//celestia_grpc::uniffi_reexport_scaffolding!();
 
 pub(crate) type Blockstore = EitherBlockstore<InMemoryBlockstore, RedbBlockstore>;
 pub(crate) type Store = EitherStore<InMemoryStore, RedbStore>;

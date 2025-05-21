@@ -99,6 +99,43 @@ pub type Proof = nmt_rs::simple_merkle::proof::Proof<NamespacedSha2Hasher>;
 )]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
+#[cfg(feature = "uniffi")]
+mod uniffi_types {
+    use super::*;
+    use crate::error::UniffiError;
+
+    use uniffi::Record;
+
+    #[derive(Record)]
+    pub struct UniffiNamespace {
+        namespace: Vec<u8>,
+    }
+
+    // TODO: methods, maybe?
+
+    impl From<Namespace> for UniffiNamespace {
+        fn from(value: Namespace) -> Self {
+            UniffiNamespace {
+                namespace: value.0 .0.to_vec(),
+            }
+        }
+    }
+
+    impl TryFrom<UniffiNamespace> for Namespace {
+        type Error = UniffiError;
+
+        fn try_from(value: UniffiNamespace) -> Result<Self, Self::Error> {
+            let ns = value.namespace.as_ref();
+            Ok(Namespace(
+                nmt_rs::NamespaceId::try_from(ns)
+                    .map_err(|_| UniffiError::InvalidNamespaceLength)?,
+            ))
+        }
+    }
+
+    uniffi::custom_type!(Namespace, UniffiNamespace);
+}
+
 impl Namespace {
     /// Primary reserved [`Namespace`] for the compact [`Share`]s with [`cosmos SDK`] transactions.
     ///

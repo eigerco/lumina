@@ -341,3 +341,49 @@ pub(crate) use bail_validation;
 pub(crate) use bail_verification;
 pub(crate) use validation_error;
 pub(crate) use verification_error;
+
+#[cfg(feature = "uniffi")]
+#[derive(Debug, uniffi::Error, thiserror::Error)]
+pub enum UniffiError {
+    #[error("Invalid namespace length")]
+    InvalidNamespaceLength,
+
+    #[error("Invalid commitment hash length")]
+    InvalidCommitmentLength,
+
+    #[error("Invalid account id length")]
+    InvalidAccountIdLength,
+
+    #[error("Invalid hash length")]
+    InvalidHashLength,
+
+    #[error("Invalid chain id length")]
+    InvalidChainIdLength,
+
+    #[error("Invalid public key")]
+    InvalidPublicKey,
+
+    #[error("Invalid parts header {msg}")]
+    InvalidPartsHeader { msg: String },
+
+    #[error("Timestamp out of range")]
+    TimestampOutOfRange,
+
+    #[error("Header heigth out of range")]
+    HeaderHeightOutOfRange,
+
+    #[error("Invalid signature length")]
+    InvalidSignatureLength,
+
+    #[error("Invalid round index")]
+    InvalidRoundIndex,
+
+    #[error("Invalid validator index")]
+    InvalidValidatorIndex,
+
+    #[error("Voting power out of range")]
+    InvalidVotingPower,
+
+    #[error("Invalid signed header")]
+    InvalidSignedHeader,
+}

@@ -27,6 +27,8 @@ mod sync;
 #[cfg_attr(docsrs, doc(cfg(feature = "test-utils")))]
 pub mod test_utils;
 pub mod trust_level;
+#[cfg(feature = "uniffi")]
+pub mod uniffi_types;
 mod validate;
 mod validator_set;
 
@@ -45,3 +47,9 @@ pub use crate::validate::*;
 
 #[cfg(all(test, target_arch = "wasm32"))]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();
+
+#[cfg(feature = "uniffi")]
+celestia_proto::uniffi_reexport_scaffolding!();

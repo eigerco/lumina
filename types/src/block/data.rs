@@ -9,6 +9,7 @@ use crate::Error;
 /// [`Block`]: crate::block::Block
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(try_from = "RawData", into = "RawData")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Data {
     /// Transactions.
     pub txs: Vec<Vec<u8>>,

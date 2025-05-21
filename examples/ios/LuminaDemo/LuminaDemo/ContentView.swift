@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Logging
 
 @MainActor
 class LuminaViewModel: ObservableObject {
@@ -20,6 +21,8 @@ class LuminaViewModel: ObservableObject {
     
     private var node: LuminaNode?
     private var statsTimer: Timer?
+    
+    private var grpc: GrpcClient?
     
     deinit {
         statsTimer?.invalidate()
@@ -41,10 +44,27 @@ class LuminaViewModel: ObservableObject {
             batchSize: nil,
             ed25519SecretKeyBytes: nil
         )
+        //do { let grpc = try GrpcClient(url: "rpc-celestia.alphab.ai:9090"); } catch {self.error = "grpc: \(error)" as! any Error}
+        
         do {
-            node = try LuminaNode(config: config)
+            // ====
+            //self.grpc = try GrpcClient(url: "rpc-celestia.alphab.ai:9090")
+            //let params = try await self.grpc?.getAuthParams()
+            //Logger(label: "LuminaDemo").info("Got auth params: \(String(describing: params))")
+            // ====
+            
+            self.node = try LuminaNode(config: config)
+            
             let _ = try await node!.start()
             isRunning = await node!.isRunning();
+            
+            Logger(label: "LuminaDemo").info("node spun up: \(isRunning)")
+            
+            self.grpc = try await GrpcClient(url: "https://rpc-celestia.alphab.ai:9090")
+            let params = try await self.grpc?.getAuthParams()
+            Logger(label: "LuminaDemo").info("Got auth params: \(String(describing: params))")
+
+            Logger(label: "LuminaDemo").info("grpc too")
             
             statsTimer = pollStats()
         } catch {

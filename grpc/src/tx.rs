@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use celestia_proto::cosmos::crypto::secp256k1;
-use celestia_proto::cosmos::tx::v1beta1::SignDoc;
+pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
@@ -413,8 +413,8 @@ where
         account_pubkey: VerifyingKey,
         signer: S,
     ) -> Result<Self> {
-        let transport = tonic::transport::Endpoint::from_shared(url.into())
-            .map_err(|e| Error::TransportError(e.to_string()))?
+        let transport = tonic::transport::Endpoint::from_shared(url.into())?
+            //.map_err(|e| Error::TransportError(e.to_string()))?
             .connect_lazy();
         Self::new(transport, account_address, account_pubkey, signer).await
     }
@@ -488,6 +488,7 @@ where
 
 /// A result of correctly submitted transaction.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxInfo {
     /// Hash of the transaction.
     pub hash: Hash,
@@ -497,6 +498,7 @@ pub struct TxInfo {
 
 /// Configuration for the transaction.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxConfig {
     /// Custom gas limit for the transaction (in `utia`).
     pub gas_limit: Option<u64>,
@@ -646,4 +648,51 @@ fn estimate_gas(blobs: &[Blob], app_version: AppVersion, gas_multiplier: f64) ->
         + (tx_size_cost_per_byte * BYTES_PER_BLOB_INFO * blobs.len() as u64)
         + PFB_GAS_FIXED_COST;
     (gas as f64 * gas_multiplier) as u64
+}
+
+#[cfg(feature = "uniffi")]
+mod uniffi_types {
+
+    use tendermint::hash::{Algorithm, Hash as TendermintHash};
+    use thiserror::Error;
+    use uniffi::Enum;
+
+    #[derive(Debug, Error)]
+    #[error("Invalid hash length")]
+    pub struct InvalidHashLength;
+
+    #[derive(Enum)]
+    pub enum Hash {
+        Sha256 { hash: Vec<u8> },
+        None,
+    }
+
+    impl TryFrom<Hash> for TendermintHash {
+        type Error = InvalidHashLength;
+
+        fn try_from(value: Hash) -> Result<Self, Self::Error> {
+            Ok(match value {
+                Hash::Sha256 { hash } => TendermintHash::from_bytes(Algorithm::Sha256, &hash)
+                    .map_err(|_| InvalidHashLength)?,
+                Hash::None => TendermintHash::None,
+            })
+        }
+    }
+
+    impl From<TendermintHash> for Hash {
+        fn from(value: TendermintHash) -> Self {
+            match value {
+                TendermintHash::Sha256(hash) => Hash::Sha256 {
+                    hash: hash.to_vec(),
+                },
+                TendermintHash::None => Hash::None,
+            }
+        }
+    }
+
+    uniffi::custom_type!(TendermintHash, Hash, {
+        remote,
+        try_lift: |value| Ok(value.try_into()?),
+        lower: |value| value.into()
+    });
 }

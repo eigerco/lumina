@@ -13,6 +13,7 @@ use crate::{Error, Result};
 
 /// Response to a tx status query
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxStatusResponse {
     /// Height of the block in which the transaction was committed.
     pub height: Height,
@@ -30,6 +31,7 @@ pub struct TxStatusResponse {
 
 /// Represents state of the transaction in the mempool
 #[derive(Debug, Copy, Clone)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum TxStatus {
     /// The transaction is not known to the node, it could be never sent.
     Unknown,
@@ -93,4 +95,38 @@ impl FromGrpcResponse<TxStatusResponse> for RawTxStatusResponse {
     fn try_from_response(self) -> Result<TxStatusResponse> {
         self.try_into()
     }
+}
+
+#[cfg(feature = "uniffi")]
+mod uniffi_types {
+    use celestia_types::UniffiError;
+    use tendermint::block::Height as TendermintHeight;
+    use uniffi::Record;
+
+    #[derive(Record)]
+    pub struct Height {
+        value: u64,
+    }
+
+    impl TryFrom<Height> for TendermintHeight {
+        type Error = UniffiError;
+
+        fn try_from(value: Height) -> Result<Self, Self::Error> {
+            TendermintHeight::try_from(value.value).map_err(|_| UniffiError::HeaderHeightOutOfRange)
+        }
+    }
+
+    impl From<TendermintHeight> for Height {
+        fn from(value: TendermintHeight) -> Self {
+            Height {
+                value: value.value(),
+            }
+        }
+    }
+
+    uniffi::custom_type!(TendermintHeight, Height, {
+        remote,
+        try_lift: |value| Ok(value.try_into()?),
+        lower: |value| value.into()
+    });
 }

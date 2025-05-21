@@ -22,3 +22,48 @@ impl HashExt for Hash {
         ])
     }
 }
+
+#[cfg(feature = "uniffi")]
+pub mod uniffi_types {
+    use super::Hash as TendermintHash;
+    use tendermint::hash::Algorithm;
+
+    use uniffi::Enum;
+
+    use crate::UniffiError;
+
+    #[derive(Enum)]
+    pub enum Hash {
+        Sha256 { hash: Vec<u8> },
+        None,
+    }
+
+    impl TryFrom<Hash> for TendermintHash {
+        type Error = UniffiError;
+
+        fn try_from(value: Hash) -> Result<Self, Self::Error> {
+            Ok(match value {
+                Hash::Sha256 { hash } => TendermintHash::from_bytes(Algorithm::Sha256, &hash)
+                    .map_err(|_| UniffiError::InvalidHashLength)?,
+                Hash::None => TendermintHash::None,
+            })
+        }
+    }
+
+    impl From<TendermintHash> for Hash {
+        fn from(value: TendermintHash) -> Self {
+            match value {
+                TendermintHash::Sha256(hash) => Hash::Sha256 {
+                    hash: hash.to_vec(),
+                },
+                TendermintHash::None => Hash::None,
+            }
+        }
+    }
+
+    uniffi::custom_type!(TendermintHash, Hash, {
+        remote,
+        try_lift: |value| Ok(value.try_into()?),
+        lower: |value| value.into()
+    });
+}
