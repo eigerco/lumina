@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.10.0...lumina-node-v0.11.0) - 2025-05-21
+
+### Fixed
+
+- *(utils)* [**breaking**] Fix `timeout` when duration is more than 24.9 days ([#617](https://github.com/eigerco/lumina/pull/617))
+
+### Other
+
+- *(rpc,node)* [**breaking**] Fix clippy issues ([#626](https://github.com/eigerco/lumina/pull/626))
+- Update bootstrappers for mainnet ([#605](https://github.com/eigerco/lumina/pull/605))
+
 ## [0.10.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.9.1...lumina-node-v0.10.0) - 2025-04-02
 
 ### Added
