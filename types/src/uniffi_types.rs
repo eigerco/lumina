@@ -389,16 +389,7 @@ uniffi::custom_type!(TendermintEvidenceList, Vec<Evidence>, {
     lower: |value| value.into_vec().into_iter().map(|e| e.try_into()).collect::<Result<_,_>>().expect("valid timestamps")
 });
 
-/*
-impl TryFrom<TendermintEvidenceList> for Vec<Evidence> {
-    type Error = UniffiError;
-
-    fn try_from(value: TendermintEvidenceList) -> Result<Self, Self::Error> {
-        Ok(value.to_vec().into_iter().map(|e| e.try_into()).collect::<Result<_,_>>()?)
-    }
-}
-*/
-
+#[allow(clippy::large_enum_variant)]
 #[derive(Enum)]
 pub enum Evidence {
     DuplicateVote {

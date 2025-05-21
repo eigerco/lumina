@@ -141,70 +141,52 @@ impl Protobuf<RawModuleAccount> for ModuleAccount {}
 
 #[cfg(feature = "uniffi")]
 mod uniffi_types {
-    use super::*;
-    use crate::error::UniffiError;
+    use super::PublicKey as TendermintPublicKey;
 
     use tendermint::public_key::{Ed25519, Secp256k1};
     use uniffi::Enum;
 
+    use crate::error::UniffiError;
+
     #[derive(Enum)]
-    pub enum UniffiPublicKey {
+    pub enum PublicKey {
         Ed25519 { bytes: Vec<u8> },
         Secp256k1 { sec1_bytes: Vec<u8> },
     }
 
-    // TODO: methods, maybe?
+    impl TryFrom<PublicKey> for TendermintPublicKey {
+        type Error = UniffiError;
 
-    uniffi::custom_type!(PublicKey, UniffiPublicKey, {
-        remote,
-        try_lift: |value| Ok(match value {
-                UniffiPublicKey::Ed25519 { bytes } => PublicKey::Ed25519(
+        fn try_from(value: PublicKey) -> Result<Self, Self::Error> {
+            Ok(match value {
+                PublicKey::Ed25519 { bytes } => TendermintPublicKey::Ed25519(
                     Ed25519::try_from(bytes.as_ref()).map_err(|_| UniffiError::InvalidPublicKey)?,
                 ),
-                UniffiPublicKey::Secp256k1 { sec1_bytes } => PublicKey::Secp256k1(
+                PublicKey::Secp256k1 { sec1_bytes } => TendermintPublicKey::Secp256k1(
                     Secp256k1::from_sec1_bytes(&sec1_bytes)
                         .map_err(|_| UniffiError::InvalidPublicKey)?,
                 ),
-            }),
-        lower: |value| match value {
-                PublicKey::Ed25519(k) => UniffiPublicKey::Ed25519 {
+            })
+        }
+    }
+
+    impl From<TendermintPublicKey> for PublicKey {
+        fn from(value: TendermintPublicKey) -> Self {
+            match value {
+                TendermintPublicKey::Ed25519(k) => PublicKey::Ed25519 {
                     bytes: k.as_bytes().to_vec(),
                 },
-                PublicKey::Secp256k1(k) => UniffiPublicKey::Secp256k1 {
+                TendermintPublicKey::Secp256k1(k) => PublicKey::Secp256k1 {
                     sec1_bytes: k.to_sec1_bytes().to_vec(),
                 },
                 _ => unimplemented!("unexpected key type"),
             }
-    });
-
-    /*
-    // TODO: ugh??
-    //#[uniffi::remote(Record)]
-    #[derive(Record)]
-    pub struct UniffiAuthParams {
-        pub max_memo_characters: u64,
-        pub tx_sig_limit: u64,
-        pub tx_size_cost_per_byte: u64,
-        pub sig_verify_cost_ed25519: u64,
-        pub sig_verify_cost_secp256k1: u64,
+        }
     }
 
-    uniffi::custom_type!(AuthParams, UniffiAuthParams, {
+    uniffi::custom_type!(TendermintPublicKey, PublicKey, {
         remote,
-        try_lift: |value| Ok(AuthParams {
-            max_memo_characters: value.max_memo_characters,
-            tx_sig_limit: value.tx_sig_limit,
-            tx_size_cost_per_byte: value.tx_size_cost_per_byte,
-            sig_verify_cost_ed25519: value.sig_verify_cost_ed25519,
-            sig_verify_cost_secp256k1: value.sig_verify_cost_secp256k1,
-        }),
-        lower: |value| UniffiAuthParams {
-            max_memo_characters: value.max_memo_characters,
-            tx_sig_limit: value.tx_sig_limit,
-            tx_size_cost_per_byte: value.tx_size_cost_per_byte,
-            sig_verify_cost_ed25519: value.sig_verify_cost_ed25519,
-            sig_verify_cost_secp256k1: value.sig_verify_cost_secp256k1,
-        }
+        try_lift: |value| Ok(value.try_into()?),
+        lower: |value| value.into()
     });
-    */
 }

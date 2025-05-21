@@ -61,7 +61,7 @@ getrandom = { version = "0.2.15", features = ["js"] }
 wasm-bindgen-test.workspace = true
 
 [features]
-default = ["p2p", "uniffi"]
+default = ["p2p"]
 p2p = ["dep:libp2p-identity", "dep:multiaddr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
 tonic = ["celestia-proto/tonic"]

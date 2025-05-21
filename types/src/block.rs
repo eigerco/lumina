@@ -272,21 +272,21 @@ fn is_zero(id: &Id) -> bool {
 
 #[cfg(feature = "uniffi")]
 pub mod uniffi_types {
-    use crate::error::UniffiError;
-    use crate::hash::Hash;
-    use crate::state::UniffiAccountId;
-    use crate::uniffi_types::{AppHash, BlockId, ChainId, ProtocolVersion, Signature, Time};
+    use tendermint::block::signed_header::SignedHeader as TendermintSignedHeader;
     use tendermint::block::{
         Commit as TendermintCommit, CommitSig as TendermintCommitSig, Header as TendermintHeader,
         Height,
     };
     use uniffi::{Enum, Record};
 
-    use tendermint::block::signed_header::SignedHeader as TendermintSignedHeader;
+    use crate::error::UniffiError;
+    use crate::hash::Hash;
+    use crate::state::UniffiAccountId;
+    use crate::uniffi_types::{AppHash, BlockId, ChainId, ProtocolVersion, Signature, Time};
 
     #[derive(Record)]
     pub struct SignedHeader {
-        pub header: UniffiHeader,
+        pub header: Header,
         pub commit: Commit,
     }
 
@@ -436,10 +436,10 @@ pub mod uniffi_types {
     }
 
     #[derive(Record)]
-    pub struct UniffiHeader {
+    pub struct Header {
         pub version: ProtocolVersion,
         pub chain_id: ChainId,
-        pub height: u64,
+        pub height: Height,
         pub time: Time,
         pub last_block_id: Option<BlockId>,
         pub last_commit_hash: Option<Hash>,
@@ -453,52 +453,51 @@ pub mod uniffi_types {
         pub proposer_address: UniffiAccountId,
     }
 
-    impl TryFrom<UniffiHeader> for TendermintHeader {
+    impl TryFrom<Header> for TendermintHeader {
         type Error = UniffiError;
 
-        fn try_from(value: UniffiHeader) -> std::result::Result<Self, Self::Error> {
+        fn try_from(value: Header) -> std::result::Result<Self, Self::Error> {
             Ok(TendermintHeader {
-                version: value.version.into(),
+                version: value.version,
                 chain_id: value.chain_id.try_into()?,
-                height: Height::try_from(value.height)
-                    .map_err(|_| UniffiError::HeaderHeightOutOfRange)?,
+                height: value.height,
                 time: value.time.try_into()?,
                 last_block_id: value.last_block_id.map(TryInto::try_into).transpose()?,
-                last_commit_hash: value.last_commit_hash, //.map(TryInto::try_into).transpose()?,
-                data_hash: value.data_hash,               //.map(TryInto::try_into).transpose()?,
-                validators_hash: value.validators_hash,   //.try_into()?,
-                next_validators_hash: value.next_validators_hash, //.try_into()?,
-                consensus_hash: value.consensus_hash,     //.try_into()?,
+                last_commit_hash: value.last_commit_hash,
+                data_hash: value.data_hash,
+                validators_hash: value.validators_hash,
+                next_validators_hash: value.next_validators_hash,
+                consensus_hash: value.consensus_hash,
                 app_hash: value.app_hash.try_into()?,
-                last_results_hash: value.last_results_hash, //.map(TryInto::try_into).transpose()?,
-                evidence_hash: value.evidence_hash,         //.map(TryInto::try_into).transpose()?,
+                last_results_hash: value.last_results_hash,
+                evidence_hash: value.evidence_hash,
                 proposer_address: value.proposer_address.try_into()?,
             })
         }
     }
 
-    impl From<TendermintHeader> for UniffiHeader {
+    impl From<TendermintHeader> for Header {
         fn from(value: TendermintHeader) -> Self {
-            UniffiHeader {
+            Header {
                 version: value.version,
                 chain_id: value.chain_id.into(),
-                height: value.height.into(),
+                height: value.height,
                 time: value.time.try_into().expect("valid time in tendermint"),
                 last_block_id: value.last_block_id.map(Into::into),
-                last_commit_hash: value.last_commit_hash.map(Into::into),
-                data_hash: value.data_hash.map(Into::into),
-                validators_hash: value.validators_hash.into(),
-                next_validators_hash: value.next_validators_hash.into(),
-                consensus_hash: value.consensus_hash.into(),
+                last_commit_hash: value.last_commit_hash,
+                data_hash: value.data_hash,
+                validators_hash: value.validators_hash,
+                next_validators_hash: value.next_validators_hash,
+                consensus_hash: value.consensus_hash,
                 app_hash: value.app_hash.into(),
-                last_results_hash: value.last_results_hash.map(Into::into),
-                evidence_hash: value.evidence_hash.map(Into::into),
+                last_results_hash: value.last_results_hash,
+                evidence_hash: value.evidence_hash,
                 proposer_address: value.proposer_address.into(),
             }
         }
     }
 
-    uniffi::custom_type!(TendermintHeader, UniffiHeader, {
+    uniffi::custom_type!(TendermintHeader, Header, {
         remote,
         try_lift: |value| Ok(value.try_into()?),
         lower: |value| value.into()

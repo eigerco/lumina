@@ -104,140 +104,6 @@ pub struct ConsAddress {
     id: Id,
 }
 
-#[cfg(feature = "uniffi")]
-pub(crate) mod uniffi_types {
-    use super::*;
-    use crate::error::UniffiError;
-    use uniffi::Record;
-
-    #[derive(Record)]
-    pub struct AccountId {
-        id: Vec<u8>,
-    }
-
-    impl From<Id> for AccountId {
-        fn from(value: Id) -> Self {
-            AccountId {
-                id: value.as_ref().to_vec(),
-            }
-        }
-    }
-
-    impl TryFrom<AccountId> for Id {
-        type Error = UniffiError;
-
-        fn try_from(value: AccountId) -> std::result::Result<Self, Self::Error> {
-            Id::try_from(value.id).map_err(|_| UniffiError::InvalidAccountIdLength)
-        }
-    }
-
-    uniffi::custom_type!(Id, AccountId, {
-        remote,
-        try_lift: |value| Ok(value.try_into()?),
-        lower: |value| value.into()
-    });
-}
-
-/*
-#[cfg(feature = "uniffi2")]
-mod uniffi_types {
-    use super::*;
-    use crate::error::UniffiError;
-
-    use uniffi::Record;
-
-    #[derive(Record)]
-    pub struct UniffiAccAddress {
-        id: Vec<u8>,
-    }
-
-    #[derive(Record)]
-    pub struct UniffiValAddress {
-        id: Vec<u8>,
-    }
-
-    #[derive(Record)]
-    pub struct UniffiConsAddress {
-        id: Vec<u8>,
-    }
-
-    // TODO: methods, maybe?
-
-    impl From<AccAddress> for UniffiAccAddress {
-        fn from(value: AccAddress) -> Self {
-            UniffiAccAddress {
-                id: value.id.as_bytes().to_vec(),
-            }
-        }
-    }
-
-    impl TryFrom<UniffiAccAddress> for AccAddress {
-        type Error = UniffiError;
-
-        fn try_from(value: UniffiAccAddress) -> Result<Self, Self::Error> {
-            Ok(AccAddress {
-                id: Id::new(
-                    value
-                        .id
-                        .try_into()
-                        .map_err(|_| UniffiError::InvalidAccountIdLength)?,
-                ),
-            })
-        }
-    }
-
-    impl From<ValAddress> for UniffiValAddress {
-        fn from(value: ValAddress) -> Self {
-            UniffiValAddress {
-                id: value.id.as_bytes().to_vec(),
-            }
-        }
-    }
-
-    impl TryFrom<UniffiValAddress> for ValAddress {
-        type Error = UniffiError;
-
-        fn try_from(value: UniffiValAddress) -> Result<Self, Self::Error> {
-            Ok(ValAddress {
-                id: Id::new(
-                    value
-                        .id
-                        .try_into()
-                        .map_err(|_| UniffiError::InvalidAccountIdLength)?,
-                ),
-            })
-        }
-    }
-
-    impl From<ConsAddress> for UniffiConsAddress {
-        fn from(value: ConsAddress) -> Self {
-            UniffiConsAddress {
-                id: value.id.as_bytes().to_vec(),
-            }
-        }
-    }
-
-    impl TryFrom<UniffiConsAddress> for ConsAddress {
-        type Error = UniffiError;
-
-        fn try_from(value: UniffiConsAddress) -> Result<Self, Self::Error> {
-            Ok(ConsAddress {
-                id: Id::new(
-                    value
-                        .id
-                        .try_into()
-                        .map_err(|_| UniffiError::InvalidAccountIdLength)?,
-                ),
-            })
-        }
-    }
-
-    uniffi::custom_type!(AccAddress, UniffiAccAddress);
-    uniffi::custom_type!(ValAddress, UniffiValAddress);
-    uniffi::custom_type!(ConsAddress, UniffiConsAddress);
-}
-*/
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 struct Raw {
@@ -418,6 +284,41 @@ fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
         .map_err(|_| Error::InvalidAddressSize(data.len()))?;
 
     Ok((kind, Id::new(bytes)))
+}
+
+#[cfg(feature = "uniffi")]
+pub(crate) mod uniffi_types {
+    use super::Id;
+    use uniffi::Record;
+
+    use crate::error::UniffiError;
+
+    #[derive(Record)]
+    pub struct AccountId {
+        id: Vec<u8>,
+    }
+
+    impl From<Id> for AccountId {
+        fn from(value: Id) -> Self {
+            AccountId {
+                id: value.as_ref().to_vec(),
+            }
+        }
+    }
+
+    impl TryFrom<AccountId> for Id {
+        type Error = UniffiError;
+
+        fn try_from(value: AccountId) -> std::result::Result<Self, Self::Error> {
+            Id::try_from(value.id).map_err(|_| UniffiError::InvalidAccountIdLength)
+        }
+    }
+
+    uniffi::custom_type!(Id, AccountId, {
+        remote,
+        try_lift: |value| Ok(value.try_into()?),
+        lower: |value| value.into()
+    });
 }
 
 #[cfg(test)]

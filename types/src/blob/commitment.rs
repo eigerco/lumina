@@ -63,43 +63,6 @@ pub struct Commitment {
     hash: merkle::Hash,
 }
 
-#[cfg(feature = "uniffi")]
-mod uniffi_types {
-    use super::*;
-    use crate::error::UniffiError;
-
-    use uniffi::Record;
-
-    #[derive(Record)]
-    pub struct UniffiCommitment {
-        pub sha_hash: Vec<u8>,
-    }
-
-    // TODO: method, maybe?
-
-    impl From<Commitment> for UniffiCommitment {
-        fn from(value: Commitment) -> Self {
-            UniffiCommitment {
-                sha_hash: value.hash.to_vec(),
-            }
-        }
-    }
-
-    impl TryFrom<UniffiCommitment> for Commitment {
-        type Error = UniffiError;
-
-        fn try_from(value: UniffiCommitment) -> Result<Self, Self::Error> {
-            let hash: [u8; HASH_SIZE] = value
-                .sha_hash
-                .try_into()
-                .map_err(|_| UniffiError::InvalidCommitmentLength)?;
-            Ok(Commitment { hash })
-        }
-    }
-
-    uniffi::custom_type!(Commitment, UniffiCommitment);
-}
-
 impl Commitment {
     /// Create a new commitment with hash
     pub fn new(hash: merkle::Hash) -> Self {
@@ -385,6 +348,41 @@ fn round_down_to_power_of_2(x: NonZeroU64) -> Option<u64> {
         Some(po2) => Some(po2 / 2),
         _ => None,
     }
+}
+
+#[cfg(feature = "uniffi")]
+mod uniffi_types {
+    use super::{Commitment as RustCommitment, HASH_SIZE};
+    use uniffi::Record;
+
+    use crate::error::UniffiError;
+
+    #[derive(Record)]
+    pub struct Commitment {
+        pub sha_hash: Vec<u8>,
+    }
+
+    impl From<RustCommitment> for Commitment {
+        fn from(value: RustCommitment) -> Self {
+            Commitment {
+                sha_hash: value.hash.to_vec(),
+            }
+        }
+    }
+
+    impl TryFrom<Commitment> for RustCommitment {
+        type Error = UniffiError;
+
+        fn try_from(value: Commitment) -> Result<Self, Self::Error> {
+            let hash: [u8; HASH_SIZE] = value
+                .sha_hash
+                .try_into()
+                .map_err(|_| UniffiError::InvalidCommitmentLength)?;
+            Ok(RustCommitment { hash })
+        }
+    }
+
+    uniffi::custom_type!(RustCommitment, Commitment);
 }
 
 #[cfg(test)]

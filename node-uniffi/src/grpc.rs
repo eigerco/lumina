@@ -15,7 +15,6 @@ pub use error::Result;
 pub use celestia_grpc::uniffi_client::TxClient;
 
 type InnerClient = celestia_grpc::GrpcClient<Channel>;
-//type InnerTxClient = celestia_grpc::TxClient<Channel, UniffiSigner>;
 
 #[derive(Object)]
 pub struct GrpcClient {
