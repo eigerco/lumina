@@ -35,7 +35,7 @@ struct InMemoryStoreInner {
     sampling_data: HashMap<u64, SamplingMetadata>,
     /// Source of truth about sampled ranges present in the db.
     sampled_ranges: BlockRanges,
-
+    /// Source of truth about ranges that were pruned from db.
     pruned_ranges: BlockRanges,
 }
 
