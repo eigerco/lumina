@@ -688,76 +688,6 @@ public func FfiConverterTypeAccountId_lower(_ value: AccountId) -> RustBuffer {
 }
 
 
-public struct Any {
-    public var typeUrl: String
-    public var value: Data
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(typeUrl: String, value: Data) {
-        self.typeUrl = typeUrl
-        self.value = value
-    }
-}
-
-#if compiler(>=6)
-extension Any: Sendable {}
-#endif
-
-
-extension Any: Equatable, Hashable {
-    public static func ==(lhs: Any, rhs: Any) -> Bool {
-        if lhs.typeUrl != rhs.typeUrl {
-            return false
-        }
-        if lhs.value != rhs.value {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(typeUrl)
-        hasher.combine(value)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeAny: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Any {
-        return
-            try Any(
-                typeUrl: FfiConverterString.read(from: &buf), 
-                value: FfiConverterData.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: Any, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.typeUrl, into: &buf)
-        FfiConverterData.write(value.value, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAny_lift(_ buf: RustBuffer) throws -> Any {
-    return try FfiConverterTypeAny.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAny_lower(_ value: Any) -> RustBuffer {
-    return FfiConverterTypeAny.lower(value)
-}
-
-
 public struct AppHash {
     public var hash: Data
 
@@ -937,7 +867,7 @@ public struct BaseAccount {
     /**
      * Optional `PublicKey` associated with this account.
      */
-    public var pubKey: PublicKey?
+    public var pubKey: TendermintPublicKey?
     /**
      * `account_number` is the account number of the account in state
      */
@@ -956,7 +886,7 @@ public struct BaseAccount {
          */address: Address, 
         /**
          * Optional `PublicKey` associated with this account.
-         */pubKey: PublicKey?, 
+         */pubKey: TendermintPublicKey?, 
         /**
          * `account_number` is the account number of the account in state
          */accountNumber: UInt64, 
@@ -1011,7 +941,7 @@ public struct FfiConverterTypeBaseAccount: FfiConverterRustBuffer {
         return
             try BaseAccount(
                 address: FfiConverterTypeAddress.read(from: &buf), 
-                pubKey: FfiConverterOptionTypePublicKey.read(from: &buf), 
+                pubKey: FfiConverterOptionTypeTendermintPublicKey.read(from: &buf), 
                 accountNumber: FfiConverterUInt64.read(from: &buf), 
                 sequence: FfiConverterUInt64.read(from: &buf)
         )
@@ -1019,7 +949,7 @@ public struct FfiConverterTypeBaseAccount: FfiConverterRustBuffer {
 
     public static func write(_ value: BaseAccount, into buf: inout [UInt8]) {
         FfiConverterTypeAddress.write(value.address, into: &buf)
-        FfiConverterOptionTypePublicKey.write(value.pubKey, into: &buf)
+        FfiConverterOptionTypeTendermintPublicKey.write(value.pubKey, into: &buf)
         FfiConverterUInt64.write(value.accountNumber, into: &buf)
         FfiConverterUInt64.write(value.sequence, into: &buf)
     }
@@ -1110,7 +1040,7 @@ public struct Blob {
     /**
      * A [`Namespace`] the [`Blob`] belongs to.
      */
-    public var namespace: Namespace
+    public var namespace: RustNamespace
     /**
      * Data stored within the [`Blob`].
      */
@@ -1122,7 +1052,7 @@ public struct Blob {
     /**
      * A [`Commitment`] computed from the [`Blob`]s data.
      */
-    public var commitment: Commitment
+    public var commitment: RustCommitment
     /**
      * Index of the blob's first share in the EDS. Only set for blobs retrieved from chain.
      */
@@ -1139,7 +1069,7 @@ public struct Blob {
     public init(
         /**
          * A [`Namespace`] the [`Blob`] belongs to.
-         */namespace: Namespace, 
+         */namespace: RustNamespace, 
         /**
          * Data stored within the [`Blob`].
          */data: Data, 
@@ -1148,7 +1078,7 @@ public struct Blob {
          */shareVersion: UInt8, 
         /**
          * A [`Commitment`] computed from the [`Blob`]s data.
-         */commitment: Commitment, 
+         */commitment: RustCommitment, 
         /**
          * Index of the blob's first share in the EDS. Only set for blobs retrieved from chain.
          */index: UInt64?, 
@@ -1213,20 +1143,20 @@ public struct FfiConverterTypeBlob: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Blob {
         return
             try Blob(
-                namespace: FfiConverterTypeNamespace.read(from: &buf), 
+                namespace: FfiConverterTypeRustNamespace.read(from: &buf), 
                 data: FfiConverterData.read(from: &buf), 
                 shareVersion: FfiConverterUInt8.read(from: &buf), 
-                commitment: FfiConverterTypeCommitment.read(from: &buf), 
+                commitment: FfiConverterTypeRustCommitment.read(from: &buf), 
                 index: FfiConverterOptionUInt64.read(from: &buf), 
                 signer: FfiConverterOptionTypeAccAddress.read(from: &buf)
         )
     }
 
     public static func write(_ value: Blob, into buf: inout [UInt8]) {
-        FfiConverterTypeNamespace.write(value.namespace, into: &buf)
+        FfiConverterTypeRustNamespace.write(value.namespace, into: &buf)
         FfiConverterData.write(value.data, into: &buf)
         FfiConverterUInt8.write(value.shareVersion, into: &buf)
-        FfiConverterTypeCommitment.write(value.commitment, into: &buf)
+        FfiConverterTypeRustCommitment.write(value.commitment, into: &buf)
         FfiConverterOptionUInt64.write(value.index, into: &buf)
         FfiConverterOptionTypeAccAddress.write(value.signer, into: &buf)
     }
@@ -1350,7 +1280,7 @@ public struct Block {
     /**
      * Transaction data
      */
-    public var data: Data
+    public var data: UniffiData
     /**
      * Evidence of malfeasance
      */
@@ -1368,7 +1298,7 @@ public struct Block {
          */header: TendermintHeader, 
         /**
          * Transaction data
-         */data: Data, 
+         */data: UniffiData, 
         /**
          * Evidence of malfeasance
          */evidence: TendermintEvidenceList, 
@@ -1422,7 +1352,7 @@ public struct FfiConverterTypeBlock: FfiConverterRustBuffer {
         return
             try Block(
                 header: FfiConverterTypeTendermintHeader.read(from: &buf), 
-                data: FfiConverterTypeData.read(from: &buf), 
+                data: FfiConverterTypeUniffiData.read(from: &buf), 
                 evidence: FfiConverterTypeTendermintEvidenceList.read(from: &buf), 
                 lastCommit: FfiConverterOptionTypeTendermintCommit.read(from: &buf)
         )
@@ -1430,7 +1360,7 @@ public struct FfiConverterTypeBlock: FfiConverterRustBuffer {
 
     public static func write(_ value: Block, into buf: inout [UInt8]) {
         FfiConverterTypeTendermintHeader.write(value.header, into: &buf)
-        FfiConverterTypeData.write(value.data, into: &buf)
+        FfiConverterTypeUniffiData.write(value.data, into: &buf)
         FfiConverterTypeTendermintEvidenceList.write(value.evidence, into: &buf)
         FfiConverterOptionTypeTendermintCommit.write(value.lastCommit, into: &buf)
     }
@@ -1449,6 +1379,68 @@ public func FfiConverterTypeBlock_lift(_ buf: RustBuffer) throws -> Block {
 #endif
 public func FfiConverterTypeBlock_lower(_ value: Block) -> RustBuffer {
     return FfiConverterTypeBlock.lower(value)
+}
+
+
+public struct BlockHeight {
+    public var value: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: UInt64) {
+        self.value = value
+    }
+}
+
+#if compiler(>=6)
+extension BlockHeight: Sendable {}
+#endif
+
+
+extension BlockHeight: Equatable, Hashable {
+    public static func ==(lhs: BlockHeight, rhs: BlockHeight) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlockHeight: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlockHeight {
+        return
+            try BlockHeight(
+                value: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlockHeight, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlockHeight_lift(_ buf: RustBuffer) throws -> BlockHeight {
+    return try FfiConverterTypeBlockHeight.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlockHeight_lower(_ value: BlockHeight) -> RustBuffer {
+    return FfiConverterTypeBlockHeight.lower(value)
 }
 
 
@@ -1817,6 +1809,68 @@ public func FfiConverterTypeCommit_lower(_ value: Commit) -> RustBuffer {
 }
 
 
+public struct Commitment {
+    public var shaHash: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shaHash: Data) {
+        self.shaHash = shaHash
+    }
+}
+
+#if compiler(>=6)
+extension Commitment: Sendable {}
+#endif
+
+
+extension Commitment: Equatable, Hashable {
+    public static func ==(lhs: Commitment, rhs: Commitment) -> Bool {
+        if lhs.shaHash != rhs.shaHash {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shaHash)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommitment: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Commitment {
+        return
+            try Commitment(
+                shaHash: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Commitment, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.shaHash, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommitment_lift(_ buf: RustBuffer) throws -> Commitment {
+    return try FfiConverterTypeCommitment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommitment_lower(_ value: Commitment) -> RustBuffer {
+    return FfiConverterTypeCommitment.lower(value)
+}
+
+
 public struct ConflictingBlock {
     public var signedHeader: SignedHeader
     public var validatorSet: ValidatorSet
@@ -1949,111 +2003,6 @@ public func FfiConverterTypeConsAddress_lift(_ buf: RustBuffer) throws -> ConsAd
 #endif
 public func FfiConverterTypeConsAddress_lower(_ value: ConsAddress) -> RustBuffer {
     return FfiConverterTypeConsAddress.lower(value)
-}
-
-
-/**
- * Data contained in a [`Block`].
- *
- * [`Block`]: crate::block::Block
- */
-public struct Data {
-    /**
-     * Transactions.
-     */
-    public var txs: [Data]
-    /**
-     * Square width of original data square.
-     */
-    public var squareSize: UInt64
-    /**
-     * Hash is the root of a binary Merkle tree where the leaves of the tree are
-     * the row and column roots of an extended data square. Hash is often referred
-     * to as the "data root".
-     */
-    public var hash: Data
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(
-        /**
-         * Transactions.
-         */txs: [Data], 
-        /**
-         * Square width of original data square.
-         */squareSize: UInt64, 
-        /**
-         * Hash is the root of a binary Merkle tree where the leaves of the tree are
-         * the row and column roots of an extended data square. Hash is often referred
-         * to as the "data root".
-         */hash: Data) {
-        self.txs = txs
-        self.squareSize = squareSize
-        self.hash = hash
-    }
-}
-
-#if compiler(>=6)
-extension Data: Sendable {}
-#endif
-
-
-extension Data: Equatable, Hashable {
-    public static func ==(lhs: Data, rhs: Data) -> Bool {
-        if lhs.txs != rhs.txs {
-            return false
-        }
-        if lhs.squareSize != rhs.squareSize {
-            return false
-        }
-        if lhs.hash != rhs.hash {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(txs)
-        hasher.combine(squareSize)
-        hasher.combine(hash)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeData: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
-        return
-            try Data(
-                txs: FfiConverterSequenceData.read(from: &buf), 
-                squareSize: FfiConverterUInt64.read(from: &buf), 
-                hash: FfiConverterData.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: Data, into buf: inout [UInt8]) {
-        FfiConverterSequenceData.write(value.txs, into: &buf)
-        FfiConverterUInt64.write(value.squareSize, into: &buf)
-        FfiConverterData.write(value.hash, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeData_lift(_ buf: RustBuffer) throws -> Data {
-    return try FfiConverterTypeData.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeData_lower(_ value: Data) -> RustBuffer {
-    return FfiConverterTypeData.lower(value)
 }
 
 
@@ -2330,31 +2279,109 @@ public func FfiConverterTypeFee_lower(_ value: Fee) -> RustBuffer {
 }
 
 
-public struct Height {
-    public var value: UInt64
+public struct Header {
+    public var version: ProtocolVersion
+    public var chainId: ChainId
+    public var height: TendermintHeight
+    public var time: Time
+    public var lastBlockId: BlockId?
+    public var lastCommitHash: TendermintHash?
+    public var dataHash: TendermintHash?
+    public var validatorsHash: TendermintHash
+    public var nextValidatorsHash: TendermintHash
+    public var consensusHash: TendermintHash
+    public var appHash: AppHash
+    public var lastResultsHash: TendermintHash?
+    public var evidenceHash: TendermintHash?
+    public var proposerAddress: AccountId
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(value: UInt64) {
-        self.value = value
+    public init(version: ProtocolVersion, chainId: ChainId, height: TendermintHeight, time: Time, lastBlockId: BlockId?, lastCommitHash: TendermintHash?, dataHash: TendermintHash?, validatorsHash: TendermintHash, nextValidatorsHash: TendermintHash, consensusHash: TendermintHash, appHash: AppHash, lastResultsHash: TendermintHash?, evidenceHash: TendermintHash?, proposerAddress: AccountId) {
+        self.version = version
+        self.chainId = chainId
+        self.height = height
+        self.time = time
+        self.lastBlockId = lastBlockId
+        self.lastCommitHash = lastCommitHash
+        self.dataHash = dataHash
+        self.validatorsHash = validatorsHash
+        self.nextValidatorsHash = nextValidatorsHash
+        self.consensusHash = consensusHash
+        self.appHash = appHash
+        self.lastResultsHash = lastResultsHash
+        self.evidenceHash = evidenceHash
+        self.proposerAddress = proposerAddress
     }
 }
 
 #if compiler(>=6)
-extension Height: Sendable {}
+extension Header: Sendable {}
 #endif
 
 
-extension Height: Equatable, Hashable {
-    public static func ==(lhs: Height, rhs: Height) -> Bool {
-        if lhs.value != rhs.value {
+extension Header: Equatable, Hashable {
+    public static func ==(lhs: Header, rhs: Header) -> Bool {
+        if lhs.version != rhs.version {
+            return false
+        }
+        if lhs.chainId != rhs.chainId {
+            return false
+        }
+        if lhs.height != rhs.height {
+            return false
+        }
+        if lhs.time != rhs.time {
+            return false
+        }
+        if lhs.lastBlockId != rhs.lastBlockId {
+            return false
+        }
+        if lhs.lastCommitHash != rhs.lastCommitHash {
+            return false
+        }
+        if lhs.dataHash != rhs.dataHash {
+            return false
+        }
+        if lhs.validatorsHash != rhs.validatorsHash {
+            return false
+        }
+        if lhs.nextValidatorsHash != rhs.nextValidatorsHash {
+            return false
+        }
+        if lhs.consensusHash != rhs.consensusHash {
+            return false
+        }
+        if lhs.appHash != rhs.appHash {
+            return false
+        }
+        if lhs.lastResultsHash != rhs.lastResultsHash {
+            return false
+        }
+        if lhs.evidenceHash != rhs.evidenceHash {
+            return false
+        }
+        if lhs.proposerAddress != rhs.proposerAddress {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
+        hasher.combine(version)
+        hasher.combine(chainId)
+        hasher.combine(height)
+        hasher.combine(time)
+        hasher.combine(lastBlockId)
+        hasher.combine(lastCommitHash)
+        hasher.combine(dataHash)
+        hasher.combine(validatorsHash)
+        hasher.combine(nextValidatorsHash)
+        hasher.combine(consensusHash)
+        hasher.combine(appHash)
+        hasher.combine(lastResultsHash)
+        hasher.combine(evidenceHash)
+        hasher.combine(proposerAddress)
     }
 }
 
@@ -2363,16 +2390,42 @@ extension Height: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeHeight: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Height {
+public struct FfiConverterTypeHeader: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Header {
         return
-            try Height(
-                value: FfiConverterUInt64.read(from: &buf)
+            try Header(
+                version: FfiConverterTypeProtocolVersion.read(from: &buf), 
+                chainId: FfiConverterTypeChainId.read(from: &buf), 
+                height: FfiConverterTypeTendermintHeight.read(from: &buf), 
+                time: FfiConverterTypeTime.read(from: &buf), 
+                lastBlockId: FfiConverterOptionTypeBlockId.read(from: &buf), 
+                lastCommitHash: FfiConverterOptionTypeTendermintHash.read(from: &buf), 
+                dataHash: FfiConverterOptionTypeTendermintHash.read(from: &buf), 
+                validatorsHash: FfiConverterTypeTendermintHash.read(from: &buf), 
+                nextValidatorsHash: FfiConverterTypeTendermintHash.read(from: &buf), 
+                consensusHash: FfiConverterTypeTendermintHash.read(from: &buf), 
+                appHash: FfiConverterTypeAppHash.read(from: &buf), 
+                lastResultsHash: FfiConverterOptionTypeTendermintHash.read(from: &buf), 
+                evidenceHash: FfiConverterOptionTypeTendermintHash.read(from: &buf), 
+                proposerAddress: FfiConverterTypeAccountId.read(from: &buf)
         )
     }
 
-    public static func write(_ value: Height, into buf: inout [UInt8]) {
-        FfiConverterUInt64.write(value.value, into: &buf)
+    public static func write(_ value: Header, into buf: inout [UInt8]) {
+        FfiConverterTypeProtocolVersion.write(value.version, into: &buf)
+        FfiConverterTypeChainId.write(value.chainId, into: &buf)
+        FfiConverterTypeTendermintHeight.write(value.height, into: &buf)
+        FfiConverterTypeTime.write(value.time, into: &buf)
+        FfiConverterOptionTypeBlockId.write(value.lastBlockId, into: &buf)
+        FfiConverterOptionTypeTendermintHash.write(value.lastCommitHash, into: &buf)
+        FfiConverterOptionTypeTendermintHash.write(value.dataHash, into: &buf)
+        FfiConverterTypeTendermintHash.write(value.validatorsHash, into: &buf)
+        FfiConverterTypeTendermintHash.write(value.nextValidatorsHash, into: &buf)
+        FfiConverterTypeTendermintHash.write(value.consensusHash, into: &buf)
+        FfiConverterTypeAppHash.write(value.appHash, into: &buf)
+        FfiConverterOptionTypeTendermintHash.write(value.lastResultsHash, into: &buf)
+        FfiConverterOptionTypeTendermintHash.write(value.evidenceHash, into: &buf)
+        FfiConverterTypeAccountId.write(value.proposerAddress, into: &buf)
     }
 }
 
@@ -2380,15 +2433,15 @@ public struct FfiConverterTypeHeight: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeHeight_lift(_ buf: RustBuffer) throws -> Height {
-    return try FfiConverterTypeHeight.lift(buf)
+public func FfiConverterTypeHeader_lift(_ buf: RustBuffer) throws -> Header {
+    return try FfiConverterTypeHeader.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeHeight_lower(_ value: Height) -> RustBuffer {
-    return FfiConverterTypeHeight.lower(value)
+public func FfiConverterTypeHeader_lower(_ value: Header) -> RustBuffer {
+    return FfiConverterTypeHeader.lower(value)
 }
 
 
@@ -2564,6 +2617,68 @@ public func FfiConverterTypeModuleAccount_lower(_ value: ModuleAccount) -> RustB
 }
 
 
+public struct Namespace {
+    public var namespace: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(namespace: Data) {
+        self.namespace = namespace
+    }
+}
+
+#if compiler(>=6)
+extension Namespace: Sendable {}
+#endif
+
+
+extension Namespace: Equatable, Hashable {
+    public static func ==(lhs: Namespace, rhs: Namespace) -> Bool {
+        if lhs.namespace != rhs.namespace {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(namespace)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNamespace: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Namespace {
+        return
+            try Namespace(
+                namespace: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Namespace, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.namespace, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamespace_lift(_ buf: RustBuffer) throws -> Namespace {
+    return try FfiConverterTypeNamespace.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamespace_lower(_ value: Namespace) -> RustBuffer {
+    return FfiConverterTypeNamespace.lower(value)
+}
+
+
 public struct PartsHeader {
     public var total: UInt32
     public var hash: TendermintHash
@@ -2631,6 +2746,76 @@ public func FfiConverterTypePartsHeader_lift(_ buf: RustBuffer) throws -> PartsH
 #endif
 public func FfiConverterTypePartsHeader_lower(_ value: PartsHeader) -> RustBuffer {
     return FfiConverterTypePartsHeader.lower(value)
+}
+
+
+public struct ProtobufAny {
+    public var typeUrl: String
+    public var value: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(typeUrl: String, value: Data) {
+        self.typeUrl = typeUrl
+        self.value = value
+    }
+}
+
+#if compiler(>=6)
+extension ProtobufAny: Sendable {}
+#endif
+
+
+extension ProtobufAny: Equatable, Hashable {
+    public static func ==(lhs: ProtobufAny, rhs: ProtobufAny) -> Bool {
+        if lhs.typeUrl != rhs.typeUrl {
+            return false
+        }
+        if lhs.value != rhs.value {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(typeUrl)
+        hasher.combine(value)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProtobufAny: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProtobufAny {
+        return
+            try ProtobufAny(
+                typeUrl: FfiConverterString.read(from: &buf), 
+                value: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProtobufAny, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.typeUrl, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProtobufAny_lift(_ buf: RustBuffer) throws -> ProtobufAny {
+    return try FfiConverterTypeProtobufAny.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProtobufAny_lower(_ value: ProtobufAny) -> RustBuffer {
+    return FfiConverterTypeProtobufAny.lower(value)
 }
 
 
@@ -2767,12 +2952,12 @@ public func FfiConverterTypeSignature_lower(_ value: Signature) -> RustBuffer {
 
 
 public struct SignedHeader {
-    public var header: UniffiHeader
+    public var header: Header
     public var commit: Commit
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(header: UniffiHeader, commit: Commit) {
+    public init(header: Header, commit: Commit) {
         self.header = header
         self.commit = commit
     }
@@ -2809,13 +2994,13 @@ public struct FfiConverterTypeSignedHeader: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignedHeader {
         return
             try SignedHeader(
-                header: FfiConverterTypeUniffiHeader.read(from: &buf), 
+                header: FfiConverterTypeHeader.read(from: &buf), 
                 commit: FfiConverterTypeCommit.read(from: &buf)
         )
     }
 
     public static func write(_ value: SignedHeader, into buf: inout [UInt8]) {
-        FfiConverterTypeUniffiHeader.write(value.header, into: &buf)
+        FfiConverterTypeHeader.write(value.header, into: &buf)
         FfiConverterTypeCommit.write(value.commit, into: &buf)
     }
 }
@@ -2846,7 +3031,7 @@ public struct SignerInfo {
      * that already exist in state. If unset, the verifier can use the required \
      * signer address for this position and lookup the public key.
      */
-    public var publicKey: Any?
+    public var publicKey: ProtobufAny?
     /**
      * mode_info describes the signing mode of the signer and is a nested
      * structure to support nested multisig pubkey's
@@ -2866,7 +3051,7 @@ public struct SignerInfo {
          * public_key is the public key of the signer. It is optional for accounts
          * that already exist in state. If unset, the verifier can use the required \
          * signer address for this position and lookup the public key.
-         */publicKey: Any?, 
+         */publicKey: ProtobufAny?, 
         /**
          * mode_info describes the signing mode of the signer and is a nested
          * structure to support nested multisig pubkey's
@@ -2917,14 +3102,14 @@ public struct FfiConverterTypeSignerInfo: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignerInfo {
         return
             try SignerInfo(
-                publicKey: FfiConverterOptionTypeAny.read(from: &buf), 
+                publicKey: FfiConverterOptionTypeProtobufAny.read(from: &buf), 
                 modeInfo: FfiConverterTypeModeInfo.read(from: &buf), 
                 sequence: FfiConverterUInt64.read(from: &buf)
         )
     }
 
     public static func write(_ value: SignerInfo, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeAny.write(value.publicKey, into: &buf)
+        FfiConverterOptionTypeProtobufAny.write(value.publicKey, into: &buf)
         FfiConverterTypeModeInfo.write(value.modeInfo, into: &buf)
         FfiConverterUInt64.write(value.sequence, into: &buf)
     }
@@ -3139,7 +3324,7 @@ public struct TxBody {
      * is referred to as the primary signer and pays the fee for the whole
      * transaction.
      */
-    public var messages: [Any]
+    public var messages: [ProtobufAny]
     /**
      * `memo` is any arbitrary memo to be added to the transaction.
      */
@@ -3154,13 +3339,13 @@ public struct TxBody {
      * when the default options are not sufficient. If any of these are present
      * and can't be handled, the transaction will be rejected
      */
-    public var extensionOptions: [Any]
+    public var extensionOptions: [ProtobufAny]
     /**
      * `extension_options` are arbitrary options that can be added by chains
      * when the default options are not sufficient. If any of these are present
      * and can't be handled, they will be ignored
      */
-    public var nonCriticalExtensionOptions: [Any]
+    public var nonCriticalExtensionOptions: [ProtobufAny]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -3174,7 +3359,7 @@ public struct TxBody {
          * By convention, the first required signer (usually from the first message)
          * is referred to as the primary signer and pays the fee for the whole
          * transaction.
-         */messages: [Any], 
+         */messages: [ProtobufAny], 
         /**
          * `memo` is any arbitrary memo to be added to the transaction.
          */memo: String, 
@@ -3186,12 +3371,12 @@ public struct TxBody {
          * `extension_options` are arbitrary options that can be added by chains
          * when the default options are not sufficient. If any of these are present
          * and can't be handled, the transaction will be rejected
-         */extensionOptions: [Any], 
+         */extensionOptions: [ProtobufAny], 
         /**
          * `extension_options` are arbitrary options that can be added by chains
          * when the default options are not sufficient. If any of these are present
          * and can't be handled, they will be ignored
-         */nonCriticalExtensionOptions: [Any]) {
+         */nonCriticalExtensionOptions: [ProtobufAny]) {
         self.messages = messages
         self.memo = memo
         self.timeoutHeight = timeoutHeight
@@ -3243,20 +3428,20 @@ public struct FfiConverterTypeTxBody: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TxBody {
         return
             try TxBody(
-                messages: FfiConverterSequenceTypeAny.read(from: &buf), 
+                messages: FfiConverterSequenceTypeProtobufAny.read(from: &buf), 
                 memo: FfiConverterString.read(from: &buf), 
                 timeoutHeight: FfiConverterTypeTendermintHeight.read(from: &buf), 
-                extensionOptions: FfiConverterSequenceTypeAny.read(from: &buf), 
-                nonCriticalExtensionOptions: FfiConverterSequenceTypeAny.read(from: &buf)
+                extensionOptions: FfiConverterSequenceTypeProtobufAny.read(from: &buf), 
+                nonCriticalExtensionOptions: FfiConverterSequenceTypeProtobufAny.read(from: &buf)
         )
     }
 
     public static func write(_ value: TxBody, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeAny.write(value.messages, into: &buf)
+        FfiConverterSequenceTypeProtobufAny.write(value.messages, into: &buf)
         FfiConverterString.write(value.memo, into: &buf)
         FfiConverterTypeTendermintHeight.write(value.timeoutHeight, into: &buf)
-        FfiConverterSequenceTypeAny.write(value.extensionOptions, into: &buf)
-        FfiConverterSequenceTypeAny.write(value.nonCriticalExtensionOptions, into: &buf)
+        FfiConverterSequenceTypeProtobufAny.write(value.extensionOptions, into: &buf)
+        FfiConverterSequenceTypeProtobufAny.write(value.nonCriticalExtensionOptions, into: &buf)
     }
 }
 
@@ -3324,7 +3509,7 @@ public struct TxResponse {
     /**
      * The request transaction bytes.
      */
-    public var tx: Any?
+    public var tx: ProtobufAny?
     /**
      * Time of the previous block. For heights > 1, it's the weighted median of
      * the timestamps of the valid votes in the block.LastCommit. For height == 1,
@@ -3375,7 +3560,7 @@ public struct TxResponse {
          */gasUsed: Int64, 
         /**
          * The request transaction bytes.
-         */tx: Any?, 
+         */tx: ProtobufAny?, 
         /**
          * Time of the previous block. For heights > 1, it's the weighted median of
          * the timestamps of the valid votes in the block.LastCommit. For height == 1,
@@ -3488,7 +3673,7 @@ public struct FfiConverterTypeTxResponse: FfiConverterRustBuffer {
                 info: FfiConverterString.read(from: &buf), 
                 gasWanted: FfiConverterInt64.read(from: &buf), 
                 gasUsed: FfiConverterInt64.read(from: &buf), 
-                tx: FfiConverterOptionTypeAny.read(from: &buf), 
+                tx: FfiConverterOptionTypeProtobufAny.read(from: &buf), 
                 timestamp: FfiConverterString.read(from: &buf), 
                 events: FfiConverterSequenceTypeEvent.read(from: &buf)
         )
@@ -3505,7 +3690,7 @@ public struct FfiConverterTypeTxResponse: FfiConverterRustBuffer {
         FfiConverterString.write(value.info, into: &buf)
         FfiConverterInt64.write(value.gasWanted, into: &buf)
         FfiConverterInt64.write(value.gasUsed, into: &buf)
-        FfiConverterOptionTypeAny.write(value.tx, into: &buf)
+        FfiConverterOptionTypeProtobufAny.write(value.tx, into: &buf)
         FfiConverterString.write(value.timestamp, into: &buf)
         FfiConverterSequenceTypeEvent.write(value.events, into: &buf)
     }
@@ -3527,31 +3712,65 @@ public func FfiConverterTypeTxResponse_lower(_ value: TxResponse) -> RustBuffer 
 }
 
 
-public struct UniffiCommitment {
-    public var shaHash: Data
+public struct UniffiData {
+    /**
+     * Transactions.
+     */
+    public var txs: [Data]
+    /**
+     * Square width of original data square.
+     */
+    public var squareSize: UInt64
+    /**
+     * Hash is the root of a binary Merkle tree where the leaves of the tree are
+     * the row and column roots of an extended data square. Hash is often referred
+     * to as the "data root".
+     */
+    public var hash: Data
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(shaHash: Data) {
-        self.shaHash = shaHash
+    public init(
+        /**
+         * Transactions.
+         */txs: [Data], 
+        /**
+         * Square width of original data square.
+         */squareSize: UInt64, 
+        /**
+         * Hash is the root of a binary Merkle tree where the leaves of the tree are
+         * the row and column roots of an extended data square. Hash is often referred
+         * to as the "data root".
+         */hash: Data) {
+        self.txs = txs
+        self.squareSize = squareSize
+        self.hash = hash
     }
 }
 
 #if compiler(>=6)
-extension UniffiCommitment: Sendable {}
+extension UniffiData: Sendable {}
 #endif
 
 
-extension UniffiCommitment: Equatable, Hashable {
-    public static func ==(lhs: UniffiCommitment, rhs: UniffiCommitment) -> Bool {
-        if lhs.shaHash != rhs.shaHash {
+extension UniffiData: Equatable, Hashable {
+    public static func ==(lhs: UniffiData, rhs: UniffiData) -> Bool {
+        if lhs.txs != rhs.txs {
+            return false
+        }
+        if lhs.squareSize != rhs.squareSize {
+            return false
+        }
+        if lhs.hash != rhs.hash {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(shaHash)
+        hasher.combine(txs)
+        hasher.combine(squareSize)
+        hasher.combine(hash)
     }
 }
 
@@ -3560,16 +3779,20 @@ extension UniffiCommitment: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeUniffiCommitment: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UniffiCommitment {
+public struct FfiConverterTypeUniffiData: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UniffiData {
         return
-            try UniffiCommitment(
-                shaHash: FfiConverterData.read(from: &buf)
+            try UniffiData(
+                txs: FfiConverterSequenceData.read(from: &buf), 
+                squareSize: FfiConverterUInt64.read(from: &buf), 
+                hash: FfiConverterData.read(from: &buf)
         )
     }
 
-    public static func write(_ value: UniffiCommitment, into buf: inout [UInt8]) {
-        FfiConverterData.write(value.shaHash, into: &buf)
+    public static func write(_ value: UniffiData, into buf: inout [UInt8]) {
+        FfiConverterSequenceData.write(value.txs, into: &buf)
+        FfiConverterUInt64.write(value.squareSize, into: &buf)
+        FfiConverterData.write(value.hash, into: &buf)
     }
 }
 
@@ -3577,243 +3800,15 @@ public struct FfiConverterTypeUniffiCommitment: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeUniffiCommitment_lift(_ buf: RustBuffer) throws -> UniffiCommitment {
-    return try FfiConverterTypeUniffiCommitment.lift(buf)
+public func FfiConverterTypeUniffiData_lift(_ buf: RustBuffer) throws -> UniffiData {
+    return try FfiConverterTypeUniffiData.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeUniffiCommitment_lower(_ value: UniffiCommitment) -> RustBuffer {
-    return FfiConverterTypeUniffiCommitment.lower(value)
-}
-
-
-public struct UniffiHeader {
-    public var version: ProtocolVersion
-    public var chainId: ChainId
-    public var height: UInt64
-    public var time: Time
-    public var lastBlockId: BlockId?
-    public var lastCommitHash: TendermintHash?
-    public var dataHash: TendermintHash?
-    public var validatorsHash: TendermintHash
-    public var nextValidatorsHash: TendermintHash
-    public var consensusHash: TendermintHash
-    public var appHash: AppHash
-    public var lastResultsHash: TendermintHash?
-    public var evidenceHash: TendermintHash?
-    public var proposerAddress: AccountId
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(version: ProtocolVersion, chainId: ChainId, height: UInt64, time: Time, lastBlockId: BlockId?, lastCommitHash: TendermintHash?, dataHash: TendermintHash?, validatorsHash: TendermintHash, nextValidatorsHash: TendermintHash, consensusHash: TendermintHash, appHash: AppHash, lastResultsHash: TendermintHash?, evidenceHash: TendermintHash?, proposerAddress: AccountId) {
-        self.version = version
-        self.chainId = chainId
-        self.height = height
-        self.time = time
-        self.lastBlockId = lastBlockId
-        self.lastCommitHash = lastCommitHash
-        self.dataHash = dataHash
-        self.validatorsHash = validatorsHash
-        self.nextValidatorsHash = nextValidatorsHash
-        self.consensusHash = consensusHash
-        self.appHash = appHash
-        self.lastResultsHash = lastResultsHash
-        self.evidenceHash = evidenceHash
-        self.proposerAddress = proposerAddress
-    }
-}
-
-#if compiler(>=6)
-extension UniffiHeader: Sendable {}
-#endif
-
-
-extension UniffiHeader: Equatable, Hashable {
-    public static func ==(lhs: UniffiHeader, rhs: UniffiHeader) -> Bool {
-        if lhs.version != rhs.version {
-            return false
-        }
-        if lhs.chainId != rhs.chainId {
-            return false
-        }
-        if lhs.height != rhs.height {
-            return false
-        }
-        if lhs.time != rhs.time {
-            return false
-        }
-        if lhs.lastBlockId != rhs.lastBlockId {
-            return false
-        }
-        if lhs.lastCommitHash != rhs.lastCommitHash {
-            return false
-        }
-        if lhs.dataHash != rhs.dataHash {
-            return false
-        }
-        if lhs.validatorsHash != rhs.validatorsHash {
-            return false
-        }
-        if lhs.nextValidatorsHash != rhs.nextValidatorsHash {
-            return false
-        }
-        if lhs.consensusHash != rhs.consensusHash {
-            return false
-        }
-        if lhs.appHash != rhs.appHash {
-            return false
-        }
-        if lhs.lastResultsHash != rhs.lastResultsHash {
-            return false
-        }
-        if lhs.evidenceHash != rhs.evidenceHash {
-            return false
-        }
-        if lhs.proposerAddress != rhs.proposerAddress {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(version)
-        hasher.combine(chainId)
-        hasher.combine(height)
-        hasher.combine(time)
-        hasher.combine(lastBlockId)
-        hasher.combine(lastCommitHash)
-        hasher.combine(dataHash)
-        hasher.combine(validatorsHash)
-        hasher.combine(nextValidatorsHash)
-        hasher.combine(consensusHash)
-        hasher.combine(appHash)
-        hasher.combine(lastResultsHash)
-        hasher.combine(evidenceHash)
-        hasher.combine(proposerAddress)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeUniffiHeader: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UniffiHeader {
-        return
-            try UniffiHeader(
-                version: FfiConverterTypeProtocolVersion.read(from: &buf), 
-                chainId: FfiConverterTypeChainId.read(from: &buf), 
-                height: FfiConverterUInt64.read(from: &buf), 
-                time: FfiConverterTypeTime.read(from: &buf), 
-                lastBlockId: FfiConverterOptionTypeBlockId.read(from: &buf), 
-                lastCommitHash: FfiConverterOptionTypeTendermintHash.read(from: &buf), 
-                dataHash: FfiConverterOptionTypeTendermintHash.read(from: &buf), 
-                validatorsHash: FfiConverterTypeTendermintHash.read(from: &buf), 
-                nextValidatorsHash: FfiConverterTypeTendermintHash.read(from: &buf), 
-                consensusHash: FfiConverterTypeTendermintHash.read(from: &buf), 
-                appHash: FfiConverterTypeAppHash.read(from: &buf), 
-                lastResultsHash: FfiConverterOptionTypeTendermintHash.read(from: &buf), 
-                evidenceHash: FfiConverterOptionTypeTendermintHash.read(from: &buf), 
-                proposerAddress: FfiConverterTypeAccountId.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: UniffiHeader, into buf: inout [UInt8]) {
-        FfiConverterTypeProtocolVersion.write(value.version, into: &buf)
-        FfiConverterTypeChainId.write(value.chainId, into: &buf)
-        FfiConverterUInt64.write(value.height, into: &buf)
-        FfiConverterTypeTime.write(value.time, into: &buf)
-        FfiConverterOptionTypeBlockId.write(value.lastBlockId, into: &buf)
-        FfiConverterOptionTypeTendermintHash.write(value.lastCommitHash, into: &buf)
-        FfiConverterOptionTypeTendermintHash.write(value.dataHash, into: &buf)
-        FfiConverterTypeTendermintHash.write(value.validatorsHash, into: &buf)
-        FfiConverterTypeTendermintHash.write(value.nextValidatorsHash, into: &buf)
-        FfiConverterTypeTendermintHash.write(value.consensusHash, into: &buf)
-        FfiConverterTypeAppHash.write(value.appHash, into: &buf)
-        FfiConverterOptionTypeTendermintHash.write(value.lastResultsHash, into: &buf)
-        FfiConverterOptionTypeTendermintHash.write(value.evidenceHash, into: &buf)
-        FfiConverterTypeAccountId.write(value.proposerAddress, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeUniffiHeader_lift(_ buf: RustBuffer) throws -> UniffiHeader {
-    return try FfiConverterTypeUniffiHeader.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeUniffiHeader_lower(_ value: UniffiHeader) -> RustBuffer {
-    return FfiConverterTypeUniffiHeader.lower(value)
-}
-
-
-public struct UniffiNamespace {
-    public var namespace: Data
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(namespace: Data) {
-        self.namespace = namespace
-    }
-}
-
-#if compiler(>=6)
-extension UniffiNamespace: Sendable {}
-#endif
-
-
-extension UniffiNamespace: Equatable, Hashable {
-    public static func ==(lhs: UniffiNamespace, rhs: UniffiNamespace) -> Bool {
-        if lhs.namespace != rhs.namespace {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(namespace)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeUniffiNamespace: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UniffiNamespace {
-        return
-            try UniffiNamespace(
-                namespace: FfiConverterData.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: UniffiNamespace, into buf: inout [UInt8]) {
-        FfiConverterData.write(value.namespace, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeUniffiNamespace_lift(_ buf: RustBuffer) throws -> UniffiNamespace {
-    return try FfiConverterTypeUniffiNamespace.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeUniffiNamespace_lower(_ value: UniffiNamespace) -> RustBuffer {
-    return FfiConverterTypeUniffiNamespace.lower(value)
+public func FfiConverterTypeUniffiData_lower(_ value: UniffiData) -> RustBuffer {
+    return FfiConverterTypeUniffiData.lower(value)
 }
 
 
@@ -3884,14 +3879,14 @@ public func FfiConverterTypeValAddress_lower(_ value: ValAddress) -> RustBuffer 
 
 public struct ValidatorInfo {
     public var address: AccountId
-    public var pubKey: PublicKey
+    public var pubKey: TendermintPublicKey
     public var power: UInt64
     public var name: String?
     public var proposerPriority: Int64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(address: AccountId, pubKey: PublicKey, power: UInt64, name: String?, proposerPriority: Int64) {
+    public init(address: AccountId, pubKey: TendermintPublicKey, power: UInt64, name: String?, proposerPriority: Int64) {
         self.address = address
         self.pubKey = pubKey
         self.power = power
@@ -3944,7 +3939,7 @@ public struct FfiConverterTypeValidatorInfo: FfiConverterRustBuffer {
         return
             try ValidatorInfo(
                 address: FfiConverterTypeAccountId.read(from: &buf), 
-                pubKey: FfiConverterTypePublicKey.read(from: &buf), 
+                pubKey: FfiConverterTypeTendermintPublicKey.read(from: &buf), 
                 power: FfiConverterUInt64.read(from: &buf), 
                 name: FfiConverterOptionString.read(from: &buf), 
                 proposerPriority: FfiConverterInt64.read(from: &buf)
@@ -3953,7 +3948,7 @@ public struct FfiConverterTypeValidatorInfo: FfiConverterRustBuffer {
 
     public static func write(_ value: ValidatorInfo, into buf: inout [UInt8]) {
         FfiConverterTypeAccountId.write(value.address, into: &buf)
-        FfiConverterTypePublicKey.write(value.pubKey, into: &buf)
+        FfiConverterTypeTendermintPublicKey.write(value.pubKey, into: &buf)
         FfiConverterUInt64.write(value.power, into: &buf)
         FfiConverterOptionString.write(value.name, into: &buf)
         FfiConverterInt64.write(value.proposerPriority, into: &buf)
@@ -4056,7 +4051,7 @@ public func FfiConverterTypeValidatorSet_lower(_ value: ValidatorSet) -> RustBuf
 
 public struct Vote {
     public var voteType: VoteType
-    public var height: Height
+    public var height: BlockHeight
     public var round: UInt32
     public var blockId: BlockId?
     public var timestamp: Time?
@@ -4068,7 +4063,7 @@ public struct Vote {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(voteType: VoteType, height: Height, round: UInt32, blockId: BlockId?, timestamp: Time?, validatorAddress: AccountId, validatorIndex: UInt32, signature: Signature?, `extension`: Data, extensionSignature: Signature?) {
+    public init(voteType: VoteType, height: BlockHeight, round: UInt32, blockId: BlockId?, timestamp: Time?, validatorAddress: AccountId, validatorIndex: UInt32, signature: Signature?, `extension`: Data, extensionSignature: Signature?) {
         self.voteType = voteType
         self.height = height
         self.round = round
@@ -4146,7 +4141,7 @@ public struct FfiConverterTypeVote: FfiConverterRustBuffer {
         return
             try Vote(
                 voteType: FfiConverterTypeVoteType.read(from: &buf), 
-                height: FfiConverterTypeHeight.read(from: &buf), 
+                height: FfiConverterTypeBlockHeight.read(from: &buf), 
                 round: FfiConverterUInt32.read(from: &buf), 
                 blockId: FfiConverterOptionTypeBlockId.read(from: &buf), 
                 timestamp: FfiConverterOptionTypeTime.read(from: &buf), 
@@ -4160,7 +4155,7 @@ public struct FfiConverterTypeVote: FfiConverterRustBuffer {
 
     public static func write(_ value: Vote, into buf: inout [UInt8]) {
         FfiConverterTypeVoteType.write(value.voteType, into: &buf)
-        FfiConverterTypeHeight.write(value.height, into: &buf)
+        FfiConverterTypeBlockHeight.write(value.height, into: &buf)
         FfiConverterUInt32.write(value.round, into: &buf)
         FfiConverterOptionTypeBlockId.write(value.blockId, into: &buf)
         FfiConverterOptionTypeTime.write(value.timestamp, into: &buf)
@@ -4279,6 +4274,95 @@ public func FfiConverterTypeAddress_lower(_ value: Address) -> RustBuffer {
 
 
 extension Address: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Enum with all valid App versions.
+ */
+
+public enum AppVersion : UInt64 {
+    
+    /**
+     * App v1
+     */
+    case v1 = 1
+    /**
+     * App v2
+     */
+    case v2 = 2
+    /**
+     * App v3
+     */
+    case v3 = 3
+}
+
+
+#if compiler(>=6)
+extension AppVersion: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAppVersion: FfiConverterRustBuffer {
+    typealias SwiftType = AppVersion
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppVersion {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .v1
+        
+        case 2: return .v2
+        
+        case 3: return .v3
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AppVersion, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .v1:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .v2:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .v3:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppVersion_lift(_ buf: RustBuffer) throws -> AppVersion {
+    return try FfiConverterTypeAppVersion.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppVersion_lower(_ value: AppVersion) -> RustBuffer {
+    return FfiConverterTypeAppVersion.lower(value)
+}
+
+
+extension AppVersion: Equatable, Hashable {}
 
 
 
@@ -5230,49 +5314,52 @@ extension Evidence: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum Hash {
+public enum PublicKey {
     
-    case sha256(hash: Data
+    case ed25519(bytes: Data
     )
-    case none
+    case secp256k1(sec1Bytes: Data
+    )
 }
 
 
 #if compiler(>=6)
-extension Hash: Sendable {}
+extension PublicKey: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeHash: FfiConverterRustBuffer {
-    typealias SwiftType = Hash
+public struct FfiConverterTypePublicKey: FfiConverterRustBuffer {
+    typealias SwiftType = PublicKey
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Hash {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublicKey {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .sha256(hash: try FfiConverterData.read(from: &buf)
+        case 1: return .ed25519(bytes: try FfiConverterData.read(from: &buf)
         )
         
-        case 2: return .none
+        case 2: return .secp256k1(sec1Bytes: try FfiConverterData.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
-    public static func write(_ value: Hash, into buf: inout [UInt8]) {
+    public static func write(_ value: PublicKey, into buf: inout [UInt8]) {
         switch value {
         
         
-        case let .sha256(hash):
+        case let .ed25519(bytes):
             writeInt(&buf, Int32(1))
-            FfiConverterData.write(hash, into: &buf)
+            FfiConverterData.write(bytes, into: &buf)
             
         
-        case .none:
+        case let .secp256k1(sec1Bytes):
             writeInt(&buf, Int32(2))
-        
+            FfiConverterData.write(sec1Bytes, into: &buf)
+            
         }
     }
 }
@@ -5281,19 +5368,19 @@ public struct FfiConverterTypeHash: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeHash_lift(_ buf: RustBuffer) throws -> Hash {
-    return try FfiConverterTypeHash.lift(buf)
+public func FfiConverterTypePublicKey_lift(_ buf: RustBuffer) throws -> PublicKey {
+    return try FfiConverterTypePublicKey.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeHash_lower(_ value: Hash) -> RustBuffer {
-    return FfiConverterTypeHash.lower(value)
+public func FfiConverterTypePublicKey_lower(_ value: PublicKey) -> RustBuffer {
+    return FfiConverterTypePublicKey.lower(value)
 }
 
 
-extension Hash: Equatable, Hashable {}
+extension PublicKey: Equatable, Hashable {}
 
 
 
@@ -5419,6 +5506,10 @@ public enum UniffiError: Swift.Error {
     case InvalidValidatorIndex
     case InvalidVotingPower
     case InvalidSignedHeader
+    case CouldNotGenerateCommitment(msg: String
+    )
+    case InvalidAddress(msg: String
+    )
 }
 
 
@@ -5451,6 +5542,12 @@ public struct FfiConverterTypeUniffiError: FfiConverterRustBuffer {
         case 12: return .InvalidValidatorIndex
         case 13: return .InvalidVotingPower
         case 14: return .InvalidSignedHeader
+        case 15: return .CouldNotGenerateCommitment(
+            msg: try FfiConverterString.read(from: &buf)
+            )
+        case 16: return .InvalidAddress(
+            msg: try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -5519,6 +5616,16 @@ public struct FfiConverterTypeUniffiError: FfiConverterRustBuffer {
         case .InvalidSignedHeader:
             writeInt(&buf, Int32(14))
         
+        
+        case let .CouldNotGenerateCommitment(msg):
+            writeInt(&buf, Int32(15))
+            FfiConverterString.write(msg, into: &buf)
+            
+        
+        case let .InvalidAddress(msg):
+            writeInt(&buf, Int32(16))
+            FfiConverterString.write(msg, into: &buf)
+            
         }
     }
 }
@@ -5556,52 +5663,49 @@ extension UniffiError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum UniffiPublicKey {
+public enum UniffiHash {
     
-    case ed25519(bytes: Data
+    case sha256(hash: Data
     )
-    case secp256k1(sec1Bytes: Data
-    )
+    case none
 }
 
 
 #if compiler(>=6)
-extension UniffiPublicKey: Sendable {}
+extension UniffiHash: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeUniffiPublicKey: FfiConverterRustBuffer {
-    typealias SwiftType = UniffiPublicKey
+public struct FfiConverterTypeUniffiHash: FfiConverterRustBuffer {
+    typealias SwiftType = UniffiHash
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UniffiPublicKey {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UniffiHash {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .ed25519(bytes: try FfiConverterData.read(from: &buf)
+        case 1: return .sha256(hash: try FfiConverterData.read(from: &buf)
         )
         
-        case 2: return .secp256k1(sec1Bytes: try FfiConverterData.read(from: &buf)
-        )
+        case 2: return .none
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
-    public static func write(_ value: UniffiPublicKey, into buf: inout [UInt8]) {
+    public static func write(_ value: UniffiHash, into buf: inout [UInt8]) {
         switch value {
         
         
-        case let .ed25519(bytes):
+        case let .sha256(hash):
             writeInt(&buf, Int32(1))
-            FfiConverterData.write(bytes, into: &buf)
+            FfiConverterData.write(hash, into: &buf)
             
         
-        case let .secp256k1(sec1Bytes):
+        case .none:
             writeInt(&buf, Int32(2))
-            FfiConverterData.write(sec1Bytes, into: &buf)
-            
+        
         }
     }
 }
@@ -5610,19 +5714,19 @@ public struct FfiConverterTypeUniffiPublicKey: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeUniffiPublicKey_lift(_ buf: RustBuffer) throws -> UniffiPublicKey {
-    return try FfiConverterTypeUniffiPublicKey.lift(buf)
+public func FfiConverterTypeUniffiHash_lift(_ buf: RustBuffer) throws -> UniffiHash {
+    return try FfiConverterTypeUniffiHash.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeUniffiPublicKey_lower(_ value: UniffiPublicKey) -> RustBuffer {
-    return FfiConverterTypeUniffiPublicKey.lower(value)
+public func FfiConverterTypeUniffiHash_lower(_ value: UniffiHash) -> RustBuffer {
+    return FfiConverterTypeUniffiHash.lower(value)
 }
 
 
-extension UniffiPublicKey: Equatable, Hashable {}
+extension UniffiHash: Equatable, Hashable {}
 
 
 
@@ -5774,30 +5878,6 @@ fileprivate struct FfiConverterOptionTypeAccAddress: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeAny: FfiConverterRustBuffer {
-    typealias SwiftType = Any?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeAny.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeAny.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeBlockId: FfiConverterRustBuffer {
     typealias SwiftType = BlockId?
 
@@ -5814,6 +5894,30 @@ fileprivate struct FfiConverterOptionTypeBlockId: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeBlockId.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeProtobufAny: FfiConverterRustBuffer {
+    typealias SwiftType = ProtobufAny?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeProtobufAny.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeProtobufAny.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -5918,30 +6022,6 @@ fileprivate struct FfiConverterOptionTypeAddress: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypePublicKey: FfiConverterRustBuffer {
-    typealias SwiftType = PublicKey?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypePublicKey.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypePublicKey.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeTendermintCommit: FfiConverterRustBuffer {
     typealias SwiftType = TendermintCommit?
 
@@ -5982,6 +6062,30 @@ fileprivate struct FfiConverterOptionTypeTendermintHash: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeTendermintHash.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeTendermintPublicKey: FfiConverterRustBuffer {
+    typealias SwiftType = TendermintPublicKey?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTendermintPublicKey.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTendermintPublicKey.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -6057,31 +6161,6 @@ fileprivate struct FfiConverterSequenceTypeAbciMessageLog: FfiConverterRustBuffe
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeAbciMessageLog.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeAny: FfiConverterRustBuffer {
-    typealias SwiftType = [Any]
-
-    public static func write(_ value: [Any], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeAny.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Any] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [Any]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeAny.read(from: &buf))
         }
         return seq
     }
@@ -6182,6 +6261,31 @@ fileprivate struct FfiConverterSequenceTypeModeInfo: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeModeInfo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeProtobufAny: FfiConverterRustBuffer {
+    typealias SwiftType = [ProtobufAny]
+
+    public static func write(_ value: [ProtobufAny], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeProtobufAny.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ProtobufAny] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ProtobufAny]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeProtobufAny.read(from: &buf))
         }
         return seq
     }
@@ -6292,50 +6396,6 @@ fileprivate struct FfiConverterSequenceTypeEvidence: FfiConverterRustBuffer {
  * Typealias from the type name used in the UDL file to the builtin type.  This
  * is needed because the UDL type name is used in function/method signatures.
  */
-public typealias Commitment = UniffiCommitment
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCommitment: FfiConverter {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Commitment {
-        return try FfiConverterTypeUniffiCommitment.read(from: &buf)
-    }
-
-    public static func write(_ value: Commitment, into buf: inout [UInt8]) {
-        return FfiConverterTypeUniffiCommitment.write(value, into: &buf)
-    }
-
-    public static func lift(_ value: RustBuffer) throws -> Commitment {
-        return try FfiConverterTypeUniffiCommitment_lift(value)
-    }
-
-    public static func lower(_ value: Commitment) -> RustBuffer {
-        return FfiConverterTypeUniffiCommitment_lower(value)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommitment_lift(_ value: RustBuffer) throws -> Commitment {
-    return try FfiConverterTypeCommitment.lift(value)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommitment_lower(_ value: Commitment) -> RustBuffer {
-    return FfiConverterTypeCommitment.lower(value)
-}
-
-
-
-/**
- * Typealias from the type name used in the UDL file to the builtin type.  This
- * is needed because the UDL type name is used in function/method signatures.
- */
 public typealias Id = AccountId
 
 #if swift(>=5.8)
@@ -6424,94 +6484,6 @@ public func FfiConverterTypeLuminaBitVector_lower(_ value: LuminaBitVector) -> R
  * Typealias from the type name used in the UDL file to the builtin type.  This
  * is needed because the UDL type name is used in function/method signatures.
  */
-public typealias Namespace = UniffiNamespace
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNamespace: FfiConverter {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Namespace {
-        return try FfiConverterTypeUniffiNamespace.read(from: &buf)
-    }
-
-    public static func write(_ value: Namespace, into buf: inout [UInt8]) {
-        return FfiConverterTypeUniffiNamespace.write(value, into: &buf)
-    }
-
-    public static func lift(_ value: RustBuffer) throws -> Namespace {
-        return try FfiConverterTypeUniffiNamespace_lift(value)
-    }
-
-    public static func lower(_ value: Namespace) -> RustBuffer {
-        return FfiConverterTypeUniffiNamespace_lower(value)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNamespace_lift(_ value: RustBuffer) throws -> Namespace {
-    return try FfiConverterTypeNamespace.lift(value)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNamespace_lower(_ value: Namespace) -> RustBuffer {
-    return FfiConverterTypeNamespace.lower(value)
-}
-
-
-
-/**
- * Typealias from the type name used in the UDL file to the builtin type.  This
- * is needed because the UDL type name is used in function/method signatures.
- */
-public typealias PublicKey = UniffiPublicKey
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePublicKey: FfiConverter {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublicKey {
-        return try FfiConverterTypeUniffiPublicKey.read(from: &buf)
-    }
-
-    public static func write(_ value: PublicKey, into buf: inout [UInt8]) {
-        return FfiConverterTypeUniffiPublicKey.write(value, into: &buf)
-    }
-
-    public static func lift(_ value: RustBuffer) throws -> PublicKey {
-        return try FfiConverterTypeUniffiPublicKey_lift(value)
-    }
-
-    public static func lower(_ value: PublicKey) -> RustBuffer {
-        return FfiConverterTypeUniffiPublicKey_lower(value)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePublicKey_lift(_ value: RustBuffer) throws -> PublicKey {
-    return try FfiConverterTypePublicKey.lift(value)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePublicKey_lower(_ value: PublicKey) -> RustBuffer {
-    return FfiConverterTypePublicKey.lower(value)
-}
-
-
-
-/**
- * Typealias from the type name used in the UDL file to the builtin type.  This
- * is needed because the UDL type name is used in function/method signatures.
- */
 public typealias RawBytes = Bytes
 
 #if swift(>=5.8)
@@ -6548,6 +6520,94 @@ public func FfiConverterTypeRawBytes_lift(_ value: RustBuffer) throws -> RawByte
 #endif
 public func FfiConverterTypeRawBytes_lower(_ value: RawBytes) -> RustBuffer {
     return FfiConverterTypeRawBytes.lower(value)
+}
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias RustCommitment = Commitment
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRustCommitment: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustCommitment {
+        return try FfiConverterTypeCommitment.read(from: &buf)
+    }
+
+    public static func write(_ value: RustCommitment, into buf: inout [UInt8]) {
+        return FfiConverterTypeCommitment.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> RustCommitment {
+        return try FfiConverterTypeCommitment_lift(value)
+    }
+
+    public static func lower(_ value: RustCommitment) -> RustBuffer {
+        return FfiConverterTypeCommitment_lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustCommitment_lift(_ value: RustBuffer) throws -> RustCommitment {
+    return try FfiConverterTypeRustCommitment.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustCommitment_lower(_ value: RustCommitment) -> RustBuffer {
+    return FfiConverterTypeRustCommitment.lower(value)
+}
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias RustNamespace = Namespace
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRustNamespace: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustNamespace {
+        return try FfiConverterTypeNamespace.read(from: &buf)
+    }
+
+    public static func write(_ value: RustNamespace, into buf: inout [UInt8]) {
+        return FfiConverterTypeNamespace.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> RustNamespace {
+        return try FfiConverterTypeNamespace_lift(value)
+    }
+
+    public static func lower(_ value: RustNamespace) -> RustBuffer {
+        return FfiConverterTypeNamespace_lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustNamespace_lift(_ value: RustBuffer) throws -> RustNamespace {
+    return try FfiConverterTypeRustNamespace.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustNamespace_lower(_ value: RustNamespace) -> RustBuffer {
+    return FfiConverterTypeRustNamespace.lower(value)
 }
 
 
@@ -6776,26 +6836,26 @@ public func FfiConverterTypeTendermintEvidenceList_lower(_ value: TendermintEvid
  * Typealias from the type name used in the UDL file to the builtin type.  This
  * is needed because the UDL type name is used in function/method signatures.
  */
-public typealias TendermintHash = Hash
+public typealias TendermintHash = UniffiHash
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeTendermintHash: FfiConverter {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TendermintHash {
-        return try FfiConverterTypeHash.read(from: &buf)
+        return try FfiConverterTypeUniffiHash.read(from: &buf)
     }
 
     public static func write(_ value: TendermintHash, into buf: inout [UInt8]) {
-        return FfiConverterTypeHash.write(value, into: &buf)
+        return FfiConverterTypeUniffiHash.write(value, into: &buf)
     }
 
     public static func lift(_ value: RustBuffer) throws -> TendermintHash {
-        return try FfiConverterTypeHash_lift(value)
+        return try FfiConverterTypeUniffiHash_lift(value)
     }
 
     public static func lower(_ value: TendermintHash) -> RustBuffer {
-        return FfiConverterTypeHash_lower(value)
+        return FfiConverterTypeUniffiHash_lower(value)
     }
 }
 
@@ -6820,26 +6880,26 @@ public func FfiConverterTypeTendermintHash_lower(_ value: TendermintHash) -> Rus
  * Typealias from the type name used in the UDL file to the builtin type.  This
  * is needed because the UDL type name is used in function/method signatures.
  */
-public typealias TendermintHeader = UniffiHeader
+public typealias TendermintHeader = Header
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeTendermintHeader: FfiConverter {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TendermintHeader {
-        return try FfiConverterTypeUniffiHeader.read(from: &buf)
+        return try FfiConverterTypeHeader.read(from: &buf)
     }
 
     public static func write(_ value: TendermintHeader, into buf: inout [UInt8]) {
-        return FfiConverterTypeUniffiHeader.write(value, into: &buf)
+        return FfiConverterTypeHeader.write(value, into: &buf)
     }
 
     public static func lift(_ value: RustBuffer) throws -> TendermintHeader {
-        return try FfiConverterTypeUniffiHeader_lift(value)
+        return try FfiConverterTypeHeader_lift(value)
     }
 
     public static func lower(_ value: TendermintHeader) -> RustBuffer {
-        return FfiConverterTypeUniffiHeader_lower(value)
+        return FfiConverterTypeHeader_lower(value)
     }
 }
 
@@ -6864,26 +6924,26 @@ public func FfiConverterTypeTendermintHeader_lower(_ value: TendermintHeader) ->
  * Typealias from the type name used in the UDL file to the builtin type.  This
  * is needed because the UDL type name is used in function/method signatures.
  */
-public typealias TendermintHeight = Height
+public typealias TendermintHeight = BlockHeight
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeTendermintHeight: FfiConverter {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TendermintHeight {
-        return try FfiConverterTypeHeight.read(from: &buf)
+        return try FfiConverterTypeBlockHeight.read(from: &buf)
     }
 
     public static func write(_ value: TendermintHeight, into buf: inout [UInt8]) {
-        return FfiConverterTypeHeight.write(value, into: &buf)
+        return FfiConverterTypeBlockHeight.write(value, into: &buf)
     }
 
     public static func lift(_ value: RustBuffer) throws -> TendermintHeight {
-        return try FfiConverterTypeHeight_lift(value)
+        return try FfiConverterTypeBlockHeight_lift(value)
     }
 
     public static func lower(_ value: TendermintHeight) -> RustBuffer {
-        return FfiConverterTypeHeight_lower(value)
+        return FfiConverterTypeBlockHeight_lower(value)
     }
 }
 
@@ -6900,6 +6960,50 @@ public func FfiConverterTypeTendermintHeight_lift(_ value: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeTendermintHeight_lower(_ value: TendermintHeight) -> RustBuffer {
     return FfiConverterTypeTendermintHeight.lower(value)
+}
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias TendermintPublicKey = PublicKey
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTendermintPublicKey: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TendermintPublicKey {
+        return try FfiConverterTypePublicKey.read(from: &buf)
+    }
+
+    public static func write(_ value: TendermintPublicKey, into buf: inout [UInt8]) {
+        return FfiConverterTypePublicKey.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> TendermintPublicKey {
+        return try FfiConverterTypePublicKey_lift(value)
+    }
+
+    public static func lower(_ value: TendermintPublicKey) -> RustBuffer {
+        return FfiConverterTypePublicKey_lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTendermintPublicKey_lift(_ value: RustBuffer) throws -> TendermintPublicKey {
+    return try FfiConverterTypeTendermintPublicKey.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTendermintPublicKey_lower(_ value: TendermintPublicKey) -> RustBuffer {
+    return FfiConverterTypeTendermintPublicKey.lower(value)
 }
 
 
@@ -7034,6 +7138,22 @@ public func FfiConverterTypeTendermintVote_lower(_ value: TendermintVote) -> Rus
     return FfiConverterTypeTendermintVote.lower(value)
 }
 
+public func newBlob(namespace: RustNamespace, data: Data, appVersion: AppVersion)throws  -> Blob  {
+    return try  FfiConverterTypeBlob_lift(try rustCallWithError(FfiConverterTypeUniffiError_lift) {
+    uniffi_celestia_types_fn_func_new_blob(
+        FfiConverterTypeRustNamespace_lower(namespace),
+        FfiConverterData.lower(data),
+        FfiConverterTypeAppVersion_lower(appVersion),$0
+    )
+})
+}
+public func newV0Namespace(id: Data)throws  -> Namespace  {
+    return try  FfiConverterTypeNamespace_lift(try rustCallWithError(FfiConverterTypeUniffiError_lift) {
+    uniffi_celestia_types_fn_func_new_v0_namespace(
+        FfiConverterData.lower(id),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -7049,6 +7169,12 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_celestia_types_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_celestia_types_checksum_func_new_blob() != 26115) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_celestia_types_checksum_func_new_v0_namespace() != 44395) {
+        return InitializationResult.apiChecksumMismatch
     }
 
     uniffiEnsureCelestiaProtoInitialized()

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		D14DFDE92DD4890700F311BE /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = D14DFDE82DD4890700F311BE /* Logging */; };
+		D15B9CE92DDF443600F54A21 /* P256K in Frameworks */ = {isa = PBXBuildFile; productRef = D15B9CE82DDF443600F54A21 /* P256K */; };
 		FC92E19F2D5F9B1A00A25A9C /* lumina.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC92E19E2D5F9B1A00A25A9C /* lumina.xcframework */; };
 		FC92E1A22D5F9B2700A25A9C /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC92E1A12D5F9B2700A25A9C /* SystemConfiguration.framework */; };
 /* End PBXBuildFile section */
@@ -74,6 +75,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D14DFDE92DD4890700F311BE /* Logging in Frameworks */,
+				D15B9CE92DDF443600F54A21 /* P256K in Frameworks */,
 				FC92E1A22D5F9B2700A25A9C /* SystemConfiguration.framework in Frameworks */,
 				FC92E19F2D5F9B1A00A25A9C /* lumina.xcframework in Frameworks */,
 			);
@@ -147,6 +149,7 @@
 			name = LuminaDemo;
 			packageProductDependencies = (
 				D14DFDE82DD4890700F311BE /* Logging */,
+				D15B9CE82DDF443600F54A21 /* P256K */,
 			);
 			productName = LuminaDemo;
 			productReference = FC92E16B2D5F9A6D00A25A9C /* LuminaDemo.app */;
@@ -232,6 +235,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				D14DFDE72DD4890700F311BE /* XCRemoteSwiftPackageReference "swift-log" */,
+				D15B9CDD2DDF013400F54A21 /* XCRemoteSwiftPackageReference "swift-secp256k1" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FC92E16C2D5F9A6D00A25A9C /* Products */;
@@ -610,6 +614,14 @@
 				minimumVersion = 1.6.3;
 			};
 		};
+		D15B9CDD2DDF013400F54A21 /* XCRemoteSwiftPackageReference "swift-secp256k1" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/21-DOT-DEV/swift-secp256k1";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.21.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -617,6 +629,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D14DFDE72DD4890700F311BE /* XCRemoteSwiftPackageReference "swift-log" */;
 			productName = Logging;
+		};
+		D15B9CE82DDF443600F54A21 /* P256K */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D15B9CDD2DDF013400F54A21 /* XCRemoteSwiftPackageReference "swift-secp256k1" */;
+			productName = P256K;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

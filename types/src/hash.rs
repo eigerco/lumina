@@ -33,35 +33,35 @@ pub mod uniffi_types {
     use crate::UniffiError;
 
     #[derive(Enum)]
-    pub enum Hash {
+    pub enum UniffiHash {
         Sha256 { hash: Vec<u8> },
         None,
     }
 
-    impl TryFrom<Hash> for TendermintHash {
+    impl TryFrom<UniffiHash> for TendermintHash {
         type Error = UniffiError;
 
-        fn try_from(value: Hash) -> Result<Self, Self::Error> {
+        fn try_from(value: UniffiHash) -> Result<Self, Self::Error> {
             Ok(match value {
-                Hash::Sha256 { hash } => TendermintHash::from_bytes(Algorithm::Sha256, &hash)
+                UniffiHash::Sha256 { hash } => TendermintHash::from_bytes(Algorithm::Sha256, &hash)
                     .map_err(|_| UniffiError::InvalidHashLength)?,
-                Hash::None => TendermintHash::None,
+                UniffiHash::None => TendermintHash::None,
             })
         }
     }
 
-    impl From<TendermintHash> for Hash {
+    impl From<TendermintHash> for UniffiHash {
         fn from(value: TendermintHash) -> Self {
             match value {
-                TendermintHash::Sha256(hash) => Hash::Sha256 {
+                TendermintHash::Sha256(hash) => UniffiHash::Sha256 {
                     hash: hash.to_vec(),
                 },
-                TendermintHash::None => Hash::None,
+                TendermintHash::None => UniffiHash::None,
             }
         }
     }
 
-    uniffi::custom_type!(TendermintHash, Hash, {
+    uniffi::custom_type!(TendermintHash, UniffiHash, {
         remote,
         try_lift: |value| Ok(value.try_into()?),
         lower: |value| value.into()

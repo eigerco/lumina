@@ -16,10 +16,15 @@ crate-type = ["lib", "staticlib", "cdylib"]
 name = "uniffi-bindgen"
 path = "./src/bin/uniffi-bindgen.rs"
 
+[[bin]]
+name = "uniffi-bindgen-swift"
+path = "./src/bin/uniffi-bindgen-swift.rs"
+
 [dependencies]
 lumina-node = { workspace = true, features = ["uniffi"] }
 celestia-types = { workspace = true, features = ["uniffi"] }
 celestia-grpc = { workspace = true, features = ["uniffi"] }
+celestia-proto = { workspace = true, features = ["uniffi"] }
 blockstore.workspace = true
 tendermint.workspace = true
 libp2p.workspace = true

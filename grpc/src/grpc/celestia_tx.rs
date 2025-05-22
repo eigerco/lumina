@@ -11,6 +11,9 @@ use celestia_types::Height;
 use crate::grpc::{FromGrpcResponse, IntoGrpcParam};
 use crate::{Error, Result};
 
+#[cfg(feature = "uniffi")]
+uniffi::use_remote_type!(celestia_types::Height);
+
 /// Response to a tx status query
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -95,38 +98,4 @@ impl FromGrpcResponse<TxStatusResponse> for RawTxStatusResponse {
     fn try_from_response(self) -> Result<TxStatusResponse> {
         self.try_into()
     }
-}
-
-#[cfg(feature = "uniffi")]
-mod uniffi_types {
-    use celestia_types::UniffiError;
-    use tendermint::block::Height as TendermintHeight;
-    use uniffi::Record;
-
-    #[derive(Record)]
-    pub struct Height {
-        value: u64,
-    }
-
-    impl TryFrom<Height> for TendermintHeight {
-        type Error = UniffiError;
-
-        fn try_from(value: Height) -> Result<Self, Self::Error> {
-            TendermintHeight::try_from(value.value).map_err(|_| UniffiError::HeaderHeightOutOfRange)
-        }
-    }
-
-    impl From<TendermintHeight> for Height {
-        fn from(value: TendermintHeight) -> Self {
-            Height {
-                value: value.value(),
-            }
-        }
-    }
-
-    uniffi::custom_type!(TendermintHeight, Height, {
-        remote,
-        try_lift: |value| Ok(value.try_into()?),
-        lower: |value| value.into()
-    });
 }

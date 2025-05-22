@@ -13,7 +13,7 @@ use tendermint::validator::Info as TendermintValidatorInfo;
 use tendermint::validator::Set as TendermintValidatorSet;
 use tendermint::vote::Type as VoteType;
 use tendermint::vote::Vote as TendermintVote;
-use tendermint_proto::google::protobuf::Any;
+use tendermint_proto::google::protobuf::Any as ProtobufAny;
 use uniffi::{Enum, Record};
 
 use crate::block::uniffi_types::SignedHeader;
@@ -102,7 +102,7 @@ impl From<TendermintPartsHeader> for PartsHeader {
     fn from(value: TendermintPartsHeader) -> Self {
         PartsHeader {
             total: value.total,
-            hash: value.hash.into(),
+            hash: value.hash,
         }
     }
 }
@@ -215,7 +215,7 @@ pub enum VoteType {
 #[derive(Record)]
 pub struct Vote {
     pub vote_type: VoteType,
-    pub height: Height,
+    pub height: BlockHeight,
     pub round: u32,
     pub block_id: Option<BlockId>,
     pub timestamp: Option<Time>,
@@ -488,7 +488,7 @@ impl TryFrom<Evidence> for TendermintEvidence {
 }
 
 #[uniffi::remote(Record)]
-pub struct Any {
+pub struct ProtobufAny {
     pub type_url: String,
     pub value: Vec<u8>,
 }
@@ -496,27 +496,27 @@ pub struct Any {
 use tendermint::block::Height as TendermintHeight;
 
 #[derive(Record)]
-pub struct Height {
+pub struct BlockHeight {
     value: u64,
 }
 
-impl TryFrom<Height> for TendermintHeight {
+impl TryFrom<BlockHeight> for TendermintHeight {
     type Error = UniffiError;
 
-    fn try_from(value: Height) -> Result<Self, Self::Error> {
+    fn try_from(value: BlockHeight) -> Result<Self, Self::Error> {
         TendermintHeight::try_from(value.value).map_err(|_| UniffiError::HeaderHeightOutOfRange)
     }
 }
 
-impl From<TendermintHeight> for Height {
+impl From<TendermintHeight> for BlockHeight {
     fn from(value: TendermintHeight) -> Self {
-        Height {
+        BlockHeight {
             value: value.value(),
         }
     }
 }
 
-uniffi::custom_type!(TendermintHeight, Height, {
+uniffi::custom_type!(TendermintHeight, BlockHeight, {
     remote,
     try_lift: |value| Ok(value.try_into()?),
     lower: |value| value.into()

@@ -15,5 +15,3 @@ pub use crate::tx::{DocSigner, IntoAny, SignDoc, TxClient, TxConfig};
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();
-#[cfg(feature = "uniffi")]
-celestia_types::uniffi_reexport_scaffolding!();

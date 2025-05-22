@@ -712,7 +712,7 @@ public func FfiConverterTypeTxClient_lower(_ value: TxClient) -> UnsafeMutableRa
 
 public protocol UniffiSigner: AnyObject, Sendable {
     
-    func sign(doc: SignDoc) async throws  -> Signature
+    func sign(doc: SignDoc) async throws  -> UniffiSignature
     
 }
 open class UniffiSignerImpl: UniffiSigner, @unchecked Sendable {
@@ -767,7 +767,7 @@ open class UniffiSignerImpl: UniffiSigner, @unchecked Sendable {
     
 
     
-open func sign(doc: SignDoc)async throws  -> Signature  {
+open func sign(doc: SignDoc)async throws  -> UniffiSignature  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -779,7 +779,7 @@ open func sign(doc: SignDoc)async throws  -> Signature  {
             pollFunc: ffi_celestia_grpc_rust_future_poll_rust_buffer,
             completeFunc: ffi_celestia_grpc_rust_future_complete_rust_buffer,
             freeFunc: ffi_celestia_grpc_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSignature_lift,
+            liftFunc: FfiConverterTypeUniffiSignature_lift,
             errorHandler: FfiConverterTypeSigningError_lift
         )
 }
@@ -805,7 +805,7 @@ fileprivate struct UniffiCallbackInterfaceUniffiSigner {
             uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () async throws -> Signature in
+                () async throws -> UniffiSignature in
                 guard let uniffiObj = try? FfiConverterTypeUniffiSigner.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
@@ -814,11 +814,11 @@ fileprivate struct UniffiCallbackInterfaceUniffiSigner {
                 )
             }
 
-            let uniffiHandleSuccess = { (returnValue: Signature) in
+            let uniffiHandleSuccess = { (returnValue: UniffiSignature) in
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeSignature_lower(returnValue),
+                        returnValue: FfiConverterTypeUniffiSignature_lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -1062,130 +1062,6 @@ public func FfiConverterTypeGetTxResponse_lift(_ buf: RustBuffer) throws -> GetT
 #endif
 public func FfiConverterTypeGetTxResponse_lower(_ value: GetTxResponse) -> RustBuffer {
     return FfiConverterTypeGetTxResponse.lower(value)
-}
-
-
-public struct Height {
-    public var value: UInt64
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: UInt64) {
-        self.value = value
-    }
-}
-
-#if compiler(>=6)
-extension Height: Sendable {}
-#endif
-
-
-extension Height: Equatable, Hashable {
-    public static func ==(lhs: Height, rhs: Height) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHeight: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Height {
-        return
-            try Height(
-                value: FfiConverterUInt64.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: Height, into buf: inout [UInt8]) {
-        FfiConverterUInt64.write(value.value, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHeight_lift(_ buf: RustBuffer) throws -> Height {
-    return try FfiConverterTypeHeight.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHeight_lower(_ value: Height) -> RustBuffer {
-    return FfiConverterTypeHeight.lower(value)
-}
-
-
-public struct Signature {
-    public var bytes: Data
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(bytes: Data) {
-        self.bytes = bytes
-    }
-}
-
-#if compiler(>=6)
-extension Signature: Sendable {}
-#endif
-
-
-extension Signature: Equatable, Hashable {
-    public static func ==(lhs: Signature, rhs: Signature) -> Bool {
-        if lhs.bytes != rhs.bytes {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(bytes)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeSignature: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Signature {
-        return
-            try Signature(
-                bytes: FfiConverterData.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: Signature, into buf: inout [UInt8]) {
-        FfiConverterData.write(value.bytes, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSignature_lift(_ buf: RustBuffer) throws -> Signature {
-    return try FfiConverterTypeSignature.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSignature_lower(_ value: Signature) -> RustBuffer {
-    return FfiConverterTypeSignature.lower(value)
 }
 
 
@@ -1489,6 +1365,68 @@ public func FfiConverterTypeTxStatusResponse_lower(_ value: TxStatusResponse) ->
     return FfiConverterTypeTxStatusResponse.lower(value)
 }
 
+
+public struct UniffiSignature {
+    public var bytes: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(bytes: Data) {
+        self.bytes = bytes
+    }
+}
+
+#if compiler(>=6)
+extension UniffiSignature: Sendable {}
+#endif
+
+
+extension UniffiSignature: Equatable, Hashable {
+    public static func ==(lhs: UniffiSignature, rhs: UniffiSignature) -> Bool {
+        if lhs.bytes != rhs.bytes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(bytes)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUniffiSignature: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UniffiSignature {
+        return
+            try UniffiSignature(
+                bytes: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UniffiSignature, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.bytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUniffiSignature_lift(_ buf: RustBuffer) throws -> UniffiSignature {
+    return try FfiConverterTypeUniffiSignature.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUniffiSignature_lower(_ value: UniffiSignature) -> RustBuffer {
+    return FfiConverterTypeUniffiSignature.lower(value)
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
@@ -1583,6 +1521,7 @@ public enum GrpcError: Swift.Error {
     )
     case InvalidAccountPublicKey(msg: String
     )
+    case InvalidAccountId
 }
 
 
@@ -1605,6 +1544,7 @@ public struct FfiConverterTypeGrpcError: FfiConverterRustBuffer {
         case 2: return .InvalidAccountPublicKey(
             msg: try FfiConverterString.read(from: &buf)
             )
+        case 3: return .InvalidAccountId
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1626,6 +1566,10 @@ public struct FfiConverterTypeGrpcError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
             FfiConverterString.write(msg, into: &buf)
             
+        
+        case .InvalidAccountId:
+            writeInt(&buf, Int32(3))
+        
         }
     }
 }
@@ -1656,79 +1600,6 @@ extension GrpcError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
-
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum Hash {
-    
-    case sha256(hash: Data
-    )
-    case none
-}
-
-
-#if compiler(>=6)
-extension Hash: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHash: FfiConverterRustBuffer {
-    typealias SwiftType = Hash
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Hash {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .sha256(hash: try FfiConverterData.read(from: &buf)
-        )
-        
-        case 2: return .none
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: Hash, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .sha256(hash):
-            writeInt(&buf, Int32(1))
-            FfiConverterData.write(hash, into: &buf)
-            
-        
-        case .none:
-            writeInt(&buf, Int32(2))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHash_lift(_ buf: RustBuffer) throws -> Hash {
-    return try FfiConverterTypeHash.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHash_lower(_ value: Hash) -> RustBuffer {
-    return FfiConverterTypeHash.lower(value)
-}
-
-
-extension Hash: Equatable, Hashable {}
-
-
 
 
 
@@ -2004,94 +1875,6 @@ fileprivate struct FfiConverterSequenceTypeBlob: FfiConverterRustBuffer {
         return seq
     }
 }
-
-
-/**
- * Typealias from the type name used in the UDL file to the builtin type.  This
- * is needed because the UDL type name is used in function/method signatures.
- */
-public typealias TendermintHash = Hash
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeTendermintHash: FfiConverter {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TendermintHash {
-        return try FfiConverterTypeHash.read(from: &buf)
-    }
-
-    public static func write(_ value: TendermintHash, into buf: inout [UInt8]) {
-        return FfiConverterTypeHash.write(value, into: &buf)
-    }
-
-    public static func lift(_ value: RustBuffer) throws -> TendermintHash {
-        return try FfiConverterTypeHash_lift(value)
-    }
-
-    public static func lower(_ value: TendermintHash) -> RustBuffer {
-        return FfiConverterTypeHash_lower(value)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTendermintHash_lift(_ value: RustBuffer) throws -> TendermintHash {
-    return try FfiConverterTypeTendermintHash.lift(value)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTendermintHash_lower(_ value: TendermintHash) -> RustBuffer {
-    return FfiConverterTypeTendermintHash.lower(value)
-}
-
-
-
-/**
- * Typealias from the type name used in the UDL file to the builtin type.  This
- * is needed because the UDL type name is used in function/method signatures.
- */
-public typealias TendermintHeight = Height
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeTendermintHeight: FfiConverter {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TendermintHeight {
-        return try FfiConverterTypeHeight.read(from: &buf)
-    }
-
-    public static func write(_ value: TendermintHeight, into buf: inout [UInt8]) {
-        return FfiConverterTypeHeight.write(value, into: &buf)
-    }
-
-    public static func lift(_ value: RustBuffer) throws -> TendermintHeight {
-        return try FfiConverterTypeHeight_lift(value)
-    }
-
-    public static func lower(_ value: TendermintHeight) -> RustBuffer {
-        return FfiConverterTypeHeight_lower(value)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTendermintHeight_lift(_ value: RustBuffer) throws -> TendermintHeight {
-    return try FfiConverterTypeTendermintHeight.lift(value)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTendermintHeight_lower(_ value: TendermintHeight) -> RustBuffer {
-    return FfiConverterTypeTendermintHeight.lower(value)
-}
-
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_MAYBE_READY: Int8 = 1
 
@@ -2204,6 +1987,20 @@ private func uniffiForeignFutureFree(handle: UInt64) {
 public func uniffiForeignFutureHandleCountCelestiaGrpc() -> Int {
     UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.count
 }
+public func parseBech32Address(bech32Address: String)throws  -> Address  {
+    return try  FfiConverterTypeAddress_lift(try rustCallWithError(FfiConverterTypeGrpcError_lift) {
+    uniffi_celestia_grpc_fn_func_parse_bech32_address(
+        FfiConverterString.lower(bech32Address),$0
+    )
+})
+}
+public func protoEncodeSignDoc(signDoc: SignDoc) -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_celestia_grpc_fn_func_proto_encode_sign_doc(
+        FfiConverterTypeSignDoc_lower(signDoc),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -2220,6 +2017,12 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_celestia_grpc_checksum_func_parse_bech32_address() != 45158) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_celestia_grpc_checksum_func_proto_encode_sign_doc() != 18886) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_celestia_grpc_checksum_method_txclient_app_version() != 734) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2232,7 +2035,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_celestia_grpc_checksum_method_txclient_submit_message() != 20816) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_celestia_grpc_checksum_method_uniffisigner_sign() != 64725) {
+    if (uniffi_celestia_grpc_checksum_method_uniffisigner_sign() != 18917) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_celestia_grpc_checksum_constructor_txclient_new() != 58491) {

@@ -4,7 +4,7 @@ use uniffi::Object;
 use celestia_grpc::grpc::{Account, BroadcastMode, GasInfo, GetTxResponse, TxStatusResponse};
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
-use celestia_types::hash::uniffi_types::Hash;
+use celestia_types::hash::uniffi_types::UniffiHash;
 use celestia_types::state::auth::AuthParams;
 use celestia_types::state::{Address, Coin, TxResponse};
 
@@ -89,7 +89,7 @@ impl GrpcClient {
     }
 
     /// Get Tx
-    async fn get_tx(&self, hash: Hash) -> Result<GetTxResponse> {
+    async fn get_tx(&self, hash: UniffiHash) -> Result<GetTxResponse> {
         Ok(self.client.get_tx(hash.try_into()?).await?)
     }
 
@@ -104,7 +104,7 @@ impl GrpcClient {
     }
 
     /// Get status of the transaction
-    async fn tx_status(&self, hash: Hash) -> Result<TxStatusResponse> {
+    async fn tx_status(&self, hash: UniffiHash) -> Result<TxStatusResponse> {
         Ok(self.client.tx_status(hash.try_into()?).await?)
     }
 }

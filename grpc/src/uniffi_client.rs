@@ -7,6 +7,7 @@ use k256::ecdsa::{Signature as DocSignature, VerifyingKey};
 use tendermint_proto::google::protobuf::Any;
 use tonic::transport::Channel;
 use uniffi::{Object, Record};
+use prost::Message;
 
 use crate::tx::TxInfo;
 use crate::{DocSigner, SignDoc, TxConfig};
@@ -20,6 +21,9 @@ pub enum GrpcError {
 
     #[error("invalid account public key")]
     InvalidAccountPublicKey { msg: String },
+
+    #[error("invalid account id")]
+    InvalidAccountId,
 }
 
 impl From<crate::Error> for GrpcError {
@@ -30,10 +34,20 @@ impl From<crate::Error> for GrpcError {
     }
 }
 
+#[uniffi::export]
+fn proto_encode_sign_doc(sign_doc: SignDoc) -> Vec<u8> {
+    sign_doc.encode_to_vec()
+}
+
+#[uniffi::export]
+fn parse_bech32_address(bech32_address: String) -> Result<Address> {
+    bech32_address.parse().map_err(|_| GrpcError::InvalidAccountId)
+}
+
 #[uniffi::export(with_foreign)]
 #[async_trait::async_trait]
 pub trait UniffiSigner: Sync + Send {
-    async fn sign(&self, doc: SignDoc) -> Result<Signature, SigningError>;
+    async fn sign(&self, doc: SignDoc) -> Result<UniffiSignature, SigningError>;
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -124,22 +138,22 @@ impl DocSigner for UniffiSignerBox {
 }
 
 #[derive(Record)]
-pub struct Signature {
-    bytes: Vec<u8>,
+pub struct UniffiSignature {
+    pub bytes: Vec<u8>,
 }
 
-impl From<DocSignature> for Signature {
+impl From<DocSignature> for UniffiSignature {
     fn from(value: DocSignature) -> Self {
-        Signature {
+        UniffiSignature {
             bytes: value.to_vec(),
         }
     }
 }
 
-impl TryFrom<Signature> for DocSignature {
+impl TryFrom<UniffiSignature> for DocSignature {
     type Error = SigningError;
 
-    fn try_from(value: Signature) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: UniffiSignature) -> std::result::Result<Self, Self::Error> {
         DocSignature::from_slice(&value.bytes).map_err(|e| SigningError::SigningError {
             msg: format!("invalid signature {e}"),
         })

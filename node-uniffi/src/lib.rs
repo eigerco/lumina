@@ -26,7 +26,8 @@ uniffi::setup_scaffolding!();
 
 lumina_node::uniffi_reexport_scaffolding!();
 celestia_types::uniffi_reexport_scaffolding!();
-//celestia_grpc::uniffi_reexport_scaffolding!();
+celestia_grpc::uniffi_reexport_scaffolding!();
+celestia_proto::uniffi_reexport_scaffolding!();
 
 pub(crate) type Blockstore = EitherBlockstore<InMemoryBlockstore, RedbBlockstore>;
 pub(crate) type Store = EitherStore<InMemoryStore, RedbStore>;

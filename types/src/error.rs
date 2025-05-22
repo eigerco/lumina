@@ -386,4 +386,10 @@ pub enum UniffiError {
 
     #[error("Invalid signed header")]
     InvalidSignedHeader,
+
+    #[error("Could not generate commitment")]
+    CouldNotGenerateCommitment { msg: String },
+
+    #[error("Invalid address")]
+    InvalidAddress { msg: String }
 }

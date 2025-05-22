@@ -31,6 +31,10 @@ use tonic::client::GrpcService;
 use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxStatus};
 use crate::{Error, Result};
 
+// uniffi :(
+#[cfg(feature = "uniffi")]
+uniffi::use_remote_type!(celestia_types::Hash);
+
 // source https://github.com/celestiaorg/celestia-app/blob/v3.0.2/x/blob/types/payforblob.go#L21
 // PFBGasFixedCost is a rough estimate for the "fixed cost" in the gas cost
 // formula: gas cost = gas per byte * bytes per share * shares occupied by
@@ -648,51 +652,4 @@ fn estimate_gas(blobs: &[Blob], app_version: AppVersion, gas_multiplier: f64) ->
         + (tx_size_cost_per_byte * BYTES_PER_BLOB_INFO * blobs.len() as u64)
         + PFB_GAS_FIXED_COST;
     (gas as f64 * gas_multiplier) as u64
-}
-
-#[cfg(feature = "uniffi")]
-mod uniffi_types {
-
-    use tendermint::hash::{Algorithm, Hash as TendermintHash};
-    use thiserror::Error;
-    use uniffi::Enum;
-
-    #[derive(Debug, Error)]
-    #[error("Invalid hash length")]
-    pub struct InvalidHashLength;
-
-    #[derive(Enum)]
-    pub enum Hash {
-        Sha256 { hash: Vec<u8> },
-        None,
-    }
-
-    impl TryFrom<Hash> for TendermintHash {
-        type Error = InvalidHashLength;
-
-        fn try_from(value: Hash) -> Result<Self, Self::Error> {
-            Ok(match value {
-                Hash::Sha256 { hash } => TendermintHash::from_bytes(Algorithm::Sha256, &hash)
-                    .map_err(|_| InvalidHashLength)?,
-                Hash::None => TendermintHash::None,
-            })
-        }
-    }
-
-    impl From<TendermintHash> for Hash {
-        fn from(value: TendermintHash) -> Self {
-            match value {
-                TendermintHash::Sha256(hash) => Hash::Sha256 {
-                    hash: hash.to_vec(),
-                },
-                TendermintHash::None => Hash::None,
-            }
-        }
-    }
-
-    uniffi::custom_type!(TendermintHash, Hash, {
-        remote,
-        try_lift: |value| Ok(value.try_into()?),
-        lower: |value| value.into()
-    });
 }

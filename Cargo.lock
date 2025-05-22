@@ -3596,6 +3596,7 @@ dependencies = [
  "async-trait",
  "blockstore",
  "celestia-grpc",
+ "celestia-proto",
  "celestia-types",
  "k256",
  "libp2p",
