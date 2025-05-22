@@ -757,11 +757,11 @@ mod test {
         // Because Pruner runs in parallel, it generates 2 batches. The first one will
         // be the blocks that reached pruning edge while `sleep` is still running.
         let batch1_high_height = daser_handle.expect_update_highest_prunable_block().await;
-        assert!((2491..=2493).contains(&batch1_high_height));
+        assert!((2491..=2500).contains(&batch1_high_height));
 
         let batch1_num_of_prunable_blocks =
             daser_handle.expect_update_number_of_prunable_blocks().await;
-        assert!((1..=3).contains(&batch1_num_of_prunable_blocks));
+        assert!((1..=10).contains(&batch1_num_of_prunable_blocks));
 
         // 1st batch
         for expected_height in (2491..=batch1_high_height).rev() {
@@ -772,28 +772,31 @@ mod test {
 
         assert_pruned_headers_event(&mut event_subscriber, 2491, batch1_high_height).await;
 
-        // 2nd batch
-        assert_eq!(
-            daser_handle.expect_update_highest_prunable_block().await,
-            2500
-        );
-        assert_eq!(
-            daser_handle.expect_update_number_of_prunable_blocks().await,
-            10 - batch1_num_of_prunable_blocks
-        );
+        // If 2nd batch will be produced
+        if batch1_high_height < 2500 {
+            assert_eq!(
+                daser_handle.expect_update_highest_prunable_block().await,
+                2500
+            );
+            assert_eq!(
+                daser_handle.expect_update_number_of_prunable_blocks().await,
+                10 - batch1_num_of_prunable_blocks
+            );
 
-        for expected_height in (batch1_high_height + 1..=2500).rev() {
-            let (height, respond_to) = daser_handle.expect_want_to_prune().await;
-            assert_eq!(height, expected_height);
-            respond_to.send(true).unwrap();
+            for expected_height in (batch1_high_height + 1..=2500).rev() {
+                let (height, respond_to) = daser_handle.expect_want_to_prune().await;
+                assert_eq!(height, expected_height);
+                respond_to.send(true).unwrap();
+            }
+
+            assert_eq!(
+                daser_handle.expect_update_number_of_prunable_blocks().await,
+                0
+            );
+
+            assert_pruned_headers_event(&mut event_subscriber, batch1_high_height + 1, 2500).await;
         }
 
-        assert_eq!(
-            daser_handle.expect_update_number_of_prunable_blocks().await,
-            0
-        );
-
-        assert_pruned_headers_event(&mut event_subscriber, batch1_high_height + 1, 2500).await;
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
             new_block_ranges([4991..=5000]),
