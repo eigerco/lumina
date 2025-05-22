@@ -1,6 +1,9 @@
+use std::time::Duration;
+
 use libp2p::gossipsub::IdentTopic;
 use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::{PeerId, StreamProtocol};
+use tendermint::time::Time;
 use tokio::sync::oneshot;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -93,5 +96,15 @@ impl MultiaddrExt for Multiaddr {
             Protocol::P2p(peer_id) => Some(peer_id),
             _ => None,
         })
+    }
+}
+
+pub(crate) trait TimeExt {
+    fn saturating_sub(self, dur: Duration) -> Time;
+}
+
+impl TimeExt for Time {
+    fn saturating_sub(self, dur: Duration) -> Time {
+        self.checked_sub(dur).unwrap_or_else(Time::unix_epoch)
     }
 }

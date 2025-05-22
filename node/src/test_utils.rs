@@ -8,11 +8,12 @@ use celestia_types::test_utils::ExtendedHeaderGenerator;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
 use lumina_utils::time::timeout;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::{
     block_ranges::{BlockRange, BlockRanges},
     blockstore::InMemoryBlockstore,
+    daser::DaserCmd,
     network::Network,
     p2p::{P2pCmd, P2pError},
     peer_tracker::PeerTrackerInfo,
@@ -198,6 +199,58 @@ impl MockP2pHandle {
         match self.expect_cmd().await {
             P2pCmd::GetShwapCid { cid, respond_to } => (cid, respond_to),
             cmd => panic!("Expecting GetShwapCid, but received: {cmd:?}"),
+        }
+    }
+}
+
+/// Mock handle for `Daser`.
+pub struct MockDaserHandle {
+    pub(crate) cmd_rx: mpsc::Receiver<DaserCmd>,
+}
+
+impl MockDaserHandle {
+    pub(crate) async fn try_recv_cmd(&mut self) -> Option<DaserCmd> {
+        timeout(Duration::from_millis(300), async move {
+            self.cmd_rx.recv().await.expect("Daser dropped")
+        })
+        .await
+        .ok()
+    }
+
+    pub(crate) async fn expect_cmd(&mut self) -> DaserCmd {
+        self.try_recv_cmd()
+            .await
+            .expect("Expecting DaserCmd, but timed-out")
+    }
+
+    /// Assert that no command was sent to the `Daser` worker.
+    pub async fn expect_no_cmd(&mut self) {
+        if let Some(cmd) = self.try_recv_cmd().await {
+            panic!("Expecting no DaserCmd, but received: {cmd:?}");
+        }
+    }
+
+    /// Assert that `DaserCmd::WantToPrune` was sent to `Daser` and obtain a response channel.
+    pub async fn expect_want_to_prune(&mut self) -> (u64, oneshot::Sender<bool>) {
+        match self.expect_cmd().await {
+            DaserCmd::WantToPrune { height, respond_to } => (height, respond_to),
+            cmd => panic!("Expecting WantToPrune, but received: {cmd:?}"),
+        }
+    }
+
+    /// Assert that `DaserCmd::UpdateHighestPrunableHeight` was sent to `Daser`.
+    pub async fn expect_update_highest_prunable_block(&mut self) -> u64 {
+        match self.expect_cmd().await {
+            DaserCmd::UpdateHighestPrunableHeight { value } => value,
+            cmd => panic!("Expecting UpdateHighestPrunableHeight, but received: {cmd:?}"),
+        }
+    }
+
+    /// Assert that `DaserCmd::UpdateNumberOfPrunableBlocks` was sent to `Daser`.
+    pub async fn expect_update_number_of_prunable_blocks(&mut self) -> u64 {
+        match self.expect_cmd().await {
+            DaserCmd::UpdateNumberOfPrunableBlocks { value } => value,
+            cmd => panic!("Expecting UpdateNumberOfPrunableBlocks, but received: {cmd:?}"),
         }
     }
 }
