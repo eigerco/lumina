@@ -1022,6 +1022,7 @@ mod tests {
             .update_number_of_prunable_blocks(PRUNER_THRESHOLD - 1)
             .await
             .unwrap();
+        sleep(Duration::from_millis(5)).await;
 
         // Sample blocks that are in prunable area
         sample_block(
@@ -1048,6 +1049,7 @@ mod tests {
             .update_number_of_prunable_blocks(PRUNER_THRESHOLD)
             .await
             .unwrap();
+        sleep(Duration::from_millis(5)).await;
 
         // But sampling of 998 block was already scheduled, so we need to handle it
         sample_block(
