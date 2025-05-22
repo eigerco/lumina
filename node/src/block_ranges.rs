@@ -470,6 +470,7 @@ impl BlockRanges {
         edges
     }
 
+    /// Returns `(left, middle, right)` that can be used for binary search.
     pub(crate) fn partitions(&self) -> Option<(BlockRanges, u64, BlockRanges)> {
         let len = self.len();
 
@@ -487,9 +488,12 @@ impl BlockRanges {
             let range_len = range.len();
 
             if left_len + range_len <= middle {
-                left.insert_relaxed(range.to_owned()).unwrap();
+                // If the whole `range` is up to the `middle`
+                left.insert_relaxed(range.to_owned())
+                    .expect("BlockRanges always holds valid ranges");
                 left_len += range_len;
             } else if left_len < middle {
+                // If `range` overlaps with `middle`
                 let start = *range.start();
                 let end = *range.end();
 
@@ -497,13 +501,19 @@ impl BlockRanges {
                 let left_range = start..=left_end;
 
                 left_len += left_range.len();
-                left.insert_relaxed(left_range).unwrap();
+                left.insert_relaxed(left_range)
+                    .expect("BlockRanges always holds valid ranges");
 
                 if left_end < end {
-                    right.insert_relaxed(left_end + 1..=end).unwrap();
+                    right
+                        .insert_relaxed(left_end + 1..=end)
+                        .expect("BlockRanges always holds valid ranges");
                 }
             } else {
-                right.insert_relaxed(range.to_owned()).unwrap();
+                // If the whole `range` is after the `middle`
+                right
+                    .insert_relaxed(range.to_owned())
+                    .expect("BlockRanges always holds valid ranges");
             }
         }
 
@@ -528,7 +538,9 @@ impl BlockRanges {
             let r = range.keep_head(limit - len);
 
             len += r.len();
-            truncated.insert_relaxed(r).unwrap();
+            truncated
+                .insert_relaxed(r)
+                .expect("BlockRanges always holds valid ranges");
 
             debug_assert_eq!(truncated.len(), len);
             debug_assert!(len <= limit);
@@ -550,7 +562,9 @@ impl BlockRanges {
             let r = range.keep_tail(limit - len);
 
             len += r.len();
-            truncated.insert_relaxed(r).unwrap();
+            truncated
+                .insert_relaxed(r)
+                .expect("BlockRanges always holds valid ranges");
 
             debug_assert_eq!(truncated.len(), len);
             debug_assert!(len <= limit);
