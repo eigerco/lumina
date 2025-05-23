@@ -2,14 +2,14 @@ use celestia_types::{hash::Hash, state::ErrorCode};
 use k256::ecdsa::signature::Error as SignatureError;
 use tonic::Status;
 
-/// Alias for a `Result` with the error type [`celestia_tonic::Error`].
+/// Alias for a `Result` with the error type [`celestia_grpc::Error`].
 ///
-/// [`celestia_tonic::Error`]: crate::Error
+/// [`celestia_grpc::Error`]: crate::Error
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-/// Representation of all the errors that can occur when interacting with [`celestia_tonic`].
+/// Representation of all the errors that can occur when interacting with [`celestia_grpc`].
 ///
-/// [`celestia_tonic`]: crate
+/// [`celestia_grpc`]: crate
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Tonic error
@@ -18,7 +18,7 @@ pub enum Error {
 
     /// Transport error
     #[error("Transport: {0}")]
-    TransportError(String),
+    TransportError(#[from] tonic::transport::Error),
 
     /// Tendermint Error
     #[error(transparent)]

@@ -11,7 +11,7 @@ use crate::consts::appconsts;
 use crate::consts::appconsts::AppVersion;
 use crate::nmt::Namespace;
 use crate::state::{AccAddress, AddressTrait};
-use crate::{bail_validation, Error, Result, Share};
+use crate::{bail_validation, Error, Result, Share, UniffiError};
 
 pub use self::commitment::Commitment;
 pub use self::msg_pay_for_blobs::MsgPayForBlobs;
@@ -31,6 +31,7 @@ use wasm_bindgen::prelude::*;
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
     wasm_bindgen(getter_with_clone, inspectable)
 )]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Blob {
     /// A [`Namespace`] the [`Blob`] belongs to.
     pub namespace: Namespace,
@@ -50,6 +51,7 @@ pub struct Blob {
 
 /// Params defines the parameters for the blob module.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BlobParams {
     /// Gas cost per blob byte
     pub gas_per_blob_byte: u32,
@@ -553,6 +555,12 @@ mod custom_serde {
             })
         }
     }
+}
+
+#[cfg(feature = "uniffi")]
+#[uniffi::export]
+fn new_blob(namespace: Namespace, data: Vec<u8>, app_version: AppVersion) -> Result<Blob, UniffiError> {
+        Blob::new(namespace, data, app_version).map_err(|e| UniffiError::CouldNotGenerateCommitment {msg: e.to_string()})
 }
 
 #[cfg(test)]

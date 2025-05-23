@@ -14,6 +14,7 @@ pub use celestia_proto::cosmos::tx::v1beta1::BroadcastMode;
 
 /// Response to GetTx
 #[derive(Debug)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct GetTxResponse {
     /// Response Transaction
     pub tx: Tx,
