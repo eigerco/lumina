@@ -12,10 +12,10 @@ use prost::Message;
 use crate::tx::TxInfo;
 use crate::{DocSigner, SignDoc, TxConfig};
 
-type Result<T, E = GrpcError> = std::result::Result<T, E>;
+type Result<T, E = TransactionClientError> = std::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
-pub enum GrpcError {
+pub enum TransactionClientError {
     #[error("grpc error: {msg}")]
     GrpcError { msg: String },
 
@@ -24,41 +24,33 @@ pub enum GrpcError {
 
     #[error("invalid account id")]
     InvalidAccountId,
-}
 
-impl From<crate::Error> for GrpcError {
-    fn from(value: crate::Error) -> Self {
-        GrpcError::GrpcError {
-            msg: value.to_string(),
-        }
-    }
-}
-
-#[uniffi::export]
-fn proto_encode_sign_doc(sign_doc: SignDoc) -> Vec<u8> {
-    sign_doc.encode_to_vec()
-}
-
-#[uniffi::export]
-fn parse_bech32_address(bech32_address: String) -> Result<Address> {
-    bech32_address.parse().map_err(|_| GrpcError::InvalidAccountId)
+    #[error("error while signing: {msg}")]
+    SigningError { msg: String }
 }
 
 #[uniffi::export(with_foreign)]
 #[async_trait::async_trait]
 pub trait UniffiSigner: Sync + Send {
-    async fn sign(&self, doc: SignDoc) -> Result<UniffiSignature, SigningError>;
+    async fn sign(&self, doc: SignDoc) -> Result<UniffiSignature, TransactionClientError>;
 }
 
-#[derive(Debug, thiserror::Error, uniffi::Error)]
-pub enum SigningError {
-    #[error("signing error: {msg}")]
-    SigningError { msg: String },
+struct UniffiSignerBox(pub Arc<dyn UniffiSigner>);
+
+#[derive(Record)]
+pub struct UniffiSignature {
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Object)]
 pub struct TxClient {
     client: crate::TxClient<Channel, UniffiSignerBox>,
+}
+
+#[derive(Record)]
+pub struct AnyMsg {
+    pub r#type: String,
+    pub value: Vec<u8>,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -71,7 +63,7 @@ impl TxClient {
         signer: Arc<dyn UniffiSigner>,
     ) -> Result<Self> {
         let vk = VerifyingKey::from_sec1_bytes(&account_pubkey)
-            .map_err(|e| GrpcError::InvalidAccountPublicKey { msg: e.to_string() })?;
+            .map_err(|e| TransactionClientError::InvalidAccountPublicKey { msg: e.to_string() })?;
 
         let signer = UniffiSignerBox(signer);
 
@@ -108,12 +100,6 @@ impl TxClient {
     }
 }
 
-#[derive(Record)]
-pub struct AnyMsg {
-    pub r#type: String,
-    pub value: Vec<u8>,
-}
-
 impl From<AnyMsg> for Any {
     fn from(value: AnyMsg) -> Self {
         Any {
@@ -122,8 +108,6 @@ impl From<AnyMsg> for Any {
         }
     }
 }
-
-struct UniffiSignerBox(pub Arc<dyn UniffiSigner>);
 
 impl DocSigner for UniffiSignerBox {
     async fn try_sign(
@@ -137,10 +121,6 @@ impl DocSigner for UniffiSignerBox {
     }
 }
 
-#[derive(Record)]
-pub struct UniffiSignature {
-    pub bytes: Vec<u8>,
-}
 
 impl From<DocSignature> for UniffiSignature {
     fn from(value: DocSignature) -> Self {
@@ -151,11 +131,40 @@ impl From<DocSignature> for UniffiSignature {
 }
 
 impl TryFrom<UniffiSignature> for DocSignature {
-    type Error = SigningError;
+    type Error = TransactionClientError;
 
     fn try_from(value: UniffiSignature) -> std::result::Result<Self, Self::Error> {
-        DocSignature::from_slice(&value.bytes).map_err(|e| SigningError::SigningError {
+        DocSignature::from_slice(&value.bytes).map_err(|e| TransactionClientError::SigningError {
             msg: format!("invalid signature {e}"),
         })
     }
 }
+
+impl From<crate::Error> for TransactionClientError {
+    fn from(value: crate::Error) -> Self {
+        TransactionClientError::GrpcError {
+            msg: value.to_string(),
+        }
+    }
+}
+
+#[uniffi::export]
+fn proto_encode_sign_doc(sign_doc: SignDoc) -> Vec<u8> {
+    sign_doc.encode_to_vec()
+}
+
+#[uniffi::export]
+fn parse_bech32_address(bech32_address: String) -> Result<Address> {
+    bech32_address.parse().map_err(|_| TransactionClientError::InvalidAccountId)
+}
+
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn new_tx_client(
+        url: String,
+        account_address: &Address,
+        account_pubkey: Vec<u8>,
+        signer: Arc<dyn UniffiSigner>,
+) -> Result<TxClient> {
+    TxClient::new(url, account_address, account_pubkey, signer).await
+}
+
