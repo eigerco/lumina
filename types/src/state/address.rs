@@ -58,7 +58,6 @@ pub enum AddressKind {
 #[enum_dispatch]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Address {
     /// Account address.
     AccAddress,
@@ -87,7 +86,6 @@ pub struct AccAddress {
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
     wasm_bindgen(inspectable)
 )]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ValAddress {
     id: Id,
 }
@@ -99,7 +97,6 @@ pub struct ValAddress {
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
     wasm_bindgen(inspectable)
 )]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ConsAddress {
     id: Id,
 }
@@ -288,10 +285,45 @@ fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
 
 #[cfg(feature = "uniffi")]
 pub(crate) mod uniffi_types {
-    use super::Id;
-    use uniffi::Record;
+    use super::{Id, Address as RustAddress, AccAddress, ValAddress, ConsAddress};
+    use uniffi::{Record, Enum};
 
     use crate::error::UniffiError;
+
+    // uniffi does not play well with enum_dispatch
+    #[derive(Enum)]
+    pub enum Address {
+        /// Account address.
+        AccAddress(AccountId),
+        /// Validator address.
+        ValAddress(AccountId),
+        /// Consensus address.
+        ConsAddress(AccountId),
+    }
+
+    impl TryFrom<Address> for RustAddress {
+        type Error = UniffiError;
+
+        fn try_from(value: Address) -> Result<Self, Self::Error> {
+            Ok(match value {
+                Address::AccAddress(id) => RustAddress::from(AccAddress {id: id.try_into()?}),
+                Address::ValAddress(id) => RustAddress::from(ValAddress {id: id.try_into()?}),
+                Address::ConsAddress(id) => RustAddress::from(ConsAddress {id: id.try_into()?}),
+            })
+        }
+    }
+
+    impl From<RustAddress> for Address {
+        fn from(value: RustAddress) -> Self {
+            match value {
+                RustAddress::AccAddress(v) => Address::AccAddress(v.id.into()),
+                RustAddress::ValAddress(v) => Address::ValAddress(v.id.into()),
+                RustAddress::ConsAddress(v) => Address::ConsAddress(v.id.into()),
+            }
+        }
+    }
+
+    uniffi::custom_type!(RustAddress, Address);
 
     #[derive(Record)]
     pub struct AccountId {
