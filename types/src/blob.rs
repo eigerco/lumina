@@ -11,7 +11,7 @@ use crate::consts::appconsts;
 use crate::consts::appconsts::AppVersion;
 use crate::nmt::Namespace;
 use crate::state::{AccAddress, AddressTrait};
-use crate::{bail_validation, Error, Result, Share, UniffiError};
+use crate::{bail_validation, Error, Result, Share};
 
 pub use self::commitment::Commitment;
 pub use self::msg_pay_for_blobs::MsgPayForBlobs;
@@ -559,8 +559,8 @@ mod custom_serde {
 
 #[cfg(feature = "uniffi")]
 #[uniffi::export]
-fn new_blob(namespace: Namespace, data: Vec<u8>, app_version: AppVersion) -> Result<Blob, UniffiError> {
-        Blob::new(namespace, data, app_version).map_err(|e| UniffiError::CouldNotGenerateCommitment {msg: e.to_string()})
+fn new_blob(namespace: Namespace, data: Vec<u8>, app_version: AppVersion) -> Result<Blob, crate::UniffiError> {
+        Blob::new(namespace, data, app_version).map_err(|e| crate::UniffiError::CouldNotGenerateCommitment {msg: e.to_string()})
 }
 
 #[cfg(test)]
