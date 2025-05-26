@@ -142,6 +142,8 @@
 			buildRules = (
 			);
 			dependencies = (
+				D15B9CEF2DE45ECF00F54A21 /* PBXTargetDependency */,
+				D15B9CED2DE45ECA00F54A21 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				FC92E16D2D5F9A6D00A25A9C /* LuminaDemo */,
@@ -298,6 +300,14 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		D15B9CED2DE45ECA00F54A21 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = D15B9CEC2DE45ECA00F54A21 /* Logging */;
+		};
+		D15B9CEF2DE45ECF00F54A21 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = D15B9CEE2DE45ECF00F54A21 /* P256K */;
+		};
 		FC92E17D2D5F9A6E00A25A9C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = FC92E16A2D5F9A6D00A25A9C /* LuminaDemo */;
@@ -631,6 +641,16 @@
 			productName = Logging;
 		};
 		D15B9CE82DDF443600F54A21 /* P256K */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D15B9CDD2DDF013400F54A21 /* XCRemoteSwiftPackageReference "swift-secp256k1" */;
+			productName = P256K;
+		};
+		D15B9CEC2DE45ECA00F54A21 /* Logging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D14DFDE72DD4890700F311BE /* XCRemoteSwiftPackageReference "swift-log" */;
+			productName = Logging;
+		};
+		D15B9CEE2DE45ECF00F54A21 /* P256K */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D15B9CDD2DDF013400F54A21 /* XCRemoteSwiftPackageReference "swift-secp256k1" */;
 			productName = P256K;
