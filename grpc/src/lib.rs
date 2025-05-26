@@ -5,7 +5,7 @@ pub mod grpc;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod js_client;
 mod tx;
-#[cfg(feature = "uniffi")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "uniffi"))]
 pub mod uniffi_client;
 mod utils;
 

@@ -127,7 +127,7 @@ impl TryFrom<BlockId> for TendermintBlockId {
 impl From<TendermintBlockId> for BlockId {
     fn from(value: TendermintBlockId) -> Self {
         BlockId {
-            hash: value.hash.into(),
+            hash: value.hash,
             part_set_header: value.part_set_header.into(),
         }
     }

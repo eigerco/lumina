@@ -294,11 +294,11 @@ pub(crate) mod uniffi_types {
     #[derive(Enum)]
     pub enum Address {
         /// Account address.
-        AccAddress(AccountId),
+        Account(AccountId),
         /// Validator address.
-        ValAddress(AccountId),
+        Validator(AccountId),
         /// Consensus address.
-        ConsAddress(AccountId),
+        Consensus(AccountId),
     }
 
     impl TryFrom<Address> for RustAddress {
@@ -306,9 +306,9 @@ pub(crate) mod uniffi_types {
 
         fn try_from(value: Address) -> Result<Self, Self::Error> {
             Ok(match value {
-                Address::AccAddress(id) => RustAddress::from(AccAddress {id: id.try_into()?}),
-                Address::ValAddress(id) => RustAddress::from(ValAddress {id: id.try_into()?}),
-                Address::ConsAddress(id) => RustAddress::from(ConsAddress {id: id.try_into()?}),
+                Address::Account(id) => RustAddress::from(AccAddress {id: id.try_into()?}),
+                Address::Validator(id) => RustAddress::from(ValAddress {id: id.try_into()?}),
+                Address::Consensus(id) => RustAddress::from(ConsAddress {id: id.try_into()?}),
             })
         }
     }
@@ -316,9 +316,9 @@ pub(crate) mod uniffi_types {
     impl From<RustAddress> for Address {
         fn from(value: RustAddress) -> Self {
             match value {
-                RustAddress::AccAddress(v) => Address::AccAddress(v.id.into()),
-                RustAddress::ValAddress(v) => Address::ValAddress(v.id.into()),
-                RustAddress::ConsAddress(v) => Address::ConsAddress(v.id.into()),
+                RustAddress::AccAddress(v) => Address::Account(v.id.into()),
+                RustAddress::ValAddress(v) => Address::Validator(v.id.into()),
+                RustAddress::ConsAddress(v) => Address::Consensus(v.id.into()),
             }
         }
     }

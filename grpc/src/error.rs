@@ -17,6 +17,7 @@ pub enum Error {
     TonicError(#[from] Status),
 
     /// Transport error
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("Transport: {0}")]
     TransportError(#[from] tonic::transport::Error),
 
