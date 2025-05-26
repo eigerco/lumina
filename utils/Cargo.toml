@@ -9,7 +9,7 @@ homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
 
 [dependencies]
-tokio = { optional = true, version = "1.38.0", features = ["macros", "sync"] }
+tokio = { optional = true, version = "1.43.1", features = ["macros", "sync"] }
 tokio-util = { optional = true, version = "0.7.11" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
