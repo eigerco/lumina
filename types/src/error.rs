@@ -342,54 +342,80 @@ pub(crate) use bail_verification;
 pub(crate) use validation_error;
 pub(crate) use verification_error;
 
+/// Errors raised when converting from uniffi helper types
 #[cfg(feature = "uniffi")]
 #[derive(Debug, uniffi::Error, thiserror::Error)]
 pub enum UniffiError {
+    /// Invalid namespace length
     #[error("Invalid namespace length")]
     InvalidNamespaceLength,
 
+    /// Invalid commitment length
     #[error("Invalid commitment hash length")]
     InvalidCommitmentLength,
 
+    /// Invalid account id length
     #[error("Invalid account id length")]
     InvalidAccountIdLength,
 
+    /// Invalid hash length
     #[error("Invalid hash length")]
     InvalidHashLength,
 
+    /// Invalid chain ID lenght
     #[error("Invalid chain id length")]
     InvalidChainIdLength,
 
+    /// Invalid public key
     #[error("Invalid public key")]
     InvalidPublicKey,
 
+    /// Invalid parts header
     #[error("Invalid parts header {msg}")]
-    InvalidPartsHeader { msg: String },
+    InvalidPartsHeader {
+        /// error message
+        msg: String,
+    },
 
+    /// Timestamp out of range
     #[error("Timestamp out of range")]
     TimestampOutOfRange,
 
+    /// Header height out of range
     #[error("Header heigth out of range")]
     HeaderHeightOutOfRange,
 
+    /// Invalid signature length
     #[error("Invalid signature length")]
     InvalidSignatureLength,
 
+    /// Invalid round index
     #[error("Invalid round index")]
     InvalidRoundIndex,
 
+    /// Invalid validator index
     #[error("Invalid validator index")]
     InvalidValidatorIndex,
 
+    /// Invalid voting power
     #[error("Voting power out of range")]
     InvalidVotingPower,
 
+    /// Invalid signed header
     #[error("Invalid signed header")]
     InvalidSignedHeader,
 
+    /// Could not generate commitment
     #[error("Could not generate commitment")]
-    CouldNotGenerateCommitment { msg: String },
+    CouldNotGenerateCommitment {
+        /// error message
+        msg: String,
+    },
 
+    /// Invalid address
     #[error("Invalid address")]
-    InvalidAddress { msg: String },
+    InvalidAddress {
+        /// error message
+        msg: String,
+    },
 }

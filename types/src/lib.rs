@@ -48,8 +48,6 @@ pub use crate::validate::*;
 // uniffi :(
 #[cfg(feature = "uniffi")]
 pub use crate::hash::Hash;
-//#[cfg(feature = "uniffi")]
-//pub use crate::uniffi_types::TendermintHeight;
 
 #[cfg(all(test, target_arch = "wasm32"))]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);

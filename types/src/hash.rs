@@ -23,6 +23,7 @@ impl HashExt for Hash {
     }
 }
 
+/// uniffi conversion types
 #[cfg(feature = "uniffi")]
 pub mod uniffi_types {
     use super::Hash as TendermintHash;
@@ -32,9 +33,15 @@ pub mod uniffi_types {
 
     use crate::UniffiError;
 
+    /// Hash digest
     #[derive(Enum)]
     pub enum UniffiHash {
-        Sha256 { hash: Vec<u8> },
+        /// SHA-256 hash
+        Sha256 {
+            /// hash value
+            hash: Vec<u8>,
+        },
+        /// Empty hash
         None,
     }
 

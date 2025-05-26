@@ -1,3 +1,5 @@
+//! Misc types used by uniffi
+
 use tendermint::block::parts::Header as TendermintPartsHeader;
 use tendermint::block::Id as TendermintBlockId;
 use tendermint::chain::Id as TendermintChainId;
@@ -21,16 +23,22 @@ use crate::block::uniffi_types::SignedHeader;
 use crate::error::UniffiError;
 use crate::state::UniffiAccountId;
 
+/// Version contains the protocol version for the blockchain and the application.
 pub type ProtocolVersion = tendermint::block::header::Version;
 
+/// Version contains the protocol version for the blockchain and the application.
 #[uniffi::remote(Record)]
 pub struct ProtocolVersion {
+    /// blockchain version
     pub block: u64,
+    /// app version
     pub app: u64,
 }
 
+/// AppHash is usually a SHA256 hash, but in reality it can be any kind of data
 #[derive(Record)]
 pub struct AppHash {
+    /// AppHash value
     pub hash: Vec<u8>,
 }
 
@@ -56,6 +64,7 @@ uniffi::custom_type!(TendermintAppHash, AppHash, {
     lower: |value| value.into(),
 });
 
+/// Chain identifier (e.g. ‘gaia-9000’)
 #[derive(Record)]
 pub struct ChainId {
     id: String,
@@ -83,9 +92,12 @@ uniffi::custom_type!(TendermintChainId, ChainId, {
     lower: |value| value.into()
 });
 
+/// Block parts header
 #[derive(Record)]
 pub struct PartsHeader {
+    /// Number of parts in this block
     pub total: u32,
+    /// Hash of the parts set header
     pub hash: Hash,
 }
 
@@ -107,9 +119,24 @@ impl From<TendermintPartsHeader> for PartsHeader {
     }
 }
 
+/// Block identifiers which contain two distinct Merkle roots of the block, as well as the number of parts in the block.
 #[derive(Record)]
 pub struct BlockId {
+    /// The block’s main hash is the Merkle root of all the fields in the block header.
     pub hash: Hash,
+    /// Parts header (if available) is used for secure gossipping of the block during
+    /// consensus. It is the Merkle root of the complete serialized block cut into parts.
+    ///
+    /// PartSet is used to split a byteslice of data into parts (pieces) for transmission.
+    /// By splitting data into smaller parts and computing a Merkle root hash on the list,
+    /// you can verify that a part is legitimately part of the complete data, and the part
+    /// can be forwarded to other peers before all the parts are known. In short, it’s
+    /// a fast way to propagate a large file over a gossip network.
+    ///
+    /// https://github.com/tendermint/tendermint/wiki/Block-Structure#partset
+    ///
+    /// PartSetHeader in protobuf is defined as never nil using the gogoproto annotations.
+    /// This does not translate to Rust, but we can indicate this in the domain type.
     pub part_set_header: PartsHeader,
 }
 
@@ -139,6 +166,7 @@ uniffi::custom_type!(TendermintBlockId, BlockId, {
     lower: |value| value.into()
 });
 
+/// Tendermint timestamp
 #[derive(Record)]
 pub struct Time {
     ts: i64,
@@ -176,6 +204,7 @@ uniffi::custom_type!(TendermintTime, Time, {
     lower: |value| value.try_into().expect("valid data")
 });
 
+/// Signature
 #[derive(Record)]
 pub struct Signature {
     signature: Vec<u8>,
@@ -205,6 +234,7 @@ uniffi::custom_type!(TendermintSignature, Signature, {
     lower: |value| value.into()
 });
 
+/// Types of votes
 #[uniffi::remote(Enum)]
 #[repr(u8)]
 pub enum VoteType {
@@ -212,17 +242,29 @@ pub enum VoteType {
     Precommit = 2,
 }
 
+/// Votes are signed messages from validators for a particular block which include information
+/// about the validator signing it.
 #[derive(Record)]
 pub struct Vote {
+    /// Type of vote (prevote or precommit)
     pub vote_type: VoteType,
+    /// Block height
     pub height: BlockHeight,
+    /// Round
     pub round: u32,
+    /// Block ID
     pub block_id: Option<BlockId>,
+    /// Timestamp
     pub timestamp: Option<Time>,
+    /// Validator address
     pub validator_address: UniffiAccountId,
+    /// Validator index
     pub validator_index: u32,
+    /// Signature
     pub signature: Option<Signature>,
+    /// Vote extension provided by the application. Only valid for precommit messages.
     pub extension: Vec<u8>,
+    /// Vote extension signature by the validator Only valid for precommit messages.
     pub extension_signature: Option<Signature>,
 }
 
@@ -279,12 +321,18 @@ uniffi::custom_type!(TendermintVote, Vote, {
     lower: |value| value.try_into().expect("valid tendermint time")
 });
 
+/// Validator information
 #[derive(Record)]
 pub struct ValidatorInfo {
+    /// Validator account address
     pub address: UniffiAccountId,
+    /// Validator public key
     pub pub_key: PublicKey,
+    /// Validator voting power
     pub power: u64,
+    /// Validator name
     pub name: Option<String>,
+    /// Validator proposer priority
     pub proposer_priority: i64,
 }
 
@@ -316,10 +364,14 @@ impl TryFrom<ValidatorInfo> for TendermintValidatorInfo {
     }
 }
 
+/// Validator set contains a vector of validators
 #[derive(Record)]
 pub struct ValidatorSet {
+    /// Validators in the set
     pub validators: Vec<ValidatorInfo>,
+    /// Proposer
     pub proposer: Option<ValidatorInfo>,
+    /// Total voting power
     pub total_voting_power: u64,
 }
 
@@ -352,9 +404,12 @@ impl TryFrom<ValidatorSet> for TendermintValidatorSet {
     }
 }
 
+/// Conflicting block detected in light client attack
 #[derive(Record)]
 pub struct ConflictingBlock {
+    /// Signed header
     pub signed_header: SignedHeader,
+    /// Validator set
     pub validator_set: ValidatorSet,
 }
 
@@ -389,21 +444,34 @@ uniffi::custom_type!(TendermintEvidenceList, Vec<Evidence>, {
     lower: |value| value.into_vec().into_iter().map(|e| e.try_into()).collect::<Result<_,_>>().expect("valid timestamps")
 });
 
+/// Evidence of malfeasance by validators (i.e. signing conflicting votes or light client attack).
 #[allow(clippy::large_enum_variant)]
 #[derive(Enum)]
 pub enum Evidence {
+    /// Duplicate vote evidence
     DuplicateVote {
+        /// Vote A
         vote_a: Vote,
+        /// Vote B
         vote_b: Vote,
+        /// Total voting power
         total_voting_power: u64,
+        /// Validator power
         validator_power: u64,
+        /// Timestamp
         timestamp: Time,
     },
+    /// LightClient attack evidence
     LightClientAttack {
+        /// Conflicting block
         conflicting_block: ConflictingBlock,
+        /// Common height
         common_height: u64,
+        /// Byzantine validators
         byzantine_validators: Vec<ValidatorInfo>,
+        /// Total voting power
         total_voting_power: u64,
+        /// Timestamp
         timestamp: Time,
     },
 }
@@ -487,17 +555,29 @@ impl TryFrom<Evidence> for TendermintEvidence {
     }
 }
 
+/// Any contains an arbitrary serialized protocol buffer message along with a URL that
+/// describes the type of the serialized message.
 #[uniffi::remote(Record)]
 pub struct ProtobufAny {
+    /// A URL/resource name that uniquely identifies the type of the serialized protocol
+    /// buffer message. This string must contain at least one “/” character. The last
+    /// segment of the URL’s path must represent the fully qualified name of the type
+    /// (as in path/google.protobuf.Duration). The name should be in a canonical form
+    /// (e.g., leading “.” is not accepted).
     pub type_url: String,
+    /// Must be a valid serialized protocol buffer of the above specified type.
     pub value: Vec<u8>,
 }
 
 use tendermint::block::Height as TendermintHeight;
 
+/// Block height for a particular chain (i.e. number of blocks created since the chain began)
+///
+/// A height of 0 represents a chain which has not yet produced a block.
 #[derive(Record)]
 pub struct BlockHeight {
-    value: u64,
+    /// Height value
+    pub value: u64,
 }
 
 impl TryFrom<BlockHeight> for TendermintHeight {
@@ -524,8 +604,10 @@ uniffi::custom_type!(TendermintHeight, BlockHeight, {
 
 use bytes::Bytes as RawBytes;
 
+/// Array of bytes
 #[derive(Record)]
 pub struct Bytes {
+    /// Stored bytes
     bytes: Vec<u8>,
 }
 

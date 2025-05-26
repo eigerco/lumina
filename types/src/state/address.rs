@@ -325,9 +325,11 @@ pub(crate) mod uniffi_types {
 
     uniffi::custom_type!(RustAddress, Address);
 
+    /// Account ID
     #[derive(Record)]
     pub struct AccountId {
-        id: Vec<u8>,
+        /// id value
+        pub id: Vec<u8>,
     }
 
     impl From<Id> for AccountId {

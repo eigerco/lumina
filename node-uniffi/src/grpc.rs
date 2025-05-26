@@ -1,3 +1,5 @@
+//! GRPC client wrapper for uniffi
+
 use tonic::transport::Channel;
 use uniffi::Object;
 
@@ -7,15 +9,34 @@ use celestia_types::block::Block;
 use celestia_types::hash::uniffi_types::UniffiHash;
 use celestia_types::state::auth::AuthParams;
 use celestia_types::state::{Address, Coin, TxResponse};
+use celestia_types::UniffiError;
 
-mod error;
+/// Alias for a `Result` with the error type [`GrpcClientError`]
+pub type Result<T, E = GrpcClientError> = std::result::Result<T, E>;
 
-pub use error::Result;
+/// Errors returned from [`GrpcClient`]
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum GrpcClientError {
+    /// Error from grpc client
+    #[error("grpc error: {msg}")]
+    GrpcError {
+        /// error message
+        msg: String,
+    },
+
+    /// Error during uniffi types conversion
+    #[error("uniffi conversion error: {msg}")]
+    UniffiError {
+        /// error message
+        msg: String,
+    },
+}
 
 pub use celestia_grpc::uniffi_client::TxClient;
 
 type InnerClient = celestia_grpc::GrpcClient<Channel>;
 
+/// Celestia GRPC client
 #[derive(Object)]
 pub struct GrpcClient {
     client: InnerClient,
@@ -23,9 +44,10 @@ pub struct GrpcClient {
 
 #[uniffi::export(async_runtime = "tokio")]
 impl GrpcClient {
+    /// Create a new client connected with the given `url`
+    #[uniffi::constructor]
     // this function _must_ be async despite not awaiting, so that it executes in tokio runtime
     // context
-    #[uniffi::constructor]
     pub async fn new(url: String) -> Result<Self> {
         Ok(GrpcClient {
             client: celestia_grpc::GrpcClient::with_url(url)
@@ -106,5 +128,21 @@ impl GrpcClient {
     /// Get status of the transaction
     async fn tx_status(&self, hash: UniffiHash) -> Result<TxStatusResponse> {
         Ok(self.client.tx_status(hash.try_into()?).await?)
+    }
+}
+
+impl From<celestia_grpc::Error> for GrpcClientError {
+    fn from(value: celestia_grpc::Error) -> Self {
+        GrpcClientError::GrpcError {
+            msg: value.to_string(),
+        }
+    }
+}
+
+impl From<UniffiError> for GrpcClientError {
+    fn from(value: UniffiError) -> Self {
+        GrpcClientError::GrpcError {
+            msg: value.to_string(),
+        }
     }
 }

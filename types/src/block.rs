@@ -270,6 +270,7 @@ fn is_zero(id: &Id) -> bool {
         && id.part_set_header.total == 0
 }
 
+/// uniffi types
 #[cfg(feature = "uniffi")]
 pub mod uniffi_types {
     use tendermint::block::signed_header::SignedHeader as TendermintSignedHeader;
@@ -284,9 +285,12 @@ pub mod uniffi_types {
     use crate::state::UniffiAccountId;
     use crate::uniffi_types::{AppHash, BlockId, ChainId, ProtocolVersion, Signature, Time};
 
+    /// Signed block headers
     #[derive(Record)]
     pub struct SignedHeader {
+        /// Signed block headers
         pub header: Header,
+        /// Commit containing signatures for the header
         pub commit: Commit,
     }
 
@@ -310,11 +314,17 @@ pub mod uniffi_types {
         }
     }
 
+    /// Commit contains the justification (ie. a set of signatures) that a block was
+    /// committed by a set of validators.
     #[derive(Record)]
     pub struct Commit {
+        /// Block height
         pub height: u64,
+        /// Round
         pub round: u32,
+        /// Block ID
         pub block_id: BlockId,
+        /// Signatures
         pub signatures: Vec<CommitSig>,
     }
 
@@ -364,17 +374,28 @@ pub mod uniffi_types {
         lower: |value| value.try_into().expect("valid tendermint timestamp")
     });
 
+    /// CommitSig represents a signature of a validator. It’s a part of the Commit and can
+    /// be used to reconstruct the vote set given the validator set.
     #[derive(Enum)]
     pub enum CommitSig {
+        /// no vote was received from a validator.
         BlockIdFlagAbsent,
+        /// voted for the Commit.BlockID.
         BlockIdFlagCommit {
+            /// Validator address
             validator_address: UniffiAccountId,
+            /// Timestamp
             timestamp: Time,
+            /// Signature of vote
             signature: Option<Signature>,
         },
+        /// voted for nil
         BlockIdFlagNil {
+            /// Validator address
             validator_address: UniffiAccountId,
+            /// Timestamp
             timestamp: Time,
+            /// Signature of vote
             signature: Option<Signature>,
         },
     }
@@ -435,21 +456,38 @@ pub mod uniffi_types {
         }
     }
 
+    /// Block Header values contain metadata about the block and about the consensus,
+    /// as well as commitments to the data in the current block, the previous block,
+    /// and the results returned by the application.
     #[derive(Record)]
     pub struct Header {
+        /// Header version
         pub version: ProtocolVersion,
+        /// Chain ID
         pub chain_id: ChainId,
+        /// Current block height
         pub height: Height,
+        /// Current timestamp
         pub time: Time,
+        /// Previous block info
         pub last_block_id: Option<BlockId>,
+        /// Commit from validators from the last block
         pub last_commit_hash: Option<Hash>,
+        /// Merkle root of transaction hashes
         pub data_hash: Option<Hash>,
+        /// Validators for the current block
         pub validators_hash: Hash,
+        /// Validators for the next block
         pub next_validators_hash: Hash,
+        /// Consensus params for the current block
         pub consensus_hash: Hash,
+        /// State after txs from the previous block
         pub app_hash: AppHash,
+        /// Root hash of all results from the txs from the previous block
         pub last_results_hash: Option<Hash>,
+        /// Hash of evidence included in the block
         pub evidence_hash: Option<Hash>,
+        /// Original proposer of the block
         pub proposer_address: UniffiAccountId,
     }
 

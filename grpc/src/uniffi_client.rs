@@ -1,3 +1,5 @@
+//! GRPC transaction client wrapper for uniffi
+
 use std::sync::Arc;
 
 use celestia_types::state::Address;
@@ -14,47 +16,94 @@ use crate::{DocSigner, SignDoc, TxConfig};
 
 type Result<T, E = TransactionClientError> = std::result::Result<T, E>;
 
+/// Errors returned from TxClient
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum TransactionClientError {
+    /// Error returned from grpc
     #[error("grpc error: {msg}")]
-    GrpcError { msg: String },
+    GrpcError {
+        /// error message
+        msg: String,
+    },
 
+    /// Invalid account public key
     #[error("invalid account public key")]
-    InvalidAccountPublicKey { msg: String },
+    InvalidAccountPublicKey {
+        /// error message
+        msg: String,
+    },
 
+    /// Invalid account id
     #[error("invalid account id")]
     InvalidAccountId,
 
+    /// Error occured during signing
     #[error("error while signing: {msg}")]
-    SigningError { msg: String },
+    SigningError {
+        /// error message
+        msg: String,
+    },
 }
 
+/// Trait that implements signing the transaction.
+///
+/// Example usage:
+/// ```swift
+/// // uses 21-DOT-DEV/swift-secp256k1
+/// final class StaticSigner : UniffiSigner {
+///     let sk : P256K.Signing.PrivateKey
+///     
+///     init(sk: P256K.Signing.PrivateKey) {
+///         self.sk = sk
+///     }
+///     
+///     func sign(doc: SignDoc) async throws -> UniffiSignature {
+///         let messageData = protoEncodeSignDoc(signDoc: doc);
+///         let signature = try! sk.signature(for: messageData)
+///         return try! UniffiSignature (bytes: signature.compactRepresentation)
+///     }
+/// }
+/// ```
 #[uniffi::export(with_foreign)]
 #[async_trait::async_trait]
 pub trait UniffiSigner: Sync + Send {
+    /// sign provided `SignDoc` using secp256k1. Use helper proto_encode_sign_doc to
+    /// get canonical protobuf byte encoding of the message.
     async fn sign(&self, doc: SignDoc) -> Result<UniffiSignature, TransactionClientError>;
 }
 
 struct UniffiSignerBox(pub Arc<dyn UniffiSigner>);
 
+/// Message signature
 #[derive(Record)]
 pub struct UniffiSignature {
+    /// signature bytes
     pub bytes: Vec<u8>,
 }
 
+/// Celestia GRPC transaction client
 #[derive(Object)]
 pub struct TxClient {
     client: crate::TxClient<Channel, UniffiSignerBox>,
 }
 
+/// Any contains an arbitrary serialized protocol buffer message along with a URL that
+/// describes the type of the serialized message.
 #[derive(Record)]
 pub struct AnyMsg {
+    /// A URL/resource name that uniquely identifies the type of the serialized protocol
+    /// buffer message. This string must contain at least one “/” character. The last
+    /// segment of the URL’s path must represent the fully qualified name of the type
+    /// (as in path/google.protobuf.Duration). The name should be in a canonical form
+    /// (e.g., leading “.” is not accepted).
     pub r#type: String,
+    /// Must be a valid serialized protocol buffer of the above specified type.
     pub value: Vec<u8>,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
 impl TxClient {
+    /// Create a new transaction client with the specified account.
     #[uniffi::constructor]
     pub async fn new(
         url: String,
@@ -82,11 +131,21 @@ impl TxClient {
         self.client.app_version().as_u64()
     }
 
+    /// Submit blobs to the celestia network.
+    ///
+    /// When no `TxConfig` is provided, client will automatically calculate needed
+    /// gas and update the `gasPrice`, if network agreed on a new minimal value.
+    /// To enforce specific values use a `TxConfig`.
     pub async fn submit_blobs(&self, blobs: Vec<Blob>, config: Option<TxConfig>) -> Result<TxInfo> {
         let config = config.unwrap_or_default();
         Ok(self.client.submit_blobs(&blobs, config).await?)
     }
 
+    /// Submit message to the celestia network.
+    ///
+    /// When no `TxConfig` is provided, client will automatically calculate needed
+    /// gas and update the `gasPrice`, if network agreed on a new minimal value.
+    /// To enforce specific values use a `TxConfig`.
     pub async fn submit_message(
         &self,
         message: AnyMsg,
@@ -159,6 +218,7 @@ fn parse_bech32_address(bech32_address: String) -> Result<Address> {
         .map_err(|_| TransactionClientError::InvalidAccountId)
 }
 
+/// Create a new transaction client with the specified account.
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn new_tx_client(
     url: String,
