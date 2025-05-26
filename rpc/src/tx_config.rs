@@ -59,7 +59,7 @@ impl TxConfig {
     /// Sets the [`gas_price`] of the transaction.
     ///
     /// [`gas_price`]: TxConfig::gas_price
-    pub fn with_gas_price(&mut self, gas_price: f64) -> &mut Self {
+    pub fn with_gas_price(mut self, gas_price: f64) -> Self {
         self.gas_price = Some(gas_price);
         self
     }
@@ -67,7 +67,7 @@ impl TxConfig {
     /// Sets the [`max_gas_price`] of the transaction.
     ///
     /// [`max_gas_price`]: TxConfig::max_gas_price
-    pub fn with_max_gas_price(&mut self, max_gas_price: f64) -> &mut Self {
+    pub fn with_max_gas_price(mut self, max_gas_price: f64) -> Self {
         self.max_gas_price = Some(max_gas_price);
         self
     }
@@ -75,7 +75,7 @@ impl TxConfig {
     /// Sets the [`gas`] of the transaction.
     ///
     /// [`gas`]: TxConfig::gas
-    pub fn with_gas(&mut self, gas: u64) -> &mut Self {
+    pub fn with_gas(mut self, gas: u64) -> Self {
         self.gas = Some(gas);
         self
     }
@@ -83,7 +83,7 @@ impl TxConfig {
     /// Sets the [`priority`] of the transaction.
     ///
     /// [`priority`]: TxConfig::priority
-    pub fn with_priority(&mut self, priority: TxPriority) -> &mut Self {
+    pub fn with_priority(mut self, priority: TxPriority) -> Self {
         self.priority = Some(priority);
         self
     }
@@ -91,7 +91,7 @@ impl TxConfig {
     /// Sets the [`fee_granter_address`] of the transaction.
     ///
     /// [`fee_granter_address`]: TxConfig::fee_granter_address
-    pub fn with_fee_granter_address(&mut self, fee_granter_address: AccAddress) -> &mut Self {
+    pub fn with_fee_granter_address(mut self, fee_granter_address: AccAddress) -> Self {
         self.fee_granter_address = Some(fee_granter_address);
         self
     }
@@ -99,7 +99,7 @@ impl TxConfig {
     /// Sets the [`signer_address`] of the transaction.
     ///
     /// [`signer_address`]: TxConfig::signer_address
-    pub fn with_signer_address(&mut self, signer_address: AccAddress) -> &mut Self {
+    pub fn with_signer_address(mut self, signer_address: AccAddress) -> Self {
         self.signer_address = Some(signer_address);
         self
     }
@@ -107,7 +107,7 @@ impl TxConfig {
     /// Sets the [`key_name`] of the transaction.
     ///
     /// [`key_name`]: TxConfig::key_name
-    pub fn with_key_name(&mut self, key_name: impl Into<String>) -> &mut Self {
+    pub fn with_key_name(mut self, key_name: impl Into<String>) -> Self {
         self.key_name = Some(key_name.into());
         self
     }

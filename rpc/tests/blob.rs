@@ -185,27 +185,12 @@ async fn blob_subscribe() {
 async fn blob_submit_with_different_tx_config() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
 
-    let mut with_gas_price = TxConfig::default();
-    with_gas_price.with_gas_price(100.0);
-
-    let mut with_max_gas_price = TxConfig::default();
-    with_max_gas_price.with_max_gas_price(100.0);
-
-    let mut with_gas = TxConfig::default();
-    with_gas.with_gas(100000000);
-
-    let mut with_default_priority = TxConfig::default();
-    with_default_priority.with_priority(TxPriority::default());
-
-    let mut with_low_priority = TxConfig::default();
-    with_low_priority.with_priority(TxPriority::Low);
-
     let configs = [
-        with_gas_price,
-        with_max_gas_price,
-        with_gas,
-        with_default_priority,
-        with_low_priority,
+        TxConfig::default().with_gas_price(100.0),
+        TxConfig::default().with_max_gas_price(100.0),
+        TxConfig::default().with_gas(100000000),
+        TxConfig::default().with_priority(TxPriority::default()),
+        TxConfig::default().with_priority(TxPriority::Low),
     ];
 
     for config in configs {
