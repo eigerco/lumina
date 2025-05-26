@@ -133,7 +133,7 @@ pub struct BlockId {
     /// can be forwarded to other peers before all the parts are known. In short, it’s
     /// a fast way to propagate a large file over a gossip network.
     ///
-    /// https://github.com/tendermint/tendermint/wiki/Block-Structure#partset
+    /// [https://github.com/tendermint/tendermint/wiki/Block-Structure#partset]
     ///
     /// PartSetHeader in protobuf is defined as never nil using the gogoproto annotations.
     /// This does not translate to Rust, but we can indicate this in the domain type.
