@@ -37,8 +37,6 @@ class LuminaViewModel: ObservableObject {
     private var node: LuminaNode?
     private var statsTimer: Timer?
     
-    //private var grpc: GrpcClient?
-    
     deinit {
         statsTimer?.invalidate()
     }
@@ -62,48 +60,32 @@ class LuminaViewModel: ObservableObject {
         //do { let grpc = try GrpcClient(url: "rpc-celestia.alphab.ai:9090"); } catch {self.error = "grpc: \(error)" as! any Error}
         
         do {
-            // ====
-            //self.grpc = try GrpcClient(url: "rpc-celestia.alphab.ai:9090")
-            //let params = try await self.grpc?.getAuthParams()
-            //Logger(label: "LuminaDemo").info("Got auth params: \(String(describing: params))")
-            // ====
-            
+            let grpcClient = try await GrpcClient(url: "https://rpc-celestia.alphab.ai:9090")
+            let params = try await grpcClient.getAuthParams()
+            Logger(label: "GrpcTest").info("Got auth params: \(String(describing: params))")
             
             let address = try! parseBech32Address(bech32Address:"celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9")
-            
             let sk = try! P256K.Signing.PrivateKey(dataRepresentation: try! "393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839".bytes
             )
             
             let pk = sk.publicKey
             let signer = StaticSigner(sk: sk);
-            
-            Logger(label: "LuminaDemo").info("fire tx client")
-            
             let txclient = try await TxClient(url: "http://192.168.1.11:19090", accountAddress: address, accountPubkey: pk.dataRepresentation, signer: signer)
-            
-            Logger(label: "LuminaDemo").info("got tx client")
             
             let data = "Hello, World".data(using: .utf8)!
             let ns  = try newV0Namespace(id: "foo".data(using: .utf8)!)
-                                
             let blob = try newBlob(namespace: ns, data: data, appVersion: AppVersion.v1)
-            
             
             let submit = try await txclient.submitBlobs(blobs: [blob], config: nil)
             
-            Logger(label: "LuminaDemo").info("Submitted: \(submit)")
+            Logger(label: "GrpcTest").info("Submitted: \(submit)")
             
             self.node = try LuminaNode(config: config)
-            
             let _ = try await node!.start()
             isRunning = await node!.isRunning();
             
             Logger(label: "LuminaDemo").info("node spun up: \(isRunning)")
             
-            //self.grpc = try await GrpcClient(url: "https://rpc-celestia.alphab.ai:9090")
-            //let params = try await self.grpc?.getAuthParams()
-            //Logger(label: "LuminaDemo").info("Got auth params: \(String(describing: params))")
-            //Logger(label: "LuminaDemo").info("grpc too")
             
             
             
