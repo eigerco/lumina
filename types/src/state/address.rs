@@ -285,8 +285,8 @@ fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
 
 #[cfg(feature = "uniffi")]
 pub(crate) mod uniffi_types {
-    use super::{Id, Address as RustAddress, AccAddress, ValAddress, ConsAddress};
-    use uniffi::{Record, Enum};
+    use super::{AccAddress, Address as RustAddress, ConsAddress, Id, ValAddress};
+    use uniffi::{Enum, Record};
 
     use crate::error::UniffiError;
 
@@ -306,9 +306,9 @@ pub(crate) mod uniffi_types {
 
         fn try_from(value: Address) -> Result<Self, Self::Error> {
             Ok(match value {
-                Address::Account(id) => RustAddress::from(AccAddress {id: id.try_into()?}),
-                Address::Validator(id) => RustAddress::from(ValAddress {id: id.try_into()?}),
-                Address::Consensus(id) => RustAddress::from(ConsAddress {id: id.try_into()?}),
+                Address::Account(id) => RustAddress::from(AccAddress { id: id.try_into()? }),
+                Address::Validator(id) => RustAddress::from(ValAddress { id: id.try_into()? }),
+                Address::Consensus(id) => RustAddress::from(ConsAddress { id: id.try_into()? }),
             })
         }
     }

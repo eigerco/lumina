@@ -4,10 +4,10 @@ use celestia_types::state::Address;
 use celestia_types::Blob;
 use k256::ecdsa::signature::Error as K256Error;
 use k256::ecdsa::{Signature as DocSignature, VerifyingKey};
+use prost::Message;
 use tendermint_proto::google::protobuf::Any;
 use tonic::transport::Channel;
 use uniffi::{Object, Record};
-use prost::Message;
 
 use crate::tx::TxInfo;
 use crate::{DocSigner, SignDoc, TxConfig};
@@ -26,7 +26,7 @@ pub enum TransactionClientError {
     InvalidAccountId,
 
     #[error("error while signing: {msg}")]
-    SigningError { msg: String }
+    SigningError { msg: String },
 }
 
 #[uniffi::export(with_foreign)]
@@ -121,7 +121,6 @@ impl DocSigner for UniffiSignerBox {
     }
 }
 
-
 impl From<DocSignature> for UniffiSignature {
     fn from(value: DocSignature) -> Self {
         UniffiSignature {
@@ -155,16 +154,17 @@ fn proto_encode_sign_doc(sign_doc: SignDoc) -> Vec<u8> {
 
 #[uniffi::export]
 fn parse_bech32_address(bech32_address: String) -> Result<Address> {
-    bech32_address.parse().map_err(|_| TransactionClientError::InvalidAccountId)
+    bech32_address
+        .parse()
+        .map_err(|_| TransactionClientError::InvalidAccountId)
 }
 
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn new_tx_client(
-        url: String,
-        account_address: &Address,
-        account_pubkey: Vec<u8>,
-        signer: Arc<dyn UniffiSigner>,
+    url: String,
+    account_address: &Address,
+    account_pubkey: Vec<u8>,
+    signer: Arc<dyn UniffiSigner>,
 ) -> Result<TxClient> {
     TxClient::new(url, account_address, account_pubkey, signer).await
 }
-

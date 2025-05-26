@@ -64,5 +64,4 @@ mod uniffi_types {
         /// to as the "data root".
         pub hash: Vec<u8>,
     }
-
 }

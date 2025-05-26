@@ -391,5 +391,5 @@ pub enum UniffiError {
     CouldNotGenerateCommitment { msg: String },
 
     #[error("Invalid address")]
-    InvalidAddress { msg: String }
+    InvalidAddress { msg: String },
 }

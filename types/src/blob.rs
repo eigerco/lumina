@@ -559,8 +559,13 @@ mod custom_serde {
 
 #[cfg(feature = "uniffi")]
 #[uniffi::export]
-fn new_blob(namespace: Namespace, data: Vec<u8>, app_version: AppVersion) -> Result<Blob, crate::UniffiError> {
-        Blob::new(namespace, data, app_version).map_err(|e| crate::UniffiError::CouldNotGenerateCommitment {msg: e.to_string()})
+fn new_blob(
+    namespace: Namespace,
+    data: Vec<u8>,
+    app_version: AppVersion,
+) -> Result<Blob, crate::UniffiError> {
+    Blob::new(namespace, data, app_version)
+        .map_err(|e| crate::UniffiError::CouldNotGenerateCommitment { msg: e.to_string() })
 }
 
 #[cfg(test)]

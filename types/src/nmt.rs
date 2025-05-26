@@ -499,7 +499,9 @@ mod uniffi_types {
 
     #[uniffi::export]
     fn new_v0_namespace(id: Vec<u8>) -> Result<Namespace, UniffiError> {
-        Ok(RustNamespace::new_v0(&id).map_err(|_| UniffiError::InvalidNamespaceLength)?.into())
+        Ok(RustNamespace::new_v0(&id)
+            .map_err(|_| UniffiError::InvalidNamespaceLength)?
+            .into())
     }
 
     impl From<RustNamespace> for Namespace {
