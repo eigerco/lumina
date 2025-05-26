@@ -57,7 +57,6 @@ class LuminaViewModel: ObservableObject {
             batchSize: nil,
             ed25519SecretKeyBytes: nil
         )
-        //do { let grpc = try GrpcClient(url: "rpc-celestia.alphab.ai:9090"); } catch {self.error = "grpc: \(error)" as! any Error}
         
         do {
             let grpcClient = try await GrpcClient(url: "https://rpc-celestia.alphab.ai:9090")
@@ -85,9 +84,6 @@ class LuminaViewModel: ObservableObject {
             isRunning = await node!.isRunning();
             
             Logger(label: "LuminaDemo").info("node spun up: \(isRunning)")
-            
-            
-            
             
             statsTimer = pollStats()
         } catch {

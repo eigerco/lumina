@@ -6,5 +6,8 @@ build
 
 # artifacts that we build from node-uniffi
 lumina.xcframework
+LuminaDemo/celestia_grpc.swift
+LuminaDemo/celestia_proto.swift
+LuminaDemo/celestia_types.swift
 LuminaDemo/lumina_node.swift
 LuminaDemo/lumina_node_uniffi.swift
