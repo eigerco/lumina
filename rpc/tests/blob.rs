@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::prelude::*;
+use celestia_rpc::{TxConfig, TxPriority};
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::state::Address;
 use celestia_types::{Blob, Commitment};
@@ -12,7 +13,7 @@ use jsonrpsee::core::client::Subscription;
 
 pub mod utils;
 
-use crate::utils::client::{blob_submit, new_test_client, AuthLevel};
+use crate::utils::client::{blob_submit, blob_submit_with_config, new_test_client, AuthLevel};
 use crate::utils::{random_bytes, random_bytes_array, random_ns};
 
 #[tokio::test]
@@ -178,6 +179,41 @@ async fn blob_subscribe() {
     assert_eq!(received.len(), 2);
     assert_blob_equal_to_sent(&received[0], &blob1);
     assert_blob_equal_to_sent(&received[1], &blob3);
+}
+
+#[tokio::test]
+async fn blob_submit_with_different_tx_config() {
+    let client = new_test_client(AuthLevel::Write).await.unwrap();
+
+    let mut with_gas_price = TxConfig::default();
+    with_gas_price.with_gas_price(100.0);
+
+    let mut with_max_gas_price = TxConfig::default();
+    with_max_gas_price.with_max_gas_price(100.0);
+
+    let mut with_gas = TxConfig::default();
+    with_gas.with_gas(100000000);
+
+    let mut with_default_priority = TxConfig::default();
+    with_default_priority.with_priority(TxPriority::default());
+
+    let mut with_low_priority = TxConfig::default();
+    with_low_priority.with_priority(TxPriority::Low);
+
+    let configs = [
+        with_gas_price,
+        with_max_gas_price,
+        with_gas,
+        with_default_priority,
+        with_low_priority,
+    ];
+
+    for config in configs {
+        let blob = Blob::new(random_ns(), random_bytes(10), AppVersion::V3).unwrap();
+        blob_submit_with_config(&client, &[blob], config)
+            .await
+            .unwrap();
+    }
 }
 
 #[tokio::test]

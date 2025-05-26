@@ -25,6 +25,7 @@ prost.workspace = true
 async-trait = "0.1.80"
 jsonrpsee = { version = "0.25.1", features = ["client-core", "macros"] }
 serde = { version = "1.0.203", features = ["derive"] }
+serde_repr = "0.1.19"
 thiserror = "1.0.61"
 tracing = "0.1.40"
 base64 = "0.22.1"
