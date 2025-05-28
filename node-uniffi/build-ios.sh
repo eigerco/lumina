@@ -18,7 +18,12 @@ cargo run --bin uniffi-bindgen \
   --language swift \
   --out-dir ./bindings
 
-cat ./bindings/lumina_node_uniffiFFI.modulemap ./bindings/lumina_nodeFFI.modulemap > ./bindings/Headers/module.modulemap
+cat \
+	./bindings/lumina_node_uniffiFFI.modulemap \
+	./bindings/lumina_nodeFFI.modulemap \
+	./bindings/celestia_typesFFI.modulemap \
+	./bindings/celestia_grpcFFI.modulemap \
+	./bindings/celestia_protoFFI.modulemap > ./bindings/Headers/module.modulemap
 
 cp ./bindings/*.h ./bindings/Headers/
 

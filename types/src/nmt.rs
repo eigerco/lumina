@@ -485,6 +485,48 @@ impl Namespace {
     }
 }
 
+#[cfg(feature = "uniffi")]
+mod uniffi_types {
+    use super::Namespace as RustNamespace;
+    use uniffi::Record;
+
+    use crate::error::UniffiError;
+
+    #[derive(Record)]
+    pub struct Namespace {
+        pub namespace: Vec<u8>,
+    }
+
+    #[uniffi::export]
+    fn new_v0_namespace(id: Vec<u8>) -> Result<Namespace, UniffiError> {
+        Ok(RustNamespace::new_v0(&id)
+            .map_err(|_| UniffiError::InvalidNamespaceLength)?
+            .into())
+    }
+
+    impl From<RustNamespace> for Namespace {
+        fn from(value: RustNamespace) -> Self {
+            Namespace {
+                namespace: value.0 .0.to_vec(),
+            }
+        }
+    }
+
+    impl TryFrom<Namespace> for RustNamespace {
+        type Error = UniffiError;
+
+        fn try_from(value: Namespace) -> Result<Self, Self::Error> {
+            let ns = value.namespace.as_ref();
+            Ok(RustNamespace(
+                nmt_rs::NamespaceId::try_from(ns)
+                    .map_err(|_| UniffiError::InvalidNamespaceLength)?,
+            ))
+        }
+    }
+
+    uniffi::custom_type!(RustNamespace, Namespace);
+}
+
 impl From<Namespace> for nmt_rs::NamespaceId<NS_SIZE> {
     fn from(value: Namespace) -> Self {
         value.0

@@ -19,6 +19,8 @@ const OPTION_PROTOBUF_DURATION: &str =
 const NULL_DEFAULT: &str = r#"#[serde(with = "crate::serializers::null_default")]"#;
 const VEC_SKIP_IF_EMPTY: &str = r#"#[serde(skip_serializing_if = "::std::vec::Vec::is_empty")]"#;
 const BYTES_SKIP_IF_EMPTY: &str = r#"#[serde(skip_serializing_if = "bytes::Bytes::is_empty")]"#;
+const UNIFFI_RECORD: &str = r#"#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]"#;
+const UNIFFI_ENUM: &str = r#"#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]"#;
 
 #[rustfmt::skip]
 static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
@@ -28,9 +30,14 @@ static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.core.v1.proof.Proof", SERIALIZED_DEFAULT),
     (".celestia.core.v1.proof.RowProof", SERIALIZED_DEFAULT),
     (".celestia.core.v1.proof.ShareProof", SERIALIZED_DEFAULT),
+    (".cosmos.auth.v1beta1.Params", UNIFFI_RECORD),
     (".cosmos.base.abci.v1beta1.ABCIMessageLog", SERIALIZED_DEFAULT),
+    (".cosmos.base.abci.v1beta1.ABCIMessageLog", UNIFFI_RECORD),
     (".cosmos.base.abci.v1beta1.Attribute", SERIALIZED_DEFAULT),
+    (".cosmos.base.abci.v1beta1.Attribute", UNIFFI_RECORD),
+    (".cosmos.base.abci.v1beta1.GasInfo", UNIFFI_RECORD),
     (".cosmos.base.abci.v1beta1.StringEvent", SERIALIZED_DEFAULT),
+    (".cosmos.base.abci.v1beta1.StringEvent", UNIFFI_RECORD),
     (".cosmos.base.abci.v1beta1.TxResponse", SERIALIZED_DEFAULT),
     (".cosmos.base.v1beta1.Coin", SERIALIZED_DEFAULT),
     (".cosmos.base.query.v1beta1.PageResponse", SERIALIZED_DEFAULT),
@@ -46,7 +53,9 @@ static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".cosmos.staking.v1beta1.UnbondingDelegation", SERIALIZED_DEFAULT),
     (".cosmos.staking.v1beta1.UnbondingDelegationEntry", SERIALIZED_DEFAULT),
     (".cosmos.tx.v1beta1.SignDoc", SERIALIZED_DEFAULT),
+    (".cosmos.tx.v1beta1.SignDoc", UNIFFI_RECORD),
     (".cosmos.tx.v1beta1.SignDoc", r#"#[serde(rename_all = "camelCase")]"#),
+    (".cosmos.tx.v1beta1.BroadcastMode", UNIFFI_ENUM),
     (".header.pb.ExtendedHeader", SERIALIZED_DEFAULT),
     (".proof.pb.Proof", SERIALIZED_DEFAULT),
     (".proto.blob.v1.BlobProto", SERIALIZED),
