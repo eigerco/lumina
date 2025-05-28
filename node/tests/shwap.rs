@@ -40,15 +40,15 @@ async fn shwap_sampling_forward() {
         let wait_height_sampled = async {
             loop {
                 let ev = events.recv().await.unwrap();
-                let NodeEvent::SamplingFinished {
-                    height, accepted, ..
+                let NodeEvent::SamplingResult {
+                    height, timed_out, ..
                 } = ev.event
                 else {
                     continue;
                 };
 
                 if height == new_head {
-                    assert!(accepted);
+                    assert!(!timed_out);
                     break;
                 }
             }
@@ -93,14 +93,14 @@ async fn shwap_sampling_backward() {
     timeout(Duration::from_secs(10), async {
         loop {
             let ev = events.recv().await.unwrap();
-            let NodeEvent::SamplingFinished {
-                height, accepted, ..
+            let NodeEvent::SamplingResult {
+                height, timed_out, ..
             } = ev.event
             else {
                 continue;
             };
 
-            assert!(accepted);
+            assert!(!timed_out);
             headers_to_sample.remove(&height);
 
             if headers_to_sample.is_empty() {
