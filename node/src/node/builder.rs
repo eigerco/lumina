@@ -25,7 +25,7 @@ pub const MIN_SAMPLING_WINDOW: Duration = Duration::from_secs(60);
 /// Default maximum age of blocks before they get pruned.
 pub const DEFAULT_PRUNING_WINDOW: Duration = Duration::from_secs(30 * DAY + HOUR);
 /// Minimum pruning window that can be used in [`NodeBuilder`].
-pub const MIN_PRUNING_WINDOW: Duration = Duration::from_secs(60);
+pub const MIN_PRUNING_WINDOW: Duration = Duration::from_secs(0);
 
 /// [`Node`] builder.
 pub struct NodeBuilder<B, S>
@@ -238,9 +238,8 @@ where
     /// exactly after they get sampled. This is useful when you want to keep low
     /// memory footprint but still validate the blockchain.
     ///
-    /// **Default if [`InMemoryStore`]/[`InMemoryBlockstore`] are used:** 60 seconds.\
+    /// **Default if [`InMemoryStore`]/[`InMemoryBlockstore`] are used:** 0 seconds.\
     /// **Default:** 30 days plus 1 hour.\
-    /// **Minimum:** 60 seconds.
     pub fn pruning_window(self, dur: Duration) -> Self {
         NodeBuilder {
             pruning_window: Some(dur),

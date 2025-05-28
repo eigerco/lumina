@@ -59,9 +59,7 @@ pub struct WasmNodeConfig {
     /// If this is not set, then default value will apply:
     ///
     /// * If `use_persistent_memory == true`, default value is 30 days plus 1 hour.
-    /// * If `use_persistent_memory == false`, default value is 60 seconds.
-    ///
-    /// The minimum value that can be set is 60 seconds.
+    /// * If `use_persistent_memory == false`, default value is 0 seconds.
     #[wasm_bindgen(js_name = customPruningWindowSecs)]
     pub custom_pruning_window_secs: Option<u32>,
 }
