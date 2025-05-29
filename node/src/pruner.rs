@@ -10,7 +10,7 @@ use lumina_utils::time::{sleep, Instant};
 use tendermint::Time;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use crate::daser::{Daser, DaserError};
 use crate::events::{EventPublisher, NodeEvent};
@@ -182,6 +182,8 @@ where
                     _ = sleep(self.block_time) => continue,
                 }
             }
+
+            info!("Going to prune {} blocks", prunable_batch.len());
 
             for range in prunable_batch.into_inner() {
                 let from_height = *range.start();

@@ -209,7 +209,7 @@ where
     max_samples_needed: usize,
     sampling_futs: FuturesUnordered<BoxFuture<'static, Result<(u64, bool)>>>,
     queue: BlockRanges,
-    done: BlockRanges,
+    timed_out: BlockRanges,
     ongoing: BlockRanges,
     will_be_pruned: BlockRanges,
     sampling_window: Duration,
@@ -238,7 +238,7 @@ where
             max_samples_needed: MAX_SAMPLES_NEEDED,
             sampling_futs: FuturesUnordered::new(),
             queue: BlockRanges::default(),
-            done: BlockRanges::default(),
+            timed_out: BlockRanges::default(),
             ongoing: BlockRanges::default(),
             will_be_pruned: BlockRanges::default(),
             sampling_window: args.sampling_window,
@@ -343,12 +343,13 @@ where
                     // to P2P nor networking.
                     let (height, timed_out) = res?;
 
-                    if !timed_out {
+                    if timed_out {
+                        self.timed_out.insert_relaxed(height..=height).expect("invalid height");
+                    } else {
                         self.store.mark_as_sampled(height).await?;
                     }
 
                     self.ongoing.remove_relaxed(height..=height).expect("invalid height");
-                    self.done.insert_relaxed(height..=height).expect("invalid height");
                 },
                 _ = &mut wait_new_head => {
                     wait_new_head = store.wait_new_head();
@@ -360,7 +361,7 @@ where
         self.sampling_futs.clear();
         self.queue = BlockRanges::default();
         self.ongoing = BlockRanges::default();
-        self.done = BlockRanges::default();
+        self.timed_out = BlockRanges::default();
         self.head_height = None;
 
         Ok(())
@@ -461,7 +462,7 @@ where
             self.queue
                 .remove_relaxed(1..=height)
                 .expect("invalid height");
-            self.done
+            self.timed_out
                 .insert_relaxed(1..=height)
                 .expect("invalid height");
             return Ok(false);
@@ -559,7 +560,7 @@ where
         let sampled = self.store.get_sampled_ranges().await?;
 
         self.head_height = stored.head();
-        self.queue = stored - &sampled - &self.done - &self.ongoing - &self.will_be_pruned;
+        self.queue = stored - &sampled - &self.timed_out - &self.ongoing - &self.will_be_pruned;
 
         Ok(())
     }
