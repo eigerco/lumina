@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.1.2...lumina-node-uniffi-v0.1.3) - 2025-05-30
+
+### Other
+
+- updated the following local packages: lumina-node
+
 ## [0.1.2](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.1.1...lumina-node-uniffi-v0.1.2) - 2025-05-26
 
 ### Other
