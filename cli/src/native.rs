@@ -13,7 +13,7 @@ use libp2p::multiaddr::{Multiaddr, Protocol};
 use lumina_node::blockstore::{InMemoryBlockstore, RedbBlockstore};
 use lumina_node::events::NodeEvent;
 use lumina_node::network::Network;
-use lumina_node::node::{Node, MIN_PRUNING_DELAY, MIN_SAMPLING_WINDOW};
+use lumina_node::node::{Node, MIN_PRUNING_WINDOW};
 use lumina_node::store::{EitherStore, InMemoryStore, RedbStore, Store as _};
 use tokio::task::spawn_blocking;
 use tracing::info;
@@ -52,11 +52,10 @@ pub(crate) struct Params {
     #[clap(value_parser = parse_duration::parse)]
     pub(crate) sampling_window: Option<Duration>,
 
-    /// Pruning delay defines how much time the pruner should wait after sampling window in
-    /// order to prune the block.
+    /// Pruning window defines maximum age of a block considered to be keeped in store.
     #[arg(long)]
     #[clap(value_parser = parse_duration::parse)]
-    pub(crate) pruning_delay: Option<Duration>,
+    pub(crate) pruning_window: Option<Duration>,
 }
 
 pub(crate) async fn run(args: Params) -> Result<()> {
@@ -73,16 +72,13 @@ pub(crate) async fn run(args: Params) -> Result<()> {
 
     if let Some(sampling_window) = args.sampling_window {
         node_builder = node_builder.sampling_window(sampling_window);
-    } else if args.in_memory_store {
-        // In-memory stores are memory hungry, so we lower sampling window.
-        node_builder = node_builder.sampling_window(MIN_SAMPLING_WINDOW);
     }
 
-    if let Some(pruning_delay) = args.pruning_delay {
-        node_builder = node_builder.pruning_delay(pruning_delay);
+    if let Some(pruning_window) = args.pruning_window {
+        node_builder = node_builder.pruning_window(pruning_window);
     } else if args.in_memory_store {
-        // In-memory stores are memory hungry, so we lower pruning window.
-        node_builder = node_builder.pruning_delay(MIN_PRUNING_DELAY);
+        // In-memory stores are memory hungry, so we prune blocks as soon as possible.
+        node_builder = node_builder.pruning_window(MIN_PRUNING_WINDOW);
     }
 
     if args.bootnodes.is_empty() {
