@@ -31,7 +31,7 @@ pub mod uniffi_types {
 
     use uniffi::Enum;
 
-    use crate::UniffiConversionError;
+    use crate::error::UniffiConversionError;
 
     /// Hash digest
     #[derive(Enum)]

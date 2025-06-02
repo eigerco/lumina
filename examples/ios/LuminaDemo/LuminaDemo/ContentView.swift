@@ -72,8 +72,8 @@ class LuminaViewModel: ObservableObject {
             let txclient = try await TxClient(url: "http://192.168.1.11:19090", accountAddress: address, accountPubkey: pk.dataRepresentation, signer: signer)
             
             let data = "Hello, World".data(using: .utf8)!
-            let ns  = try newV0Namespace(id: "foo".data(using: .utf8)!)
-            let blob = try newBlob(namespace: ns, data: data, appVersion: AppVersion.v1)
+            let ns = try Namespace(version: 0, id: "foo".data(using: .utf8)!)
+            let blob = try Blob(namespace: ns, data: data, appVersion: AppVersion.v1)
             
             let submit = try await txclient.submitBlobs(blobs: [blob], config: nil)
             

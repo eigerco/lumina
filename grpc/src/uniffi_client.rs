@@ -220,6 +220,7 @@ fn parse_bech32_address(bech32_address: String) -> Result<Address> {
         .map_err(|_| TransactionClientError::InvalidAccountId)
 }
 
+/*
 /// Create a new transaction client with the specified account.
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn new_tx_client(
@@ -230,3 +231,4 @@ pub async fn new_tx_client(
 ) -> Result<TxClient> {
     TxClient::new(url, account_address, account_pubkey, signer).await
 }
+*/

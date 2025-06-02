@@ -48,11 +48,11 @@ impl From<Data> for RawData {
 
 #[cfg(feature = "uniffi")]
 mod uniffi_types {
-    use super::Data as UniffiData;
+    use super::Data as BlockData;
 
-    // poor man's rename
+    // we need to rename `Data`, otherwise it clashes with `Foundation::Data` for Swift
     #[uniffi::remote(Record)]
-    pub struct UniffiData {
+    pub struct BlockData {
         /// Transactions.
         pub txs: Vec<Vec<u8>>,
 

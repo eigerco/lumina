@@ -1,6 +1,8 @@
 //! Types related to creation and submission of blobs.
 
 use std::iter;
+#[cfg(feature = "uniffi")]
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -9,10 +11,10 @@ mod msg_pay_for_blobs;
 
 use crate::consts::appconsts;
 use crate::consts::appconsts::AppVersion;
+#[cfg(feature = "uniffi")]
+use crate::error::UniffiResult;
 use crate::nmt::Namespace;
 use crate::state::{AccAddress, AddressTrait};
-#[cfg(feature = "uniffi")]
-use crate::UniffiConversionError;
 use crate::{bail_validation, Error, Result, Share};
 
 pub use self::commitment::Commitment;
@@ -401,25 +403,75 @@ impl Blob {
 #[cfg(feature = "uniffi")]
 #[uniffi::export]
 impl Blob {
-    #[uniffi::constructor]
-    fn uniffi_new(
-        namespace: Namespace,
+    /// Create a new blob with the given data within the [`Namespace`].
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any error from the [`Commitment`] creation.
+    #[uniffi::constructor(name = "new")]
+    pub fn uniffi_new(
+        namespace: Arc<Namespace>,
         data: Vec<u8>,
         app_version: AppVersion,
-    ) -> Result<Self, crate::error::UniffiError> {
+    ) -> UniffiResult<Self> {
+        let namespace = Arc::unwrap_or_clone(namespace);
         Ok(Blob::new(namespace, data, app_version)?)
     }
-}
 
-#[cfg(feature = "uniffi")]
-#[uniffi::export]
-fn new_blob(
-    namespace: Namespace,
-    data: Vec<u8>,
-    app_version: AppVersion,
-) -> Result<Blob, UniffiConversionError> {
-    Blob::new(namespace, data, app_version)
-        .map_err(|e| UniffiConversionError::CouldNotGenerateCommitment { msg: e.to_string() })
+    /// Create a new blob with the given data within the [`Namespace`] and with given signer.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any error from the [`Commitment`] creation. Also [`AppVersion`]
+    /// must be at least [`AppVersion::V3`].
+    #[uniffi::constructor(name = "new_with_signer")]
+    pub fn uniffi_new_with_signer(
+        namespace: Arc<Namespace>,
+        data: Vec<u8>,
+        signer: AccAddress,
+        app_version: AppVersion,
+    ) -> UniffiResult<Blob> {
+        let namespace = Arc::unwrap_or_clone(namespace);
+        Ok(Blob::new_with_signer(namespace, data, signer, app_version)?)
+    }
+
+    /// A [`Namespace`] the [`Blob`] belongs to.
+    #[uniffi::method(name = "namespace")]
+    pub fn get_namespace(&self) -> Namespace {
+        self.namespace
+    }
+
+    /// Data stored within the [`Blob`].
+    #[uniffi::method(name = "data")]
+    pub fn get_data(&self) -> Vec<u8> {
+        self.data.clone()
+    }
+
+    /// Version indicating the format in which [`Share`]s should be created from this [`Blob`].
+    #[uniffi::method(name = "share_version")]
+    pub fn get_share_version(&self) -> u8 {
+        self.share_version
+    }
+
+    /// A [`Commitment`] computed from the [`Blob`]s data.
+    #[uniffi::method(name = "commitment")]
+    pub fn get_commitment(&self) -> Commitment {
+        self.commitment
+    }
+
+    /// Index of the blob's first share in the EDS. Only set for blobs retrieved from chain.
+    #[uniffi::method(name = "index")]
+    pub fn get_index(&self) -> Option<u64> {
+        self.index
+    }
+
+    /// A signer of the blob, i.e. address of the account which submitted the blob.
+    ///
+    /// Must be present in `share_version 1` and absent otherwise.
+    #[uniffi::method(name = "signer")]
+    pub fn get_signer(&self) -> Option<AccAddress> {
+        self.signer.clone()
+    }
 }
 
 impl From<Blob> for RawBlob {
