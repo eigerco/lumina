@@ -8,6 +8,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 /// `Result` counterpart for functions exposed to uniffi with [`UniffiError`]
 ///
 /// [`UniffiError`]: crate::error::UniffiError
+#[cfg(feature = "uniffi")]
 pub type UniffiResult<T> = std::result::Result<T, UniffiError>;
 
 /// Representation of all the errors that can occur when interacting with [`celestia_types`].
