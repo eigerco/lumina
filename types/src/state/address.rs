@@ -288,7 +288,7 @@ pub(crate) mod uniffi_types {
     use super::{AccAddress, Address as RustAddress, ConsAddress, Id, ValAddress};
     use uniffi::{Enum, Record};
 
-    use crate::error::UniffiError;
+    use crate::error::UniffiConversionError;
 
     // uniffi does not play well with enum_dispatch
     #[derive(Enum)]
@@ -302,7 +302,7 @@ pub(crate) mod uniffi_types {
     }
 
     impl TryFrom<Address> for RustAddress {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: Address) -> Result<Self, Self::Error> {
             Ok(match value {
@@ -341,10 +341,10 @@ pub(crate) mod uniffi_types {
     }
 
     impl TryFrom<AccountId> for Id {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: AccountId) -> std::result::Result<Self, Self::Error> {
-            Id::try_from(value.id).map_err(|_| UniffiError::InvalidAccountIdLength)
+            Id::try_from(value.id).map_err(|_| UniffiConversionError::InvalidAccountIdLength)
         }
     }
 

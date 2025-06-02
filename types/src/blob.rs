@@ -11,6 +11,8 @@ use crate::consts::appconsts;
 use crate::consts::appconsts::AppVersion;
 use crate::nmt::Namespace;
 use crate::state::{AccAddress, AddressTrait};
+#[cfg(feature = "uniffi")]
+use crate::UniffiConversionError;
 use crate::{bail_validation, Error, Result, Share};
 
 pub use self::commitment::Commitment;
@@ -31,7 +33,7 @@ use wasm_bindgen::prelude::*;
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
     wasm_bindgen(getter_with_clone, inspectable)
 )]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct Blob {
     /// A [`Namespace`] the [`Blob`] belongs to.
     pub namespace: Namespace,
@@ -396,6 +398,30 @@ impl Blob {
     }
 }
 
+#[cfg(feature = "uniffi")]
+#[uniffi::export]
+impl Blob {
+    #[uniffi::constructor]
+    fn uniffi_new(
+        namespace: Namespace,
+        data: Vec<u8>,
+        app_version: AppVersion,
+    ) -> Result<Self, crate::error::UniffiError> {
+        Ok(Blob::new(namespace, data, app_version)?)
+    }
+}
+
+#[cfg(feature = "uniffi")]
+#[uniffi::export]
+fn new_blob(
+    namespace: Namespace,
+    data: Vec<u8>,
+    app_version: AppVersion,
+) -> Result<Blob, UniffiConversionError> {
+    Blob::new(namespace, data, app_version)
+        .map_err(|e| UniffiConversionError::CouldNotGenerateCommitment { msg: e.to_string() })
+}
+
 impl From<Blob> for RawBlob {
     fn from(value: Blob) -> RawBlob {
         RawBlob {
@@ -555,17 +581,6 @@ mod custom_serde {
             })
         }
     }
-}
-
-#[cfg(feature = "uniffi")]
-#[uniffi::export]
-fn new_blob(
-    namespace: Namespace,
-    data: Vec<u8>,
-    app_version: AppVersion,
-) -> Result<Blob, crate::UniffiError> {
-    Blob::new(namespace, data, app_version)
-        .map_err(|e| crate::UniffiError::CouldNotGenerateCommitment { msg: e.to_string() })
 }
 
 #[cfg(test)]

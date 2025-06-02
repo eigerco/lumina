@@ -12,7 +12,7 @@ use tonic::transport::Channel;
 use uniffi::{Object, Record};
 
 use crate::tx::TxInfo;
-use crate::{DocSigner, SignDoc, TxConfig};
+use crate::{DocSigner, IntoAny, SignDoc, TxConfig};
 
 type Result<T, E = TransactionClientError> = std::result::Result<T, E>;
 
@@ -136,7 +136,12 @@ impl TxClient {
     /// When no `TxConfig` is provided, client will automatically calculate needed
     /// gas and update the `gasPrice`, if network agreed on a new minimal value.
     /// To enforce specific values use a `TxConfig`.
-    pub async fn submit_blobs(&self, blobs: Vec<Blob>, config: Option<TxConfig>) -> Result<TxInfo> {
+    pub async fn submit_blobs(
+        &self,
+        blobs: Vec<Arc<Blob>>,
+        config: Option<TxConfig>,
+    ) -> Result<TxInfo> {
+        let blobs = Vec::from_iter(blobs.into_iter().map(Arc::<Blob>::unwrap_or_clone));
         let config = config.unwrap_or_default();
         Ok(self.client.submit_blobs(&blobs, config).await?)
     }
@@ -152,18 +157,15 @@ impl TxClient {
         config: Option<TxConfig>,
     ) -> Result<TxInfo> {
         let config = config.unwrap_or_default();
-        Ok(self
-            .client
-            .submit_message(Any::from(message), config)
-            .await?)
+        Ok(self.client.submit_message(message, config).await?)
     }
 }
 
-impl From<AnyMsg> for Any {
-    fn from(value: AnyMsg) -> Self {
+impl IntoAny for AnyMsg {
+    fn into_any(self) -> Any {
         Any {
-            type_url: value.r#type,
-            value: value.value,
+            type_url: self.r#type,
+            value: self.value,
         }
     }
 }

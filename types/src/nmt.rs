@@ -490,7 +490,7 @@ mod uniffi_types {
     use super::Namespace as RustNamespace;
     use uniffi::Record;
 
-    use crate::error::UniffiError;
+    use crate::error::UniffiConversionError;
 
     #[derive(Record)]
     pub struct Namespace {
@@ -498,9 +498,9 @@ mod uniffi_types {
     }
 
     #[uniffi::export]
-    fn new_v0_namespace(id: Vec<u8>) -> Result<Namespace, UniffiError> {
+    fn new_v0_namespace(id: Vec<u8>) -> Result<Namespace, UniffiConversionError> {
         Ok(RustNamespace::new_v0(&id)
-            .map_err(|_| UniffiError::InvalidNamespaceLength)?
+            .map_err(|_| UniffiConversionError::InvalidNamespaceLength)?
             .into())
     }
 
@@ -513,14 +513,13 @@ mod uniffi_types {
     }
 
     impl TryFrom<Namespace> for RustNamespace {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: Namespace) -> Result<Self, Self::Error> {
             let ns = value.namespace.as_ref();
-            Ok(RustNamespace(
-                nmt_rs::NamespaceId::try_from(ns)
-                    .map_err(|_| UniffiError::InvalidNamespaceLength)?,
-            ))
+            Ok(RustNamespace(nmt_rs::NamespaceId::try_from(ns).map_err(
+                |_| UniffiConversionError::InvalidNamespaceLength,
+            )?))
         }
     }
 

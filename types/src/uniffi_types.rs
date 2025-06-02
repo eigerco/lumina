@@ -20,7 +20,7 @@ use uniffi::{Enum, Record};
 
 use crate::block::uniffi_types::SignedHeader;
 
-use crate::error::UniffiError;
+use crate::error::UniffiConversionError;
 use crate::state::UniffiAccountId;
 
 /// Version contains the protocol version for the blockchain and the application.
@@ -43,7 +43,7 @@ pub struct AppHash {
 }
 
 impl TryFrom<AppHash> for TendermintAppHash {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: AppHash) -> Result<Self, Self::Error> {
         Ok(TendermintAppHash::try_from(value.hash).expect("conversion to be infallible"))
@@ -79,10 +79,11 @@ impl From<TendermintChainId> for ChainId {
 }
 
 impl TryFrom<ChainId> for TendermintChainId {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: ChainId) -> Result<Self, Self::Error> {
-        TendermintChainId::try_from(value.id).map_err(|_| UniffiError::InvalidChainIdLength)
+        TendermintChainId::try_from(value.id)
+            .map_err(|_| UniffiConversionError::InvalidChainIdLength)
     }
 }
 
@@ -102,11 +103,11 @@ pub struct PartsHeader {
 }
 
 impl TryFrom<PartsHeader> for TendermintPartsHeader {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: PartsHeader) -> Result<Self, Self::Error> {
         TendermintPartsHeader::new(value.total, value.hash)
-            .map_err(|e| UniffiError::InvalidPartsHeader { msg: e.to_string() })
+            .map_err(|e| UniffiConversionError::InvalidPartsHeader { msg: e.to_string() })
     }
 }
 
@@ -141,7 +142,7 @@ pub struct BlockId {
 }
 
 impl TryFrom<BlockId> for TendermintBlockId {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: BlockId) -> Result<Self, Self::Error> {
         Ok(TendermintBlockId {
@@ -174,7 +175,7 @@ pub struct Time {
 }
 
 impl TryFrom<TendermintTime> for Time {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: TendermintTime) -> Result<Self, Self::Error> {
         const NANOSECONDS_IN_SECOND: i128 = 1_000_000_000;
@@ -184,17 +185,18 @@ impl TryFrom<TendermintTime> for Time {
             .expect("remainder to fit");
         let ts: i64 = (ts / NANOSECONDS_IN_SECOND)
             .try_into()
-            .map_err(|_| UniffiError::TimestampOutOfRange)?;
+            .map_err(|_| UniffiConversionError::TimestampOutOfRange)?;
         Ok(Time { ts, nanos })
     }
 }
 
 impl TryFrom<Time> for TendermintTime {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: Time) -> Result<Self, Self::Error> {
         let Time { ts, nanos } = value;
-        TendermintTime::from_unix_timestamp(ts, nanos).map_err(|_| UniffiError::TimestampOutOfRange)
+        TendermintTime::from_unix_timestamp(ts, nanos)
+            .map_err(|_| UniffiConversionError::TimestampOutOfRange)
     }
 }
 
@@ -211,12 +213,12 @@ pub struct Signature {
 }
 
 impl TryFrom<Signature> for TendermintSignature {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: Signature) -> Result<Self, Self::Error> {
         TendermintSignature::new(&value.signature)
-            .map_err(|_| UniffiError::InvalidSignatureLength)?
-            .ok_or(UniffiError::InvalidSignatureLength)
+            .map_err(|_| UniffiConversionError::InvalidSignatureLength)?
+            .ok_or(UniffiConversionError::InvalidSignatureLength)
     }
 }
 
@@ -269,7 +271,7 @@ pub struct Vote {
 }
 
 impl TryFrom<Vote> for TendermintVote {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: Vote) -> Result<Self, Self::Error> {
         Ok(TendermintVote {
@@ -278,14 +280,14 @@ impl TryFrom<Vote> for TendermintVote {
             round: value
                 .round
                 .try_into()
-                .map_err(|_| UniffiError::InvalidRoundIndex)?,
+                .map_err(|_| UniffiConversionError::InvalidRoundIndex)?,
             block_id: value.block_id.map(TryInto::try_into).transpose()?,
             timestamp: value.timestamp.map(TryInto::try_into).transpose()?,
             validator_address: value.validator_address.try_into()?,
             validator_index: value
                 .validator_index
                 .try_into()
-                .map_err(|_| UniffiError::InvalidValidatorIndex)?,
+                .map_err(|_| UniffiConversionError::InvalidValidatorIndex)?,
             signature: value.signature.map(TryInto::try_into).transpose()?,
             extension: value.extension,
             extension_signature: value
@@ -297,7 +299,7 @@ impl TryFrom<Vote> for TendermintVote {
 }
 
 impl TryFrom<TendermintVote> for Vote {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: TendermintVote) -> Result<Self, Self::Error> {
         Ok(Vote {
@@ -349,7 +351,7 @@ impl From<TendermintValidatorInfo> for ValidatorInfo {
 }
 
 impl TryFrom<ValidatorInfo> for TendermintValidatorInfo {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
     fn try_from(value: ValidatorInfo) -> Result<Self, Self::Error> {
         Ok(TendermintValidatorInfo {
             address: value.address.try_into()?,
@@ -357,7 +359,7 @@ impl TryFrom<ValidatorInfo> for TendermintValidatorInfo {
             power: value
                 .power
                 .try_into()
-                .map_err(|_| UniffiError::InvalidVotingPower)?,
+                .map_err(|_| UniffiConversionError::InvalidVotingPower)?,
             name: value.name,
             proposer_priority: value.proposer_priority.into(),
         })
@@ -386,7 +388,7 @@ impl From<TendermintValidatorSet> for ValidatorSet {
 }
 
 impl TryFrom<ValidatorSet> for TendermintValidatorSet {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: ValidatorSet) -> Result<Self, Self::Error> {
         Ok(TendermintValidatorSet {
@@ -399,7 +401,7 @@ impl TryFrom<ValidatorSet> for TendermintValidatorSet {
             total_voting_power: value
                 .total_voting_power
                 .try_into()
-                .map_err(|_| UniffiError::InvalidVotingPower)?,
+                .map_err(|_| UniffiConversionError::InvalidVotingPower)?,
         })
     }
 }
@@ -414,7 +416,7 @@ pub struct ConflictingBlock {
 }
 
 impl TryFrom<TendermintConfliclingBlock> for ConflictingBlock {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: TendermintConfliclingBlock) -> Result<Self, Self::Error> {
         Ok(ConflictingBlock {
@@ -425,7 +427,7 @@ impl TryFrom<TendermintConfliclingBlock> for ConflictingBlock {
 }
 
 impl TryFrom<ConflictingBlock> for TendermintConfliclingBlock {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: ConflictingBlock) -> Result<Self, Self::Error> {
         Ok(TendermintConfliclingBlock {
@@ -477,7 +479,7 @@ pub enum Evidence {
 }
 
 impl TryFrom<TendermintEvidence> for Evidence {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: TendermintEvidence) -> Result<Self, Self::Error> {
         Ok(match value {
@@ -504,7 +506,7 @@ impl TryFrom<TendermintEvidence> for Evidence {
 }
 
 impl TryFrom<Evidence> for TendermintEvidence {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
     fn try_from(value: Evidence) -> Result<Self, Self::Error> {
         match value {
             Evidence::DuplicateVote {
@@ -519,10 +521,10 @@ impl TryFrom<Evidence> for TendermintEvidence {
                     vote_b: vote_b.try_into()?,
                     total_voting_power: total_voting_power
                         .try_into()
-                        .map_err(|_| UniffiError::InvalidVotingPower)?,
+                        .map_err(|_| UniffiConversionError::InvalidVotingPower)?,
                     validator_power: validator_power
                         .try_into()
-                        .map_err(|_| UniffiError::InvalidVotingPower)?,
+                        .map_err(|_| UniffiConversionError::InvalidVotingPower)?,
                     timestamp: timestamp.try_into()?,
                 };
                 Ok(TendermintEvidence::DuplicateVote(Box::new(evidence)))
@@ -538,14 +540,14 @@ impl TryFrom<Evidence> for TendermintEvidence {
                     conflicting_block: conflicting_block.try_into()?,
                     common_height: common_height
                         .try_into()
-                        .map_err(|_| UniffiError::HeaderHeightOutOfRange)?,
+                        .map_err(|_| UniffiConversionError::HeaderHeightOutOfRange)?,
                     byzantine_validators: byzantine_validators
                         .into_iter()
                         .map(|v| v.try_into())
                         .collect::<Result<_, _>>()?,
                     total_voting_power: total_voting_power
                         .try_into()
-                        .map_err(|_| UniffiError::InvalidVotingPower)?,
+                        .map_err(|_| UniffiConversionError::InvalidVotingPower)?,
                     timestamp: timestamp.try_into()?,
                 };
 
@@ -581,10 +583,11 @@ pub struct BlockHeight {
 }
 
 impl TryFrom<BlockHeight> for TendermintHeight {
-    type Error = UniffiError;
+    type Error = UniffiConversionError;
 
     fn try_from(value: BlockHeight) -> Result<Self, Self::Error> {
-        TendermintHeight::try_from(value.value).map_err(|_| UniffiError::HeaderHeightOutOfRange)
+        TendermintHeight::try_from(value.value)
+            .map_err(|_| UniffiConversionError::HeaderHeightOutOfRange)
     }
 }
 

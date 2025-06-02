@@ -9,7 +9,7 @@ use celestia_types::block::Block;
 use celestia_types::hash::uniffi_types::UniffiHash;
 use celestia_types::state::auth::AuthParams;
 use celestia_types::state::{Address, Coin, TxResponse};
-use celestia_types::UniffiError;
+use celestia_types::UniffiConversionError;
 
 /// Alias for a `Result` with the error type [`GrpcClientError`]
 pub type Result<T, E = GrpcClientError> = std::result::Result<T, E>;
@@ -26,7 +26,7 @@ pub enum GrpcClientError {
 
     /// Error during uniffi types conversion
     #[error("uniffi conversion error: {msg}")]
-    UniffiError {
+    UniffiConversionError {
         /// error message
         msg: String,
     },
@@ -139,8 +139,8 @@ impl From<celestia_grpc::Error> for GrpcClientError {
     }
 }
 
-impl From<UniffiError> for GrpcClientError {
-    fn from(value: UniffiError) -> Self {
+impl From<UniffiConversionError> for GrpcClientError {
+    fn from(value: UniffiConversionError) -> Self {
         GrpcClientError::GrpcError {
             msg: value.to_string(),
         }

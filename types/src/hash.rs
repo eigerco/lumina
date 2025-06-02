@@ -31,7 +31,7 @@ pub mod uniffi_types {
 
     use uniffi::Enum;
 
-    use crate::UniffiError;
+    use crate::UniffiConversionError;
 
     /// Hash digest
     #[derive(Enum)]
@@ -46,12 +46,12 @@ pub mod uniffi_types {
     }
 
     impl TryFrom<UniffiHash> for TendermintHash {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: UniffiHash) -> Result<Self, Self::Error> {
             Ok(match value {
                 UniffiHash::Sha256 { hash } => TendermintHash::from_bytes(Algorithm::Sha256, &hash)
-                    .map_err(|_| UniffiError::InvalidHashLength)?,
+                    .map_err(|_| UniffiConversionError::InvalidHashLength)?,
                 UniffiHash::None => TendermintHash::None,
             })
         }

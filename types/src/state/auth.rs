@@ -146,7 +146,7 @@ mod uniffi_types {
     use tendermint::public_key::{Ed25519, Secp256k1};
     use uniffi::Enum;
 
-    use crate::error::UniffiError;
+    use crate::error::UniffiConversionError;
 
     #[derive(Enum)]
     pub enum PublicKey {
@@ -155,16 +155,17 @@ mod uniffi_types {
     }
 
     impl TryFrom<PublicKey> for TendermintPublicKey {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: PublicKey) -> Result<Self, Self::Error> {
             Ok(match value {
                 PublicKey::Ed25519 { bytes } => TendermintPublicKey::Ed25519(
-                    Ed25519::try_from(bytes.as_ref()).map_err(|_| UniffiError::InvalidPublicKey)?,
+                    Ed25519::try_from(bytes.as_ref())
+                        .map_err(|_| UniffiConversionError::InvalidPublicKey)?,
                 ),
                 PublicKey::Secp256k1 { sec1_bytes } => TendermintPublicKey::Secp256k1(
                     Secp256k1::from_sec1_bytes(&sec1_bytes)
-                        .map_err(|_| UniffiError::InvalidPublicKey)?,
+                        .map_err(|_| UniffiConversionError::InvalidPublicKey)?,
                 ),
             })
         }

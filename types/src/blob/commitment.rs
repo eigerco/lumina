@@ -355,7 +355,7 @@ mod uniffi_types {
     use super::{Commitment as RustCommitment, HASH_SIZE};
     use uniffi::Record;
 
-    use crate::error::UniffiError;
+    use crate::error::UniffiConversionError;
 
     #[derive(Record)]
     pub struct Commitment {
@@ -371,13 +371,13 @@ mod uniffi_types {
     }
 
     impl TryFrom<Commitment> for RustCommitment {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: Commitment) -> Result<Self, Self::Error> {
             let hash: [u8; HASH_SIZE] = value
                 .sha_hash
                 .try_into()
-                .map_err(|_| UniffiError::InvalidCommitmentLength)?;
+                .map_err(|_| UniffiConversionError::InvalidCommitmentLength)?;
             Ok(RustCommitment { hash })
         }
     }

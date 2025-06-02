@@ -280,7 +280,7 @@ pub mod uniffi_types {
     };
     use uniffi::{Enum, Record};
 
-    use crate::error::UniffiError;
+    use crate::error::UniffiConversionError;
     use crate::hash::Hash;
     use crate::state::UniffiAccountId;
     use crate::uniffi_types::{AppHash, BlockId, ChainId, ProtocolVersion, Signature, Time};
@@ -295,7 +295,7 @@ pub mod uniffi_types {
     }
 
     impl TryFrom<TendermintSignedHeader> for SignedHeader {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: TendermintSignedHeader) -> Result<Self, Self::Error> {
             Ok(SignedHeader {
@@ -306,11 +306,11 @@ pub mod uniffi_types {
     }
 
     impl TryFrom<SignedHeader> for TendermintSignedHeader {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: SignedHeader) -> Result<Self, Self::Error> {
             TendermintSignedHeader::new(value.header.try_into()?, value.commit.try_into()?)
-                .map_err(|_| UniffiError::InvalidSignedHeader)
+                .map_err(|_| UniffiConversionError::InvalidSignedHeader)
         }
     }
 
@@ -329,7 +329,7 @@ pub mod uniffi_types {
     }
 
     impl TryFrom<TendermintCommit> for Commit {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: TendermintCommit) -> Result<Self, Self::Error> {
             Ok(Commit {
@@ -346,18 +346,18 @@ pub mod uniffi_types {
     }
 
     impl TryFrom<Commit> for TendermintCommit {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: Commit) -> Result<Self, Self::Error> {
             Ok(TendermintCommit {
                 height: value
                     .height
                     .try_into()
-                    .map_err(|_| UniffiError::HeaderHeightOutOfRange)?,
+                    .map_err(|_| UniffiConversionError::HeaderHeightOutOfRange)?,
                 round: value
                     .round
                     .try_into()
-                    .map_err(|_| UniffiError::InvalidRoundIndex)?,
+                    .map_err(|_| UniffiConversionError::InvalidRoundIndex)?,
                 block_id: value.block_id.try_into()?,
                 signatures: value
                     .signatures
@@ -401,7 +401,7 @@ pub mod uniffi_types {
     }
 
     impl TryFrom<TendermintCommitSig> for CommitSig {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: TendermintCommitSig) -> Result<Self, Self::Error> {
             Ok(match value {
@@ -429,7 +429,7 @@ pub mod uniffi_types {
     }
 
     impl TryFrom<CommitSig> for TendermintCommitSig {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: CommitSig) -> Result<Self, Self::Error> {
             Ok(match value {
@@ -492,7 +492,7 @@ pub mod uniffi_types {
     }
 
     impl TryFrom<Header> for TendermintHeader {
-        type Error = UniffiError;
+        type Error = UniffiConversionError;
 
         fn try_from(value: Header) -> std::result::Result<Self, Self::Error> {
             Ok(TendermintHeader {

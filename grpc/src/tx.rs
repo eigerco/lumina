@@ -417,9 +417,7 @@ where
         account_pubkey: VerifyingKey,
         signer: S,
     ) -> Result<Self> {
-        let transport = tonic::transport::Endpoint::from_shared(url.into())?
-            //.map_err(|e| Error::TransportError(e.to_string()))?
-            .connect_lazy();
+        let transport = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
         Self::new(transport, account_address, account_pubkey, signer).await
     }
 }
