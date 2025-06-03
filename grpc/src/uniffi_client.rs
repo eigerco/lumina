@@ -104,7 +104,8 @@ pub struct AnyMsg {
 #[uniffi::export(async_runtime = "tokio")]
 impl TxClient {
     /// Create a new transaction client with the specified account.
-    #[uniffi::constructor]
+    // constructor cannot be named `new`, otherwise it doesn't show up in Kotlin ¯\_(ツ)_/¯
+    #[uniffi::constructor(name = "create")]
     pub async fn new(
         url: String,
         account_address: &Address,

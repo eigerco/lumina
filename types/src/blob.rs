@@ -408,7 +408,8 @@ impl Blob {
     /// # Errors
     ///
     /// This function propagates any error from the [`Commitment`] creation.
-    #[uniffi::constructor(name = "new")]
+    // constructor cannot be named `new`, otherwise it doesn't show up in Kotlin ¯\_(ツ)_/¯
+    #[uniffi::constructor(name = "create")]
     pub fn uniffi_new(
         namespace: Arc<Namespace>,
         data: Vec<u8>,
@@ -424,7 +425,7 @@ impl Blob {
     ///
     /// This function propagates any error from the [`Commitment`] creation. Also [`AppVersion`]
     /// must be at least [`AppVersion::V3`].
-    #[uniffi::constructor(name = "new_with_signer")]
+    #[uniffi::constructor(name = "create_with_signer")]
     pub fn uniffi_new_with_signer(
         namespace: Arc<Namespace>,
         data: Vec<u8>,
