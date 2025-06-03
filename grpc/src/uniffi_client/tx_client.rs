@@ -34,8 +34,11 @@ pub enum TransactionClientError {
     },
 
     /// Invalid account id
-    #[error("invalid account id")]
-    InvalidAccountId,
+    #[error("invalid account id: {msg}")]
+    InvalidAccountId {
+        ///error message
+        msg: String,
+    },
 
     /// Error occured during signing
     #[error("error while signing: {msg}")]
@@ -218,7 +221,9 @@ fn proto_encode_sign_doc(sign_doc: SignDoc) -> Vec<u8> {
 fn parse_bech32_address(bech32_address: String) -> Result<Address> {
     bech32_address
         .parse()
-        .map_err(|_| TransactionClientError::InvalidAccountId)
+        .map_err(|e| TransactionClientError::InvalidAccountId {
+            msg: format!("{e}"),
+        })
 }
 
 /*
