@@ -21,8 +21,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import co.eiger.luminademo.ui.theme.LuminaDemoTheme
-import org.bouncycastle.jce.provider.BouncyCastleProvider
-import java.security.Security
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable

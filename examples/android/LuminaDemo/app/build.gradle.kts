@@ -82,10 +82,12 @@ dependencies {
     implementation("androidx.compose.material3:material3:$material3_version")
     implementation("androidx.compose.material:material-icons-extended:$compose_version")
 
-    // Kotlin standard library with nice utils
-    implementation(kotlin("stdlib"))
 
     // secp256k1 library, used by gRPC TxClient
     implementation("fr.acinq.secp256k1:secp256k1-kmp-jni-android:0.17.3")
 
+    // Kotlin standard library with nice utils
+    implementation(kotlin("stdlib"))
+    testImplementation(kotlin("test"))
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 }

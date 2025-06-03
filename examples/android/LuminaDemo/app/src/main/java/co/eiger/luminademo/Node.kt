@@ -46,12 +46,6 @@ import uniffi.lumina_node.NetworkId
 import uniffi.lumina_node_uniffi.BlockRange
 import uniffi.lumina_node_uniffi.LuminaNode
 import uniffi.lumina_node_uniffi.NodeConfig
-import java.math.BigInteger
-import java.security.AlgorithmParameters
-import java.security.KeyFactory
-import java.security.spec.ECGenParameterSpec
-import java.security.spec.ECParameterSpec
-import java.security.spec.ECPrivateKeySpec
 
 @Preview
 @Composable
