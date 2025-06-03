@@ -10,13 +10,15 @@ import Logging
 import P256K
 
 final class StaticSigner : UniffiSigner {
-    let sk : P256K.Signing.PrivateKey
+    // PrivateKey isn't Sendable, but we _need_ to send it
+    let skBytes : Data
     
     init(sk: P256K.Signing.PrivateKey) {
-        self.sk = sk
+        self.skBytes = sk.dataRepresentation
     }
     
     func sign(doc: SignDoc) async throws -> UniffiSignature {
+        let sk = try P256K.Signing.PrivateKey(dataRepresentation: skBytes)
         let messageData = protoEncodeSignDoc(signDoc: doc);
         let signature = try! sk.signature(for: messageData)
         return try! UniffiSignature (bytes: signature.compactRepresentation)
@@ -69,11 +71,11 @@ class LuminaViewModel: ObservableObject {
             
             let pk = sk.publicKey
             let signer = StaticSigner(sk: sk);
-            let txclient = try await TxClient(url: "http://192.168.1.11:19090", accountAddress: address, accountPubkey: pk.dataRepresentation, signer: signer)
+            let txclient = try await TxClient.create(url: "http://192.168.1.11:19090", accountAddress: address, accountPubkey: pk.dataRepresentation, signer: signer)
             
             let data = "Hello, World".data(using: .utf8)!
             let ns = try Namespace(version: 0, id: "foo".data(using: .utf8)!)
-            let blob = try Blob(namespace: ns, data: data, appVersion: AppVersion.v3)
+            let blob = try Blob.create(namespace: ns, data: data, appVersion: AppVersion.v3)
             
             let submit = try await txclient.submitBlobs(blobs: [blob], config: nil)
             
