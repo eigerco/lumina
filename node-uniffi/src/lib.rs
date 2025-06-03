@@ -5,7 +5,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 mod error;
-pub mod grpc;
 mod types;
 
 use blockstore::EitherBlockstore;

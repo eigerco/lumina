@@ -3,13 +3,14 @@
 use tonic::transport::Channel;
 use uniffi::Object;
 
-use celestia_grpc::grpc::{Account, BroadcastMode, GasInfo, GetTxResponse, TxStatusResponse};
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::hash::uniffi_types::UniffiHash;
 use celestia_types::state::auth::AuthParams;
 use celestia_types::state::{Address, Coin, TxResponse};
 use celestia_types::UniffiConversionError;
+
+use crate::grpc::{Account, BroadcastMode, GasInfo, GetTxResponse, TxStatusResponse};
 
 /// Alias for a `Result` with the error type [`GrpcClientError`]
 pub type Result<T, E = GrpcClientError> = std::result::Result<T, E>;
@@ -32,9 +33,7 @@ pub enum GrpcClientError {
     },
 }
 
-pub use celestia_grpc::uniffi_client::TxClient;
-
-type InnerClient = celestia_grpc::GrpcClient<Channel>;
+type InnerClient = crate::GrpcClient<Channel>;
 
 /// Celestia GRPC client
 #[derive(Object)]
@@ -50,8 +49,7 @@ impl GrpcClient {
     // context
     pub async fn new(url: String) -> Result<Self> {
         Ok(GrpcClient {
-            client: celestia_grpc::GrpcClient::with_url(url)
-                .map_err(celestia_grpc::Error::TransportError)?,
+            client: InnerClient::with_url(url).map_err(crate::Error::TransportError)?,
         })
     }
 
@@ -131,8 +129,8 @@ impl GrpcClient {
     }
 }
 
-impl From<celestia_grpc::Error> for GrpcClientError {
-    fn from(value: celestia_grpc::Error) -> Self {
+impl From<crate::Error> for GrpcClientError {
+    fn from(value: crate::Error) -> Self {
         GrpcClientError::GrpcError {
             msg: value.to_string(),
         }

@@ -31,7 +31,6 @@ use tonic::client::GrpcService;
 use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxStatus};
 use crate::{Error, Result};
 
-// uniffi :(
 #[cfg(feature = "uniffi")]
 uniffi::use_remote_type!(celestia_types::Hash);
 
