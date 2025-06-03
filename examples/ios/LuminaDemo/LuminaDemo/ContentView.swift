@@ -73,7 +73,7 @@ class LuminaViewModel: ObservableObject {
             
             let data = "Hello, World".data(using: .utf8)!
             let ns = try Namespace(version: 0, id: "foo".data(using: .utf8)!)
-            let blob = try Blob(namespace: ns, data: data, appVersion: AppVersion.v1)
+            let blob = try Blob(namespace: ns, data: data, appVersion: AppVersion.v3)
             
             let submit = try await txclient.submitBlobs(blobs: [blob], config: nil)
             
