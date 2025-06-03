@@ -1,6 +1,6 @@
 # Instructions to re-create the setup
 
-- Create a new kotlin project in xcode
+- Create a new kotlin project in Android Studio
 - make sure you have all the default android targets installed
 ```
 rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android
