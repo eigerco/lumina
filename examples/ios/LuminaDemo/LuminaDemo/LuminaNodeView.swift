@@ -9,22 +9,6 @@ import SwiftUI
 import Logging
 import P256K
 
-final class StaticSigner : UniffiSigner {
-    // PrivateKey isn't Sendable, but we _need_ to send it
-    let skBytes : Data
-    
-    init(sk: P256K.Signing.PrivateKey) {
-        self.skBytes = sk.dataRepresentation
-    }
-    
-    func sign(doc: SignDoc) async throws -> UniffiSignature {
-        let sk = try P256K.Signing.PrivateKey(dataRepresentation: skBytes)
-        let messageData = protoEncodeSignDoc(signDoc: doc);
-        let signature = try! sk.signature(for: messageData)
-        return try! UniffiSignature (bytes: signature.compactRepresentation)
-    }
-}
-
 @MainActor
 class LuminaViewModel: ObservableObject {
     @Published var error: Error?
@@ -61,25 +45,6 @@ class LuminaViewModel: ObservableObject {
         )
         
         do {
-            let grpcClient = try await GrpcClient(url: "https://rpc-celestia.alphab.ai:9090")
-            let params = try await grpcClient.getAuthParams()
-            Logger(label: "GrpcTest").info("Got auth params: \(String(describing: params))")
-            
-            let address = try! parseBech32Address(bech32Address:"celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9")
-            let sk = try! P256K.Signing.PrivateKey(dataRepresentation: try! "393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839".bytes
-            )
-            
-            let pk = sk.publicKey
-            let signer = StaticSigner(sk: sk);
-            let txclient = try await TxClient.create(url: "http://192.168.1.11:19090", accountAddress: address, accountPubkey: pk.dataRepresentation, signer: signer)
-            
-            let data = "Hello, World".data(using: .utf8)!
-            let ns = try Namespace(version: 0, id: "foo".data(using: .utf8)!)
-            let blob = try Blob.create(namespace: ns, data: data, appVersion: AppVersion.v3)
-            
-            let submit = try await txclient.submitBlobs(blobs: [blob], config: nil)
-            
-            Logger(label: "GrpcTest").info("Submitted: \(submit)")
             
             self.node = try LuminaNode(config: config)
             let _ = try await node!.start()
@@ -145,7 +110,7 @@ class LuminaViewModel: ObservableObject {
     }
 }
 
-struct ContentView: View {
+struct LuminaNodeView: View {
     @StateObject private var viewModel = LuminaViewModel()
     
     var body: some View {
@@ -296,5 +261,5 @@ extension BlockRange: Identifiable {
 }
 
 #Preview {
-    ContentView()
+    LuminaNodeView()
 }
