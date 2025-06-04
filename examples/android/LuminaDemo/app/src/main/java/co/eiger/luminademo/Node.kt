@@ -26,7 +26,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import fr.acinq.secp256k1.Hex
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,11 +35,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import uniffi.celestia_grpc.TxClient
-import uniffi.celestia_grpc.parseBech32Address
-import uniffi.celestia_types.AppVersion
-import uniffi.celestia_types.Blob
-import uniffi.celestia_types.Namespace
 import uniffi.lumina_node.Network
 import uniffi.lumina_node.NetworkId
 import uniffi.lumina_node_uniffi.BlockRange
@@ -50,7 +44,7 @@ import uniffi.lumina_node_uniffi.NodeConfig
 @Preview
 @Composable
 fun LuminaUi(modifier: Modifier = Modifier) {
-    val dbPath = LocalContext.current.filesDir.path;
+    val dbPath = LocalContext.current.filesDir.path
 
     var config by remember { mutableStateOf<NodeConfig?>(null) }
 
@@ -81,31 +75,29 @@ fun LuminaUi(modifier: Modifier = Modifier) {
     }
 
     if (config == null) {
-        Box(modifier) {
-            Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "Select network",
-                    style = TextStyle(fontSize = 20.sp),
-                    modifier = modifier.padding(20.dp)
-                )
-                networks.forEach { network ->
-                    Button(onClick = { onNetworkSelected(network) }) {
-                        Text(text = network.toNetworkName())
-                    }
+        Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "Select network",
+                style = TextStyle(fontSize = 20.sp),
+                modifier = Modifier.padding(20.dp)
+            )
+            networks.forEach { network ->
+                Button(onClick = { onNetworkSelected(network) }) {
+                    Text(text = network.toNetworkName())
                 }
             }
         }
     } else {
-        LuminaStatus(config!!, resetConfig, modifier)
+        LuminaStatus(modifier = modifier.fillMaxWidth(), config!!, resetConfig)
     }
 }
 
 @OptIn(ExperimentalStdlibApi::class)
 @Composable
 fun LuminaStatus(
+    modifier: Modifier = Modifier,
     config: NodeConfig,
     resetConfig: () -> Unit,
-    modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
     var lumina by remember { mutableStateOf<LuminaNode?>(null) }
@@ -134,19 +126,17 @@ fun LuminaStatus(
     }
 
     if (luminaStats == null) {
-        Box(modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-            ) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
                 text = "Connecting to Celestia...",
-                modifier = Modifier.Companion
+                modifier = Modifier
                     .fillMaxSize()
                     .padding(all = 50.dp),
-                textAlign = TextAlign.Companion.Center
+                textAlign = TextAlign.Center
             )
             Box(
-                contentAlignment = Alignment.Companion.Center,
-                modifier = Modifier.Companion.fillMaxSize()
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize()
             ) {
                 CircularProgressIndicator()
             }
@@ -154,64 +144,64 @@ fun LuminaStatus(
         return
     }
 
-    val rowModifier = Modifier.Companion
+    val rowModifier = Modifier
         .fillMaxWidth()
         .padding(8.dp)
     Column(modifier = modifier.fillMaxWidth()) {
         Row(modifier = rowModifier, horizontalArrangement = Arrangement.Center) {
-            Text(text = "Lumina Node started", textAlign = TextAlign.Companion.Center)
+            Text(text = "Lumina Node started", textAlign = TextAlign.Center)
         }
         Row(modifier = rowModifier) {
             Text(
                 "Network",
-                modifier = Modifier.Companion.weight(1f),
-                textAlign = TextAlign.Companion.Center
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
             )
             Text(
                 config.network.toNetworkName(),
-                modifier = Modifier.Companion.weight(1f),
-                textAlign = TextAlign.Companion.Center
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
             )
         }
         Row(modifier = rowModifier) {
             Text(
                 "Network Height",
-                modifier = Modifier.Companion.weight(1f),
-                textAlign = TextAlign.Companion.Center
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
             )
             Text(
                 luminaStats?.networkHeight.toString(),
-                modifier = Modifier.Companion.weight(1f),
-                textAlign = TextAlign.Companion.Center
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
             )
         }
         Row(modifier = rowModifier) {
             Text(
                 "Connected Peers",
-                modifier = Modifier.Companion.weight(1f),
-                textAlign = TextAlign.Companion.Center
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
             )
             Text(
                 luminaStats?.connectedPeers.toString(),
-                modifier = Modifier.Companion.weight(1f),
-                textAlign = TextAlign.Companion.Center
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
             )
         }
         Row(modifier = rowModifier) {
             Text(
                 "Trusted Peers",
-                modifier = Modifier.Companion.weight(1f),
-                textAlign = TextAlign.Companion.Center
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
             )
             Text(
                 luminaStats?.trustedPeers.toString(),
-                modifier = Modifier.Companion.weight(1f),
-                textAlign = TextAlign.Companion.Center
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
             )
         }
 
         Row(modifier = rowModifier, horizontalArrangement = Arrangement.Center) {
-            Text(text = "Synced Ranges", textAlign = TextAlign.Companion.Center)
+            Text(text = "Synced Ranges", textAlign = TextAlign.Center)
         }
 
         luminaStats?.ranges?.forEach {

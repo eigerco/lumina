@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.WifiCalling
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,10 +46,10 @@ enum class Destination(
         contentDescription = "Light Node"
     ),
     GRPC(
-    route = "grpc",
-    label = "gRPC",
-    icon = Icons.Default.WifiCalling,
-    contentDescription = "gRPC"
+        route = "grpc",
+        label = "gRPC",
+        icon = Icons.Default.WifiCalling,
+        contentDescription = "gRPC"
     ),
 }
 
@@ -77,7 +79,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        //enableEdgeToEdge()
+        enableEdgeToEdge()
 
         Log.i("MAIN", "Starting Lumina Demo")
 
@@ -113,6 +115,12 @@ fun ExamplesNavigation(modifier: Modifier = Modifier) {
                             text = destination.label,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    icon = {
+                        Icon(
+                            imageVector = destination.icon,
+                            contentDescription = destination.contentDescription
                         )
                     }
                 )

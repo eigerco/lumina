@@ -12,7 +12,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,7 +99,7 @@ fun GrpcUi(modifier: Modifier = Modifier) {
                         val skBytes = Hex.decode(skHex.text.toString())
                         val pkBytes = Hex.decode(pkHex.text.toString())
 
-                        val signer = KotlinSigner(skBytes)
+                        val signer = StaticSigner(skBytes)
 
                         grpcClient = TxClient.create(
                             url = url.toString(),
@@ -193,49 +192,7 @@ fun GrpcBlobSubmit(modifier: Modifier = Modifier, txClient: TxClient, coroutineS
     }
 }
 
-@OptIn(ExperimentalStdlibApi::class)
-@Composable
-fun nope() {
-    LaunchedEffect(true) {
-        val address = parseBech32Address("celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9")
-        val skBytes =
-            Hex.decode("393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839") //.hexToByteArray()
-        val pk =
-            "031e57072482b4344234163fdd5d46f95f2e02124a586016dcfc958d837f1c0b39".hexToByteArray()
-
-        //val algo = AlgorithmParameters.getInstance("EC", "BC")
-        //algo.init(ECGenParameterSpec("secp256k1"))
-
-        //val param = algo.getParameterSpec(ECParameterSpec::class.java)
-        //val s = BigInteger(1, skBytes)
-        //val kf = KeyFactory.getInstance("EC")
-        //val sk = kf.generatePrivate(ECPrivateKeySpec(s, param))
-
-        val signer = KotlinSigner(skBytes)
-
-        Log.i("GRPC", "=== [ CLIENT ] ===")
-        val client = TxClient.create(
-            url = "http://192.168.1.11:19090",
-            address, accountPubkey = pk, signer
-        )
-        Log.i("GRPC", "=== [ CLIENTED ] ===")
-
-
-        val ns = Namespace.Companion.newV0("foo".toByteArray(Charsets.UTF_8))
-        val blob = Blob.Companion.create(
-            ns, "hello world".toByteArray(Charsets.UTF_8),
-            AppVersion.V1
-        )
-
-        Log.i("GRPC", "=== [ PRE SUBMIT ] ===")
-        val submit = client.submitBlobs(blobs = listOf(blob), config = null)
-
-        Log.i("GRPC", "submit: $submit")
-    }
-
-}
-
-class KotlinSigner(private val sk: ByteArray) : UniffiSigner {
+class StaticSigner(private val sk: ByteArray) : UniffiSigner {
     @OptIn(ExperimentalStdlibApi::class)
     override suspend fun sign(doc: SignDoc): UniffiSignature {
         val messageData = protoEncodeSignDoc(doc)
