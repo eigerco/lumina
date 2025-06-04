@@ -45,7 +45,7 @@ pub use crate::share::*;
 pub use crate::sync::*;
 pub use crate::validate::*;
 
-// `uniffi::use_remote_type` macro seems a bit, limited in that it it work correctly only
+// `uniffi::use_remote_type` macro seems a bit limited in that it works correctly only
 // for types that are exported in the root of the crate
 #[cfg(feature = "uniffi")]
 pub use crate::hash::Hash;
