@@ -5,7 +5,7 @@ use js_sys::Promise;
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
 use serde::Deserialize;
-use tracing::error;
+use tracing::warn;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, RequestMode, Response};
@@ -27,7 +27,7 @@ pub(crate) async fn resolve_bootnode_addresses(addrs: Vec<Multiaddr>) -> Vec<Mul
     for addr in addrs {
         match resolve_dnsaddr_multiaddress(&addr, DEFAULT_DNS_ADDR).await {
             Ok(resolved_addrs) => bootnodes.extend(resolved_addrs.into_iter()),
-            Err(e) => error!("Failed to resolve {addr}: {e}"),
+            Err(e) => warn!("Failed to resolve {addr}: {e}"),
         }
     }
 
