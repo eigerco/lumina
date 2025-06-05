@@ -270,7 +270,7 @@ where
             // If we had some bootnodes but resolving them failed for all of them,
             // then we fail with an error.
             if bootnodes.is_empty() && !bootnodes_was_empty {
-                return Err(NodeBuilderError::FailedResolvingBootnodes)?;
+                return Err(NodeBuilderError::FailedResolvingBootnodes);
             }
 
             bootnodes
