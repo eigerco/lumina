@@ -8,7 +8,7 @@ use celestia_proto::celestia::blob::v1::query_client::QueryClient as BlobQueryCl
 use celestia_proto::celestia::core::v1::tx::tx_client::TxClient as TxStatusClient;
 use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQueryClient;
 use celestia_proto::cosmos::bank::v1beta1::query_client::QueryClient as BankQueryClient;
-use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
+pub use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;

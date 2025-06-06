@@ -29,6 +29,7 @@ pub type Height = tendermint::block::Height;
 /// [data-mod]: https://github.com/celestiaorg/celestia-core/blob/a1268f7ae3e688144a613c8a439dd31818aae07d/proto/tendermint/types/types.proto#L84-L104
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(try_from = "RawBlock", into = "RawBlock")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Block {
     /// Block header
     pub header: Header,
@@ -267,6 +268,278 @@ fn is_zero(id: &Id) -> bool {
     matches!(id.hash, Hash::None)
         && matches!(id.part_set_header.hash, Hash::None)
         && id.part_set_header.total == 0
+}
+
+/// uniffi types
+#[cfg(feature = "uniffi")]
+pub mod uniffi_types {
+    use tendermint::block::signed_header::SignedHeader as TendermintSignedHeader;
+    use tendermint::block::{
+        Commit as TendermintCommit, CommitSig as TendermintCommitSig, Header as TendermintHeader,
+        Height,
+    };
+    use uniffi::{Enum, Record};
+
+    use crate::error::UniffiConversionError;
+    use crate::hash::Hash;
+    use crate::state::UniffiAccountId;
+    use crate::uniffi_types::{AppHash, BlockId, ChainId, ProtocolVersion, Signature, Time};
+
+    /// Signed block headers
+    #[derive(Record)]
+    pub struct SignedHeader {
+        /// Signed block headers
+        pub header: Header,
+        /// Commit containing signatures for the header
+        pub commit: Commit,
+    }
+
+    impl TryFrom<TendermintSignedHeader> for SignedHeader {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: TendermintSignedHeader) -> Result<Self, Self::Error> {
+            Ok(SignedHeader {
+                header: value.header.into(),
+                commit: value.commit.try_into()?,
+            })
+        }
+    }
+
+    impl TryFrom<SignedHeader> for TendermintSignedHeader {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: SignedHeader) -> Result<Self, Self::Error> {
+            TendermintSignedHeader::new(value.header.try_into()?, value.commit.try_into()?)
+                .map_err(|_| UniffiConversionError::InvalidSignedHeader)
+        }
+    }
+
+    /// Commit contains the justification (ie. a set of signatures) that a block was
+    /// committed by a set of validators.
+    #[derive(Record)]
+    pub struct Commit {
+        /// Block height
+        pub height: u64,
+        /// Round
+        pub round: u32,
+        /// Block ID
+        pub block_id: BlockId,
+        /// Signatures
+        pub signatures: Vec<CommitSig>,
+    }
+
+    impl TryFrom<TendermintCommit> for Commit {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: TendermintCommit) -> Result<Self, Self::Error> {
+            Ok(Commit {
+                height: value.height.value(),
+                round: value.round.value(),
+                block_id: value.block_id.into(),
+                signatures: value
+                    .signatures
+                    .into_iter()
+                    .map(|s| s.try_into())
+                    .collect::<Result<Vec<_>, _>>()?,
+            })
+        }
+    }
+
+    impl TryFrom<Commit> for TendermintCommit {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: Commit) -> Result<Self, Self::Error> {
+            Ok(TendermintCommit {
+                height: value
+                    .height
+                    .try_into()
+                    .map_err(|_| UniffiConversionError::HeaderHeightOutOfRange)?,
+                round: value
+                    .round
+                    .try_into()
+                    .map_err(|_| UniffiConversionError::InvalidRoundIndex)?,
+                block_id: value.block_id.try_into()?,
+                signatures: value
+                    .signatures
+                    .into_iter()
+                    .map(|s| s.try_into())
+                    .collect::<Result<_, _>>()?,
+            })
+        }
+    }
+
+    uniffi::custom_type!(TendermintCommit, Commit, {
+        remote,
+        try_lift: |value| Ok(value.try_into()?),
+        lower: |value| value.try_into().expect("valid tendermint timestamp")
+    });
+
+    /// CommitSig represents a signature of a validator. It’s a part of the Commit and can
+    /// be used to reconstruct the vote set given the validator set.
+    #[derive(Enum)]
+    pub enum CommitSig {
+        /// no vote was received from a validator.
+        BlockIdFlagAbsent,
+        /// voted for the Commit.BlockID.
+        BlockIdFlagCommit {
+            /// Validator address
+            validator_address: UniffiAccountId,
+            /// Timestamp
+            timestamp: Time,
+            /// Signature of vote
+            signature: Option<Signature>,
+        },
+        /// voted for nil
+        BlockIdFlagNil {
+            /// Validator address
+            validator_address: UniffiAccountId,
+            /// Timestamp
+            timestamp: Time,
+            /// Signature of vote
+            signature: Option<Signature>,
+        },
+    }
+
+    impl TryFrom<TendermintCommitSig> for CommitSig {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: TendermintCommitSig) -> Result<Self, Self::Error> {
+            Ok(match value {
+                TendermintCommitSig::BlockIdFlagAbsent => CommitSig::BlockIdFlagAbsent,
+                TendermintCommitSig::BlockIdFlagCommit {
+                    validator_address,
+                    timestamp,
+                    signature,
+                } => CommitSig::BlockIdFlagCommit {
+                    validator_address: validator_address.into(),
+                    timestamp: timestamp.try_into()?,
+                    signature: signature.map(Into::into),
+                },
+                TendermintCommitSig::BlockIdFlagNil {
+                    validator_address,
+                    timestamp,
+                    signature,
+                } => CommitSig::BlockIdFlagNil {
+                    validator_address: validator_address.into(),
+                    timestamp: timestamp.try_into()?,
+                    signature: signature.map(Into::into),
+                },
+            })
+        }
+    }
+
+    impl TryFrom<CommitSig> for TendermintCommitSig {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: CommitSig) -> Result<Self, Self::Error> {
+            Ok(match value {
+                CommitSig::BlockIdFlagAbsent => TendermintCommitSig::BlockIdFlagAbsent,
+                CommitSig::BlockIdFlagCommit {
+                    validator_address,
+                    timestamp,
+                    signature,
+                } => TendermintCommitSig::BlockIdFlagCommit {
+                    validator_address: validator_address.try_into()?,
+                    timestamp: timestamp.try_into()?,
+                    signature: signature.map(TryInto::try_into).transpose()?,
+                },
+                CommitSig::BlockIdFlagNil {
+                    validator_address,
+                    timestamp,
+                    signature,
+                } => TendermintCommitSig::BlockIdFlagNil {
+                    validator_address: validator_address.try_into()?,
+                    timestamp: timestamp.try_into()?,
+                    signature: signature.map(TryInto::try_into).transpose()?,
+                },
+            })
+        }
+    }
+
+    /// Block Header values contain metadata about the block and about the consensus,
+    /// as well as commitments to the data in the current block, the previous block,
+    /// and the results returned by the application.
+    #[derive(Record)]
+    pub struct Header {
+        /// Header version
+        pub version: ProtocolVersion,
+        /// Chain ID
+        pub chain_id: ChainId,
+        /// Current block height
+        pub height: Height,
+        /// Current timestamp
+        pub time: Time,
+        /// Previous block info
+        pub last_block_id: Option<BlockId>,
+        /// Commit from validators from the last block
+        pub last_commit_hash: Option<Hash>,
+        /// Merkle root of transaction hashes
+        pub data_hash: Option<Hash>,
+        /// Validators for the current block
+        pub validators_hash: Hash,
+        /// Validators for the next block
+        pub next_validators_hash: Hash,
+        /// Consensus params for the current block
+        pub consensus_hash: Hash,
+        /// State after txs from the previous block
+        pub app_hash: AppHash,
+        /// Root hash of all results from the txs from the previous block
+        pub last_results_hash: Option<Hash>,
+        /// Hash of evidence included in the block
+        pub evidence_hash: Option<Hash>,
+        /// Original proposer of the block
+        pub proposer_address: UniffiAccountId,
+    }
+
+    impl TryFrom<Header> for TendermintHeader {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: Header) -> std::result::Result<Self, Self::Error> {
+            Ok(TendermintHeader {
+                version: value.version,
+                chain_id: value.chain_id.try_into()?,
+                height: value.height,
+                time: value.time.try_into()?,
+                last_block_id: value.last_block_id.map(TryInto::try_into).transpose()?,
+                last_commit_hash: value.last_commit_hash,
+                data_hash: value.data_hash,
+                validators_hash: value.validators_hash,
+                next_validators_hash: value.next_validators_hash,
+                consensus_hash: value.consensus_hash,
+                app_hash: value.app_hash.try_into()?,
+                last_results_hash: value.last_results_hash,
+                evidence_hash: value.evidence_hash,
+                proposer_address: value.proposer_address.try_into()?,
+            })
+        }
+    }
+
+    impl From<TendermintHeader> for Header {
+        fn from(value: TendermintHeader) -> Self {
+            Header {
+                version: value.version,
+                chain_id: value.chain_id.into(),
+                height: value.height,
+                time: value.time.try_into().expect("valid time in tendermint"),
+                last_block_id: value.last_block_id.map(Into::into),
+                last_commit_hash: value.last_commit_hash,
+                data_hash: value.data_hash,
+                validators_hash: value.validators_hash,
+                next_validators_hash: value.next_validators_hash,
+                consensus_hash: value.consensus_hash,
+                app_hash: value.app_hash.into(),
+                last_results_hash: value.last_results_hash,
+                evidence_hash: value.evidence_hash,
+                proposer_address: value.proposer_address.into(),
+            }
+        }
+    }
+
+    uniffi::custom_type!(TendermintHeader, Header, {
+        remote,
+        try_lift: |value| Ok(value.try_into()?),
+        lower: |value| value.into()
+    });
 }
 
 #[cfg(test)]

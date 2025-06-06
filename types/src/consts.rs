@@ -72,6 +72,7 @@ pub mod appconsts {
     /// Enum with all valid App versions.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
     #[repr(u64)]
+    #[cfg(not(feature = "uniffi"))]
     pub enum AppVersion {
         /// App v1
         V1 = v1::VERSION,
@@ -79,6 +80,19 @@ pub mod appconsts {
         V2 = v2::VERSION,
         /// App v3
         V3 = v3::VERSION,
+    }
+
+    /// Enum with all valid App versions.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, uniffi::Enum)]
+    #[repr(u64)]
+    #[cfg(feature = "uniffi")] // uniffi supports only literal initialisers
+    pub enum AppVersion {
+        /// App v1
+        V1 = 1,
+        /// App v2
+        V2 = 2,
+        /// App v3
+        V3 = 3,
     }
 
     impl AppVersion {

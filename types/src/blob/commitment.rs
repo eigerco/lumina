@@ -350,6 +350,41 @@ fn round_down_to_power_of_2(x: NonZeroU64) -> Option<u64> {
     }
 }
 
+#[cfg(feature = "uniffi")]
+mod uniffi_types {
+    use super::{Commitment as RustCommitment, HASH_SIZE};
+    use uniffi::Record;
+
+    use crate::error::UniffiConversionError;
+
+    #[derive(Record)]
+    pub struct Commitment {
+        pub sha_hash: Vec<u8>,
+    }
+
+    impl From<RustCommitment> for Commitment {
+        fn from(value: RustCommitment) -> Self {
+            Commitment {
+                sha_hash: value.hash.to_vec(),
+            }
+        }
+    }
+
+    impl TryFrom<Commitment> for RustCommitment {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: Commitment) -> Result<Self, Self::Error> {
+            let hash: [u8; HASH_SIZE] = value
+                .sha_hash
+                .try_into()
+                .map_err(|_| UniffiConversionError::InvalidCommitmentLength)?;
+            Ok(RustCommitment { hash })
+        }
+    }
+
+    uniffi::custom_type!(RustCommitment, Commitment);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

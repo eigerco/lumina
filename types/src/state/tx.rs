@@ -33,6 +33,7 @@ pub const BOND_DENOM: &str = "utia";
 
 /// [`Tx`] is the standard type used for broadcasting transactions.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Tx {
     /// Processable content of the transaction
     pub body: TxBody,
@@ -51,6 +52,7 @@ pub struct Tx {
 
 /// [`TxBody`] of a transaction that all signers sign over.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxBody {
     /// `messages` is a list of messages to be executed. The required signers of
     /// those messages define the number and order of elements in `AuthInfo`'s
@@ -78,6 +80,7 @@ pub struct TxBody {
 
 /// Response to a tx query
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxResponse {
     /// The block height
     pub height: Height,
@@ -128,6 +131,7 @@ pub struct TxResponse {
 
 /// [`AuthInfo`] describes the fee and signer modes that are used to sign a transaction.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct AuthInfo {
     /// Defines the signing modes for the required signers.
     ///
@@ -146,6 +150,7 @@ pub struct AuthInfo {
 /// SignerInfo describes the public key and signing mode of a single top-level
 /// signer.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct SignerInfo {
     /// public_key is the public key of the signer. It is optional for accounts
     /// that already exist in state. If unset, the verifier can use the required \
@@ -162,6 +167,7 @@ pub struct SignerInfo {
 
 /// ModeInfo describes the signing mode of a single or nested multisig signer.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ModeInfo {
     /// sum is the oneof that specifies whether this represents a single or nested
     /// multisig signer
@@ -171,6 +177,7 @@ pub struct ModeInfo {
 /// sum is the oneof that specifies whether this represents a single or nested
 /// multisig signer
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Sum {
     /// Single is the mode info for a single signer. It is structured as a message
     /// to allow for additional fields such as locale for SIGN_MODE_TEXTUAL in the
@@ -193,6 +200,7 @@ pub enum Sum {
 /// gas to be used by the transaction. The ratio yields an effective "gasprice",
 /// which must be above some miminum to be accepted into the mempool.
 #[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Fee {
     /// amount is the amount of coins to be paid as a fee
     pub amount: Vec<Coin>,
@@ -227,6 +235,7 @@ impl Fee {
 
 /// Coin defines a token with a denomination and an amount.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Coin {
     /// Coin denomination
     pub denom: String,
@@ -247,6 +256,7 @@ impl Coin {
 /// Error codes associated with transaction responses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ErrorCode {
     // source https://github.com/celestiaorg/cosmos-sdk/blob/v1.25.1-sdk-v0.46.16/types/errors/errors.go#L38
     /// No error
@@ -706,3 +716,22 @@ impl TryFrom<RawCoin> for Coin {
 
 impl Protobuf<RawTxBody> for TxBody {}
 impl Protobuf<RawAuthInfo> for AuthInfo {}
+
+#[cfg(feature = "uniffi")]
+mod uniffi_types {
+    use bytes::Bytes;
+    use tendermint_proto::v0_34::abci::{Event, EventAttribute};
+
+    #[uniffi::remote(Record)]
+    pub struct Event {
+        pub r#type: String,
+        pub attributes: Vec<EventAttribute>,
+    }
+
+    #[uniffi::remote(Record)]
+    pub struct EventAttribute {
+        pub key: Bytes,
+        pub value: Bytes,
+        pub index: bool,
+    }
+}
