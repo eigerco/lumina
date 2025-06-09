@@ -60,8 +60,8 @@ pub enum NodeBuilderError {
     PruningDelayTooSmall(Duration),
 
     /// Builder failed to resolve dnsaddr multiaddresses for bootnodes
-    #[error("Could not resolve bootnode addresses: {0}")]
-    FailedResolvingBootnodes(String),
+    #[error("Could not resolve any of the bootnode addresses")]
+    FailedResolvingBootnodes,
 }
 
 impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
@@ -263,9 +263,18 @@ where
         }
 
         #[cfg(target_arch = "wasm32")]
-        let bootnodes = resolve_bootnode_addresses(bootnodes)
-            .await
-            .map_err(|e| NodeBuilderError::FailedResolvingBootnodes(e.to_string()))?;
+        let bootnodes = {
+            let bootnodes_was_empty = bootnodes.is_empty();
+            let bootnodes = resolve_bootnode_addresses(bootnodes).await;
+
+            // If we had some bootnodes but resolving them failed for all of them,
+            // then we fail with an error.
+            if bootnodes.is_empty() && !bootnodes_was_empty {
+                return Err(NodeBuilderError::FailedResolvingBootnodes);
+            }
+
+            bootnodes
+        };
 
         // `Node` is memory hungry when in-memory stores are used and the user may not
         // expect they should set a smaller sampling window to reduce that. For user-friendliness

@@ -3683,7 +3683,7 @@ Auth module parameters
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:88
+lumina\_node\_wasm.d.ts:78
 
 ***
 
@@ -3693,7 +3693,7 @@ lumina\_node\_wasm.d.ts:88
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:91
+lumina\_node\_wasm.d.ts:81
 
 ***
 
@@ -3703,7 +3703,7 @@ lumina\_node\_wasm.d.ts:91
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:92
+lumina\_node\_wasm.d.ts:82
 
 ***
 
@@ -3713,7 +3713,7 @@ lumina\_node\_wasm.d.ts:92
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:89
+lumina\_node\_wasm.d.ts:79
 
 ***
 
@@ -3723,7 +3723,7 @@ lumina\_node\_wasm.d.ts:89
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:90
+lumina\_node\_wasm.d.ts:80
 
 
 <a name="interfacesbaseaccountmd"></a>
@@ -3746,7 +3746,7 @@ Common data of all account types
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:80
+lumina\_node\_wasm.d.ts:70
 
 ***
 
@@ -3756,7 +3756,7 @@ lumina\_node\_wasm.d.ts:80
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:78
+lumina\_node\_wasm.d.ts:68
 
 ***
 
@@ -3766,7 +3766,7 @@ lumina\_node\_wasm.d.ts:78
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:79
+lumina\_node\_wasm.d.ts:69
 
 ***
 
@@ -3776,7 +3776,7 @@ lumina\_node\_wasm.d.ts:79
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:81
+lumina\_node\_wasm.d.ts:71
 
 
 <a name="interfacescoinmd"></a>
@@ -3799,7 +3799,7 @@ Coin
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:61
+lumina\_node\_wasm.d.ts:92
 
 ***
 
@@ -3809,7 +3809,7 @@ lumina\_node\_wasm.d.ts:61
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:60
+lumina\_node\_wasm.d.ts:91
 
 
 <a name="interfacesprotoanymd"></a>
@@ -3865,7 +3865,7 @@ Public key
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:70
+lumina\_node\_wasm.d.ts:60
 
 ***
 
@@ -3875,7 +3875,7 @@ lumina\_node\_wasm.d.ts:70
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:71
+lumina\_node\_wasm.d.ts:61
 
 
 <a name="interfacessigndocmd"></a>

@@ -5,6 +5,7 @@ use js_sys::Promise;
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
 use serde::Deserialize;
+use tracing::warn;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, RequestMode, Response};
@@ -20,17 +21,17 @@ pub(crate) enum Error {
     CouldNotParseResponse(String),
 }
 
-pub(crate) async fn resolve_bootnode_addresses(
-    addrs: Vec<Multiaddr>,
-) -> Result<Vec<Multiaddr>, Error> {
+pub(crate) async fn resolve_bootnode_addresses(addrs: Vec<Multiaddr>) -> Vec<Multiaddr> {
     let mut bootnodes = Vec::with_capacity(addrs.len());
 
     for addr in addrs {
-        let resolved_addrs = resolve_dnsaddr_multiaddress(addr, DEFAULT_DNS_ADDR).await?;
-        bootnodes.extend(resolved_addrs.into_iter());
+        match resolve_dnsaddr_multiaddress(&addr, DEFAULT_DNS_ADDR).await {
+            Ok(resolved_addrs) => bootnodes.extend(resolved_addrs.into_iter()),
+            Err(e) => warn!("Failed to resolve {addr}: {e}"),
+        }
     }
 
-    Ok(bootnodes)
+    bootnodes
 }
 
 #[wasm_bindgen]
@@ -81,7 +82,7 @@ fn get_dnsaddr(ma: &Multiaddr) -> Option<Cow<'_, str>> {
 /// If provided multiaddress uses dnsaddr protocol, resolve it using dns-over-https.
 /// Otherwise returns the provided address.
 pub async fn resolve_dnsaddr_multiaddress(
-    ma: Multiaddr,
+    ma: &Multiaddr,
     dns_ip: IpAddr,
 ) -> Result<Vec<Multiaddr>, Error> {
     const TXT_TYPE: u16 = 16;
@@ -98,11 +99,11 @@ pub async fn resolve_dnsaddr_multiaddress(
         answer: Vec<DohEntry>,
     }
 
-    let Some(dnsaddr) = get_dnsaddr(&ma) else {
+    let Some(dnsaddr) = get_dnsaddr(ma) else {
         // not a dnsaddr multiaddr
-        return Ok(vec![ma]);
+        return Ok(vec![ma.to_owned()]);
     };
-    let Some(peer_id) = get_peer_id(&ma) else {
+    let Some(peer_id) = get_peer_id(ma) else {
         return Err(Error::CouldNotFetch(
             "failed preparing request: PeerId missing".to_string(),
         ));

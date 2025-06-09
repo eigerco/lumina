@@ -34,7 +34,7 @@ pub use crate::header::HeaderClient;
 pub use crate::p2p::P2PClient;
 pub use crate::share::ShareClient;
 pub use crate::state::StateClient;
-pub use crate::tx_config::TxConfig;
+pub use crate::tx_config::{TxConfig, TxPriority};
 
 /// Re-exports of all the RPC traits.
 pub mod prelude {
