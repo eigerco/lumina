@@ -93,7 +93,7 @@ impl PeerTracker {
     /// Get the `PeerInfo` of the peer.
     ///
     /// If peer is not found it is added as `PeerState::Discovered`.
-    fn get(&self, peer: PeerId) -> RefMut<PeerId, PeerInfo> {
+    fn get(&self, peer: PeerId) -> RefMut<'_, PeerId, PeerInfo> {
         self.peers.entry(peer).or_insert_with(|| PeerInfo {
             state: PeerState::Discovered,
             addrs: SmallVec::new(),
