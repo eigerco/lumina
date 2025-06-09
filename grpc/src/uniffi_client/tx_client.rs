@@ -225,4 +225,3 @@ fn parse_bech32_address(bech32_address: String) -> Result<Address> {
             msg: format!("{e}"),
         })
 }
-

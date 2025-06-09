@@ -30,6 +30,7 @@ tendermint-proto.workspace = true
 tendermint.workspace = true
 lumina-utils = { workspace = true, features = ["time"] }
 
+async-trait = { version = "0.1.88", optional = true }
 bytes = "1.8"
 hex = "0.4.3"
 http-body = "1"
@@ -41,7 +42,6 @@ tonic = { version = "0.12.3", default-features = false, features = [
   "codegen", "prost"
 ]}
 uniffi = { version = "0.29.2", optional = true, features = ["tokio"] }
-async-trait = "0.1.88"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.38.0", features = ["time"] }
@@ -72,4 +72,4 @@ wasm-bindgen-test.workspace = true
 [features]
 default = []
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
-uniffi = ["dep:uniffi", "celestia-types/uniffi"]
+uniffi = ["dep:uniffi", "dep:async-trait", "celestia-types/uniffi"]
