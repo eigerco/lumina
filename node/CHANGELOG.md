@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.11.0...lumina-node-v0.12.0) - 2025-06-09
+
+### Fixed
+
+- Fix doc builds, new rust? :thinking: ([#650](https://github.com/eigerco/lumina/pull/650))
+- *(node)* [**breaking**] Do not fail fast on dns-over-https ([#648](https://github.com/eigerco/lumina/pull/648))
+
+### Other
+
+- update mocha validators to match celestia ([#633](https://github.com/eigerco/lumina/pull/633))
+
 ## [0.11.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.10.0...lumina-node-v0.11.0) - 2025-05-26
 
 ### Fixed

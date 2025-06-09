@@ -4,8 +4,8 @@ members = ["cli", "grpc", "node", "node-wasm", "node-uniffi", "proto", "rpc", "t
 
 [workspace.dependencies]
 blockstore = "0.7.1"
-lumina-node = { version = "0.11.0", path = "node" }
-lumina-node-wasm = { version = "0.8.3", path = "node-wasm" }
+lumina-node = { version = "0.12.0", path = "node" }
+lumina-node-wasm = { version = "0.8.4", path = "node-wasm" }
 lumina-utils = { version = "0.2.0", path = "utils" }
 celestia-proto = { version = "0.7.1", path = "proto" }
 celestia-grpc = { version = "0.3.0", path = "grpc" }
