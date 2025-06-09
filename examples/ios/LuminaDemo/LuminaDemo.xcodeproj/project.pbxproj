@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D14DFDE92DD4890700F311BE /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = D14DFDE82DD4890700F311BE /* Logging */; };
+		D15B9CE92DDF443600F54A21 /* P256K in Frameworks */ = {isa = PBXBuildFile; productRef = D15B9CE82DDF443600F54A21 /* P256K */; };
 		FC92E19F2D5F9B1A00A25A9C /* lumina.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC92E19E2D5F9B1A00A25A9C /* lumina.xcframework */; };
 		FC92E1A22D5F9B2700A25A9C /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC92E1A12D5F9B2700A25A9C /* SystemConfiguration.framework */; };
 /* End PBXBuildFile section */
@@ -36,9 +38,22 @@
 		FC92E1A12D5F9B2700A25A9C /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D14DFDE62DD38AC500F311BE /* Exceptions for "LuminaDemo" folder in "LuminaDemo" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = FC92E16A2D5F9A6D00A25A9C /* LuminaDemo */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		FC92E16D2D5F9A6D00A25A9C /* LuminaDemo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D14DFDE62DD38AC500F311BE /* Exceptions for "LuminaDemo" folder in "LuminaDemo" target */,
+			);
 			path = LuminaDemo;
 			sourceTree = "<group>";
 		};
@@ -59,6 +74,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D14DFDE92DD4890700F311BE /* Logging in Frameworks */,
+				D15B9CE92DDF443600F54A21 /* P256K in Frameworks */,
 				FC92E1A22D5F9B2700A25A9C /* SystemConfiguration.framework in Frameworks */,
 				FC92E19F2D5F9B1A00A25A9C /* lumina.xcframework in Frameworks */,
 			);
@@ -125,12 +142,16 @@
 			buildRules = (
 			);
 			dependencies = (
+				D15B9CEF2DE45ECF00F54A21 /* PBXTargetDependency */,
+				D15B9CED2DE45ECA00F54A21 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				FC92E16D2D5F9A6D00A25A9C /* LuminaDemo */,
 			);
 			name = LuminaDemo;
 			packageProductDependencies = (
+				D14DFDE82DD4890700F311BE /* Logging */,
+				D15B9CE82DDF443600F54A21 /* P256K */,
 			);
 			productName = LuminaDemo;
 			productReference = FC92E16B2D5F9A6D00A25A9C /* LuminaDemo.app */;
@@ -214,6 +235,10 @@
 			);
 			mainGroup = FC92E1622D5F9A6D00A25A9C;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D14DFDE72DD4890700F311BE /* XCRemoteSwiftPackageReference "swift-log" */,
+				D15B9CDD2DDF013400F54A21 /* XCRemoteSwiftPackageReference "swift-secp256k1" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FC92E16C2D5F9A6D00A25A9C /* Products */;
 			projectDirPath = "";
@@ -275,6 +300,14 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		D15B9CED2DE45ECA00F54A21 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = D15B9CEC2DE45ECA00F54A21 /* Logging */;
+		};
+		D15B9CEF2DE45ECF00F54A21 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = D15B9CEE2DE45ECF00F54A21 /* P256K */;
+		};
 		FC92E17D2D5F9A6E00A25A9C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = FC92E16A2D5F9A6D00A25A9C /* LuminaDemo */;
@@ -418,11 +451,13 @@
 				DEVELOPMENT_TEAM = 772B362MTF;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LuminaDemo/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -447,11 +482,13 @@
 				DEVELOPMENT_TEAM = 772B362MTF;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LuminaDemo/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -577,6 +614,48 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D14DFDE72DD4890700F311BE /* XCRemoteSwiftPackageReference "swift-log" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-log.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.6.3;
+			};
+		};
+		D15B9CDD2DDF013400F54A21 /* XCRemoteSwiftPackageReference "swift-secp256k1" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/21-DOT-DEV/swift-secp256k1";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.21.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D14DFDE82DD4890700F311BE /* Logging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D14DFDE72DD4890700F311BE /* XCRemoteSwiftPackageReference "swift-log" */;
+			productName = Logging;
+		};
+		D15B9CE82DDF443600F54A21 /* P256K */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D15B9CDD2DDF013400F54A21 /* XCRemoteSwiftPackageReference "swift-secp256k1" */;
+			productName = P256K;
+		};
+		D15B9CEC2DE45ECA00F54A21 /* Logging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D14DFDE72DD4890700F311BE /* XCRemoteSwiftPackageReference "swift-log" */;
+			productName = Logging;
+		};
+		D15B9CEE2DE45ECF00F54A21 /* P256K */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D15B9CDD2DDF013400F54A21 /* XCRemoteSwiftPackageReference "swift-secp256k1" */;
+			productName = P256K;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = FC92E1632D5F9A6D00A25A9C /* Project object */;
 }

@@ -25,6 +25,7 @@ const COSMOS_SECP256K1_PUBKEY: &str = "/cosmos.crypto.secp256k1.PubKey";
 /// Any custom account type should extend this type for additional functionality
 /// (e.g. vesting).
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BaseAccount {
     /// Bech32 `AccountId` of this account.
     pub address: Address,
@@ -39,6 +40,7 @@ pub struct BaseAccount {
 
 /// [`ModuleAccount`] defines an account for modules that holds coins on a pool.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ModuleAccount {
     /// [`BaseAccount`] specification of this module account.
     pub base_account: BaseAccount,
@@ -136,3 +138,56 @@ fn any_from_public_key(key: PublicKey) -> Any {
 impl Protobuf<RawBaseAccount> for BaseAccount {}
 
 impl Protobuf<RawModuleAccount> for ModuleAccount {}
+
+#[cfg(feature = "uniffi")]
+mod uniffi_types {
+    use super::PublicKey as TendermintPublicKey;
+
+    use tendermint::public_key::{Ed25519, Secp256k1};
+    use uniffi::Enum;
+
+    use crate::error::UniffiConversionError;
+
+    #[derive(Enum)]
+    pub enum PublicKey {
+        Ed25519 { bytes: Vec<u8> },
+        Secp256k1 { sec1_bytes: Vec<u8> },
+    }
+
+    impl TryFrom<PublicKey> for TendermintPublicKey {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: PublicKey) -> Result<Self, Self::Error> {
+            Ok(match value {
+                PublicKey::Ed25519 { bytes } => TendermintPublicKey::Ed25519(
+                    Ed25519::try_from(bytes.as_ref())
+                        .map_err(|_| UniffiConversionError::InvalidPublicKey)?,
+                ),
+                PublicKey::Secp256k1 { sec1_bytes } => TendermintPublicKey::Secp256k1(
+                    Secp256k1::from_sec1_bytes(&sec1_bytes)
+                        .map_err(|_| UniffiConversionError::InvalidPublicKey)?,
+                ),
+            })
+        }
+    }
+
+    impl From<TendermintPublicKey> for PublicKey {
+        fn from(value: TendermintPublicKey) -> Self {
+            match value {
+                TendermintPublicKey::Ed25519(k) => PublicKey::Ed25519 {
+                    bytes: k.as_bytes().to_vec(),
+                },
+                TendermintPublicKey::Secp256k1(k) => PublicKey::Secp256k1 {
+                    sec1_bytes: k.to_sec1_bytes().to_vec(),
+                },
+                _ => unimplemented!("unexpected key type"),
+            }
+        }
+    }
+
+    uniffi::custom_type!(TendermintPublicKey, PublicKey, {
+        remote,
+        try_lift: |value| Ok(value.try_into()?),
+        lower: |value| value.into()
+    });
+}
