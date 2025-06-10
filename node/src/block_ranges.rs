@@ -45,8 +45,8 @@ pub(crate) trait BlockRangeExt {
     fn is_adjacent(&self, other: &BlockRange) -> bool;
     fn is_overlapping(&self, other: &BlockRange) -> bool;
     fn left_of(&self, other: &BlockRange) -> bool;
-    fn keep_head(&self, limit: u64) -> Self;
-    fn keep_tail(&self, limit: u64) -> Self;
+    fn headn(&self, limit: u64) -> Self;
+    fn tailn(&self, limit: u64) -> Self;
 }
 
 pub(crate) struct BlockRangeDisplay<'a>(&'a RangeInclusive<u64>);
@@ -147,7 +147,7 @@ impl BlockRangeExt for BlockRange {
     }
 
     /// Truncate the range so that it contains at most `limit` elements, removing from the tail
-    fn keep_head(&self, limit: u64) -> Self {
+    fn headn(&self, limit: u64) -> Self {
         if self.is_empty() {
             return RangeInclusive::new(1, 0);
         }
@@ -163,7 +163,7 @@ impl BlockRangeExt for BlockRange {
     }
 
     /// Truncate the range so that it contains at most `limit` elements, removing from the head
-    fn keep_tail(&self, limit: u64) -> Self {
+    fn tailn(&self, limit: u64) -> Self {
         if self.is_empty() {
             return RangeInclusive::new(1, 0);
         }
@@ -246,9 +246,56 @@ impl BlockRanges {
         self.0.last().map(|r| *r.end())
     }
 
+    pub(crate) fn headn(&self, limit: u64) -> BlockRanges {
+        let mut truncated = BlockRanges::new();
+        let mut len = 0;
+
+        for range in self.0.iter().rev() {
+            if len == limit {
+                break;
+            }
+
+            let r = range.headn(limit - len);
+
+            len += r.len();
+            truncated
+                .insert_relaxed(r)
+                .expect("BlockRanges always holds valid ranges");
+
+            debug_assert_eq!(truncated.len(), len);
+            debug_assert!(len <= limit);
+        }
+
+        truncated
+    }
+
     /// Return lowest height in the range.
     pub fn tail(&self) -> Option<u64> {
         self.0.first().map(|r| *r.start())
+    }
+
+    #[allow(unused)]
+    pub(crate) fn tailn(&self, limit: u64) -> BlockRanges {
+        let mut truncated = BlockRanges::new();
+        let mut len = 0;
+
+        for range in self.0.iter() {
+            if len == limit {
+                break;
+            }
+
+            let r = range.tailn(limit - len);
+
+            len += r.len();
+            truncated
+                .insert_relaxed(r)
+                .expect("BlockRanges always holds valid ranges");
+
+            debug_assert_eq!(truncated.len(), len);
+            debug_assert!(len <= limit);
+        }
+
+        truncated
     }
 
     /// Returns first and last index of ranges overlapping or touching provided `range`.
@@ -524,53 +571,6 @@ impl BlockRanges {
         };
 
         Some((left, middle_height, right))
-    }
-
-    pub(crate) fn keep_head(&self, limit: u64) -> BlockRanges {
-        let mut truncated = BlockRanges::new();
-        let mut len = 0;
-
-        for range in self.0.iter().rev() {
-            if len == limit {
-                break;
-            }
-
-            let r = range.keep_head(limit - len);
-
-            len += r.len();
-            truncated
-                .insert_relaxed(r)
-                .expect("BlockRanges always holds valid ranges");
-
-            debug_assert_eq!(truncated.len(), len);
-            debug_assert!(len <= limit);
-        }
-
-        truncated
-    }
-
-    #[allow(unused)]
-    pub(crate) fn keep_tail(&self, limit: u64) -> BlockRanges {
-        let mut truncated = BlockRanges::new();
-        let mut len = 0;
-
-        for range in self.0.iter() {
-            if len == limit {
-                break;
-            }
-
-            let r = range.keep_tail(limit - len);
-
-            len += r.len();
-            truncated
-                .insert_relaxed(r)
-                .expect("BlockRanges always holds valid ranges");
-
-            debug_assert_eq!(truncated.len(), len);
-            debug_assert!(len <= limit);
-        }
-
-        truncated
     }
 }
 
@@ -1091,142 +1091,142 @@ mod tests {
     }
 
     #[test]
-    fn keep_head() {
-        assert_eq!((1..=10).keep_head(u64::MAX), 1..=10);
-        assert_eq!((1..=10).keep_head(20), 1..=10);
-        assert_eq!((1..=10).keep_head(10), 1..=10);
-        assert_eq!((1..=10).keep_head(5), 6..=10);
-        assert_eq!((1..=10).keep_head(1), 10..=10);
-        assert!((1..=10).keep_head(0).is_empty());
+    fn headn() {
+        assert_eq!((1..=10).headn(u64::MAX), 1..=10);
+        assert_eq!((1..=10).headn(20), 1..=10);
+        assert_eq!((1..=10).headn(10), 1..=10);
+        assert_eq!((1..=10).headn(5), 6..=10);
+        assert_eq!((1..=10).headn(1), 10..=10);
+        assert!((1..=10).headn(0).is_empty());
 
-        assert_eq!((0..=u64::MAX).keep_head(u64::MAX), 1..=u64::MAX);
-        assert_eq!((0..=u64::MAX).keep_head(1), u64::MAX..=u64::MAX);
-        assert!((0..=u64::MAX).keep_head(0).is_empty());
+        assert_eq!((0..=u64::MAX).headn(u64::MAX), 1..=u64::MAX);
+        assert_eq!((0..=u64::MAX).headn(1), u64::MAX..=u64::MAX);
+        assert!((0..=u64::MAX).headn(0).is_empty());
 
         assert_eq!(
-            new_block_ranges([1..=10]).keep_head(u64::MAX),
+            new_block_ranges([1..=10]).headn(u64::MAX),
             new_block_ranges([1..=10])
         );
         assert_eq!(
-            new_block_ranges([1..=10]).keep_head(20),
+            new_block_ranges([1..=10]).headn(20),
             new_block_ranges([1..=10])
         );
         assert_eq!(
-            new_block_ranges([1..=10]).keep_head(10),
+            new_block_ranges([1..=10]).headn(10),
             new_block_ranges([1..=10])
         );
         assert_eq!(
-            new_block_ranges([1..=10]).keep_head(5),
+            new_block_ranges([1..=10]).headn(5),
             new_block_ranges([6..=10])
         );
         assert_eq!(
-            new_block_ranges([1..=10]).keep_head(1),
+            new_block_ranges([1..=10]).headn(1),
             new_block_ranges([10..=10])
         );
-        assert!(new_block_ranges([1..=10]).keep_head(0).is_empty());
+        assert!(new_block_ranges([1..=10]).headn(0).is_empty());
 
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_head(u64::MAX),
+            new_block_ranges([1..=5, 10..=14]).headn(u64::MAX),
             new_block_ranges([1..=5, 10..=14])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_head(20),
+            new_block_ranges([1..=5, 10..=14]).headn(20),
             new_block_ranges([1..=5, 10..=14])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_head(10),
+            new_block_ranges([1..=5, 10..=14]).headn(10),
             new_block_ranges([1..=5, 10..=14])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_head(4),
+            new_block_ranges([1..=5, 10..=14]).headn(4),
             new_block_ranges([11..=14])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_head(5),
+            new_block_ranges([1..=5, 10..=14]).headn(5),
             new_block_ranges([10..=14])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_head(6),
+            new_block_ranges([1..=5, 10..=14]).headn(6),
             new_block_ranges([5..=5, 10..=14])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_head(7),
+            new_block_ranges([1..=5, 10..=14]).headn(7),
             new_block_ranges([4..=5, 10..=14])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_head(1),
+            new_block_ranges([1..=5, 10..=14]).headn(1),
             new_block_ranges([14..=14])
         );
-        assert!(new_block_ranges([1..=5, 10..=14]).keep_head(0).is_empty());
+        assert!(new_block_ranges([1..=5, 10..=14]).headn(0).is_empty());
     }
 
     #[test]
-    fn keep_tail() {
-        assert_eq!((1..=10).keep_tail(20), 1..=10);
-        assert_eq!((1..=10).keep_tail(10), 1..=10);
-        assert_eq!((1..=10).keep_tail(5), 1..=5);
-        assert_eq!((1..=10).keep_tail(1), 1..=1);
-        assert!((1..=10).keep_tail(0).is_empty());
+    fn tailn() {
+        assert_eq!((1..=10).tailn(20), 1..=10);
+        assert_eq!((1..=10).tailn(10), 1..=10);
+        assert_eq!((1..=10).tailn(5), 1..=5);
+        assert_eq!((1..=10).tailn(1), 1..=1);
+        assert!((1..=10).tailn(0).is_empty());
 
-        assert_eq!((0..=u64::MAX).keep_tail(u64::MAX), 0..=(u64::MAX - 1));
-        assert_eq!((0..=u64::MAX).keep_tail(1), 0..=0);
-        assert!((0..=u64::MAX).keep_tail(0).is_empty());
+        assert_eq!((0..=u64::MAX).tailn(u64::MAX), 0..=(u64::MAX - 1));
+        assert_eq!((0..=u64::MAX).tailn(1), 0..=0);
+        assert!((0..=u64::MAX).tailn(0).is_empty());
 
         assert_eq!(
-            new_block_ranges([1..=10]).keep_tail(u64::MAX),
+            new_block_ranges([1..=10]).tailn(u64::MAX),
             new_block_ranges([1..=10])
         );
         assert_eq!(
-            new_block_ranges([1..=10]).keep_tail(20),
+            new_block_ranges([1..=10]).tailn(20),
             new_block_ranges([1..=10])
         );
         assert_eq!(
-            new_block_ranges([1..=10]).keep_tail(10),
+            new_block_ranges([1..=10]).tailn(10),
             new_block_ranges([1..=10])
         );
         assert_eq!(
-            new_block_ranges([1..=10]).keep_tail(5),
+            new_block_ranges([1..=10]).tailn(5),
             new_block_ranges([1..=5])
         );
         assert_eq!(
-            new_block_ranges([1..=10]).keep_tail(1),
+            new_block_ranges([1..=10]).tailn(1),
             new_block_ranges([1..=1])
         );
-        assert!(new_block_ranges([1..=10]).keep_tail(0).is_empty());
+        assert!(new_block_ranges([1..=10]).tailn(0).is_empty());
 
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_tail(u64::MAX),
+            new_block_ranges([1..=5, 10..=14]).tailn(u64::MAX),
             new_block_ranges([1..=5, 10..=14])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_tail(20),
+            new_block_ranges([1..=5, 10..=14]).tailn(20),
             new_block_ranges([1..=5, 10..=14])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_tail(10),
+            new_block_ranges([1..=5, 10..=14]).tailn(10),
             new_block_ranges([1..=5, 10..=14])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_tail(4),
+            new_block_ranges([1..=5, 10..=14]).tailn(4),
             new_block_ranges([1..=4])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_tail(5),
+            new_block_ranges([1..=5, 10..=14]).tailn(5),
             new_block_ranges([1..=5])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_tail(6),
+            new_block_ranges([1..=5, 10..=14]).tailn(6),
             new_block_ranges([1..=5, 10..=10])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_tail(7),
+            new_block_ranges([1..=5, 10..=14]).tailn(7),
             new_block_ranges([1..=5, 10..=11])
         );
         assert_eq!(
-            new_block_ranges([1..=5, 10..=14]).keep_tail(1),
+            new_block_ranges([1..=5, 10..=14]).tailn(1),
             new_block_ranges([1..=1])
         );
-        assert!(new_block_ranges([1..=5, 10..=14]).keep_tail(0).is_empty());
+        assert!(new_block_ranges([1..=5, 10..=14]).tailn(0).is_empty());
     }
 
     #[test]

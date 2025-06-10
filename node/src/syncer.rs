@@ -630,20 +630,20 @@ fn calculate_range_to_fetch(
     let Some(synced_head_range) = synced_headers_iter.next() else {
         // empty synced ranges, we're missing everything
         let range = 1..=subjective_head_height;
-        return range.keep_tail(limit);
+        return range.tailn(limit);
     };
 
     if synced_head_range.end() < &subjective_head_height {
         // if we haven't caught up with the network head, start from there
         let range = synced_head_range.end() + 1..=subjective_head_height;
-        return range.keep_tail(limit);
+        return range.tailn(limit);
     }
 
     // there exists a range contiguous with network head. inspect previous range end
     let penultimate_range_end = synced_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
 
     let range = penultimate_range_end + 1..=synced_head_range.start().saturating_sub(1);
-    range.keep_head(limit)
+    range.headn(limit)
 }
 
 #[instrument(skip_all)]

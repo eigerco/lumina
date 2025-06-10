@@ -354,7 +354,7 @@ where
             self.prev_num_of_prunable_blocks = num_of_prunable_blocks;
         }
 
-        let mut prunable_batch = prunable_and_sampled.keep_head(MAX_PRUNABLE_BATCH_SIZE);
+        let mut prunable_batch = prunable_and_sampled.headn(MAX_PRUNABLE_BATCH_SIZE);
 
         // Daser needs to allow us to remove anything beyond sampling and pruning window.
         for height in after_sampling_window.rev() {
