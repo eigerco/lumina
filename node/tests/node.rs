@@ -134,27 +134,27 @@ async fn peer_discovery() {
     // Check Node1 connected peers
     let connected_peers = node1.connected_peers().await.unwrap();
     let tracker_info = node1.peer_tracker_info();
-    assert!(connected_peers.iter().any(|peer| *peer == bridge_peer_id));
-    assert!(connected_peers.iter().any(|peer| peer == node2_peer_id));
-    assert!(connected_peers.iter().any(|peer| peer == node3_peer_id));
+    assert!(connected_peers.contains(&bridge_peer_id));
+    assert!(connected_peers.contains(node2_peer_id));
+    assert!(connected_peers.contains(node3_peer_id));
     assert!(tracker_info.num_connected_peers >= 3);
     assert_eq!(tracker_info.num_connected_trusted_peers, 1);
 
     // Check Node2 connected peers
     let connected_peers = node2.connected_peers().await.unwrap();
     let tracker_info = node2.peer_tracker_info();
-    assert!(connected_peers.iter().any(|peer| *peer == bridge_peer_id));
-    assert!(connected_peers.iter().any(|peer| peer == node1_peer_id));
-    assert!(connected_peers.iter().any(|peer| peer == node3_peer_id));
+    assert!(connected_peers.contains(&bridge_peer_id));
+    assert!(connected_peers.contains(node1_peer_id));
+    assert!(connected_peers.contains(node3_peer_id));
     assert!(tracker_info.num_connected_peers >= 3);
     assert_eq!(tracker_info.num_connected_trusted_peers, 1);
 
     // Check Node3 connected peers
     let connected_peers = node3.connected_peers().await.unwrap();
     let tracker_info = node2.peer_tracker_info();
-    assert!(connected_peers.iter().any(|peer| *peer == bridge_peer_id));
-    assert!(connected_peers.iter().any(|peer| peer == node1_peer_id));
-    assert!(connected_peers.iter().any(|peer| peer == node2_peer_id));
+    assert!(connected_peers.contains(&bridge_peer_id));
+    assert!(connected_peers.contains(node1_peer_id));
+    assert!(connected_peers.contains(node2_peer_id));
     assert!(tracker_info.num_connected_peers >= 3);
     assert_eq!(tracker_info.num_connected_trusted_peers, 1);
 }

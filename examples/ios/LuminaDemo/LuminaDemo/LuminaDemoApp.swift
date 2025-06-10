@@ -11,7 +11,14 @@ import SwiftUI
 struct LuminaDemoApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            TabView{
+                Tab("Node", systemImage: "l.circle") {
+                    LuminaNodeView()
+                }
+                Tab("gRPC", systemImage: "phone.connection") {
+                    GrpcView()
+                }
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "lumina-utils"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Platform abstraction utilities used across lumina project"
@@ -20,6 +20,7 @@ futures = { optional = true, version = "0.3.30" }
 pin-project = { optional = true, version = "1.1.5" }
 send_wrapper = { optional = true, version = "0.6.0", features = ["futures"] }
 wasm-bindgen-test = { optional = true, workspace = true }
+web-time = { optional = true, version = "1.1.0" }
 
 [dev-dependencies]
 web-time = "1.1.0"
@@ -28,5 +29,5 @@ web-time = "1.1.0"
 default = []
 executor = ["token", "dep:tokio-util", "dep:tokio", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:send_wrapper"]
 token = ["dep:tokio-util"]
-time = ["dep:gloo-timers", "dep:tokio", "dep:send_wrapper", "dep:futures", "dep:pin-project"]
+time = ["dep:gloo-timers", "dep:tokio", "dep:send_wrapper", "dep:futures", "dep:pin-project", "dep:web-time"]
 test-utils = ["dep:wasm-bindgen-test"]

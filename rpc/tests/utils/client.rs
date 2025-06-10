@@ -61,10 +61,21 @@ pub async fn new_test_client(auth_level: AuthLevel) -> Result<Client> {
     new_test_client_with_url(auth_level, CELESTIA_RPC_URL).await
 }
 
-pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, ClientError>
+pub async fn blob_submit_with_config<C>(
+    client: &C,
+    blobs: &[Blob],
+    config: TxConfig,
+) -> Result<u64, ClientError>
 where
     C: SubscriptionClientT + Sync,
 {
     let _guard = write_lock().await;
-    client.blob_submit(blobs, TxConfig::default()).await
+    client.blob_submit(blobs, config).await
+}
+
+pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, ClientError>
+where
+    C: SubscriptionClientT + Sync,
+{
+    blob_submit_with_config(client, blobs, TxConfig::default()).await
 }

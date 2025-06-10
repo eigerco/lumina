@@ -47,12 +47,12 @@ mod rpc {
     use super::*;
     use celestia_types::eds::RawExtendedDataSquare;
 
-    #[rpc(client)]
+    #[rpc(client, namespace = "share", namespace_separator = ".")]
     pub trait Share {
-        #[method(name = "share.GetEDS")]
+        #[method(name = "GetEDS")]
         async fn share_get_eds(&self, height: u64) -> Result<RawExtendedDataSquare, Error>;
 
-        #[method(name = "share.GetRange")]
+        #[method(name = "GetRange")]
         async fn share_get_range(
             &self,
             height: u64,
@@ -60,21 +60,21 @@ mod rpc {
             end: u64,
         ) -> Result<GetRangeResponse, Error>;
 
-        #[method(name = "share.GetRow")]
+        #[method(name = "GetRow")]
         async fn share_get_row(&self, height: u64, row: u64) -> Result<GetRowResponse, Error>;
 
-        #[method(name = "share.GetShare")]
+        #[method(name = "GetShare")]
         async fn share_get_share(&self, height: u64, row: u64, col: u64)
             -> Result<RawShare, Error>;
 
-        #[method(name = "share.GetNamespaceData")]
+        #[method(name = "GetNamespaceData")]
         async fn share_get_namespace_data(
             &self,
             height: u64,
             namespace: Namespace,
         ) -> Result<NamespaceData, Error>;
 
-        #[method(name = "share.SharesAvailable")]
+        #[method(name = "SharesAvailable")]
         async fn share_shares_available(&self, height: u64) -> Result<(), Error>;
     }
 }

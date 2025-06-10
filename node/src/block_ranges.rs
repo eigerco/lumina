@@ -56,7 +56,7 @@ impl Display for BlockRangeDisplay<'_> {
 }
 
 impl BlockRangeExt for BlockRange {
-    fn display(&self) -> BlockRangeDisplay {
+    fn display(&self) -> BlockRangeDisplay<'_> {
         BlockRangeDisplay(self)
     }
 

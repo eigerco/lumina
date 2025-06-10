@@ -46,6 +46,38 @@ impl From<BitVector> for CompactBitArray {
     }
 }
 
+#[cfg(feature = "uniffi")]
+mod uniffi_types {
+    use super::BitVector as LuminaBitVector;
+    use bitvec::vec::BitVec;
+    use uniffi::Record;
+
+    #[derive(Record)]
+    pub struct BitVector {
+        bytes: Vec<u8>,
+    }
+
+    impl From<BitVector> for LuminaBitVector {
+        fn from(value: BitVector) -> Self {
+            LuminaBitVector(BitVec::from_vec(value.bytes))
+        }
+    }
+
+    impl From<LuminaBitVector> for BitVector {
+        fn from(value: LuminaBitVector) -> Self {
+            BitVector {
+                bytes: value.0.into_vec(),
+            }
+        }
+    }
+
+    uniffi::custom_type!(LuminaBitVector, BitVector, {
+        remote,
+        try_lift: |value| Ok(value.into()),
+        lower: |value| value.into()
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

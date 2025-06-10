@@ -200,7 +200,7 @@ jobs:
         ./examples/ios/LuminaDemo/copy_bindings.sh
     - name: xcode clean build
       working-directory: examples/ios/LuminaDemo
-      run: xcodebuild clean build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+      run: xcodebuild -scheme LuminaDemo clean build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
     - name: xcode sim test
       working-directory: examples/ios/LuminaDemo
       run: xcodebuild -scheme LuminaDemo -sdk iphonesimulator -destination "platform=iOS Simulator,name=iPhone 16" test

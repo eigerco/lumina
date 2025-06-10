@@ -17,6 +17,8 @@
 //!
 //! [`nmt-rs`]: https://github.com/sovereign-labs/nmt-rs
 
+#[cfg(feature = "uniffi")]
+use crate::error::UniffiError;
 use base64::prelude::*;
 use blockstore::block::CidError;
 use celestia_proto::serializers::cow_str::CowStr;
@@ -97,6 +99,7 @@ pub type Proof = nmt_rs::simple_merkle::proof::Proof<NamespacedSha2Hasher>;
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
     wasm_bindgen(inspectable)
 )]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct Namespace(nmt_rs::NamespaceId<NS_SIZE>);
 
 impl Namespace {
@@ -482,6 +485,71 @@ impl Namespace {
     #[wasm_bindgen(js_name = id, getter)]
     pub fn js_id(&self) -> Vec<u8> {
         self.id().to_vec()
+    }
+}
+
+#[cfg(feature = "uniffi")]
+#[uniffi::export]
+impl Namespace {
+    /// Create a new [`Namespace`] from the version and id.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if provided namespace version isn't supported
+    /// or if the namespace is invalid. If you are constructing the
+    /// version `0` namespace, check [`new_namespace_v0`] for more details.
+    ///
+    /// [`new_namespace_v0`]: crate::nmt::Namespace::new_namespace_v0
+    #[uniffi::constructor(name = "new")]
+    fn uniffi_new(version: u8, id: Vec<u8>) -> Result<Self, UniffiError> {
+        Ok(Namespace::new(version, &id)?)
+    }
+
+    /// Create a new [`Namespace`] version `0` with given id.
+    ///
+    /// The `id` must be either:
+    ///  - a 28 byte slice specifying full id
+    ///  - a 10 or less byte slice specifying user-defined suffix
+    ///
+    /// [`Namespace`]s in version 0 must have id's prefixed with 18 `0x00` bytes.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the provided id has incorrect length
+    /// or if the `id` has 28 bytes and have doesn't have mandatory 18x`0x00` bytes prefix
+    #[uniffi::constructor(name = "new_v0")]
+    fn uniffi_new_v0(id: Vec<u8>) -> Result<Self, UniffiError> {
+        Ok(Namespace::new_v0(&id)?)
+    }
+
+    /// Return the [`Namespace`] as a byte slice.
+    #[uniffi::method]
+    pub fn bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
+    }
+
+    /// Returns the first byte indicating the version of the [`Namespace`].
+    #[uniffi::method(name = "version")]
+    pub fn uniffi_version(&self) -> u8 {
+        self.version()
+    }
+
+    /// Returns the trailing 28 bytes indicating the id of the [`Namespace`].
+    #[uniffi::method(name = "id")]
+    pub fn uniffi_id(&self) -> Vec<u8> {
+        self.id().to_vec()
+    }
+
+    /// Returns the 10 bytes user-defined suffix of the [`Namespace`] if it's a version 0.
+    #[uniffi::method(name = "id_v0")]
+    pub fn uniffi_id_v0(&self) -> Option<Vec<u8>> {
+        self.id_v0().map(ToOwned::to_owned)
+    }
+
+    /// Returns true if the namespace is reserved for special purposes.
+    #[uniffi::method(name = "is_reserved")]
+    pub fn uniffi_is_reserved(&self) -> bool {
+        self.is_reserved()
     }
 }
 
