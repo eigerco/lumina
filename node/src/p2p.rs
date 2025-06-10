@@ -355,7 +355,7 @@ impl P2p {
     }
 
     /// A reference to the current [`PeerTrackerInfo`].
-    pub fn peer_tracker_info(&self) -> watch::Ref<PeerTrackerInfo> {
+    pub fn peer_tracker_info(&self) -> watch::Ref<'_, PeerTrackerInfo> {
         self.peer_tracker_info_watcher.borrow()
     }
 

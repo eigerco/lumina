@@ -45,3 +45,23 @@ impl From<Data> for RawData {
         }
     }
 }
+
+#[cfg(feature = "uniffi")]
+mod uniffi_types {
+    use super::Data as BlockData;
+
+    // we need to rename `Data`, otherwise it clashes with `Foundation::Data` for Swift
+    #[uniffi::remote(Record)]
+    pub struct BlockData {
+        /// Transactions.
+        pub txs: Vec<Vec<u8>>,
+
+        /// Square width of original data square.
+        pub square_size: u64,
+
+        /// Hash is the root of a binary Merkle tree where the leaves of the tree are
+        /// the row and column roots of an extended data square. Hash is often referred
+        /// to as the "data root".
+        pub hash: Vec<u8>,
+    }
+}

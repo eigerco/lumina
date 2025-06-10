@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2](https://github.com/eigerco/lumina/compare/celestia-types-v0.11.1...celestia-types-v0.11.2) - 2025-06-09
+
+### Added
+
+- *(node-uniffi)* Add grpc types and client for uniffi ([#627](https://github.com/eigerco/lumina/pull/627))
+
+## [0.11.1](https://github.com/eigerco/lumina/compare/celestia-types-v0.11.0...celestia-types-v0.11.1) - 2025-05-26
+
+### Fixed
+
+- *(types)* Fix clippy issues ([#594](https://github.com/eigerco/lumina/pull/594))
+
+### Other
+
+- Upgrade to tendermint 0.40.3 ([#622](https://github.com/eigerco/lumina/pull/622))
+
 ## [0.11.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.10.1...celestia-types-v0.11.0) - 2025-04-02
 
 ### Added

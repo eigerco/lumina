@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import Logging
+import P256K
 
 @MainActor
 class LuminaViewModel: ObservableObject {
@@ -41,10 +43,14 @@ class LuminaViewModel: ObservableObject {
             batchSize: nil,
             ed25519SecretKeyBytes: nil
         )
+
         do {
-            node = try LuminaNode(config: config)
+
+            self.node = try LuminaNode(config: config)
             let _ = try await node!.start()
             isRunning = await node!.isRunning();
+
+            Logger(label: "LuminaDemo").info("node spun up: \(isRunning)")
 
             statsTimer = pollStats()
         } catch {
@@ -104,7 +110,7 @@ class LuminaViewModel: ObservableObject {
     }
 }
 
-struct ContentView: View {
+struct LuminaNodeView: View {
     @StateObject private var viewModel = LuminaViewModel()
 
     var body: some View {
@@ -255,5 +261,5 @@ extension BlockRange: Identifiable {
 }
 
 #Preview {
-    ContentView()
+    LuminaNodeView()
 }
