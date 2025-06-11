@@ -49,9 +49,9 @@ impl SampleBlockstore<blockstore::RedbBlockstore> {
 #[cfg(target_arch = "wasm32")]
 impl SampleBlockstore<blockstore::IndexedDbBlockstore> {
     pub async fn new(name: &str) -> Result<Self> {
-        Self {
-            blockstore: blockstore::IndexedDbBlockstore::new(name),
-        }
+        Ok(Self {
+            blockstore: blockstore::IndexedDbBlockstore::new(name).await?,
+        })
     }
 }
 
