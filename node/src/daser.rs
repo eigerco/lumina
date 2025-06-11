@@ -95,8 +95,21 @@ pub(crate) enum DaserCmd {
     },
 
     /// Used by Pruner to tell Daser about a block that is going to be pruned.
-    /// Daser then replies with `true` if Pruner can do it. This is needed to
-    /// avoid race conditions between them when Daser has as ongoing sampling.
+    /// Daser then replies with `true` if Pruner is allowed to do it.
+    ///
+    /// This is needed to avoid following race condition:
+    ///
+    /// We have `Store` very tightly integrated with `beetswap::Multihasher`
+    /// and when Daser starts data sampling the header of that block must be
+    /// in the `Store` until the data sampling is finished. This can be fixed
+    /// only if we decouple `Store` from `beetswap::Multihasher`.
+    ///
+    /// However, even if we fix the above, a second problem arise: When Pruner
+    /// removes the header and samples of an ongoing data sampling, how are we
+    /// going to handle the incoming CIDs? We need somehow make sure that Pruner
+    /// will remove them after sampling is finished.
+    ///
+    /// After the above issues are fixed, this can be removed.
     WantToPrune {
         height: u64,
         respond_to: oneshot::Sender<bool>,
