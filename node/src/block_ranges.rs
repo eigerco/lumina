@@ -517,7 +517,7 @@ impl BlockRanges {
         edges
     }
 
-    /// Returns `(left, middle, right)` that can be used for binary search.
+    /// Returns `([left], middle, [right])` that can be used for binary search.
     pub(crate) fn partitions(&self) -> Option<(BlockRanges, u64, BlockRanges)> {
         let len = self.len();
 
