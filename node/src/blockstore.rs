@@ -146,7 +146,7 @@ mod tests {
             cid!(RowNamespaceDataId, Namespace::new_v0(b"a").unwrap(), 15, 12),
             cid!(RowNamespaceDataId, Namespace::new_v0(b"z").unwrap(), 1, 1),
             cid!([1; 64].as_ref()),
-            cid!([[1].as_ref(), &[243; 63]].concat()),
+            cid!([[1].as_ref(), &[18; 63]].concat()),
         ];
 
         for cid in sample_cids.iter().chain(non_sample_cids.iter()) {
