@@ -203,7 +203,7 @@ pub enum NodeEvent {
         row: u16,
         /// The column of the share.
         column: u16,
-        /// Sampling of the share timed out.
+        /// Share sampling timed out.
         timed_out: bool,
     },
 
