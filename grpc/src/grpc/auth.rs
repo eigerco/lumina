@@ -16,6 +16,7 @@ use crate::{Error, Result};
 //       + add vesting accounts
 /// Enum representing different types of account
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Account {
     /// Base account type
     Base(BaseAccount),

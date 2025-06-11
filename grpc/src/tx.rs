@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use celestia_proto::cosmos::crypto::secp256k1;
-use celestia_proto::cosmos::tx::v1beta1::SignDoc;
+pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
@@ -30,6 +30,9 @@ use tonic::client::GrpcService;
 
 use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxStatus};
 use crate::{Error, Result};
+
+#[cfg(feature = "uniffi")]
+uniffi::use_remote_type!(celestia_types::Hash);
 
 // source https://github.com/celestiaorg/celestia-app/blob/v3.0.2/x/blob/types/payforblob.go#L21
 // PFBGasFixedCost is a rough estimate for the "fixed cost" in the gas cost
@@ -413,9 +416,7 @@ where
         account_pubkey: VerifyingKey,
         signer: S,
     ) -> Result<Self> {
-        let transport = tonic::transport::Endpoint::from_shared(url.into())
-            .map_err(|e| Error::TransportError(e.to_string()))?
-            .connect_lazy();
+        let transport = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
         Self::new(transport, account_address, account_pubkey, signer).await
     }
 }
@@ -488,6 +489,7 @@ where
 
 /// A result of correctly submitted transaction.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxInfo {
     /// Hash of the transaction.
     pub hash: Hash,
@@ -497,6 +499,7 @@ pub struct TxInfo {
 
 /// Configuration for the transaction.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxConfig {
     /// Custom gas limit for the transaction (in `utia`).
     pub gas_limit: Option<u64>,

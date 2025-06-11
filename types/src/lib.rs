@@ -27,6 +27,8 @@ mod sync;
 #[cfg_attr(docsrs, doc(cfg(feature = "test-utils")))]
 pub mod test_utils;
 pub mod trust_level;
+#[cfg(feature = "uniffi")]
+pub mod uniffi_types;
 mod validate;
 mod validator_set;
 
@@ -43,5 +45,13 @@ pub use crate::share::*;
 pub use crate::sync::*;
 pub use crate::validate::*;
 
+// `uniffi::use_remote_type` macro seems a bit limited in that it works correctly only
+// for types that are exported in the root of the crate
+#[cfg(feature = "uniffi")]
+pub use crate::hash::Hash;
+
 #[cfg(all(test, target_arch = "wasm32"))]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();
