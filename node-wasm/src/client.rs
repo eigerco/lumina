@@ -52,8 +52,8 @@ pub struct WasmNodeConfig {
 
     /// Pruning window defines maximum age of a block for it to be retained in store.
     ///
-    /// If pruning window is smaller than sampling window then blocks will be pruned
-    /// exactly after they get sampled. This is useful when you want to keep low
+    /// If pruning window is smaller than sampling window, then blocks will be pruned
+    /// right after they are sampled. This is useful when you want to keep low
     /// memory footprint but still validate the blockchain.
     ///
     /// If this is not set, then default value will apply:
