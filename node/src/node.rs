@@ -364,7 +364,11 @@ where
         Ok(self.p2p().get_row(row_index, block_height, timeout).await?)
     }
 
+    // TODO: Fix the storage cleanup after calling this method.
     /// Request a verified [`Sample`] from the network.
+    ///
+    /// Samples retrieved from this method will be stored in blockstore and never
+    /// cleared.
     ///
     /// # Errors
     ///
