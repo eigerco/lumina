@@ -280,7 +280,7 @@ pub enum NodeEvent {
     PrunedHeaders {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
     },
 
