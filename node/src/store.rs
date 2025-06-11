@@ -251,7 +251,7 @@ impl SamplingMetadata {
 
 #[derive(Message)]
 struct RawSamplingMetadata {
-    // Tags 1 and 3 are reseerved because they were used in previous versions
+    // Tags 1 and 3 are reserved because they were used in previous versions
     // of this struct.
     #[prost(message, repeated, tag = "2")]
     cids: Vec<Vec<u8>>,
