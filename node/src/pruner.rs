@@ -264,7 +264,7 @@ where
         Ok(())
     }
 
-    /// Returns a batch of at most 512 blocks that are needed to be pruned.
+    /// Returns a batch of at most 512 blocks that are need to be pruned.
     async fn get_next_prunable_batch(
         &mut self,
         sampling_cutoff: Time,
