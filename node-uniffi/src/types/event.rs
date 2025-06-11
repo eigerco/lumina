@@ -62,7 +62,7 @@ pub enum NodeEvent {
         /// The coordinates of the shares that will be sampled.
         shares: Vec<ShareCoordinate>,
     },
-    /// A share was sampled.
+    /// Share sampling result.
     ShareSamplingResult {
         /// The block height of the share.
         height: u64,
@@ -72,15 +72,15 @@ pub enum NodeEvent {
         row: u16,
         /// The column of the share.
         column: u16,
-        /// The result of the sampling of the share.
-        accepted: bool,
+        /// Share sampling timed out.
+        timed_out: bool,
     },
-    /// Sampling just finished.
-    SamplingFinished {
+    /// Sampling result.
+    SamplingResult {
         /// The block height that was sampled.
         height: u64,
-        /// The overall result of the sampling.
-        accepted: bool,
+        /// Sampling timed out.
+        timed_out: bool,
         /// How much time sampling took in milliseconds.
         took_ms: u64,
     },
@@ -107,14 +107,14 @@ pub enum NodeEvent {
     FetchingHeadersStarted {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
     },
     /// Fetching headers of a specific block range just finished.
     FetchingHeadersFinished {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
         /// How much time fetching took in milliseconds.
         took_ms: u64,
@@ -123,7 +123,7 @@ pub enum NodeEvent {
     FetchingHeadersFailed {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
         /// A human readable error.
         error: String,
@@ -135,9 +135,11 @@ pub enum NodeEvent {
         /// A human readable error.
         error: String,
     },
-    /// Pruned headers up to and including specified height.
+    /// Range of headers that were pruned.
     PrunedHeaders {
-        /// Last header height that was pruned
+        /// Start of the range.
+        from_height: u64,
+        /// End of the range (inclusive).
         to_height: u64,
     },
     /// Pruning fatal error.
@@ -185,21 +187,21 @@ impl From<LuminaNodeEvent> for NodeEvent {
                 square_width,
                 row,
                 column,
-                accepted,
+                timed_out,
             } => NodeEvent::ShareSamplingResult {
                 height,
                 square_width,
                 row,
                 column,
-                accepted,
+                timed_out,
             },
-            LuminaNodeEvent::SamplingFinished {
+            LuminaNodeEvent::SamplingResult {
                 height,
-                accepted,
+                timed_out,
                 took,
-            } => NodeEvent::SamplingFinished {
+            } => NodeEvent::SamplingResult {
                 height,
-                accepted,
+                timed_out,
                 took_ms: took.as_millis() as u64,
             },
             LuminaNodeEvent::FatalDaserError { error } => NodeEvent::FatalDaserError { error },
@@ -241,7 +243,13 @@ impl From<LuminaNodeEvent> for NodeEvent {
                 took_ms: took.as_millis() as u64,
             },
             LuminaNodeEvent::FatalSyncerError { error } => NodeEvent::FatalSyncerError { error },
-            LuminaNodeEvent::PrunedHeaders { to_height } => NodeEvent::PrunedHeaders { to_height },
+            LuminaNodeEvent::PrunedHeaders {
+                from_height,
+                to_height,
+            } => NodeEvent::PrunedHeaders {
+                from_height,
+                to_height,
+            },
             LuminaNodeEvent::FatalPrunerError { error } => NodeEvent::FatalPrunerError { error },
             LuminaNodeEvent::NetworkCompromised => NodeEvent::NetworkCompromised,
             LuminaNodeEvent::NodeStopped => NodeEvent::NodeStopped,
