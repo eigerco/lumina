@@ -114,39 +114,39 @@ mod tests {
     use celestia_types::{
         nmt::Namespace, row::RowId, row_namespace_data::RowNamespaceDataId, sample::SampleId,
     };
-    use cid::CidGeneric;
     use lumina_utils::test_utils::async_test;
-
-    use crate::p2p::shwap::convert_cid;
 
     use super::InMemoryBlockstore;
 
     #[async_test]
     async fn should_only_store_samples() {
+        macro_rules! cid {
+            ($bytes:expr) => {
+                ::cid::CidGeneric::try_from($bytes).unwrap()
+            };
+            ($id:ty, $($args:expr),+ $(,)?) => {
+                $crate::p2p::shwap::convert_cid(
+                    &<$id>::new($($args),+).unwrap().into()
+                )
+                .unwrap()
+            };
+        }
+
         let blockstore = InMemoryBlockstore::new();
 
         let sample_cids = [
-            convert_cid(&SampleId::new(1, 2, 3).unwrap().into()).unwrap(),
-            convert_cid(&SampleId::new(1111, 232, 33).unwrap().into()).unwrap(),
-            convert_cid(&SampleId::new(123, 1, 888888888).unwrap().into()).unwrap(),
+            cid!(SampleId, 1, 2, 3),
+            cid!(SampleId, 1111, 232, 33),
+            cid!(SampleId, 123, 1, 888888888),
         ];
 
         let non_sample_cids = [
-            convert_cid(&RowId::new(1, 1737).unwrap().into()).unwrap(),
-            convert_cid(&RowId::new(8812, 193139).unwrap().into()).unwrap(),
-            convert_cid(
-                &RowNamespaceDataId::new(Namespace::new_v0(b"foo").unwrap(), 15, 12310)
-                    .unwrap()
-                    .into(),
-            )
-            .unwrap(),
-            convert_cid(
-                &RowNamespaceDataId::new(Namespace::new_v0(b"bar").unwrap(), 1, 1)
-                    .unwrap()
-                    .into(),
-            )
-            .unwrap(),
-            CidGeneric::try_from([1; 64].as_ref()).unwrap(),
+            cid!(RowId, 1, 1737),
+            cid!(RowId, 8812, 193139),
+            cid!(RowNamespaceDataId, Namespace::new_v0(b"a").unwrap(), 15, 12),
+            cid!(RowNamespaceDataId, Namespace::new_v0(b"z").unwrap(), 1, 1),
+            cid!([1; 64].as_ref()),
+            cid!([[1].as_ref(), &[243; 63]].concat()),
         ];
 
         for cid in sample_cids.iter().chain(non_sample_cids.iter()) {
