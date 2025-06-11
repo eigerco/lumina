@@ -52,7 +52,7 @@ pub(crate) struct Params {
     #[clap(value_parser = parse_duration::parse)]
     pub(crate) sampling_window: Option<Duration>,
 
-    /// Pruning window defines maximum age of a block considered to be keeped in store.
+    /// Pruning window defines maximum age of a block for it to be retained in store.
     #[arg(long)]
     #[clap(value_parser = parse_duration::parse)]
     pub(crate) pruning_window: Option<Duration>,
