@@ -1,7 +1,5 @@
 //! Blockstore types aliases with lumina specific constants.
 
-use std::path::Path;
-
 use blockstore::{Blockstore, Result};
 use celestia_types::sample::SAMPLE_ID_CODEC;
 use cid::CidGeneric;
@@ -57,7 +55,7 @@ impl SampleBlockstore<blockstore::RedbBlockstore> {
     }
 
     /// Open a persistent [`RedbBlockstore`]
-    pub async fn open(path: impl AsRef<Path>) -> Result<Self> {
+    pub async fn open(path: impl AsRef<std::path::Path>) -> Result<Self> {
         Ok(Self {
             blockstore: blockstore::RedbBlockstore::open(path).await?,
         })
