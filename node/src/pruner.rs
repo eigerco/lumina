@@ -59,7 +59,7 @@ where
     pub blockstore: Arc<B>,
     /// Event publisher.
     pub event_pub: EventPublisher,
-    /// After how much time a new block is produced.
+    /// Average block production interval.
     pub block_time: Duration,
     /// Size of pruning window
     pub pruning_window: Duration,
