@@ -244,7 +244,7 @@ pub enum NodeEvent {
     FetchingHeadersStarted {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
     },
 
@@ -252,7 +252,7 @@ pub enum NodeEvent {
     FetchingHeadersFinished {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
         /// How much time fetching took.
         took: Duration,
@@ -262,7 +262,7 @@ pub enum NodeEvent {
     FetchingHeadersFailed {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
         /// A human readable error.
         error: String,

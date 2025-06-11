@@ -72,7 +72,7 @@ pub enum NodeEvent {
         row: u16,
         /// The column of the share.
         column: u16,
-        /// Sampling of the share timed out.
+        /// Share sampling timed out.
         timed_out: bool,
     },
     /// Sampling result.
@@ -107,14 +107,14 @@ pub enum NodeEvent {
     FetchingHeadersStarted {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
     },
     /// Fetching headers of a specific block range just finished.
     FetchingHeadersFinished {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
         /// How much time fetching took in milliseconds.
         took_ms: u64,
@@ -123,7 +123,7 @@ pub enum NodeEvent {
     FetchingHeadersFailed {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
         /// A human readable error.
         error: String,
