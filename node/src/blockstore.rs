@@ -1,5 +1,7 @@
 //! Blockstore types aliases with lumina specific constants.
 
+use std::path::Path;
+
 use blockstore::{Blockstore, Result};
 use celestia_types::sample::SAMPLE_ID_CODEC;
 use cid::CidGeneric;
@@ -28,6 +30,13 @@ pub struct SampleBlockstore<B> {
     blockstore: B,
 }
 
+impl<B> SampleBlockstore<B> {
+    /// Extract the underlying blockstore
+    pub fn into_inner(self) -> B {
+        self.blockstore
+    }
+}
+
 impl SampleBlockstore<blockstore::InMemoryBlockstore<MAX_MH_SIZE>> {
     /// Create a new [`InMemoryBlockstore`]
     #[allow(clippy::new_without_default)]
@@ -45,6 +54,20 @@ impl SampleBlockstore<blockstore::RedbBlockstore> {
         Self {
             blockstore: blockstore::RedbBlockstore::new(db),
         }
+    }
+
+    /// Open a persistent [`RedbBlockstore`]
+    pub async fn open(path: impl AsRef<Path>) -> Result<Self> {
+        Ok(Self {
+            blockstore: blockstore::RedbBlockstore::open(path).await?,
+        })
+    }
+
+    /// Open an in memory [`RedbBlockstore`]
+    pub fn in_memory() -> Result<Self> {
+        Ok(Self {
+            blockstore: blockstore::RedbBlockstore::in_memory()?,
+        })
     }
 }
 
