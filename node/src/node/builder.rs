@@ -232,7 +232,7 @@ where
 
     /// Set pruning window.
     ///
-    /// Pruning window defines maximum age of a block considered to be kept in store.
+    /// Pruning window defines maximum age of a block for it to be retained in store.
     ///
     /// If pruning window is smaller than sampling window then blocks will be pruned
     /// exactly after they get sampled. This is useful when you want to keep low
