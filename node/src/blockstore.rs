@@ -29,6 +29,7 @@ pub struct SampleBlockstore<B> {
 }
 
 impl SampleBlockstore<blockstore::InMemoryBlockstore<MAX_MH_SIZE>> {
+    /// Create a new [`InMemoryBlockstore`]
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
@@ -39,6 +40,7 @@ impl SampleBlockstore<blockstore::InMemoryBlockstore<MAX_MH_SIZE>> {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl SampleBlockstore<blockstore::RedbBlockstore> {
+    /// Create a new [`RedbBlockstore`]
     pub fn new(db: std::sync::Arc<redb::Database>) -> Self {
         Self {
             blockstore: blockstore::RedbBlockstore::new(db),
@@ -48,6 +50,7 @@ impl SampleBlockstore<blockstore::RedbBlockstore> {
 
 #[cfg(target_arch = "wasm32")]
 impl SampleBlockstore<blockstore::IndexedDbBlockstore> {
+    /// Create a new [`IndexedDbBlockstore`]
     pub async fn new(name: &str) -> Result<Self> {
         Ok(Self {
             blockstore: blockstore::IndexedDbBlockstore::new(name).await?,
