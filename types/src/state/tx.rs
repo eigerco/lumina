@@ -20,10 +20,7 @@ use crate::state::bit_array::BitVector;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 use crate::state::bit_array::JsBitVector;
 use crate::state::Address;
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-use crate::state::Bech32Address;
-use crate::Error;
-use crate::Height;
+use crate::{Error, Height};
 
 pub use celestia_proto::cosmos::base::abci::v1beta1::TxResponse as RawTxResponse;
 pub use celestia_proto::cosmos::base::v1beta1::Coin as RawCoin;
@@ -467,15 +464,15 @@ impl Fee {
     /// the payer must be a tx signer (and thus have signed this field in AuthInfo).
     /// setting this field does *not* change the ordering of required signers for the transaction.
     #[wasm_bindgen(getter)]
-    pub fn payer(&self) -> Option<Bech32Address> {
-        self.payer.as_ref().map(Into::into)
+    pub fn payer(&self) -> Option<String> {
+        self.payer.as_ref().map(|a| a.to_string())
     }
     /// if set, the fee payer (either the first signer or the value of the payer field) requests that a fee grant be used
     /// to pay fees instead of the fee payer's own balance. If an appropriate fee grant does not exist or the chain does
     /// not support fee grants, this will fail
     #[wasm_bindgen(getter)]
-    pub fn granter(&self) -> Option<Bech32Address> {
-        self.granter.as_ref().map(Into::into)
+    pub fn granter(&self) -> Option<String> {
+        self.granter.as_ref().map(|a| a.to_string())
     }
 }
 

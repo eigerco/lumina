@@ -1,3 +1,7 @@
+//! Platform wrappers for tendermint's [`Signature`]
+//!
+//! [`Signature`]: tendermint::signature::Signature
+
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 pub use wbg::*;
 
@@ -24,6 +28,7 @@ mod wbg {
     }
 }
 
+/// uniffi conversion types
 #[cfg(feature = "uniffi")]
 pub mod uniffi_types {
     use tendermint::signature::Signature as TendermintSignature;

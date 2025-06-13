@@ -283,29 +283,7 @@ fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
     Ok((kind, Id::new(bytes)))
 }
 
-#[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen)]
-pub struct Bech32Address(String);
-
-impl From<Address> for Bech32Address {
-    fn from(value: Address) -> Self {
-        Bech32Address(address_to_string(&value))
-    }
-}
-
-impl From<&Address> for Bech32Address {
-    fn from(value: &Address) -> Self {
-        Bech32Address(address_to_string(value))
-    }
-}
-
-impl TryFrom<Bech32Address> for Address {
-    type Error = Error;
-
-    fn try_from(value: Bech32Address) -> Result<Self, Self::Error> {
-        value.0.parse()
-    }
-}
-
+/// uniffi conversion types
 #[cfg(feature = "uniffi")]
 pub(crate) mod uniffi_types {
     use super::{AccAddress, Address as RustAddress, ConsAddress, Id, ValAddress};

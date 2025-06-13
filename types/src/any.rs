@@ -1,3 +1,5 @@
+//! Helpers for dealing with `Any` types conversion
+
 use prost::Name;
 use tendermint_proto::google::protobuf::Any;
 
@@ -74,6 +76,7 @@ mod wbg {
     }
 }
 
+/// uniffi conversion types
 #[cfg(feature = "uniffi")]
 mod uniffi_types {
     use tendermint_proto::google::protobuf::Any as ProtobufAny;

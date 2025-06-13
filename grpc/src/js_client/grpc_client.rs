@@ -4,7 +4,7 @@ use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::state::auth::JsAuthParams;
 use celestia_types::state::auth::JsBaseAccount;
-use celestia_types::state::{Bech32Address, JsCoin, TxResponse};
+use celestia_types::state::{JsCoin, TxResponse};
 
 use crate::grpc::GetTxResponse;
 use crate::grpc::TxStatusResponse;
@@ -34,8 +34,8 @@ impl GrpcClient {
     }
 
     /// Get account
-    pub async fn get_account(&self, account: Bech32Address) -> Result<JsBaseAccount> {
-        Ok(self.client.get_account(&account.try_into()?).await?.into())
+    pub async fn get_account(&self, account: &str) -> Result<JsBaseAccount> {
+        Ok(self.client.get_account(&account.parse()?).await?.into())
     }
 
     /// Get accounts
@@ -50,19 +50,19 @@ impl GrpcClient {
     }
 
     /// Get balance of coins with given denom
-    pub async fn get_balance(&self, address: Bech32Address, denom: String) -> Result<JsCoin> {
+    pub async fn get_balance(&self, address: &str, denom: String) -> Result<JsCoin> {
         Ok(self
             .client
-            .get_balance(&address.try_into()?, denom)
+            .get_balance(&address.parse()?, denom)
             .await?
             .into())
     }
 
     /// Get balance of all coins
-    pub async fn get_all_balances(&self, address: Bech32Address) -> Result<Vec<JsCoin>> {
+    pub async fn get_all_balances(&self, address: &str) -> Result<Vec<JsCoin>> {
         Ok(self
             .client
-            .get_all_balances(&address.try_into()?)
+            .get_all_balances(&address.parse()?)
             .await?
             .into_iter()
             .map(Into::into)
@@ -70,10 +70,10 @@ impl GrpcClient {
     }
 
     /// Get balance of all spendable coins
-    pub async fn get_spendable_balances(&self, address: Bech32Address) -> Result<Vec<JsCoin>> {
+    pub async fn get_spendable_balances(&self, address: &str) -> Result<Vec<JsCoin>> {
         Ok(self
             .client
-            .get_spendable_balances(&address.try_into()?)
+            .get_spendable_balances(&address.parse()?)
             .await?
             .into_iter()
             .map(Into::into)

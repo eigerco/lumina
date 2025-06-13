@@ -1,3 +1,5 @@
+//! Types relaying malfeasance evidence
+
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 pub use wbg::*;
 
@@ -176,6 +178,7 @@ mod wbg {
     }
 }
 
+/// uniffi conversion types
 #[cfg(feature = "uniffi")]
 pub mod uniffi_types {
     use tendermint::evidence::{

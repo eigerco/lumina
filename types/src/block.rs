@@ -216,6 +216,7 @@ mod wbg {
     }
 }
 
+/// uniffi conversion types
 #[cfg(feature = "uniffi")]
 pub mod uniffi_types {
     use tendermint::block::Height as TendermintHeight;
