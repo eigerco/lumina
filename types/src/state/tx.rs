@@ -268,6 +268,7 @@ pub struct ModeInfo {
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 #[wasm_bindgen]
 impl ModeInfo {
+    /// Return signature mode for the stored signature(s)
     pub fn signature_mode(&self) -> SignatureMode {
         match self.sum {
             Sum::Single { .. } => SignatureMode::Single,

@@ -11,6 +11,7 @@ mod wbg {
     use tendermint::signature::Signature;
     use wasm_bindgen::prelude::*;
 
+    /// Signature
     #[derive(Clone, Debug)]
     #[wasm_bindgen(getter_with_clone, js_name = "Signature")]
     pub struct JsSignature(pub Uint8Array);

@@ -274,7 +274,7 @@ mod wbg {
         #[wasm_bindgen(typescript_type = "PublicKey")]
         pub type JsPublicKey;
 
-        // AuthParams exposed to JS
+        /// AuthParams exposed to JS
         #[wasm_bindgen(typescript_type = "AuthParams")]
         pub type JsAuthParams;
 

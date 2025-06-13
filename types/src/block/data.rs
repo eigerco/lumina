@@ -37,6 +37,7 @@ pub struct Data {
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 #[wasm_bindgen]
 impl Data {
+    /// Transactions
     #[wasm_bindgen(getter)]
     pub fn transactions(&self) -> Vec<Uint8Array> {
         self.txs

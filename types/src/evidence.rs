@@ -13,6 +13,8 @@ mod wbg {
     use crate::signature::JsSignature;
     use crate::validator_set::{JsValidatorInfo, JsValidatorSet};
 
+    /// Votes are signed messages from validators for a particular block which include
+    /// information about the validator signing it.
     #[derive(Clone, Debug)]
     #[wasm_bindgen(getter_with_clone, js_name = "Vote")]
     pub struct JsVote {
@@ -55,10 +57,13 @@ mod wbg {
         }
     }
 
+    /// Types of votes
     #[derive(Clone, Copy, Debug)]
     #[wasm_bindgen(js_name = "VoteType")]
     pub enum JsVoteType {
+        /// Prevote
         Prevote,
+        /// Precommit
         Precommit,
     }
 
@@ -121,17 +126,22 @@ mod wbg {
         pub timestamp: String,
     }
 
+    /// Attack type for the associated evidence
     #[wasm_bindgen(js_name = "AttackType")]
     pub enum JsAttackType {
+        /// Duplicate vote
         DuplicateVote,
+        /// LightClient attack
         LightClient,
     }
 
+    /// Evidence of malfeasance by validators (i.e. signing conflicting votes or light client attack).
     #[wasm_bindgen(js_name = Evidence)]
     pub struct JsEvidence(Evidence);
 
     #[wasm_bindgen]
     impl JsEvidence {
+        /// type of the attack for the provided evidence
         pub fn attack_type(&self) -> JsAttackType {
             match &self.0 {
                 Evidence::DuplicateVote(_) => JsAttackType::DuplicateVote,
@@ -139,7 +149,9 @@ mod wbg {
             }
         }
 
-        pub fn get_duplicate_vote_evidence(&self) -> Option<JsDuplicateVoteEvidence> {
+        /// get duplicate vote evidence, if appropriate type
+        #[wasm_bindgen(getter)]
+        pub fn duplicate_vote_evidence(&self) -> Option<JsDuplicateVoteEvidence> {
             let Evidence::DuplicateVote(e) = &self.0 else {
                 return None;
             };
@@ -152,7 +164,9 @@ mod wbg {
             })
         }
 
-        pub fn get_light_client_attack_evidence(&self) -> Option<JsLightClientAttackEvidence> {
+        /// get light client attack evidence, if appropriate type
+        #[wasm_bindgen(getter)]
+        pub fn light_client_attack_evidence(&self) -> Option<JsLightClientAttackEvidence> {
             let Evidence::LightClientAttack(e) = &self.0 else {
                 return None;
             };
@@ -351,7 +365,9 @@ pub mod uniffi_types {
     #[uniffi::remote(Enum)]
     #[repr(u8)]
     pub enum VoteType {
+        /// Prevote
         Prevote = 1,
+        /// Precommit
         Precommit = 2,
     }
 

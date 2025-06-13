@@ -150,6 +150,8 @@ mod wbg {
         }
     }
 
+    /// CommitSig represents a signature of a validator. It’s a part of the Commit and can
+    /// be used to reconstruct the vote set given the validator set.
     #[derive(Clone, Debug)]
     #[wasm_bindgen(getter_with_clone, js_name = "CommitSig")]
     pub struct JsCommitSig {

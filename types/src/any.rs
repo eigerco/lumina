@@ -48,9 +48,11 @@ mod wbg {
         #[wasm_bindgen(typescript_type = "ProtoAny")]
         pub type JsAny;
 
+        /// Any type URL
         #[wasm_bindgen(method, getter, js_name = typeUrl)]
         pub fn type_url(this: &JsAny) -> String;
 
+        /// Any type value
         #[wasm_bindgen(method, getter, js_name = value)]
         pub fn value(this: &JsAny) -> Vec<u8>;
     }
