@@ -6,8 +6,12 @@ use tendermint::block::{Commit, CommitSig, Header, Id};
 use tendermint::signature::SIGNATURE_LENGTH;
 use tendermint::{chain, evidence, vote, Vote};
 use tendermint_proto::Protobuf;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use wasm_bindgen::prelude::*;
 
 use crate::consts::{genesis::MAX_CHAIN_ID_LEN, version};
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use crate::evidence::JsEvidence;
 use crate::hash::Hash;
 use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
 
@@ -30,17 +34,33 @@ pub type Height = tendermint::block::Height;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(try_from = "RawBlock", into = "RawBlock")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct Block {
     /// Block header
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub header: Header,
 
     /// Transaction data
     pub data: Data,
 
     /// Evidence of malfeasance
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub evidence: evidence::List,
 
     /// Last commit, should be `None` for the initial block.
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub last_commit: Option<Commit>,
 }
 
@@ -268,6 +288,357 @@ fn is_zero(id: &Id) -> bool {
     matches!(id.hash, Hash::None)
         && matches!(id.part_set_header.hash, Hash::None)
         && id.part_set_header.total == 0
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+impl Block {
+    /// Block header
+    #[wasm_bindgen(getter)]
+    pub fn get_header(&self) -> JsHeader {
+        self.header.clone().into()
+    }
+
+    /// Evidence of malfeasance
+    #[wasm_bindgen(getter)]
+    pub fn get_evidence(&self) -> Vec<JsEvidence> {
+        self.evidence
+            .iter()
+            .map(|e| JsEvidence::from(e.clone()))
+            .collect()
+    }
+
+    /// Last commit, should be `None` for the initial block.
+    #[wasm_bindgen(getter)]
+    pub fn get_last_commit(&self) -> Option<JsCommit> {
+        self.last_commit.clone().map(Into::into)
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use wbg::*;
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+mod wbg {
+    use js_sys::Uint8Array;
+    use tendermint::block;
+    use tendermint::block::header::Version;
+    use tendermint::block::parts;
+    use tendermint::block::signed_header::SignedHeader;
+    use tendermint::block::Commit;
+    use tendermint::block::CommitSig;
+    use tendermint::block::Header;
+    use tendermint::vote::{Type as VoteType, Vote};
+    use tendermint::Signature;
+
+    use wasm_bindgen::prelude::*;
+
+    /// Commit contains the justification (ie. a set of signatures) that a block was
+    /// committed by a set of validators.
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone, js_name = "Commit")]
+    pub struct JsCommit {
+        /// Block height
+        pub height: u64,
+        /// Round
+        pub round: u32,
+        /// Block ID
+        pub block_id: JsBlockId,
+        /// Signatures
+        pub signatures: Vec<JsCommitSig>,
+    }
+
+    impl From<Commit> for JsCommit {
+        fn from(value: Commit) -> Self {
+            JsCommit {
+                height: value.height.into(),
+                round: value.round.into(),
+                block_id: value.block_id.into(),
+                signatures: value.signatures.into_iter().map(Into::into).collect(),
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone, js_name = "CommitSig")]
+    pub struct JsCommitSig {
+        /// vote type of a validator
+        pub vote_type: JsCommitVoteType,
+        /// vote, if received
+        pub vote: Option<JsCommitVote>,
+    }
+
+    impl From<CommitSig> for JsCommitSig {
+        fn from(value: CommitSig) -> Self {
+            match value {
+                CommitSig::BlockIdFlagAbsent => JsCommitSig {
+                    vote_type: JsCommitVoteType::BlockIdFlagAbsent,
+                    vote: None,
+                },
+                CommitSig::BlockIdFlagCommit {
+                    validator_address,
+                    timestamp,
+                    signature,
+                } => JsCommitSig {
+                    vote_type: JsCommitVoteType::BlockIdFlagCommit,
+                    vote: Some(JsCommitVote {
+                        validator_address: validator_address.to_string(),
+                        timestamp: timestamp.to_rfc3339(),
+                        signature: signature.map(Into::into),
+                    }),
+                },
+                CommitSig::BlockIdFlagNil {
+                    validator_address,
+                    timestamp,
+                    signature,
+                } => JsCommitSig {
+                    vote_type: JsCommitVoteType::BlockIdFlagNil,
+                    vote: Some(JsCommitVote {
+                        validator_address: validator_address.to_string(),
+                        timestamp: timestamp.to_rfc3339(),
+                        signature: signature.map(Into::into),
+                    }),
+                },
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone, js_name = "Signature")]
+    pub struct JsSignature(pub Uint8Array);
+
+    impl From<Signature> for JsSignature {
+        fn from(value: Signature) -> Self {
+            JsSignature(Uint8Array::from(value.as_bytes()))
+        }
+    }
+
+    impl From<&[u8]> for JsSignature {
+        fn from(value: &[u8]) -> Self {
+            JsSignature(Uint8Array::from(value))
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    #[wasm_bindgen(js_name = "CommitVoteType")]
+    pub enum JsCommitVoteType {
+        /// no vote was received from a validator.
+        BlockIdFlagAbsent,
+        /// voted for the Commit.BlockID.
+        BlockIdFlagCommit,
+        /// voted for nil
+        BlockIdFlagNil,
+    }
+
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone, js_name = "CommitVote")]
+    pub struct JsCommitVote {
+        pub validator_address: String,
+        pub timestamp: String,
+        pub signature: Option<JsSignature>,
+    }
+
+    /// Version contains the protocol version for the blockchain and the application.
+    #[derive(Clone, Copy, Debug)]
+    #[wasm_bindgen(js_name = "ProtocolVersion")]
+    pub struct JsProtocolVersion {
+        /// blockchain version
+        pub block: u64,
+        /// app version
+        pub app: u64,
+    }
+
+    impl From<Version> for JsProtocolVersion {
+        fn from(value: Version) -> Self {
+            JsProtocolVersion {
+                block: value.block,
+                app: value.app,
+            }
+        }
+    }
+    /// Block parts header
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone, js_name = "PartsHeader")]
+    pub struct JsPartsHeader {
+        /// Number of parts in this block
+        pub total: u32,
+        /// Hash of the parts set header
+        pub hash: String,
+    }
+
+    impl From<parts::Header> for JsPartsHeader {
+        fn from(value: parts::Header) -> Self {
+            JsPartsHeader {
+                total: value.total,
+                hash: value.hash.to_string(),
+            }
+        }
+    }
+
+    /// Block identifiers which contain two distinct Merkle roots of the block, as well as the number of parts in the block.
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone, js_name = "BlockId")]
+    pub struct JsBlockId {
+        /// The block’s main hash is the Merkle root of all the fields in the block header.
+        pub hash: String,
+        /// Parts header (if available) is used for secure gossipping of the block during
+        /// consensus. It is the Merkle root of the complete serialized block cut into parts.
+        ///
+        /// PartSet is used to split a byteslice of data into parts (pieces) for transmission.
+        /// By splitting data into smaller parts and computing a Merkle root hash on the list,
+        /// you can verify that a part is legitimately part of the complete data, and the part
+        /// can be forwarded to other peers before all the parts are known. In short, it’s
+        /// a fast way to propagate a large file over a gossip network.
+        ///
+        /// <https://github.com/tendermint/tendermint/wiki/Block-Structure#partset>
+        ///
+        /// PartSetHeader in protobuf is defined as never nil using the gogoproto annotations.
+        /// This does not translate to Rust, but we can indicate this in the domain type.
+        pub part_set_header: JsPartsHeader,
+    }
+
+    impl From<block::Id> for JsBlockId {
+        fn from(value: block::Id) -> Self {
+            JsBlockId {
+                hash: value.hash.to_string(),
+                part_set_header: value.part_set_header.into(),
+            }
+        }
+    }
+
+    /// Block Header values contain metadata about the block and about the consensus,
+    /// as well as commitments to the data in the current block, the previous block,
+    /// and the results returned by the application.
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone, js_name = "Header")]
+    pub struct JsHeader {
+        /// Header version
+        pub version: JsProtocolVersion,
+        /// Chain ID
+        pub chain_id: String,
+        /// Current block height
+        pub height: u64,
+        /// Current timestamp encoded as rfc3339
+        pub time: String,
+        /// Previous block info
+        pub last_block_id: Option<JsBlockId>,
+        /// Commit from validators from the last block
+        pub last_commit_hash: Option<String>,
+        /// Merkle root of transaction hashes
+        pub data_hash: Option<String>,
+        /// Validators for the current block
+        pub validators_hash: String,
+        /// Validators for the next block
+        pub next_validators_hash: String,
+        /// Consensus params for the current block
+        pub consensus_hash: String,
+        /// State after txs from the previous block
+        pub app_hash: String,
+        /// Root hash of all results from the txs from the previous block
+        pub last_results_hash: Option<String>,
+        /// Hash of evidence included in the block
+        pub evidence_hash: Option<String>,
+        /// Original proposer of the block
+        pub proposer_address: String,
+    }
+
+    impl From<Header> for JsHeader {
+        fn from(value: Header) -> Self {
+            JsHeader {
+                version: value.version.into(),
+                chain_id: value.chain_id.to_string(),
+                height: value.height.value(),
+                time: value.time.to_rfc3339(),
+                last_block_id: value.last_block_id.map(Into::into),
+                last_commit_hash: value.last_commit_hash.map(|h| h.to_string()),
+                data_hash: value.data_hash.map(|h| h.to_string()),
+                validators_hash: value.validators_hash.to_string(),
+                next_validators_hash: value.next_validators_hash.to_string(),
+                consensus_hash: value.consensus_hash.to_string(),
+                app_hash: value.app_hash.to_string(),
+                last_results_hash: value.last_results_hash.map(|h| h.to_string()),
+                evidence_hash: value.evidence_hash.map(|h| h.to_string()),
+                proposer_address: value.proposer_address.to_string(),
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    #[wasm_bindgen(js_name = "VoteType")]
+    pub enum JsVoteType {
+        Prevote,
+        Precommit,
+    }
+
+    impl From<VoteType> for JsVoteType {
+        fn from(value: VoteType) -> Self {
+            match value {
+                VoteType::Prevote => JsVoteType::Prevote,
+                VoteType::Precommit => JsVoteType::Precommit,
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone, js_name = "Vote")]
+    pub struct JsVote {
+        /// Type of vote (prevote or precommit)
+        pub vote_type: JsVoteType,
+        /// Block height
+        pub height: u64,
+        /// Round
+        pub round: u32,
+        /// Block ID
+        pub block_id: Option<JsBlockId>,
+        /// Timestamp
+        pub timestamp: Option<String>,
+        /// Validator address
+        pub validator_address: String,
+        /// Validator index
+        pub validator_index: u32,
+        /// Signature
+        pub signature: Option<JsSignature>,
+        /// Vote extension provided by the application. Only valid for precommit messages.
+        pub extension: Vec<u8>,
+        /// Vote extension signature by the validator Only valid for precommit messages.
+        pub extension_signature: Option<JsSignature>,
+    }
+
+    impl From<Vote> for JsVote {
+        fn from(value: Vote) -> Self {
+            JsVote {
+                vote_type: value.vote_type.into(),
+                height: value.height.value(),
+                round: value.round.into(),
+                block_id: value.block_id.map(Into::into),
+                timestamp: value.timestamp.map(|ts| ts.to_rfc3339()),
+                validator_address: value.validator_address.to_string(),
+                validator_index: value.validator_index.into(),
+                signature: value.signature.map(Into::into),
+                extension: value.extension,
+                extension_signature: value.extension_signature.map(Into::into),
+            }
+        }
+    }
+
+    /// Signed block headers
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone, js_name = "SignedHeader")]
+    pub struct JsSignedHeader {
+        /// Signed block headers
+        pub header: JsHeader,
+        /// Commit containing signatures for the header
+        pub commit: JsCommit,
+    }
+
+    impl From<SignedHeader> for JsSignedHeader {
+        fn from(value: SignedHeader) -> Self {
+            JsSignedHeader {
+                header: value.header.into(),
+                commit: value.commit.into(),
+            }
+        }
+    }
 }
 
 /// uniffi types

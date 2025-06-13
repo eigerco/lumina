@@ -1,3 +1,6 @@
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use wasm_bindgen::prelude::*;
+
 use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
 use celestia_types::hash::Hash;
 
@@ -15,6 +18,10 @@ pub use celestia_proto::cosmos::tx::v1beta1::BroadcastMode;
 /// Response to GetTx
 #[derive(Debug)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct GetTxResponse {
     /// Response Transaction
     pub tx: Tx,
@@ -88,5 +95,51 @@ impl IntoGrpcParam<SimulateRequest> for Vec<u8> {
 impl FromGrpcResponse<GasInfo> for SimulateResponse {
     fn try_from_response(self) -> Result<GasInfo> {
         self.gas_info.ok_or(Error::FailedToParseResponse)
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use wbg::*;
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+mod wbg {
+    use super::BroadcastMode;
+    use wasm_bindgen::prelude::*;
+
+    #[wasm_bindgen]
+    pub enum JsBroadcastMode {
+        /// zero-value for mode ordering
+        Unspecified = 0,
+        /// BROADCAST_MODE_BLOCK defines a tx broadcasting mode where the client waits for
+        /// the tx to be committed in a block.
+        Block = 1,
+        /// BROADCAST_MODE_SYNC defines a tx broadcasting mode where the client waits for
+        /// a CheckTx execution response only.
+        Sync = 2,
+        /// BROADCAST_MODE_ASYNC defines a tx broadcasting mode where the client returns
+        /// immediately.
+        Async = 3,
+    }
+
+    impl From<BroadcastMode> for JsBroadcastMode {
+        fn from(value: BroadcastMode) -> Self {
+            match value {
+                BroadcastMode::Unspecified => JsBroadcastMode::Unspecified,
+                BroadcastMode::Block => JsBroadcastMode::Block,
+                BroadcastMode::Sync => JsBroadcastMode::Sync,
+                BroadcastMode::Async => JsBroadcastMode::Async,
+            }
+        }
+    }
+
+    impl From<JsBroadcastMode> for BroadcastMode {
+        fn from(value: JsBroadcastMode) -> Self {
+            match value {
+                JsBroadcastMode::Unspecified => BroadcastMode::Unspecified,
+                JsBroadcastMode::Block => BroadcastMode::Block,
+                JsBroadcastMode::Sync => BroadcastMode::Sync,
+                JsBroadcastMode::Async => BroadcastMode::Async,
+            }
+        }
     }
 }

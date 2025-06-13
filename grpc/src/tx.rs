@@ -10,10 +10,12 @@ pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
+use celestia_types::state::auth::Account;
 use celestia_types::state::auth::BaseAccount;
 use celestia_types::state::{
     Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
 };
+use celestia_types::wasm_types::IntoAny;
 use celestia_types::{AppVersion, Height};
 use http_body::Body;
 use k256::ecdsa::signature::{Error as SignatureError, Signer};
@@ -28,7 +30,7 @@ use tokio::sync::{Mutex, MutexGuard};
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
 
-use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxStatus};
+use crate::grpc::{BroadcastMode, GrpcClient, StdError, TxStatus};
 use crate::{Error, Result};
 
 #[cfg(feature = "uniffi")]
@@ -466,24 +468,6 @@ where
     async fn try_sign(&self, doc: SignDoc) -> Result<Signature, SignatureError> {
         let bytes = doc.encode_to_vec();
         self.try_sign(&bytes)
-    }
-}
-
-/// Value convertion into protobuf's Any
-pub trait IntoAny {
-    /// Converts itself into protobuf's Any type
-    fn into_any(self) -> Any;
-}
-
-impl<T> IntoAny for T
-where
-    T: Name,
-{
-    fn into_any(self) -> Any {
-        Any {
-            type_url: T::type_url(),
-            value: self.encode_to_vec(),
-        }
     }
 }
 

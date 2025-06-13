@@ -23,6 +23,49 @@ impl HashExt for Hash {
     }
 }
 
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use wbg::*;
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+mod wbg {
+    use super::Hash;
+    use js_sys::Uint8Array;
+    use tendermint::hash::{Algorithm, SHA256_HASH_SIZE};
+
+    /// Hash digest
+    pub struct JsHash {
+        /// Sha256 or empty hash
+        hash: Option<Uint8Array>,
+    }
+
+    impl From<Hash> for JsHash {
+        fn from(value: Hash) -> Self {
+            match value {
+                Hash::None => JsHash { hash: None },
+                Hash::Sha256(digest) => {
+                    let array = Uint8Array::new_with_length(
+                        SHA256_HASH_SIZE.try_into().expect("valid hash size"),
+                    );
+                    array.copy_from(&digest);
+                    JsHash { hash: Some(array) }
+                }
+            }
+        }
+    }
+
+    impl TryFrom<JsHash> for Hash {
+        type Error = tendermint::Error;
+
+        fn try_from(value: JsHash) -> Result<Self, Self::Error> {
+            let Some(digest) = value.hash else {
+                return Ok(Hash::None);
+            };
+
+            Hash::from_bytes(Algorithm::Sha256, &digest.to_vec())
+        }
+    }
+}
+
 /// uniffi conversion types
 #[cfg(feature = "uniffi")]
 pub mod uniffi_types {

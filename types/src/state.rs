@@ -9,7 +9,9 @@ mod tx;
 
 #[cfg(feature = "uniffi")]
 pub use self::address::uniffi_types::AccountId as UniffiAccountId;
-pub use self::address::{AccAddress, Address, AddressKind, AddressTrait, ConsAddress, ValAddress};
+pub use self::address::{
+    AccAddress, Address, AddressKind, AddressTrait, Bech32Address, ConsAddress, ValAddress,
+};
 pub use self::balance::Balance;
 pub use self::query_delegation::{
     QueryDelegationResponse, QueryRedelegationsResponse, QueryUnbondingDelegationResponse,

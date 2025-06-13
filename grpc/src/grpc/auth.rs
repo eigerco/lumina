@@ -2,47 +2,13 @@ use celestia_proto::cosmos::auth::v1beta1::{
     QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
     QueryParamsRequest as QueryAuthParamsRequest, QueryParamsResponse as QueryAuthParamsResponse,
 };
-use celestia_types::state::auth::{
-    AuthParams, BaseAccount, ModuleAccount, RawBaseAccount, RawModuleAccount,
-};
+use celestia_types::state::auth::{Account, AuthParams, RawBaseAccount, RawModuleAccount};
 use celestia_types::state::Address;
 use prost::{Message, Name};
 use tendermint_proto::google::protobuf::Any;
 
 use crate::grpc::{make_empty_params, FromGrpcResponse, IntoGrpcParam};
 use crate::{Error, Result};
-
-// TODO: move this stuff to types similarly to address
-//       + add vesting accounts
-/// Enum representing different types of account
-#[derive(Debug, PartialEq)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-pub enum Account {
-    /// Base account type
-    Base(BaseAccount),
-    /// Account for modules that holds coins on a pool
-    Module(ModuleAccount),
-}
-
-impl std::ops::Deref for Account {
-    type Target = BaseAccount;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Account::Base(base) => base,
-            Account::Module(module) => &module.base_account,
-        }
-    }
-}
-
-impl std::ops::DerefMut for Account {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            Account::Base(base) => base,
-            Account::Module(module) => &mut module.base_account,
-        }
-    }
-}
 
 impl FromGrpcResponse<AuthParams> for QueryAuthParamsResponse {
     fn try_from_response(self) -> Result<AuthParams> {
@@ -107,34 +73,13 @@ pub use wbg::*;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod wbg {
     use celestia_types::state::auth::AuthParams;
-    use js_sys::{BigInt, Uint8Array};
-    use tendermint::PublicKey;
+    use js_sys::BigInt;
     use wasm_bindgen::{prelude::*, JsCast};
 
     use crate::utils::make_object;
 
-    use super::Account;
-
     #[wasm_bindgen(typescript_custom_section)]
     const _: &str = r#"
-    /**
-     * Public key
-     */
-    export interface PublicKey {
-      type: "ed25519" | "secp256k1",
-      value: Uint8Array
-    }
-
-    /**
-     * Common data of all account types
-     */
-    export interface BaseAccount {
-      address: string,
-      pubkey?: PublicKey,
-      accountNumber: bigint,
-      sequence: bigint
-    }
-
     /**
      * Auth module parameters
      */
@@ -149,46 +94,9 @@ mod wbg {
 
     #[wasm_bindgen]
     extern "C" {
-        /// Public key exposed to javascript.
-        #[wasm_bindgen(typescript_type = "PublicKey")]
-        pub type JsPublicKey;
-
-        /// BaseAccount exposed to javascript.
-        #[wasm_bindgen(typescript_type = "BaseAccount")]
-        pub type JsBaseAccount;
-
         /// AuthParams exposed to javascript.
         #[wasm_bindgen(typescript_type = "AuthParams")]
         pub type JsAuthParams;
-    }
-
-    impl From<PublicKey> for JsPublicKey {
-        fn from(value: PublicKey) -> JsPublicKey {
-            let algo = match value {
-                PublicKey::Ed25519(..) => "ed25519",
-                PublicKey::Secp256k1(..) => "secp256k1",
-                _ => unreachable!("unsupported pubkey algo found"),
-            };
-            let obj = make_object!(
-                "type" => algo.into(),
-                "value" => Uint8Array::from(value.to_bytes().as_ref())
-            );
-
-            obj.unchecked_into()
-        }
-    }
-
-    impl From<Account> for JsBaseAccount {
-        fn from(value: Account) -> JsBaseAccount {
-            let obj = make_object!(
-                "address" => value.address.to_string().into(),
-                "pubkey" => value.pub_key.map(JsPublicKey::from).into(),
-                "accountNumber" => BigInt::from(value.account_number),
-                "sequence" => BigInt::from(value.sequence)
-            );
-
-            obj.unchecked_into()
-        }
     }
 
     impl From<AuthParams> for JsAuthParams {

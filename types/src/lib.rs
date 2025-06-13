@@ -8,6 +8,7 @@ pub mod consts;
 mod data_availability_header;
 pub mod eds;
 mod error;
+pub mod evidence;
 mod extended_header;
 pub mod fraud_proof;
 pub mod hash;
@@ -31,6 +32,8 @@ pub mod trust_level;
 pub mod uniffi_types;
 mod validate;
 mod validator_set;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub mod wasm_types;
 
 pub use crate::blob::{Blob, Commitment};
 pub use crate::block::Height;

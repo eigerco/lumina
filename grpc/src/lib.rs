@@ -11,7 +11,8 @@ mod utils;
 
 pub use crate::error::{Error, Result};
 pub use crate::grpc::GrpcClient;
-pub use crate::tx::{DocSigner, IntoAny, SignDoc, TxClient, TxConfig};
+pub use crate::tx::{DocSigner, SignDoc, TxClient, TxConfig};
+pub use celestia_types::wasm_types::IntoAny;
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();

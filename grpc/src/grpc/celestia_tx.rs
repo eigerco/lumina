@@ -1,6 +1,9 @@
 use std::fmt;
 use std::str::FromStr;
 
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use wasm_bindgen::prelude::*;
+
 use celestia_proto::celestia::core::v1::tx::{
     TxStatusRequest as RawTxStatusRequest, TxStatusResponse as RawTxStatusResponse,
 };
@@ -17,8 +20,13 @@ uniffi::use_remote_type!(celestia_types::Height);
 /// Response to a tx status query
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct TxStatusResponse {
     /// Height of the block in which the transaction was committed.
+    #[wasm_bindgen(skip)]
     pub height: Height,
     /// Index of the transaction in block.
     pub index: u32,
@@ -35,6 +43,7 @@ pub struct TxStatusResponse {
 /// Represents state of the transaction in the mempool
 #[derive(Debug, Copy, Clone)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(all(target_arch = "wasm32", feature = "wasm-bindgen"), wasm_bindgen)]
 pub enum TxStatus {
     /// The transaction is not known to the node, it could be never sent.
     Unknown,
@@ -69,6 +78,16 @@ impl FromStr for TxStatus {
             "COMMITTED" => Ok(TxStatus::Committed),
             _ => Err(Error::FailedToParseResponse),
         }
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+impl TxStatusResponse {
+    /// Height of the block in which the transaction was committed.
+    #[wasm_bindgen(getter)]
+    pub fn height(&self) -> u64 {
+        self.height.value()
     }
 }
 
