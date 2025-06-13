@@ -1,6 +1,10 @@
 use celestia_proto::tendermint_celestia_mods::types::Data as RawData;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use js_sys::Uint8Array;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use wasm_bindgen::prelude::*;
 
 use crate::Error;
 
@@ -9,8 +13,16 @@ use crate::Error;
 /// [`Block`]: crate::block::Block
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(try_from = "RawData", into = "RawData")]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct Data {
     /// Transactions.
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub txs: Vec<Vec<u8>>,
 
     /// Square width of original data square.
@@ -20,6 +32,19 @@ pub struct Data {
     /// the row and column roots of an extended data square. Hash is often referred
     /// to as the "data root".
     pub hash: Vec<u8>,
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+impl Data {
+    /// Transactions
+    #[wasm_bindgen(getter)]
+    pub fn transactions(&self) -> Vec<Uint8Array> {
+        self.txs
+            .iter()
+            .map(|tx| Uint8Array::from(&tx[..]))
+            .collect()
+    }
 }
 
 impl Protobuf<RawData> for Data {}

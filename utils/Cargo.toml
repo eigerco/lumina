@@ -21,6 +21,7 @@ pin-project = { optional = true, version = "1.1.5" }
 send_wrapper = { optional = true, version = "0.6.0", features = ["futures"] }
 wasm-bindgen-test = { optional = true, workspace = true }
 web-time = { optional = true, version = "1.1.0" }
+js-sys = { optional = true, version = "0.3.77"}
 
 [dev-dependencies]
 web-time = "1.1.0"
@@ -31,3 +32,4 @@ executor = ["token", "dep:tokio-util", "dep:tokio", "dep:wasm-bindgen", "dep:was
 token = ["dep:tokio-util"]
 time = ["dep:gloo-timers", "dep:tokio", "dep:send_wrapper", "dep:futures", "dep:pin-project", "dep:web-time"]
 test-utils = ["dep:wasm-bindgen-test"]
+make-object = ["dep:js-sys"]
