@@ -1,20 +1,20 @@
 use celestia_proto::cosmos::tx::v1beta1::SignDoc;
+use celestia_types::any::JsAny;
 use celestia_types::consts::appconsts::JsAppVersion;
 use celestia_types::state::auth::{JsAuthParams, JsBaseAccount};
-use celestia_types::wasm_types::JsAny;
+use celestia_types::state::JsCoin;
 use celestia_types::Blob;
 use js_sys::{BigInt, Function, Promise, Uint8Array};
 use k256::ecdsa::signature::Error as SignatureError;
 use k256::ecdsa::{Signature, VerifyingKey};
+use lumina_utils::make_object;
 use prost::Message;
 use tonic_web_wasm_client::Client;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 
-use crate::grpc::JsCoin;
 use crate::tx::{DocSigner, JsTxConfig, JsTxInfo};
-use crate::utils::make_object;
 use crate::{Result, TxClient};
 
 /// Celestia grpc transaction client.

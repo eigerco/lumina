@@ -43,8 +43,6 @@ pub use crate::grpc::celestia_tx::{TxStatus, TxStatusResponse};
 pub use crate::grpc::cosmos_tx::{BroadcastMode, GetTxResponse};
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-pub use crate::grpc::bank::JsCoin;
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 pub use crate::grpc::cosmos_tx::JsBroadcastMode;
 
 /// Error convertible to std, used by grpc transports

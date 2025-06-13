@@ -26,7 +26,10 @@ uniffi::use_remote_type!(celestia_types::Height);
 )]
 pub struct TxStatusResponse {
     /// Height of the block in which the transaction was committed.
-    #[wasm_bindgen(skip)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub height: Height,
     /// Index of the transaction in block.
     pub index: u32,

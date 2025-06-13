@@ -4,11 +4,11 @@ use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::state::auth::JsAuthParams;
 use celestia_types::state::auth::JsBaseAccount;
-use celestia_types::state::{Bech32Address, TxResponse};
+use celestia_types::state::{Bech32Address, JsCoin, TxResponse};
 
 use crate::grpc::GetTxResponse;
 use crate::grpc::TxStatusResponse;
-use crate::grpc::{GasInfo, JsBroadcastMode, JsCoin};
+use crate::grpc::{GasInfo, JsBroadcastMode};
 use crate::Result;
 
 type InnerClient = crate::GrpcClient<tonic_web_wasm_client::Client>;
@@ -93,17 +93,17 @@ impl GrpcClient {
 
     /// Get Minimum Gas price
     pub async fn get_min_gas_price(&self) -> Result<f64> {
-        Ok(self.client.get_min_gas_price().await?)
+        self.client.get_min_gas_price().await
     }
 
     /// Get latest block
     pub async fn get_latest_block(&self) -> Result<Block> {
-        Ok(self.client.get_latest_block().await?)
+        self.client.get_latest_block().await
     }
 
     /// Get block by height
     pub async fn get_block_by_height(&self, height: i64) -> Result<Block> {
-        Ok(self.client.get_block_by_height(height).await?)
+        self.client.get_block_by_height(height).await
     }
 
     /// Broadcast prepared and serialised transaction
@@ -112,26 +112,26 @@ impl GrpcClient {
         tx_bytes: Vec<u8>,
         mode: JsBroadcastMode,
     ) -> Result<TxResponse> {
-        Ok(self.client.broadcast_tx(tx_bytes, mode.into()).await?)
+        self.client.broadcast_tx(tx_bytes, mode.into()).await
     }
 
     /// Get Tx
     pub async fn get_tx(&self, hash: &str) -> Result<GetTxResponse> {
-        Ok(self.client.get_tx(hash.parse()?).await?)
+        self.client.get_tx(hash.parse()?).await
     }
 
     /// Simulate prepared and serialised transaction, returning simulated gas usage
     pub async fn simulate(&self, tx_bytes: Vec<u8>) -> Result<GasInfo> {
-        Ok(self.client.simulate(tx_bytes).await?)
+        self.client.simulate(tx_bytes).await
     }
 
     /// Get blob params
     pub async fn get_blob_params(&self) -> Result<BlobParams> {
-        Ok(self.client.get_blob_params().await?)
+        self.client.get_blob_params().await
     }
 
     /// Get status of the transaction
     pub async fn tx_status(&self, hash: &str) -> Result<TxStatusResponse> {
-        Ok(self.client.tx_status(hash.parse()?).await?)
+        self.client.tx_status(hash.parse()?).await
     }
 }

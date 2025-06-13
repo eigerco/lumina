@@ -71,8 +71,9 @@ mod wbg {
 pub mod uniffi_types {
     use super::Hash as TendermintHash;
     use tendermint::hash::Algorithm;
+    use tendermint::hash::AppHash as TendermintAppHash;
 
-    use uniffi::Enum;
+    use uniffi::{Enum, Record};
 
     use crate::error::UniffiConversionError;
 
@@ -115,5 +116,34 @@ pub mod uniffi_types {
         remote,
         try_lift: |value| Ok(value.try_into()?),
         lower: |value| value.into()
+    });
+
+    /// AppHash is usually a SHA256 hash, but in reality it can be any kind of data
+    #[derive(Record)]
+    pub struct AppHash {
+        /// AppHash value
+        pub hash: Vec<u8>,
+    }
+
+    impl TryFrom<AppHash> for TendermintAppHash {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: AppHash) -> Result<Self, Self::Error> {
+            Ok(TendermintAppHash::try_from(value.hash).expect("conversion to be infallible"))
+        }
+    }
+
+    impl From<TendermintAppHash> for AppHash {
+        fn from(value: TendermintAppHash) -> Self {
+            AppHash {
+                hash: value.as_bytes().to_vec(),
+            }
+        }
+    }
+
+    uniffi::custom_type!(TendermintAppHash, AppHash, {
+        remote,
+        try_lift: |value| Ok(value.try_into()?),
+        lower: |value| value.into(),
     });
 }

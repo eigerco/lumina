@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
+pub mod any;
 pub mod blob;
 pub mod block;
 mod byzantine;
@@ -22,6 +23,7 @@ pub mod row_namespace_data;
 pub mod sample;
 pub mod serializers;
 mod share;
+pub mod signature;
 pub mod state;
 mod sync;
 #[cfg(any(test, feature = "test-utils"))]
@@ -32,8 +34,6 @@ pub mod trust_level;
 pub mod uniffi_types;
 mod validate;
 mod validator_set;
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-pub mod wasm_types;
 
 pub use crate::blob::{Blob, Commitment};
 pub use crate::block::Height;

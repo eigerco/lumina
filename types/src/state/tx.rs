@@ -10,18 +10,18 @@ use tendermint_proto::Protobuf;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 use wasm_bindgen::prelude::*;
 
-use crate::bail_validation;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-use crate::block::JsSignature;
+use crate::any::JsAny;
+use crate::bail_validation;
 use crate::hash::Hash;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use crate::signature::JsSignature;
 use crate::state::bit_array::BitVector;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 use crate::state::bit_array::JsBitVector;
 use crate::state::Address;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 use crate::state::Bech32Address;
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-use crate::wasm_types::JsAny;
 use crate::Error;
 use crate::Height;
 
@@ -970,8 +970,12 @@ pub use wbg::*;
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod wbg {
+    use super::Coin;
+    use js_sys::BigInt;
     use tendermint_proto::v0_34::abci::{Event, EventAttribute};
     use wasm_bindgen::prelude::*;
+
+    use lumina_utils::make_object;
 
     #[derive(Clone)]
     #[wasm_bindgen(getter_with_clone)]
@@ -1004,6 +1008,35 @@ mod wbg {
                 value: value.value.to_vec(),
                 index: value.index,
             }
+        }
+    }
+
+    #[wasm_bindgen(typescript_custom_section)]
+    const _: &str = "
+    /**
+     * Coin
+     */
+    export interface Coin {
+      denom: string,
+      amount: bigint
+    }
+    ";
+
+    #[wasm_bindgen]
+    extern "C" {
+        /// Coin exposed to javascript
+        #[wasm_bindgen(typescript_type = "Coin")]
+        pub type JsCoin;
+    }
+
+    impl From<Coin> for JsCoin {
+        fn from(value: Coin) -> JsCoin {
+            let obj = make_object!(
+                "denom" => value.denom.into(),
+                "amount" => BigInt::from(value.amount)
+            );
+
+            obj.unchecked_into()
         }
     }
 }

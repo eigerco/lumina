@@ -7,6 +7,7 @@ use std::time::Duration;
 use bytes::Bytes;
 use celestia_proto::cosmos::crypto::secp256k1;
 pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
+use celestia_types::any::IntoAny;
 use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
@@ -15,7 +16,6 @@ use celestia_types::state::auth::BaseAccount;
 use celestia_types::state::{
     Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
 };
-use celestia_types::wasm_types::IntoAny;
 use celestia_types::{AppVersion, Height};
 use http_body::Body;
 use k256::ecdsa::signature::{Error as SignatureError, Signer};
@@ -513,7 +513,7 @@ mod wbg {
     use wasm_bindgen::{prelude::*, JsCast};
 
     use super::{TxConfig, TxInfo};
-    use crate::utils::make_object;
+    use lumina_utils::make_object;
 
     #[wasm_bindgen(typescript_custom_section)]
     const _: &str = "

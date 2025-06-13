@@ -4,10 +4,70 @@ pub use wbg::*;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod wbg {
     use tendermint::evidence::{ConflictingBlock, Evidence};
+    use tendermint::vote::{Type as VoteType, Vote};
     use wasm_bindgen::prelude::*;
 
-    use crate::block::{JsSignedHeader, JsVote};
+    use crate::block::{JsBlockId, JsSignedHeader};
+    use crate::signature::JsSignature;
     use crate::validator_set::{JsValidatorInfo, JsValidatorSet};
+
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone, js_name = "Vote")]
+    pub struct JsVote {
+        /// Type of vote (prevote or precommit)
+        pub vote_type: JsVoteType,
+        /// Block height
+        pub height: u64,
+        /// Round
+        pub round: u32,
+        /// Block ID
+        pub block_id: Option<JsBlockId>,
+        /// Timestamp
+        pub timestamp: Option<String>,
+        /// Validator address
+        pub validator_address: String,
+        /// Validator index
+        pub validator_index: u32,
+        /// Signature
+        pub signature: Option<JsSignature>,
+        /// Vote extension provided by the application. Only valid for precommit messages.
+        pub extension: Vec<u8>,
+        /// Vote extension signature by the validator Only valid for precommit messages.
+        pub extension_signature: Option<JsSignature>,
+    }
+
+    impl From<Vote> for JsVote {
+        fn from(value: Vote) -> Self {
+            JsVote {
+                vote_type: value.vote_type.into(),
+                height: value.height.value(),
+                round: value.round.into(),
+                block_id: value.block_id.map(Into::into),
+                timestamp: value.timestamp.map(|ts| ts.to_rfc3339()),
+                validator_address: value.validator_address.to_string(),
+                validator_index: value.validator_index.into(),
+                signature: value.signature.map(Into::into),
+                extension: value.extension,
+                extension_signature: value.extension_signature.map(Into::into),
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    #[wasm_bindgen(js_name = "VoteType")]
+    pub enum JsVoteType {
+        Prevote,
+        Precommit,
+    }
+
+    impl From<VoteType> for JsVoteType {
+        fn from(value: VoteType) -> Self {
+            match value {
+                VoteType::Prevote => JsVoteType::Prevote,
+                VoteType::Precommit => JsVoteType::Precommit,
+            }
+        }
+    }
 
     /// Duplicate vote evidence
     #[derive(Clone, Debug)]
@@ -122,11 +182,15 @@ pub mod uniffi_types {
         ConflictingBlock as TendermintConfliclingBlock, DuplicateVoteEvidence,
         Evidence as TendermintEvidence, LightClientAttackEvidence, List as TendermintEvidenceList,
     };
+    use tendermint::vote::{Type as VoteType, Vote as TendermintVote};
     use uniffi::{Enum, Record};
 
-    use crate::block::uniffi_types::SignedHeader;
+    use crate::block::header::uniffi_types::SignedHeader;
+    use crate::block::uniffi_types::{BlockHeight, BlockId};
     use crate::error::UniffiConversionError;
-    use crate::uniffi_types::{Time, Vote};
+    use crate::signature::uniffi_types::Signature;
+    use crate::state::UniffiAccountId;
+    use crate::uniffi_types::Time;
     use crate::validator_set::uniffi_types::{ValidatorInfo, ValidatorSet};
 
     /// Conflicting block detected in light client attack
@@ -279,4 +343,91 @@ pub mod uniffi_types {
             }
         }
     }
+
+    /// Types of votes
+    #[uniffi::remote(Enum)]
+    #[repr(u8)]
+    pub enum VoteType {
+        Prevote = 1,
+        Precommit = 2,
+    }
+
+    /// Votes are signed messages from validators for a particular block which include information
+    /// about the validator signing it.
+    #[derive(Record)]
+    pub struct Vote {
+        /// Type of vote (prevote or precommit)
+        pub vote_type: VoteType,
+        /// Block height
+        pub height: BlockHeight,
+        /// Round
+        pub round: u32,
+        /// Block ID
+        pub block_id: Option<BlockId>,
+        /// Timestamp
+        pub timestamp: Option<Time>,
+        /// Validator address
+        pub validator_address: UniffiAccountId,
+        /// Validator index
+        pub validator_index: u32,
+        /// Signature
+        pub signature: Option<Signature>,
+        /// Vote extension provided by the application. Only valid for precommit messages.
+        pub extension: Vec<u8>,
+        /// Vote extension signature by the validator Only valid for precommit messages.
+        pub extension_signature: Option<Signature>,
+    }
+
+    impl TryFrom<Vote> for TendermintVote {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: Vote) -> Result<Self, Self::Error> {
+            Ok(TendermintVote {
+                vote_type: value.vote_type,
+                height: value.height.try_into()?,
+                round: value
+                    .round
+                    .try_into()
+                    .map_err(|_| UniffiConversionError::InvalidRoundIndex)?,
+                block_id: value.block_id.map(TryInto::try_into).transpose()?,
+                timestamp: value.timestamp.map(TryInto::try_into).transpose()?,
+                validator_address: value.validator_address.try_into()?,
+                validator_index: value
+                    .validator_index
+                    .try_into()
+                    .map_err(|_| UniffiConversionError::InvalidValidatorIndex)?,
+                signature: value.signature.map(TryInto::try_into).transpose()?,
+                extension: value.extension,
+                extension_signature: value
+                    .extension_signature
+                    .map(TryInto::try_into)
+                    .transpose()?,
+            })
+        }
+    }
+
+    impl TryFrom<TendermintVote> for Vote {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: TendermintVote) -> Result<Self, Self::Error> {
+            Ok(Vote {
+                vote_type: value.vote_type,
+                height: value.height.into(),
+                round: value.round.value(),
+                block_id: value.block_id.map(Into::into),
+                timestamp: value.timestamp.map(TryInto::try_into).transpose()?,
+                validator_address: value.validator_address.into(),
+                validator_index: value.validator_index.value(),
+                signature: value.signature.map(Into::into),
+                extension: value.extension,
+                extension_signature: value.extension_signature.map(Into::into),
+            })
+        }
+    }
+
+    uniffi::custom_type!(TendermintVote, Vote, {
+        remote,
+        try_lift: |value| Ok(value.try_into()?),
+        lower: |value| value.try_into().expect("valid tendermint time")
+    });
 }
