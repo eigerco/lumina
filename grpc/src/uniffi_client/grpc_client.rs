@@ -89,17 +89,17 @@ impl GrpcClient {
     }
 
     /// Get Minimum Gas price
-    async fn get_min_gas_price(&self) -> Result<f64> {
+    pub async fn get_min_gas_price(&self) -> Result<f64> {
         Ok(self.client.get_min_gas_price().await?)
     }
 
     /// Get latest block
-    async fn get_latest_block(&self) -> Result<Block> {
+    pub async fn get_latest_block(&self) -> Result<Block> {
         Ok(self.client.get_latest_block().await?)
     }
 
     /// Get block by height
-    async fn get_block_by_height(&self, height: i64) -> Result<Block> {
+    pub async fn get_block_by_height(&self, height: i64) -> Result<Block> {
         Ok(self.client.get_block_by_height(height).await?)
     }
 
@@ -114,17 +114,17 @@ impl GrpcClient {
     }
 
     /// Broadcast prepared and serialised transaction
-    async fn simulate(&self, tx_bytes: Vec<u8>) -> Result<GasInfo> {
+    pub async fn simulate(&self, tx_bytes: Vec<u8>) -> Result<GasInfo> {
         Ok(self.client.simulate(tx_bytes).await?)
     }
 
     /// Get blob params
-    async fn get_blob_params(&self) -> Result<BlobParams> {
+    pub async fn get_blob_params(&self) -> Result<BlobParams> {
         Ok(self.client.get_blob_params().await?)
     }
 
     /// Get status of the transaction
-    async fn tx_status(&self, hash: UniffiHash) -> Result<TxStatusResponse> {
+    pub async fn tx_status(&self, hash: UniffiHash) -> Result<TxStatusResponse> {
         Ok(self.client.tx_status(hash.try_into()?).await?)
     }
 }
