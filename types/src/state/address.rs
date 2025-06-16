@@ -286,12 +286,37 @@ fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
 #[cfg(feature = "uniffi")]
 pub(crate) mod uniffi_types {
     use super::{AccAddress, Address as RustAddress, ConsAddress, Id, ValAddress};
-    use uniffi::{Enum, Record};
+    use uniffi::{Enum, Object, Record};
 
-    use crate::error::UniffiConversionError;
+    use crate::{error::UniffiConversionError, UniffiError};
+
+    #[derive(Object, Clone)]
+    struct AddressObject(Address);
+
+    #[uniffi::export]
+    impl AddressObject {
+        /// Create object-ful Address from record Address
+        #[uniffi::constructor]
+        fn create(address: Address) -> Self {
+            AddressObject(address)
+        }
+
+        /// Create Address from string
+        #[uniffi::constructor]
+        fn create_from_string(string: &str) -> Result<Self, UniffiError> {
+            let address: RustAddress = string.parse()?;
+            Ok(AddressObject(address.into()))
+        }
+
+        /// Return readable representation of the address
+        fn to_string(&self) -> Result<String, UniffiConversionError> {
+            let addr: RustAddress = self.0.clone().try_into()?;
+            Ok(addr.to_string())
+        }
+    }
 
     // uniffi does not play well with enum_dispatch
-    #[derive(Enum)]
+    #[derive(Enum, Clone)]
     pub enum Address {
         /// Account address.
         Account(AccountId),
@@ -326,7 +351,7 @@ pub(crate) mod uniffi_types {
     uniffi::custom_type!(RustAddress, Address);
 
     /// Account ID
-    #[derive(Record)]
+    #[derive(Record, Clone)]
     pub struct AccountId {
         /// id value
         pub id: Vec<u8>,

@@ -7,7 +7,7 @@ use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::hash::uniffi_types::UniffiHash;
 use celestia_types::state::auth::AuthParams;
-use celestia_types::state::{Address, Coin, TxResponse};
+use celestia_types::state::{Coin, TxResponse};
 use celestia_types::UniffiConversionError;
 
 use crate::grpc::{Account, BroadcastMode, GasInfo, GetTxResponse, TxStatusResponse};
@@ -59,8 +59,8 @@ impl GrpcClient {
     }
 
     /// Get account
-    pub async fn get_account(&self, account: &Address) -> Result<Account> {
-        Ok(self.client.get_account(account).await?)
+    pub async fn get_account(&self, account: &str) -> Result<Account> {
+        Ok(self.client.get_account(&account.parse()?).await?)
     }
 
     /// Get accounts
@@ -69,18 +69,21 @@ impl GrpcClient {
     }
 
     /// Get balance of coins with given denom
-    pub async fn get_balance(&self, address: &Address, denom: String) -> Result<Coin> {
-        Ok(self.client.get_balance(address, denom).await?)
+    pub async fn get_balance(&self, address: &str, denom: String) -> Result<Coin> {
+        Ok(self.client.get_balance(&address.parse()?, denom).await?)
     }
 
     /// Get balance of all coins
-    pub async fn get_all_balances(&self, address: &Address) -> Result<Vec<Coin>> {
-        Ok(self.client.get_all_balances(address).await?)
+    pub async fn get_all_balances(&self, address: &str) -> Result<Vec<Coin>> {
+        Ok(self.client.get_all_balances(&address.parse()?).await?)
     }
 
     /// Get balance of all spendable coins
-    pub async fn get_spendable_balances(&self, address: &Address) -> Result<Vec<Coin>> {
-        Ok(self.client.get_spendable_balances(address).await?)
+    pub async fn get_spendable_balances(&self, address: &str) -> Result<Vec<Coin>> {
+        Ok(self
+            .client
+            .get_spendable_balances(&address.parse()?)
+            .await?)
     }
 
     /// Get total supply
@@ -142,5 +145,11 @@ impl From<UniffiConversionError> for GrpcClientError {
         GrpcClientError::GrpcError {
             msg: value.to_string(),
         }
+    }
+}
+
+impl From<celestia_types::Error> for GrpcClientError {
+    fn from(value: celestia_types::Error) -> Self {
+        crate::Error::from(value).into()
     }
 }
