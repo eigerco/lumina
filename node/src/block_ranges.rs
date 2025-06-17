@@ -39,7 +39,7 @@ pub enum BlockRangesError {
 type Result<T, E = BlockRangesError> = std::result::Result<T, E>;
 
 pub(crate) trait BlockRangeExt {
-    fn display(&self) -> BlockRangeDisplay;
+    fn display(&self) -> BlockRangeDisplay<'_>;
     fn validate(&self) -> Result<()>;
     fn len(&self) -> u64;
     fn is_adjacent(&self, other: &BlockRange) -> bool;
