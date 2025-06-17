@@ -12,9 +12,13 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawMerkleProof", into = "RawMerkleProof")]
 pub struct MerkleProof {
+    /// Leaf index.
     pub index: usize,
+    /// Total number of leaves in the Merkle tree.
     pub total: usize,
+    /// Hash of the leaf.
     pub leaf_hash: Hash,
+    /// Hashes of the sibling nodes at each level of the tree.
     pub aunts: Vec<Hash>,
 }
 
