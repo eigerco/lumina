@@ -231,6 +231,9 @@ jobs:
         ./node-uniffi/build-android.sh
         ./examples/android/LuminaDemo/copy_bindings.sh
 
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+
     - name: Gradle build
       working-directory: examples/android/LuminaDemo
       run: ./gradlew build
