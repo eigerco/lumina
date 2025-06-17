@@ -1,10 +1,10 @@
 //! Component responsible for removing blocks that aren't needed anymore.
 
+use std::collections::{hash_map, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
 use blockstore::Blockstore;
-use celestia_types::ExtendedHeader;
 use lumina_utils::executor::{spawn, JoinHandle};
 use lumina_utils::time::{sleep, Instant};
 use tendermint::Time;
@@ -129,13 +129,54 @@ where
     cache: Cache,
 }
 
+#[derive(Default)]
 struct Cache {
     /// When Cache was updated.
     updated_at: Option<Instant>,
+
     /// The first known height that is after the pruning window.
     after_pruning_window: Option<u64>,
     /// The first known height that is after the sampling window.
     after_sampling_window: Option<u64>,
+
+    /// Cached `BlockInfo`.
+    block_info: HashMap<u64, BlockInfo>,
+    /// Blocks that we need need to keep their `BlockInfo`.
+    keep_block_info: HashSet<u64>,
+}
+
+#[derive(Debug, Clone)]
+struct BlockInfo {
+    height: u64,
+    time: Time,
+}
+
+impl Cache {
+    fn garbage_collect(&mut self) {
+        self.block_info.retain(|&height, _| {
+            self.after_pruning_window == Some(height)
+                || self.after_sampling_window == Some(height)
+                || self.keep_block_info.contains(&height)
+        });
+    }
+
+    async fn get_block_info<S>(&mut self, store: &S, height: u64) -> Result<BlockInfo>
+    where
+        S: Store,
+    {
+        match self.block_info.entry(height) {
+            hash_map::Entry::Occupied(entry) => Ok(entry.get().to_owned()),
+            hash_map::Entry::Vacant(entry) => {
+                let header = store.get_by_height(height).await?;
+                let info = BlockInfo {
+                    height: header.height().value(),
+                    time: header.time(),
+                };
+                entry.insert(info.clone());
+                Ok(info)
+            }
+        }
+    }
 }
 
 impl<S, B> Worker<S, B>
@@ -158,6 +199,8 @@ where
                 updated_at: None,
                 after_pruning_window: None,
                 after_sampling_window: None,
+                block_info: HashMap::new(),
+                keep_block_info: HashSet::new(),
             },
         }
     }
@@ -230,21 +273,34 @@ where
         sampling_cutoff: &Time,
         pruning_cutoff: &Time,
     ) -> Result<()> {
-        let update_afer = Duration::from_secs(1).min(self.block_time);
+        let update_after = Duration::from_secs(1).min(self.block_time);
 
         if self
             .cache
             .updated_at
-            .is_some_and(|updated_at| updated_at.elapsed() < update_afer)
+            .is_some_and(|updated_at| updated_at.elapsed() < update_after)
         {
             // No need to update cached values
             return Ok(());
         }
 
-        let after_sampling_window =
-            find_height_after_window(&*self.store, stored_blocks, sampling_cutoff).await?;
-        let after_pruning_window =
-            find_height_after_window(&*self.store, stored_blocks, pruning_cutoff).await?;
+        let after_sampling_window = find_height_after_window(
+            &*self.store,
+            stored_blocks,
+            sampling_cutoff,
+            self.cache.after_sampling_window.clone(),
+            &mut self.cache,
+        )
+        .await?;
+
+        let after_pruning_window = find_height_after_window(
+            &*self.store,
+            stored_blocks,
+            pruning_cutoff,
+            self.cache.after_pruning_window.clone(),
+            &mut self.cache,
+        )
+        .await?;
 
         if self.cache.after_sampling_window < after_sampling_window {
             self.cache.after_sampling_window = after_sampling_window;
@@ -259,6 +315,29 @@ where
             }
         }
 
+        self.cache.keep_block_info.clear();
+
+        if let Some(stored_tail) = stored_blocks.tail() {
+            self.cache.keep_block_info.insert(stored_tail);
+        }
+
+        if let Some(sampling_window_tail) = self
+            .cache
+            .after_sampling_window
+            .and_then(|height| stored_blocks.right_of(height))
+        {
+            self.cache.keep_block_info.insert(sampling_window_tail);
+        }
+
+        if let Some(pruning_window_tail) = self
+            .cache
+            .after_pruning_window
+            .and_then(|height| stored_blocks.right_of(height))
+        {
+            self.cache.keep_block_info.insert(pruning_window_tail);
+        }
+
+        self.cache.garbage_collect();
         self.cache.updated_at = Some(Instant::now());
 
         Ok(())
@@ -373,27 +452,125 @@ where
     }
 }
 
-/// Use binary search and find the first header that is after the window cutoff
 async fn find_height_after_window<S>(
     store: &S,
     stored_headers: &BlockRanges,
     cutoff: &Time,
+    prev_after_window: Option<u64>,
+    cache: &mut Cache,
+) -> Result<Option<u64>>
+where
+    S: Store,
+{
+    if let Some(res) =
+        find_height_after_window_fast(store, stored_headers, cutoff, prev_after_window, cache)
+            .await?
+    {
+        return Ok(res);
+    }
+
+    // Binary search
+    find_height_after_window_slow(store, stored_headers, cutoff, cache).await
+}
+
+/// Uses cached values to figure out the first height after the window cutoff.
+///
+/// Returns:
+///
+/// * `Ok(None)` if it couldn't figure it out and a binary search is needed.
+/// * `Ok(Some(None))` if it there is no height after the window cutoff.
+/// * `Ok(Some(Some(height))` if it figured out the height.
+async fn find_height_after_window_fast<S>(
+    store: &S,
+    stored_headers: &BlockRanges,
+    cutoff: &Time,
+    prev_after_window: Option<u64>,
+    cache: &mut Cache,
+) -> Result<Option<Option<u64>>>
+where
+    S: Store,
+{
+    match prev_after_window {
+        Some(prev_after_window) => match stored_headers.right_of(prev_after_window) {
+            Some(right_of_after_window) => {
+                let block_info = cache.get_block_info(store, right_of_after_window).await?;
+
+                // If the block on the right is still within window.
+                if *cutoff < block_info.time {
+                    if stored_headers.contains(prev_after_window) {
+                        return Ok(Some(Some(prev_after_window)));
+                    } else {
+                        return Ok(Some(stored_headers.left_of(prev_after_window)));
+                    }
+                }
+
+                // This point is reached when block on the right is now out of window.
+                // As an optimization we need to check the next on if it is in.
+                //
+                // This check mostly catches the blocks that are on the boarder of window.
+                match stored_headers.right_of(right_of_after_window) {
+                    Some(right_of_right) => {
+                        let block_info = cache.get_block_info(store, right_of_right).await?;
+
+                        // If the right of the right block is within window.
+                        if *cutoff < block_info.time {
+                            return Ok(Some(Some(right_of_after_window)));
+                        }
+                    }
+                    // If there aren't blocks on the right.
+                    None => return Ok(Some(Some(right_of_after_window))),
+                }
+            }
+            // If there aren't blocks on the right.
+            None => {
+                if stored_headers.contains(prev_after_window) {
+                    return Ok(Some(Some(prev_after_window)));
+                } else {
+                    return Ok(Some(stored_headers.left_of(prev_after_window)));
+                }
+            }
+        },
+        None => {
+            let Some(tail) = stored_headers.tail() else {
+                // No stored headers
+                return Ok(Some(None));
+            };
+
+            let block_info = cache.get_block_info(store, tail).await?;
+
+            if *cutoff < block_info.time {
+                // All blocks are within the window
+                return Ok(Some(None));
+            }
+        }
+    }
+
+    // Binary search is needed
+    Ok(None)
+}
+
+/// Use binary search and find the first height after the window cutoff.
+async fn find_height_after_window_slow<S>(
+    store: &S,
+    stored_headers: &BlockRanges,
+    cutoff: &Time,
+    cache: &mut Cache,
 ) -> Result<Option<u64>>
 where
     S: Store,
 {
     let mut ranges = stored_headers.to_owned();
-    let mut highest: Option<ExtendedHeader> = None;
+    let mut highest: Option<BlockInfo> = None;
 
     while let Some((left, middle, right)) = ranges.partitions() {
-        let middle_header = store.get_by_height(middle).await?;
+        let middle = cache.get_block_info(store, middle).await?;
 
-        if middle_header.time() < *cutoff {
+        if middle.time < *cutoff {
             if highest
                 .as_ref()
-                .is_none_or(|highest| highest.time() < middle_header.time())
+                .is_none_or(|highest| highest.time < middle.time)
             {
-                highest = Some(middle_header);
+                highest = Some(middle);
             }
 
             ranges = right;
@@ -402,7 +579,7 @@ where
         }
     }
 
-    Ok(highest.map(|header| header.height().value()))
+    Ok(highest.map(|block_info| block_info.height))
 }
 
 #[cfg(test)]
@@ -428,6 +605,7 @@ mod test {
     async fn prunable_height() {
         let now = Time::now();
         let store = InMemoryStore::new();
+        let mut cache = Cache::default();
         let pruning_window = Duration::from_secs(60);
         let mut gen = ExtendedHeaderGenerator::new();
 
@@ -440,7 +618,7 @@ mod test {
         let pruning_cutoff = now.saturating_sub(pruning_window);
 
         assert_eq!(
-            find_height_after_window(&store, &stored_headers, &pruning_cutoff)
+            find_height_after_window_slow(&store, &stored_headers, &pruning_cutoff, &mut cache)
                 .await
                 .unwrap(),
             Some(59)
@@ -451,6 +629,7 @@ mod test {
     async fn prunable_height_with_gaps() {
         let now = Time::now();
         let store = InMemoryStore::new();
+        let mut cache = Cache::default();
         let pruning_window = Duration::from_secs(60);
         let mut gen = ExtendedHeaderGenerator::new();
 
@@ -469,7 +648,7 @@ mod test {
         let pruning_cutoff = now.saturating_sub(pruning_window);
 
         assert_eq!(
-            find_height_after_window(&store, &stored_headers, &pruning_cutoff)
+            find_height_after_window_slow(&store, &stored_headers, &pruning_cutoff, &mut cache)
                 .await
                 .unwrap(),
             Some(30)
@@ -478,7 +657,7 @@ mod test {
         store.insert(&headers[58..=64]).await.unwrap();
 
         assert_eq!(
-            find_height_after_window(&store, &stored_headers, &pruning_cutoff)
+            find_height_after_window_slow(&store, &stored_headers, &pruning_cutoff, &mut cache)
                 .await
                 .unwrap(),
             Some(30)
@@ -489,6 +668,7 @@ mod test {
     async fn prunable_height_beyond_genesis() {
         let now = Time::now();
         let store = InMemoryStore::new();
+        let mut cache = Cache::default();
         let pruning_window = Duration::from_secs(121);
         let mut gen = ExtendedHeaderGenerator::new();
 
@@ -502,9 +682,263 @@ mod test {
         let pruning_cutoff = now.saturating_sub(pruning_window);
 
         assert_eq!(
-            find_height_after_window(&store, &stored_headers, &pruning_cutoff)
+            find_height_after_window_slow(&store, &stored_headers, &pruning_cutoff, &mut cache)
                 .await
                 .unwrap(),
+            None
+        );
+    }
+
+    #[async_test]
+    async fn prunable_height_cached_empty_store() {
+        let now = Time::now();
+        let store = InMemoryStore::new();
+        let mut cache = Cache::default();
+        let pruning_window = Duration::from_secs(60);
+
+        let stored_headers = store.get_stored_header_ranges().await.unwrap();
+        let pruning_cutoff = now.saturating_sub(pruning_window);
+
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                None,
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            Some(None)
+        );
+
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                Some(40),
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            Some(None)
+        );
+    }
+
+    #[async_test]
+    async fn prunable_height_cached_all_blocks_in_window() {
+        let now = Time::now();
+        let store = InMemoryStore::new();
+        let mut cache = Cache::default();
+        let pruning_window = Duration::from_secs(60);
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        let first_header_time = (now - Duration::from_secs(120)).unwrap();
+        gen.set_time(first_header_time, Duration::from_secs(1));
+
+        let headers = gen.next_many(120);
+        store.insert(&headers[110..120]).await.unwrap();
+
+        let stored_headers = store.get_stored_header_ranges().await.unwrap();
+        let pruning_cutoff = now.saturating_sub(pruning_window);
+
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                None,
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            Some(None)
+        );
+
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                Some(40),
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            Some(None)
+        );
+    }
+
+    #[async_test]
+    async fn prunable_height_cached_all_blocks_out_of_window() {
+        let now = Time::now();
+        let store = InMemoryStore::new();
+        let mut cache = Cache::default();
+        let pruning_window = Duration::from_secs(60);
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        let first_header_time = (now - Duration::from_secs(120)).unwrap();
+        gen.set_time(first_header_time, Duration::from_secs(1));
+
+        let headers = gen.next_many(120);
+        store.insert(&headers[30..40]).await.unwrap();
+
+        let stored_headers = store.get_stored_header_ranges().await.unwrap();
+        let pruning_cutoff = now.saturating_sub(pruning_window);
+
+        // Binary search is needed because there is no cached info.
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                None,
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            None
+        );
+
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                Some(50),
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            Some(Some(40))
+        );
+
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                Some(40),
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            Some(Some(40))
+        );
+
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                Some(39),
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            Some(Some(40))
+        );
+
+        // Binary search is needed because of too many blocks that are out of window
+        // are after the `prev_after_window` parameter.
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                Some(38),
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            None
+        );
+    }
+
+    #[async_test]
+    async fn prunable_height_cached_mixed() {
+        let now = Time::now();
+        let store = InMemoryStore::new();
+        let mut cache = Cache::default();
+        let pruning_window = Duration::from_secs(60);
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        let first_header_time = (now - Duration::from_secs(120)).unwrap();
+        gen.set_time(first_header_time, Duration::from_secs(1));
+
+        let headers = gen.next_many(120);
+        store.insert(&headers[30..40]).await.unwrap();
+        store.insert(&headers[110..120]).await.unwrap();
+
+        let stored_headers = store.get_stored_header_ranges().await.unwrap();
+        let pruning_cutoff = now.saturating_sub(pruning_window);
+
+        // Binary search is needed because there is no cached info.
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                None,
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            None
+        );
+
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                Some(50),
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            Some(Some(40))
+        );
+
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                Some(40),
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            Some(Some(40))
+        );
+
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                Some(39),
+                &mut cache
+            )
+            .await
+            .unwrap(),
+            Some(Some(40))
+        );
+
+        // Binary search is needed because of too many blocks that are out of window
+        // are after the `prev_after_window` parameter.
+        assert_eq!(
+            find_height_after_window_fast(
+                &store,
+                &stored_headers,
+                &pruning_cutoff,
+                Some(38),
+                &mut cache
+            )
+            .await
+            .unwrap(),
             None
         );
     }
@@ -780,6 +1214,7 @@ mod test {
                 daser_handle.expect_update_highest_prunable_block().await,
                 2500
             );
+
             assert_eq!(
                 daser_handle.expect_update_number_of_prunable_blocks().await,
                 10 - batch1_num_of_prunable_blocks
@@ -791,13 +1226,13 @@ mod test {
                 respond_to.send(true).unwrap();
             }
 
-            assert_eq!(
-                daser_handle.expect_update_number_of_prunable_blocks().await,
-                0
-            );
-
             assert_pruned_headers_event(&mut event_subscriber, batch1_high_height + 1, 2500).await;
         }
+
+        assert_eq!(
+            daser_handle.expect_update_number_of_prunable_blocks().await,
+            0
+        );
 
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),

@@ -44,7 +44,8 @@ pub(crate) trait BlockRangeExt {
     fn len(&self) -> u64;
     fn is_adjacent(&self, other: &BlockRange) -> bool;
     fn is_overlapping(&self, other: &BlockRange) -> bool;
-    fn left_of(&self, other: &BlockRange) -> bool;
+    fn is_left_of(&self, other: &BlockRange) -> bool;
+    fn is_right_of(&self, other: &BlockRange) -> bool;
     fn headn(&self, limit: u64) -> Self;
     fn tailn(&self, limit: u64) -> Self;
 }
@@ -140,10 +141,17 @@ impl BlockRangeExt for BlockRange {
     }
 
     /// Returns `true` if the whole range of `self` is on the left of `other`.
-    fn left_of(&self, other: &BlockRange) -> bool {
+    fn is_left_of(&self, other: &BlockRange) -> bool {
         debug_assert!(self.validate().is_ok());
         debug_assert!(other.validate().is_ok());
         self.end() < other.start()
+    }
+
+    /// Returns `true` if the whole range of `self` is on the right of `other`.
+    fn is_right_of(&self, other: &BlockRange) -> bool {
+        debug_assert!(self.validate().is_ok());
+        debug_assert!(other.validate().is_ok());
+        other.end() < self.start()
     }
 
     /// Truncate the range so that it contains at most `limit` elements, removing from the tail
@@ -355,7 +363,7 @@ impl BlockRanges {
             return Ok((false, false));
         };
 
-        if head_range.left_of(to_insert) {
+        if head_range.is_left_of(to_insert) {
             // Allow adding a new HEAD
             let prev_exists = head_range.is_adjacent(to_insert);
             return Ok((prev_exists, false));
@@ -377,7 +385,7 @@ impl BlockRanges {
                         to_insert.to_owned(),
                         calc_overlap(to_insert, first, last),
                     ))
-                } else if first.left_of(to_insert) {
+                } else if first.is_left_of(to_insert) {
                     Ok((true, false))
                 } else {
                     Ok((false, true))
@@ -571,6 +579,32 @@ impl BlockRanges {
         };
 
         Some((left, middle_height, right))
+    }
+
+    /// Returns the height that is on the left of `height` parameter.
+    pub(crate) fn left_of(&self, height: u64) -> Option<u64> {
+        for r in self.0.iter().rev() {
+            if r.is_left_of(&(height..=height)) {
+                return Some(*r.end());
+            } else if r.contains(&height) && *r.start() != height {
+                return Some(height - 1);
+            }
+        }
+
+        None
+    }
+
+    /// Returns the height that is on the left of `height` parameter.
+    pub(crate) fn right_of(&self, height: u64) -> Option<u64> {
+        for r in self.0.iter() {
+            if r.is_right_of(&(height..=height)) {
+                return Some(*r.start());
+            } else if r.contains(&height) && *r.end() != height {
+                return Some(height + 1);
+            }
+        }
+
+        None
     }
 }
 
@@ -1075,19 +1109,72 @@ mod tests {
     }
 
     #[test]
-    fn left_of_check() {
+    fn is_left_of_check() {
         // range is on the left of
-        assert!((1..=2).left_of(&(3..=4)));
-        assert!((1..=1).left_of(&(3..=4)));
+        assert!((1..=2).is_left_of(&(3..=4)));
+        assert!((1..=1).is_left_of(&(3..=4)));
 
         // range is on the right of
-        assert!(!(3..=4).left_of(&(1..=2)));
-        assert!(!(3..=4).left_of(&(1..=1)));
+        assert!(!(3..=4).is_left_of(&(1..=2)));
+        assert!(!(3..=4).is_left_of(&(1..=1)));
 
         // overlapping is not accepted
-        assert!(!(1..=3).left_of(&(3..=4)));
-        assert!(!(1..=5).left_of(&(3..=4)));
-        assert!(!(3..=4).left_of(&(1..=3)));
+        assert!(!(1..=3).is_left_of(&(3..=4)));
+        assert!(!(1..=5).is_left_of(&(3..=4)));
+        assert!(!(3..=4).is_left_of(&(1..=3)));
+    }
+
+    #[test]
+    fn left_of() {
+        let r = new_block_ranges([10..=20, 30..=30, 40..=50]);
+
+        assert_eq!(r.left_of(60), Some(50));
+        assert_eq!(r.left_of(50), Some(49));
+        assert_eq!(r.left_of(45), Some(44));
+        assert_eq!(r.left_of(40), Some(30));
+        assert_eq!(r.left_of(39), Some(30));
+        assert_eq!(r.left_of(30), Some(20));
+        assert_eq!(r.left_of(29), Some(20));
+        assert_eq!(r.left_of(20), Some(19));
+        assert_eq!(r.left_of(15), Some(14));
+        assert_eq!(r.left_of(10), None);
+        assert_eq!(r.left_of(9), None);
+    }
+
+    #[test]
+    fn is_right_of_check() {
+        // range is on the right of
+        assert!((3..=4).is_right_of(&(1..=2)));
+        assert!((3..=4).is_right_of(&(1..=1)));
+
+        // range is on the left of
+        assert!(!(1..=2).is_right_of(&(3..=4)));
+        assert!(!(1..=1).is_right_of(&(3..=4)));
+
+        // overlapping is not accepted
+        assert!(!(1..=3).is_right_of(&(3..=4)));
+        assert!(!(1..=5).is_right_of(&(3..=4)));
+        assert!(!(3..=4).is_right_of(&(1..=3)));
+    }
+
+    #[test]
+    fn right_of() {
+        let r = new_block_ranges([10..=20, 30..=30, 40..=50]);
+
+        assert_eq!(r.right_of(1), Some(10));
+        assert_eq!(r.right_of(9), Some(10));
+        assert_eq!(r.right_of(10), Some(11));
+        assert_eq!(r.right_of(15), Some(16));
+        assert_eq!(r.right_of(19), Some(20));
+        assert_eq!(r.right_of(20), Some(30));
+        assert_eq!(r.right_of(29), Some(30));
+        assert_eq!(r.right_of(30), Some(40));
+        assert_eq!(r.right_of(39), Some(40));
+        assert_eq!(r.right_of(40), Some(41));
+        assert_eq!(r.right_of(45), Some(46));
+        assert_eq!(r.right_of(49), Some(50));
+        assert_eq!(r.right_of(50), None);
+        assert_eq!(r.right_of(60), None);
     }
 
     #[test]
