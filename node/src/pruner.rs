@@ -288,7 +288,7 @@ where
             &*self.store,
             stored_blocks,
             sampling_cutoff,
-            self.cache.after_sampling_window.clone(),
+            self.cache.after_sampling_window,
             &mut self.cache,
         )
         .await?;
@@ -297,7 +297,7 @@ where
             &*self.store,
             stored_blocks,
             pruning_cutoff,
-            self.cache.after_pruning_window.clone(),
+            self.cache.after_pruning_window,
             &mut self.cache,
         )
         .await?;
