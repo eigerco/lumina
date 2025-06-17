@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1](https://github.com/eigerco/lumina/compare/lumina-node-v0.12.0...lumina-node-v0.12.1) - 2025-06-17
+
+### Other
+
+- *(node)* Fix lifetime warning on nightly ([#656](https://github.com/eigerco/lumina/pull/656))
+
 ## [0.12.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.11.0...lumina-node-v0.12.0) - 2025-06-09
 
 ### Added
