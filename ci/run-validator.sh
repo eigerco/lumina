@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+set -euxo pipefail
 
 # Amount of DA nodes to setup, taken from the first argument
 # or 1 if not provided
@@ -37,7 +37,8 @@ wait_for_block() {
   # Wait for the block to be created
   while [[ -z "$block_hash" ]]; do
     # `|| echo` fallbacks to an empty string in case it's not ready
-    block_hash="$(celestia-appd query block "$block_num" 2>/dev/null | jq '.block_id.hash' || echo)"
+    # `celestia-appd` skips the block_id field so we use rest
+    block_hash="$(curl -sS "http://localhost:26657/block?height=$block_num" 2>/dev/null | jq -r '.result.block_id.hash // ""' || echo)"
     sleep 0.1
   done
 
@@ -49,11 +50,6 @@ wait_for_block() {
 provision_da_nodes() {
   local genesis_hash
   local last_node_idx=$((NODE_COUNT - 1))
-
-  # Save the genesis hash for the DA node
-  genesis_hash=$(wait_for_block 1)
-  echo "Saving a genesis hash to $GENESIS_HASH_FILE"
-  echo "$genesis_hash" > "$GENESIS_HASH_FILE"
 
   # Get or create the keys for DA nodes
   for node_idx in $(seq 0 "$last_node_idx"); do
@@ -77,7 +73,7 @@ provision_da_nodes() {
     else
       # otherwise, just import it
       echo "password" | celestia-appd keys import "$node_name" "$key_file" \
-        --keyring-backend="test"
+        --keyring-backend "test"
     fi
   done
 
@@ -102,8 +98,14 @@ provision_da_nodes() {
       "$NODE_NAME" \
       "$peer_addr" \
       "$NODE_COINS" \
-      --fees 21000utia
+      --fees 21000utia \
+      --keyring-backend "test"
   done
+
+  # Save the genesis hash for the DA node
+  genesis_hash=$(wait_for_block 1)
+  echo "Saving a genesis hash to $GENESIS_HASH_FILE"
+  echo "$genesis_hash" > "$GENESIS_HASH_FILE"
 
   echo "Provisioning finished."
 }
@@ -118,25 +120,29 @@ setup_private_validator() {
   celestia-appd init "$P2P_NETWORK" --chain-id "$P2P_NETWORK"
   # Derive a new private key for the validator
   celestia-appd keys add "$NODE_NAME" --keyring-backend="test"
-  validator_addr="$(celestia-appd keys show "$NODE_NAME" -a --keyring-backend="test")"
+  validator_addr="$(node_address "$NODE_NAME")"
   # Create a validator's genesis account for the genesis.json with an initial bag of coins
-  celestia-appd add-genesis-account "$validator_addr" "$VALIDATOR_COINS"
+  celestia-appd genesis add-genesis-account "$validator_addr" "$VALIDATOR_COINS"
   # Generate a genesis transaction that creates a validator with a self-delegation
-  celestia-appd gentx "$NODE_NAME" 5000000000utia \
+  celestia-appd genesis gentx "$NODE_NAME" 5000000000utia \
     --fees 500utia \
     --keyring-backend="test" \
     --chain-id "$P2P_NETWORK"
   # Collect the genesis transactions and form a genesis.json
-  celestia-appd collect-gentxs
+  celestia-appd genesis collect-gentxs
 
   # Set proper defaults and change ports
+  # sed -i 's/localhost/0.0.0.0/' "$CONFIG_DIR/config/config.toml"
+  # sed -i 's/127.0.0.1/0.0.0.0/' "$CONFIG_DIR/config/config.toml"
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://0.0.0.0:9090' rpc.grpc_laddr
   dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://0.0.0.0:26657' rpc.laddr
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://0.0.0.0:26658' proxy_app
   # enable transaction indexing
   dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'kv' tx_index.indexer
 
   # enable grpc-web
   dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable
-  # enable unsafe CORS since we don't do security properly in CI
+  # enable CORS as regular grpc is open
   dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable-unsafe-cors
 }
 
@@ -147,7 +153,10 @@ main() {
   provision_da_nodes &
   # Start the celestia-app
   echo "Configuration finished. Running a validator node..."
-  celestia-appd start --api.enable --grpc.enable --force-no-bbr
+  celestia-appd start \
+    --api.enable \
+    --grpc.enable \
+    --force-no-bbr
 }
 
 main

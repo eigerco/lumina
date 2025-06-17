@@ -1,14 +1,14 @@
 # A dockerfile for the celestia validator in consensus layer
 # Based on:
 # https://github.com/celestiaorg/celestia-app/blob/main/Dockerfile
-FROM docker.io/alpine:3.19.1
+FROM docker.io/alpine:3.20
 
 ENV CELESTIA_HOME=/root
 
-RUN apk update && apk add --no-cache bash jq dasel
+RUN apk update && apk add --no-cache bash curl jq dasel
 
 # Copy in the binary
-COPY --from=ghcr.io/celestiaorg/celestia-app:v3.4.2-mocha /bin/celestia-appd /bin/celestia-appd
+COPY --from=ghcr.io/celestiaorg/celestia-app:v4.0.2-mocha /bin/celestia-appd /bin/celestia-appd
 
 COPY ./run-validator.sh /opt/entrypoint.sh
 
