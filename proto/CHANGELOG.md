@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2](https://github.com/eigerco/lumina/compare/celestia-proto-v0.7.1...celestia-proto-v0.7.2) - 2025-06-09
+
+### Added
+
+- *(node-uniffi)* Add grpc types and client for uniffi ([#627](https://github.com/eigerco/lumina/pull/627))
+
 ## [0.7.1](https://github.com/eigerco/lumina/compare/celestia-proto-v0.7.0...celestia-proto-v0.7.1) - 2025-05-26
 
 ### Other
