@@ -309,7 +309,7 @@ pub(crate) mod uniffi_types {
         }
 
         /// Return readable representation of the address
-        fn to_string(&self) -> Result<String, UniffiConversionError> {
+        fn as_string(&self) -> Result<String, UniffiConversionError> {
             let addr: RustAddress = self.0.clone().try_into()?;
             Ok(addr.to_string())
         }

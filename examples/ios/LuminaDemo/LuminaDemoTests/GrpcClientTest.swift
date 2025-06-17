@@ -31,7 +31,7 @@ struct GrpcClientTest {
 
         switch account {
         case .base(let baseAccount):
-            let addressStr = try AddressObject.create(address: baseAccount.address).toString()
+            let addressStr = try AddressObject.create(address: baseAccount.address).asString()
             
             assert(addressStr == NODE_0_ADDR)
         default :
