@@ -63,9 +63,9 @@ provision_da_nodes() {
       echo "Creating a new keys for the $node_name"
       celestia-appd keys add "$node_name" --keyring-backend "test"
       # export it
-      echo "password" | celestia-appd keys export "$node_name" > "$key_file.lock"
+      echo "password" | celestia-appd keys export "$node_name" --keyring-backend "test" > "$key_file.lock"
       # export also plaintext key for convenience in tests
-      echo y | celestia-appd keys export "$node_name" --unsafe --unarmored-hex 2> "${plaintext_key_file}"
+      echo y | celestia-appd keys export "$node_name" --unsafe --unarmored-hex --keyring-backend "test" 2> "${plaintext_key_file}"
       # the `.lock` file and `mv` ensures that readers read file only after finished writing
       mv "$key_file.lock" "$key_file"
       # export associated address
