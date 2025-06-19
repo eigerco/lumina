@@ -35,8 +35,8 @@ use crate::syncer::{Syncer, SyncerArgs};
 mod builder;
 
 pub use self::builder::{
-    NodeBuilder, NodeBuilderError, DEFAULT_PRUNING_WINDOW, DEFAULT_SAMPLING_WINDOW,
-    MIN_PRUNING_WINDOW, MIN_SAMPLING_WINDOW,
+    NodeBuilder, NodeBuilderError, DEFAULT_PRUNING_WINDOW, DEFAULT_PRUNING_WINDOW_IN_MEMORY,
+    DEFAULT_SAMPLING_WINDOW, MIN_SAMPLING_WINDOW,
 };
 pub use crate::daser::DaserError;
 pub use crate::p2p::{HeaderExError, P2pError};

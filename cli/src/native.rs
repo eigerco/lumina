@@ -13,7 +13,7 @@ use libp2p::multiaddr::{Multiaddr, Protocol};
 use lumina_node::blockstore::{InMemoryBlockstore, RedbBlockstore};
 use lumina_node::events::NodeEvent;
 use lumina_node::network::Network;
-use lumina_node::node::{Node, MIN_PRUNING_WINDOW};
+use lumina_node::node::{Node, DEFAULT_PRUNING_WINDOW_IN_MEMORY};
 use lumina_node::store::{EitherStore, InMemoryStore, RedbStore, Store as _};
 use tokio::task::spawn_blocking;
 use tracing::info;
@@ -78,7 +78,7 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         node_builder = node_builder.pruning_window(pruning_window);
     } else if args.in_memory_store {
         // In-memory stores are memory hungry, so we prune blocks as soon as possible.
-        node_builder = node_builder.pruning_window(MIN_PRUNING_WINDOW);
+        node_builder = node_builder.pruning_window(DEFAULT_PRUNING_WINDOW_IN_MEMORY);
     }
 
     if args.bootnodes.is_empty() {

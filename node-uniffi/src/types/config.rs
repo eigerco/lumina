@@ -6,7 +6,7 @@ use blockstore::EitherBlockstore;
 use libp2p::identity::Keypair;
 use lumina_node::blockstore::{InMemoryBlockstore, RedbBlockstore};
 use lumina_node::network::Network;
-use lumina_node::node::MIN_PRUNING_WINDOW;
+use lumina_node::node::DEFAULT_PRUNING_WINDOW_IN_MEMORY;
 use lumina_node::store::{EitherStore, InMemoryStore, RedbStore};
 use lumina_node::NodeBuilder;
 use tokio::task::spawn_blocking;
@@ -62,7 +62,7 @@ impl NodeConfig {
         // If base path is not set that means we use in-memory stores, so we
         // adjust pruning_window to avoid huge memory consumption.
         if self.base_path.is_none() {
-            builder = builder.pruning_window(MIN_PRUNING_WINDOW);
+            builder = builder.pruning_window(DEFAULT_PRUNING_WINDOW_IN_MEMORY);
         }
 
         if let Some(bootnodes) = self.bootnodes {

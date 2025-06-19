@@ -9,7 +9,7 @@ use js_sys::Array;
 use libp2p::Multiaddr;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::network;
-use lumina_node::node::{NodeBuilder, MIN_PRUNING_WINDOW};
+use lumina_node::node::{NodeBuilder, DEFAULT_PRUNING_WINDOW_IN_MEMORY};
 use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
@@ -396,7 +396,7 @@ impl WasmNodeConfig {
                 .store(EitherStore::Left(InMemoryStore::new()))
                 .blockstore(EitherBlockstore::Left(InMemoryBlockstore::new()))
                 // In-memory stores are memory hungry, so we prune blocks as soon as possible.
-                .pruning_window(MIN_PRUNING_WINDOW)
+                .pruning_window(DEFAULT_PRUNING_WINDOW_IN_MEMORY)
         };
 
         let bootnodes = self

@@ -24,8 +24,8 @@ pub const MIN_SAMPLING_WINDOW: Duration = Duration::from_secs(60);
 
 /// Default maximum age of blocks before they get pruned.
 pub const DEFAULT_PRUNING_WINDOW: Duration = Duration::from_secs(30 * DAY + HOUR);
-/// Minimum pruning window that can be used in [`NodeBuilder`].
-pub const MIN_PRUNING_WINDOW: Duration = Duration::from_secs(0);
+/// Default pruninig window for in-memory stores.
+pub const DEFAULT_PRUNING_WINDOW_IN_MEMORY: Duration = Duration::from_secs(0);
 
 /// [`Node`] builder.
 pub struct NodeBuilder<B, S>
@@ -54,10 +54,6 @@ pub enum NodeBuilderError {
     /// Sampling window is smaller than [`MIN_SAMPLING_WINDOW`].
     #[error("Sampling window is {0:?} but cannot be smaller than {MIN_SAMPLING_WINDOW:?}")]
     SamplingWindowTooSmall(Duration),
-
-    /// Pruning window is smaller than [`MIN_PRUNING_WINDOW`].
-    #[error("Pruning window is {0:?} but cannot be smaller than {MIN_PRUNING_WINDOW:?}")]
-    PruningWindowTooSmall(Duration),
 
     /// Builder failed to resolve dnsaddr multiaddresses for bootnodes
     #[error("Could not resolve any of the bootnode addresses")]
@@ -295,14 +291,10 @@ where
         let pruning_window = if let Some(dur) = self.pruning_window {
             dur
         } else if in_memory_stores_used {
-            MIN_PRUNING_WINDOW
+            DEFAULT_PRUNING_WINDOW_IN_MEMORY
         } else {
             DEFAULT_PRUNING_WINDOW
         };
-
-        if pruning_window < MIN_PRUNING_WINDOW {
-            return Err(NodeBuilderError::PruningWindowTooSmall(pruning_window));
-        }
 
         info!("Sampling window: {sampling_window:?}, Pruning window: {pruning_window:?}",);
 
