@@ -35,7 +35,7 @@ const HASH_INDEX_NAME: &str = "hash";
 const HEIGHT_INDEX_NAME: &str = "height";
 
 const HEADER_RANGES_KEY: &str = "header_ranges";
-const SAMPLED_RANGES_KEY: &str = "accepted_sampling_ranges";
+const SAMPLED_RANGES_KEY: &str = "sampled_ranges";
 const PRUNED_RANGES_KEY: &str = "pruned_ranges";
 const VERSION_KEY: &str = "version";
 
@@ -829,14 +829,27 @@ async fn migrate_v4_to_v5(db: &Rexie) -> Result<()> {
     debug_assert_eq!(version, 4);
     warn!("Migrating DB schema from v4 to v5");
 
-    let tx = db.transaction(&[SCHEMA_STORE_NAME], TransactionMode::ReadWrite)?;
+    let tx = db.transaction(
+        &[SCHEMA_STORE_NAME, RANGES_STORE_NAME],
+        TransactionMode::ReadWrite,
+    )?;
     let schema_store = tx.store(SCHEMA_STORE_NAME)?;
+    let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
-    // v5 just removes `SamplingStatus` but it doesn't affect us if it is
-    // present on older entries because we discard it on deserialization.
+    // There are two chages in v5:
     //
-    // Because of that, for faster migration we just increase only the
-    // version without modifing older entries.
+    // * Removal of `SamplingStatus` in `SamplingMetadata`
+    // * Rename of sampled ranges database key
+    //
+    // For the first one we don't need to take any actions because it will
+    // be ingored by the deserializer.
+    let sampled_ranges = get_ranges(&ranges_store, v4::SAMPLED_RANGES_KEY).await?;
+    set_ranges(&ranges_store, SAMPLED_RANGES_KEY, &sampled_ranges).await?;
+    ranges_store
+        .delete(JsValue::from_str(v4::SAMPLED_RANGES_KEY))
+        .await?;
+
+    // Migrated to v5
     set_schema_version(&schema_store, 5).await?;
 
     tx.commit().await?;
@@ -878,6 +891,10 @@ mod v3 {
 
         Ok(ranges)
     }
+}
+
+mod v4 {
+    pub(super) const SAMPLED_RANGES_KEY: &str = "accepted_sampling_ranges";
 }
 
 #[cfg(test)]

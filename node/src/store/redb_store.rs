@@ -36,7 +36,7 @@ const SCHEMA_VERSION_TABLE: TableDefinition<'static, (), u64> =
 const RANGES_TABLE: TableDefinition<'static, &str, Vec<(u64, u64)>> =
     TableDefinition::new("STORE.RANGES");
 
-const SAMPLED_RANGES_KEY: &str = "KEY.ACCEPTED_SAMPING_RANGES";
+const SAMPLED_RANGES_KEY: &str = "KEY.SAMPLED_RANGES";
 const HEADER_RANGES_KEY: &str = "KEY.HEADER_RANGES";
 const PRUNED_RANGES_KEY: &str = "KEY.PRUNED_RANGES";
 
@@ -786,7 +786,7 @@ fn migrate_v1_to_v2(
 }
 
 fn migrate_v2_to_v3(
-    _tx: &WriteTransaction,
+    tx: &WriteTransaction,
     schema_version_table: &mut Table<(), u64>,
 ) -> Result<()> {
     let version = schema_version_table
@@ -802,14 +802,26 @@ fn migrate_v2_to_v3(
     debug_assert_eq!(version, 2);
     warn!("Migrating DB schema from v2 to v3");
 
-    // v3 just removes `SamplingStatus` but it doesn't affect us if it is
-    // present on older entries because we discard it on deserialization.
+    // There are two chages in v3:
     //
-    // Because of that, for faster migration we just increase only the
-    // version without modifing older entries.
+    // * Removal of `SamplingStatus` in `SamplingMetadata`
+    // * Rename of sampled ranges database key
+    //
+    // For the first one we don't need to take any actions because it will
+    // be ingored by the deserializer.
+    let mut ranges_table = tx.open_table(RANGES_TABLE)?;
+    let sampled_ranges = get_ranges(&ranges_table, v2::SAMPLED_RANGES_KEY)?;
+    set_ranges(&mut ranges_table, SAMPLED_RANGES_KEY, &sampled_ranges)?;
+    ranges_table.remove(v2::SAMPLED_RANGES_KEY)?;
+
+    // Migrated to v3
     schema_version_table.insert((), 3)?;
 
     Ok(())
+}
+
+mod v2 {
+    pub(super) const SAMPLED_RANGES_KEY: &str = "KEY.ACCEPTED_SAMPING_RANGES";
 }
 
 #[cfg(test)]
