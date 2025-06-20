@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.3.1...celestia-grpc-v0.4.0) - 2025-06-20
+
+### Added
+
+- *(grpc)* [**breaking**] add memo field to TxConfig ([#659](https://github.com/eigerco/lumina/pull/659))
+
 ## [0.3.1](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.3.0...celestia-grpc-v0.3.1) - 2025-06-09
 
 ### Added

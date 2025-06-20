@@ -97,12 +97,13 @@ async fn submit_and_get_tx() {
     let blobs = vec![Blob::new(namespace, "bleb".into(), AppVersion::V3).unwrap()];
 
     let tx = tx_client
-        .submit_blobs(&blobs, TxConfig::default())
+        .submit_blobs(&blobs, TxConfig::default().with_memo("foo"))
         .await
         .unwrap();
     let tx2 = tx_client.get_tx(tx.hash).await.unwrap();
 
     assert_eq!(tx.hash, tx2.tx_response.txhash);
+    assert_eq!(tx2.tx.body.memo, "foo");
 }
 
 #[async_test]

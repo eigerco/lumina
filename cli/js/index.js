@@ -43,7 +43,7 @@ async function submitBankMsgSend(address, amount) {
     },
   };
   const sendMsgAny = registry.encodeAsAny(sendMsg);
-  const txInfo = await window.txClient.submitMessage(sendMsgAny);
+  const txInfo = await window.txClient.submitMessage(sendMsgAny, { memo: "foo" });
 
   return txInfo;
 }
