@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5](https://github.com/eigerco/lumina/compare/lumina-cli-v0.6.4...lumina-cli-v0.6.5) - 2025-06-20
+
+### Other
+
+- updated the following local packages: lumina-node
+
 ## [0.6.4](https://github.com/eigerco/lumina/compare/lumina-cli-v0.6.3...lumina-cli-v0.6.4) - 2025-06-09
 
 ### Other
