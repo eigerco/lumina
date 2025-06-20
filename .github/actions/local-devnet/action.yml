@@ -10,16 +10,13 @@ runs:
       if: runner.os == 'macos'
       shell: bash
       run: |
-        brew install docker docker-compose
+        brew install colima docker docker-compose docker-buildx
         
         # Link the Docker Compose v2 plugin so it's understood by the docker CLI
         mkdir -p ~/.docker/cli-plugins
         ln -sfn /usr/local/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
         
         colima start
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
 
     - name: Cache Docker layers
       uses: actions/cache@v4
