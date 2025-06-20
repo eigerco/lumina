@@ -323,7 +323,7 @@ mod tests {
     // https://docs.rs/rstest/0.18.2/rstest/attr.rstest.html#inject-test-attribute
     use lumina_utils::test_utils::async_test as test;
 
-    use crate::test_utils::{new_block_ranges, new_indexed_db_store_name};
+    use crate::test_utils::new_block_ranges;
 
     #[test]
     async fn converts_bounded_ranges() {
@@ -1260,7 +1260,7 @@ mod tests {
 
     #[cfg(target_arch = "wasm32")]
     async fn new_indexed_db_store() -> IndexedDbStore {
-        let store_name = new_indexed_db_store_name().await;
+        let store_name = crate::test_utils::new_indexed_db_store_name().await;
 
         IndexedDbStore::new(&store_name)
             .await
