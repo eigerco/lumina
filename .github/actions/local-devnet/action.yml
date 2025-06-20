@@ -2,8 +2,17 @@ name: Local celestia devnet
 runs:
   using: "composite"
   steps:
-    - name: Set up Docker
-      uses: docker/setup-docker-action@v4
+    # https://github.com/actions/runner/issues/1456#issuecomment-1676495453
+    - name: Setup docker and docker-compose (missing on MacOS)
+      if: runner.os == 'macos'
+      run: |
+        brew install docker docker-compose
+        
+        # Link the Docker Compose v2 plugin so it's understood by the docker CLI
+        mkdir -p ~/.docker/cli-plugins
+        ln -sfn /usr/local/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
+        
+        colima start
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
