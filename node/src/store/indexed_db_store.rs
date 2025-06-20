@@ -902,15 +902,14 @@ pub mod tests {
     use super::*;
     use crate::test_utils::ExtendedHeaderGeneratorExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use function_name::named;
     use wasm_bindgen_test::wasm_bindgen_test;
 
-    #[named]
+    use crate::test_utils::new_indexed_db_store_name;
+
     #[wasm_bindgen_test]
     async fn test_large_db() {
-        let store_name = function_name!();
-        Rexie::delete(store_name).await.unwrap();
-        let s = IndexedDbStore::new(store_name)
+        let store_name = new_indexed_db_store_name().await;
+        let s = IndexedDbStore::new(&store_name)
             .await
             .expect("creating test store failed");
 
@@ -932,17 +931,18 @@ pub mod tests {
 
         drop(s);
         // re-open the store, to force re-calculation of the cached heights
-        let s = IndexedDbStore::new(store_name)
+        let s = IndexedDbStore::new(&store_name)
             .await
             .expect("re-opening large test store failed");
 
         assert_eq!(s.get_head().unwrap().height().value(), expected_height);
     }
 
-    #[named]
     #[wasm_bindgen_test]
     async fn test_persistence() {
-        let (original_store, mut gen) = gen_filled_store(0, function_name!()).await;
+        let store_name = new_indexed_db_store_name().await;
+
+        let (original_store, mut gen) = gen_filled_store(0, &store_name).await;
         let original_headers = gen.next_many_verified(20);
 
         original_store
@@ -951,7 +951,7 @@ pub mod tests {
             .expect("inserting test data failed");
         drop(original_store);
 
-        let reopened_store = IndexedDbStore::new(function_name!())
+        let reopened_store = IndexedDbStore::new(&store_name)
             .await
             .expect("failed to reopen store");
 
@@ -979,7 +979,7 @@ pub mod tests {
             .chain(new_headers.into_iter())
             .collect::<Vec<_>>();
 
-        let reopened_store = IndexedDbStore::new(function_name!())
+        let reopened_store = IndexedDbStore::new(&store_name)
             .await
             .expect("failed to reopen store");
 
@@ -996,15 +996,16 @@ pub mod tests {
         }
     }
 
-    #[named]
     #[wasm_bindgen_test]
     async fn test_delete_db() {
-        let (original_store, _) = gen_filled_store(3, function_name!()).await;
+        let store_name = new_indexed_db_store_name().await;
+
+        let (original_store, _) = gen_filled_store(3, &store_name).await;
         assert_eq!(original_store.get_head_height().unwrap(), 3);
 
         original_store.delete_db().await.unwrap();
 
-        let same_name_store = IndexedDbStore::new(function_name!())
+        let same_name_store = IndexedDbStore::new(&store_name)
             .await
             .expect("creating test store failed");
 
@@ -1023,7 +1024,6 @@ pub mod tests {
         // and fills it with `hs` headers. It is a caller responsibility to make sure provided
         // headers are correct and in order.
         async fn init_store(name: &str, hs: Vec<ExtendedHeader>) {
-            Rexie::delete(name).await.unwrap();
             let rexie = Rexie::builder(name)
                 .version(PREVIOUS_DB_VERSION)
                 .add_object_store(
@@ -1058,16 +1058,15 @@ pub mod tests {
             rexie.close();
         }
 
-        #[named]
         #[wasm_bindgen_test]
         async fn migration_test() {
-            let store_name = function_name!();
+            let store_name = new_indexed_db_store_name().await;
             let mut gen = ExtendedHeaderGenerator::new();
             let headers = gen.next_many(20);
 
-            init_store(store_name, headers.clone()).await;
+            init_store(&store_name, headers.clone()).await;
 
-            let store = IndexedDbStore::new(store_name)
+            let store = IndexedDbStore::new(&store_name)
                 .await
                 .expect("opening migrated store failed");
 
@@ -1091,7 +1090,6 @@ pub mod tests {
         use super::*;
 
         async fn init_store(name: &str) {
-            Rexie::delete(name).await.unwrap();
             let rexie = Rexie::builder(name)
                 .version(4)
                 .add_object_store(ObjectStore::new("ranges"))
@@ -1123,22 +1121,21 @@ pub mod tests {
             rexie.close();
         }
 
-        #[named]
         #[wasm_bindgen_test]
         async fn migration_test() {
-            let store_name = function_name!();
+            let store_name = new_indexed_db_store_name().await;
 
             // Prepare store
-            init_store(store_name).await;
+            init_store(&store_name).await;
 
             // Migrate and check
-            let store = IndexedDbStore::new(store_name).await.unwrap();
+            let store = IndexedDbStore::new(&store_name).await.unwrap();
             let ranges = store.get_sampled_ranges().await.unwrap();
             assert_eq!(ranges, BlockRanges::try_from([123..=124]).unwrap());
             store.close().await.unwrap();
 
             // Check that old ranges were deleted
-            let rexie = Rexie::builder(store_name)
+            let rexie = Rexie::builder(&store_name)
                 .version(5)
                 .add_object_store(ObjectStore::new("ranges"))
                 .build()

@@ -34,6 +34,20 @@ pub async fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGene
     (s, gen)
 }
 
+#[cfg(all(test, target_arch = "wasm32"))]
+pub(crate) async fn new_indexed_db_store_name() -> String {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+
+    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    let db_name = format!("indexeddb-lumina-node-store-test-{id}");
+
+    // DB can persist if test run within the browser
+    rexie::Rexie::delete(&db_name).await.unwrap();
+
+    db_name
+}
+
 /// Convenience function for creating a `BlockRange` out of a list of `N..=M` ranges
 pub fn new_block_ranges<const N: usize>(ranges: [BlockRange; N]) -> BlockRanges {
     BlockRanges::from_vec(ranges.into_iter().collect()).expect("invalid BlockRanges")

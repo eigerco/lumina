@@ -100,7 +100,6 @@ web-sys = { version = "0.3.77", features = ["Request", "RequestInit", "RequestMo
 libp2p-websocket-websys = "0.3.3"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-function_name = "0.3.0"
 wasm-bindgen-test.workspace = true
 
 [dev-dependencies]

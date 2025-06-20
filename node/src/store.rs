@@ -318,12 +318,12 @@ mod tests {
     use crate::test_utils::ExtendedHeaderGeneratorExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::Height;
-    use lumina_utils::test_utils::async_test as test;
     use rstest::rstest;
-
     // rstest only supports attributes which last segment is `test`
     // https://docs.rs/rstest/0.18.2/rstest/attr.rstest.html#inject-test-attribute
-    use crate::test_utils::new_block_ranges;
+    use lumina_utils::test_utils::async_test as test;
+
+    use crate::test_utils::{new_block_ranges, new_indexed_db_store_name};
 
     #[test]
     async fn converts_bounded_ranges() {
@@ -1260,16 +1260,9 @@ mod tests {
 
     #[cfg(target_arch = "wasm32")]
     async fn new_indexed_db_store() -> IndexedDbStore {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+        let store_name = new_indexed_db_store_name().await;
 
-        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-        let db_name = format!("indexeddb-lumina-node-store-test-{id}");
-
-        // DB can persist if test run within the browser
-        rexie::Rexie::delete(&db_name).await.unwrap();
-
-        IndexedDbStore::new(&db_name)
+        IndexedDbStore::new(&store_name)
             .await
             .expect("creating test store failed")
     }
