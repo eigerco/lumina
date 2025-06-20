@@ -63,7 +63,7 @@ fun LuminaUi(modifier: Modifier = Modifier) {
             network = network,
             bootnodes = null,
             syncingWindowSecs = null,
-            pruningDelaySecs = null,
+            pruningWindowSecs = null,
             batchSize = null,
             ed25519SecretKeyBytes = null,
         )
