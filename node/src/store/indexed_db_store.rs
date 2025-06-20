@@ -1014,7 +1014,7 @@ pub mod tests {
         ));
     }
 
-    mod migration_v1 {
+    mod migration_from_v1 {
         use super::*;
 
         const PREVIOUS_DB_VERSION: u32 = 1;
@@ -1084,6 +1084,75 @@ pub mod tests {
                 let sampling_data = store.get_sampling_metadata(height).await.unwrap();
                 assert!(sampling_data.is_none());
             }
+        }
+    }
+
+    mod migration_from_v4 {
+        use super::*;
+
+        async fn init_store(name: &str) {
+            Rexie::delete(name).await.unwrap();
+            let rexie = Rexie::builder(name)
+                .version(4)
+                .add_object_store(ObjectStore::new("ranges"))
+                .add_object_store(ObjectStore::new("schema"))
+                .build()
+                .await
+                .unwrap();
+
+            let tx = rexie
+                .transaction(&["schema", "ranges"], TransactionMode::ReadWrite)
+                .unwrap();
+
+            let schema_store = tx.store("schema").unwrap();
+            schema_store
+                .put(&to_value(&4).unwrap(), Some(&JsValue::from_str("version")))
+                .await
+                .unwrap();
+
+            let ranges_store = tx.store("ranges").unwrap();
+            ranges_store
+                .put(
+                    &to_value(&BlockRanges::try_from([123..=124]).unwrap()).unwrap(),
+                    Some(&JsValue::from_str(v4::SAMPLED_RANGES_KEY)),
+                )
+                .await
+                .unwrap();
+
+            tx.commit().await.unwrap();
+            rexie.close();
+        }
+
+        #[named]
+        #[wasm_bindgen_test]
+        async fn migration_test() {
+            let store_name = function_name!();
+
+            // Prepare store
+            init_store(store_name).await;
+
+            // Migrate and check
+            let store = IndexedDbStore::new(store_name).await.unwrap();
+            let ranges = store.get_sampled_ranges().await.unwrap();
+            assert_eq!(ranges, BlockRanges::try_from([123..=124]).unwrap());
+            store.close().await.unwrap();
+
+            // Check that old ranges were deleted
+            let rexie = Rexie::builder(store_name)
+                .version(5)
+                .add_object_store(ObjectStore::new("ranges"))
+                .build()
+                .await
+                .unwrap();
+            let tx = rexie
+                .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)
+                .unwrap();
+            let store = tx.store(RANGES_STORE_NAME).unwrap();
+            assert!(store
+                .get(JsValue::from_str(v4::SAMPLED_RANGES_KEY))
+                .await
+                .unwrap()
+                .is_none());
         }
     }
 

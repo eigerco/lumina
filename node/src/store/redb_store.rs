@@ -910,6 +910,59 @@ pub mod tests {
         assert_eq!(store1.head_height().await.unwrap(), 16);
     }
 
+    #[tokio::test]
+    async fn migration_from_v2() {
+        const SCHEMA_VERSION_TABLE: TableDefinition<'static, (), u64> =
+            TableDefinition::new("STORE.SCHEMA_VERSION");
+        const RANGES_TABLE: TableDefinition<'static, &str, Vec<(u64, u64)>> =
+            TableDefinition::new("STORE.RANGES");
+
+        let db = Database::builder()
+            .create_with_backend(redb::backends::InMemoryBackend::new())
+            .unwrap();
+        let db = Arc::new(db);
+
+        // Prepare a v2 db
+        tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let tx = db.begin_write().unwrap();
+
+                {
+                    let mut schema_version_table = tx.open_table(SCHEMA_VERSION_TABLE).unwrap();
+                    schema_version_table.insert((), 2).unwrap();
+
+                    let mut ranges_table = tx.open_table(RANGES_TABLE).unwrap();
+                    ranges_table
+                        .insert(v2::SAMPLED_RANGES_KEY, vec![(123, 124)])
+                        .unwrap();
+                }
+
+                tx.commit().unwrap();
+            }
+        })
+        .await
+        .unwrap();
+
+        // Migrate and check store
+        let store = RedbStore::new(db.clone()).await.unwrap();
+        let ranges = store.get_sampled_ranges().await.unwrap();
+        assert_eq!(ranges, BlockRanges::try_from([123..=124]).unwrap());
+        store.close().await.unwrap();
+
+        // Check that old ranges were deleted
+        tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let tx = db.begin_read().unwrap();
+                let ranges_table = tx.open_table(RANGES_TABLE).unwrap();
+                assert!(ranges_table.get(v2::SAMPLED_RANGES_KEY).unwrap().is_none());
+            }
+        })
+        .await
+        .unwrap();
+    }
+
     pub async fn create_store(path: Option<&Path>) -> RedbStore {
         match path {
             Some(path) => RedbStore::open(path).await.unwrap(),
