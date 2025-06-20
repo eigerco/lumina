@@ -181,9 +181,12 @@ jobs:
       run: cd cli/js && npm ci && npm run build
 
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-13
     steps: 
     - uses: actions/checkout@v4
+
+    - name: Celestia devnet
+      uses: ./.github/actions/local-devnet
 
     - name: Setup toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
