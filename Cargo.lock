@@ -1680,21 +1680,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "function_name"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1ab577a896d09940b5fe12ec5ae71f9d8211fff62c919c03a3750a9901e98a7"
-dependencies = [
- "function_name-proc-macro",
-]
-
-[[package]]
-name = "function_name-proc-macro"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673464e1e314dd67a0fd9544abc99e8eb28d0c7e3b69b033bcff9b2d00b87333"
-
-[[package]]
 name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2831,9 +2816,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.168"
+version = "0.2.171"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aaeb2981e0606ca11d79718f8bb01164f1d6ed75080182d3abf017e6d244b6d"
+checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
 
 [[package]]
 name = "libm"
@@ -3553,7 +3538,6 @@ dependencies = [
  "celestia-types",
  "cid",
  "dashmap 5.5.3",
- "function_name",
  "futures",
  "getrandom",
  "gloo-timers 0.3.0",
@@ -4665,9 +4649,9 @@ dependencies = [
 
 [[package]]
 name = "redb"
-version = "2.3.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7c2a94325f9c5826b17c42af11067230f503747f870117a28180e85696e21ba"
+checksum = "34bc6763177194266fc3773e2b2bb3693f7b02fdf461e285aa33202e3164b74e"
 dependencies = [
  "libc",
 ]

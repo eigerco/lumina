@@ -83,7 +83,7 @@ impl ExtendedHeaderGenerator {
     /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> ExtendedHeader {
-        let time = self.get_and_increment_time();
+        let time = self.get_and_increment_time(1);
         let header = match self.current_header {
             Some(ref header) => generate_next(1, header, time, &self.key, None),
             None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, None),
@@ -106,7 +106,7 @@ impl ExtendedHeaderGenerator {
     /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next_with_dah(&mut self, dah: DataAvailabilityHeader) -> ExtendedHeader {
-        let time = self.get_and_increment_time();
+        let time = self.get_and_increment_time(1);
         let header = match self.current_header {
             Some(ref header) => generate_next(1, header, time, &self.key, Some(dah)),
             None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, Some(dah)),
@@ -244,7 +244,7 @@ impl ExtendedHeaderGenerator {
             return;
         }
 
-        let time = self.get_and_increment_time();
+        let time = self.get_and_increment_time(amount);
 
         let header = match self.current_header {
             Some(ref header) => generate_next(amount, header, time, &self.key, None),
@@ -290,12 +290,15 @@ impl ExtendedHeaderGenerator {
 
     // private function which gets and increments generator time, since we cannot have multiple headers on the
     // exact same timestamp
-    fn get_and_increment_time(&mut self) -> Time {
+    fn get_and_increment_time(&mut self, amount: u64) -> Time {
         let Some((spoofed_time, block_time)) = self.spoofed_block_time.take() else {
             return Time::now();
         };
 
-        let timestamp = (spoofed_time + block_time).expect("not to overflow");
+        let block_time_ms: u64 = block_time.as_millis().try_into().expect("u64 overflow");
+
+        let timestamp = (spoofed_time + Duration::from_millis(block_time_ms * amount))
+            .expect("not to overflow");
         self.spoofed_block_time = Some((timestamp, block_time));
 
         timestamp

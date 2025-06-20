@@ -23,23 +23,27 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::blockstore::InMemoryBlockstore;
-use crate::daser::{Daser, DaserArgs};
+use crate::daser::{
+    Daser, DaserArgs, DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY, DEFAULT_CONCURENCY_LIMIT,
+};
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
 use crate::p2p::{P2p, P2pArgs};
-use crate::pruner::{Pruner, PrunerArgs, DEFAULT_PRUNING_INTERVAL};
+use crate::pruner::{Pruner, PrunerArgs};
 use crate::store::{InMemoryStore, SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs};
 
 mod builder;
 
 pub use self::builder::{
-    NodeBuilder, NodeBuilderError, DEFAULT_PRUNING_DELAY, DEFAULT_SAMPLING_WINDOW,
-    MIN_PRUNING_DELAY, MIN_SAMPLING_WINDOW,
+    NodeBuilder, NodeBuilderError, DEFAULT_PRUNING_WINDOW, DEFAULT_PRUNING_WINDOW_IN_MEMORY,
+    DEFAULT_SAMPLING_WINDOW, MIN_SAMPLING_WINDOW,
 };
 pub use crate::daser::DaserError;
 pub use crate::p2p::{HeaderExError, P2pError};
 pub use crate::peer_tracker::PeerTrackerInfo;
 pub use crate::syncer::{SyncerError, SyncingInfo};
+
+const DEFAULT_BLOCK_TIME: Duration = Duration::from_secs(6);
 
 /// Alias of [`Result`] with [`NodeError`] error type
 ///
@@ -158,9 +162,8 @@ where
             p2p: p2p.clone(),
             event_pub: event_channel.publisher(),
             batch_size: config.sync_batch_size,
-            // We sync only what we need to sample. So syncing_window is
-            // the same as sampling_window.
-            syncing_window: config.sampling_window,
+            sampling_window: config.sampling_window,
+            pruning_window: config.pruning_window,
         })?);
 
         let daser = Arc::new(Daser::start(DaserArgs {
@@ -168,13 +171,17 @@ where
             store: store.clone(),
             event_pub: event_channel.publisher(),
             sampling_window: config.sampling_window,
+            concurrency_limit: DEFAULT_CONCURENCY_LIMIT,
+            additional_headersub_concurrency: DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY,
         })?);
 
         let pruner = Arc::new(Pruner::start(PrunerArgs {
+            daser: daser.clone(),
             store: store.clone(),
             blockstore: blockstore.clone(),
             event_pub: event_channel.publisher(),
-            pruning_interval: DEFAULT_PRUNING_INTERVAL,
+            block_time: DEFAULT_BLOCK_TIME,
+            sampling_window: config.sampling_window,
             pruning_window: config.pruning_window,
         }));
 

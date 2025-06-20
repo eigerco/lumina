@@ -282,10 +282,10 @@ impl SampleId {
     }
 }
 
-impl<const S: usize> TryFrom<CidGeneric<S>> for SampleId {
+impl<const S: usize> TryFrom<&CidGeneric<S>> for SampleId {
     type Error = CidError;
 
-    fn try_from(cid: CidGeneric<S>) -> Result<Self, Self::Error> {
+    fn try_from(cid: &CidGeneric<S>) -> Result<Self, Self::Error> {
         let codec = cid.codec();
         if codec != SAMPLE_ID_CODEC {
             return Err(CidError::InvalidCidCodec(codec));
@@ -307,6 +307,22 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for SampleId {
         }
 
         SampleId::decode(hash.digest())
+    }
+}
+
+impl<const S: usize> TryFrom<&mut CidGeneric<S>> for SampleId {
+    type Error = CidError;
+
+    fn try_from(cid: &mut CidGeneric<S>) -> Result<Self, Self::Error> {
+        Self::try_from(&*cid)
+    }
+}
+
+impl<const S: usize> TryFrom<CidGeneric<S>> for SampleId {
+    type Error = CidError;
+
+    fn try_from(cid: CidGeneric<S>) -> Result<Self, Self::Error> {
+        Self::try_from(&cid)
     }
 }
 
