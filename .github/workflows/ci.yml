@@ -181,7 +181,7 @@ jobs:
       run: cd cli/js && npm ci && npm run build
 
   build-ios:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps: 
     - uses: actions/checkout@v4
 
