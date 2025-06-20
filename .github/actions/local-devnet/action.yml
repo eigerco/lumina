@@ -2,6 +2,9 @@ name: Local celestia devnet
 runs:
   using: "composite"
   steps:
+    - name: Set up Docker
+      uses: docker/setup-docker-action@v4
+
     # https://github.com/actions/runner/issues/1456#issuecomment-1676495453
     - name: Setup docker and docker-compose (missing on MacOS)
       if: runner.os == 'macos'
