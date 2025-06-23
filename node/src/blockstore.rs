@@ -9,73 +9,29 @@ use crate::p2p::MAX_MH_SIZE;
 /// An [`InMemoryBlockstore`] with maximum multihash size used by lumina.
 ///
 /// [`InMemoryBlockstore`]: blockstore::InMemoryBlockstore
-pub type InMemoryBlockstore = SampleBlockstore<blockstore::InMemoryBlockstore<MAX_MH_SIZE>>;
+pub type InMemoryBlockstore = blockstore::InMemoryBlockstore<MAX_MH_SIZE>;
 
 #[cfg(not(target_arch = "wasm32"))]
 /// A [`RedbBlockstore`].
 ///
 /// [`RedbBlockstore`]: blockstore::RedbBlockstore
-pub type RedbBlockstore = SampleBlockstore<blockstore::RedbBlockstore>;
+pub type RedbBlockstore = blockstore::RedbBlockstore;
 
 #[cfg(target_arch = "wasm32")]
 /// An [`IndexedDbBlockstore`].
 ///
 /// [`IndexedDbBlockstore`]: blockstore::IndexedDbBlockstore
-pub type IndexedDbBlockstore = SampleBlockstore<blockstore::IndexedDbBlockstore>;
+pub type IndexedDbBlockstore = blockstore::IndexedDbBlockstore;
 
 /// A blockstore which only stores samples and discards other CIDs.
-pub struct SampleBlockstore<B> {
+pub(crate) struct SampleBlockstore<B> {
     blockstore: B,
 }
 
 impl<B> SampleBlockstore<B> {
-    /// Extract the underlying blockstore
-    pub fn into_inner(self) -> B {
-        self.blockstore
-    }
-}
-
-impl SampleBlockstore<blockstore::InMemoryBlockstore<MAX_MH_SIZE>> {
-    /// Create a new [`InMemoryBlockstore`]
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Self {
-            blockstore: blockstore::InMemoryBlockstore::new(),
-        }
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl SampleBlockstore<blockstore::RedbBlockstore> {
-    /// Create a new [`RedbBlockstore`]
-    pub fn new(db: std::sync::Arc<redb::Database>) -> Self {
-        Self {
-            blockstore: blockstore::RedbBlockstore::new(db),
-        }
-    }
-
-    /// Open a persistent [`RedbBlockstore`]
-    pub async fn open(path: impl AsRef<std::path::Path>) -> Result<Self> {
-        Ok(Self {
-            blockstore: blockstore::RedbBlockstore::open(path).await?,
-        })
-    }
-
-    /// Open an in memory [`RedbBlockstore`]
-    pub fn in_memory() -> Result<Self> {
-        Ok(Self {
-            blockstore: blockstore::RedbBlockstore::in_memory()?,
-        })
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl SampleBlockstore<blockstore::IndexedDbBlockstore> {
-    /// Create a new [`IndexedDbBlockstore`]
-    pub async fn new(name: &str) -> Result<Self> {
-        Ok(Self {
-            blockstore: blockstore::IndexedDbBlockstore::new(name).await?,
-        })
+    /// Wrap another blockstore with sample blockstore.
+    pub(crate) fn new(blockstore: B) -> Self {
+        Self { blockstore }
     }
 }
 
@@ -116,7 +72,7 @@ mod tests {
     };
     use lumina_utils::test_utils::async_test;
 
-    use super::InMemoryBlockstore;
+    use super::{InMemoryBlockstore, SampleBlockstore};
 
     #[async_test]
     async fn should_only_store_samples() {
@@ -132,7 +88,7 @@ mod tests {
             };
         }
 
-        let blockstore = InMemoryBlockstore::new();
+        let blockstore = SampleBlockstore::new(InMemoryBlockstore::new());
 
         let sample_cids = [
             cid!(SampleId, 1, 2, 3),
