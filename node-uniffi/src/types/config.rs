@@ -28,7 +28,7 @@ pub struct NodeConfig {
     /// Custom sampling window in seconds. Default is 30 days.
     pub sampling_window_secs: Option<u32>,
     /// Custom pruning window in seconds. Default is 30 days plus 1 hour if base path is set
-    /// and 1 minute if not.
+    /// and 0 seconds if not.
     pub pruning_window_secs: Option<u32>,
     /// Maximum number of headers in batch while syncing. Default is 128.
     pub batch_size: Option<u64>,
