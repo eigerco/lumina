@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.3](https://github.com/eigerco/lumina/compare/celestia-types-v0.11.2...celestia-types-v0.11.3) - 2025-06-23
+
+### Added
+
+- make Merkle proof fields pub for Blobstream validation ([#658](https://github.com/eigerco/lumina/pull/658))
+
 ## [0.11.2](https://github.com/eigerco/lumina/compare/celestia-types-v0.11.1...celestia-types-v0.11.2) - 2025-06-09
 
 ### Added
