@@ -22,7 +22,7 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
-use crate::blockstore::InMemoryBlockstore;
+use crate::blockstore::{InMemoryBlockstore, SampleBlockstore};
 use crate::daser::{Daser, DaserArgs};
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
 use crate::p2p::{P2p, P2pArgs};
@@ -94,7 +94,7 @@ where
 {
     event_channel: EventChannel,
     p2p: Option<Arc<P2p>>,
-    blockstore: Option<Arc<B>>,
+    blockstore: Option<Arc<SampleBlockstore<B>>>,
     store: Option<Arc<S>>,
     syncer: Option<Arc<Syncer<S>>>,
     daser: Option<Arc<Daser>>,
@@ -138,7 +138,7 @@ where
         let event_channel = EventChannel::new();
         let event_sub = event_channel.subscribe();
         let store = Arc::new(config.store);
-        let blockstore = Arc::new(config.blockstore);
+        let blockstore = Arc::new(SampleBlockstore::new(config.blockstore));
 
         let p2p = Arc::new(
             P2p::start(P2pArgs {
@@ -364,7 +364,11 @@ where
         Ok(self.p2p().get_row(row_index, block_height, timeout).await?)
     }
 
+    // TODO: Fix the storage cleanup after calling this method.
     /// Request a verified [`Sample`] from the network.
+    ///
+    /// Samples retrieved from this method will be stored in blockstore and never
+    /// cleared.
     ///
     /// # Errors
     ///
