@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.8.5...lumina-node-wasm-v0.9.0) - 2025-06-23
+
+### Added
+
+- *(node)* [**breaking**] Implement adaptive backward syncing/sampling ([#606](https://github.com/eigerco/lumina/pull/606))
+
 ## [0.8.5](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.8.4...lumina-node-wasm-v0.8.5) - 2025-06-20
 
 ### Other
