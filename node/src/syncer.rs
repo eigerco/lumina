@@ -1,13 +1,4 @@
 //! Component responsible for synchronizing block headers announced in the Celestia network.
-//!
-//! It starts by asking the trusted peers for their current head headers and picks
-//! the latest header returned by at least two of them as the initial synchronization target
-//! called `subjective_head`.
-//!
-//! Then it starts synchronizing from the genesis header up to the target requesting headers
-//! on the `header-ex` p2p protocol. In the meantime, it constantly checks for the latest
-//! headers announced on the `header-sub` p2p protocol to keep the `subjective_head` as close
-//! to the `network_head` as possible.
 
 use std::marker::PhantomData;
 use std::pin::pin;
@@ -30,11 +21,12 @@ use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
-use crate::utils::{FusedReusableFuture, OneshotSenderExt};
+use crate::utils::{FusedReusableFuture, OneshotSenderExt, TimeExt};
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
 
 const TRY_INIT_BACKOFF_MAX_INTERVAL: Duration = Duration::from_secs(60);
+const SLOW_SYNC_MIN_THRESHOLD: u64 = 50;
 
 /// Representation of all the errors that can occur in `Syncer` component.
 #[derive(Debug, thiserror::Error)]
@@ -97,8 +89,10 @@ where
     pub(crate) event_pub: EventPublisher,
     /// Batch size.
     pub(crate) batch_size: u64,
-    /// Syncing window
-    pub(crate) syncing_window: Duration,
+    /// Sampling window
+    pub(crate) sampling_window: Duration,
+    /// Pruning window
+    pub(crate) pruning_window: Duration,
 }
 
 #[derive(Debug)]
@@ -106,6 +100,8 @@ enum SyncerCmd {
     GetInfo {
         respond_to: oneshot::Sender<SyncingInfo>,
     },
+    #[cfg(test)]
+    TriggerFetchNextBatch,
 }
 
 /// Status of the synchronization.
@@ -177,6 +173,11 @@ where
 
         Ok(rx.await?)
     }
+
+    #[cfg(test)]
+    async fn trigger_fetch_next_batch(&self) -> Result<()> {
+        self.send_command(SyncerCmd::TriggerFetchNextBatch).await
+    }
 }
 
 impl<S> Drop for Syncer<S>
@@ -199,9 +200,11 @@ where
     store: Arc<S>,
     header_sub_rx: Option<mpsc::Receiver<ExtendedHeader>>,
     subjective_head_height: Option<u64>,
+    highest_slow_sync_height: Option<u64>,
     batch_size: u64,
     ongoing_batch: Ongoing,
-    syncing_window: Duration,
+    sampling_window: Duration,
+    pruning_window: Duration,
 }
 
 struct Ongoing {
@@ -226,12 +229,14 @@ where
             store: args.store,
             header_sub_rx: None,
             subjective_head_height: None,
+            highest_slow_sync_height: None,
             batch_size: args.batch_size,
             ongoing_batch: Ongoing {
                 range: None,
                 task: FusedReusableFuture::terminated(),
             },
-            syncing_window: args.syncing_window,
+            sampling_window: args.sampling_window,
+            pruning_window: args.pruning_window,
         })
     }
 
@@ -395,6 +400,10 @@ where
                 let info = self.syncing_info().await?;
                 respond_to.maybe_send(info);
             }
+            #[cfg(test)]
+            SyncerCmd::TriggerFetchNextBatch => {
+                self.fetch_next_batch().await?;
+            }
         }
 
         Ok(())
@@ -460,10 +469,15 @@ where
         };
 
         let store_ranges = self.store.get_stored_header_ranges().await?;
+        let pruned_ranges = self.store.get_pruned_ranges().await?;
+
+        // Pruner removes already sampled headers and creates gaps in the ranges.
+        // Syncer must ignore those gaps.
+        let synced_ranges = pruned_ranges + &store_ranges;
 
         let next_batch = calculate_range_to_fetch(
             subjective_head_height,
-            store_ranges.as_ref(),
+            synced_ranges.as_ref(),
             self.batch_size,
         );
 
@@ -472,10 +486,29 @@ where
             return Ok(());
         }
 
-        // make sure we're inside the syncing window before we start
+        // If all heights of next batch is within the slow sync range
+        if self
+            .highest_slow_sync_height
+            .is_some_and(|height| *next_batch.end() <= height)
+        {
+            // Threshold is the half of batch size but it should be at least 50.
+            let threshold = (self.batch_size / 2).max(SLOW_SYNC_MIN_THRESHOLD);
+
+            // Calculate how many headers are locally available for sampling.
+            let sampled_ranges = self.store.get_sampled_ranges().await?;
+            let available_for_sampling = (store_ranges - sampled_ranges).len();
+
+            // Do not fetch next batch if we have more headers than the threshold.
+            if available_for_sampling > threshold {
+                // NOTE: Recheck will happen when we receive a header from header sub (~6 secs).
+                return Ok(());
+            }
+        }
+
+        // make sure we're inside the sampling window before we start
         match self.store.get_by_height(next_batch.end() + 1).await {
             Ok(known_header) => {
-                if !self.in_syncing_window(&known_header) {
+                if !self.in_sampling_window(&known_header) {
                     return Ok(());
                 }
             }
@@ -535,6 +568,28 @@ where
             }
         };
 
+        let pruning_cutoff = Time::now().saturating_sub(self.pruning_window);
+
+        // Iterate headers from highest to lowest and check if there is
+        // a new highest "slow sync" height.
+        for header in headers.iter().rev() {
+            if self
+                .highest_slow_sync_height
+                .is_some_and(|height| header.height().value() <= height)
+            {
+                // `highest_slow_sync_height` is already higher than `header`
+                // so we don't need to check anything else.
+                break;
+            }
+
+            // If `header` is after the pruning edge, we mark it as the
+            // `highest_slow_sync_height` and we stop checking lower headers.
+            if header.time() <= pruning_cutoff {
+                self.highest_slow_sync_height = Some(header.height().value());
+                break;
+            }
+        }
+
         if let Err(e) = self.store.insert(headers).await {
             if e.is_fatal() {
                 return Err(e.into());
@@ -557,47 +612,38 @@ where
         Ok(())
     }
 
-    fn in_syncing_window(&self, header: &ExtendedHeader) -> bool {
-        let syncing_window_start =
-            Time::now()
-                .checked_sub(self.syncing_window)
-                .unwrap_or_else(|| {
-                    warn!(
-                        "underflow when computing syncing window start, defaulting to unix epoch"
-                    );
-                    Time::unix_epoch()
-                });
-
-        header.time().after(syncing_window_start)
+    fn in_sampling_window(&self, header: &ExtendedHeader) -> bool {
+        let sampling_window_end = Time::now().saturating_sub(self.sampling_window);
+        header.time().after(sampling_window_end)
     }
 }
 
-/// based on the stored headers and current network head height, calculate range of headers that
-/// should be fetched from the network, anchored on already existing header range in store
+/// based on the synced headers and current network head height, calculate range of headers that
+/// should be fetched from the network, anchored on already synced header range
 fn calculate_range_to_fetch(
     subjective_head_height: u64,
-    store_headers: &[BlockRange],
+    synced_headers: &[BlockRange],
     limit: u64,
 ) -> BlockRange {
-    let mut store_headers_iter = store_headers.iter().rev();
+    let mut synced_headers_iter = synced_headers.iter().rev();
 
-    let Some(store_head_range) = store_headers_iter.next() else {
-        // empty store, we're missing everything
+    let Some(synced_head_range) = synced_headers_iter.next() else {
+        // empty synced ranges, we're missing everything
         let range = 1..=subjective_head_height;
-        return range.truncate_right(limit);
+        return range.tailn(limit);
     };
 
-    if store_head_range.end() < &subjective_head_height {
+    if synced_head_range.end() < &subjective_head_height {
         // if we haven't caught up with the network head, start from there
-        let range = store_head_range.end() + 1..=subjective_head_height;
-        return range.truncate_right(limit);
+        let range = synced_head_range.end() + 1..=subjective_head_height;
+        return range.tailn(limit);
     }
 
     // there exists a range contiguous with network head. inspect previous range end
-    let penultimate_range_end = store_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
+    let penultimate_range_end = synced_headers_iter.next().map(|r| *r.end()).unwrap_or(0);
 
-    let range = penultimate_range_end + 1..=store_head_range.start().saturating_sub(1);
-    range.truncate_left(limit)
+    let range = penultimate_range_end + 1..=synced_head_range.start().saturating_sub(1);
+    range.headn(limit)
 }
 
 #[instrument(skip_all)]
@@ -695,8 +741,7 @@ mod tests {
     use super::*;
     use crate::block_ranges::{BlockRange, BlockRangeExt};
     use crate::events::EventChannel;
-    use crate::node::HeaderExError;
-    use crate::node::DEFAULT_SAMPLING_WINDOW;
+    use crate::node::{HeaderExError, DEFAULT_PRUNING_WINDOW, DEFAULT_SAMPLING_WINDOW};
     use crate::p2p::header_session;
     use crate::store::InMemoryStore;
     use crate::test_utils::{gen_filled_store, MockP2pHandle};
@@ -788,7 +833,8 @@ mod tests {
             store: Arc::new(InMemoryStore::new()),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            pruning_window: DEFAULT_PRUNING_WINDOW,
         })
         .unwrap();
 
@@ -895,6 +941,58 @@ mod tests {
     }
 
     #[async_test]
+    async fn slow_sync() {
+        let pruning_window = Duration::from_secs(600);
+        let sampling_window = DEFAULT_SAMPLING_WINDOW;
+
+        let mut gen = ExtendedHeaderGenerator::new();
+
+        // Generate back in time 4 batches of 512 messages (= 2048 headers).
+        let first_header_time = (Time::now() - Duration::from_secs(2048)).unwrap();
+        gen.set_time(first_header_time, Duration::from_secs(1));
+        let headers = gen.next_many(2048);
+
+        let (syncer, store, mut p2p_mock) =
+            initialized_syncer_with_windows(headers[2047].clone(), sampling_window, pruning_window)
+                .await;
+        assert_syncing(&syncer, &store, &[2048..=2048], 2048).await;
+
+        // The whole 1st batch does not reach the pruning edge.
+        handle_session_batch(&mut p2p_mock, &headers, 1536..=2047, true).await;
+        assert_syncing(&syncer, &store, &[1536..=2048], 2048).await;
+
+        // 2nd batch is partially within pruning window, so fast sync applies.
+        handle_session_batch(&mut p2p_mock, &headers, 1024..=1535, true).await;
+        assert_syncing(&syncer, &store, &[1024..=2048], 2048).await;
+
+        // The whole 3rd batch is beyond pruning edge. So now slow sync applies.
+        // In order for the Syncer to send requests, more than a half of the previous
+        // batch needs to be sampled.
+        syncer.trigger_fetch_next_batch().await.unwrap();
+        p2p_mock.expect_no_cmd().await;
+
+        // After marking the 1st and more than of the 2nd batch, syncer
+        // will finally request the 3rd batch.
+        for height in 1250..=2048 {
+            // Simulate Daser
+            store.mark_as_sampled(height).await.unwrap();
+        }
+        for height in 1300..=1450 {
+            // Simulate Pruner
+            store.remove_height(height).await.unwrap();
+        }
+        syncer.trigger_fetch_next_batch().await.unwrap();
+        // Syncer should not request the pruned range
+        handle_session_batch(&mut p2p_mock, &headers, 512..=1023, true).await;
+        assert_syncing(&syncer, &store, &[512..=1299, 1451..=2048], 2048).await;
+
+        // Syncer should not request the 4th batch since there are plenty
+        // of blocks to be sampled.
+        syncer.trigger_fetch_next_batch().await.unwrap();
+        p2p_mock.expect_no_cmd().await;
+    }
+
+    #[async_test]
     async fn window_edge() {
         let month_and_day_ago = Duration::from_secs(31 * 24 * 60 * 60);
         let mut gen = ExtendedHeaderGenerator::new();
@@ -913,7 +1011,7 @@ mod tests {
         handle_session_batch(&mut p2p_mock, &headers, 1537..=2048, true).await;
         assert_syncing(&syncer, &store, &[1537..=2049], 2049).await;
 
-        // Syncer requested the second batch hitting the syncing window
+        // Syncer requested the second batch hitting the sampling window
         handle_session_batch(&mut p2p_mock, &headers, 1025..=1536, true).await;
         assert_syncing(&syncer, &store, &[1025..=2049], 2049).await;
 
@@ -936,7 +1034,8 @@ mod tests {
             store: store.clone(),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            pruning_window: DEFAULT_PRUNING_WINDOW,
         })
         .unwrap();
 
@@ -1167,6 +1266,14 @@ mod tests {
     async fn initialized_syncer(
         head: ExtendedHeader,
     ) -> (Syncer<InMemoryStore>, Arc<InMemoryStore>, MockP2pHandle) {
+        initialized_syncer_with_windows(head, DEFAULT_SAMPLING_WINDOW, DEFAULT_PRUNING_WINDOW).await
+    }
+
+    async fn initialized_syncer_with_windows(
+        head: ExtendedHeader,
+        sampling_window: Duration,
+        pruning_window: Duration,
+    ) -> (Syncer<InMemoryStore>, Arc<InMemoryStore>, MockP2pHandle) {
         let events = EventChannel::new();
         let (mock, mut handle) = P2p::mocked();
         let store = Arc::new(InMemoryStore::new());
@@ -1176,7 +1283,8 @@ mod tests {
             store: store.clone(),
             event_pub: events.publisher(),
             batch_size: 512,
-            syncing_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window,
+            pruning_window,
         })
         .unwrap();
 
