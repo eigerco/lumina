@@ -7,7 +7,7 @@ use std::time::Duration;
 use bytes::Bytes;
 use celestia_proto::cosmos::crypto::secp256k1;
 pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
-use celestia_types::any::IntoAny;
+use celestia_types::any::IntoProtobufAny;
 use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
@@ -158,7 +158,7 @@ where
     /// ```
     pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
     where
-        M: IntoAny,
+        M: IntoProtobufAny,
     {
         let tx_body = RawTxBody {
             messages: vec![message.into_any()],

@@ -12,7 +12,7 @@ mod utils;
 pub use crate::error::{Error, Result};
 pub use crate::grpc::GrpcClient;
 pub use crate::tx::{DocSigner, SignDoc, TxClient, TxConfig};
-pub use celestia_types::any::IntoAny;
+pub use celestia_types::any::IntoProtobufAny;
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();

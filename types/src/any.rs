@@ -4,12 +4,12 @@ use prost::Name;
 use tendermint_proto::google::protobuf::Any;
 
 /// Value convertion into protobuf's Any
-pub trait IntoAny {
+pub trait IntoProtobufAny {
     /// Converts itself into protobuf's Any type
     fn into_any(self) -> Any;
 }
 
-impl<T> IntoAny for T
+impl<T> IntoProtobufAny for T
 where
     T: Name,
 {
@@ -68,7 +68,7 @@ mod wbg {
         }
     }
 
-    impl IntoAny for JsAny {
+    impl IntoProtobufAny for JsAny {
         fn into_any(self) -> Any {
             Any {
                 type_url: self.type_url(),
