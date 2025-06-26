@@ -152,12 +152,15 @@ pub enum P2pError {
     #[error(transparent)]
     CelestiaTypes(#[from] celestia_types::Error),
 
+    /// An error propagated from [`Store`].
     #[error("Store error: {0}")]
     Store(#[from] StoreError),
 
+    /// Header was pruned.
     #[error("Header of {0} was pruned because it is outside of retention period")]
     HeaderPruned(u64),
 
+    /// Header not synced yet.
     #[error("Header of {0} is not synced yet")]
     HeaderNotSynced(u64),
 }
@@ -604,7 +607,7 @@ impl P2p {
                     return Err(P2pError::HeaderNotSynced(height));
                 }
             }
-            Err(e) => return Err(P2pError::Store(e.into())),
+            Err(e) => return Err(e.into()),
         };
 
         let height = header.height().value();
