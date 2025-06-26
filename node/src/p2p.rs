@@ -157,11 +157,11 @@ pub enum P2pError {
     Store(#[from] StoreError),
 
     /// Header was pruned.
-    #[error("Header of {0} was pruned because it is outside of retention period")]
+    #[error("Header of {0} block was pruned because it is outside of retention period")]
     HeaderPruned(u64),
 
     /// Header not synced yet.
-    #[error("Header of {0} is not synced yet")]
+    #[error("Header of {0} block is not synced yet")]
     HeaderNotSynced(u64),
 }
 

@@ -512,6 +512,8 @@ mod tests {
             .await
             .expect("successful submission");
 
+        sleep(Duration::from_millis(100)).await;
+
         let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
