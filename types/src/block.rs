@@ -153,14 +153,14 @@ impl From<Block> for RawBlock {
 #[wasm_bindgen]
 impl Block {
     /// Block header
-    #[wasm_bindgen(getter)]
-    pub fn get_header(&self) -> JsHeader {
+    #[wasm_bindgen(getter, js_name = header)]
+    pub fn js_get_header(&self) -> JsHeader {
         self.header.clone().into()
     }
 
     /// Evidence of malfeasance
-    #[wasm_bindgen(getter)]
-    pub fn get_evidence(&self) -> Vec<JsEvidence> {
+    #[wasm_bindgen(getter, js_name = evidence)]
+    pub fn js_get_evidence(&self) -> Vec<JsEvidence> {
         self.evidence
             .iter()
             .map(|e| JsEvidence::from(e.clone()))
@@ -168,8 +168,8 @@ impl Block {
     }
 
     /// Last commit, should be `None` for the initial block.
-    #[wasm_bindgen(getter)]
-    pub fn get_last_commit(&self) -> Option<JsCommit> {
+    #[wasm_bindgen(getter, js_name = lastCommit)]
+    pub fn js_get_last_commit(&self) -> Option<JsCommit> {
         self.last_commit.clone().map(Into::into)
     }
 }

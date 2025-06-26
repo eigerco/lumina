@@ -319,7 +319,6 @@ pub enum SignatureMode {
 /// sum is the oneof that specifies whether this represents a single or nested
 /// multisig signer
 #[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Sum {
     /// Single is the mode info for a single signer. It is structured as a message
