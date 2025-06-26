@@ -261,13 +261,13 @@ impl NodeClient {
     #[wasm_bindgen(js_name = requestAllBlobs)]
     pub async fn request_all_blobs(
         &self,
-        block_height: u64,
         namespace: &Namespace,
+        block_height: u64,
         timeout_secs: Option<f64>,
     ) -> Result<Vec<Blob>> {
         let command = NodeCommand::RequestAllBlobs {
-            block_height,
             namespace: *namespace,
+            block_height,
             timeout_secs,
         };
         let response = self.worker.exec(command).await?;
@@ -516,7 +516,7 @@ mod tests {
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
         let mut blobs = client
-            .request_all_blobs(submitted_height, &namespace, None)
+            .request_all_blobs(&namespace, submitted_height, None)
             .await
             .expect("to fetch blob");
 

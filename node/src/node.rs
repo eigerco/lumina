@@ -413,13 +413,13 @@ where
     /// using bitswap protocol.
     pub async fn request_all_blobs(
         &self,
-        height: u64,
         namespace: Namespace,
+        block_height: u64,
         timeout: Option<Duration>,
     ) -> Result<Vec<Blob>> {
         Ok(self
             .p2p()
-            .get_all_blobs(height, namespace, timeout, self.store())
+            .get_all_blobs(namespace, block_height, timeout, self.store())
             .await?)
     }
 

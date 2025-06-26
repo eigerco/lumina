@@ -228,14 +228,14 @@ impl NodeWorkerInstance {
 
     async fn request_all_blobs(
         &mut self,
-        block_height: u64,
         namespace: Namespace,
+        block_height: u64,
         timeout_secs: Option<f64>,
     ) -> Result<Vec<Blob>> {
         let timeout = timeout_secs.map(Duration::from_secs_f64);
         Ok(self
             .node
-            .request_all_blobs(block_height, namespace, timeout)
+            .request_all_blobs(namespace, block_height, timeout)
             .await?)
     }
 
@@ -289,11 +289,11 @@ impl NodeWorkerInstance {
                 WorkerResponse::SamplingMetadata(self.get_sampling_metadata(height).await)
             }
             NodeCommand::RequestAllBlobs {
-                block_height,
                 namespace,
+                block_height,
                 timeout_secs,
             } => WorkerResponse::Blobs(
-                self.request_all_blobs(block_height, namespace, timeout_secs)
+                self.request_all_blobs(namespace, block_height, timeout_secs)
                     .await,
             ),
             NodeCommand::InternalPing => WorkerResponse::InternalPong,

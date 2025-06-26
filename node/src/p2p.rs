@@ -588,29 +588,28 @@ impl P2p {
     /// using bitswap protocol.
     pub async fn get_all_blobs<S>(
         &self,
-        height: u64,
         namespace: Namespace,
+        block_height: u64,
         timeout: Option<Duration>,
         store: &S,
     ) -> Result<Vec<Blob>>
     where
         S: Store,
     {
-        let header = match store.get_by_height(height).await {
+        let header = match store.get_by_height(block_height).await {
             Ok(header) => header,
             Err(StoreError::NotFound) => {
                 let pruned_ranges = store.get_pruned_ranges().await?;
 
-                if pruned_ranges.contains(height) {
-                    return Err(P2pError::HeaderPruned(height));
+                if pruned_ranges.contains(block_height) {
+                    return Err(P2pError::HeaderPruned(block_height));
                 } else {
-                    return Err(P2pError::HeaderNotSynced(height));
+                    return Err(P2pError::HeaderNotSynced(block_height));
                 }
             }
             Err(e) => return Err(e.into()),
         };
 
-        let height = header.height().value();
         let app_version = header.app_version()?;
         let rows_to_fetch: Vec<_> = header
             .dah
@@ -623,13 +622,13 @@ impl P2p {
 
         let futs = rows_to_fetch
             .into_iter()
-            .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, height, timeout))
+            .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, block_height, timeout))
             .collect::<FuturesOrdered<_>>();
 
         let rows: Vec<_> = match futs.try_collect().await {
             Ok(rows) => rows,
-            Err(P2pError::BitswapQueryTimeout) if !store.has_at(height).await => {
-                return Err(P2pError::HeaderPruned(height));
+            Err(P2pError::BitswapQueryTimeout) if !store.has_at(block_height).await => {
+                return Err(P2pError::HeaderPruned(block_height));
             }
             Err(e) => return Err(e),
         };
