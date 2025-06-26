@@ -86,7 +86,7 @@ Address of an account.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:154
+lumina\_node\_wasm.d.ts:155
 
 ***
 
@@ -102,7 +102,7 @@ lumina\_node\_wasm.d.ts:154
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:149
+lumina\_node\_wasm.d.ts:150
 
 ***
 
@@ -118,7 +118,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:153
+lumina\_node\_wasm.d.ts:154
 
 
 <a name="classesappversionmd"></a>
@@ -143,7 +143,7 @@ App v1
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:169
+lumina\_node\_wasm.d.ts:170
 
 ***
 
@@ -155,7 +155,7 @@ App v2
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:173
+lumina\_node\_wasm.d.ts:174
 
 ***
 
@@ -167,7 +167,7 @@ App v3
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:177
+lumina\_node\_wasm.d.ts:178
 
 ### Methods
 
@@ -181,7 +181,7 @@ lumina\_node\_wasm.d.ts:177
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:161
+lumina\_node\_wasm.d.ts:162
 
 ***
 
@@ -197,7 +197,7 @@ Latest App version variant.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:165
+lumina\_node\_wasm.d.ts:166
 
 
 <a name="classesblobmd"></a>
@@ -240,7 +240,7 @@ Create a new blob with the given data within the [`Namespace`].
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:195
+lumina\_node\_wasm.d.ts:196
 
 ### Properties
 
@@ -252,7 +252,7 @@ A [`Commitment`] computed from the [`Blob`]s data.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:215
+lumina\_node\_wasm.d.ts:216
 
 ***
 
@@ -264,7 +264,7 @@ Data stored within the [`Blob`].
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:207
+lumina\_node\_wasm.d.ts:208
 
 ***
 
@@ -276,7 +276,7 @@ A [`Namespace`] the [`Blob`] belongs to.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:203
+lumina\_node\_wasm.d.ts:204
 
 ***
 
@@ -288,7 +288,7 @@ Version indicating the format in which [`Share`]s should be created from this [`
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:211
+lumina\_node\_wasm.d.ts:212
 
 ### Accessors
 
@@ -322,7 +322,7 @@ Index of the blob's first share in the EDS. Only set for blobs retrieved from ch
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:219
+lumina\_node\_wasm.d.ts:220
 
 ***
 
@@ -360,7 +360,7 @@ Must be present in `share_version 1` and absent otherwise.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:229
+lumina\_node\_wasm.d.ts:230
 
 ### Methods
 
@@ -376,7 +376,7 @@ Clone a blob creating a new deep copy of it.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:199
+lumina\_node\_wasm.d.ts:200
 
 ***
 
@@ -390,7 +390,7 @@ lumina\_node\_wasm.d.ts:199
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:191
+lumina\_node\_wasm.d.ts:192
 
 ***
 
@@ -406,7 +406,7 @@ lumina\_node\_wasm.d.ts:191
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:186
+lumina\_node\_wasm.d.ts:187
 
 ***
 
@@ -422,7 +422,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:190
+lumina\_node\_wasm.d.ts:191
 
 
 <a name="classesblockrangemd"></a>
@@ -447,7 +447,7 @@ Last block height in range
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:258
+lumina\_node\_wasm.d.ts:259
 
 ***
 
@@ -459,7 +459,7 @@ First block height in range
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:254
+lumina\_node\_wasm.d.ts:255
 
 ### Methods
 
@@ -473,7 +473,7 @@ lumina\_node\_wasm.d.ts:254
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:250
+lumina\_node\_wasm.d.ts:251
 
 ***
 
@@ -489,7 +489,7 @@ lumina\_node\_wasm.d.ts:250
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:245
+lumina\_node\_wasm.d.ts:246
 
 ***
 
@@ -505,7 +505,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:249
+lumina\_node\_wasm.d.ts:250
 
 
 <a name="classescommitmentmd"></a>
@@ -566,7 +566,7 @@ read more about that in the [`share commitment rules`].
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:308
+lumina\_node\_wasm.d.ts:309
 
 ***
 
@@ -582,7 +582,7 @@ Hash of the commitment
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:312
+lumina\_node\_wasm.d.ts:313
 
 ***
 
@@ -598,7 +598,7 @@ lumina\_node\_wasm.d.ts:312
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:303
+lumina\_node\_wasm.d.ts:304
 
 ***
 
@@ -614,7 +614,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:307
+lumina\_node\_wasm.d.ts:308
 
 
 <a name="classesconnectioncounterssnapshotmd"></a>
@@ -637,7 +637,7 @@ The total number of connections, both pending and established.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:328
+lumina\_node\_wasm.d.ts:329
 
 ***
 
@@ -649,7 +649,7 @@ The number of outgoing connections being established.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:344
+lumina\_node\_wasm.d.ts:345
 
 ***
 
@@ -661,7 +661,7 @@ The number of established incoming connections.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:348
+lumina\_node\_wasm.d.ts:349
 
 ***
 
@@ -673,7 +673,7 @@ The number of established outgoing connections.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:352
+lumina\_node\_wasm.d.ts:353
 
 ***
 
@@ -685,7 +685,7 @@ The total number of pending connections, both incoming and outgoing.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:332
+lumina\_node\_wasm.d.ts:333
 
 ***
 
@@ -697,7 +697,7 @@ The total number of pending connections, both incoming and outgoing.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:336
+lumina\_node\_wasm.d.ts:337
 
 ***
 
@@ -709,7 +709,7 @@ The number of outgoing connections being established.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:340
+lumina\_node\_wasm.d.ts:341
 
 ### Methods
 
@@ -723,7 +723,7 @@ lumina\_node\_wasm.d.ts:340
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:324
+lumina\_node\_wasm.d.ts:325
 
 ***
 
@@ -739,7 +739,7 @@ lumina\_node\_wasm.d.ts:324
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:319
+lumina\_node\_wasm.d.ts:320
 
 ***
 
@@ -755,7 +755,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:323
+lumina\_node\_wasm.d.ts:324
 
 
 <a name="classesconsaddressmd"></a>
@@ -782,7 +782,7 @@ Address of a consensus node.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:367
+lumina\_node\_wasm.d.ts:368
 
 ***
 
@@ -798,7 +798,7 @@ lumina\_node\_wasm.d.ts:367
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:362
+lumina\_node\_wasm.d.ts:363
 
 ***
 
@@ -814,7 +814,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:366
+lumina\_node\_wasm.d.ts:367
 
 
 <a name="classesdataavailabilityheadermd"></a>
@@ -882,7 +882,7 @@ Get the a root of the column with the given index.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:431
+lumina\_node\_wasm.d.ts:432
 
 ***
 
@@ -898,7 +898,7 @@ Merkle roots of the [`ExtendedDataSquare`] columns.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:423
+lumina\_node\_wasm.d.ts:424
 
 ***
 
@@ -912,7 +912,7 @@ lumina\_node\_wasm.d.ts:423
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:415
+lumina\_node\_wasm.d.ts:416
 
 ***
 
@@ -930,7 +930,7 @@ This is the data commitment for the block.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:437
+lumina\_node\_wasm.d.ts:438
 
 ***
 
@@ -952,7 +952,7 @@ Get a root of the row with the given index.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:427
+lumina\_node\_wasm.d.ts:428
 
 ***
 
@@ -968,7 +968,7 @@ Merkle roots of the [`ExtendedDataSquare`] rows.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:419
+lumina\_node\_wasm.d.ts:420
 
 ***
 
@@ -984,7 +984,7 @@ Get the size of the [`ExtendedDataSquare`] for which this header was built.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:441
+lumina\_node\_wasm.d.ts:442
 
 ***
 
@@ -1000,7 +1000,7 @@ lumina\_node\_wasm.d.ts:441
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:410
+lumina\_node\_wasm.d.ts:411
 
 ***
 
@@ -1016,7 +1016,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:414
+lumina\_node\_wasm.d.ts:415
 
 
 <a name="classesextendedheadermd"></a>
@@ -1067,7 +1067,7 @@ Commit metadata and signatures from validators committing the block.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:572
+lumina\_node\_wasm.d.ts:573
 
 ***
 
@@ -1079,7 +1079,7 @@ Header of the block data availability.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:564
+lumina\_node\_wasm.d.ts:565
 
 ***
 
@@ -1091,7 +1091,7 @@ Tendermint block header.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:568
+lumina\_node\_wasm.d.ts:569
 
 ***
 
@@ -1103,7 +1103,7 @@ Information about the set of validators commiting the block.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:576
+lumina\_node\_wasm.d.ts:577
 
 ### Methods
 
@@ -1119,7 +1119,7 @@ Clone a header producing a deep copy of it.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:486
+lumina\_node\_wasm.d.ts:487
 
 ***
 
@@ -1133,7 +1133,7 @@ lumina\_node\_wasm.d.ts:486
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:482
+lumina\_node\_wasm.d.ts:483
 
 ***
 
@@ -1149,7 +1149,7 @@ Get the block hash.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:498
+lumina\_node\_wasm.d.ts:499
 
 ***
 
@@ -1165,7 +1165,7 @@ Get the block height.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:490
+lumina\_node\_wasm.d.ts:491
 
 ***
 
@@ -1181,7 +1181,7 @@ Get the hash of the previous header.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:502
+lumina\_node\_wasm.d.ts:503
 
 ***
 
@@ -1197,7 +1197,7 @@ Get the block time.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:494
+lumina\_node\_wasm.d.ts:495
 
 ***
 
@@ -1213,7 +1213,7 @@ lumina\_node\_wasm.d.ts:494
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:477
+lumina\_node\_wasm.d.ts:478
 
 ***
 
@@ -1229,7 +1229,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:481
+lumina\_node\_wasm.d.ts:482
 
 ***
 
@@ -1245,7 +1245,7 @@ Decode protobuf encoded header and then validate it.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:506
+lumina\_node\_wasm.d.ts:507
 
 ***
 
@@ -1273,7 +1273,7 @@ This function will also return an error if untrusted headers and `self` don't fo
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:516
+lumina\_node\_wasm.d.ts:517
 
 ***
 
@@ -1313,7 +1313,7 @@ This function will also return an error if untrusted headers and `self` don't fo
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:560
+lumina\_node\_wasm.d.ts:561
 
 ***
 
@@ -1353,7 +1353,7 @@ to each other.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:538
+lumina\_node\_wasm.d.ts:539
 
 
 <a name="classesintounderlyingbytesourcemd"></a>
@@ -1374,7 +1374,7 @@ lumina\_node\_wasm.d.ts:538
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:585
+lumina\_node\_wasm.d.ts:586
 
 ***
 
@@ -1384,7 +1384,7 @@ lumina\_node\_wasm.d.ts:585
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:584
+lumina\_node\_wasm.d.ts:585
 
 ### Methods
 
@@ -1398,7 +1398,7 @@ lumina\_node\_wasm.d.ts:584
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:583
+lumina\_node\_wasm.d.ts:584
 
 ***
 
@@ -1412,7 +1412,7 @@ lumina\_node\_wasm.d.ts:583
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:580
+lumina\_node\_wasm.d.ts:581
 
 ***
 
@@ -1432,7 +1432,7 @@ lumina\_node\_wasm.d.ts:580
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:582
+lumina\_node\_wasm.d.ts:583
 
 ***
 
@@ -1452,7 +1452,7 @@ lumina\_node\_wasm.d.ts:582
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:581
+lumina\_node\_wasm.d.ts:582
 
 
 <a name="classesintounderlyingsinkmd"></a>
@@ -1483,7 +1483,7 @@ lumina\_node\_wasm.d.ts:581
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:592
+lumina\_node\_wasm.d.ts:593
 
 ***
 
@@ -1497,7 +1497,7 @@ lumina\_node\_wasm.d.ts:592
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:591
+lumina\_node\_wasm.d.ts:592
 
 ***
 
@@ -1511,7 +1511,7 @@ lumina\_node\_wasm.d.ts:591
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:589
+lumina\_node\_wasm.d.ts:590
 
 ***
 
@@ -1531,7 +1531,7 @@ lumina\_node\_wasm.d.ts:589
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:590
+lumina\_node\_wasm.d.ts:591
 
 
 <a name="classesintounderlyingsourcemd"></a>
@@ -1556,7 +1556,7 @@ lumina\_node\_wasm.d.ts:590
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:598
+lumina\_node\_wasm.d.ts:599
 
 ***
 
@@ -1570,7 +1570,7 @@ lumina\_node\_wasm.d.ts:598
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:596
+lumina\_node\_wasm.d.ts:597
 
 ***
 
@@ -1590,7 +1590,7 @@ lumina\_node\_wasm.d.ts:596
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:597
+lumina\_node\_wasm.d.ts:598
 
 
 <a name="classesnamespacemd"></a>
@@ -1633,7 +1633,7 @@ Returns the trailing 28 bytes indicating the id of the [`Namespace`].
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:707
+lumina\_node\_wasm.d.ts:708
 
 ***
 
@@ -1645,7 +1645,7 @@ Returns the first byte indicating the version of the [`Namespace`].
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:703
+lumina\_node\_wasm.d.ts:704
 
 ***
 
@@ -1659,7 +1659,7 @@ Used to indicate the end of the primary reserved group.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:678
+lumina\_node\_wasm.d.ts:679
 
 ***
 
@@ -1673,7 +1673,7 @@ Used to indicate the beginning of the secondary reserved group.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:684
+lumina\_node\_wasm.d.ts:685
 
 ***
 
@@ -1685,7 +1685,7 @@ Namespace size in bytes.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:657
+lumina\_node\_wasm.d.ts:658
 
 ***
 
@@ -1701,7 +1701,7 @@ merkle roots.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:699
+lumina\_node\_wasm.d.ts:700
 
 ***
 
@@ -1713,7 +1713,7 @@ Primary reserved [`Namespace`] for the compact Shares with MsgPayForBlobs transa
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:665
+lumina\_node\_wasm.d.ts:666
 
 ***
 
@@ -1728,7 +1728,7 @@ so that user-defined namespaces are correctly aligned in `ExtendedDataSquare`
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:672
+lumina\_node\_wasm.d.ts:673
 
 ***
 
@@ -1743,7 +1743,7 @@ blobs before the parity data is generated for the `ExtendedDataSquare`.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:691
+lumina\_node\_wasm.d.ts:692
 
 ***
 
@@ -1755,7 +1755,7 @@ Primary reserved [`Namespace`] for the compact `Share`s with `cosmos SDK` transa
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:661
+lumina\_node\_wasm.d.ts:662
 
 ### Methods
 
@@ -1771,7 +1771,7 @@ Converts the [`Namespace`] to a byte slice.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:653
+lumina\_node\_wasm.d.ts:654
 
 ***
 
@@ -1785,7 +1785,7 @@ lumina\_node\_wasm.d.ts:653
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:631
+lumina\_node\_wasm.d.ts:632
 
 ***
 
@@ -1801,7 +1801,7 @@ lumina\_node\_wasm.d.ts:631
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:626
+lumina\_node\_wasm.d.ts:627
 
 ***
 
@@ -1817,7 +1817,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:630
+lumina\_node\_wasm.d.ts:631
 
 ***
 
@@ -1845,7 +1845,7 @@ version `0` namespace, check [`newV0`].
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:649
+lumina\_node\_wasm.d.ts:650
 
 ***
 
@@ -1870,7 +1870,7 @@ Check [`Namespace::new_v0`] for more details.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:639
+lumina\_node\_wasm.d.ts:640
 
 
 <a name="classesnetworkinfosnapshotmd"></a>
@@ -1895,7 +1895,7 @@ Gets counters for ongoing network connections.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:730
+lumina\_node\_wasm.d.ts:731
 
 ***
 
@@ -1907,7 +1907,7 @@ The number of connected peers, i.e. peers with whom at least one established con
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:726
+lumina\_node\_wasm.d.ts:727
 
 ### Methods
 
@@ -1921,7 +1921,7 @@ lumina\_node\_wasm.d.ts:726
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:722
+lumina\_node\_wasm.d.ts:723
 
 ***
 
@@ -1937,7 +1937,7 @@ lumina\_node\_wasm.d.ts:722
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:717
+lumina\_node\_wasm.d.ts:718
 
 ***
 
@@ -1953,7 +1953,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:721
+lumina\_node\_wasm.d.ts:722
 
 
 <a name="classesnodeclientmd"></a>
@@ -1992,7 +1992,7 @@ expected to have `MessagePort`-like interface for sending and receiving messages
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:744
+lumina\_node\_wasm.d.ts:745
 
 ### Methods
 
@@ -2014,7 +2014,7 @@ Establish a new connection to the existing worker over provided port
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:748
+lumina\_node\_wasm.d.ts:749
 
 ***
 
@@ -2030,7 +2030,7 @@ Get all the peers that node is connected to.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:785
+lumina\_node\_wasm.d.ts:786
 
 ***
 
@@ -2046,7 +2046,7 @@ Returns a [`BroadcastChannel`] for events generated by [`Node`].
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:852
+lumina\_node\_wasm.d.ts:853
 
 ***
 
@@ -2060,7 +2060,7 @@ lumina\_node\_wasm.d.ts:852
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:739
+lumina\_node\_wasm.d.ts:740
 
 ***
 
@@ -2082,7 +2082,7 @@ Get a synced header for the block with a given hash.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:828
+lumina\_node\_wasm.d.ts:829
 
 ***
 
@@ -2104,7 +2104,7 @@ Get a synced header for the block with a given height.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:832
+lumina\_node\_wasm.d.ts:833
 
 ***
 
@@ -2138,7 +2138,7 @@ If range contains a height of a header that is not found in the store.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:844
+lumina\_node\_wasm.d.ts:845
 
 ***
 
@@ -2154,7 +2154,7 @@ Get the latest locally synced header.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:824
+lumina\_node\_wasm.d.ts:825
 
 ***
 
@@ -2170,7 +2170,7 @@ Get the latest header announced in the network.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:820
+lumina\_node\_wasm.d.ts:821
 
 ***
 
@@ -2192,7 +2192,7 @@ Get data sampling metadata of an already sampled height.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:848
+lumina\_node\_wasm.d.ts:849
 
 ***
 
@@ -2208,7 +2208,7 @@ Check whether Lumina is currently running
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:752
+lumina\_node\_wasm.d.ts:753
 
 ***
 
@@ -2224,7 +2224,7 @@ Get all the multiaddresses on which the node listens.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:781
+lumina\_node\_wasm.d.ts:782
 
 ***
 
@@ -2240,7 +2240,7 @@ Get node's local peer ID.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:761
+lumina\_node\_wasm.d.ts:762
 
 ***
 
@@ -2256,7 +2256,7 @@ Get current network info.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:777
+lumina\_node\_wasm.d.ts:778
 
 ***
 
@@ -2272,7 +2272,7 @@ Get current [`PeerTracker`] info.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:765
+lumina\_node\_wasm.d.ts:766
 
 ***
 
@@ -2303,7 +2303,7 @@ using bitswap protocol.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:812
+lumina\_node\_wasm.d.ts:813
 
 ***
 
@@ -2325,7 +2325,7 @@ Request a header for the block with a given hash from the network.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:797
+lumina\_node\_wasm.d.ts:798
 
 ***
 
@@ -2347,7 +2347,7 @@ Request a header for the block with a given height from the network.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:801
+lumina\_node\_wasm.d.ts:802
 
 ***
 
@@ -2363,7 +2363,7 @@ Request the head header from the network.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:793
+lumina\_node\_wasm.d.ts:794
 
 ***
 
@@ -2391,7 +2391,7 @@ The headers will be verified with the `from` header.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:807
+lumina\_node\_wasm.d.ts:808
 
 ***
 
@@ -2417,7 +2417,7 @@ Trust or untrust the peer with a given ID.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:789
+lumina\_node\_wasm.d.ts:790
 
 ***
 
@@ -2439,7 +2439,7 @@ Start a node with the provided config, if it's not running
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:756
+lumina\_node\_wasm.d.ts:757
 
 ***
 
@@ -2453,7 +2453,7 @@ lumina\_node\_wasm.d.ts:756
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:757
+lumina\_node\_wasm.d.ts:758
 
 ***
 
@@ -2469,7 +2469,7 @@ Get current header syncing info.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:816
+lumina\_node\_wasm.d.ts:817
 
 ***
 
@@ -2485,7 +2485,7 @@ Wait until the node is connected to at least 1 peer.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:769
+lumina\_node\_wasm.d.ts:770
 
 ***
 
@@ -2501,7 +2501,7 @@ Wait until the node is connected to at least 1 trusted peer.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:773
+lumina\_node\_wasm.d.ts:774
 
 
 <a name="classesnodeconfigmd"></a>
@@ -2526,7 +2526,7 @@ A list of bootstrap peers to connect to.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:879
+lumina\_node\_wasm.d.ts:880
 
 ***
 
@@ -2538,7 +2538,7 @@ A network to connect to.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:875
+lumina\_node\_wasm.d.ts:876
 
 ***
 
@@ -2552,7 +2552,7 @@ Whether to store data in persistent memory or not.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:885
+lumina\_node\_wasm.d.ts:886
 
 ### Accessors
 
@@ -2602,7 +2602,7 @@ The minimum value that can be set is 60 seconds.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:919
+lumina\_node\_wasm.d.ts:920
 
 ***
 
@@ -2650,7 +2650,7 @@ The minimum value that can be set is 60 seconds.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:896
+lumina\_node\_wasm.d.ts:897
 
 ### Methods
 
@@ -2664,7 +2664,7 @@ lumina\_node\_wasm.d.ts:896
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:867
+lumina\_node\_wasm.d.ts:868
 
 ***
 
@@ -2680,7 +2680,7 @@ lumina\_node\_wasm.d.ts:867
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:862
+lumina\_node\_wasm.d.ts:863
 
 ***
 
@@ -2696,7 +2696,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:866
+lumina\_node\_wasm.d.ts:867
 
 ***
 
@@ -2718,7 +2718,7 @@ Get the configuration with default bootnodes for provided network
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:871
+lumina\_node\_wasm.d.ts:872
 
 
 <a name="classesnodeworkermd"></a>
@@ -2754,7 +2754,7 @@ them and sending a response back, as well as accepting new `NodeClient` connecti
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:941
+lumina\_node\_wasm.d.ts:942
 
 ### Methods
 
@@ -2768,7 +2768,7 @@ lumina\_node\_wasm.d.ts:941
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:940
+lumina\_node\_wasm.d.ts:941
 
 ***
 
@@ -2782,7 +2782,7 @@ lumina\_node\_wasm.d.ts:940
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:942
+lumina\_node\_wasm.d.ts:943
 
 
 <a name="classespeertrackerinfosnapshotmd"></a>
@@ -2807,7 +2807,7 @@ Number of the connected peers.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:961
+lumina\_node\_wasm.d.ts:962
 
 ***
 
@@ -2819,7 +2819,7 @@ Number of the connected trusted peers.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:965
+lumina\_node\_wasm.d.ts:966
 
 ### Methods
 
@@ -2833,7 +2833,7 @@ lumina\_node\_wasm.d.ts:965
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:957
+lumina\_node\_wasm.d.ts:958
 
 ***
 
@@ -2849,7 +2849,7 @@ lumina\_node\_wasm.d.ts:957
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:952
+lumina\_node\_wasm.d.ts:953
 
 ***
 
@@ -2865,7 +2865,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:956
+lumina\_node\_wasm.d.ts:957
 
 
 <a name="classessamplingmetadatamd"></a>
@@ -2892,7 +2892,7 @@ Return Array of cids
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:982
+lumina\_node\_wasm.d.ts:983
 
 ***
 
@@ -2904,7 +2904,7 @@ Indicates whether this node was able to successfuly sample the block
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:978
+lumina\_node\_wasm.d.ts:979
 
 ### Methods
 
@@ -2918,7 +2918,7 @@ lumina\_node\_wasm.d.ts:978
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:974
+lumina\_node\_wasm.d.ts:975
 
 
 <a name="classessyncinginfosnapshotmd"></a>
@@ -2943,7 +2943,7 @@ Ranges of headers that are already synchronised
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1001
+lumina\_node\_wasm.d.ts:1002
 
 ***
 
@@ -2955,7 +2955,7 @@ Syncing target. The latest height seen in the network that was successfully veri
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1005
+lumina\_node\_wasm.d.ts:1006
 
 ### Methods
 
@@ -2969,7 +2969,7 @@ lumina\_node\_wasm.d.ts:1005
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:997
+lumina\_node\_wasm.d.ts:998
 
 ***
 
@@ -2985,7 +2985,7 @@ lumina\_node\_wasm.d.ts:997
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:992
+lumina\_node\_wasm.d.ts:993
 
 ***
 
@@ -3001,7 +3001,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:996
+lumina\_node\_wasm.d.ts:997
 
 
 <a name="classestxclientmd"></a>
@@ -3080,7 +3080,7 @@ const tx_client = await new TxClient("http://127.0.0.1:18080", keys.bech32Addres
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1047
+lumina\_node\_wasm.d.ts:1048
 
 ### Properties
 
@@ -3092,7 +3092,7 @@ AppVersion of the client
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1142
+lumina\_node\_wasm.d.ts:1143
 
 ***
 
@@ -3104,7 +3104,7 @@ Chain id of the client
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1138
+lumina\_node\_wasm.d.ts:1139
 
 ### Methods
 
@@ -3118,7 +3118,7 @@ lumina\_node\_wasm.d.ts:1138
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1011
+lumina\_node\_wasm.d.ts:1012
 
 ***
 
@@ -3140,7 +3140,7 @@ Get account
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1114
+lumina\_node\_wasm.d.ts:1115
 
 ***
 
@@ -3156,7 +3156,7 @@ Get accounts
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1118
+lumina\_node\_wasm.d.ts:1119
 
 ***
 
@@ -3178,7 +3178,7 @@ Get balance of all coins
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1126
+lumina\_node\_wasm.d.ts:1127
 
 ***
 
@@ -3194,7 +3194,7 @@ Get auth params
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1110
+lumina\_node\_wasm.d.ts:1111
 
 ***
 
@@ -3220,7 +3220,7 @@ Get balance of coins with given denom
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1122
+lumina\_node\_wasm.d.ts:1123
 
 ***
 
@@ -3242,7 +3242,7 @@ Get balance of all spendable coins
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1130
+lumina\_node\_wasm.d.ts:1131
 
 ***
 
@@ -3258,7 +3258,7 @@ Get total supply
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1134
+lumina\_node\_wasm.d.ts:1135
 
 ***
 
@@ -3274,7 +3274,7 @@ Last gas price fetched by the client
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1051
+lumina\_node\_wasm.d.ts:1052
 
 ***
 
@@ -3295,7 +3295,7 @@ const data = new Uint8Array([100, 97, 116, 97]);
 const blob = new Blob(ns, data, AppVersion.latest());
 
 const txInfo = await txClient.submitBlobs([blob]);
-await txClient.submitBlobs([blob], { gasLimit: 100000n, gasPrice: 0.02 });
+await txClient.submitBlobs([blob], { gasLimit: 100000n, gasPrice: 0.02, memo: "foo" });
 ```
 
 ## Note
@@ -3325,7 +3325,7 @@ await txClient.submitBlobs(blobs.map(b => b.clone()));
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1080
+lumina\_node\_wasm.d.ts:1081
 
 ***
 
@@ -3373,7 +3373,7 @@ const txInfo = await txClient.submitMessage(sendMsgAny);
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1106
+lumina\_node\_wasm.d.ts:1107
 
 
 <a name="classesvaladdressmd"></a>
@@ -3400,7 +3400,7 @@ Address of a validator.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1157
+lumina\_node\_wasm.d.ts:1158
 
 ***
 
@@ -3416,7 +3416,7 @@ lumina\_node\_wasm.d.ts:1157
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1152
+lumina\_node\_wasm.d.ts:1153
 
 ***
 
@@ -3432,7 +3432,7 @@ Return stringified version of self.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:1156
+lumina\_node\_wasm.d.ts:1157
 
 # Enumerations
 
@@ -3962,6 +3962,16 @@ lumina\_node\_wasm.d.ts:136
 ##### Defined in
 
 lumina\_node\_wasm.d.ts:137
+
+***
+
+#### memo?
+
+> `optional` **memo**: `string`
+
+##### Defined in
+
+lumina\_node\_wasm.d.ts:138
 
 
 <a name="interfacestxinfomd"></a>

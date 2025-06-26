@@ -162,12 +162,16 @@ where
     {
         let tx_body = RawTxBody {
             messages: vec![message.into_any()],
+            memo: cfg.memo.clone().unwrap_or_default(),
             ..RawTxBody::default()
         };
 
         let mut retries = 0;
         let (tx_hash, sequence) = loop {
-            match self.sign_and_broadcast_tx(tx_body.clone(), cfg).await {
+            match self
+                .sign_and_broadcast_tx(tx_body.clone(), cfg.clone())
+                .await
+            {
                 Ok(resp) => break resp,
                 Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _))
                     if retries < 3 && cfg.gas_price.is_none() =>
@@ -224,7 +228,10 @@ where
 
         let mut retries = 0;
         let (tx_hash, sequence) = loop {
-            match self.sign_and_broadcast_blobs(blobs.to_vec(), cfg).await {
+            match self
+                .sign_and_broadcast_blobs(blobs.to_vec(), cfg.clone())
+                .await
+            {
                 Ok(resp) => break resp,
                 Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _))
                     if retries < 3 && cfg.gas_price.is_none() =>
@@ -308,6 +315,7 @@ where
         let pfb = MsgPayForBlobs::new(&blobs, account.address.clone())?;
         let pfb = RawTxBody {
             messages: vec![RawMsgPayForBlobs::from(pfb).into_any()],
+            memo: cfg.memo.unwrap_or_default(),
             ..RawTxBody::default()
         };
 
@@ -482,13 +490,15 @@ pub struct TxInfo {
 }
 
 /// Configuration for the transaction.
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxConfig {
     /// Custom gas limit for the transaction (in `utia`).
     pub gas_limit: Option<u64>,
     /// Custom gas price for fee calculation.
     pub gas_price: Option<f64>,
+    /// Memo for the transaction
+    pub memo: Option<String>,
 }
 
 impl TxConfig {
@@ -501,6 +511,12 @@ impl TxConfig {
     /// Attach gas price to this config.
     pub fn with_gas_price(mut self, gas_price: f64) -> Self {
         self.gas_price = Some(gas_price);
+        self
+    }
+
+    /// Attach memo to this config.
+    pub fn with_memo(mut self, memo: impl Into<String>) -> Self {
+        self.memo = Some(memo.into());
         self
     }
 }
@@ -531,6 +547,7 @@ mod wbg {
     export interface TxConfig {
       gasLimit?: bigint; // utia
       gasPrice?: number;
+      memo?: string;
     }
     ";
 
@@ -549,6 +566,9 @@ mod wbg {
 
         #[wasm_bindgen(method, getter, js_name = gasPrice)]
         pub fn gas_price(this: &JsTxConfig) -> Option<f64>;
+
+        #[wasm_bindgen(method, getter, js_name = memo)]
+        pub fn memo(this: &JsTxConfig) -> Option<String>;
     }
 
     impl From<TxInfo> for JsTxInfo {
@@ -567,6 +587,7 @@ mod wbg {
             TxConfig {
                 gas_limit: value.gas_limit(),
                 gas_price: value.gas_price(),
+                memo: value.memo(),
             }
         }
     }

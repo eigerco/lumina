@@ -19,12 +19,10 @@ use wasm_bindgen::JsValue;
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
-use crate::store::{
-    Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
-};
+use crate::store::{Result, SamplingMetadata, Store, StoreError, StoreInsertionError};
 
 /// indexeddb version, needs to be incremented on every schema schange
-const DB_VERSION: u32 = 4;
+const DB_VERSION: u32 = 5;
 
 // Data stores (SQL table analogue) used in IndexedDb
 const HEADER_STORE_NAME: &str = "headers";
@@ -36,8 +34,9 @@ const SCHEMA_STORE_NAME: &str = "schema";
 const HASH_INDEX_NAME: &str = "hash";
 const HEIGHT_INDEX_NAME: &str = "height";
 
-const ACCEPTED_SAMPLING_RANGES_KEY: &str = "accepted_sampling_ranges";
 const HEADER_RANGES_KEY: &str = "header_ranges";
+const SAMPLED_RANGES_KEY: &str = "sampled_ranges";
+const PRUNED_RANGES_KEY: &str = "pruned_ranges";
 const VERSION_KEY: &str = "version";
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -91,6 +90,7 @@ impl IndexedDbStore {
                 }
 
                 migrate_older_to_v4(&rexie).await?;
+                migrate_v4_to_v5(&rexie).await?;
             }
             None => {
                 // New database
@@ -253,20 +253,13 @@ impl IndexedDbStore {
         stored_ranges.contains(height)
     }
 
-    async fn update_sampling_metadata(
-        &self,
-        height: u64,
-        status: SamplingStatus,
-        cids: Vec<Cid>,
-    ) -> Result<()> {
+    async fn update_sampling_metadata(&self, height: u64, cids: Vec<Cid>) -> Result<()> {
         self.write_tx(
             &[SAMPLING_STORE_NAME, RANGES_STORE_NAME],
             update_sampling_metadata_tx_op,
-            (height, status, cids),
+            (height, cids),
         )
-        .await?;
-
-        Ok(())
+        .await
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -287,18 +280,32 @@ impl IndexedDbStore {
         Ok(Some(from_value(sampling_entry)?))
     }
 
-    async fn get_sampling_ranges(&self) -> Result<BlockRanges> {
+    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
+        self.write_tx(&[RANGES_STORE_NAME], mark_as_sampled_tx_op, height)
+            .await
+    }
+
+    async fn get_sampled_ranges(&self) -> Result<BlockRanges> {
         let tx = self
             .db
-            .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadWrite)?;
+            .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)?;
         let store = tx.store(RANGES_STORE_NAME)?;
 
-        get_ranges(&store, ACCEPTED_SAMPLING_RANGES_KEY).await
+        get_ranges(&store, SAMPLED_RANGES_KEY).await
+    }
+
+    async fn get_pruned_ranges(&self) -> Result<BlockRanges> {
+        let tx = self
+            .db
+            .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)?;
+        let store = tx.store(RANGES_STORE_NAME)?;
+
+        get_ranges(&store, PRUNED_RANGES_KEY).await
     }
 
     async fn remove_height(&self, height: u64) -> Result<()> {
         self.write_tx(
-            &[HEADER_STORE_NAME, RANGES_STORE_NAME],
+            &[HEADER_STORE_NAME, SAMPLING_STORE_NAME, RANGES_STORE_NAME],
             remove_height_tx_op,
             height,
         )
@@ -388,13 +395,8 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn update_sampling_metadata(
-        &self,
-        height: u64,
-        status: SamplingStatus,
-        cids: Vec<Cid>,
-    ) -> Result<()> {
-        let fut = SendWrapper::new(self.update_sampling_metadata(height, status, cids));
+    async fn update_sampling_metadata(&self, height: u64, cids: Vec<Cid>) -> Result<()> {
+        let fut = SendWrapper::new(self.update_sampling_metadata(height, cids));
         fut.await
     }
 
@@ -412,13 +414,23 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
+    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
+        let fut = SendWrapper::new(self.mark_as_sampled(height));
+        fut.await
+    }
+
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges> {
         let fut = SendWrapper::new(self.get_stored_header_ranges());
         fut.await
     }
 
-    async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
-        let fut = SendWrapper::new(self.get_sampling_ranges());
+    async fn get_sampled_ranges(&self) -> Result<BlockRanges> {
+        let fut = SendWrapper::new(self.get_sampled_ranges());
+        fut.await
+    }
+
+    async fn get_pruned_ranges(&self) -> Result<BlockRanges> {
+        let fut = SendWrapper::new(self.get_pruned_ranges());
         fut.await
     }
 
@@ -603,6 +615,8 @@ async fn insert_tx_op(
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
     let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+    let mut sampled_ranges = get_ranges(&ranges_store, SAMPLED_RANGES_KEY).await?;
+    let mut pruned_ranges = get_ranges(&ranges_store, PRUNED_RANGES_KEY).await?;
 
     let headers_range = head.height().value()..=tail.height().value();
     let (prev_exists, next_exists) = header_ranges
@@ -641,22 +655,29 @@ async fn insert_tx_op(
     }
 
     header_ranges
-        .insert_relaxed(headers_range)
+        .insert_relaxed(&headers_range)
         .expect("invalid range");
+    sampled_ranges
+        .remove_relaxed(&headers_range)
+        .expect("invalid range");
+    pruned_ranges
+        .remove_relaxed(&headers_range)
+        .expect("invalid range");
+
     set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
+    set_ranges(&ranges_store, SAMPLED_RANGES_KEY, &sampled_ranges).await?;
+    set_ranges(&ranges_store, PRUNED_RANGES_KEY, &pruned_ranges).await?;
 
     Ok(tail)
 }
 
 async fn update_sampling_metadata_tx_op(
     tx: &Transaction,
-    (height, status, cids): (u64, SamplingStatus, Vec<Cid>),
+    (height, cids): (u64, Vec<Cid>),
 ) -> Result<()> {
     let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
-
     let header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
-    let mut accepted_ranges = get_ranges(&ranges_store, ACCEPTED_SAMPLING_RANGES_KEY).await?;
 
     if !header_ranges.contains(height) {
         return Err(StoreError::NotFound);
@@ -667,8 +688,6 @@ async fn update_sampling_metadata_tx_op(
         Some(previous_entry) => {
             let mut value: SamplingMetadata = from_value(previous_entry)?;
 
-            value.status = status;
-
             for cid in cids {
                 if !value.cids.contains(&cid) {
                     value.cids.push(cid);
@@ -677,7 +696,7 @@ async fn update_sampling_metadata_tx_op(
 
             value
         }
-        None => SamplingMetadata { status, cids },
+        None => SamplingMetadata { cids },
     };
 
     let metadata_jsvalue = to_value(&new_entry)?;
@@ -685,21 +704,23 @@ async fn update_sampling_metadata_tx_op(
         .put(&metadata_jsvalue, Some(&height_key))
         .await?;
 
-    match status {
-        SamplingStatus::Accepted => accepted_ranges
-            .insert_relaxed(height..=height)
-            .expect("invalid height"),
-        _ => accepted_ranges
-            .remove_relaxed(height..=height)
-            .expect("invalid height"),
+    Ok(())
+}
+
+async fn mark_as_sampled_tx_op(tx: &Transaction, height: u64) -> Result<()> {
+    let ranges_store = tx.store(RANGES_STORE_NAME)?;
+    let header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+    let mut sampled_ranges = get_ranges(&ranges_store, SAMPLED_RANGES_KEY).await?;
+
+    if !header_ranges.contains(height) {
+        return Err(StoreError::NotFound);
     }
 
-    set_ranges(
-        &ranges_store,
-        ACCEPTED_SAMPLING_RANGES_KEY,
-        &accepted_ranges,
-    )
-    .await?;
+    sampled_ranges
+        .insert_relaxed(height..=height)
+        .expect("invalid height");
+
+    set_ranges(&ranges_store, SAMPLED_RANGES_KEY, &sampled_ranges).await?;
 
     Ok(())
 }
@@ -708,20 +729,19 @@ async fn remove_height_tx_op(tx: &Transaction, height: u64) -> Result<()> {
     let header_store = tx.store(HEADER_STORE_NAME)?;
     let height_index = header_store.index(HEIGHT_INDEX_NAME)?;
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
+    let sampling_store = tx.store(SAMPLING_STORE_NAME)?;
 
     let mut header_ranges = get_ranges(&ranges_store, HEADER_RANGES_KEY).await?;
+    let mut sampled_ranges = get_ranges(&ranges_store, SAMPLED_RANGES_KEY).await?;
+    let mut pruned_ranges = get_ranges(&ranges_store, PRUNED_RANGES_KEY).await?;
 
     if !header_ranges.contains(height) {
         return Err(StoreError::NotFound);
     }
 
-    header_ranges
-        .remove_relaxed(height..=height)
-        .expect("valid range never fails");
-    set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
-
     let jsvalue_height = to_value(&height).expect("to create jsvalue");
-    let Some(header) = height_index.get(jsvalue_height).await? else {
+
+    let Some(header) = height_index.get(jsvalue_height.clone()).await? else {
         return Err(StoreError::StoredDataError(
             "inconsistency between headers and ranges table".into(),
         ));
@@ -732,14 +752,29 @@ async fn remove_height_tx_op(tx: &Transaction, height: u64) -> Result<()> {
 
     header_store.delete(id).await?;
 
+    sampling_store.delete(jsvalue_height).await?;
+
+    header_ranges
+        .remove_relaxed(height..=height)
+        .expect("invalid range");
+    sampled_ranges
+        .remove_relaxed(height..=height)
+        .expect("invalid range");
+    pruned_ranges
+        .insert_relaxed(height..=height)
+        .expect("invalid range");
+
+    set_ranges(&ranges_store, HEADER_RANGES_KEY, &header_ranges).await?;
+    set_ranges(&ranges_store, SAMPLED_RANGES_KEY, &sampled_ranges).await?;
+    set_ranges(&ranges_store, PRUNED_RANGES_KEY, &pruned_ranges).await?;
+
     Ok(())
 }
 
 async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
-    let Some(version) = detect_schema_version(db).await? else {
-        // New database.
-        return Ok(());
-    };
+    let version = detect_schema_version(db)
+        .await?
+        .expect("migrations never run on new db");
 
     if version >= 4 {
         // Nothing to migrate.
@@ -774,6 +809,48 @@ async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
 
     // Migrated to version 4
     set_schema_version(&schema_store, 4).await?;
+
+    tx.commit().await?;
+
+    Ok(())
+}
+
+async fn migrate_v4_to_v5(db: &Rexie) -> Result<()> {
+    let Some(version) = detect_schema_version(db).await? else {
+        // New database.
+        return Ok(());
+    };
+
+    if version >= 5 {
+        // Nothing to migrate.
+        return Ok(());
+    }
+
+    debug_assert_eq!(version, 4);
+    warn!("Migrating DB schema from v4 to v5");
+
+    let tx = db.transaction(
+        &[SCHEMA_STORE_NAME, RANGES_STORE_NAME],
+        TransactionMode::ReadWrite,
+    )?;
+    let schema_store = tx.store(SCHEMA_STORE_NAME)?;
+    let ranges_store = tx.store(RANGES_STORE_NAME)?;
+
+    // There are two chages in v5:
+    //
+    // * Removal of `SamplingStatus` in `SamplingMetadata`
+    // * Rename of sampled ranges database key
+    //
+    // For the first one we don't need to take any actions because it will
+    // be ingored by the deserializer.
+    let sampled_ranges = get_ranges(&ranges_store, v4::SAMPLED_RANGES_KEY).await?;
+    set_ranges(&ranges_store, SAMPLED_RANGES_KEY, &sampled_ranges).await?;
+    ranges_store
+        .delete(JsValue::from_str(v4::SAMPLED_RANGES_KEY))
+        .await?;
+
+    // Migrated to v5
+    set_schema_version(&schema_store, 5).await?;
 
     tx.commit().await?;
 
@@ -816,20 +893,23 @@ mod v3 {
     }
 }
 
+mod v4 {
+    pub(super) const SAMPLED_RANGES_KEY: &str = "accepted_sampling_ranges";
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
     use crate::test_utils::ExtendedHeaderGeneratorExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use function_name::named;
     use wasm_bindgen_test::wasm_bindgen_test;
 
-    #[named]
+    use crate::test_utils::new_indexed_db_store_name;
+
     #[wasm_bindgen_test]
     async fn test_large_db() {
-        let store_name = function_name!();
-        Rexie::delete(store_name).await.unwrap();
-        let s = IndexedDbStore::new(store_name)
+        let store_name = new_indexed_db_store_name().await;
+        let s = IndexedDbStore::new(&store_name)
             .await
             .expect("creating test store failed");
 
@@ -841,26 +921,28 @@ pub mod tests {
             .expect("inserting test data failed");
 
         for h in 1..=expected_height {
-            s.update_sampling_metadata(h, SamplingStatus::Accepted, vec![])
+            s.mark_as_sampled(h).await.expect("marking sampled failed");
+            s.update_sampling_metadata(h, vec![])
                 .await
-                .expect("marking sampled failed");
+                .expect("updating sampling metadata failed");
         }
 
         assert_eq!(s.get_head().unwrap().height().value(), expected_height);
 
         drop(s);
         // re-open the store, to force re-calculation of the cached heights
-        let s = IndexedDbStore::new(store_name)
+        let s = IndexedDbStore::new(&store_name)
             .await
             .expect("re-opening large test store failed");
 
         assert_eq!(s.get_head().unwrap().height().value(), expected_height);
     }
 
-    #[named]
     #[wasm_bindgen_test]
     async fn test_persistence() {
-        let (original_store, mut gen) = gen_filled_store(0, function_name!()).await;
+        let store_name = new_indexed_db_store_name().await;
+
+        let (original_store, mut gen) = gen_filled_store(0, &store_name).await;
         let original_headers = gen.next_many_verified(20);
 
         original_store
@@ -869,7 +951,7 @@ pub mod tests {
             .expect("inserting test data failed");
         drop(original_store);
 
-        let reopened_store = IndexedDbStore::new(function_name!())
+        let reopened_store = IndexedDbStore::new(&store_name)
             .await
             .expect("failed to reopen store");
 
@@ -897,7 +979,7 @@ pub mod tests {
             .chain(new_headers.into_iter())
             .collect::<Vec<_>>();
 
-        let reopened_store = IndexedDbStore::new(function_name!())
+        let reopened_store = IndexedDbStore::new(&store_name)
             .await
             .expect("failed to reopen store");
 
@@ -914,15 +996,16 @@ pub mod tests {
         }
     }
 
-    #[named]
     #[wasm_bindgen_test]
     async fn test_delete_db() {
-        let (original_store, _) = gen_filled_store(3, function_name!()).await;
+        let store_name = new_indexed_db_store_name().await;
+
+        let (original_store, _) = gen_filled_store(3, &store_name).await;
         assert_eq!(original_store.get_head_height().unwrap(), 3);
 
         original_store.delete_db().await.unwrap();
 
-        let same_name_store = IndexedDbStore::new(function_name!())
+        let same_name_store = IndexedDbStore::new(&store_name)
             .await
             .expect("creating test store failed");
 
@@ -932,7 +1015,7 @@ pub mod tests {
         ));
     }
 
-    mod migration_v1 {
+    mod migration_from_v1 {
         use super::*;
 
         const PREVIOUS_DB_VERSION: u32 = 1;
@@ -941,7 +1024,6 @@ pub mod tests {
         // and fills it with `hs` headers. It is a caller responsibility to make sure provided
         // headers are correct and in order.
         async fn init_store(name: &str, hs: Vec<ExtendedHeader>) {
-            Rexie::delete(name).await.unwrap();
             let rexie = Rexie::builder(name)
                 .version(PREVIOUS_DB_VERSION)
                 .add_object_store(
@@ -976,16 +1058,15 @@ pub mod tests {
             rexie.close();
         }
 
-        #[named]
         #[wasm_bindgen_test]
         async fn migration_test() {
-            let store_name = function_name!();
+            let store_name = new_indexed_db_store_name().await;
             let mut gen = ExtendedHeaderGenerator::new();
             let headers = gen.next_many(20);
 
-            init_store(store_name, headers.clone()).await;
+            init_store(&store_name, headers.clone()).await;
 
-            let store = IndexedDbStore::new(store_name)
+            let store = IndexedDbStore::new(&store_name)
                 .await
                 .expect("opening migrated store failed");
 
@@ -1002,13 +1083,73 @@ pub mod tests {
                 let sampling_data = store.get_sampling_metadata(height).await.unwrap();
                 assert!(sampling_data.is_none());
             }
+        }
+    }
 
-            store
-                .update_sampling_metadata(1, SamplingStatus::Accepted, vec![])
+    mod migration_from_v4 {
+        use super::*;
+
+        async fn init_store(name: &str) {
+            let rexie = Rexie::builder(name)
+                .version(4)
+                .add_object_store(ObjectStore::new("ranges"))
+                .add_object_store(ObjectStore::new("schema"))
+                .build()
                 .await
                 .unwrap();
-            let sampling_data = store.get_sampling_metadata(1).await.unwrap().unwrap();
-            assert_eq!(sampling_data.status, SamplingStatus::Accepted);
+
+            let tx = rexie
+                .transaction(&["schema", "ranges"], TransactionMode::ReadWrite)
+                .unwrap();
+
+            let schema_store = tx.store("schema").unwrap();
+            schema_store
+                .put(&to_value(&4).unwrap(), Some(&JsValue::from_str("version")))
+                .await
+                .unwrap();
+
+            let ranges_store = tx.store("ranges").unwrap();
+            ranges_store
+                .put(
+                    &to_value(&BlockRanges::try_from([123..=124]).unwrap()).unwrap(),
+                    Some(&JsValue::from_str(v4::SAMPLED_RANGES_KEY)),
+                )
+                .await
+                .unwrap();
+
+            tx.commit().await.unwrap();
+            rexie.close();
+        }
+
+        #[wasm_bindgen_test]
+        async fn migration_test() {
+            let store_name = new_indexed_db_store_name().await;
+
+            // Prepare store
+            init_store(&store_name).await;
+
+            // Migrate and check
+            let store = IndexedDbStore::new(&store_name).await.unwrap();
+            let ranges = store.get_sampled_ranges().await.unwrap();
+            assert_eq!(ranges, BlockRanges::try_from([123..=124]).unwrap());
+            store.close().await.unwrap();
+
+            // Check that old ranges were deleted
+            let rexie = Rexie::builder(&store_name)
+                .version(5)
+                .add_object_store(ObjectStore::new("ranges"))
+                .build()
+                .await
+                .unwrap();
+            let tx = rexie
+                .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)
+                .unwrap();
+            let store = tx.store(RANGES_STORE_NAME).unwrap();
+            assert!(store
+                .get(JsValue::from_str(v4::SAMPLED_RANGES_KEY))
+                .await
+                .unwrap()
+                .is_none());
         }
     }
 

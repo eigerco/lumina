@@ -103,7 +103,7 @@ impl JsClient {
     /// const blob = new Blob(ns, data, AppVersion.latest());
     ///
     /// const txInfo = await txClient.submitBlobs([blob]);
-    /// await txClient.submitBlobs([blob], { gasLimit: 100000n, gasPrice: 0.02 });
+    /// await txClient.submitBlobs([blob], { gasLimit: 100000n, gasPrice: 0.02, memo: "foo" });
     /// ```
     ///
     /// # Note

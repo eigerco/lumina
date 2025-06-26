@@ -2,7 +2,9 @@
 
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
-use std::ops::{Add, RangeInclusive, Sub};
+use std::ops::{
+    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, RangeInclusive, Sub, SubAssign,
+};
 
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -37,14 +39,15 @@ pub enum BlockRangesError {
 type Result<T, E = BlockRangesError> = std::result::Result<T, E>;
 
 pub(crate) trait BlockRangeExt {
-    fn display(&self) -> BlockRangeDisplay;
+    fn display(&self) -> BlockRangeDisplay<'_>;
     fn validate(&self) -> Result<()>;
     fn len(&self) -> u64;
     fn is_adjacent(&self, other: &BlockRange) -> bool;
     fn is_overlapping(&self, other: &BlockRange) -> bool;
-    fn left_of(&self, other: &BlockRange) -> bool;
-    fn truncate_left(&self, limit: u64) -> Self;
-    fn truncate_right(&self, limit: u64) -> Self;
+    fn is_left_of(&self, other: &BlockRange) -> bool;
+    fn is_right_of(&self, other: &BlockRange) -> bool;
+    fn headn(&self, limit: u64) -> Self;
+    fn tailn(&self, limit: u64) -> Self;
 }
 
 pub(crate) struct BlockRangeDisplay<'a>(&'a RangeInclusive<u64>);
@@ -138,14 +141,21 @@ impl BlockRangeExt for BlockRange {
     }
 
     /// Returns `true` if the whole range of `self` is on the left of `other`.
-    fn left_of(&self, other: &BlockRange) -> bool {
+    fn is_left_of(&self, other: &BlockRange) -> bool {
         debug_assert!(self.validate().is_ok());
         debug_assert!(other.validate().is_ok());
         self.end() < other.start()
     }
 
-    /// Truncate the range so that it contains at most `limit` elements, removing from the left
-    fn truncate_left(&self, limit: u64) -> Self {
+    /// Returns `true` if the whole range of `self` is on the right of `other`.
+    fn is_right_of(&self, other: &BlockRange) -> bool {
+        debug_assert!(self.validate().is_ok());
+        debug_assert!(other.validate().is_ok());
+        other.end() < self.start()
+    }
+
+    /// Truncate the range so that it contains at most `limit` elements, removing from the tail
+    fn headn(&self, limit: u64) -> Self {
         if self.is_empty() {
             return RangeInclusive::new(1, 0);
         }
@@ -160,8 +170,8 @@ impl BlockRangeExt for BlockRange {
         u64::max(start, adjusted_start)..=end
     }
 
-    /// Truncate the range so that it contains at most `limit` elements, removing from the right
-    fn truncate_right(&self, limit: u64) -> Self {
+    /// Truncate the range so that it contains at most `limit` elements, removing from the head
+    fn tailn(&self, limit: u64) -> Self {
         if self.is_empty() {
             return RangeInclusive::new(1, 0);
         }
@@ -229,6 +239,11 @@ impl BlockRanges {
         self.0.iter().any(|r| r.contains(&height))
     }
 
+    /// Return how many blocks exist in `BlockRanges`.
+    pub fn len(&self) -> u64 {
+        self.0.iter().map(|r| r.len()).sum()
+    }
+
     /// Return whether range is empty.
     pub fn is_empty(&self) -> bool {
         self.0.iter().all(|r| r.is_empty())
@@ -239,9 +254,56 @@ impl BlockRanges {
         self.0.last().map(|r| *r.end())
     }
 
+    pub(crate) fn headn(&self, limit: u64) -> BlockRanges {
+        let mut truncated = BlockRanges::new();
+        let mut len = 0;
+
+        for range in self.0.iter().rev() {
+            if len == limit {
+                break;
+            }
+
+            let r = range.headn(limit - len);
+
+            len += r.len();
+            truncated
+                .insert_relaxed(r)
+                .expect("BlockRanges always holds valid ranges");
+
+            debug_assert_eq!(truncated.len(), len);
+            debug_assert!(len <= limit);
+        }
+
+        truncated
+    }
+
     /// Return lowest height in the range.
     pub fn tail(&self) -> Option<u64> {
         self.0.first().map(|r| *r.start())
+    }
+
+    #[allow(unused)]
+    pub(crate) fn tailn(&self, limit: u64) -> BlockRanges {
+        let mut truncated = BlockRanges::new();
+        let mut len = 0;
+
+        for range in self.0.iter() {
+            if len == limit {
+                break;
+            }
+
+            let r = range.tailn(limit - len);
+
+            len += r.len();
+            truncated
+                .insert_relaxed(r)
+                .expect("BlockRanges always holds valid ranges");
+
+            debug_assert_eq!(truncated.len(), len);
+            debug_assert!(len <= limit);
+        }
+
+        truncated
     }
 
     /// Returns first and last index of ranges overlapping or touching provided `range`.
@@ -301,7 +363,7 @@ impl BlockRanges {
             return Ok((false, false));
         };
 
-        if head_range.left_of(to_insert) {
+        if head_range.is_left_of(to_insert) {
             // Allow adding a new HEAD
             let prev_exists = head_range.is_adjacent(to_insert);
             return Ok((prev_exists, false));
@@ -323,7 +385,7 @@ impl BlockRanges {
                         to_insert.to_owned(),
                         calc_overlap(to_insert, first, last),
                     ))
-                } else if first.left_of(to_insert) {
+                } else if first.is_left_of(to_insert) {
                     Ok((true, false))
                 } else {
                     Ok((false, true))
@@ -444,6 +506,132 @@ impl BlockRanges {
 
         Ok(())
     }
+
+    pub(crate) fn edges(&self) -> BlockRanges {
+        let mut edges = BlockRanges::new();
+
+        for range in self.0.iter() {
+            let start = *range.start();
+            let end = *range.end();
+
+            edges
+                .insert_relaxed(start..=start)
+                .expect("BlockRanges always holds valid ranges");
+            edges
+                .insert_relaxed(end..=end)
+                .expect("BlockRanges always holds valid ranges");
+        }
+
+        edges
+    }
+
+    /// Returns `([left], middle, [right])` that can be used for binary search.
+    pub(crate) fn partitions(&self) -> Option<(BlockRanges, u64, BlockRanges)> {
+        let len = self.len();
+
+        if len == 0 {
+            return None;
+        }
+
+        let mut left = BlockRanges::new();
+        let mut right = BlockRanges::new();
+
+        let middle = len / 2;
+        let mut left_len = 0;
+
+        for range in self.0.iter() {
+            let range_len = range.len();
+
+            if left_len + range_len <= middle {
+                // If the whole `range` is up to the `middle`
+                left.insert_relaxed(range.to_owned())
+                    .expect("BlockRanges always holds valid ranges");
+                left_len += range_len;
+            } else if left_len < middle {
+                // If `range` overlaps with `middle`
+                let start = *range.start();
+                let end = *range.end();
+
+                let left_end = start + middle - left_len;
+                let left_range = start..=left_end;
+
+                left_len += left_range.len();
+                left.insert_relaxed(left_range)
+                    .expect("BlockRanges always holds valid ranges");
+
+                if left_end < end {
+                    right
+                        .insert_relaxed(left_end + 1..=end)
+                        .expect("BlockRanges always holds valid ranges");
+                }
+            } else {
+                // If the whole `range` is after the `middle`
+                right
+                    .insert_relaxed(range.to_owned())
+                    .expect("BlockRanges always holds valid ranges");
+            }
+        }
+
+        let middle_height = if left_len < right.len() {
+            right.pop_tail()?
+        } else {
+            left.pop_head()?
+        };
+
+        Some((left, middle_height, right))
+    }
+
+    /// Returns the height that is on the left of `height` parameter.
+    pub(crate) fn left_of(&self, height: u64) -> Option<u64> {
+        for r in self.0.iter().rev() {
+            if r.is_left_of(&(height..=height)) {
+                return Some(*r.end());
+            } else if r.contains(&height) && *r.start() != height {
+                return Some(height - 1);
+            }
+        }
+
+        None
+    }
+
+    /// Returns the height that is on the left of `height` parameter.
+    pub(crate) fn right_of(&self, height: u64) -> Option<u64> {
+        for r in self.0.iter() {
+            if r.is_right_of(&(height..=height)) {
+                return Some(*r.start());
+            } else if r.contains(&height) && *r.end() != height {
+                return Some(height + 1);
+            }
+        }
+
+        None
+    }
+}
+
+impl TryFrom<RangeInclusive<u64>> for BlockRanges {
+    type Error = BlockRangesError;
+
+    fn try_from(value: RangeInclusive<u64>) -> Result<Self, Self::Error> {
+        let mut ranges = BlockRanges::new();
+        ranges.insert_relaxed(value)?;
+        Ok(ranges)
+    }
+}
+
+impl<const N: usize> TryFrom<[RangeInclusive<u64>; N]> for BlockRanges {
+    type Error = BlockRangesError;
+
+    fn try_from(value: [RangeInclusive<u64>; N]) -> Result<Self, Self::Error> {
+        BlockRanges::from_vec(value.into_iter().collect())
+    }
+}
+
+impl TryFrom<&[RangeInclusive<u64>]> for BlockRanges {
+    type Error = BlockRangesError;
+
+    fn try_from(value: &[RangeInclusive<u64>]) -> Result<Self, Self::Error> {
+        BlockRanges::from_vec(value.iter().cloned().collect())
+    }
 }
 
 impl AsRef<[RangeInclusive<u64>]> for BlockRanges {
@@ -452,11 +640,27 @@ impl AsRef<[RangeInclusive<u64>]> for BlockRanges {
     }
 }
 
+impl AddAssign for BlockRanges {
+    fn add_assign(&mut self, rhs: BlockRanges) {
+        self.add_assign(&rhs);
+    }
+}
+
+impl AddAssign<&BlockRanges> for BlockRanges {
+    fn add_assign(&mut self, rhs: &BlockRanges) {
+        for range in rhs.0.iter() {
+            self.insert_relaxed(range)
+                .expect("BlockRanges always holds valid ranges");
+        }
+    }
+}
+
 impl Add for BlockRanges {
     type Output = Self;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        self.add(&rhs)
+    fn add(mut self, rhs: BlockRanges) -> Self::Output {
+        self.add_assign(&rhs);
+        self
     }
 }
 
@@ -464,19 +668,32 @@ impl Add<&BlockRanges> for BlockRanges {
     type Output = Self;
 
     fn add(mut self, rhs: &BlockRanges) -> Self::Output {
+        self.add_assign(rhs);
+        self
+    }
+}
+
+impl SubAssign for BlockRanges {
+    fn sub_assign(&mut self, rhs: BlockRanges) {
+        self.sub_assign(&rhs);
+    }
+}
+
+impl SubAssign<&BlockRanges> for BlockRanges {
+    fn sub_assign(&mut self, rhs: &BlockRanges) {
         for range in rhs.0.iter() {
-            self.insert_relaxed(range)
+            self.remove_relaxed(range)
                 .expect("BlockRanges always holds valid ranges");
         }
-        self
     }
 }
 
 impl Sub for BlockRanges {
     type Output = Self;
 
-    fn sub(self, rhs: Self) -> Self::Output {
-        self.sub(&rhs)
+    fn sub(mut self, rhs: BlockRanges) -> Self::Output {
+        self.sub_assign(&rhs);
+        self
     }
 }
 
@@ -484,10 +701,88 @@ impl Sub<&BlockRanges> for BlockRanges {
     type Output = Self;
 
     fn sub(mut self, rhs: &BlockRanges) -> Self::Output {
-        for range in rhs.0.iter() {
-            self.remove_relaxed(range)
+        self.sub_assign(rhs);
+        self
+    }
+}
+
+impl Not for BlockRanges {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        let mut inverse = BlockRanges::new();
+
+        // Start with full range
+        inverse.insert_relaxed(1..=u64::MAX).expect("valid ranges");
+
+        // And remove whatever we have
+        for range in self.0.iter() {
+            inverse
+                .remove_relaxed(range)
                 .expect("BlockRanges always holds valid ranges");
         }
+
+        inverse
+    }
+}
+
+impl BitOrAssign for BlockRanges {
+    fn bitor_assign(&mut self, rhs: BlockRanges) {
+        self.add_assign(&rhs);
+    }
+}
+
+impl BitOrAssign<&BlockRanges> for BlockRanges {
+    fn bitor_assign(&mut self, rhs: &BlockRanges) {
+        self.add_assign(rhs);
+    }
+}
+
+impl BitOr for BlockRanges {
+    type Output = Self;
+
+    fn bitor(mut self, rhs: BlockRanges) -> Self::Output {
+        self.add_assign(&rhs);
+        self
+    }
+}
+
+impl BitOr<&BlockRanges> for BlockRanges {
+    type Output = Self;
+
+    fn bitor(mut self, rhs: &BlockRanges) -> Self::Output {
+        self.add_assign(rhs);
+        self
+    }
+}
+
+impl BitAndAssign for BlockRanges {
+    fn bitand_assign(&mut self, rhs: BlockRanges) {
+        self.bitand_assign(&rhs);
+    }
+}
+
+impl BitAndAssign<&BlockRanges> for BlockRanges {
+    fn bitand_assign(&mut self, rhs: &BlockRanges) {
+        // !(!A | !B) == (A & B)
+        *self = !(!self.clone() | !rhs.clone());
+    }
+}
+
+impl BitAnd for BlockRanges {
+    type Output = Self;
+
+    fn bitand(mut self, rhs: BlockRanges) -> Self::Output {
+        self.bitand_assign(&rhs);
+        self
+    }
+}
+
+impl BitAnd<&BlockRanges> for BlockRanges {
+    type Output = Self;
+
+    fn bitand(mut self, rhs: &BlockRanges) -> Self::Output {
+        self.bitand_assign(rhs);
         self
     }
 }
@@ -814,46 +1109,211 @@ mod tests {
     }
 
     #[test]
-    fn left_of_check() {
+    fn is_left_of_check() {
         // range is on the left of
-        assert!((1..=2).left_of(&(3..=4)));
-        assert!((1..=1).left_of(&(3..=4)));
+        assert!((1..=2).is_left_of(&(3..=4)));
+        assert!((1..=1).is_left_of(&(3..=4)));
 
         // range is on the right of
-        assert!(!(3..=4).left_of(&(1..=2)));
-        assert!(!(3..=4).left_of(&(1..=1)));
+        assert!(!(3..=4).is_left_of(&(1..=2)));
+        assert!(!(3..=4).is_left_of(&(1..=1)));
 
         // overlapping is not accepted
-        assert!(!(1..=3).left_of(&(3..=4)));
-        assert!(!(1..=5).left_of(&(3..=4)));
-        assert!(!(3..=4).left_of(&(1..=3)));
+        assert!(!(1..=3).is_left_of(&(3..=4)));
+        assert!(!(1..=5).is_left_of(&(3..=4)));
+        assert!(!(3..=4).is_left_of(&(1..=3)));
     }
 
     #[test]
-    fn truncate_left() {
-        assert_eq!((1..=10).truncate_left(u64::MAX), 1..=10);
-        assert_eq!((1..=10).truncate_left(20), 1..=10);
-        assert_eq!((1..=10).truncate_left(10), 1..=10);
-        assert_eq!((1..=10).truncate_left(5), 6..=10);
-        assert_eq!((1..=10).truncate_left(1), 10..=10);
-        assert!((1..=10).truncate_left(0).is_empty());
+    fn left_of() {
+        let r = new_block_ranges([10..=20, 30..=30, 40..=50]);
 
-        assert_eq!((0..=u64::MAX).truncate_left(u64::MAX), 1..=u64::MAX);
-        assert_eq!((0..=u64::MAX).truncate_left(1), u64::MAX..=u64::MAX);
-        assert!((0..=u64::MAX).truncate_left(0).is_empty());
+        assert_eq!(r.left_of(60), Some(50));
+        assert_eq!(r.left_of(50), Some(49));
+        assert_eq!(r.left_of(45), Some(44));
+        assert_eq!(r.left_of(40), Some(30));
+        assert_eq!(r.left_of(39), Some(30));
+        assert_eq!(r.left_of(30), Some(20));
+        assert_eq!(r.left_of(29), Some(20));
+        assert_eq!(r.left_of(20), Some(19));
+        assert_eq!(r.left_of(15), Some(14));
+        assert_eq!(r.left_of(10), None);
+        assert_eq!(r.left_of(9), None);
     }
 
     #[test]
-    fn truncate_right() {
-        assert_eq!((1..=10).truncate_right(20), 1..=10);
-        assert_eq!((1..=10).truncate_right(10), 1..=10);
-        assert_eq!((1..=10).truncate_right(5), 1..=5);
-        assert_eq!((1..=10).truncate_right(1), 1..=1);
-        assert!((1..=10).truncate_right(0).is_empty());
+    fn is_right_of_check() {
+        // range is on the right of
+        assert!((3..=4).is_right_of(&(1..=2)));
+        assert!((3..=4).is_right_of(&(1..=1)));
 
-        assert_eq!((0..=u64::MAX).truncate_right(u64::MAX), 0..=(u64::MAX - 1));
-        assert_eq!((0..=u64::MAX).truncate_right(1), 0..=0);
-        assert!((0..=u64::MAX).truncate_right(0).is_empty());
+        // range is on the left of
+        assert!(!(1..=2).is_right_of(&(3..=4)));
+        assert!(!(1..=1).is_right_of(&(3..=4)));
+
+        // overlapping is not accepted
+        assert!(!(1..=3).is_right_of(&(3..=4)));
+        assert!(!(1..=5).is_right_of(&(3..=4)));
+        assert!(!(3..=4).is_right_of(&(1..=3)));
+    }
+
+    #[test]
+    fn right_of() {
+        let r = new_block_ranges([10..=20, 30..=30, 40..=50]);
+
+        assert_eq!(r.right_of(1), Some(10));
+        assert_eq!(r.right_of(9), Some(10));
+        assert_eq!(r.right_of(10), Some(11));
+        assert_eq!(r.right_of(15), Some(16));
+        assert_eq!(r.right_of(19), Some(20));
+        assert_eq!(r.right_of(20), Some(30));
+        assert_eq!(r.right_of(29), Some(30));
+        assert_eq!(r.right_of(30), Some(40));
+        assert_eq!(r.right_of(39), Some(40));
+        assert_eq!(r.right_of(40), Some(41));
+        assert_eq!(r.right_of(45), Some(46));
+        assert_eq!(r.right_of(49), Some(50));
+        assert_eq!(r.right_of(50), None);
+        assert_eq!(r.right_of(60), None);
+    }
+
+    #[test]
+    fn headn() {
+        assert_eq!((1..=10).headn(u64::MAX), 1..=10);
+        assert_eq!((1..=10).headn(20), 1..=10);
+        assert_eq!((1..=10).headn(10), 1..=10);
+        assert_eq!((1..=10).headn(5), 6..=10);
+        assert_eq!((1..=10).headn(1), 10..=10);
+        assert!((1..=10).headn(0).is_empty());
+
+        assert_eq!((0..=u64::MAX).headn(u64::MAX), 1..=u64::MAX);
+        assert_eq!((0..=u64::MAX).headn(1), u64::MAX..=u64::MAX);
+        assert!((0..=u64::MAX).headn(0).is_empty());
+
+        assert_eq!(
+            new_block_ranges([1..=10]).headn(u64::MAX),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).headn(20),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).headn(10),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).headn(5),
+            new_block_ranges([6..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).headn(1),
+            new_block_ranges([10..=10])
+        );
+        assert!(new_block_ranges([1..=10]).headn(0).is_empty());
+
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).headn(u64::MAX),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).headn(20),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).headn(10),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).headn(4),
+            new_block_ranges([11..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).headn(5),
+            new_block_ranges([10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).headn(6),
+            new_block_ranges([5..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).headn(7),
+            new_block_ranges([4..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).headn(1),
+            new_block_ranges([14..=14])
+        );
+        assert!(new_block_ranges([1..=5, 10..=14]).headn(0).is_empty());
+    }
+
+    #[test]
+    fn tailn() {
+        assert_eq!((1..=10).tailn(20), 1..=10);
+        assert_eq!((1..=10).tailn(10), 1..=10);
+        assert_eq!((1..=10).tailn(5), 1..=5);
+        assert_eq!((1..=10).tailn(1), 1..=1);
+        assert!((1..=10).tailn(0).is_empty());
+
+        assert_eq!((0..=u64::MAX).tailn(u64::MAX), 0..=(u64::MAX - 1));
+        assert_eq!((0..=u64::MAX).tailn(1), 0..=0);
+        assert!((0..=u64::MAX).tailn(0).is_empty());
+
+        assert_eq!(
+            new_block_ranges([1..=10]).tailn(u64::MAX),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).tailn(20),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).tailn(10),
+            new_block_ranges([1..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).tailn(5),
+            new_block_ranges([1..=5])
+        );
+        assert_eq!(
+            new_block_ranges([1..=10]).tailn(1),
+            new_block_ranges([1..=1])
+        );
+        assert!(new_block_ranges([1..=10]).tailn(0).is_empty());
+
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).tailn(u64::MAX),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).tailn(20),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).tailn(10),
+            new_block_ranges([1..=5, 10..=14])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).tailn(4),
+            new_block_ranges([1..=4])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).tailn(5),
+            new_block_ranges([1..=5])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).tailn(6),
+            new_block_ranges([1..=5, 10..=10])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).tailn(7),
+            new_block_ranges([1..=5, 10..=11])
+        );
+        assert_eq!(
+            new_block_ranges([1..=5, 10..=14]).tailn(1),
+            new_block_ranges([1..=1])
+        );
+        assert!(new_block_ranges([1..=5, 10..=14]).tailn(0).is_empty());
     }
 
     #[test]
@@ -1103,5 +1563,204 @@ mod tests {
         let mut r = new_block_ranges([1..=u64::MAX]);
         r.remove_relaxed(u64::MAX..=u64::MAX).unwrap();
         assert_eq!(&r.0[..], &[1..=u64::MAX - 1][..]);
+    }
+
+    #[test]
+    fn edges() {
+        let r = BlockRanges::default();
+        let edges = r.edges();
+        assert!(edges.is_empty());
+
+        let r = new_block_ranges([6..=6, 8..=100, 200..=201, 300..=310]);
+        let edges = r.edges();
+        assert_eq!(
+            &edges.0[..],
+            &[6..=6, 8..=8, 100..=100, 200..=201, 300..=300, 310..=310][..]
+        );
+    }
+
+    #[test]
+    fn inverse() {
+        let inverse = !BlockRanges::new();
+        assert_eq!(&inverse.0[..], &[1..=u64::MAX][..]);
+
+        let inverse = !new_block_ranges([1..=u64::MAX]);
+        assert!(inverse.is_empty());
+
+        let inverse = !new_block_ranges([10..=u64::MAX]);
+        assert_eq!(&inverse.0[..], &[1..=9][..]);
+
+        let inverse = !new_block_ranges([1..=9]);
+        assert_eq!(&inverse.0[..], &[10..=u64::MAX][..]);
+
+        let inverse = !new_block_ranges([10..=100, 200..=200, 400..=600, 700..=800, 900..=900]);
+        assert_eq!(
+            &inverse.0[..],
+            &[
+                1..=9,
+                101..=199,
+                201..=399,
+                601..=699,
+                801..=899,
+                901..=u64::MAX
+            ][..]
+        );
+        assert_eq!(
+            &(!inverse).0[..],
+            &[10..=100, 200..=200, 400..=600, 700..=800, 900..=900][..]
+        );
+
+        let inverse = !new_block_ranges([1..=100, 200..=200, 400..=600, 700..=800, 900..=900]);
+        assert_eq!(
+            &inverse.0[..],
+            &[101..=199, 201..=399, 601..=699, 801..=899, 901..=u64::MAX][..]
+        );
+        assert_eq!(
+            &(!inverse).0[..],
+            &[1..=100, 200..=200, 400..=600, 700..=800, 900..=900][..]
+        );
+
+        let inverse = !new_block_ranges([2..=100, 400..=600, 700..=(u64::MAX - 1)]);
+        assert_eq!(
+            &inverse.0[..],
+            &[1..=1, 101..=399, 601..=699, u64::MAX..=u64::MAX][..]
+        );
+        assert_eq!(
+            &(!inverse).0[..],
+            &[2..=100, 400..=600, 700..=(u64::MAX - 1)][..]
+        );
+    }
+
+    #[test]
+    fn bitwise_and() {
+        let a = new_block_ranges([10..=100, 200..=200, 400..=600, 700..=800, 900..=900]);
+        let b = new_block_ranges([50..=50, 55..=250, 300..=750, 800..=1000]);
+
+        assert_eq!(
+            a & b,
+            new_block_ranges([
+                50..=50,
+                55..=100,
+                200..=200,
+                400..=600,
+                700..=750,
+                800..=800,
+                900..=900
+            ])
+        );
+    }
+
+    #[test]
+    fn partition() {
+        assert!(BlockRanges::new().partitions().is_none());
+
+        let ranges = new_block_ranges([1..=101]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([1..=50]));
+        assert_eq!(middle, 51);
+        assert_eq!(right, new_block_ranges([52..=101]));
+
+        let ranges = new_block_ranges([10..=10]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert!(left.is_empty());
+        assert_eq!(middle, 10);
+        assert!(right.is_empty());
+
+        let ranges = new_block_ranges([10..=14, 20..=24, 100..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=23]));
+        assert_eq!(middle, 24);
+        assert_eq!(right, new_block_ranges([100..=109]));
+
+        let ranges = new_block_ranges([10..=19, 90..=94, 100..=104]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=18]));
+        assert_eq!(middle, 19);
+        assert_eq!(right, new_block_ranges([90..=94, 100..=104]));
+
+        let ranges = new_block_ranges([10..=14, 20..=25, 100..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=24]));
+        assert_eq!(middle, 25);
+        assert_eq!(right, new_block_ranges([100..=109]));
+
+        let ranges = new_block_ranges([10..=14, 20..=24, 99..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=24]));
+        assert_eq!(middle, 99);
+        assert_eq!(right, new_block_ranges([100..=109]));
+
+        let ranges = new_block_ranges([10..=14, 20..=24, 30..=30, 100..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=24]));
+        assert_eq!(middle, 30);
+        assert_eq!(right, new_block_ranges([100..=109]));
+
+        let ranges = new_block_ranges([10..=19, 30..=30, 90..=94, 100..=104]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=19]));
+        assert_eq!(middle, 30);
+        assert_eq!(right, new_block_ranges([90..=94, 100..=104]));
+
+        let ranges = new_block_ranges([10..=14, 20..=24, 30..=31, 100..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=24, 30..=30]));
+        assert_eq!(middle, 31);
+        assert_eq!(right, new_block_ranges([100..=109]));
+
+        let ranges = new_block_ranges([10..=19, 30..=31, 90..=94, 100..=104]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=19, 30..=30]));
+        assert_eq!(middle, 31);
+        assert_eq!(right, new_block_ranges([90..=94, 100..=104]));
+
+        let ranges = new_block_ranges([10..=14, 20..=24, 30..=32, 100..=109]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=14, 20..=24, 30..=30]));
+        assert_eq!(middle, 31);
+        assert_eq!(right, new_block_ranges([32..=32, 100..=109]));
+
+        let ranges = new_block_ranges([10..=19, 30..=32, 90..=94, 100..=104]);
+        let (left, middle, right) = ranges.partitions().unwrap();
+        assert_eq!(left, new_block_ranges([10..=19, 30..=30]));
+        assert_eq!(middle, 31);
+        assert_eq!(right, new_block_ranges([32..=32, 90..=94, 100..=104]));
+    }
+
+    #[test]
+    fn block_ranges_len() {
+        let r = BlockRanges::default();
+        assert!(r.is_empty());
+        assert_eq!(r.len(), 0);
+        assert_eq!(r.count(), 0);
+
+        let r = new_block_ranges([4..=4]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 1);
+
+        let r = new_block_ranges([4..=4, 100..=101]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 3);
+        assert_eq!(r.count(), 3);
+
+        let r = new_block_ranges([250..=300]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 51);
+        assert_eq!(r.count(), 51);
+
+        let r = new_block_ranges([4..=4, 100..=101, 250..=300]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 54);
+        assert_eq!(r.count(), 54);
+
+        let r = new_block_ranges([4..=10, 100..=101, 250..=300]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 60);
+        assert_eq!(r.count(), 60);
+
+        let r = new_block_ranges([4..=4, 100..=101, 250..=300, 500..=500]);
+        assert!(!r.is_empty());
+        assert_eq!(r.len(), 55);
+        assert_eq!(r.count(), 55);
     }
 }
