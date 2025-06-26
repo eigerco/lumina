@@ -413,11 +413,14 @@ where
     /// using bitswap protocol.
     pub async fn request_all_blobs(
         &self,
-        header: &ExtendedHeader,
+        height: u64,
         namespace: Namespace,
         timeout: Option<Duration>,
     ) -> Result<Vec<Blob>> {
-        Ok(self.p2p().get_all_blobs(header, namespace, timeout).await?)
+        Ok(self
+            .p2p()
+            .get_all_blobs(height, namespace, timeout, self.store())
+            .await?)
     }
 
     /// Get current header syncing info.
