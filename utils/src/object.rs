@@ -1,5 +1,5 @@
-#[macro_export]
 /// Create a new javascript `Object` with given properties
+#[macro_export]
 #[cfg(all(target_arch = "wasm32", feature = "make-object"))]
 macro_rules! make_object {
     ($( $prop:expr => $val:expr ),+) => {{

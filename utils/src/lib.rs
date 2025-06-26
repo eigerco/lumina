@@ -15,5 +15,3 @@ pub mod time;
 /// platform independent cancellation token
 #[cfg(feature = "token")]
 pub mod token;
-//#[cfg(all(target_arch = "wasm32", feature = "make-object"))]
-//pub use crate::object::make_object;
