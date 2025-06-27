@@ -11,7 +11,7 @@ pub struct PeerId {
 
 impl PeerId {
     pub fn to_libp2p(&self) -> std::result::Result<Libp2pPeerId, String> {
-        Libp2pPeerId::from_str(&self.peer_id).map_err(|e| format!("Invalid peer ID format: {}", e))
+        Libp2pPeerId::from_str(&self.peer_id).map_err(|e| format!("Invalid peer ID format: {e}"))
     }
 
     pub fn from_libp2p(peer_id: &Libp2pPeerId) -> Self {
@@ -253,7 +253,7 @@ impl From<LuminaNodeEvent> for NodeEvent {
             LuminaNodeEvent::FatalPrunerError { error } => NodeEvent::FatalPrunerError { error },
             LuminaNodeEvent::NetworkCompromised => NodeEvent::NetworkCompromised,
             LuminaNodeEvent::NodeStopped => NodeEvent::NodeStopped,
-            _ => panic!("Unknown event: {:?}", event),
+            _ => panic!("Unknown event: {event:?}"),
         }
     }
 }
