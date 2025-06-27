@@ -182,7 +182,7 @@ impl LuminaNode {
         let node = self.node.read().await;
         let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
         let from: ExtendedHeader = serde_json::from_str(&from)
-            .map_err(|e| LuminaError::invalid_header(format!("Invalid header JSON: {}", e)))?;
+            .map_err(|e| LuminaError::invalid_header(format!("Invalid header JSON: {e}")))?;
         let headers = node.request_verified_headers(&from, amount).await?;
         Ok(headers
             .into_iter()
