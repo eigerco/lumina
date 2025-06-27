@@ -85,7 +85,25 @@ where
     <T::ResponseBody as Body>::Error: Into<StdError> + Send,
     S: DocSigner,
 {
-    /// Create a new transaction client.
+    /// Create a new transaction client with the specified account.
+    ///
+    /// # Example with a static key
+    /// ```rust,no_run
+    /// # async fn docs() {
+    /// # use celestia_types::state::Address;
+    /// # use k256::ecdsa::SigningKey;
+    /// # use celestia_grpc::TxClient;
+    /// # const GRPC_URL : &str = "http://localhost:19090";
+    /// const HEX_SIGNING_KEY: &str = "393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839";
+    /// const ADDRESS: &str = "celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9";
+    ///
+    /// let address : Address = ADDRESS.parse().unwrap();
+    /// let signing_key = SigningKey::from_slice(&hex::decode(HEX_SIGNING_KEY).unwrap()).unwrap();
+    /// let verifying_key = *signing_key.verifying_key();
+    ///
+    /// let client = TxClient::with_url(GRPC_URL, &address, verifying_key, signing_key).await.unwrap();
+    /// # }
+    /// ```
     pub async fn new(
         transport: T,
         account_address: &Address,
