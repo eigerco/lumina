@@ -251,11 +251,10 @@ async fn shwap_request_all_blobs() {
         .collect();
 
     let height = blob_submit(&client, &blobs).await;
-    let header = node.get_header_by_height(height).await.unwrap();
 
     // check existing namespace
     let received = node
-        .request_all_blobs(&header, ns, Some(Duration::from_secs(2)))
+        .request_all_blobs(ns, height, Some(Duration::from_secs(2)))
         .await
         .unwrap();
 
@@ -264,7 +263,7 @@ async fn shwap_request_all_blobs() {
     // check nonexisting namespace
     let ns = Namespace::const_v0(rand::random());
     let received = node
-        .request_all_blobs(&header, ns, Some(Duration::from_secs(2)))
+        .request_all_blobs(ns, height, Some(Duration::from_secs(2)))
         .await
         .unwrap();
 

@@ -71,7 +71,7 @@ use crate::p2p::shwap::{convert_cid, get_block_container, ShwapMultihasher};
 use crate::p2p::swarm::new_swarm;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
-use crate::store::Store;
+use crate::store::{Store, StoreError};
 use crate::utils::{
     celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
     OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt,
@@ -151,6 +151,18 @@ pub enum P2pError {
     /// An error propagated from [`celestia_types`].
     #[error(transparent)]
     CelestiaTypes(#[from] celestia_types::Error),
+
+    /// An error propagated from [`Store`].
+    #[error("Store error: {0}")]
+    Store(#[from] StoreError),
+
+    /// Header was pruned.
+    #[error("Header of {0} block was pruned because it is outside of retention period")]
+    HeaderPruned(u64),
+
+    /// Header not synced yet.
+    #[error("Header of {0} block is not synced yet")]
+    HeaderNotSynced(u64),
 }
 
 impl P2pError {
@@ -172,7 +184,10 @@ impl P2pError {
             | P2pError::Cid(_)
             | P2pError::BitswapQueryTimeout
             | P2pError::Shwap(_)
-            | P2pError::CelestiaTypes(_) => false,
+            | P2pError::CelestiaTypes(_)
+            | P2pError::HeaderPruned(_)
+            | P2pError::HeaderNotSynced(_) => false,
+            P2pError::Store(e) => e.is_fatal(),
         }
     }
 }
@@ -571,13 +586,30 @@ impl P2p {
 
     /// Request all blobs with provided namespace in the block corresponding to this header
     /// using bitswap protocol.
-    pub async fn get_all_blobs(
+    pub async fn get_all_blobs<S>(
         &self,
-        header: &ExtendedHeader,
         namespace: Namespace,
+        block_height: u64,
         timeout: Option<Duration>,
-    ) -> Result<Vec<Blob>> {
-        let height = header.height().value();
+        store: &S,
+    ) -> Result<Vec<Blob>>
+    where
+        S: Store,
+    {
+        let header = match store.get_by_height(block_height).await {
+            Ok(header) => header,
+            Err(StoreError::NotFound) => {
+                let pruned_ranges = store.get_pruned_ranges().await?;
+
+                if pruned_ranges.contains(block_height) {
+                    return Err(P2pError::HeaderPruned(block_height));
+                } else {
+                    return Err(P2pError::HeaderNotSynced(block_height));
+                }
+            }
+            Err(e) => return Err(e.into()),
+        };
+
         let app_version = header.app_version()?;
         let rows_to_fetch: Vec<_> = header
             .dah
@@ -590,9 +622,17 @@ impl P2p {
 
         let futs = rows_to_fetch
             .into_iter()
-            .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, height, timeout))
+            .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, block_height, timeout))
             .collect::<FuturesOrdered<_>>();
-        let rows: Vec<_> = futs.try_collect().await?;
+
+        let rows: Vec<_> = match futs.try_collect().await {
+            Ok(rows) => rows,
+            Err(P2pError::BitswapQueryTimeout) if !store.has_at(block_height).await => {
+                return Err(P2pError::HeaderPruned(block_height));
+            }
+            Err(e) => return Err(e),
+        };
+
         let shares = rows.iter().flat_map(|row| row.shares.iter());
 
         Ok(Blob::reconstruct_all(shares, app_version)?)
