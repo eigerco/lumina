@@ -46,6 +46,30 @@ impl From<BitVector> for CompactBitArray {
     }
 }
 
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use wbg::*;
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+mod wbg {
+    use super::BitVector;
+    use wasm_bindgen::prelude::*;
+
+    #[wasm_bindgen(getter_with_clone)]
+    pub struct JsBitVector(pub Vec<u8>);
+
+    impl From<BitVector> for JsBitVector {
+        fn from(value: BitVector) -> Self {
+            JsBitVector(
+                value
+                    .0
+                    .iter()
+                    .map(|v| if *v { 1 } else { 0 })
+                    .collect::<Vec<u8>>(),
+            )
+        }
+    }
+}
+
 #[cfg(feature = "uniffi")]
 mod uniffi_types {
     use super::BitVector as LuminaBitVector;
