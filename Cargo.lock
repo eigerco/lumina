@@ -842,6 +842,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "celestia-client"
+version = "0.1.0"
+
+[[package]]
 name = "celestia-grpc"
 version = "0.4.0"
 dependencies = [

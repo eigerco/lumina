@@ -1,12 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["cli", "grpc", "node", "node-wasm", "node-uniffi", "proto", "rpc", "types", "utils"]
+members = ["cli", "grpc", "node", "node-wasm", "node-uniffi", "proto", "rpc", "types", "utils", "client"]
 
 [workspace.dependencies]
 blockstore = "0.7.1"
 lumina-node = { version = "0.12.1", path = "node" }
 lumina-node-wasm = { version = "0.8.5", path = "node-wasm" }
 lumina-utils = { version = "0.2.0", path = "utils" }
+celestia-client = { version = "0.1.0", path = "client" }
 celestia-proto = { version = "0.7.2", path = "proto" }
 celestia-grpc = { version = "0.4.0", path = "grpc" }
 celestia-rpc = { version = "0.11.1", path = "rpc", default-features = false }

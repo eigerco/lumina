@@ -28,6 +28,7 @@ jobs:
           - celestia-rpc
           - celestia-grpc
           - celestia-grpc-macros
+          - celestia-client
           - lumina-node
           - lumina-node-uniffi
           - lumina-node-wasm
@@ -63,6 +64,7 @@ jobs:
           - celestia-rpc
           - celestia-grpc
           - celestia-grpc-macros
+          - celestia-client
           - lumina-node
           - lumina-node-uniffi
           - lumina-node-wasm
@@ -124,6 +126,8 @@ jobs:
             wasm-pack-test-flags: --features=wasm-bindgen
           - name: celestia-grpc
             dir: grpc
+          - name: celestia-client
+            dir: client
           - name: lumina-node
             dir: node
           - name: lumina-node-wasm
@@ -182,7 +186,7 @@ jobs:
 
   build-ios:
     runs-on: macos-latest
-    steps: 
+    steps:
     - uses: actions/checkout@v4
 
     - name: Setup toolchain
@@ -191,7 +195,7 @@ jobs:
         target: 'aarch64-apple-ios aarch64-apple-ios-sim'
 
     - uses: mxcl/xcodebuild@v3
-      with: 
+      with:
         action: none
         xcode: ^16
     - name: build and copy bindings

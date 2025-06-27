@@ -1,0 +1,24 @@
+[package]
+name = "celestia-client"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "TODO"
+authors = ["Eiger <hello@eiger.co>"]
+homepage = "https://www.eiger.co"
+repository = "https://github.com/eigerco/lumina"
+readme = "README.md"
+# crates.io is limited to 5 keywords and 5 categories
+keywords = ["blockchain", "celestia", "lumina"]
+# Must be one of <https://crates.io/category_slugs>
+categories = [
+  "api-bindings",
+  "asynchronous",
+  "encoding",
+  "cryptography::cryptocurrencies",
+]
+
+[dependencies]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
