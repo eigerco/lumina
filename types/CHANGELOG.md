@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.11.2...celestia-types-v0.12.0) - 2025-06-27
+
+### Added
+
+- *(node)* [**breaking**] Implement adaptive backward syncing/sampling ([#606](https://github.com/eigerco/lumina/pull/606))
+- make Merkle proof fields pub for Blobstream validation ([#658](https://github.com/eigerco/lumina/pull/658))
+
+### Other
+
+- Fix uninlined-format-args clippy ([#671](https://github.com/eigerco/lumina/pull/671))
+
 ## [0.11.2](https://github.com/eigerco/lumina/compare/celestia-types-v0.11.1...celestia-types-v0.11.2) - 2025-06-09
 
 ### Added
