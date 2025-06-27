@@ -40,15 +40,15 @@ async fn shwap_sampling_forward() {
         let wait_height_sampled = async {
             loop {
                 let ev = events.recv().await.unwrap();
-                let NodeEvent::SamplingFinished {
-                    height, accepted, ..
+                let NodeEvent::SamplingResult {
+                    height, timed_out, ..
                 } = ev.event
                 else {
                     continue;
                 };
 
                 if height == new_head {
-                    assert!(accepted);
+                    assert!(!timed_out);
                     break;
                 }
             }
@@ -93,14 +93,14 @@ async fn shwap_sampling_backward() {
     timeout(Duration::from_secs(10), async {
         loop {
             let ev = events.recv().await.unwrap();
-            let NodeEvent::SamplingFinished {
-                height, accepted, ..
+            let NodeEvent::SamplingResult {
+                height, timed_out, ..
             } = ev.event
             else {
                 continue;
             };
 
-            assert!(accepted);
+            assert!(!timed_out);
             headers_to_sample.remove(&height);
 
             if headers_to_sample.is_empty() {
@@ -251,11 +251,10 @@ async fn shwap_request_all_blobs() {
         .collect();
 
     let height = blob_submit(&client, &blobs).await;
-    let header = node.get_header_by_height(height).await.unwrap();
 
     // check existing namespace
     let received = node
-        .request_all_blobs(&header, ns, Some(Duration::from_secs(2)))
+        .request_all_blobs(ns, height, Some(Duration::from_secs(2)))
         .await
         .unwrap();
 
@@ -264,7 +263,7 @@ async fn shwap_request_all_blobs() {
     // check nonexisting namespace
     let ns = Namespace::const_v0(rand::random());
     let received = node
-        .request_all_blobs(&header, ns, Some(Duration::from_secs(2)))
+        .request_all_blobs(ns, height, Some(Duration::from_secs(2)))
         .await
         .unwrap();
 

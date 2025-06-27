@@ -193,7 +193,7 @@ pub enum NodeEvent {
         shares: Vec<(u16, u16)>,
     },
 
-    /// A share was sampled.
+    /// Share sampling result.
     ShareSamplingResult {
         /// The block height of the share.
         height: u64,
@@ -203,16 +203,16 @@ pub enum NodeEvent {
         row: u16,
         /// The column of the share.
         column: u16,
-        /// The result of the sampling of the share.
-        accepted: bool,
+        /// Share sampling timed out.
+        timed_out: bool,
     },
 
-    /// Sampling just finished.
-    SamplingFinished {
+    /// Sampling result.
+    SamplingResult {
         /// The block height that was sampled.
         height: u64,
-        /// The overall result of the sampling.
-        accepted: bool,
+        /// Sampling timed out.
+        timed_out: bool,
         /// How much time sampling took.
         took: Duration,
     },
@@ -244,7 +244,7 @@ pub enum NodeEvent {
     FetchingHeadersStarted {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
     },
 
@@ -252,7 +252,7 @@ pub enum NodeEvent {
     FetchingHeadersFinished {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
         /// How much time fetching took.
         took: Duration,
@@ -262,7 +262,7 @@ pub enum NodeEvent {
     FetchingHeadersFailed {
         /// Start of the range.
         from_height: u64,
-        /// End of the range (included).
+        /// End of the range (inclusive).
         to_height: u64,
         /// A human readable error.
         error: String,
@@ -276,9 +276,11 @@ pub enum NodeEvent {
         error: String,
     },
 
-    /// Pruned headers up to and including specified height.
+    /// Range of headers that were pruned.
     PrunedHeaders {
-        /// Last header height that was pruned
+        /// Start of the range.
+        from_height: u64,
+        /// End of the range (inclusive).
         to_height: u64,
     },
 
@@ -314,7 +316,7 @@ impl NodeEvent {
             | NodeEvent::PeerDisconnected { .. }
             | NodeEvent::SamplingStarted { .. }
             | NodeEvent::ShareSamplingResult { .. }
-            | NodeEvent::SamplingFinished { .. }
+            | NodeEvent::SamplingResult { .. }
             | NodeEvent::AddedHeaderFromHeaderSub { .. }
             | NodeEvent::FetchingHeadHeaderStarted
             | NodeEvent::FetchingHeadHeaderFinished { .. }
@@ -357,17 +359,22 @@ impl fmt::Display for NodeEvent {
                 height,
                 row,
                 column,
-                accepted,
+                timed_out,
                 ..
             } => {
-                let acc = if *accepted { "accepted" } else { "rejected" };
+                let s = if *timed_out { "timed out" } else { "finished" };
                 write!(
                     f,
-                    "Sampling for share [{row}, {column}] of block {height} was {acc}"
+                    "Sampling for share [{row}, {column}] of block {height} {s}"
                 )
             }
-            NodeEvent::SamplingFinished { height, took, .. } => {
-                write!(f, "Sampling of block {height} finished. Took: {took:?}")
+            NodeEvent::SamplingResult {
+                height,
+                timed_out,
+                took,
+            } => {
+                let s = if *timed_out { "timed out" } else { "finished" };
+                write!(f, "Sampling of block {height} {s}. Took: {took:?}")
             }
             NodeEvent::FatalDaserError { error } => {
                 write!(f, "Daser stopped because of a fatal error: {error}")
@@ -426,8 +433,15 @@ impl fmt::Display for NodeEvent {
             NodeEvent::FatalSyncerError { error } => {
                 write!(f, "Syncer stopped because of a fatal error: {error}")
             }
-            Self::PrunedHeaders { to_height } => {
-                write!(f, "Pruned headers up to and including {to_height}")
+            Self::PrunedHeaders {
+                from_height,
+                to_height,
+            } => {
+                if from_height == to_height {
+                    write!(f, "Header of block {from_height} was pruned")
+                } else {
+                    write!(f, "Headers of blocks {from_height}-{to_height} were pruned")
+                }
             }
             NodeEvent::FatalPrunerError { error } => {
                 write!(f, "Pruner stopped because of a fatal error: {error}")
