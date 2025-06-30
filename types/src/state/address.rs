@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use bech32::Hrp;
 use enum_dispatch::enum_dispatch;
+use k256::ecdsa::VerifyingKey;
 use serde::{Deserialize, Serialize};
 use tendermint::account::Id;
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
@@ -234,6 +235,12 @@ macro_rules! impl_address_type {
         impl From<[u8; appconsts::SIGNER_SIZE]> for $name {
             fn from(value: [u8; appconsts::SIGNER_SIZE]) -> Self {
                 Self::new(Id::new(value))
+            }
+        }
+
+        impl From<VerifyingKey> for $name {
+            fn from(value: VerifyingKey) -> Self {
+                Self::new(Id::from(value))
             }
         }
 

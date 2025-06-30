@@ -12,7 +12,7 @@ use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::BaseAccount;
 use celestia_types::state::{
-    Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
+    AccAddress, Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
 };
 use celestia_types::{AppVersion, Height};
 use http_body::Body;
@@ -20,6 +20,7 @@ use k256::ecdsa::signature::{Error as SignatureError, Signer};
 use k256::ecdsa::{Signature, VerifyingKey};
 use lumina_utils::time::Interval;
 use prost::{Message, Name};
+use signature::Keypair;
 use tendermint::chain::Id;
 use tendermint::PublicKey;
 use tendermint_proto::google::protobuf::Any;
@@ -104,14 +105,10 @@ where
     /// let client = TxClient::with_url(GRPC_URL, &address, verifying_key, signing_key).await.unwrap();
     /// # }
     /// ```
-    pub async fn new(
-        transport: T,
-        account_address: &Address,
-        account_pubkey: VerifyingKey,
-        signer: S,
-    ) -> Result<Self> {
+    pub async fn new(transport: T, account_pubkey: VerifyingKey, signer: S) -> Result<Self> {
         let client = GrpcClient::new(transport);
-        let account = client.get_account(account_address).await?;
+        let account_address = Address::AccAddress(AccAddress::from(account_pubkey));
+        let account = client.get_account(&account_address).await?;
         if let Some(pubkey) = account.pub_key {
             if pubkey != PublicKey::Secp256k1(account_pubkey) {
                 return Err(Error::PublicKeyMismatch);
@@ -438,12 +435,25 @@ where
     /// settings of [`tonic::transport::Channel`].
     pub async fn with_url(
         url: impl Into<String>,
-        account_address: &Address,
         account_pubkey: VerifyingKey,
         signer: S,
     ) -> Result<Self> {
         let transport = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
-        Self::new(transport, account_address, account_pubkey, signer).await
+        Self::new(transport, account_pubkey, signer).await
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<S> TxClient<tonic::transport::Channel, S>
+where
+    S: DocSigner + Keypair<VerifyingKey = VerifyingKey>,
+{
+    pub async fn with_url_and_signer_keypair(
+        url: impl Into<String>,
+        signer_keypair: S,
+    ) -> Result<Self> {
+        let transport = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
+        Self::new(transport, signer_keypair.verifying_key(), signer_keypair).await
     }
 }
 
@@ -456,12 +466,11 @@ where
     /// settings of [`tonic_web_wasm_client::Client`].
     pub async fn with_grpcweb_url(
         url: impl Into<String>,
-        account_address: &Address,
         account_pubkey: VerifyingKey,
         signer: S,
     ) -> Result<Self> {
         let transport = tonic_web_wasm_client::Client::new(url.into());
-        Self::new(transport, account_address, account_pubkey, signer).await
+        Self::new(transport, account_pubkey, signer).await
     }
 }
 
