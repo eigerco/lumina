@@ -20,6 +20,7 @@ use k256::ecdsa::signature::{Error as SignatureError, Signer};
 use k256::ecdsa::{Signature, VerifyingKey};
 use lumina_utils::time::Interval;
 use prost::{Message, Name};
+#[cfg(not(target_arch = "wasm32"))]
 use signature::Keypair;
 use tendermint::chain::Id;
 use tendermint::PublicKey;

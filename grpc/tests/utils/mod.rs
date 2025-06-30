@@ -115,7 +115,6 @@ mod imp {
         let creds = load_account();
         let client = TxClient::with_grpcweb_url(
             CELESTIA_GRPCWEB_PROXY_URL,
-            &creds.address,
             creds.verifying_key,
             creds.signing_key,
         )
