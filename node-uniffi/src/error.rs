@@ -81,6 +81,6 @@ impl From<NodeError> for LuminaError {
 
 impl From<libp2p::multiaddr::Error> for LuminaError {
     fn from(e: libp2p::multiaddr::Error) -> Self {
-        LuminaError::network(format!("Invalid multiaddr: {}", e))
+        LuminaError::network(format!("Invalid multiaddr: {e}"))
     }
 }
