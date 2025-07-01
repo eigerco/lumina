@@ -145,10 +145,11 @@ setup_private_validator() {
 
   # TODO: uncomment and remove grpcwebproxy, once CORS works with built-in grpc-web
   # enable grpc-web
-  dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable
+  #dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable
   # enable CORS as regular grpc is open
-  dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable-unsafe-cors
-  dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true api.enabled-unsafe-cors
+  #dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable-unsafe-cors
+  #dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true api.enabled-unsafe-cors
+  #dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true api.enable-unsafe-cors
 }
 
 main() {
