@@ -18,7 +18,7 @@ runs:
       run: |
         mkdir -p ${{ runner.temp }}/.buildx-cache-new
         cd ci
-        for image in "validator" "node" "grpcwebproxy"; do
+        for image in "validator" "node"; do
           docker buildx build \
             --file "Dockerfile.$image" \
             --tag "$image" \
