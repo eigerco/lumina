@@ -27,6 +27,7 @@ use crate::daser::{
     Daser, DaserArgs, DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY, DEFAULT_CONCURENCY_LIMIT,
 };
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
+use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pArgs};
 use crate::pruner::{Pruner, PrunerArgs};
 use crate::store::{InMemoryStore, SamplingMetadata, Store, StoreError};
@@ -371,11 +372,7 @@ where
         Ok(self.p2p().get_row(row_index, block_height, timeout).await?)
     }
 
-    // TODO: Fix the storage cleanup after calling this method.
     /// Request a verified [`Sample`] from the network.
-    ///
-    /// Samples retrieved from this method will be stored in blockstore and never
-    /// cleared.
     ///
     /// # Errors
     ///
@@ -388,10 +385,23 @@ where
         block_height: u64,
         timeout: Option<Duration>,
     ) -> Result<Sample> {
-        Ok(self
+        let sample = self
             .p2p()
             .get_sample(row_index, column_index, block_height, timeout)
-            .await?)
+            .await?;
+
+        if let Some(metadata) = self.get_sampling_metadata(block_height).await? {
+            let cid = sample_cid(row_index, column_index, block_height)?;
+            if !metadata.cids.contains(&cid) {
+                let blockstore = self
+                    .blockstore
+                    .as_ref()
+                    .expect("Blockstore not initialized");
+                let _ = blockstore.remove(&cid).await;
+            }
+        }
+
+        Ok(sample)
     }
 
     /// Request a verified [`RowNamespaceData`] from the network.
