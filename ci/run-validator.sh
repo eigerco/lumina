@@ -134,9 +134,9 @@ setup_private_validator() {
   # Set proper defaults and change ports
   # sed -i 's/localhost/0.0.0.0/' "$CONFIG_DIR/config/config.toml"
   # sed -i 's/127.0.0.1/0.0.0.0/' "$CONFIG_DIR/config/config.toml"
-  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://0.0.0.0:9090' rpc.grpc_laddr
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://127.0.0.1:9098' rpc.grpc_laddr
   dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://0.0.0.0:26657' rpc.laddr
-  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://0.0.0.0:26658' proxy_app
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://127.0.0.1:36658' proxy_app
   # enable transaction indexing
   dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'kv' tx_index.indexer
 
@@ -151,6 +151,9 @@ main() {
   setup_private_validator
   # Spawn a job to provision a bridge node later
   provision_da_nodes &
+
+  socat TCP4-LISTEN:19090,fork TCP4:localhost:9090 &
+
   # Start the celestia-app
   echo "Configuration finished. Running a validator node..."
   celestia-appd start \

@@ -9,7 +9,7 @@ services:
       # provide amount of DA nodes to provision (default: 1)
       - NODE_COUNT=3
     ports:
-      - 19090:9090 # grpc
+      - 19090:19090 # grpc
       - 18080:9091 # grpc-web
     volumes:
       - credentials:/credentials
