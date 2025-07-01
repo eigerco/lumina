@@ -128,15 +128,14 @@ where
     /// # async fn docs() {
     /// use celestia_grpc::{TxClient, TxConfig};
     /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
-    /// use celestia_types::state::{AccAddress, Coin};
+    /// use celestia_types::state::{Address, AccAddress, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
     /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
-    /// let public_key = *signing_key.verifying_key();
-    /// let address = AccAddress::new(public_key.into()).into();
+    /// let address : Address = AccAddress::new((*signing_key.verifying_key()).into()).into();
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
-    /// let tx_client = TxClient::with_url(grpc_url, &address, public_key, signing_key)
+    /// let tx_client = TxClient::with_url_and_signer_keypair(grpc_url, signing_key)
     ///     .await
     ///     .unwrap();
     ///
@@ -191,17 +190,16 @@ where
     /// ```no_run
     /// # async fn docs() {
     /// use celestia_grpc::{TxClient, TxConfig};
-    /// use celestia_types::state::{AccAddress, Coin};
+    /// use celestia_types::state::{Address, AccAddress, Coin};
     /// use celestia_types::{AppVersion, Blob};
     /// use celestia_types::nmt::Namespace;
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
     /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
-    /// let public_key = *signing_key.verifying_key();
-    /// let address = AccAddress::new(public_key.into()).into();
+    /// let address : Address = AccAddress::new((*signing_key.verifying_key()).into()).into();
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
-    /// let tx_client = TxClient::with_url(grpc_url, &address, public_key, signing_key)
+    /// let tx_client = TxClient::with_url_and_signer_keypair(grpc_url, signing_key)
     ///     .await
     ///     .unwrap();
     ///
@@ -445,7 +443,7 @@ where
     /// # const GRPC_URL : &str = "http://localhost:19090";
     /// const HEX_SIGNING_KEY: &str = "393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839";
     /// let signing_key = SigningKey::from_slice(&hex::decode(HEX_SIGNING_KEY).unwrap()).unwrap();
-    /// let client = TxClient::with_url(GRPC_URL, signing_key).await.unwrap();
+    /// let client = TxClient::with_url_and_signer_keypair(GRPC_URL, signing_key).await.unwrap();
     /// # }
     /// ```
     pub async fn with_url_and_signer_keypair(
