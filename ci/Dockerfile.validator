@@ -5,7 +5,7 @@ FROM docker.io/alpine:3.20
 
 ENV CELESTIA_HOME=/root
 
-RUN apk update && apk add --no-cache bash curl jq dasel socat
+RUN apk update && apk add --no-cache bash curl jq dasel
 
 # Copy in the binary
 COPY --from=ghcr.io/celestiaorg/celestia-app:v4.0.6-mocha /bin/celestia-appd /bin/celestia-appd
@@ -16,6 +16,6 @@ COPY ./run-validator.sh /opt/entrypoint.sh
 # 19090 is the remotely accessible port for gRPC
 # 26656 is the default node p2p port
 # 26657 is the default RPC port
-EXPOSE 26656 26657 1317 19090
+EXPOSE 1317 19090 26656 26657
 
 CMD /opt/entrypoint.sh

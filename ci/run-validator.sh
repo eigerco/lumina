@@ -132,18 +132,24 @@ setup_private_validator() {
   celestia-appd genesis collect-gentxs
 
   # Set proper defaults and change ports
-  # sed -i 's/localhost/0.0.0.0/' "$CONFIG_DIR/config/config.toml"
-  # sed -i 's/127.0.0.1/0.0.0.0/' "$CONFIG_DIR/config/config.toml"
-  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://127.0.0.1:9098' rpc.grpc_laddr
   dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://0.0.0.0:26657' rpc.laddr
-  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'tcp://127.0.0.1:36658' proxy_app
   # enable transaction indexing
   dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v 'kv' tx_index.indexer
 
+  # enable REST API
+  dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true api.enable
+  dasel put -f "$CONFIG_DIR/config/app.toml" -t string -v 'tcp://0.0.0.0:1317' api.address
+  # enable gRPC
+  dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc.enable
+  dasel put -f "$CONFIG_DIR/config/app.toml" -t string -v '0.0.0.0:9090' grpc.address
+
+  # TODO: uncomment and remove grpcwebproxy, once CORS works with built-in grpc-web
   # enable grpc-web
-  dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable
+  #dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable
   # enable CORS as regular grpc is open
-  dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable-unsafe-cors
+  #dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable-unsafe-cors
+  #dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true api.enabled-unsafe-cors
+  #dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true api.enable-unsafe-cors
 }
 
 main() {
@@ -151,8 +157,6 @@ main() {
   setup_private_validator
   # Spawn a job to provision a bridge node later
   provision_da_nodes &
-
-  socat TCP4-LISTEN:19090,fork TCP4:localhost:9090 &
 
   # Start the celestia-app
   echo "Configuration finished. Running a validator node..."

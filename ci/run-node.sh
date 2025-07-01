@@ -110,9 +110,7 @@ main() {
   celestia "$NODE_TYPE" start \
     --rpc.skip-auth="$SKIP_AUTH" \
     --rpc.addr 0.0.0.0 \
-    --gateway.addr 0.0.0.0 \
     --core.ip validator \
-    --core.port 19090 \
     --keyring.keyname "$NODE_NAME" \
     --p2p.network "$P2P_NETWORK" \
     "${extra_flags[@]}"

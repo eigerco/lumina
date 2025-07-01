@@ -65,6 +65,8 @@ pub mod appconsts {
         pub const GAS_PER_BLOB_BYTE: u64 = 8;
     }
 
+    // celestia-app/pkg/appconsts/v4/app_consts
+    /// Consts of App v4.
     pub mod v4 {
         /// App version.
         pub const VERSION: u64 = 4;
