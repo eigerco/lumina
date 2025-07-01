@@ -10,21 +10,10 @@ services:
       - NODE_COUNT=3
     ports:
       - 19090:9090 # grpc
-      # TODO: uncomment and remove grpcwebproxy below, once CORS works with built-in grpc-web
-      #- 18080:1317 # grpc-web
+      - 18080:1317 # grpc-web
     volumes:
       - credentials:/credentials
       - genesis:/genesis
-
-  grpcwebproxy:
-    image: grpcwebproxy
-    platform: "linux/amd64"
-    build:
-      context: .
-      dockerfile: Dockerfile.grpcwebproxy
-    command: --backend_addr=validator:9090 --run_tls_server=false --allow_all_origins
-    ports:
-      - 18080:8080
 
   node-0:
     image: node
