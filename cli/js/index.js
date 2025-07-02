@@ -25,7 +25,6 @@ async function createTxClient() {
 
   const txClient = await new TxClient(
     "http://127.0.0.1:18080",
-    window.node0Addr,
     pubKey,
     signer
   );

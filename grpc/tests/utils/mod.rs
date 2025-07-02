@@ -79,14 +79,9 @@ mod imp {
         let lock = LOCK.get_or_init(|| Mutex::new(())).lock().await;
 
         let creds = load_account();
-        let client = TxClient::with_url(
-            CELESTIA_GRPC_URL,
-            &creds.address,
-            creds.verifying_key,
-            creds.signing_key,
-        )
-        .await
-        .unwrap();
+        let client = TxClient::with_url_and_keypair(CELESTIA_GRPC_URL, creds.signing_key)
+            .await
+            .unwrap();
 
         (lock, client)
     }
@@ -120,7 +115,6 @@ mod imp {
         let creds = load_account();
         let client = TxClient::with_grpcweb_url(
             CELESTIA_GRPCWEB_PROXY_URL,
-            &creds.address,
             creds.verifying_key,
             creds.signing_key,
         )

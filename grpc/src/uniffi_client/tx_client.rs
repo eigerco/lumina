@@ -111,7 +111,6 @@ impl TxClient {
     #[uniffi::constructor(name = "create")]
     pub async fn new(
         url: String,
-        account_address: &Address,
         account_pubkey: Vec<u8>,
         signer: Arc<dyn UniffiSigner>,
     ) -> Result<Self> {
@@ -120,7 +119,7 @@ impl TxClient {
 
         let signer = UniffiSignerBox(signer);
 
-        let client = crate::TxClient::with_url(url, account_address, vk, signer).await?;
+        let client = crate::TxClient::with_url(url, vk, signer).await?;
 
         Ok(TxClient { client })
     }
