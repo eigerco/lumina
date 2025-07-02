@@ -70,14 +70,17 @@ pub enum Address {
 }
 
 impl Address {
+    /// Create a account address for the provided account public key
     pub fn from_account_veryfing_key(key: VerifyingKey) -> Self {
         Address::AccAddress(key.into())
     }
 
+    /// Create a validator address for the provided validator public key
     pub fn from_validator_veryfing_key(key: VerifyingKey) -> Self {
         Address::ValAddress(key.into())
     }
 
+    /// Create a consensus address for the provided consensus public key
     pub fn from_consensus_veryfing_key(key: VerifyingKey) -> Self {
         Address::ConsAddress(key.into())
     }

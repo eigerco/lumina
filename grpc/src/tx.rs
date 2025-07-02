@@ -135,7 +135,7 @@ where
     /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
-    /// let tx_client = TxClient::with_url_and_signer_keypair(grpc_url, signing_key)
+    /// let tx_client = TxClient::with_url_and_keypair(grpc_url, signing_key)
     ///     .await
     ///     .unwrap();
     ///
@@ -199,7 +199,7 @@ where
     /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
-    /// let tx_client = TxClient::with_url_and_signer_keypair(grpc_url, signing_key)
+    /// let tx_client = TxClient::with_url_and_keypair(grpc_url, signing_key)
     ///     .await
     ///     .unwrap();
     ///
@@ -443,7 +443,7 @@ where
     /// # const GRPC_URL : &str = "http://localhost:19090";
     /// const HEX_SIGNING_KEY: &str = "393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839";
     /// let signing_key = SigningKey::from_slice(&hex::decode(HEX_SIGNING_KEY).unwrap()).unwrap();
-    /// let client = TxClient::with_url_and_signer_keypair(GRPC_URL, signing_key).await.unwrap();
+    /// let client = TxClient::with_url_and_keypair(GRPC_URL, signing_key).await.unwrap();
     /// # }
     /// ```
     pub async fn with_url_and_keypair(url: impl Into<String>, signer_keypair: S) -> Result<Self> {
