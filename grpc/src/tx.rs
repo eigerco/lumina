@@ -12,7 +12,7 @@ use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::BaseAccount;
 use celestia_types::state::{
-    AccAddress, Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
+    Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
 };
 use celestia_types::{AppVersion, Height};
 use http_body::Body;
@@ -90,7 +90,7 @@ where
     /// Create a new transaction client with the specified account.
     pub async fn new(transport: T, account_pubkey: VerifyingKey, signer: S) -> Result<Self> {
         let client = GrpcClient::new(transport);
-        let account_address = Address::AccAddress(AccAddress::from(account_pubkey));
+        let account_address = Address::from_account_veryfing_key(account_pubkey);
         let account = client.get_account(&account_address).await?;
         if let Some(pubkey) = account.pub_key {
             if pubkey != PublicKey::Secp256k1(account_pubkey) {
@@ -128,11 +128,11 @@ where
     /// # async fn docs() {
     /// use celestia_grpc::{TxClient, TxConfig};
     /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
-    /// use celestia_types::state::{Address, AccAddress, Coin};
+    /// use celestia_types::state::{Address, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
     /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
-    /// let address : Address = AccAddress::new((*signing_key.verifying_key()).into()).into();
+    /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = TxClient::with_url_and_signer_keypair(grpc_url, signing_key)
@@ -190,13 +190,13 @@ where
     /// ```no_run
     /// # async fn docs() {
     /// use celestia_grpc::{TxClient, TxConfig};
-    /// use celestia_types::state::{Address, AccAddress, Coin};
+    /// use celestia_types::state::{Address, Coin};
     /// use celestia_types::{AppVersion, Blob};
     /// use celestia_types::nmt::Namespace;
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
     /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
-    /// let address : Address = AccAddress::new((*signing_key.verifying_key()).into()).into();
+    /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = TxClient::with_url_and_signer_keypair(grpc_url, signing_key)
@@ -446,10 +446,7 @@ where
     /// let client = TxClient::with_url_and_signer_keypair(GRPC_URL, signing_key).await.unwrap();
     /// # }
     /// ```
-    pub async fn with_url_and_signer_keypair(
-        url: impl Into<String>,
-        signer_keypair: S,
-    ) -> Result<Self> {
+    pub async fn with_url_and_keypair(url: impl Into<String>, signer_keypair: S) -> Result<Self> {
         let transport = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
         Self::new(transport, signer_keypair.verifying_key(), signer_keypair).await
     }

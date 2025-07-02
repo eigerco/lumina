@@ -3,7 +3,6 @@ use std::str::FromStr;
 
 use bech32::Hrp;
 use enum_dispatch::enum_dispatch;
-use k256::ecdsa::VerifyingKey;
 use serde::{Deserialize, Serialize};
 use tendermint::account::Id;
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
@@ -12,6 +11,8 @@ use wasm_bindgen::prelude::*;
 use crate::consts::appconsts;
 use crate::consts::cosmos::*;
 use crate::{Error, Result};
+
+pub use k256::ecdsa::VerifyingKey;
 
 /// A generic representation of an address in Celestia network.
 #[enum_dispatch(Address)]
@@ -66,6 +67,20 @@ pub enum Address {
     ValAddress,
     /// Consensus address.
     ConsAddress,
+}
+
+impl Address {
+    pub fn from_account_veryfing_key(key: VerifyingKey) -> Self {
+        Address::AccAddress(key.into())
+    }
+
+    pub fn from_validator_veryfing_key(key: VerifyingKey) -> Self {
+        Address::ValAddress(key.into())
+    }
+
+    pub fn from_consensus_veryfing_key(key: VerifyingKey) -> Self {
+        Address::ConsAddress(key.into())
+    }
 }
 
 /// Address of an account.
