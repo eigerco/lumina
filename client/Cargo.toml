@@ -3,7 +3,7 @@ name = "celestia-client"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
-description = "TODO"
+description = "Celestia client combining RPC and gRPC functionality."
 authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
@@ -19,6 +19,17 @@ categories = [
 ]
 
 [dependencies]
+jsonrpsee-core = "0.25.1"
+tendermint.workspace = true
+thiserror = "2.0.12"
+tonic = "0.12.3"
+
+celestia-grpc.workspace = true
+celestia-rpc = { workspace = true, default-features = false }
+celestia-types.workspace = true
+
+[features]
+wasm-bindgen = ["celestia-grpc/wasm-bindgen", "celestia-rpc/wasm-bindgen", "celestia-types/wasm-bindgen"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
