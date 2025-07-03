@@ -1,8 +1,13 @@
 use std::sync::Arc;
 
 use celestia_grpc::DocSigner;
+use celestia_rpc::blob::BlobsAtHeight;
+use celestia_rpc::BlobClient;
+use celestia_types::nmt::{Namespace, NamespaceProof};
+use celestia_types::{Blob, Commitment};
+use jsonrpsee_core::client::Subscription;
 
-use crate::Context;
+use crate::{Context, Result, TxConfig, TxInfo};
 
 pub struct BlobApi<S> {
     ctx: Arc<Context<S>>,
@@ -16,40 +21,73 @@ where
         BlobApi { ctx }
     }
 
-    /*
-         // Submit sends Blobs and reports the height in which they were included.
-    // Allows sending multiple Blobs atomically synchronously.
-    // Uses default wallet registered on the Node.
-    //
-    // WRITE
-    Submit(_ context.Context, _ []*blob.Blob, _ *blob.SubmitOptions) (height uint64, _ error)
+    /// Submit given blobs to celestia network.
+    ///
+    /// When no gas price is specified through config, it will automatically handle updating client’s gas price when consensus updates minimal gas price.
+    ///
+    /// # Notes
+    ///
+    /// This is the same as [`StateApi::submit_pay_for_blob`].
+    ///
+    /// [`StateApi::submit_pay_for_blob`]: crate::StateApi::submit_pay_for_blob
+    pub async fn submit(&self, blobs: &[Blob], cfg: TxConfig) -> Result<TxInfo> {
+        Ok(self.ctx.grpc()?.submit_blobs(blobs, cfg).await?)
+    }
 
+    /// Retrieves the blob by commitment under the given namespace and height.
+    pub async fn get(
+        &self,
+        height: u64,
+        namespace: Namespace,
+        commitment: Commitment,
+    ) -> Result<Blob> {
+        Ok(self.ctx.rpc.blob_get(height, namespace, commitment).await?)
+    }
 
-    // Get retrieves the blob by commitment under the given namespace and height.
-    Get(_ context.Context, height uint64, _ libshare.Namespace, _ blob.Commitment) (*blob.Blob, error)
-    // GetAll returns all blobs under the given namespaces at the given height.
-    // If all blobs were found without any errors, the user will receive a list of blobs.
-    // If the BlobService couldn't find any blobs under the requested namespaces,
-    // the user will receive an empty list of blobs along with an empty error.
-    // If some of the requested namespaces were not found, the user will receive all the found blobs
-    // and an empty error. If there were internal errors during some of the requests,
-    // the user will receive all found blobs along with a combined error message.
-    //
-    // All blobs will preserve the order of the namespaces that were requested.
-    GetAll(_ context.Context, height uint64, _ []libshare.Namespace) ([]*blob.Blob, error)
-    // GetProof retrieves proofs in the given namespaces at the given height by commitment.
-    GetProof(_ context.Context, height uint64, _ libshare.Namespace, _ blob.Commitment) (*blob.Proof, error)
-    // Included checks whether a blob's given commitment(Merkle subtree root) is included at
-    // given height and under the namespace.
-    Included(_ context.Context, height uint64, _ libshare.Namespace, _ *blob.Proof, _ blob.Commitment) (bool, error)
-    // GetCommitmentProof generates a commitment proof for a share commitment.
-    GetCommitmentProof(
-        ctx context.Context,
-        height uint64,
-        namespace libshare.Namespace,
-        shareCommitment []byte,
-    ) (*blob.CommitmentProof, error)
-    // Subscribe to published blobs from the given namespace as they are included.
-    Subscribe(_ context.Context, _ libshare.Namespace) (<-chan *blob.SubscriptionResponse, error)
-    */
+    /// Retrieves all blobs under the given namespaces and height.
+    pub async fn get_all(
+        &self,
+        height: u64,
+        namespaces: &[Namespace],
+    ) -> Result<Option<Vec<Blob>>> {
+        Ok(self.ctx.rpc.blob_get_all(height, namespaces).await?)
+    }
+
+    /// Retrieves proofs in the given namespaces at the given height by commitment.
+    pub async fn get_proof(
+        &self,
+        height: u64,
+        namespace: Namespace,
+        commitment: Commitment,
+    ) -> Result<Vec<NamespaceProof>> {
+        Ok(self
+            .ctx
+            .rpc
+            .blob_get_proof(height, namespace, commitment)
+            .await?)
+    }
+
+    /// Checks whether a blob's given commitment is included at given height and under the namespace.
+    pub async fn included(
+        &self,
+        height: u64,
+        namespace: Namespace,
+        proof: &NamespaceProof,
+        commitment: Commitment,
+    ) -> Result<bool> {
+        Ok(self
+            .ctx
+            .rpc
+            .blob_included(height, namespace, proof, commitment)
+            .await?)
+    }
+
+    /// Subscribe to published blobs from the given namespace as they are included.
+    ///
+    /// # Notes
+    ///
+    /// Unsubscribe is not implemented by Celestia nodes.
+    pub async fn subscribe(&self, namespace: Namespace) -> Result<Subscription<BlobsAtHeight>> {
+        Ok(self.ctx.rpc.blob_subscribe(namespace).await?)
+    }
 }

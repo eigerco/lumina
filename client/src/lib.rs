@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use celestia_grpc::{DocSigner, IntoAny, TxClient, TxConfig, TxInfo};
+use celestia_grpc::TxClient;
 use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::{
     BlobClient, Client as RpcClient, DasClient, HeaderClient, ShareClient, StateClient,
@@ -27,6 +27,9 @@ pub use crate::header::HeaderApi;
 pub use crate::share::ShareApi;
 pub use crate::state::StateApi;
 
+#[doc(inline)]
+pub use celestia_grpc::{DocSigner, IntoAny, TxConfig, TxInfo};
+
 pub(crate) struct Context<S> {
     pub(crate) rpc: RpcClient,
     grpc: Option<TxClient<tonic::transport::Channel, S>>,
@@ -45,6 +48,7 @@ where
 ///
 /// It combines the functionality of `celestia-rpc` and `celestia-grpc` crates.
 pub struct Client<S> {
+    ctx: Arc<Context<S>>,
     state: StateApi<S>,
     blob: BlobApi<S>,
     header: HeaderApi<S>,
@@ -104,6 +108,7 @@ where
         });
 
         Ok(Client {
+            ctx: ctx.clone(),
             blob: BlobApi::new(ctx.clone()),
             header: HeaderApi::new(ctx.clone()),
             share: ShareApi::new(ctx.clone()),
@@ -111,6 +116,25 @@ where
             blobstream: BlobstreamApi::new(ctx.clone()),
             state: StateApi::new(ctx.clone()),
         })
+    }
+
+    pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
+    where
+        M: IntoAny,
+    {
+        Ok(self.ctx.grpc()?.submit_message(message, cfg).await?)
+    }
+
+    pub fn last_seen_gas_price(&self) -> Result<f64> {
+        Ok(self.ctx.grpc()?.last_seen_gas_price())
+    }
+
+    pub fn chain_id(&self) -> Result<Id> {
+        Ok(self.ctx.grpc()?.chain_id().to_owned())
+    }
+
+    pub fn app_version(&self) -> Result<AppVersion> {
+        Ok(self.ctx.grpc()?.app_version())
     }
 
     pub fn state(&self) -> &StateApi<S> {
@@ -132,147 +156,4 @@ where
     pub fn fraud(&self) -> &FraudApi<S> {
         &self.fraud
     }
-
-    /*
-    async fn get_auth_params(&self) -> Result<AuthParams>;
-
-    /// Get account
-    #[grpc_method(AuthQueryClient::account)]
-    async fn get_account(&self, account: &Address) -> Result<Account>;
-
-    /// Get accounts
-    #[grpc_method(AuthQueryClient::accounts)]
-    async fn get_accounts(&self) -> Result<Vec<Account>>;
-
-    // cosmos.bank
-
-    /// Get balance of coins with given denom
-    #[grpc_method(BankQueryClient::balance)]
-    async fn get_balance(&self, address: &Address, denom: impl Into<String>) -> Result<Coin>;
-
-    /// Get balance of all coins
-    #[grpc_method(BankQueryClient::all_balances)]
-    async fn get_all_balances(&self, address: &Address) -> Result<Vec<Coin>>;
-
-    /// Get balance of all spendable coins
-    #[grpc_method(BankQueryClient::spendable_balances)]
-    async fn get_spendable_balances(&self, address: &Address) -> Result<Vec<Coin>>;
-
-    /// Get total supply
-    #[grpc_method(BankQueryClient::total_supply)]
-    async fn get_total_supply(&self) -> Result<Vec<Coin>>;
-
-    // cosmos.base.node
-
-    /// Get Minimum Gas price
-    #[grpc_method(ConfigServiceClient::config)]
-    async fn get_min_gas_price(&self) -> Result<f64>;
-
-    // cosmos.base.tendermint
-
-    /// Get latest block
-    #[grpc_method(TendermintServiceClient::get_latest_block)]
-    async fn get_latest_block(&self) -> Result<Block>;
-
-    /// Get block by height
-    #[grpc_method(TendermintServiceClient::get_block_by_height)]
-    async fn get_block_by_height(&self, height: i64) -> Result<Block>;
-
-    // cosmos.tx
-
-    /// Broadcast prepared and serialised transaction
-    #[grpc_method(TxServiceClient::broadcast_tx)]
-    async fn broadcast_tx(&self, tx_bytes: Vec<u8>, mode: BroadcastMode) -> Result<TxResponse>;
-
-    /// Get Tx
-    #[grpc_method(TxServiceClient::get_tx)]
-    async fn get_tx(&self, hash: Hash) -> Result<GetTxResponse>;
-
-    /// Broadcast prepared and serialised transaction
-    #[grpc_method(TxServiceClient::simulate)]
-    async fn simulate(&self, tx_bytes: Vec<u8>) -> Result<GasInfo>;
-
-    // celestia.blob
-
-    /// Get blob params
-    #[grpc_method(BlobQueryClient::params)]
-    async fn get_blob_params(&self) -> Result<BlobParams>;
-
-    // celestia.core.tx
-
-    /// Get status of the transaction
-    #[grpc_method(TxStatusClient::tx_status)]
-    async fn tx_status(&self, hash: Hash) -> Result<TxStatusResponse>;
-
-    ////////
-
-    /// Retrieves the blob by commitment under the given namespace and height.
-    pub async fn get_blob(
-        &self,
-        height: u64,
-        namespace: Namespace,
-        commitment: Commitment,
-    ) -> Result<Blob> {
-        Ok(self.rpc.blob_get(height, namespace, commitment).await?)
-    }
-
-    /// Retrieves all blobs under the given namespaces and height.
-    pub async fn get_all_blobs(
-        &self,
-        height: u64,
-        namespaces: &[Namespace],
-    ) -> Result<Option<Vec<Blob>>> {
-        Ok(self.rpc.blob_get_all(height, namespaces).await?)
-    }
-
-    /// Retrieves proofs in the given namespaces at the given height by commitment.
-    pub async fn get_proof(
-        &self,
-        height: u64,
-        namespace: Namespace,
-        commitment: Commitment,
-    ) -> Result<Vec<NamespaceProof>> {
-        Ok(self
-            .rpc
-            .blob_get_proof(height, namespace, commitment)
-            .await?)
-    }
-
-    /// Checks whether a blob's given commitment is included at given height and under the namespace.
-    pub async fn blob_included(
-        &self,
-        height: u64,
-        namespace: Namespace,
-        proof: &NamespaceProof,
-        commitment: Commitment,
-    ) -> Result<bool> {
-        Ok(self
-            .rpc
-            .blob_included(height, namespace, proof, commitment)
-            .await?)
-    }
-
-    /// Subscribe to published blobs from the given namespace as they are included.
-    ///
-    /// # Notes
-    ///
-    /// Unsubscribe is not implemented by Celestia nodes.
-    pub async fn blob_subscribe(
-        &self,
-        namespace: Namespace,
-    ) -> Result<Subscription<BlobsAtHeight>> {
-        Ok(self.rpc.blob_subscribe(namespace).await?)
-    }
-
-    /*
-     *
-    Header     headerapi.Module
-    State      stateapi.Module
-    Share      shareapi.Module
-    Fraud      fraudapi.Module
-    Blobstream blobstreamapi.Module
-    */
-
-
-    */
 }

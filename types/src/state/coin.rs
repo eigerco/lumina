@@ -1,44 +1,54 @@
 use celestia_proto::cosmos::base::v1beta1::Coin as RawCoin;
 use serde::{Deserialize, Serialize};
 
-use crate::state::Uint;
 use crate::{Error, Result};
 
-/// Representation of the account's balance.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(try_from = "RawCoin")]
-pub struct Balance {
-    /// The denomination, eg. 'utia'.
-    pub denom: String,
+/// Coin defines a token with a denomination and an amount.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawCoin", into = "RawCoin")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct Coin {
+    /// Coin denomination
+    denom: String,
     /// The amount of coins.
-    pub amount: Uint,
+    amount: u64,
 }
 
-impl Balance {
-    /// Validate if the balance is correct.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if the denomination is invalid.
-    pub fn validate(&self) -> Result<()> {
-        validate_denom(&self.denom)
+impl Coin {
+    pub fn new(denom: &str, amount: u64) -> Result<Coin> {
+        validate_denom(denom)?;
+
+        Ok(Coin {
+            denom: denom.to_owned(),
+            amount,
+        })
+    }
+
+    /// Create a coin with given amount of `utia`.
+    pub fn utia(amount: u64) -> Self {
+        Coin::new("utia", amount).expect("denom is always valid")
+    }
+
+    pub fn amount(&self) -> u64 {
+        self.amount
+    }
+
+    pub fn set_amount(&mut self, amount: u64) {
+        self.amount = amount;
+    }
+
+    pub fn denom(&self) -> &str {
+        self.denom.as_str()
+    }
+
+    pub fn set_denom(&mut self, denom: &str) -> Result<()> {
+        validate_denom(denom)?;
+        self.denom = denom.to_owned();
+        Ok(())
     }
 }
 
-impl Serialize for Balance {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let raw: RawCoin = self
-            .to_owned()
-            .try_into()
-            .map_err(serde::ser::Error::custom)?;
-        raw.serialize(serializer)
-    }
-}
-
-impl TryFrom<RawCoin> for Balance {
+impl TryFrom<RawCoin> for Coin {
     type Error = Error;
 
     fn try_from(value: RawCoin) -> Result<Self, Self::Error> {
@@ -47,46 +57,42 @@ impl TryFrom<RawCoin> for Balance {
         let amount = value
             .amount
             .parse()
-            .map_err(|_| Error::InvalidBalanceAmount(value.amount))?;
+            .map_err(|_| Error::InvalidCoinAmount(value.amount))?;
 
-        Ok(Balance {
+        Ok(Coin {
             denom: value.denom,
             amount,
         })
     }
 }
 
-impl TryFrom<Balance> for RawCoin {
-    type Error = Error;
-
-    fn try_from(value: Balance) -> Result<Self, Self::Error> {
-        value.validate()?;
-
-        Ok(RawCoin {
+impl From<Coin> for RawCoin {
+    fn from(value: Coin) -> Self {
+        RawCoin {
             denom: value.denom,
             amount: value.amount.to_string(),
-        })
+        }
     }
 }
 
 fn validate_denom(denom: &str) -> Result<()> {
     // Length must be 3-128 characters
     if denom.len() < 3 || denom.len() > 128 {
-        return Err(Error::InvalidBalanceDenomination(denom.to_owned()));
+        return Err(Error::InvalidCoinDenomination(denom.to_owned()));
     }
 
     let mut chars = denom.chars();
 
     // First character must be a letter
     if !matches!(chars.next(), Some('a'..='z' | 'A'..='Z')) {
-        return Err(Error::InvalidBalanceDenomination(denom.to_owned()));
+        return Err(Error::InvalidCoinDenomination(denom.to_owned()));
     }
 
     // The rest can be a letter, a number, or a symbol from '/', ':', '.', '_', '-'
     if chars.all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '/' | ':' | '.' | '_' | '-')) {
         Ok(())
     } else {
-        Err(Error::InvalidBalanceDenomination(denom.to_owned()))
+        Err(Error::InvalidCoinDenomination(denom.to_owned()))
     }
 }
 
@@ -98,45 +104,39 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
     #[test]
-    fn deserialize_balance() {
+    fn deserialize_coin() {
         let s = r#"{"denom":"abcd","amount":"1234"}"#;
-        let balance: Balance = serde_json::from_str(s).unwrap();
-        assert_eq!(balance.denom, "abcd");
-        assert_eq!(balance.amount, Uint::from(1234));
+        let coin: Coin = serde_json::from_str(s).unwrap();
+        assert_eq!(coin.denom(), "abcd");
+        assert_eq!(coin.amount(), 1234);
     }
 
     #[test]
     fn deserialize_invalid_denom() {
         let s = r#"{"denom":"0asdadas","amount":"1234"}"#;
-        serde_json::from_str::<Balance>(s).unwrap_err();
+        serde_json::from_str::<Coin>(s).unwrap_err();
     }
 
     #[test]
     fn deserialize_invalid_amount() {
         let s = r#"{"denom":"abcd","amount":"a1234"}"#;
-        serde_json::from_str::<Balance>(s).unwrap_err();
+        serde_json::from_str::<Coin>(s).unwrap_err();
     }
 
     #[test]
-    fn serialize_balance() {
-        let balance = Balance {
-            denom: "abcd".to_string(),
-            amount: Uint::from(1234),
-        };
-
-        let s = serde_json::to_string(&balance).unwrap();
+    fn serialize_coin() {
+        let coin = Coin::new("abcd", 1234).unwrap();
+        let s = serde_json::to_string(&coin).unwrap();
         let expected = r#"{"denom":"abcd","amount":"1234"}"#;
         assert_eq!(s, expected);
     }
 
     #[test]
-    fn serialize_invalid_balance() {
-        let balance = Balance {
-            denom: "0sdfsfs".to_string(),
-            amount: Uint::from(1234),
-        };
+    fn invalid_coin_denom() {
+        Coin::new("0bc", 1234).unwrap_err();
 
-        serde_json::to_string(&balance).unwrap_err();
+        let mut coin = Coin::utia(1);
+        coin.set_denom("0bc").unwrap_err();
     }
 
     #[test]

@@ -194,17 +194,13 @@ pub enum Error {
     #[error("Invalid address: {0}")]
     InvalidAddress(String),
 
-    /// Invalid balance denomination.
-    #[error("Invalid balance denomination: {0}")]
-    InvalidBalanceDenomination(String),
-
-    /// Invalid balance amount.
-    #[error("Invalid balance amount: {0}")]
-    InvalidBalanceAmount(String),
-
     /// Invalid coin amount.
     #[error("Invalid coin amount: {0}")]
     InvalidCoinAmount(String),
+
+    /// Invalid balance denomination.
+    #[error("Invalid balance denomination: {0}")]
+    InvalidCoinDenomination(String),
 
     /// Invalid Public Key
     #[error("Invalid Public Key")]
@@ -610,17 +606,13 @@ pub enum UniffiError {
     #[error("Invalid address: {0}")]
     InvalidAddress(String),
 
-    /// Invalid balance denomination.
-    #[error("Invalid balance denomination: {0}")]
-    InvalidBalanceDenomination(String),
-
-    /// Invalid balance amount.
-    #[error("Invalid balance amount: {0}")]
-    InvalidBalanceAmount(String),
-
     /// Invalid coin amount.
     #[error("Invalid coin amount: {0}")]
     InvalidCoinAmount(String),
+
+    /// Invalid coin denomination.
+    #[error("Invalid coin denomination: {0}")]
+    InvalidCoinDenomination(String),
 
     /// Invalid Public Key
     #[error("Invalid Public Key")]
@@ -740,9 +732,8 @@ impl From<Error> for UniffiError {
                 UniffiError::InvalidAddressSize(s.try_into().expect("size to fit"))
             }
             Error::InvalidAddress(a) => UniffiError::InvalidAddress(a),
-            Error::InvalidBalanceDenomination(d) => UniffiError::InvalidBalanceDenomination(d),
-            Error::InvalidBalanceAmount(a) => UniffiError::InvalidBalanceAmount(a),
             Error::InvalidCoinAmount(a) => UniffiError::InvalidCoinAmount(a),
+            Error::InvalidCoinDenomination(d) => UniffiError::InvalidCoinDenomination(d),
             Error::InvalidPublicKeyType(t) => UniffiError::InvalidPublicKeyType(t),
             Error::UnsupportedFraudProofType(t) => UniffiError::UnsupportedFraudProofType(t),
             Error::IndexOutOfRange(i, r) => UniffiError::IndexOutOfRange(

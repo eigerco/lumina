@@ -34,7 +34,6 @@ libp2p-identity = { version = "0.2.9", optional = true }
 multiaddr = { version = "0.18.1", optional = true }
 multihash = "0.19.1"
 rand = { version = "0.8.5", optional = true }
-ruint = { version = "1.12.3", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_repr = "0.1.19"
 sha2 = "0.10.6"

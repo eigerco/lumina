@@ -25,6 +25,7 @@ thiserror = "2.0.12"
 tonic = "0.12.3"
 
 celestia-grpc.workspace = true
+celestia-proto.workspace  = true
 celestia-rpc = { workspace = true, default-features = false }
 celestia-types.workspace = true
 

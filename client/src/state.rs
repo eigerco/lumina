@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use celestia_grpc::{DocSigner, IntoAny, TxClient, TxConfig, TxInfo};
+use celestia_proto::cosmos::bank::v1beta1::MsgSend;
 use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::{
     BlobClient, Client as RpcClient, DasClient, HeaderClient, ShareClient, StateClient,
@@ -125,28 +126,7 @@ where
     ) (*state.TxResponse, error)
     */
 
-    pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
-    where
-        M: IntoAny,
-    {
-        Ok(self.ctx.grpc()?.submit_message(message, cfg).await?)
-    }
-
-    pub async fn submit_blobs(&self, blobs: &[Blob], cfg: TxConfig) -> Result<TxInfo> {
-        Ok(self.ctx.grpc()?.submit_blobs(blobs, cfg).await?)
-    }
-
-    pub fn last_seen_gas_price(&self) -> Result<f64> {
-        Ok(self.ctx.grpc()?.last_seen_gas_price())
-    }
-
-    pub fn chain_id(&self) -> Result<Id> {
-        Ok(self.ctx.grpc()?.chain_id().to_owned())
-    }
-
-    pub fn app_version(&self) -> Result<AppVersion> {
-        Ok(self.ctx.grpc()?.app_version())
-    }
+    // TODO: https://docs.rs/celestia-grpc/latest/celestia_grpc/grpc/struct.GrpcClient.html
 
     pub fn account_address(&self) -> Result<AccAddress> {
         todo!();
@@ -158,11 +138,19 @@ where
     }
 
     pub async fn balance_for_address(&self, address: AccAddress) -> Result<Coin> {
-        Ok(self
-            .ctx
-            .grpc()?
-            .get_balance(&Address::AccAddress(address), "utia")
-            .await?)
+        let address = address.into();
+
+        match self.ctx.grpc() {
+            Ok(grpc) => Ok(grpc.get_balance(&address, "utia").await?),
+            Err(_) => Ok(self.ctx.rpc.state_balance_for_address(&address).await?),
+        }
+    }
+
+    pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
+    where
+        M: IntoAny,
+    {
+        Ok(self.ctx.grpc()?.submit_message(message, cfg).await?)
     }
 
     pub async fn transfer(
@@ -171,6 +159,32 @@ where
         amount: Coin,
         cfg: TxConfig,
     ) -> Result<TxInfo> {
+        let from_address = self.account_address()?;
+
+        let msg = MsgSend {
+            from_address: from_address.to_string(),
+            to_address: to_address.to_string(),
+            amount: vec![amount.into()],
+        };
+
+        self.submit_message(msg, cfg).await
+    }
+
+    /// Builds, signs and submits a PayForBlob transaction.
+    ///
+    /// When no gas price is specified through config, it will automatically
+    /// handle updating client's gas price when consensus updates minimal
+    /// gas price.
+    ///
+    /// # Example
+    /// ```no_run
+    /// TODO
+    /// ```
+    pub async fn submit_pay_for_blob(&self, blobs: &[Blob], cfg: TxConfig) -> Result<TxInfo> {
+        Ok(self.ctx.grpc()?.submit_blobs(blobs, cfg).await?)
+    }
+
+    pub async fn cancel_unbonding_delegation(&self) -> Result<()> {
         todo!();
     }
 
@@ -178,11 +192,11 @@ where
         todo!();
     }
 
-    pub async fn delegate(&self) -> Result<()> {
+    pub async fn undelegate(&self) -> Result<()> {
         todo!();
     }
 
-    pub async fn undelegate(&self) -> Result<()> {
+    pub async fn delegate(&self) -> Result<()> {
         todo!();
     }
 
@@ -203,14 +217,6 @@ where
     }
 
     pub async fn revoke_grant_fee(&self) -> Result<()> {
-        todo!();
-    }
-
-    pub async fn last_pay_for_blob(&self) -> Result<()> {
-        todo!();
-    }
-
-    pub async fn pay_for_blob_count(&self) -> Result<()> {
         todo!();
     }
 }
