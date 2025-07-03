@@ -2,18 +2,22 @@ use std::sync::Arc;
 
 use celestia_grpc::{DocSigner, IntoAny, TxClient, TxConfig, TxInfo};
 use celestia_proto::cosmos::bank::v1beta1::MsgSend;
+use celestia_proto::cosmos::staking::v1beta1::{
+    MsgBeginRedelegate, MsgCancelUnbondingDelegation, MsgDelegate, MsgUndelegate,
+};
 use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::{
     BlobClient, Client as RpcClient, DasClient, HeaderClient, ShareClient, StateClient,
 };
 use celestia_types::nmt::{Namespace, NamespaceProof};
-use celestia_types::state::{AccAddress, Address, Coin};
+use celestia_types::state::{AccAddress, Address, Coin, QueryDelegationResponse, ValAddress};
 use celestia_types::Commitment;
 use celestia_types::{AppVersion, Blob};
 use jsonrpsee_core::client::Subscription;
 use tendermint::chain::Id;
 use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
 
+use crate::utils::height_i64;
 use crate::{Context, Error, Result};
 
 pub struct StateApi<S> {
@@ -132,18 +136,20 @@ where
         todo!();
     }
 
-    pub async fn balance(&self) -> Result<Coin> {
+    pub async fn balance(&self) -> Result<u64> {
         let address = self.account_address()?;
         self.balance_for_address(address).await
     }
 
-    pub async fn balance_for_address(&self, address: AccAddress) -> Result<Coin> {
+    pub async fn balance_for_address(&self, address: AccAddress) -> Result<u64> {
         let address = address.into();
 
-        match self.ctx.grpc() {
-            Ok(grpc) => Ok(grpc.get_balance(&address, "utia").await?),
-            Err(_) => Ok(self.ctx.rpc.state_balance_for_address(&address).await?),
-        }
+        let coin = match self.ctx.grpc() {
+            Ok(grpc) => grpc.get_balance(&address, "utia").await?,
+            Err(_) => self.ctx.rpc.state_balance_for_address(&address).await?,
+        };
+
+        Ok(coin.amount())
     }
 
     pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
@@ -155,8 +161,8 @@ where
 
     pub async fn transfer(
         &self,
-        to_address: AccAddress,
-        amount: Coin,
+        to_address: &AccAddress,
+        amount: u64,
         cfg: TxConfig,
     ) -> Result<TxInfo> {
         let from_address = self.account_address()?;
@@ -164,7 +170,7 @@ where
         let msg = MsgSend {
             from_address: from_address.to_string(),
             to_address: to_address.to_string(),
-            amount: vec![amount.into()],
+            amount: vec![Coin::utia(amount).into()],
         };
 
         self.submit_message(msg, cfg).await
@@ -184,24 +190,89 @@ where
         Ok(self.ctx.grpc()?.submit_blobs(blobs, cfg).await?)
     }
 
-    pub async fn cancel_unbonding_delegation(&self) -> Result<()> {
-        todo!();
+    pub async fn cancel_unbonding_delegation(
+        &self,
+        validator_address: &ValAddress,
+        amount: u64,
+        creation_height: u64,
+        cfg: TxConfig,
+    ) -> Result<TxInfo> {
+        let delegator_address = self.account_address()?;
+
+        let msg = MsgCancelUnbondingDelegation {
+            delegator_address: delegator_address.to_string(),
+            validator_address: validator_address.to_string(),
+            amount: Some(Coin::utia(amount).into()),
+            creation_height: height_i64(creation_height)?,
+        };
+
+        self.submit_message(msg, cfg).await
     }
 
-    pub async fn begin_redelegate(&self) -> Result<()> {
-        todo!();
+    pub async fn begin_redelegate(
+        &self,
+        from_validator_address: &ValAddress,
+        to_validator_address: &ValAddress,
+        amount: u64,
+        cfg: TxConfig,
+    ) -> Result<TxInfo> {
+        let delegator_address = self.account_address()?;
+
+        let msg = MsgBeginRedelegate {
+            delegator_address: delegator_address.to_string(),
+            validator_src_address: from_validator_address.to_string(),
+            validator_dst_address: to_validator_address.to_string(),
+            amount: Some(Coin::utia(amount).into()),
+        };
+
+        self.submit_message(msg, cfg).await
     }
 
-    pub async fn undelegate(&self) -> Result<()> {
-        todo!();
+    pub async fn undelegate(
+        &self,
+        validator_address: &ValAddress,
+        amount: u64,
+        cfg: TxConfig,
+    ) -> Result<TxInfo> {
+        let delegator_address = self.account_address()?;
+
+        let msg = MsgUndelegate {
+            delegator_address: delegator_address.to_string(),
+            validator_address: validator_address.to_string(),
+            amount: Some(Coin::utia(amount).into()),
+        };
+
+        self.submit_message(msg, cfg).await
     }
 
-    pub async fn delegate(&self) -> Result<()> {
-        todo!();
+    pub async fn delegate(
+        &self,
+        validator_address: &ValAddress,
+        amount: u64,
+        cfg: TxConfig,
+    ) -> Result<TxInfo> {
+        let delegator_address = self.account_address()?;
+
+        let msg = MsgDelegate {
+            delegator_address: delegator_address.to_string(),
+            validator_address: validator_address.to_string(),
+            amount: Some(Coin::utia(amount).into()),
+        };
+
+        self.submit_message(msg, cfg).await
     }
 
-    pub async fn query_delegation(&self) -> Result<()> {
-        todo!();
+    pub async fn query_delegation(
+        &self,
+        validator_address: &ValAddress,
+    ) -> Result<QueryDelegationResponse> {
+        let delegator_address = self.account_address()?;
+
+        Ok(self
+            .ctx
+            .grpc()?
+            .query_delegation(&delegator_address, validator_address)
+            .await?)
     }
 
     pub async fn query_unbonding(&self) -> Result<()> {

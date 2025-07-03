@@ -261,6 +261,18 @@ pub enum Error {
     /// Empty blob list provided when creating MsgPayForBlobs
     #[error("Empty blob list")]
     EmptyBlobList,
+
+    /// Missing DelegationResponse
+    #[error("Missing DelegationResponse")]
+    MissingDelegationResponse,
+
+    /// Missing Delegation
+    #[error("Missing Delegation")]
+    MissingDelegation,
+
+    /// Missing Balance
+    #[error("Missing Balance")]
+    MissingBalance,
 }
 
 impl From<prost::DecodeError> for Error {
@@ -673,6 +685,18 @@ pub enum UniffiError {
     /// Empty blob list provided when creating MsgPayForBlobs
     #[error("Empty blob list")]
     EmptyBlobList,
+
+    /// Missing DelegationResponse
+    #[error("Missing DelegationResponse")]
+    MissingDelegationResponse,
+
+    /// Missing Delegation
+    #[error("Missing Delegation")]
+    MissingDelegation,
+
+    /// Missing Balance
+    #[error("Missing Balance")]
+    MissingBalance,
 }
 
 #[cfg(feature = "uniffi")]
@@ -752,6 +776,9 @@ impl From<Error> for UniffiError {
             Error::MissingSigner => UniffiError::MissingSigner,
             Error::SignerNotSupported => UniffiError::SignerNotSupported,
             Error::EmptyBlobList => UniffiError::EmptyBlobList,
+            Error::MissingDelegationResponse => UniffiError::MissingDelegationResponse,
+            Error::MissingDelegation => UniffiError::MissingDelegation,
+            Error::MissingBalance => UniffiError::MissingBalance,
         }
     }
 }

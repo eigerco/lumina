@@ -19,6 +19,7 @@ mod fraud;
 mod header;
 mod share;
 mod state;
+pub(crate) mod utils;
 
 pub use crate::blob::BlobApi;
 pub use crate::blobstream::BlobstreamApi;
@@ -73,6 +74,10 @@ pub enum Error {
     /// Client is in read-only mode
     #[error("Client is constructed for read-only mode")]
     ReadOnlyMode,
+
+    /// Invalid height
+    #[error("Invalid height: {0}")]
+    InvalidHeight(u64),
 }
 
 impl From<jsonrpsee_core::client::error::Error> for Error {

@@ -12,7 +12,8 @@ pub use self::address::uniffi_types::AccountId as UniffiAccountId;
 pub use self::address::{AccAddress, Address, AddressKind, AddressTrait, ConsAddress, ValAddress};
 pub use self::coin::Coin;
 pub use self::query_delegation::{
-    QueryDelegationResponse, QueryRedelegationsResponse, QueryUnbondingDelegationResponse,
+    Delegation, QueryDelegationResponse, QueryRedelegationsResponse,
+    QueryUnbondingDelegationResponse,
 };
 pub use self::tx::{
     AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, RawTxResponse, SignerInfo, Sum, Tx,

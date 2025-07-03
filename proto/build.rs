@@ -141,6 +141,7 @@ const PROTO_FILES: &[&str] = &[
     "vendor/cosmos/crypto/multisig/v1beta1/multisig.proto",
     "vendor/cosmos/crypto/secp256k1/keys.proto",
     "vendor/cosmos/staking/v1beta1/query.proto",
+    "vendor/cosmos/staking/v1beta1/tx.proto",
     "vendor/cosmos/tx/v1beta1/service.proto",
     "vendor/cosmos/tx/v1beta1/tx.proto",
     "vendor/go-header/p2p/pb/header_request.proto",

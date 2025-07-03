@@ -86,6 +86,7 @@ pub struct AccAddress {
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
     wasm_bindgen(inspectable)
 )]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ValAddress {
     id: Id,
 }
@@ -97,6 +98,7 @@ pub struct ValAddress {
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
     wasm_bindgen(inspectable)
 )]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ConsAddress {
     id: Id,
 }
