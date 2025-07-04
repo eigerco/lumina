@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+mod abci_proofs;
 mod error;
 pub mod grpc;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
@@ -12,6 +13,8 @@ mod utils;
 pub use crate::error::{Error, Result};
 pub use crate::grpc::GrpcClient;
 pub use crate::tx::{DocSigner, IntoAny, SignDoc, TxClient, TxConfig};
+// TODO: remove
+pub use abci_proofs::{ProofError, ProofsChain};
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();
