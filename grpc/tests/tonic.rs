@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use celestia_grpc::{Error, TxConfig};
 use celestia_proto::cosmos::bank::v1beta1::MsgSend;
+use celestia_rpc::HeaderClient;
 use celestia_types::nmt::Namespace;
 use celestia_types::state::{Coin, ErrorCode};
 use celestia_types::{AppVersion, Blob};
@@ -14,6 +15,26 @@ use crate::utils::{new_grpc_client, new_tx_client, spawn};
 
 #[cfg(target_arch = "wasm32")]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+#[async_test]
+async fn get_balance_for_account() {
+    let jrpc_client = celestia_rpc::Client::new("ws://localhost:46658", None)
+        .await
+        .unwrap();
+    let client = new_grpc_client();
+    let account = load_account();
+
+    let head = jrpc_client.header_network_head().await.unwrap();
+
+    let verified_balance = client
+        .get_verified_balance(&account.address, &head)
+        .await
+        .unwrap();
+
+    let balance = client.get_balance(&account.address, "utia").await.unwrap();
+
+    assert_eq!(balance, verified_balance);
+}
 
 #[async_test]
 async fn get_auth_params() {

@@ -1,6 +1,6 @@
 use celestia_proto::cosmos::base::tendermint::v1beta1::{
-    GetBlockByHeightRequest, GetBlockByHeightResponse, GetLatestBlockRequest,
-    GetLatestBlockResponse,
+    AbciQueryRequest, AbciQueryResponse, GetBlockByHeightRequest, GetBlockByHeightResponse,
+    GetLatestBlockRequest, GetLatestBlockResponse,
 };
 use celestia_types::block::Block;
 
@@ -22,6 +22,19 @@ impl FromGrpcResponse<Block> for GetLatestBlockResponse {
 impl IntoGrpcParam<GetBlockByHeightRequest> for i64 {
     fn into_parameter(self) -> GetBlockByHeightRequest {
         GetBlockByHeightRequest { height: self }
+    }
+}
+
+impl IntoGrpcParam<AbciQueryRequest> for AbciQueryRequest {
+    fn into_parameter(self) -> AbciQueryRequest {
+        self
+    }
+}
+
+// TODO: Wrap abci query response the same way as TxResponse
+impl FromGrpcResponse<AbciQueryResponse> for AbciQueryResponse {
+    fn try_from_response(self) -> Result<AbciQueryResponse> {
+        Ok(self)
     }
 }
 
