@@ -11,6 +11,7 @@ use celestia_proto::cosmos::bank::v1beta1::query_client::QueryClient as BankQuer
 pub use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
+use celestia_proto::cosmos::base::tendermint::v1beta1::{AbciQueryRequest, AbciQueryResponse};
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
@@ -121,6 +122,10 @@ where
     /// Get block by height
     #[grpc_method(TendermintServiceClient::get_block_by_height)]
     async fn get_block_by_height(&self, height: i64) -> Result<Block>;
+
+    /// Issue a direct ABCI query to the application
+    #[grpc_method(TendermintServiceClient::abci_query)]
+    async fn abci_query(&self, query: AbciQueryRequest) -> Result<AbciQueryResponse>;
 
     // cosmos.tx
 
