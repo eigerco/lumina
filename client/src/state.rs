@@ -11,8 +11,8 @@ use celestia_rpc::{
 };
 use celestia_types::nmt::{Namespace, NamespaceProof};
 use celestia_types::state::{
-    AccAddress, Address, Coin, QueryDelegationResponse, QueryUnbondingDelegationResponse,
-    ValAddress,
+    AccAddress, Address, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
+    QueryUnbondingDelegationResponse, ValAddress,
 };
 use celestia_types::Commitment;
 use celestia_types::{AppVersion, Blob};
@@ -211,8 +211,8 @@ impl StateApi {
 
     pub async fn begin_redelegate(
         &self,
-        from_validator_address: &ValAddress,
-        to_validator_address: &ValAddress,
+        src_validator_address: &ValAddress,
+        dest_validator_address: &ValAddress,
         amount: u64,
         cfg: TxConfig,
     ) -> Result<TxInfo> {
@@ -220,8 +220,8 @@ impl StateApi {
 
         let msg = MsgBeginRedelegate {
             delegator_address: delegator_address.to_string(),
-            validator_src_address: from_validator_address.to_string(),
-            validator_dst_address: to_validator_address.to_string(),
+            validator_src_address: src_validator_address.to_string(),
+            validator_dst_address: dest_validator_address.to_string(),
             amount: Some(Coin::utia(amount).into()),
         };
 
@@ -306,8 +306,55 @@ impl StateApi {
         Ok(resp)
     }
 
-    pub async fn query_redelegations(&self) -> Result<()> {
-        todo!();
+    pub async fn query_redelegations(
+        &self,
+        src_validator_address: &ValAddress,
+        dest_validator_address: &ValAddress,
+    ) -> Result<QueryRedelegationsResponse> {
+        let delegator_address = self.account_address()?;
+
+        let mut resp = QueryRedelegationsResponse {
+            redelegation_responses: Vec::new(),
+            pagination: None,
+        };
+
+        match self.ctx.grpc() {
+            Ok(grpc) => {
+                let mut next_key = Vec::new();
+
+                loop {
+                    let mut r = grpc
+                        .query_redelegations(
+                            &delegator_address,
+                            src_validator_address,
+                            dest_validator_address,
+                            Some(PageRequest {
+                                key: next_key,
+                                ..Default::default()
+                            }),
+                        )
+                        .await?;
+
+                    resp.redelegation_responses
+                        .append(&mut r.redelegation_responses);
+
+                    match r.pagination {
+                        Some(pagination) => next_key = pagination.next_key,
+                        None => break,
+                    }
+                }
+            }
+
+            Err(_) => {
+                resp = self
+                    .ctx
+                    .rpc
+                    .state_query_redelegations(src_validator_address, dest_validator_address)
+                    .await?;
+            }
+        }
+
+        Ok(resp)
     }
 
     pub async fn grant_fee(&self) -> Result<()> {

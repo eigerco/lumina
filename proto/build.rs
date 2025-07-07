@@ -41,6 +41,7 @@ static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".cosmos.base.abci.v1beta1.TxResponse", SERIALIZED_DEFAULT),
     (".cosmos.base.v1beta1.Coin", SERIALIZED_DEFAULT),
     (".cosmos.base.query.v1beta1.PageResponse", SERIALIZED_DEFAULT),
+    (".cosmos.base.query.v1beta1.PageResponse", UNIFFI_RECORD),
     (".cosmos.staking.v1beta1.QueryDelegationResponse", SERIALIZED_DEFAULT),
     (".cosmos.staking.v1beta1.DelegationResponse", SERIALIZED_DEFAULT),
     (".cosmos.staking.v1beta1.Delegation", SERIALIZED_DEFAULT),

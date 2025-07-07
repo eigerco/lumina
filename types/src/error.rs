@@ -198,9 +198,13 @@ pub enum Error {
     #[error("Invalid coin amount: {0}")]
     InvalidCoinAmount(String),
 
-    /// Invalid balance denomination.
-    #[error("Invalid balance denomination: {0}")]
+    /// Invalid coin denomination.
+    #[error("Invalid coin denomination: {0}")]
     InvalidCoinDenomination(String),
+
+    /// Invalid balance
+    #[error("Invalid balance")]
+    InvalidBalance(String),
 
     /// Invalid Public Key
     #[error("Invalid Public Key")]
@@ -273,6 +277,10 @@ pub enum Error {
     /// Missing Balance
     #[error("Missing Balance")]
     MissingBalance,
+
+    /// Missing unbond
+    #[error("Missing unbond")]
+    MissingUnbond,
 }
 
 impl From<prost::DecodeError> for Error {
@@ -626,6 +634,10 @@ pub enum UniffiError {
     #[error("Invalid coin denomination: {0}")]
     InvalidCoinDenomination(String),
 
+    /// Invalid balance
+    #[error("Invalid balance")]
+    InvalidBalance(String),
+
     /// Invalid Public Key
     #[error("Invalid Public Key")]
     InvalidPublicKeyType(String),
@@ -697,6 +709,10 @@ pub enum UniffiError {
     /// Missing Balance
     #[error("Missing Balance")]
     MissingBalance,
+
+    /// Missing unbond
+    #[error("Missing unbond")]
+    MissingUnbond,
 }
 
 #[cfg(feature = "uniffi")]
@@ -758,6 +774,7 @@ impl From<Error> for UniffiError {
             Error::InvalidAddress(a) => UniffiError::InvalidAddress(a),
             Error::InvalidCoinAmount(a) => UniffiError::InvalidCoinAmount(a),
             Error::InvalidCoinDenomination(d) => UniffiError::InvalidCoinDenomination(d),
+            Error::InvalidBalance(b) => UniffiError::InvalidBalance(b),
             Error::InvalidPublicKeyType(t) => UniffiError::InvalidPublicKeyType(t),
             Error::UnsupportedFraudProofType(t) => UniffiError::UnsupportedFraudProofType(t),
             Error::IndexOutOfRange(i, r) => UniffiError::IndexOutOfRange(
@@ -779,6 +796,7 @@ impl From<Error> for UniffiError {
             Error::MissingDelegationResponse => UniffiError::MissingDelegationResponse,
             Error::MissingDelegation => UniffiError::MissingDelegation,
             Error::MissingBalance => UniffiError::MissingBalance,
+            Error::MissingUnbond => UniffiError::MissingUnbond,
         }
     }
 }

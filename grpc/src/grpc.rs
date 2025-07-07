@@ -18,8 +18,8 @@ use celestia_types::block::Block;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::AuthParams;
 use celestia_types::state::{
-    AccAddress, Address, Coin, QueryDelegationResponse, QueryUnbondingDelegationResponse,
-    TxResponse, ValAddress,
+    AccAddress, Address, Coin, PageRequest, PageResponse, QueryDelegationResponse,
+    QueryRedelegationsResponse, QueryUnbondingDelegationResponse, TxResponse, ValAddress,
 };
 use http_body::Body;
 use tonic::body::BoxBody;
@@ -159,6 +159,16 @@ where
         delegator_address: &AccAddress,
         validator_address: &ValAddress,
     ) -> Result<QueryUnbondingDelegationResponse>;
+
+    /// TODO
+    #[grpc_method(StakingQueryClient::redelegations)]
+    async fn query_redelegations(
+        &self,
+        delegator_address: &AccAddress,
+        src_validator_address: &ValAddress,
+        dest_validator_address: &ValAddress,
+        pagination: Option<PageRequest>,
+    ) -> Result<QueryRedelegationsResponse>;
 
     // celestia.blob
 
