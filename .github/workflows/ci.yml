@@ -308,6 +308,7 @@ jobs:
     - test-wasm
     - test-bindings
     - build-wasm
+    - build-android
     - build-ios
     - fmt
     - docs
