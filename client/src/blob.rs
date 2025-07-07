@@ -9,15 +9,12 @@ use jsonrpsee_core::client::Subscription;
 
 use crate::{Context, Result, TxConfig, TxInfo};
 
-pub struct BlobApi<S> {
-    ctx: Arc<Context<S>>,
+pub struct BlobApi {
+    ctx: Arc<Context>,
 }
 
-impl<S> BlobApi<S>
-where
-    S: DocSigner,
-{
-    pub(crate) fn new(ctx: Arc<Context<S>>) -> BlobApi<S> {
+impl BlobApi {
+    pub(crate) fn new(ctx: Arc<Context>) -> BlobApi {
         BlobApi { ctx }
     }
 

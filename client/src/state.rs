@@ -23,15 +23,12 @@ use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
 use crate::utils::height_i64;
 use crate::{Context, Error, Result};
 
-pub struct StateApi<S> {
-    ctx: Arc<Context<S>>,
+pub struct StateApi {
+    ctx: Arc<Context>,
 }
 
-impl<S> StateApi<S>
-where
-    S: DocSigner,
-{
-    pub(crate) fn new(ctx: Arc<Context<S>>) -> StateApi<S> {
+impl StateApi {
+    pub(crate) fn new(ctx: Arc<Context>) -> StateApi {
         StateApi { ctx }
     }
 

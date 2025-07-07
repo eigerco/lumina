@@ -1,18 +1,13 @@
 use std::sync::Arc;
 
-use celestia_grpc::DocSigner;
-
 use crate::Context;
 
-pub struct BlobstreamApi<S> {
-    ctx: Arc<Context<S>>,
+pub struct BlobstreamApi {
+    ctx: Arc<Context>,
 }
 
-impl<S> BlobstreamApi<S>
-where
-    S: DocSigner,
-{
-    pub(crate) fn new(ctx: Arc<Context<S>>) -> BlobstreamApi<S> {
+impl BlobstreamApi {
+    pub(crate) fn new(ctx: Arc<Context>) -> BlobstreamApi {
         BlobstreamApi { ctx }
     }
 

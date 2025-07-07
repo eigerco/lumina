@@ -28,19 +28,18 @@ pub use crate::header::HeaderApi;
 pub use crate::share::ShareApi;
 pub use crate::state::StateApi;
 
+use crate::utils::DispatchedDocSigner;
+
 #[doc(inline)]
 pub use celestia_grpc::{DocSigner, IntoAny, TxConfig, TxInfo};
 
 pub(crate) struct Context {
     pub(crate) rpc: RpcClient,
-    grpc: Option<TxClient<tonic::transport::Channel, Arc<dyn DispatchedSigner>>>,
+    grpc: Option<TxClient<tonic::transport::Channel, DispatchedDocSigner>>,
 }
 
-impl<S> Context<S>
-where
-    S: DocSigner,
-{
-    pub(crate) fn grpc(&self) -> Result<&TxClient<tonic::transport::Channel, S>> {
+impl Context {
+    pub(crate) fn grpc(&self) -> Result<&TxClient<tonic::transport::Channel, DispatchedDocSigner>> {
         self.grpc.as_ref().ok_or(Error::ReadOnlyMode)
     }
 }
@@ -48,14 +47,14 @@ where
 /// A high-level client for interacting with a Celestia node.
 ///
 /// It combines the functionality of `celestia-rpc` and `celestia-grpc` crates.
-pub struct Client<S> {
-    ctx: Arc<Context<S>>,
-    state: StateApi<S>,
-    blob: BlobApi<S>,
-    header: HeaderApi<S>,
-    share: ShareApi<S>,
-    fraud: FraudApi<S>,
-    blobstream: BlobstreamApi<S>,
+pub struct Client {
+    ctx: Arc<Context>,
+    state: StateApi,
+    blob: BlobApi,
+    header: HeaderApi,
+    share: ShareApi,
+    fraud: FraudApi,
+    blobstream: BlobstreamApi,
 }
 
 /// Representation of all the errors that can occur when interacting with [`celestia_client`].
@@ -102,8 +101,9 @@ impl Client {
         signer: S,
     ) -> Result<Self>
     where
-        S: DocSigner,
+        S: DocSigner + 'static,
     {
+        let signer = DispatchedDocSigner::new(signer);
         let rpc = RpcClient::new(rpc_url, rpc_auth_token).await?;
         let grpc = TxClient::with_url(grpc_url, address, pubkey, signer).await?;
 
@@ -142,23 +142,23 @@ impl Client {
         Ok(self.ctx.grpc()?.app_version())
     }
 
-    pub fn state(&self) -> &StateApi<S> {
+    pub fn state(&self) -> &StateApi {
         &self.state
     }
 
-    pub fn blob(&self) -> &BlobApi<S> {
+    pub fn blob(&self) -> &BlobApi {
         &self.blob
     }
 
-    pub fn header(&self) -> &HeaderApi<S> {
+    pub fn header(&self) -> &HeaderApi {
         &self.header
     }
 
-    pub fn share(&self) -> &ShareApi<S> {
+    pub fn share(&self) -> &ShareApi {
         &self.share
     }
 
-    pub fn fraud(&self) -> &FraudApi<S> {
+    pub fn fraud(&self) -> &FraudApi {
         &self.fraud
     }
 }

@@ -1,18 +1,13 @@
 use std::sync::Arc;
 
-use celestia_grpc::DocSigner;
-
 use crate::Context;
 
-pub struct HeaderApi<S> {
-    ctx: Arc<Context<S>>,
+pub struct HeaderApi {
+    ctx: Arc<Context>,
 }
 
-impl<S> HeaderApi<S>
-where
-    S: DocSigner,
-{
-    pub(crate) fn new(ctx: Arc<Context<S>>) -> HeaderApi<S> {
+impl HeaderApi {
+    pub(crate) fn new(ctx: Arc<Context>) -> HeaderApi {
         HeaderApi { ctx }
     }
 

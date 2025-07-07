@@ -1,18 +1,13 @@
 use std::sync::Arc;
 
-use celestia_grpc::DocSigner;
-
 use crate::Context;
 
-pub struct ShareApi<S> {
-    ctx: Arc<Context<S>>,
+pub struct ShareApi {
+    ctx: Arc<Context>,
 }
 
-impl<S> ShareApi<S>
-where
-    S: DocSigner,
-{
-    pub(crate) fn new(ctx: Arc<Context<S>>) -> ShareApi<S> {
+impl ShareApi {
+    pub(crate) fn new(ctx: Arc<Context>) -> ShareApi {
         ShareApi { ctx }
     }
 

@@ -1,18 +1,13 @@
 use std::sync::Arc;
 
-use celestia_grpc::DocSigner;
-
 use crate::Context;
 
-pub struct FraudApi<S> {
-    ctx: Arc<Context<S>>,
+pub struct FraudApi {
+    ctx: Arc<Context>,
 }
 
-impl<S> FraudApi<S>
-where
-    S: DocSigner,
-{
-    pub(crate) fn new(ctx: Arc<Context<S>>) -> FraudApi<S> {
+impl FraudApi {
+    pub(crate) fn new(ctx: Arc<Context>) -> FraudApi {
         FraudApi { ctx }
     }
 
