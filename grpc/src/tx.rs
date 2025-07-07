@@ -12,7 +12,7 @@ use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::BaseAccount;
 use celestia_types::state::{
-    Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
+    AccAddress, Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
 };
 use celestia_types::{AppVersion, Height};
 use http_body::Body;
@@ -90,7 +90,7 @@ where
     /// Create a new transaction client with the specified account.
     pub async fn new(transport: T, account_pubkey: VerifyingKey, signer: S) -> Result<Self> {
         let client = GrpcClient::new(transport);
-        let account_address = Address::from_account_veryfing_key(account_pubkey);
+        let account_address = AccAddress::from(account_pubkey);
         let account = client.get_account(&account_address).await?;
         if let Some(pubkey) = account.pub_key {
             if pubkey != PublicKey::Secp256k1(account_pubkey) {
@@ -655,7 +655,7 @@ pub async fn sign_tx(
     };
 
     let mut fee = Fee::new(fee, gas_limit);
-    fee.payer = Some(base_account.address.clone());
+    fee.payer = Some(Address::AccAddress(base_account.address.clone()));
 
     let auth_info = AuthInfo {
         signer_infos: vec![SignerInfo {
