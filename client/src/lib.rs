@@ -31,9 +31,9 @@ pub use crate::state::StateApi;
 #[doc(inline)]
 pub use celestia_grpc::{DocSigner, IntoAny, TxConfig, TxInfo};
 
-pub(crate) struct Context<S> {
+pub(crate) struct Context {
     pub(crate) rpc: RpcClient,
-    grpc: Option<TxClient<tonic::transport::Channel, S>>,
+    grpc: Option<TxClient<tonic::transport::Channel, Arc<dyn DispatchedSigner>>>,
 }
 
 impl<S> Context<S>
@@ -91,19 +91,19 @@ impl From<jsonrpsee_core::client::error::Error> for Error {
 /// [`celestia_client::Error`]: crate::Error
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-impl<S> Client<S>
-where
-    S: DocSigner,
-{
+impl Client {
     /// Create a new client.
-    pub async fn new(
+    pub async fn new<S>(
         rpc_url: &str,
         rpc_auth_token: Option<&str>,
         grpc_url: &str,
         address: &Address,
         pubkey: VerifyingKey,
         signer: S,
-    ) -> Result<Self> {
+    ) -> Result<Self>
+    where
+        S: DocSigner,
+    {
         let rpc = RpcClient::new(rpc_url, rpc_auth_token).await?;
         let grpc = TxClient::with_url(grpc_url, address, pubkey, signer).await?;
 

@@ -10,7 +10,10 @@ use celestia_rpc::{
     BlobClient, Client as RpcClient, DasClient, HeaderClient, ShareClient, StateClient,
 };
 use celestia_types::nmt::{Namespace, NamespaceProof};
-use celestia_types::state::{AccAddress, Address, Coin, QueryDelegationResponse, ValAddress};
+use celestia_types::state::{
+    AccAddress, Address, Coin, QueryDelegationResponse, QueryUnbondingDelegationResponse,
+    ValAddress,
+};
 use celestia_types::Commitment;
 use celestia_types::{AppVersion, Blob};
 use jsonrpsee_core::client::Subscription;
@@ -268,15 +271,42 @@ where
     ) -> Result<QueryDelegationResponse> {
         let delegator_address = self.account_address()?;
 
-        Ok(self
-            .ctx
-            .grpc()?
-            .query_delegation(&delegator_address, validator_address)
-            .await?)
+        let resp = match self.ctx.grpc() {
+            Ok(grpc) => {
+                grpc.query_delegation(&delegator_address, validator_address)
+                    .await?
+            }
+            Err(_) => {
+                self.ctx
+                    .rpc
+                    .state_query_delegation(validator_address)
+                    .await?
+            }
+        };
+
+        Ok(resp)
     }
 
-    pub async fn query_unbonding(&self) -> Result<()> {
-        todo!();
+    pub async fn query_unbonding(
+        &self,
+        validator_address: &ValAddress,
+    ) -> Result<QueryUnbondingDelegationResponse> {
+        let delegator_address = self.account_address()?;
+
+        let resp = match self.ctx.grpc() {
+            Ok(grpc) => {
+                grpc.query_unbonding(&delegator_address, validator_address)
+                    .await?
+            }
+            Err(_) => {
+                self.ctx
+                    .rpc
+                    .state_query_unbonding(validator_address)
+                    .await?
+            }
+        };
+
+        Ok(resp)
     }
 
     pub async fn query_redelegations(&self) -> Result<()> {

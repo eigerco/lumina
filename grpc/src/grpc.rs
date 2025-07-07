@@ -18,7 +18,8 @@ use celestia_types::block::Block;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::AuthParams;
 use celestia_types::state::{
-    AccAddress, Address, Coin, QueryDelegationResponse, TxResponse, ValAddress,
+    AccAddress, Address, Coin, QueryDelegationResponse, QueryUnbondingDelegationResponse,
+    TxResponse, ValAddress,
 };
 use http_body::Body;
 use tonic::body::BoxBody;
@@ -150,6 +151,14 @@ where
         delegator_address: &AccAddress,
         validator_address: &ValAddress,
     ) -> Result<QueryDelegationResponse>;
+
+    /// TODO
+    #[grpc_method(StakingQueryClient::unbonding_delegation)]
+    async fn query_unbonding(
+        &self,
+        delegator_address: &AccAddress,
+        validator_address: &ValAddress,
+    ) -> Result<QueryUnbondingDelegationResponse>;
 
     // celestia.blob
 

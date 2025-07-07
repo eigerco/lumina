@@ -23,6 +23,7 @@ jsonrpsee-core = "0.25.1"
 tendermint.workspace = true
 thiserror = "2.0.12"
 tonic = "0.12.3"
+k256 = "0.13.4"
 
 celestia-grpc.workspace = true
 celestia-proto.workspace  = true
