@@ -1,18 +1,21 @@
 # A dockerfile for the celestia validator in consensus layer
 # Based on:
 # https://github.com/celestiaorg/celestia-app/blob/main/Dockerfile
-FROM docker.io/alpine:3.19.1
+FROM docker.io/alpine:3.20
 
 ENV CELESTIA_HOME=/root
 
-RUN apk update && apk add --no-cache bash jq dasel
+RUN apk update && apk add --no-cache bash curl jq dasel
 
 # Copy in the binary
-COPY --from=ghcr.io/celestiaorg/celestia-app:v3.4.2-mocha /bin/celestia-appd /bin/celestia-appd
+COPY --from=ghcr.io/celestiaorg/celestia-app:v4.0.6-mocha /bin/celestia-appd /bin/celestia-appd
 
 COPY ./run-validator.sh /opt/entrypoint.sh
 
-# p2p, rpc and prometheus port
-EXPOSE 26656 26657 1317 9090
+#  1317 is the default API server port
+# 19090 is the remotely accessible port for gRPC
+# 26656 is the default node p2p port
+# 26657 is the default RPC port
+EXPOSE 1317 19090 26656 26657
 
 CMD /opt/entrypoint.sh
