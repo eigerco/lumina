@@ -1,14 +1,12 @@
 use std::fmt;
 use std::future::Future;
 use std::ops::Deref;
-use std::sync::RwLock;
 use std::time::Duration;
 
 use bytes::Bytes;
 use celestia_proto::cosmos::crypto::secp256k1;
 pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
-use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::BaseAccount;
 use celestia_types::state::{
@@ -28,12 +26,13 @@ use tokio::sync::{Mutex, MutexGuard};
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
 
-use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxStatus};
+use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxPriority, TxStatus};
 use crate::{Error, Result};
 
 #[cfg(feature = "uniffi")]
 uniffi::use_remote_type!(celestia_types::Hash);
 
+/*
 // source https://github.com/celestiaorg/celestia-app/blob/v3.0.2/x/blob/types/payforblob.go#L21
 // PFBGasFixedCost is a rough estimate for the "fixed cost" in the gas cost
 // formula: gas cost = gas per byte * bytes per share * shares occupied by
@@ -53,7 +52,9 @@ const PFB_GAS_FIXED_COST: u64 = 75000;
 // BytesPerBlobInfo is a rough estimation for the amount of extra bytes in
 // information a blob adds to the size of the underlying transaction.
 const BYTES_PER_BLOB_INFO: u64 = 70;
+*/
 const DEFAULT_GAS_MULTIPLIER: f64 = 1.1;
+
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
 const BLOB_TX_TYPE_ID: &str = "BLOB";
 
@@ -74,7 +75,6 @@ pub struct TxClient<T, S> {
 
     app_version: AppVersion,
     chain_id: Id,
-    gas_price: RwLock<f64>,
 }
 
 impl<T, S> TxClient<T, S>
@@ -100,7 +100,6 @@ where
             }
         };
         let account = Mutex::new(account);
-        let gas_price = client.get_min_gas_price().await?;
 
         let block = client.get_latest_block().await?;
         let app_version = block.header.version.app;
@@ -115,7 +114,6 @@ where
             pubkey: account_pubkey,
             app_version,
             chain_id,
-            gas_price: RwLock::new(gas_price),
         })
     }
 
@@ -171,9 +169,7 @@ where
                 .await
             {
                 Ok(resp) => break resp,
-                Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _))
-                    if retries < 3 && cfg.gas_price.is_none() =>
-                {
+                Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _)) if retries < 3 => {
                     retries += 1;
                     continue;
                 }
@@ -231,9 +227,7 @@ where
                 .await
             {
                 Ok(resp) => break resp,
-                Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _))
-                    if retries < 3 && cfg.gas_price.is_none() =>
-                {
+                Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _)) if retries < 3 => {
                     retries += 1;
                     continue;
                 }
@@ -244,15 +238,12 @@ where
     }
 
     /// Get most recent minimal gas price seen by the client
-    pub fn last_seen_gas_price(&self) -> f64 {
-        *self.gas_price.read().expect("lock poisoned")
+    pub async fn get_min_gas_price(&self) -> Result<f64> {
+        self.client.get_min_gas_price().await
     }
 
-    /// Set current gas price used by the client
-    async fn update_gas_price(&self) -> Result<f64> {
-        let gas_price = self.client.get_min_gas_price().await?;
-        *self.gas_price.write().expect("lock poisoned") = gas_price;
-        Ok(gas_price)
+    pub async fn get_estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
+        self.client.get_estimate_gas_price(priority).await
     }
 
     /// Get client's chain id
@@ -263,6 +254,42 @@ where
     /// Get client's app version
     pub fn app_version(&self) -> AppVersion {
         self.app_version
+    }
+
+    /// compute gas limit and gas price according to provided TxConfig for serialised
+    /// transaction, potentially calling gas estimation service
+    async fn calculate_transaction_gas_params(
+        &self,
+        tx_body: &RawTxBody,
+        cfg: &TxConfig,
+        account: &BaseAccount,
+    ) -> Result<(u64, f64)> {
+        Ok(match (cfg.gas_limit, cfg.gas_price) {
+            (Some(gas_limit), Some(gas_price)) => (gas_limit, gas_price),
+            (Some(gas_limit), None) => {
+                let gas_price = self.client.get_estimate_gas_price(cfg.priority).await?;
+                (gas_limit, gas_price)
+            }
+            (None, maybe_gas_price) => {
+                let tx = sign_tx(
+                    tx_body.clone(),
+                    self.chain_id.clone(),
+                    account,
+                    &self.pubkey,
+                    &self.signer,
+                    0,
+                    1,
+                )
+                .await?;
+                //let tx = dummy_sign_tx(tx_body.clone(), account.sequence);
+                let (estimated_gas_price, gas_usage) = self
+                    .client
+                    .get_estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
+                    .await?;
+                let gas_limit = (gas_usage as f64 * DEFAULT_GAS_MULTIPLIER) as u64;
+                (gas_limit, maybe_gas_price.unwrap_or(estimated_gas_price))
+            }
+        })
     }
 
     async fn sign_and_broadcast_tx(&self, tx: RawTxBody, cfg: TxConfig) -> Result<(Hash, u64)> {
@@ -279,21 +306,10 @@ where
             )
         };
 
-        let gas_limit = if let Some(gas_limit) = cfg.gas_limit {
-            gas_limit
-        } else {
-            // simulate the gas that would be used by transaction
-            // fee should be at least 1 as it affects calculation
-            let tx = sign_tx(tx.clone(), 0, 1).await?;
-            let gas_info = self.client.simulate(tx.encode_to_vec()).await?;
-            (gas_info.gas_used as f64 * DEFAULT_GAS_MULTIPLIER) as u64
-        };
+        let (gas_limit, gas_price) = self
+            .calculate_transaction_gas_params(&tx, &cfg, &account)
+            .await?;
 
-        let gas_price = if let Some(gas_price) = cfg.gas_price {
-            gas_price
-        } else {
-            self.update_gas_price().await?
-        };
         let fee = (gas_limit as f64 * gas_price).ceil();
         let tx = sign_tx(tx, gas_limit, fee as u64).await?;
 
@@ -313,18 +329,14 @@ where
         let pfb = MsgPayForBlobs::new(&blobs, account.address.clone())?;
         let pfb = RawTxBody {
             messages: vec![RawMsgPayForBlobs::from(pfb).into_any()],
-            memo: cfg.memo.unwrap_or_default(),
+            memo: cfg.memo.clone().unwrap_or_default(),
             ..RawTxBody::default()
         };
 
-        let gas_limit = cfg
-            .gas_limit
-            .unwrap_or_else(|| estimate_gas(&blobs, self.app_version, DEFAULT_GAS_MULTIPLIER));
-        let gas_price = if let Some(gas_price) = cfg.gas_price {
-            gas_price
-        } else {
-            self.update_gas_price().await?
-        };
+        let (gas_limit, gas_price) = self
+            .calculate_transaction_gas_params(&pfb, &cfg, &account)
+            .await?;
+
         let fee = (gas_limit as f64 * gas_price).ceil() as u64;
         let tx = sign_tx(
             pfb,
@@ -509,12 +521,16 @@ pub struct TxInfo {
 #[derive(Debug, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxConfig {
-    /// Custom gas limit for the transaction (in `utia`).
+    /// Custom gas limit for the transaction (in `utia`). By default, client will
+    /// query gas estimation service to get estimate gas limit.
     pub gas_limit: Option<u64>,
-    /// Custom gas price for fee calculation.
+    /// Custom gas price for fee calculation. By default, client will query gas
+    /// estimation service to get gas price estimate.
     pub gas_price: Option<f64>,
     /// Memo for the transaction
     pub memo: Option<String>,
+    /// Priority of the transaction, used with gas estimation service
+    pub priority: TxPriority,
 }
 
 impl TxConfig {
@@ -533,6 +549,12 @@ impl TxConfig {
     /// Attach memo to this config.
     pub fn with_memo(mut self, memo: impl Into<String>) -> Self {
         self.memo = Some(memo.into());
+        self
+    }
+
+    /// Specify transaction priority to be used when using gas estimation service
+    pub fn with_priority(mut self, priority: TxPriority) -> Self {
+        self.priority = priority;
         self
     }
 }
@@ -609,6 +631,36 @@ mod wbg {
     }
 }
 
+pub fn dummy_sign_tx(tx_body: RawTxBody, sequence: u64) -> RawTx {
+    // From https://github.com/celestiaorg/cosmos-sdk/blob/v1.25.0-sdk-v0.46.16/proto/cosmos/tx/signing/v1beta1/signing.proto#L24
+    const SIGNING_MODE_INFO: ModeInfo = ModeInfo {
+        sum: Sum::Single { mode: 1 },
+    };
+
+    let public_key_as_any = Any {
+        type_url: secp256k1::PubKey::type_url(),
+        value: vec![0; 35],
+    };
+
+    let fee = Fee::new(1, 0);
+
+    let auth_info = AuthInfo {
+        signer_infos: vec![SignerInfo {
+            public_key: Some(public_key_as_any),
+            mode_info: SIGNING_MODE_INFO,
+            sequence,
+        }],
+        fee,
+    };
+    let dummy_signature = vec![0; 64];
+
+    RawTx {
+        auth_info: Some(auth_info.into()),
+        body: Some(tx_body),
+        signatures: vec![dummy_signature],
+    }
+}
+
 /// Sign `tx_body` and the transaction metadata as the `base_account` using `signer`
 pub async fn sign_tx(
     tx_body: RawTxBody,
@@ -627,6 +679,7 @@ pub async fn sign_tx(
     let public_key = secp256k1::PubKey {
         key: verifying_key.to_encoded_point(true).as_bytes().to_vec(),
     };
+
     let public_key_as_any = Any {
         type_url: secp256k1::PubKey::type_url(),
         value: public_key.encode_to_vec(),
@@ -652,22 +705,12 @@ pub async fn sign_tx(
     };
     let signature = signer.try_sign(doc).await?;
 
+    //println!("{:?}", signature.to_bytes().to_vec().len());
+    //panic!("AAAA");
+
     Ok(RawTx {
         auth_info: Some(auth_info.into()),
         body: Some(tx_body),
         signatures: vec![signature.to_bytes().to_vec()],
     })
-}
-
-fn estimate_gas(blobs: &[Blob], app_version: AppVersion, gas_multiplier: f64) -> u64 {
-    let gas_per_blob_byte = appconsts::gas_per_blob_byte(app_version);
-    let tx_size_cost_per_byte = appconsts::tx_size_cost_per_byte(app_version);
-
-    let blobs_bytes =
-        blobs.iter().map(Blob::shares_len).sum::<usize>() as u64 * appconsts::SHARE_SIZE as u64;
-
-    let gas = blobs_bytes * gas_per_blob_byte
-        + (tx_size_cost_per_byte * BYTES_PER_BLOB_INFO * blobs.len() as u64)
-        + PFB_GAS_FIXED_COST;
-    (gas as f64 * gas_multiplier) as u64
 }

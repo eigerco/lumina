@@ -5,6 +5,7 @@ use std::fmt;
 use bytes::Bytes;
 use celestia_grpc_macros::grpc_method;
 use celestia_proto::celestia::blob::v1::query_client::QueryClient as BlobQueryClient;
+use celestia_proto::celestia::core::v1::gas_estimation::gas_estimator_client::GasEstimatorClient;
 use celestia_proto::celestia::core::v1::tx::tx_client::TxClient as TxStatusClient;
 use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQueryClient;
 use celestia_proto::cosmos::bank::v1beta1::query_client::QueryClient as BankQueryClient;
@@ -27,6 +28,8 @@ use crate::Result;
 mod auth;
 // cosmos.bank
 mod bank;
+// celestia.core.gas_estimation
+mod gas_estimation;
 // cosmos.base.node
 mod node;
 // cosmos.base.tendermint
@@ -41,6 +44,7 @@ mod cosmos_tx;
 pub use crate::grpc::auth::Account;
 pub use crate::grpc::celestia_tx::{TxStatus, TxStatusResponse};
 pub use crate::grpc::cosmos_tx::{BroadcastMode, GetTxResponse};
+pub use crate::grpc::gas_estimation::TxPriority;
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 pub use crate::grpc::auth::{JsAuthParams, JsBaseAccount, JsPublicKey};
@@ -76,33 +80,34 @@ where
 
     // cosmos.auth
 
-    /// Get auth params
+    /// Params queries all parameters.
     #[grpc_method(AuthQueryClient::params)]
     async fn get_auth_params(&self) -> Result<AuthParams>;
 
-    /// Get account
+    /// Account returns account details based on address.
     #[grpc_method(AuthQueryClient::account)]
     async fn get_account(&self, account: &Address) -> Result<Account>;
 
-    /// Get accounts
+    /// Accounts returns all the existing accounts
     #[grpc_method(AuthQueryClient::accounts)]
     async fn get_accounts(&self) -> Result<Vec<Account>>;
 
     // cosmos.bank
 
-    /// Get balance of coins with given denom
+    /// Balance queries the balance of a single coin for a single account.
     #[grpc_method(BankQueryClient::balance)]
     async fn get_balance(&self, address: &Address, denom: impl Into<String>) -> Result<Coin>;
 
-    /// Get balance of all coins
+    /// AllBalances queries the balance of all coins for a single account.
     #[grpc_method(BankQueryClient::all_balances)]
     async fn get_all_balances(&self, address: &Address) -> Result<Vec<Coin>>;
 
-    /// Get balance of all spendable coins
+    /// get_spendable_balances queries the spenable balance of all coins for a single
+    /// account.
     #[grpc_method(BankQueryClient::spendable_balances)]
     async fn get_spendable_balances(&self, address: &Address) -> Result<Vec<Coin>>;
 
-    /// Get total supply
+    /// get_total_supply queries the total supply of all coins.
     #[grpc_method(BankQueryClient::total_supply)]
     async fn get_total_supply(&self) -> Result<Vec<Coin>>;
 
@@ -114,11 +119,11 @@ where
 
     // cosmos.base.tendermint
 
-    /// Get latest block
+    /// get_latest_block returns the latest block.
     #[grpc_method(TendermintServiceClient::get_latest_block)]
     async fn get_latest_block(&self) -> Result<Block>;
 
-    /// Get block by height
+    /// get_block_by_height queries block for given height.
     #[grpc_method(TendermintServiceClient::get_block_by_height)]
     async fn get_block_by_height(&self, height: i64) -> Result<Block>;
 
@@ -128,25 +133,50 @@ where
     #[grpc_method(TxServiceClient::broadcast_tx)]
     async fn broadcast_tx(&self, tx_bytes: Vec<u8>, mode: BroadcastMode) -> Result<TxResponse>;
 
-    /// Get Tx
+    /// get_tx fetches a tx by hash.
     #[grpc_method(TxServiceClient::get_tx)]
     async fn get_tx(&self, hash: Hash) -> Result<GetTxResponse>;
 
-    /// Broadcast prepared and serialised transaction
+    /// simulate simulates executing a transaction for estimating gas usage.
     #[grpc_method(TxServiceClient::simulate)]
     async fn simulate(&self, tx_bytes: Vec<u8>) -> Result<GasInfo>;
 
     // celestia.blob
 
-    /// Get blob params
+    /// get_blob_params queries the blob parameters.
     #[grpc_method(BlobQueryClient::params)]
     async fn get_blob_params(&self) -> Result<BlobParams>;
 
     // celestia.core.tx
 
-    /// Get status of the transaction
+    /// tx_status returns the status of a transaction.
     #[grpc_method(TxStatusClient::tx_status)]
     async fn tx_status(&self, hash: Hash) -> Result<TxStatusResponse>;
+
+    // celestia.core.gas_estimation
+
+    /// estimate_gas_price takes a transaction priority and estimates the gas price based
+    /// on the gas prices of the transactions in the last five blocks.
+    ///
+    /// If no transaction is found in the last five blocks, return the network
+    /// min gas price.
+    #[grpc_method(GasEstimatorClient::estimate_gas_price)]
+    async fn get_estimate_gas_price(&self, priority: TxPriority) -> Result<f64>;
+
+    /// EstimateGasPriceAndUsage takes a transaction priority and a transaction bytes
+    /// and estimates the gas price and the gas used for that transaction.
+    ///
+    /// The gas price estimation is based on the gas prices of the transactions in the last five blocks.
+    /// If no transaction is found in the last five blocks, return the network
+    /// min gas price.
+    ///
+    /// The gas used is estimated using the state machine simulation.
+    #[grpc_method(GasEstimatorClient::estimate_gas_price_and_usage)]
+    async fn get_estimate_gas_price_and_usage(
+        &self,
+        priority: TxPriority,
+        tx_bytes: Vec<u8>,
+    ) -> Result<(f64, u64)>;
 }
 
 #[cfg(not(target_arch = "wasm32"))]

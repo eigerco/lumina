@@ -126,8 +126,8 @@ impl TxClient {
     }
 
     /// Last gas price fetched by the client
-    pub fn last_seen_gas_price(&self) -> f64 {
-        self.client.last_seen_gas_price()
+    pub async fn get_min_gas_price(&self) -> Result<f64> {
+        Ok(self.client.get_min_gas_price().await?)
     }
 
     /// AppVersion of the client
