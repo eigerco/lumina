@@ -7,7 +7,7 @@ use tendermint::public_key::PublicKey;
 use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
 
-use crate::state::Address;
+use crate::state::AccAddress;
 use crate::validation_error;
 use crate::Error;
 
@@ -28,7 +28,7 @@ const COSMOS_SECP256K1_PUBKEY: &str = "/cosmos.crypto.secp256k1.PubKey";
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BaseAccount {
     /// Bech32 `AccountId` of this account.
-    pub address: Address,
+    pub address: AccAddress,
     /// Optional `PublicKey` associated with this account.
     pub pub_key: Option<PublicKey>,
     /// `account_number` is the account number of the account in state
