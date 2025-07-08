@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.4.1...celestia-grpc-v0.5.0) - 2025-07-08
+
+### Added
+
+- *(grpc)* Streamline TxClient creation API, add docs with example ([#673](https://github.com/eigerco/lumina/pull/673))
+
 ## [0.4.1](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.4.0...celestia-grpc-v0.4.1) - 2025-07-02
 
 ### Other
