@@ -3014,7 +3014,7 @@ Celestia grpc transaction client.
 
 #### new TxClient()
 
-> **new TxClient**(`url`, `bech32_address`, `pubkey`, `signer_fn`): [`TxClient`](#classestxclientmd)
+> **new TxClient**(`url`, `pubkey`, `signer_fn`): [`TxClient`](#classestxclientmd)
 
 Create a new transaction client with the specified account.
 
@@ -3053,10 +3053,6 @@ const tx_client = await new TxClient("http://127.0.0.1:18080", keys.bech32Addres
 ##### Parameters
 
 ###### url
-
-`string`
-
-###### bech32\_address
 
 `string`
 
