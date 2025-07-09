@@ -11,6 +11,7 @@ use tendermint_proto::google::protobuf::Any;
 use tonic::transport::Channel;
 use uniffi::{Object, Record};
 
+use crate::grpc::TxPriority;
 use crate::tx::TxInfo;
 use crate::{DocSigner, IntoAny, SignDoc, TxConfig};
 
@@ -136,9 +137,8 @@ impl TxClient {
     /// If no transaction is found in the last five blocks, return the network
     /// min gas price.
     pub async fn get_estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
-        self.client.get_estimate_gas_price(priority).await
+        Ok(self.client.get_estimate_gas_price(priority).await?)
     }
-
 
     /// AppVersion of the client
     pub fn app_version(&self) -> AppVersion {

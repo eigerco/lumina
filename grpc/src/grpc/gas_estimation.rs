@@ -9,7 +9,10 @@ use crate::Result;
 /// TxPriority is the priority level of the requested gas price.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-#[cfg_attr(all(feature = "wasm-bindgen", target_arch = "wasm32"), wasm_bindgen::prelude::wasm_bindgen)]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen::prelude::wasm_bindgen
+)]
 #[repr(i32)]
 pub enum TxPriority {
     /// Estimated gas price is the value at the end of the lowest 10% of gas prices from the last 5 blocks.
