@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
-use celestia_grpc::{Error, TxConfig};
+use celestia_grpc::{Error, ProofsChain, TxConfig};
 use celestia_proto::cosmos::bank::v1beta1::MsgSend;
+use celestia_proto::cosmos::base::tendermint::v1beta1::AbciQueryRequest;
+use celestia_rpc::HeaderClient;
 use celestia_types::nmt::Namespace;
+use celestia_types::state::AddressTrait;
 use celestia_types::state::{Coin, ErrorCode};
 use celestia_types::{AppVersion, Blob};
 use lumina_utils::test_utils::async_test;
@@ -14,6 +17,58 @@ use crate::utils::{new_grpc_client, new_tx_client, spawn};
 
 #[cfg(target_arch = "wasm32")]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+#[async_test]
+async fn get_balance_for_account() {
+    let jrpc_client = celestia_rpc::Client::new("ws://localhost:46658", None)
+        .await
+        .unwrap();
+    let client = new_grpc_client();
+    let account = load_account();
+
+    let head = jrpc_client.header_network_head().await.unwrap();
+
+    let mut prefixed_account_key = Vec::new();
+    prefixed_account_key.push(0x02); // balances prefix
+    prefixed_account_key.push(account.address.as_bytes().len() as u8); // address length
+    prefixed_account_key.extend_from_slice(account.address.as_bytes()); // address
+    prefixed_account_key.extend_from_slice(b"utia"); // denom
+
+    let query = AbciQueryRequest {
+        data: prefixed_account_key.clone(),
+        path: "store/bank/key".into(),
+        height: head.height().value() as i64 - 1,
+        prove: true,
+    };
+
+    let response = client.abci_query(query).await.unwrap();
+    if response.code != 0 {
+        panic!("{} {}", response.code, response.log);
+    }
+
+    let balance = if response.value.is_empty() {
+        // Account doesn't exist yet
+        Coin::utia(0)
+    } else {
+        let amount = str::from_utf8(&response.value)
+            .expect("Amount encoding is invalid")
+            .parse()
+            .expect("Couldn't parse u64 from amount");
+        Coin::utia(amount)
+    };
+
+    let proof: ProofsChain = response.proof_ops.unwrap_or_default().try_into().unwrap();
+    proof
+        .verify_membership(
+            head.header.app_hash,
+            [prefixed_account_key.as_slice(), b"bank"],
+            response.value,
+        )
+        .unwrap();
+
+    println!("Balance: {balance:?}");
+    panic!();
+}
 
 #[async_test]
 async fn get_auth_params() {
