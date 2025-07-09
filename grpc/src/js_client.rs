@@ -11,7 +11,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 
-use crate::grpc::{JsAuthParams, JsBaseAccount, JsCoin};
+use crate::grpc::{JsAuthParams, JsBaseAccount, JsCoin, TxPriority};
 use crate::tx::{DocSigner, IntoAny, JsTxConfig, JsTxInfo};
 use crate::utils::make_object;
 use crate::{Result, TxClient};
@@ -71,10 +71,20 @@ impl JsClient {
         Ok(Self { client })
     }
 
-    /// Last gas price fetched by the client
-    #[wasm_bindgen(js_name = lastSeenGasPrice)]
-    pub fn last_seen_gas_price(&self) -> f64 {
-        self.client.last_seen_gas_price()
+    /// Query for the current minimum gas price
+    #[wasm_bindgen(js_name = getMinGasPrice)]
+    pub async fn get_min_gas_price(&self) -> Result<f64> {
+        self.client.get_min_gas_price().await
+    }
+
+    /// get_estimate_gas_price takes a transaction priority and estimates the gas price based
+    /// on the gas prices of the transactions in the last five blocks.
+    ///
+    /// If no transaction is found in the last five blocks, return the network
+    /// min gas price.
+    #[wasm_bindgen(js_name = getEstimateGasPrice)]
+    pub async fn get_estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
+        self.client.get_estimate_gas_price(priority).await
     }
 
     /// Chain id of the client

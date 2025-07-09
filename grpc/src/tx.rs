@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use celestia_proto::cosmos::crypto::secp256k1;
-pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::BaseAccount;
@@ -28,6 +27,8 @@ use tonic::client::GrpcService;
 
 use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxPriority, TxStatus};
 use crate::{Error, Result};
+
+pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 
 #[cfg(feature = "uniffi")]
 uniffi::use_remote_type!(celestia_types::Hash);
@@ -237,11 +238,16 @@ where
         self.confirm_tx(tx_hash, sequence).await
     }
 
-    /// Get most recent minimal gas price seen by the client
+    /// Query for the current minimum gas price
     pub async fn get_min_gas_price(&self) -> Result<f64> {
         self.client.get_min_gas_price().await
     }
 
+    /// get_estimate_gas_price takes a transaction priority and estimates the gas price based
+    /// on the gas prices of the transactions in the last five blocks.
+    ///
+    /// If no transaction is found in the last five blocks, return the network
+    /// min gas price.
     pub async fn get_estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
         self.client.get_estimate_gas_price(priority).await
     }
@@ -566,7 +572,7 @@ pub use wbg::*;
 mod wbg {
     use wasm_bindgen::{prelude::*, JsCast};
 
-    use super::{TxConfig, TxInfo};
+    use super::{TxConfig, TxInfo, TxPriority};
     use crate::utils::make_object;
 
     #[wasm_bindgen(typescript_custom_section)]
@@ -575,17 +581,56 @@ mod wbg {
      * Transaction info
      */
     export interface TxInfo {
+      /**
+       * Hash of the transaction.
+       */
       hash: string;
+      /**
+       * Height at which transaction was submitted.
+       */
       height: bigint;
+    }
+
+    /**
+     * Transaction priority, if not provided default TxConfig uses medium priority.
+     */
+    export interface TxPriority {
+      /**
+       * Estimated gas price is the value at the end of the lowest 10% of gas prices from the last 5 blocks.
+       */
+      Low = 1,
+      /**
+       * Estimated gas price is the mean of all gas prices from the last 5 blocks.
+       */
+      Medium = 2,
+      /**
+       * Estimated gas price is the price at the start of the top 10% of transactions’ gas prices from the last 5 blocks.
+       */
+      High = 3,
     }
 
     /**
      * Transaction config.
      */
     export interface TxConfig {
+      /**
+       * Custom gas limit for the transaction (in `utia`). By default, client will
+       * query gas estimation service to get estimate gas limit.
+       */
       gasLimit?: bigint; // utia
+      /**
+       * Custom gas price for fee calculation. By default, client will query gas
+       * estimation service to get gas price estimate.
+       */
       gasPrice?: number;
+      /**
+       * Memo for the transaction
+       */
       memo?: string;
+      /**
+       * Priority of the transaction, used with gas estimation service
+       */
+      priority?: TxPriority;
     }
     ";
 
@@ -594,6 +639,10 @@ mod wbg {
         /// TxInfo exposed to javascript
         #[wasm_bindgen(typescript_type = "TxInfo")]
         pub type JsTxInfo;
+
+        /// TxPriority exposed to javascript
+        #[wasm_bindgen(typescript_type = "TxPriority")]
+        pub type JsTxPriority;
 
         /// TxConfig exposed to javascript
         #[wasm_bindgen(typescript_type = "TxConfig")]
@@ -607,6 +656,9 @@ mod wbg {
 
         #[wasm_bindgen(method, getter, js_name = memo)]
         pub fn memo(this: &JsTxConfig) -> Option<String>;
+
+        #[wasm_bindgen(method, getter, js_name = priority)]
+        pub fn priority(this: &JsTxConfig) -> Option<TxPriority>;
     }
 
     impl From<TxInfo> for JsTxInfo {
@@ -626,38 +678,9 @@ mod wbg {
                 gas_limit: value.gas_limit(),
                 gas_price: value.gas_price(),
                 memo: value.memo(),
+                priority: value.priority().unwrap_or(TxPriority::Medium),
             }
         }
-    }
-}
-
-pub fn dummy_sign_tx(tx_body: RawTxBody, sequence: u64) -> RawTx {
-    // From https://github.com/celestiaorg/cosmos-sdk/blob/v1.25.0-sdk-v0.46.16/proto/cosmos/tx/signing/v1beta1/signing.proto#L24
-    const SIGNING_MODE_INFO: ModeInfo = ModeInfo {
-        sum: Sum::Single { mode: 1 },
-    };
-
-    let public_key_as_any = Any {
-        type_url: secp256k1::PubKey::type_url(),
-        value: vec![0; 35],
-    };
-
-    let fee = Fee::new(1, 0);
-
-    let auth_info = AuthInfo {
-        signer_infos: vec![SignerInfo {
-            public_key: Some(public_key_as_any),
-            mode_info: SIGNING_MODE_INFO,
-            sequence,
-        }],
-        fee,
-    };
-    let dummy_signature = vec![0; 64];
-
-    RawTx {
-        auth_info: Some(auth_info.into()),
-        body: Some(tx_body),
-        signatures: vec![dummy_signature],
     }
 }
 

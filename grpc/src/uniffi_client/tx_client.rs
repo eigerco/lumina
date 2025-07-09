@@ -125,10 +125,20 @@ impl TxClient {
         Ok(TxClient { client })
     }
 
-    /// Last gas price fetched by the client
+    /// Query for the current minimum gas price
     pub async fn get_min_gas_price(&self) -> Result<f64> {
         Ok(self.client.get_min_gas_price().await?)
     }
+
+    /// get_estimate_gas_price takes a transaction priority and estimates the gas price based
+    /// on the gas prices of the transactions in the last five blocks.
+    ///
+    /// If no transaction is found in the last five blocks, return the network
+    /// min gas price.
+    pub async fn get_estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
+        self.client.get_estimate_gas_price(priority).await
+    }
+
 
     /// AppVersion of the client
     pub fn app_version(&self) -> AppVersion {

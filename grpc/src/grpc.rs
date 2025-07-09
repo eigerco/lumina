@@ -155,7 +155,7 @@ where
 
     // celestia.core.gas_estimation
 
-    /// estimate_gas_price takes a transaction priority and estimates the gas price based
+    /// get_estimate_gas_price takes a transaction priority and estimates the gas price based
     /// on the gas prices of the transactions in the last five blocks.
     ///
     /// If no transaction is found in the last five blocks, return the network
@@ -163,7 +163,7 @@ where
     #[grpc_method(GasEstimatorClient::estimate_gas_price)]
     async fn get_estimate_gas_price(&self, priority: TxPriority) -> Result<f64>;
 
-    /// EstimateGasPriceAndUsage takes a transaction priority and a transaction bytes
+    /// get_estimate_gas_price_and_usage takes a transaction priority and a transaction bytes
     /// and estimates the gas price and the gas used for that transaction.
     ///
     /// The gas price estimation is based on the gas prices of the transactions in the last five blocks.

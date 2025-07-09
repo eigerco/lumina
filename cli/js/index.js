@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import { AppVersion, Blob, Namespace, NodeConfig, TxClient, protoEncodeSignDoc, spawnNode } from "lumina-node";
+import { AppVersion, Blob, Namespace, NodeConfig, TxClient, TxPriority, protoEncodeSignDoc, spawnNode } from "lumina-node";
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { Registry } from "@cosmjs/proto-signing";
 
@@ -8,6 +8,7 @@ import { Registry } from "@cosmjs/proto-signing";
 window.AppVersion = AppVersion;
 window.Blob = Blob;
 window.Namespace = Namespace;
+window.TxPriority = TxPriority;
 
 // cat ci/credentials/node-0.address
 window.node0Addr = "celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9";
@@ -43,7 +44,7 @@ async function submitBankMsgSend(address, amount) {
     },
   };
   const sendMsgAny = registry.encodeAsAny(sendMsg);
-  const txInfo = await window.txClient.submitMessage(sendMsgAny, { memo: "foo" });
+  const txInfo = await window.txClient.submitMessage(sendMsgAny, { memo: "foo", priority: TxPriority.High });
 
   return txInfo;
 }
