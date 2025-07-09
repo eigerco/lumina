@@ -83,8 +83,7 @@ impl IndexedDbStore {
             Some(schema_version) => {
                 if schema_version > DB_VERSION {
                     let e = format!(
-                        "Incompatible database schema; found {}, expected {}.",
-                        schema_version, DB_VERSION
+                        "Incompatible database schema; found {schema_version}, expected {DB_VERSION}."
                     );
                     return Err(StoreError::OpenFailed(e));
                 }

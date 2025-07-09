@@ -19,12 +19,12 @@ use crate::{Result, TxClient};
 
 /// Celestia grpc transaction client.
 #[wasm_bindgen(js_name = "TxClient")]
-pub struct JsClient {
+pub struct JsTxClient {
     client: TxClient<Client, JsSigner>,
 }
 
 #[wasm_bindgen(js_class = "TxClient")]
-impl JsClient {
+impl JsTxClient {
     /// Create a new transaction client with the specified account.
     ///
     /// Url must point to a [grpc-web proxy](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-WEB.md).
@@ -59,16 +59,10 @@ impl JsClient {
     /// const tx_client = await new TxClient("http://127.0.0.1:18080", keys.bech32Address, keys.pubKey, signer)
     /// ```
     #[wasm_bindgen(constructor)]
-    pub async fn new(
-        url: String,
-        bech32_address: String,
-        pubkey: Uint8Array,
-        signer_fn: JsSignerFn,
-    ) -> Result<JsClient> {
+    pub async fn new(url: String, pubkey: Uint8Array, signer_fn: JsSignerFn) -> Result<JsTxClient> {
         let signer = JsSigner { signer_fn };
-        let address = bech32_address.parse()?;
         let pubkey = VerifyingKey::try_from(pubkey.to_vec().as_slice())?;
-        let client = TxClient::with_grpcweb_url(url, &address, pubkey, signer).await?;
+        let client = TxClient::with_grpcweb_url(url, pubkey, signer).await?;
         Ok(Self { client })
     }
 

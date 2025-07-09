@@ -17,7 +17,7 @@ use celestia_types::block::Block;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::Account;
 use celestia_types::state::auth::AuthParams;
-use celestia_types::state::{Address, Coin, TxResponse};
+use celestia_types::state::{AccAddress, Address, Coin, TxResponse};
 use http_body::Body;
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
@@ -80,7 +80,7 @@ where
 
     /// Get account
     #[grpc_method(AuthQueryClient::account)]
-    async fn get_account(&self, account: &Address) -> Result<Account>;
+    async fn get_account(&self, account: &AccAddress) -> Result<Account>;
 
     /// Get accounts
     #[grpc_method(AuthQueryClient::accounts)]

@@ -95,8 +95,7 @@ impl RedbStore {
                     Some(schema_version) => {
                         if schema_version > SCHEMA_VERSION {
                             let e = format!(
-                                "Incompatible database schema; found {}, expected {}.",
-                                schema_version, SCHEMA_VERSION
+                                "Incompatible database schema; found {schema_version}, expected {SCHEMA_VERSION}."
                             );
                             return Err(StoreError::OpenFailed(e));
                         }

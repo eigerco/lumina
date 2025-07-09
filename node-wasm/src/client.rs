@@ -261,13 +261,13 @@ impl NodeClient {
     #[wasm_bindgen(js_name = requestAllBlobs)]
     pub async fn request_all_blobs(
         &self,
-        header: &ExtendedHeader,
         namespace: &Namespace,
+        block_height: u64,
         timeout_secs: Option<f64>,
     ) -> Result<Vec<Blob>> {
         let command = NodeCommand::RequestAllBlobs {
-            header: header.clone(),
             namespace: *namespace,
+            block_height,
             timeout_secs,
         };
         let response = self.worker.exec(command).await?;
@@ -512,16 +512,14 @@ mod tests {
             .await
             .expect("successful submission");
 
-        let header = rpc_client
-            .header_get_by_height(submitted_height)
-            .await
-            .expect("header for blob");
-
         let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
+        // Wait for the `client` node to sync until the `submitted_height`.
+        sleep(Duration::from_millis(100)).await;
+
         let mut blobs = client
-            .request_all_blobs(&header, &namespace, None)
+            .request_all_blobs(&namespace, submitted_height, None)
             .await
             .expect("to fetch blob");
 

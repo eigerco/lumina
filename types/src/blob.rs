@@ -297,8 +297,7 @@ impl Blob {
             let version = share.info_byte().expect("non parity").version();
             if version != share_version {
                 return Err(Error::BlobSharesMetadataMismatch(format!(
-                    "expected share version ({}) got ({})",
-                    share_version, version
+                    "expected share version ({share_version}) got ({version})"
                 )));
             }
             if share.sequence_length().is_some() {

@@ -7,7 +7,7 @@ use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::hash::uniffi_types::UniffiHash;
 use celestia_types::state::auth::{Account, AuthParams};
-use celestia_types::state::{Address, Coin, TxResponse};
+use celestia_types::state::{AccAddress, Address, Coin, TxResponse};
 use celestia_types::UniffiConversionError;
 
 use crate::grpc::{BroadcastMode, GasInfo, GetTxResponse, TxStatusResponse};
@@ -59,7 +59,7 @@ impl GrpcClient {
     }
 
     /// Get account
-    pub async fn get_account(&self, account: &Address) -> Result<Account> {
+    pub async fn get_account(&self, account: &AccAddress) -> Result<Account> {
         Ok(self.client.get_account(account).await?)
     }
 

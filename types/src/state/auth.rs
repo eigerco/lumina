@@ -7,7 +7,7 @@ use tendermint::public_key::PublicKey;
 use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
 
-use crate::state::Address;
+use crate::state::AccAddress;
 use crate::validation_error;
 use crate::Error;
 
@@ -59,7 +59,7 @@ impl std::ops::DerefMut for Account {
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BaseAccount {
     /// Bech32 `AccountId` of this account.
-    pub address: Address,
+    pub address: AccAddress,
     /// Optional `PublicKey` associated with this account.
     pub pub_key: Option<PublicKey>,
     /// `account_number` is the account number of the account in state
