@@ -5,7 +5,7 @@ use celestia_proto::cosmos::auth::v1beta1::{
 use celestia_types::state::auth::{
     AuthParams, BaseAccount, ModuleAccount, RawBaseAccount, RawModuleAccount,
 };
-use celestia_types::state::Address;
+use celestia_types::state::AccAddress;
 use prost::{Message, Name};
 use tendermint_proto::google::protobuf::Any;
 
@@ -71,7 +71,7 @@ impl FromGrpcResponse<Vec<Account>> for QueryAccountsResponse {
 
 make_empty_params!(QueryAuthParamsRequest);
 
-impl IntoGrpcParam<QueryAccountRequest> for &Address {
+impl IntoGrpcParam<QueryAccountRequest> for &AccAddress {
     fn into_parameter(self) -> QueryAccountRequest {
         QueryAccountRequest {
             address: self.to_string(),
