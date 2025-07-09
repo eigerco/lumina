@@ -1,6 +1,11 @@
 use std::sync::Arc;
 
-use crate::Context;
+use celestia_rpc::FraudClient;
+use futures_util::{Stream, TryStreamExt};
+
+pub use celestia_rpc::fraud::{Proof, ProofType};
+
+use crate::{Context, Result};
 
 pub struct FraudApi {
     ctx: Arc<Context>,
@@ -11,10 +16,18 @@ impl FraudApi {
         FraudApi { ctx }
     }
 
-    /*
-    // Subscribe allows to subscribe on a Proof pub sub topic by its type.
-    Subscribe(context.Context, fraud.ProofType) (<-chan *Proof, error)
-    // Get fetches fraud proofs from the disk by its type.
-    Get(context.Context, fraud.ProofType) ([]Proof, error)
-     */
+    /// Fetches fraud proofs from node by their type.
+    async fn get(&self, proof_type: ProofType) -> Result<Vec<Proof>> {
+        Ok(self.ctx.rpc.fraud_get(proof_type).await?)
+    }
+
+    /// Subscribe to fraud proof by its type.
+    async fn subscribe(&self, proof_type: ProofType) -> Result<impl Stream<Item = Result<Proof>>> {
+        Ok(self
+            .ctx
+            .rpc
+            .fraud_subscribe(proof_type)
+            .await?
+            .map_err(Into::into))
+    }
 }

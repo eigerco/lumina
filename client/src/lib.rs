@@ -7,40 +7,52 @@ use celestia_rpc::{
 };
 use celestia_types::nmt::{Namespace, NamespaceProof};
 use celestia_types::state::Address;
-use celestia_types::AppVersion;
 use celestia_types::Commitment;
-use jsonrpsee_core::client::Subscription;
+use celestia_types::{AppVersion, ExtendedHeader};
 use tendermint::chain::Id;
 use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
 
-mod blob;
-mod blobstream;
-mod fraud;
-mod header;
-mod share;
-mod state;
+pub mod blob;
+pub mod blobstream;
+pub mod fraud;
+pub mod header;
+pub mod share;
+pub mod state;
 pub(crate) mod utils;
 
-pub use crate::blob::BlobApi;
-pub use crate::blobstream::BlobstreamApi;
-pub use crate::fraud::FraudApi;
-pub use crate::header::HeaderApi;
-pub use crate::share::ShareApi;
-pub use crate::state::StateApi;
+pub mod tx {
+    #[doc(inline)]
+    pub use celestia_grpc::{DocSigner, IntoAny, TxConfig, TxInfo};
+}
 
+use crate::blob::BlobApi;
+use crate::blobstream::BlobstreamApi;
+use crate::fraud::FraudApi;
+use crate::header::HeaderApi;
+use crate::share::ShareApi;
+use crate::state::StateApi;
+use crate::tx::DocSigner;
 use crate::utils::DispatchedDocSigner;
-
-#[doc(inline)]
-pub use celestia_grpc::{DocSigner, IntoAny, TxConfig, TxInfo};
 
 pub(crate) struct Context {
     pub(crate) rpc: RpcClient,
     grpc: Option<TxClient<tonic::transport::Channel, DispatchedDocSigner>>,
+    pubkey: Option<VerifyingKey>,
 }
 
 impl Context {
     pub(crate) fn grpc(&self) -> Result<&TxClient<tonic::transport::Channel, DispatchedDocSigner>> {
         self.grpc.as_ref().ok_or(Error::ReadOnlyMode)
+    }
+
+    pub(crate) fn pubkey(&self) -> Result<&VerifyingKey> {
+        self.pubkey.as_ref().ok_or(Error::ReadOnlyMode)
+    }
+
+    pub(crate) async fn get_header_validated(&self, height: u64) -> Result<ExtendedHeader> {
+        let header = self.rpc.header_get_by_height(height).await?;
+        header.validate()?;
+        Ok(header)
     }
 }
 
@@ -77,11 +89,24 @@ pub enum Error {
     /// Invalid height
     #[error("Invalid height: {0}")]
     InvalidHeight(u64),
+
+    /// Celestia types error
+    #[error("Celestia types error: {0}")]
+    Types(#[from] celestia_types::Error),
+
+    #[error("Invalid blob commitment")]
+    InvalidBlobCommitment,
 }
 
-impl From<jsonrpsee_core::client::error::Error> for Error {
-    fn from(value: jsonrpsee_core::client::error::Error) -> Self {
+impl From<jsonrpsee_core::ClientError> for Error {
+    fn from(value: jsonrpsee_core::ClientError) -> Self {
         Error::Rpc(celestia_rpc::Error::JsonRpc(value))
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(value: serde_json::Error) -> Self {
+        jsonrpsee_core::ClientError::ParseError(value).into()
     }
 }
 
@@ -105,11 +130,12 @@ impl Client {
     {
         let signer = DispatchedDocSigner::new(signer);
         let rpc = RpcClient::new(rpc_url, rpc_auth_token).await?;
-        let grpc = TxClient::with_url(grpc_url, address, pubkey, signer).await?;
+        let grpc = TxClient::with_url(grpc_url, address, pubkey.clone(), signer).await?;
 
         let ctx = Arc::new(Context {
             rpc,
             grpc: Some(grpc),
+            pubkey: Some(pubkey),
         });
 
         Ok(Client {
@@ -121,13 +147,6 @@ impl Client {
             blobstream: BlobstreamApi::new(ctx.clone()),
             state: StateApi::new(ctx.clone()),
         })
-    }
-
-    pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
-    where
-        M: IntoAny,
-    {
-        Ok(self.ctx.grpc()?.submit_message(message, cfg).await?)
     }
 
     pub fn last_seen_gas_price(&self) -> Result<f64> {

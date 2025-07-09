@@ -6,6 +6,7 @@ pub mod blobstream;
 pub mod client;
 pub mod das;
 mod error;
+pub mod fraud;
 mod header;
 #[cfg(feature = "p2p")]
 mod p2p;
@@ -28,6 +29,7 @@ pub use crate::blob::BlobClient;
 pub use crate::client::Client;
 pub use crate::das::DasClient;
 pub use crate::error::{Error, Result};
+pub use crate::fraud::FraudClient;
 pub use crate::header::HeaderClient;
 #[cfg(feature = "p2p")]
 #[cfg_attr(docsrs, doc(cfg(feature = "p2p")))]

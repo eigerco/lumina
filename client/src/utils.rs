@@ -2,8 +2,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use celestia_grpc::{DocSigner, SignDoc};
-use k256::ecdsa::signature::Error as SignatureError;
 use k256::ecdsa::Signature;
+use k256::ecdsa::signature::Error as SignatureError;
 
 use crate::{Error, Result};
 

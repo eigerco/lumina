@@ -5,9 +5,10 @@ use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::BlobClient;
 use celestia_types::nmt::{Namespace, NamespaceProof};
 use celestia_types::{Blob, Commitment};
-use jsonrpsee_core::client::Subscription;
+use futures_util::{Stream, TryStreamExt};
 
-use crate::{Context, Result, TxConfig, TxInfo};
+use crate::tx::{TxConfig, TxInfo};
+use crate::{Context, Error, Result};
 
 pub struct BlobApi {
     ctx: Arc<Context>,
@@ -38,7 +39,16 @@ impl BlobApi {
         namespace: Namespace,
         commitment: Commitment,
     ) -> Result<Blob> {
-        Ok(self.ctx.rpc.blob_get(height, namespace, commitment).await?)
+        let blob = self.ctx.rpc.blob_get(height, namespace, commitment).await?;
+        let app_version = self.ctx.get_header_validated(height).await?.app_version()?;
+
+        blob.validate(app_version)?;
+
+        if commitment == blob.commitment {
+            Ok(blob)
+        } else {
+            Err(Error::InvalidBlobCommitment)
+        }
     }
 
     /// Retrieves all blobs under the given namespaces and height.
@@ -47,7 +57,17 @@ impl BlobApi {
         height: u64,
         namespaces: &[Namespace],
     ) -> Result<Option<Vec<Blob>>> {
-        Ok(self.ctx.rpc.blob_get_all(height, namespaces).await?)
+        let Some(blobs) = self.ctx.rpc.blob_get_all(height, namespaces).await? else {
+            return Ok(None);
+        };
+
+        let app_version = self.ctx.get_header_validated(height).await?.app_version()?;
+
+        for blob in &blobs {
+            blob.validate(app_version)?;
+        }
+
+        Ok(Some(blobs))
     }
 
     /// Retrieves proofs in the given namespaces at the given height by commitment.
@@ -80,11 +100,15 @@ impl BlobApi {
     }
 
     /// Subscribe to published blobs from the given namespace as they are included.
-    ///
-    /// # Notes
-    ///
-    /// Unsubscribe is not implemented by Celestia nodes.
-    pub async fn subscribe(&self, namespace: Namespace) -> Result<Subscription<BlobsAtHeight>> {
-        Ok(self.ctx.rpc.blob_subscribe(namespace).await?)
+    pub async fn subscribe(
+        &self,
+        namespace: Namespace,
+    ) -> Result<impl Stream<Item = Result<BlobsAtHeight>>> {
+        Ok(self
+            .ctx
+            .rpc
+            .blob_subscribe(namespace)
+            .await?
+            .map_err(Into::into))
     }
 }

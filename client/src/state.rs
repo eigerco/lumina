@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use celestia_grpc::{DocSigner, IntoAny, TxClient, TxConfig, TxInfo};
 use celestia_proto::cosmos::bank::v1beta1::MsgSend;
 use celestia_proto::cosmos::staking::v1beta1::{
     MsgBeginRedelegate, MsgCancelUnbondingDelegation, MsgDelegate, MsgUndelegate,
@@ -16,10 +15,10 @@ use celestia_types::state::{
 };
 use celestia_types::Commitment;
 use celestia_types::{AppVersion, Blob};
-use jsonrpsee_core::client::Subscription;
 use tendermint::chain::Id;
 use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
 
+use crate::tx::{DocSigner, IntoAny, TxConfig, TxInfo};
 use crate::utils::height_i64;
 use crate::{Context, Error, Result};
 
@@ -32,126 +31,59 @@ impl StateApi {
         StateApi { ctx }
     }
 
-    /*
-    // AccountAddress retrieves the address of the node's account/signer
-    AccountAddress(ctx context.Context) (state.Address, error)
-
-    // Balance retrieves the Celestia coin balance for the node's account/signer
-    // and verifies it against the corresponding block's AppHash.
-    Balance(ctx context.Context) (*state.Balance, error)
-
-    // BalanceForAddress retrieves the Celestia coin balance for the given address and verifies
-    // the returned balance against the corresponding block's AppHash.
-    //
-    // NOTE: the balance returned is the balance reported by the block right before
-    // the node's current head (head-1). This is due to the fact that for block N, the block's
-    // `AppHash` is the result of applying the previous block's transaction list.
-    BalanceForAddress(ctx context.Context, addr state.Address) (*state.Balance, error)
-
-    // Transfer sends the given amount of coins from default wallet of the node to the given account
-    // address.
-    // WRITE
-    Transfer(
-        ctx context.Context, to state.AccAddress, amount state.Int, config *state.TxConfig,
-    ) (*state.TxResponse, error)
-
-    // SubmitPayForBlob builds, signs and submits a PayForBlob transaction.
-    // WRITE
-    SubmitPayForBlob(
-        ctx context.Context,
-        blobs []*libshare.Blob,
-        config *state.TxConfig,
-    ) (*state.TxResponse, error)
-
-    // CancelUnbondingDelegation cancels a user's pending undelegation from a validator.
-    // WRITE
-    CancelUnbondingDelegation(
-        ctx context.Context,
-        valAddr state.ValAddress,
-        amount,
-        height state.Int,
-        config *state.TxConfig,
-    ) (*state.TxResponse, error)
-
-    // BeginRedelegate sends a user's delegated tokens to a new validator for redelegation.
-    // WRITE
-    BeginRedelegate(
-        ctx context.Context,
-        srcValAddr,
-        dstValAddr state.ValAddress,
-        amount state.Int,
-        config *state.TxConfig,
-    ) (*state.TxResponse, error)
-
-    // Undelegate undelegates a user's delegated tokens, unbonding them from the current validator.
-    // WRITE
-    Undelegate(
-        ctx context.Context,
-        delAddr state.ValAddress,
-        amount state.Int,
-        config *state.TxConfig,
-    ) (*state.TxResponse, error)
-
-    // Delegate sends a user's liquid tokens to a validator for delegation.
-    // WRITE
-    Delegate(
-        ctx context.Context,
-        delAddr state.ValAddress,
-        amount state.Int,
-        config *state.TxConfig,
-    ) (*state.TxResponse, error)
-
-    // QueryDelegation retrieves the delegation information between a delegator and a validator.
-    QueryDelegation(ctx context.Context, valAddr state.ValAddress) (*types.QueryDelegationResponse, error)
-
-    // QueryUnbonding retrieves the unbonding status between a delegator and a validator.
-    QueryUnbonding(ctx context.Context, valAddr state.ValAddress) (*types.QueryUnbondingDelegationResponse, error)
-
-    // QueryRedelegations retrieves the status of the redelegations between a delegator and a validator.
-    QueryRedelegations(
-        ctx context.Context,
-        srcValAddr,
-        dstValAddr state.ValAddress,
-    ) (*types.QueryRedelegationsResponse, error)
-
-    // WRITE
-    GrantFee(
-        ctx context.Context,
-        grantee state.AccAddress,
-        amount state.Int,
-        config *state.TxConfig,
-    ) (*state.TxResponse, error)
-
-    // WRITE
-    RevokeGrantFee(
-        ctx context.Context,
-        grantee state.AccAddress,
-        config *state.TxConfig,
-    ) (*state.TxResponse, error)
-    */
-
-    // TODO: https://docs.rs/celestia-grpc/latest/celestia_grpc/grpc/struct.GrpcClient.html
-
+    /// Returns the address of signer.
     pub fn account_address(&self) -> Result<AccAddress> {
-        todo!();
+        let pubkey = self.ctx.pubkey()?.to_owned();
+        Ok(AccAddress::new(pubkey.into()))
     }
 
+    /// Retrieves the Celestia coin balance for the signer.
+    // TODO:
+    // and verifies it against the corresponding block's AppHash.
     pub async fn balance(&self) -> Result<u64> {
         let address = self.account_address()?;
         self.balance_for_address(address).await
     }
 
+    /// Retrieves the Celestia coin balance for the given address.
+    // TODO:
+    // and verifies
+    // the returned balance against the corresponding block's AppHash.
+    //
+    // NOTE: the balance returned is the balance reported by the block right before
+    // the node's current head (head-1). This is due to the fact that for block N, the block's
+    // `AppHash` is the result of applying the previous block's transaction list.
     pub async fn balance_for_address(&self, address: AccAddress) -> Result<u64> {
-        let address = address.into();
+        let address = Address::AccAddress(address);
 
-        let coin = match self.ctx.grpc() {
-            Ok(grpc) => grpc.get_balance(&address, "utia").await?,
-            Err(_) => self.ctx.rpc.state_balance_for_address(&address).await?,
+        let grpc = match self.ctx.grpc() {
+            Ok(grpc) => grpc,
+            Err(_) => {
+                return Ok(self
+                    .ctx
+                    .rpc
+                    .state_balance_for_address(&address)
+                    .await?
+                    .amount());
+            }
         };
+
+        // TODO: Verify balance with AbciQuery is ready.
+        let coin = grpc.get_balance(&address, "utia").await?;
 
         Ok(coin.amount())
     }
 
+    /// Submit given message to celestia network.
+    ///
+    /// When no gas price is specified through config, it will automatically
+    /// handle updating client's gas price when consensus updates minimal
+    /// gas price.
+    ///
+    /// # Example
+    /// ```no_run
+    /// // TODO
+    /// ```
     pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
     where
         M: IntoAny,
@@ -159,6 +91,7 @@ impl StateApi {
         Ok(self.ctx.grpc()?.submit_message(message, cfg).await?)
     }
 
+    /// Sends the given amount of coins from signer's wallet to the given account address.
     pub async fn transfer(
         &self,
         to_address: &AccAddress,
@@ -190,6 +123,7 @@ impl StateApi {
         Ok(self.ctx.grpc()?.submit_blobs(blobs, cfg).await?)
     }
 
+    /// Cancels signer's pending undelegation from a validator.
     pub async fn cancel_unbonding_delegation(
         &self,
         validator_address: &ValAddress,
@@ -209,6 +143,7 @@ impl StateApi {
         self.submit_message(msg, cfg).await
     }
 
+    /// Sends signer's delegated tokens to a new validator for redelegation.
     pub async fn begin_redelegate(
         &self,
         src_validator_address: &ValAddress,
@@ -228,6 +163,7 @@ impl StateApi {
         self.submit_message(msg, cfg).await
     }
 
+    /// Undelegates signer's delegated tokens, unbonding them from the current validator.
     pub async fn undelegate(
         &self,
         validator_address: &ValAddress,
@@ -245,6 +181,7 @@ impl StateApi {
         self.submit_message(msg, cfg).await
     }
 
+    /// Sends signer's liquid tokens to a validator for delegation.
     pub async fn delegate(
         &self,
         validator_address: &ValAddress,
@@ -262,50 +199,39 @@ impl StateApi {
         self.submit_message(msg, cfg).await
     }
 
+    /// Retrieves the delegation information between signer and a validator.
     pub async fn query_delegation(
         &self,
         validator_address: &ValAddress,
     ) -> Result<QueryDelegationResponse> {
         let delegator_address = self.account_address()?;
 
-        let resp = match self.ctx.grpc() {
-            Ok(grpc) => {
-                grpc.query_delegation(&delegator_address, validator_address)
-                    .await?
-            }
-            Err(_) => {
-                self.ctx
-                    .rpc
-                    .state_query_delegation(validator_address)
-                    .await?
-            }
-        };
+        let resp = self
+            .ctx
+            .grpc()?
+            .query_delegation(&delegator_address, validator_address)
+            .await?;
 
         Ok(resp)
     }
 
+    /// Retrieves the unbonding status between signer and a validator.
     pub async fn query_unbonding(
         &self,
         validator_address: &ValAddress,
     ) -> Result<QueryUnbondingDelegationResponse> {
         let delegator_address = self.account_address()?;
 
-        let resp = match self.ctx.grpc() {
-            Ok(grpc) => {
-                grpc.query_unbonding(&delegator_address, validator_address)
-                    .await?
-            }
-            Err(_) => {
-                self.ctx
-                    .rpc
-                    .state_query_unbonding(validator_address)
-                    .await?
-            }
-        };
+        let resp = self
+            .ctx
+            .grpc()?
+            .query_unbonding(&delegator_address, validator_address)
+            .await?;
 
         Ok(resp)
     }
 
+    /// Retrieves the status of the redelegations between signer and a validator.
     pub async fn query_redelegations(
         &self,
         src_validator_address: &ValAddress,
@@ -313,48 +239,39 @@ impl StateApi {
     ) -> Result<QueryRedelegationsResponse> {
         let delegator_address = self.account_address()?;
 
-        let mut resp = QueryRedelegationsResponse {
+        let mut full_resp = QueryRedelegationsResponse {
             redelegation_responses: Vec::new(),
             pagination: None,
         };
 
-        match self.ctx.grpc() {
-            Ok(grpc) => {
-                let mut next_key = Vec::new();
+        let mut next_key = Vec::new();
 
-                loop {
-                    let mut r = grpc
-                        .query_redelegations(
-                            &delegator_address,
-                            src_validator_address,
-                            dest_validator_address,
-                            Some(PageRequest {
-                                key: next_key,
-                                ..Default::default()
-                            }),
-                        )
-                        .await?;
+        loop {
+            let mut resp = self
+                .ctx
+                .grpc()?
+                .query_redelegations(
+                    &delegator_address,
+                    src_validator_address,
+                    dest_validator_address,
+                    Some(PageRequest {
+                        key: next_key,
+                        ..Default::default()
+                    }),
+                )
+                .await?;
 
-                    resp.redelegation_responses
-                        .append(&mut r.redelegation_responses);
+            full_resp
+                .redelegation_responses
+                .append(&mut resp.redelegation_responses);
 
-                    match r.pagination {
-                        Some(pagination) => next_key = pagination.next_key,
-                        None => break,
-                    }
-                }
-            }
-
-            Err(_) => {
-                resp = self
-                    .ctx
-                    .rpc
-                    .state_query_redelegations(src_validator_address, dest_validator_address)
-                    .await?;
+            match resp.pagination {
+                Some(pagination) => next_key = pagination.next_key,
+                None => break,
             }
         }
 
-        Ok(resp)
+        Ok(full_resp)
     }
 
     pub async fn grant_fee(&self) -> Result<()> {

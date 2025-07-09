@@ -40,7 +40,7 @@ pub struct BadEncodingFraudProof {
 }
 
 impl FraudProof for BadEncodingFraudProof {
-    const TYPE: &'static str = "badencoding";
+    const TYPE: &'static str = "badencodingv0.1";
 
     fn header_hash(&self) -> Hash {
         self.header_hash

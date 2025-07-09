@@ -1,6 +1,14 @@
 use std::sync::Arc;
 
-use crate::Context;
+use celestia_rpc::{
+    share::{GetRangeResponse, GetRowResponse},
+    HeaderClient, ShareClient,
+};
+use celestia_types::{
+    nmt::Namespace, row_namespace_data::NamespaceData, ExtendedDataSquare, Height, Share,
+};
+
+use crate::{Context, Result};
 
 pub struct ShareApi {
     ctx: Arc<Context>,
@@ -58,4 +66,50 @@ impl ShareApi {
         proofsOnly bool,
     ) (shwap.RangeNamespaceData, error)
     */
+
+    /// Performs a subjective validation to check if the shares committed to the
+    /// ExtendedHeader at the specified height are available and retrievable from the network.
+    ///
+    /// Returns `Ok(())` if shares are available.
+    // TODO: It should return `Result<bool>` and error only on jsonrpsee errors
+    pub async fn shares_available(&self, height: u64) -> Result<()> {
+        Ok(self.ctx.rpc.share_shares_available(height).await?)
+    }
+
+    pub async fn get(&self, height: u64, row: u64, column: u64) -> Result<Share> {
+        let header = self.ctx.get_header_validated(height).await?;
+        Ok(self.ctx.rpc.share_get_share(&header, row, column).await?)
+    }
+
+    // TODO pub async fn get_samples(&self
+
+    pub async fn get_eds(&self, height: u64) -> Result<ExtendedDataSquare> {
+        let header = self.ctx.get_header_validated(height).await?;
+        Ok(self.ctx.rpc.share_get_eds(&header).await?)
+    }
+
+    pub async fn get_row(&self, height: u64, row: u64) -> Result<GetRowResponse> {
+        let header = self.ctx.get_header_validated(height).await?;
+        Ok(self.ctx.rpc.share_get_row(&header, row).await?)
+    }
+
+    pub async fn get_namespace_data(
+        &self,
+        height: u64,
+        namespace: Namespace,
+    ) -> Result<NamespaceData> {
+        let header = self.ctx.get_header_validated(height).await?;
+
+        Ok(self
+            .ctx
+            .rpc
+            .share_get_namespace_data(&header, namespace)
+            .await?)
+    }
+
+    /// Retrieves a list of shares and their corresponding proof.
+    pub async fn get_range(&self, height: u64, start: u64, end: u64) -> Result<GetRangeResponse> {
+        let header = self.ctx.get_header_validated(height).await?;
+        Ok(self.ctx.rpc.share_get_range(&header, start, end).await?)
+    }
 }
