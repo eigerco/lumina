@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+set -euxo pipefail
 
 NODE_ID="${NODE_ID:-0}"
 NODE_TYPE="${NODE_TYPE:-bridge}"
@@ -37,14 +37,13 @@ import_shared_key() {
     --node.type "$NODE_TYPE"
 }
 
-add_trusted_genesis() {
+set_custom_network() {
   local genesis_hash
 
   # Read the hash of the genesis block
   genesis_hash="$(cat "$GENESIS_HASH_FILE")"
-  # and make it trusted in the node's config
-  echo "Trusting a genesis: $genesis_hash"
-  sed -i'.bak' "s/TrustedHash = .*/TrustedHash = $genesis_hash/" "$CONFIG_DIR/config.toml"
+  # celestia-node requires setting custom network params through env
+  export CELESTIA_CUSTOM="$P2P_NETWORK:$genesis_hash"
 }
 
 whitelist_localhost_nodes() {
@@ -80,11 +79,10 @@ main() {
   # Import the key with the coins
   import_shared_key
   # Trust the private blockchain
-  add_trusted_genesis
+  set_custom_network
   # Update the JWT token
   write_jwt_token
-  # give validator some time to set up
-  sleep 8
+  sleep 5
 
   local extra_flags=()
 

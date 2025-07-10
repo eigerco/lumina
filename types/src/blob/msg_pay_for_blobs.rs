@@ -4,7 +4,7 @@ use tendermint_proto::Protobuf;
 
 use crate::blob::{Blob, Commitment};
 use crate::nmt::Namespace;
-use crate::state::Address;
+use crate::state::AccAddress;
 use crate::{Error, Result};
 
 pub use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
@@ -13,7 +13,7 @@ pub use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MsgPayForBlobs {
     /// signer is the bech32 encoded signer address
-    pub signer: Address,
+    pub signer: AccAddress,
     /// namespaces is a list of namespaces that the blobs are associated with.
     pub namespaces: Vec<Namespace>,
     /// sizes of the associated blobs
@@ -29,7 +29,7 @@ pub struct MsgPayForBlobs {
 
 impl MsgPayForBlobs {
     /// Create a pay for blobs message for the provided Blobs and signer
-    pub fn new(blobs: &[Blob], signer: Address) -> Result<Self> {
+    pub fn new(blobs: &[Blob], signer: AccAddress) -> Result<Self> {
         let blob_count = blobs.len();
         if blob_count == 0 {
             return Err(Error::EmptyBlobList);

@@ -102,8 +102,7 @@ fun GrpcUi(modifier: Modifier = Modifier) {
                         val signer = StaticSigner(skBytes)
 
                         grpcClient = TxClient.create(
-                            url = url.toString(),
-                            address, accountPubkey = pkBytes, signer
+                            url = url.toString(), accountPubkey = pkBytes, signer
                         )
                     } catch (e : Exception) {
                         error = "Error creating TxClient: ${e.message}"

@@ -1,16 +1,18 @@
 # A dockerfile for the celestia bridge node in DA layer
 # Based on:
 # https://github.com/celestiaorg/celestia-node/blob/main/Dockerfile
-FROM docker.io/alpine:3.19.1
+FROM docker.io/alpine:3.20
 
 RUN apk update && apk add --no-cache bash jq dasel
 
 # Copy in the binary
-COPY --from=ghcr.io/celestiaorg/celestia-node:v0.21.9 /bin/celestia /bin/celestia
-COPY --from=ghcr.io/celestiaorg/celestia-node:v0.21.9 /bin/cel-key /bin/cel-key
+COPY --from=ghcr.io/celestiaorg/celestia-node:v0.23.2-mocha /bin/celestia /bin/celestia
+COPY --from=ghcr.io/celestiaorg/celestia-node:v0.23.2-mocha /bin/cel-key /bin/cel-key
 
 COPY ./run-node.sh /opt/entrypoint.sh
 
+#  2121 is the default node port for p2p connectivity
+# 26658 is the port used by RPC
 EXPOSE 2121 26658
 
 CMD /opt/entrypoint.sh

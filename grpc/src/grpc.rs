@@ -88,7 +88,7 @@ where
 
     /// Get account
     #[grpc_method(AuthQueryClient::account)]
-    async fn get_account(&self, account: &Address) -> Result<Account>;
+    async fn get_account(&self, account: &AccAddress) -> Result<Account>;
 
     /// Get accounts
     #[grpc_method(AuthQueryClient::accounts)]

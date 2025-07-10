@@ -79,7 +79,7 @@ impl NodeConfig {
             }
 
             let keypair = Keypair::ed25519_from_bytes(key_bytes)
-                .map_err(|e| LuminaError::network(format!("Invalid Ed25519 key: {}", e)))?;
+                .map_err(|e| LuminaError::network(format!("Invalid Ed25519 key: {e}")))?;
 
             builder = builder.keypair(keypair);
         }
@@ -105,20 +105,20 @@ async fn open_persistent_stores(
 
     let db = spawn_blocking(move || {
         std::fs::create_dir_all(&base_path)
-            .map_err(|e| LuminaError::storage(format!("Failed to create base directory: {}", e)))?;
+            .map_err(|e| LuminaError::storage(format!("Failed to create base directory: {e}")))?;
 
         redb::Database::create(&store_path)
             .map(Arc::new)
             .map_err(|e| LuminaError::StorageInit {
-                msg: format!("Failed to create database: {}", e),
+                msg: format!("Failed to create database: {e}"),
             })
     })
     .await
-    .map_err(|e| LuminaError::storage(format!("Failed to create base directory: {}", e)))??;
+    .map_err(|e| LuminaError::storage(format!("Failed to create base directory: {e}")))??;
 
     let store = RedbStore::new(db.clone())
         .await
-        .map_err(|e| LuminaError::storage_init(format!("Failed to initialize store: {}", e)))?;
+        .map_err(|e| LuminaError::storage_init(format!("Failed to initialize store: {e}")))?;
 
     let blockstore = RedbBlockstore::new(db);
 
