@@ -1,3 +1,4 @@
+use std::fmt::{self, Debug};
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -45,5 +46,11 @@ where
         doc: SignDoc,
     ) -> Pin<Box<dyn Future<Output = Result<Signature, SignatureError>> + 'a>> {
         Box::pin(DocSigner::try_sign(self, doc))
+    }
+}
+
+impl Debug for DispatchedDocSigner {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("DispatchedDocSigner { .. }")
     }
 }

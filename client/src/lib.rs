@@ -60,6 +60,15 @@ pub enum Error {
 
     #[error("Invalid blob commitment")]
     InvalidBlobCommitment,
+
+    #[error("Bridge node not set in builder")]
+    BridgeNodeNotSet,
+
+    #[error("Signer not set but consensus node is set")]
+    SignerNotSet,
+
+    #[error("Consensus node not set but signer is set")]
+    ConsensusNodeNotSet,
 }
 
 impl From<jsonrpsee_core::ClientError> for Error {
