@@ -17,26 +17,6 @@ use crate::utils::{new_grpc_client, new_tx_client, spawn};
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[async_test]
-async fn get_balance_for_account() {
-    let jrpc_client = celestia_rpc::Client::new("ws://localhost:46658", None)
-        .await
-        .unwrap();
-    let client = new_grpc_client();
-    let account = load_account();
-
-    let head = jrpc_client.header_network_head().await.unwrap();
-
-    let verified_balance = client
-        .get_verified_balance(&account.address, &head)
-        .await
-        .unwrap();
-
-    let balance = client.get_balance(&account.address, "utia").await.unwrap();
-
-    assert_eq!(balance, verified_balance);
-}
-
-#[async_test]
 async fn get_auth_params() {
     let client = new_grpc_client();
     let params = client.get_auth_params().await.unwrap();
@@ -82,6 +62,26 @@ async fn get_balance() {
     let total_supply = client.get_total_supply().await.unwrap();
     assert!(!total_supply.is_empty());
     assert!(total_supply.iter().map(|c| c.amount).sum::<u64>() > 0);
+}
+
+#[async_test]
+async fn get_verified_balance() {
+    let jrpc_client = celestia_rpc::Client::new("ws://localhost:46658", None)
+        .await
+        .unwrap();
+    let client = new_grpc_client();
+    let account = load_account();
+
+    let head = jrpc_client.header_network_head().await.unwrap();
+
+    let verified_balance = client
+        .get_verified_balance(&account.address, &head)
+        .await
+        .unwrap();
+
+    let balance = client.get_balance(&account.address, "utia").await.unwrap();
+
+    assert_eq!(balance, verified_balance);
 }
 
 #[async_test]
