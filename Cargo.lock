@@ -699,12 +699,15 @@ dependencies = [
  "celestia-rpc",
  "celestia-types",
  "futures-util",
+ "hex",
  "jsonrpsee-core",
  "k256",
  "serde_json",
  "tendermint",
  "thiserror 2.0.12",
+ "tokio",
  "tonic",
+ "zeroize",
 ]
 
 [[package]]

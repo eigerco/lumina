@@ -7,6 +7,7 @@ use crate::Result;
 
 const DATA_ROOT_TUPLE_ROOT_BLOCKS_LIMIT: u64 = 10_000;
 
+/// Blobstream API for quering bridge nodes.
 pub struct BlobstreamApi {
     ctx: Arc<Context>,
 }

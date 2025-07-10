@@ -10,8 +10,10 @@ use celestia_types::state::Address;
 use celestia_types::Commitment;
 use celestia_types::{AppVersion, ExtendedHeader};
 use k256::ecdsa::signature::Keypair;
+use k256::ecdsa::SigningKey;
 use tendermint::chain::Id;
 use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
+use zeroize::Zeroizing;
 
 use crate::blob::BlobApi;
 use crate::blobstream::BlobstreamApi;
@@ -31,9 +33,46 @@ pub(crate) struct Context {
 
 /// A high-level client for interacting with a Celestia node.
 ///
-/// It combines the functionality of `celestia-rpc` and `celestia-grpc` crates.
+/// There are two modes: read-only mode and submit mode. Read-only mode requires
+/// RPC endpoint and submit mode requires RPC/GRPC endpoints, and a signer.
+///
+/// # Examples
+///
+/// Read-only mode:
+///
+/// ```no_run
+/// # use celestia_client::Result;
+/// # async fn docs() -> Result<()> {
+/// let client = Client::builder()
+///     .rcp_url(RPC_URL)
+///     .await?;
+///
+/// client.header().head().await?;
+/// # }
+/// ```
+///
+/// Submit mode:
+///
+/// ```no_run
+/// # use celestia_client::Result;
+/// # use k256::ecdsa::SigningKey;
+/// # const RPC_URL: &str = "http://localhost:26658";
+/// # const GRPC_URL : &str = "http://localhost:19090";
+/// # async fn docs() -> Result<()> {
+/// let client = Client::builder()
+///     .rcp_url(RPC_URL)
+///     .grpc_url(GRPC_URL)
+///     .plaintext_private_key("...")
+///     .await?;
+///
+/// let to_address = "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm".parse().unwrap();
+/// client.state().transfer(to_address, 12345, TxConfig::default()).await?;
+/// # }
+/// ```
+///
+/// [`celestia-rpc`]: celestia_rpc
+/// [`celestia-grpc`]: celestia_grpc
 pub struct Client {
-    ctx: Arc<Context>,
     state: StateApi,
     blob: BlobApi,
     header: HeaderApi,
@@ -42,6 +81,7 @@ pub struct Client {
     blobstream: BlobstreamApi,
 }
 
+/// A builder for [`Client`].
 #[derive(Debug, Default)]
 pub struct ClientBuilder {
     rpc_url: Option<String>,
@@ -68,48 +108,44 @@ impl Context {
 }
 
 impl Client {
+    /// Returns `ClientBuilder`.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
 
-    pub fn last_seen_gas_price(&self) -> Result<f64> {
-        Ok(self.ctx.grpc()?.last_seen_gas_price())
-    }
-
-    pub fn chain_id(&self) -> Result<Id> {
-        Ok(self.ctx.grpc()?.chain_id().to_owned())
-    }
-
-    pub fn app_version(&self) -> Result<AppVersion> {
-        Ok(self.ctx.grpc()?.app_version())
-    }
-
+    /// Returns state API accessor.
     pub fn state(&self) -> &StateApi {
         &self.state
     }
 
+    /// Returns blob API accessor.
     pub fn blob(&self) -> &BlobApi {
         &self.blob
     }
 
+    /// Returns header API accessor.
     pub fn header(&self) -> &HeaderApi {
         &self.header
     }
 
+    /// Returns share API accessor.
     pub fn share(&self) -> &ShareApi {
         &self.share
     }
 
+    /// Returns fraud API accessor.
     pub fn fraud(&self) -> &FraudApi {
         &self.fraud
     }
 }
 
 impl ClientBuilder {
+    /// Returns a new builder.
     pub fn new() -> ClientBuilder {
         ClientBuilder::default()
     }
 
+    /// Set signer and its public key.
     pub fn singer<S>(mut self, pubkey: VerifyingKey, signer: S) -> ClientBuilder
     where
         S: DocSigner + 'static,
@@ -119,6 +155,7 @@ impl ClientBuilder {
         self
     }
 
+    /// Set signer from a keypair.
     pub fn keypair<S>(mut self, keypair: S) -> ClientBuilder
     where
         S: DocSigner + Keypair<VerifyingKey = VerifyingKey> + 'static,
@@ -127,23 +164,34 @@ impl ClientBuilder {
         self.singer(pubkey, keypair)
     }
 
-    pub fn bridge_node_url(mut self, url: &str) -> ClientBuilder {
+    /// Set signer from a plaintext private key.
+    pub fn plaintext_private_key(mut self, s: &str) -> Result<ClientBuilder> {
+        let bytes = Zeroizing::new(hex::decode(s).map_err(|_| Error::InvalidPrivateKey)?);
+        let signing_key = SigningKey::from_slice(&*bytes).map_err(|_| Error::InvalidPrivateKey)?;
+        Ok(self.keypair(signing_key))
+    }
+
+    /// Set the RPC endpoint.
+    pub fn rpc_url(mut self, url: &str) -> ClientBuilder {
         self.rpc_url = Some(url.to_owned());
         self
     }
 
-    pub fn bridge_node_auth_token(mut self, auth_token: &str) -> ClientBuilder {
+    /// Set the authentication token of RPC endpoint.
+    pub fn rpc_auth_token(mut self, auth_token: &str) -> ClientBuilder {
         self.rpc_auth_token = Some(auth_token.to_owned());
         self
     }
 
-    pub fn consensus_node_url(mut self, url: &str) -> ClientBuilder {
+    /// Set the GRPC endpoint.
+    pub fn grpc_url(mut self, url: &str) -> ClientBuilder {
         self.grpc_url = Some(url.to_owned());
         self
     }
 
+    /// Build [`Client`].
     pub async fn build(mut self) -> Result<Client> {
-        let rpc_url = self.rpc_url.as_ref().ok_or(Error::BridgeNodeNotSet)?;
+        let rpc_url = self.rpc_url.as_ref().ok_or(Error::RpcEndpointNotSet)?;
         let rpc_auth_token = self.rpc_auth_token.as_deref();
 
         let grpc = match (&self.grpc_url, &self.pubkey, self.signer.take()) {
@@ -151,7 +199,7 @@ impl ClientBuilder {
                 Some(TxClient::with_url(url, pubkey.to_owned(), signer).await?)
             }
             (Some(url), None, None) => return Err(Error::SignerNotSet),
-            (None, Some(pubkey), Some(signer)) => return Err(Error::ConsensusNodeNotSet),
+            (None, Some(pubkey), Some(signer)) => return Err(Error::GrpcEndpointNotSet),
             (None, None, None) => None,
             _ => unreachable!(),
         };
@@ -165,7 +213,6 @@ impl ClientBuilder {
         });
 
         Ok(Client {
-            ctx: ctx.clone(),
             blob: BlobApi::new(ctx.clone()),
             header: HeaderApi::new(ctx.clone()),
             share: ShareApi::new(ctx.clone()),

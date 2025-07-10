@@ -11,6 +11,7 @@ use crate::client::Context;
 use crate::tx::{TxConfig, TxInfo};
 use crate::{Error, Result};
 
+/// Blob API for quering bridge nodes.
 pub struct BlobApi {
     ctx: Arc<Context>,
 }

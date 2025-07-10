@@ -23,6 +23,7 @@ use crate::tx::{DocSigner, IntoAny, TxConfig, TxInfo};
 use crate::utils::height_i64;
 use crate::{Error, Result};
 
+/// State API for quering and submiting TXs to a consensus node.
 pub struct StateApi {
     ctx: Arc<Context>,
 }
@@ -39,21 +40,17 @@ impl StateApi {
     }
 
     /// Retrieves the Celestia coin balance for the signer.
-    // TODO:
-    // and verifies it against the corresponding block's AppHash.
     pub async fn balance(&self) -> Result<u64> {
         let address = self.account_address()?;
         self.balance_for_address(address).await
     }
 
     /// Retrieves the Celestia coin balance for the given address.
-    // TODO:
-    // and verifies
-    // the returned balance against the corresponding block's AppHash.
-    //
-    // NOTE: the balance returned is the balance reported by the block right before
-    // the node's current head (head-1). This is due to the fact that for block N, the block's
-    // `AppHash` is the result of applying the previous block's transaction list.
+    ///
+    /// # Notes
+    ///
+    /// This is the only method of [`StateApi`] that fallbacks to bridge node
+    /// if consensus node is not set in [`Client`].
     pub async fn balance_for_address(&self, address: AccAddress) -> Result<u64> {
         let address = Address::AccAddress(address);
 

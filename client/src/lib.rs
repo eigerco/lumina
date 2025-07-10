@@ -1,3 +1,47 @@
+//! A high-level client for interacting with a Celestia node.
+//!
+//! It combines the functionality of [`celestia-rpc`] and [`celestia-grpc`] crates.
+//!
+//! There are two modes: read-only mode and submit mode. Read-only mode requires
+//! RPC endpoint and submit mode requires RPC/GRPC endpoints, and a signer.
+//!
+//! # Examples
+//!
+//! Read-only mode:
+//!
+//! ```no_run
+//! # use celestia_client::Result;
+//! # async fn docs() -> Result<()> {
+//! let client = Client::builder()
+//!     .rcp_url(RPC_URL)
+//!     .await?;
+//!
+//! client.header().head().await?;
+//! # }
+//! ```
+//!
+//! Submit mode:
+//!
+//! ```no_run
+//! # use celestia_client::Result;
+//! # use k256::ecdsa::SigningKey;
+//! # const RPC_URL: &str = "http://localhost:26658";
+//! # const GRPC_URL : &str = "http://localhost:19090";
+//! # async fn docs() -> Result<()> {
+//! let client = Client::builder()
+//!     .rcp_url(RPC_URL)
+//!     .grpc_url(GRPC_URL)
+//!     .plaintext_private_key("...")
+//!     .await?;
+//!
+//! let to_address = "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm".parse().unwrap();
+//! client.state().transfer(to_address, 12345, TxConfig::default()).await?;
+//! # }
+//! ```
+//!
+//! [`celestia-rpc`]: celestia_rpc
+//! [`celestia-grpc`]: celestia_grpc
+
 use std::sync::Arc;
 
 use celestia_grpc::TxClient;
@@ -12,21 +56,32 @@ use celestia_types::{AppVersion, ExtendedHeader};
 use tendermint::chain::Id;
 use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
 
-pub mod blob;
-pub mod blobstream;
+mod blob;
+mod blobstream;
 mod client;
-pub mod fraud;
-pub mod header;
-pub mod share;
-pub mod state;
+mod fraud;
+mod header;
+mod share;
+mod state;
 mod utils;
 
+/// API related types.
+pub mod api {
+    pub use crate::blob::BlobApi;
+    pub use crate::blobstream::BlobstreamApi;
+    pub use crate::fraud::FraudApi;
+    pub use crate::header::HeaderApi;
+    pub use crate::share::ShareApi;
+    pub use crate::state::StateApi;
+}
+
+/// TX related types.
 pub mod tx {
     #[doc(inline)]
     pub use celestia_grpc::{DocSigner, IntoAny, TxConfig, TxInfo};
 }
 
-pub use crate::client::Client;
+pub use crate::client::{Client, ClientBuilder};
 
 /// Alias for a `Result` with the error type [`celestia_client::Error`].
 ///
@@ -46,6 +101,10 @@ pub enum Error {
     #[error("GRPC error: {0}")]
     Grpc(#[from] celestia_grpc::Error),
 
+    /// Celestia types error
+    #[error("Celestia types error: {0}")]
+    Types(#[from] celestia_types::Error),
+
     /// Client is in read-only mode
     #[error("Client is constructed for read-only mode")]
     ReadOnlyMode,
@@ -54,21 +113,21 @@ pub enum Error {
     #[error("Invalid height: {0}")]
     InvalidHeight(u64),
 
-    /// Celestia types error
-    #[error("Celestia types error: {0}")]
-    Types(#[from] celestia_types::Error),
-
     #[error("Invalid blob commitment")]
     InvalidBlobCommitment,
 
-    #[error("Bridge node not set in builder")]
-    BridgeNodeNotSet,
+    /// Invalid private key
+    #[error("Invalid private key")]
+    InvalidPrivateKey,
 
-    #[error("Signer not set but consensus node is set")]
+    #[error("RPC endpoint not set")]
+    RpcEndpointNotSet,
+
+    #[error("GRPC endpoint is set but singer is not")]
     SignerNotSet,
 
-    #[error("Consensus node not set but signer is set")]
-    ConsensusNodeNotSet,
+    #[error("Signer is set but GRPC endpoint is not")]
+    GrpcEndpointNotSet,
 }
 
 impl From<jsonrpsee_core::ClientError> for Error {
