@@ -18,9 +18,10 @@ use celestia_types::{AppVersion, Blob};
 use tendermint::chain::Id;
 use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
 
+use crate::client::Context;
 use crate::tx::{DocSigner, IntoAny, TxConfig, TxInfo};
 use crate::utils::height_i64;
-use crate::{Context, Error, Result};
+use crate::{Error, Result};
 
 pub struct StateApi {
     ctx: Arc<Context>,

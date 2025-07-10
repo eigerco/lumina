@@ -7,8 +7,9 @@ use celestia_types::nmt::{Namespace, NamespaceProof};
 use celestia_types::{Blob, Commitment};
 use futures_util::{Stream, TryStreamExt};
 
+use crate::client::Context;
 use crate::tx::{TxConfig, TxInfo};
-use crate::{Context, Error, Result};
+use crate::{Error, Result};
 
 pub struct BlobApi {
     ctx: Arc<Context>,

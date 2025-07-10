@@ -8,7 +8,8 @@ use celestia_types::{
     nmt::Namespace, row_namespace_data::NamespaceData, ExtendedDataSquare, Height, Share,
 };
 
-use crate::{Context, Result};
+use crate::client::Context;
+use crate::Result;
 
 pub struct ShareApi {
     ctx: Arc<Context>,

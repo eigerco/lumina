@@ -5,7 +5,8 @@ use futures_util::{Stream, TryStreamExt};
 
 pub use celestia_rpc::fraud::{Proof, ProofType};
 
-use crate::{Context, Result};
+use crate::client::Context;
+use crate::Result;
 
 pub struct FraudApi {
     ctx: Arc<Context>,

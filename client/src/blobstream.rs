@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use celestia_rpc::blobstream::BlobstreamClient;
 
-use crate::{Context, Result};
+use crate::client::Context;
+use crate::Result;
 
 const DATA_ROOT_TUPLE_ROOT_BLOCKS_LIMIT: u64 = 10_000;
 

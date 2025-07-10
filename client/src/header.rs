@@ -5,7 +5,8 @@ use celestia_types::hash::Hash;
 use celestia_types::{ExtendedHeader, SyncState};
 use futures_util::{Stream, StreamExt};
 
-use crate::{Context, Error, Result};
+use crate::client::Context;
+use crate::{Error, Result};
 
 pub struct HeaderApi {
     ctx: Arc<Context>,
