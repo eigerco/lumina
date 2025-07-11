@@ -8,7 +8,7 @@ use blockstore::Blockstore;
 use celestia_rpc::{HeaderClient, ShareClient};
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
 use celestia_types::sample::SampleId;
-use celestia_types::{AppVersion, Blob};
+use celestia_types::{AppVersion, Blob, ExtendedHeader};
 use cid::{Cid, CidGeneric};
 use lumina_node::blockstore::InMemoryBlockstore;
 use lumina_node::events::NodeEvent;
@@ -330,21 +330,14 @@ async fn shwap_request_sample_should_cleanup_unneeded_samples() {
         .cids;
 
     // try to request a sample that wasn't selected by daser
-    let (coords, cid) = loop {
-        let square_width = header.dah.square_width();
-        let coords = (
-            rand::random::<u16>() % square_width,
-            rand::random::<u16>() % square_width,
-        );
-        let cid = SampleId::new(coords.0, coords.1, submitted_height).unwrap();
-        let cid = convert_cid(&cid.into()).unwrap();
-
+    let (row, col, cid) = loop {
+        let (row, col, cid) = random_sample(&header);
         if !cids.contains(&cid) {
-            break (coords, cid);
+            break (row, col, cid);
         }
     };
 
-    node.request_sample(coords.0, coords.1, submitted_height, None)
+    node.request_sample(row, col, submitted_height, None)
         .await
         .unwrap();
 
@@ -406,6 +399,20 @@ impl Blockstore for TestBlockstore {
     async fn close(self) -> blockstore::Result<()> {
         self.blockstore.close().await
     }
+}
+
+fn random_sample(header: &ExtendedHeader) -> (u16, u16, Cid) {
+    let square = header.dah.square_width();
+    let id = SampleId::new(
+        rand::random::<u16>() % square,
+        rand::random::<u16>() % square,
+        header.height().value(),
+    )
+    .unwrap();
+
+    let cid = convert_cid(&id.into()).unwrap();
+
+    (id.row_index(), id.column_index(), cid)
 }
 
 fn random_bytes(len: usize) -> Vec<u8> {
