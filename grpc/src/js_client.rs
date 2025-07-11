@@ -77,14 +77,14 @@ impl JsClient {
         self.client.get_min_gas_price().await
     }
 
-    /// get_estimate_gas_price takes a transaction priority and estimates the gas price based
+    /// estimate_gas_price takes a transaction priority and estimates the gas price based
     /// on the gas prices of the transactions in the last five blocks.
     ///
     /// If no transaction is found in the last five blocks, return the network
     /// min gas price.
     #[wasm_bindgen(js_name = getEstimateGasPrice)]
-    pub async fn get_estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
-        self.client.get_estimate_gas_price(priority).await
+    pub async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
+        self.client.estimate_gas_price(priority).await
     }
 
     /// Chain id of the client

@@ -44,7 +44,7 @@ mod cosmos_tx;
 pub use crate::grpc::auth::Account;
 pub use crate::grpc::celestia_tx::{TxStatus, TxStatusResponse};
 pub use crate::grpc::cosmos_tx::{BroadcastMode, GetTxResponse};
-pub use crate::grpc::gas_estimation::TxPriority;
+pub use crate::grpc::gas_estimation::{GasEstimate, TxPriority};
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 pub use crate::grpc::auth::{JsAuthParams, JsBaseAccount, JsPublicKey};
@@ -155,15 +155,15 @@ where
 
     // celestia.core.gas_estimation
 
-    /// get_estimate_gas_price takes a transaction priority and estimates the gas price based
+    /// estimate_gas_price takes a transaction priority and estimates the gas price based
     /// on the gas prices of the transactions in the last five blocks.
     ///
     /// If no transaction is found in the last five blocks, return the network
     /// min gas price.
     #[grpc_method(GasEstimatorClient::estimate_gas_price)]
-    async fn get_estimate_gas_price(&self, priority: TxPriority) -> Result<f64>;
+    async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64>;
 
-    /// get_estimate_gas_price_and_usage takes a transaction priority and a transaction bytes
+    /// estimate_gas_price_and_usage takes a transaction priority and a transaction bytes
     /// and estimates the gas price and the gas used for that transaction.
     ///
     /// The gas price estimation is based on the gas prices of the transactions in the last five blocks.
@@ -172,11 +172,11 @@ where
     ///
     /// The gas used is estimated using the state machine simulation.
     #[grpc_method(GasEstimatorClient::estimate_gas_price_and_usage)]
-    async fn get_estimate_gas_price_and_usage(
+    async fn estimate_gas_price_and_usage(
         &self,
         priority: TxPriority,
         tx_bytes: Vec<u8>,
-    ) -> Result<(f64, u64)>;
+    ) -> Result<GasEstimate>;
 }
 
 #[cfg(not(target_arch = "wasm32"))]

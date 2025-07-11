@@ -25,7 +25,9 @@ use tokio::sync::{Mutex, MutexGuard};
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
 
-use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxPriority, TxStatus};
+use crate::grpc::{
+    Account, BroadcastMode, GasEstimate, GrpcClient, StdError, TxPriority, TxStatus,
+};
 use crate::{Error, Result};
 
 pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
@@ -223,15 +225,6 @@ where
         self.client.get_min_gas_price().await
     }
 
-    /// get_estimate_gas_price takes a transaction priority and estimates the gas price based
-    /// on the gas prices of the transactions in the last five blocks.
-    ///
-    /// If no transaction is found in the last five blocks, return the network
-    /// min gas price.
-    pub async fn get_estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
-        self.client.get_estimate_gas_price(priority).await
-    }
-
     /// Get client's chain id
     pub fn chain_id(&self) -> &Id {
         &self.chain_id
@@ -253,7 +246,7 @@ where
         Ok(match (cfg.gas_limit, cfg.gas_price) {
             (Some(gas_limit), Some(gas_price)) => (gas_limit, gas_price),
             (Some(gas_limit), None) => {
-                let gas_price = self.client.get_estimate_gas_price(cfg.priority).await?;
+                let gas_price = self.client.estimate_gas_price(cfg.priority).await?;
                 (gas_limit, gas_price)
             }
             (None, maybe_gas_price) => {
@@ -267,13 +260,12 @@ where
                     1,
                 )
                 .await?;
-                //let tx = dummy_sign_tx(tx_body.clone(), account.sequence);
-                let (estimated_gas_price, gas_usage) = self
+                let GasEstimate { price, usage } = self
                     .client
-                    .get_estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
+                    .estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
                     .await?;
-                let gas_limit = (gas_usage as f64 * DEFAULT_GAS_MULTIPLIER) as u64;
-                (gas_limit, maybe_gas_price.unwrap_or(estimated_gas_price))
+                let gas_limit = (usage as f64 * DEFAULT_GAS_MULTIPLIER) as u64;
+                (gas_limit, maybe_gas_price.unwrap_or(price))
             }
         })
     }

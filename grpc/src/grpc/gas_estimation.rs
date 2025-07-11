@@ -24,6 +24,17 @@ pub enum TxPriority {
     High = 3,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen::prelude::wasm_bindgen
+)]
+pub struct GasEstimate {
+    pub price: f64,
+    pub usage: u64,
+}
+
 impl IntoGrpcParam<EstimateGasPriceRequest> for TxPriority {
     fn into_parameter(self) -> EstimateGasPriceRequest {
         EstimateGasPriceRequest {
@@ -47,8 +58,11 @@ impl IntoGrpcParam<EstimateGasPriceAndUsageRequest> for (TxPriority, Vec<u8>) {
     }
 }
 
-impl FromGrpcResponse<(f64, u64)> for EstimateGasPriceAndUsageResponse {
-    fn try_from_response(self) -> Result<(f64, u64)> {
-        Ok((self.estimated_gas_price, self.estimated_gas_used))
+impl FromGrpcResponse<GasEstimate> for EstimateGasPriceAndUsageResponse {
+    fn try_from_response(self) -> Result<GasEstimate> {
+        Ok(GasEstimate {
+            price: self.estimated_gas_price,
+            usage: self.estimated_gas_used,
+        })
     }
 }
