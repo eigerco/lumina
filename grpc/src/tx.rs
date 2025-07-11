@@ -708,9 +708,6 @@ pub async fn sign_tx(
     };
     let signature = signer.try_sign(doc).await?;
 
-    //println!("{:?}", signature.to_bytes().to_vec().len());
-    //panic!("AAAA");
-
     Ok(RawTx {
         auth_info: Some(auth_info.into()),
         body: Some(tx_body),
