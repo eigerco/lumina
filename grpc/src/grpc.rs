@@ -15,8 +15,7 @@ use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServ
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::hash::Hash;
-use celestia_types::state::auth::Account;
-use celestia_types::state::auth::AuthParams;
+use celestia_types::state::auth::{Account, AuthParams};
 use celestia_types::state::{AccAddress, Address, Coin, TxResponse};
 use http_body::Body;
 use tonic::body::BoxBody;
