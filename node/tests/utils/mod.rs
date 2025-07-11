@@ -3,14 +3,16 @@
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use blockstore::Blockstore;
 use celestia_rpc::{prelude::*, Client, TxConfig};
 use celestia_types::Blob;
 use libp2p::{multiaddr::Protocol, Multiaddr, PeerId};
 use lumina_node::blockstore::InMemoryBlockstore;
 use lumina_node::events::EventSubscriber;
 use lumina_node::node::Node;
-use lumina_node::store::InMemoryStore;
+use lumina_node::store::{InMemoryStore, Store};
 use lumina_node::test_utils::test_node_builder;
+use lumina_node::NodeBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
@@ -37,10 +39,16 @@ pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {
     (bridge_info.id.into(), ma)
 }
 
-pub async fn new_connected_node() -> (Node<InMemoryBlockstore, InMemoryStore>, EventSubscriber) {
+pub async fn new_connected_node_with_builder<B, S>(
+    builder: NodeBuilder<B, S>,
+) -> (Node<B, S>, EventSubscriber)
+where
+    B: Blockstore + 'static,
+    S: Store + 'static,
+{
     let (_, bridge_ma) = fetch_bridge_info().await;
 
-    let (node, events) = test_node_builder()
+    let (node, events) = builder
         .bootnodes([bridge_ma])
         .start_subscribed()
         .await
@@ -60,6 +68,10 @@ pub async fn new_connected_node() -> (Node<InMemoryBlockstore, InMemoryStore>, E
     }
 
     (node, events)
+}
+
+pub async fn new_connected_node() -> (Node<InMemoryBlockstore, InMemoryStore>, EventSubscriber) {
+    new_connected_node_with_builder(test_node_builder()).await
 }
 
 pub async fn blob_submit(client: &Client, blobs: &[Blob]) -> u64 {
