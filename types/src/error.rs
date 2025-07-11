@@ -203,7 +203,7 @@ pub enum Error {
     InvalidCoinDenomination(String),
 
     /// Invalid balance
-    #[error("Invalid balance")]
+    #[error("Invalid balance: {0:?}")]
     InvalidBalance(String),
 
     /// Invalid Public Key
@@ -266,21 +266,29 @@ pub enum Error {
     #[error("Empty blob list")]
     EmptyBlobList,
 
-    /// Missing DelegationResponse
-    #[error("Missing DelegationResponse")]
+    /// Missing delegation response
+    #[error("Missing belegation response")]
     MissingDelegationResponse,
 
-    /// Missing Delegation
-    #[error("Missing Delegation")]
+    /// Missing delegation
+    #[error("Missing delegation")]
     MissingDelegation,
 
-    /// Missing Balance
-    #[error("Missing Balance")]
+    /// Missing balance
+    #[error("Missing balance")]
     MissingBalance,
 
     /// Missing unbond
     #[error("Missing unbond")]
     MissingUnbond,
+
+    /// Missing redelegation
+    #[error("Missing redelegation")]
+    MissingRedelegation,
+
+    /// Missing redelegation entry
+    #[error("Missing redelegation entry")]
+    MissingRedelegationEntry,
 }
 
 impl From<prost::DecodeError> for Error {
@@ -713,6 +721,14 @@ pub enum UniffiError {
     /// Missing unbond
     #[error("Missing unbond")]
     MissingUnbond,
+
+    /// Missing redelegation
+    #[error("Missing redelegation")]
+    MissingRedelegation,
+
+    /// Missing redelegation entry
+    #[error("Missing redelegation entry")]
+    MissingRedelegationEntry,
 }
 
 #[cfg(feature = "uniffi")]
@@ -797,6 +813,8 @@ impl From<Error> for UniffiError {
             Error::MissingDelegation => UniffiError::MissingDelegation,
             Error::MissingBalance => UniffiError::MissingBalance,
             Error::MissingUnbond => UniffiError::MissingUnbond,
+            Error::MissingRedelegation => UniffiError::MissingRedelegation,
+            Error::MissingRedelegationEntry => UniffiError::MissingRedelegationEntry,
         }
     }
 }

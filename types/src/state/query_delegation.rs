@@ -1,10 +1,12 @@
 use celestia_proto::cosmos::base::query::v1beta1::{
     PageRequest as RawPageRequest, PageResponse as RawPageResponse,
 };
-use celestia_proto::cosmos::staking::v1beta1::Delegation as RawDelegation;
-use celestia_proto::cosmos::staking::v1beta1::QueryDelegationResponse as RawQueryDelegationResponse;
-use celestia_proto::cosmos::staking::v1beta1::QueryRedelegationsResponse as RawQueryRedelegationsResponse;
-use celestia_proto::cosmos::staking::v1beta1::QueryUnbondingDelegationResponse as RawQueryUnbondingDelegationResponse;
+use celestia_proto::cosmos::staking::v1beta1::{
+    QueryDelegationResponse as RawQueryDelegationResponse,
+    QueryRedelegationsResponse as RawQueryRedelegationsResponse,
+    QueryUnbondingDelegationResponse as RawQueryUnbondingDelegationResponse,
+    Redelegation as RawRedelegation, RedelegationEntry as RawRedelegationEntry,
+};
 use serde::{Deserialize, Serialize};
 use tendermint::Time;
 
@@ -172,10 +174,92 @@ pub struct RedelegationEntry {
     pub shares_dst: String, // TODO
 }
 
+impl TryFrom<RawRedelegation> for Redelegation {
+    type Error = Error;
+
+    fn try_from(value: RawRedelegation) -> std::result::Result<Self, Self::Error> {
+        let entries = value
+            .entries
+            .into_iter()
+            .map(|entry| entry.try_into())
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(Redelegation {
+            delegator_address: value.delegator_address.parse()?,
+            src_validator_address: value.validator_src_address.parse()?,
+            dest_validator_address: value.validator_dst_address.parse()?,
+            entries,
+        })
+    }
+}
+
+impl TryFrom<RawRedelegationEntry> for RedelegationEntry {
+    type Error = Error;
+
+    fn try_from(value: RawRedelegationEntry) -> std::result::Result<Self, Self::Error> {
+        let initial_balance = value
+            .initial_balance
+            .as_str()
+            .parse::<u64>()
+            .map_err(|_| Error::InvalidBalance(value.initial_balance))?;
+
+        Ok(RedelegationEntry {
+            creation_height: value.creation_height.try_into()?,
+            completion_time: value
+                .completion_time
+                .map(|time| time.try_into())
+                .transpose()?,
+            initial_balance,
+            shares_dst: value.shares_dst,
+        })
+    }
+}
+
 impl TryFrom<RawQueryRedelegationsResponse> for QueryRedelegationsResponse {
     type Error = Error;
 
     fn try_from(value: RawQueryRedelegationsResponse) -> std::result::Result<Self, Self::Error> {
-        todo!();
+        let redelegation_responses = value
+            .redelegation_responses
+            .into_iter()
+            .map(|resp| {
+                let redelegation = resp
+                    .redelegation
+                    .ok_or(Error::MissingRedelegation)?
+                    .try_into()?;
+
+                let entries = resp
+                    .entries
+                    .into_iter()
+                    .map(|resp| {
+                        let redelegation_entry = resp
+                            .redelegation_entry
+                            .ok_or(Error::MissingRedelegationEntry)?
+                            .try_into()?;
+
+                        let balance = resp
+                            .balance
+                            .as_str()
+                            .parse::<u64>()
+                            .map_err(|_| Error::InvalidBalance(resp.balance))?;
+
+                        Ok(RedelegationEntryResponse {
+                            redelegation_entry,
+                            balance,
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                Ok(RedelegationResponse {
+                    redelegation,
+                    entries,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(QueryRedelegationsResponse {
+            redelegation_responses,
+            pagination: value.pagination,
+        })
     }
 }
