@@ -33,7 +33,6 @@ impl JsTxClient {
     /// ```js
     /// import { secp256k1 } from "@noble/curves/secp256k1";
     ///
-    /// const address = "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm";
     /// const privKey = "fdc8ac75dfa1c142dbcba77938a14dd03078052ce0b49a529dcf72a9885a3abb";
     /// const pubKey = secp256k1.getPublicKey(privKey);
     ///
@@ -43,7 +42,7 @@ impl JsTxClient {
     ///   return sig.toCompactRawBytes();
     /// };
     ///
-    /// const txClient = await new TxClient("http://127.0.0.1:18080", address, pubKey, signer);
+    /// const txClient = await new TxClient("http://127.0.0.1:18080", pubKey, signer);
     /// ```
     ///
     /// # Example with leap wallet
@@ -56,7 +55,7 @@ impl JsTxClient {
     ///     .then(sig => Uint8Array.from(atob(sig.signature.signature), c => c.charCodeAt(0)))
     /// }
     ///
-    /// const tx_client = await new TxClient("http://127.0.0.1:18080", keys.bech32Address, keys.pubKey, signer)
+    /// const tx_client = await new TxClient("http://127.0.0.1:18080", keys.pubKey, signer)
     /// ```
     #[wasm_bindgen(constructor)]
     pub async fn new(url: String, pubkey: Uint8Array, signer_fn: JsSignerFn) -> Result<JsTxClient> {

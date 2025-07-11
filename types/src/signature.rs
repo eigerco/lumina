@@ -40,7 +40,7 @@ pub mod uniffi_types {
     /// Signature
     #[derive(Record)]
     pub struct Signature {
-        signature: Vec<u8>,
+        pub signature: Vec<u8>,
     }
 
     impl TryFrom<Signature> for TendermintSignature {

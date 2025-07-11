@@ -208,11 +208,15 @@ mod wbg {
         BlockIdFlagNil,
     }
 
+    /// Value of the validator vote
     #[derive(Clone, Debug)]
     #[wasm_bindgen(getter_with_clone, js_name = "CommitVote")]
     pub struct JsCommitVote {
+        /// Address of the voting validator
         pub validator_address: String,
+        /// Timestamp
         pub timestamp: String,
+        /// Signature
         pub signature: Option<JsSignature>,
     }
 }
