@@ -1,0 +1,45 @@
+[package]
+name = "celestia-client"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Celestia client combining RPC and gRPC functionality."
+authors = ["Eiger <hello@eiger.co>"]
+homepage = "https://www.eiger.co"
+repository = "https://github.com/eigerco/lumina"
+readme = "README.md"
+# crates.io is limited to 5 keywords and 5 categories
+keywords = ["blockchain", "celestia", "lumina"]
+# Must be one of <https://crates.io/category_slugs>
+categories = [
+  "api-bindings",
+  "asynchronous",
+  "encoding",
+  "cryptography::cryptocurrencies",
+]
+
+[dependencies]
+bytes = "1.10.1"
+futures-util = "0.3.31"
+hex = "0.4.3"
+jsonrpsee-core = "0.25.1"
+k256 = "0.13.4"
+serde_json = "1.0.140"
+tendermint.workspace = true
+thiserror = "2.0.12"
+tonic = "0.12.3"
+zeroize = "1.8.1"
+
+celestia-grpc.workspace = true
+celestia-proto.workspace  = true
+celestia-rpc = { workspace = true, default-features = false }
+celestia-types.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1.38.0", features = ["rt", "macros"] }
+
+[features]
+wasm-bindgen = ["celestia-grpc/wasm-bindgen", "celestia-rpc/wasm-bindgen", "celestia-types/wasm-bindgen"]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]

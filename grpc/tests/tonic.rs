@@ -44,23 +44,23 @@ async fn get_balance() {
     let client = new_grpc_client();
 
     let coin = client.get_balance(&account.address, "utia").await.unwrap();
-    assert_eq!("utia", &coin.denom);
-    assert!(coin.amount > 0);
+    assert_eq!("utia", coin.denom());
+    assert!(coin.amount() > 0);
 
     let all_coins = client.get_all_balances(&account.address).await.unwrap();
     assert!(!all_coins.is_empty());
-    assert!(all_coins.iter().map(|c| c.amount).sum::<u64>() > 0);
+    assert!(all_coins.iter().map(|c| c.amount()).sum::<u64>() > 0);
 
     let spendable_coins = client
         .get_spendable_balances(&account.address)
         .await
         .unwrap();
     assert!(!spendable_coins.is_empty());
-    assert!(spendable_coins.iter().map(|c| c.amount).sum::<u64>() > 0);
+    assert!(spendable_coins.iter().map(|c| c.amount()).sum::<u64>() > 0);
 
     let total_supply = client.get_total_supply().await.unwrap();
     assert!(!total_supply.is_empty());
-    assert!(total_supply.iter().map(|c| c.amount).sum::<u64>() > 0);
+    assert!(total_supply.iter().map(|c| c.amount()).sum::<u64>() > 0);
 }
 
 #[async_test]

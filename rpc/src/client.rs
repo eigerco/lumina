@@ -159,11 +159,18 @@ mod native {
             }
         }
     }
+
+    impl fmt::Debug for Client {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("Client { .. }")
+        }
+    }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod wasm {
-    use std::{fmt, result::Result};
+    use std::fmt;
+    use std::result::Result;
 
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
@@ -254,6 +261,12 @@ mod wasm {
             N: DeserializeOwned,
         {
             self.client.subscribe_to_method(method).await
+        }
+    }
+
+    impl fmt::Debug for Client {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("Client { .. }")
         }
     }
 }
