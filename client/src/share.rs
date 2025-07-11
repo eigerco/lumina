@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
-use celestia_rpc::{
-    share::{GetRangeResponse, GetRowResponse},
-    HeaderClient, ShareClient,
-};
-use celestia_types::{
-    nmt::Namespace, row_namespace_data::NamespaceData, ExtendedDataSquare, Height, Share,
-};
+use celestia_rpc::share::{GetRangeResponse, GetRowResponse};
+use celestia_rpc::{HeaderClient, ShareClient};
+use celestia_types::nmt::Namespace;
+use celestia_types::row_namespace_data::NamespaceData;
+use celestia_types::sample::Sample;
+use celestia_types::{ExtendedDataSquare, Height, Share};
 
 use crate::client::Context;
 use crate::Result;
@@ -37,11 +36,17 @@ impl ShareApi {
         Ok(self.ctx.rpc.share_get_share(&header, row, column).await?)
     }
 
-    // GetSamples retrieves multiple shares from the Extended Data Square (EDS) specified by the header
-    // at the given sample coordinates. Returns an array of samples containing the requested shares
-    // or an error if retrieval fails.
-    // GetSamples(ctx context.Context, header *header.ExtendedHeader, indices []shwap.SampleCoords) ([]shwap.Sample, error)
-    // TODO pub async fn get_samples(&self
+    /// Retrieves multiple shares from the [`ExtendedDataSquare`] at the given
+    /// sample coordinates.
+    ///
+    /// `coordinates` is a list of `(row, column)`.
+    pub async fn get_samples<I>(&self, height: u64, coordinates: I) -> Result<Vec<Sample>>
+    where
+        I: IntoIterator<Item = (u16, u16)>,
+    {
+        let header = self.ctx.get_header_validated(height).await?;
+        Ok(self.ctx.rpc.share_get_samples(&header, coordinates).await?)
+    }
 
     /// Retrieves the complete [`ExtendedDataSquare`] for the specified height.
     pub async fn get_eds(&self, height: u64) -> Result<ExtendedDataSquare> {

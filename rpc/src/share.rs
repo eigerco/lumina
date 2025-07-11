@@ -1,12 +1,13 @@
 //! celestia-node rpc types and methods related to shares
 //!
-use std::fmt;
 use std::future::Future;
 use std::marker::{Send, Sync};
+use std::{fmt, u16};
 
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::nmt::Namespace;
 use celestia_types::row_namespace_data::NamespaceData;
+use celestia_types::sample::{RawSample, Sample, SampleId};
 use celestia_types::{ExtendedDataSquare, ExtendedHeader, RawShare, Share, ShareProof};
 use jsonrpsee::core::client::{ClientT, Error};
 use jsonrpsee::proc_macros::rpc;
@@ -47,8 +48,14 @@ mod rpc {
     use super::*;
     use celestia_types::eds::RawExtendedDataSquare;
 
+    #[derive(Serialize)]
+    pub(crate) struct SampleCoords {
+        pub(crate) row: u16,
+        pub(crate) col: u16,
+    }
+
     #[rpc(client, namespace = "share", namespace_separator = ".")]
-    pub trait Share {
+    pub(crate) trait Share {
         #[method(name = "GetEDS")]
         async fn share_get_eds(&self, height: u64) -> Result<RawExtendedDataSquare, Error>;
 
@@ -59,6 +66,13 @@ mod rpc {
             start: u64,
             end: u64,
         ) -> Result<GetRangeResponse, Error>;
+
+        #[method(name = "GetSamples")]
+        async fn share_get_samples(
+            &self,
+            root: &ExtendedHeader,
+            indices: &[SampleCoords],
+        ) -> Result<Vec<RawSample>, Error>;
 
         #[method(name = "GetRow")]
         async fn share_get_row(&self, height: u64, row: u64) -> Result<GetRowResponse, Error>;
@@ -133,6 +147,44 @@ pub trait ShareClient: ClientT {
             }
 
             Ok(resp)
+        }
+    }
+
+    /// Retrieves multiple shares from the [`ExtendedDataSquare`] specified by the header
+    /// at the given sample coordinates.
+    ///
+    /// `coordinates` is a list of `(row, column)`.
+    fn share_get_samples<'a, 'b, 'fut, I>(
+        &'a self,
+        root: &'b ExtendedHeader,
+        coordinates: I,
+    ) -> impl Future<Output = Result<Vec<Sample>, Error>> + Send + 'fut
+    where
+        'a: 'fut,
+        'b: 'fut,
+        Self: Sized + Sync + 'fut,
+        I: IntoIterator<Item = (u16, u16)>,
+    {
+        let coordinates = coordinates
+            .into_iter()
+            .map(|(row, col)| rpc::SampleCoords { row, col })
+            .collect::<Vec<_>>();
+
+        async move {
+            let app_version = root.app_version().map_err(custom_client_error)?;
+
+            let raw_samples = rpc::ShareClient::share_get_samples(self, root, &coordinates).await?;
+            let mut samples = Vec::with_capacity(raw_samples.len());
+
+            for (coord, raw_sample) in coordinates.iter().zip(raw_samples.into_iter()) {
+                let sample_id = SampleId::new(coord.row, coord.col, root.height().value())
+                    .map_err(custom_client_error)?;
+                let sample =
+                    Sample::from_raw(sample_id, raw_sample).map_err(custom_client_error)?;
+                samples.push(sample);
+            }
+
+            Ok(samples)
         }
     }
 

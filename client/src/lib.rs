@@ -93,39 +93,43 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 /// [`celestia_client`]: crate
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// [`celestia_rpc::Error`]
+    /// Celestia RPC error.
     #[error("RPC error: {0}")]
     Rpc(#[from] celestia_rpc::Error),
 
-    /// [`celestia_grpc::Error`]
+    /// Celestia GRPC error.
     #[error("GRPC error: {0}")]
     Grpc(#[from] celestia_grpc::Error),
 
-    /// Celestia types error
+    /// Celestia types error.
     #[error("Celestia types error: {0}")]
     Types(#[from] celestia_types::Error),
 
-    /// Client is in read-only mode
+    /// Client is in read-only mode.
     #[error("Client is constructed for read-only mode")]
     ReadOnlyMode,
 
-    /// Invalid height
+    /// Invalid height.
     #[error("Invalid height: {0}")]
     InvalidHeight(u64),
 
+    /// Invalid commitment in blob.
     #[error("Invalid blob commitment")]
     InvalidBlobCommitment,
 
-    /// Invalid private key
+    /// Invalid private key.
     #[error("Invalid private key")]
     InvalidPrivateKey,
 
+    /// RPC endpoint is not set.
     #[error("RPC endpoint not set")]
     RpcEndpointNotSet,
 
+    /// Signer is not set.
     #[error("GRPC endpoint is set but singer is not")]
     SignerNotSet,
 
+    /// GRPC endpoint is not set.
     #[error("Signer is set but GRPC endpoint is not")]
     GrpcEndpointNotSet,
 }
