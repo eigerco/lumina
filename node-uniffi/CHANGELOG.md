@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.1.4...lumina-node-uniffi-v0.2.0) - 2025-07-02
+
+### Added
+
+- *(node)* [**breaking**] Implement adaptive backward syncing/sampling ([#606](https://github.com/eigerco/lumina/pull/606))
+
+### Other
+
+- Fix uninlined-format-args clippy ([#671](https://github.com/eigerco/lumina/pull/671))
+
+## [0.1.4](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.1.3...lumina-node-uniffi-v0.1.4) - 2025-06-20
+
+### Other
+
+- updated the following local packages: lumina-node, celestia-grpc
+
 ## [0.1.3](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.1.2...lumina-node-uniffi-v0.1.3) - 2025-06-09
 
 ### Added

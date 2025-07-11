@@ -1,6 +1,6 @@
 [package]
 name = "lumina-node"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Celestia data availability node implementation in Rust"
@@ -70,7 +70,7 @@ libp2p = { workspace = true, features = [
   "websocket",
   "quic",
 ] }
-redb = "2.1.1"
+redb = "2.5.0"
 rustls-pemfile = "2.1.2"
 rustls-pki-types = "1.7.0"
 
@@ -100,7 +100,6 @@ web-sys = { version = "0.3.77", features = ["Request", "RequestInit", "RequestMo
 libp2p-websocket-websys = "0.3.3"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-function_name = "0.3.0"
 wasm-bindgen-test.workspace = true
 
 [dev-dependencies]

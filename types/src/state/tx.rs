@@ -409,7 +409,7 @@ pub enum ErrorCode {
 
 impl fmt::Display for ErrorCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

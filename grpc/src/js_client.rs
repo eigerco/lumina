@@ -58,16 +58,10 @@ impl JsClient {
     /// const tx_client = await new TxClient("http://127.0.0.1:18080", keys.bech32Address, keys.pubKey, signer)
     /// ```
     #[wasm_bindgen(constructor)]
-    pub async fn new(
-        url: String,
-        bech32_address: String,
-        pubkey: Uint8Array,
-        signer_fn: JsSignerFn,
-    ) -> Result<JsClient> {
+    pub async fn new(url: String, pubkey: Uint8Array, signer_fn: JsSignerFn) -> Result<JsClient> {
         let signer = JsSigner { signer_fn };
-        let address = bech32_address.parse()?;
         let pubkey = VerifyingKey::try_from(pubkey.to_vec().as_slice())?;
-        let client = TxClient::with_grpcweb_url(url, &address, pubkey, signer).await?;
+        let client = TxClient::with_grpcweb_url(url, pubkey, signer).await?;
         Ok(Self { client })
     }
 
@@ -102,7 +96,7 @@ impl JsClient {
     /// const blob = new Blob(ns, data, AppVersion.latest());
     ///
     /// const txInfo = await txClient.submitBlobs([blob]);
-    /// await txClient.submitBlobs([blob], { gasLimit: 100000n, gasPrice: 0.02 });
+    /// await txClient.submitBlobs([blob], { gasLimit: 100000n, gasPrice: 0.02, memo: "foo" });
     /// ```
     ///
     /// # Note

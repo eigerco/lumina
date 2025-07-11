@@ -6,7 +6,7 @@ use blockstore::EitherBlockstore;
 use libp2p::identity::Keypair;
 use lumina_node::blockstore::{InMemoryBlockstore, RedbBlockstore};
 use lumina_node::network::Network;
-use lumina_node::node::{MIN_PRUNING_DELAY, MIN_SAMPLING_WINDOW};
+use lumina_node::node::DEFAULT_PRUNING_WINDOW_IN_MEMORY;
 use lumina_node::store::{EitherStore, InMemoryStore, RedbStore};
 use lumina_node::NodeBuilder;
 use tokio::task::spawn_blocking;
@@ -25,11 +25,11 @@ pub struct NodeConfig {
     /// Custom list of bootstrap peers to connect to.
     /// If None, uses the canonical bootnodes for the network.
     pub bootnodes: Option<Vec<String>>,
-    /// Custom syncing window in seconds. Default is 30 days if base path is set and 1 minute if not.
-    pub syncing_window_secs: Option<u32>,
-    /// Custom pruning delay after syncing window in seconds. Default is 1 hour if base path is set
-    /// and 1 minute if not.
-    pub pruning_delay_secs: Option<u32>,
+    /// Custom sampling window in seconds. Default is 30 days.
+    pub sampling_window_secs: Option<u32>,
+    /// Custom pruning window in seconds. Default is 30 days plus 1 hour if base path is set
+    /// and 0 seconds if not.
+    pub pruning_window_secs: Option<u32>,
     /// Maximum number of headers in batch while syncing. Default is 128.
     pub batch_size: Option<u64>,
     /// Optional Set the keypair to be used as Node's identity. If None, generates a new Ed25519 keypair.
@@ -60,11 +60,9 @@ impl NodeConfig {
             .sync_batch_size(self.batch_size.unwrap_or(128));
 
         // If base path is not set that means we use in-memory stores, so we
-        // adjust sampling_window and pruning_delay to avoid huge memory consumption.
+        // adjust pruning_window to avoid huge memory consumption.
         if self.base_path.is_none() {
-            builder = builder
-                .sampling_window(MIN_SAMPLING_WINDOW)
-                .pruning_delay(MIN_PRUNING_DELAY);
+            builder = builder.pruning_window(DEFAULT_PRUNING_WINDOW_IN_MEMORY);
         }
 
         if let Some(bootnodes) = self.bootnodes {
@@ -81,17 +79,17 @@ impl NodeConfig {
             }
 
             let keypair = Keypair::ed25519_from_bytes(key_bytes)
-                .map_err(|e| LuminaError::network(format!("Invalid Ed25519 key: {}", e)))?;
+                .map_err(|e| LuminaError::network(format!("Invalid Ed25519 key: {e}")))?;
 
             builder = builder.keypair(keypair);
         }
 
-        if let Some(secs) = self.syncing_window_secs {
+        if let Some(secs) = self.sampling_window_secs {
             builder = builder.sampling_window(Duration::from_secs(secs.into()));
         }
 
-        if let Some(secs) = self.pruning_delay_secs {
-            builder = builder.pruning_delay(Duration::from_secs(secs.into()));
+        if let Some(secs) = self.pruning_window_secs {
+            builder = builder.pruning_window(Duration::from_secs(secs.into()));
         }
 
         Ok(builder)
@@ -107,20 +105,20 @@ async fn open_persistent_stores(
 
     let db = spawn_blocking(move || {
         std::fs::create_dir_all(&base_path)
-            .map_err(|e| LuminaError::storage(format!("Failed to create base directory: {}", e)))?;
+            .map_err(|e| LuminaError::storage(format!("Failed to create base directory: {e}")))?;
 
         redb::Database::create(&store_path)
             .map(Arc::new)
             .map_err(|e| LuminaError::StorageInit {
-                msg: format!("Failed to create database: {}", e),
+                msg: format!("Failed to create database: {e}"),
             })
     })
     .await
-    .map_err(|e| LuminaError::storage(format!("Failed to create base directory: {}", e)))??;
+    .map_err(|e| LuminaError::storage(format!("Failed to create base directory: {e}")))??;
 
     let store = RedbStore::new(db.clone())
         .await
-        .map_err(|e| LuminaError::storage_init(format!("Failed to initialize store: {}", e)))?;
+        .map_err(|e| LuminaError::storage_init(format!("Failed to initialize store: {e}")))?;
 
     let blockstore = RedbBlockstore::new(db);
 

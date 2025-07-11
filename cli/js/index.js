@@ -25,7 +25,6 @@ async function createTxClient() {
 
   const txClient = await new TxClient(
     "http://127.0.0.1:18080",
-    window.node0Addr,
     pubKey,
     signer
   );
@@ -43,7 +42,7 @@ async function submitBankMsgSend(address, amount) {
     },
   };
   const sendMsgAny = registry.encodeAsAny(sendMsg);
-  const txInfo = await window.txClient.submitMessage(sendMsgAny);
+  const txInfo = await window.txClient.submitMessage(sendMsgAny, { memo: "foo" });
 
   return txInfo;
 }

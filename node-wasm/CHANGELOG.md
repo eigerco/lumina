@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.8.5...lumina-node-wasm-v0.9.0) - 2025-07-02
+
+### Added
+
+- *(node)* [**breaking**] Use `block_height` for `Node::request_all_blobs` and return error on missing header ([#669](https://github.com/eigerco/lumina/pull/669))
+- *(node)* [**breaking**] Implement adaptive backward syncing/sampling ([#606](https://github.com/eigerco/lumina/pull/606))
+
+## [0.8.5](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.8.4...lumina-node-wasm-v0.8.5) - 2025-06-20
+
+### Other
+
+- updated the following local packages: lumina-node, celestia-grpc
+
 ## [0.8.4](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.8.3...lumina-node-wasm-v0.8.4) - 2025-06-09
 
 ### Other
