@@ -132,11 +132,26 @@ async fn get_shares_range_ignores_parity() {
     let header = client.header_get_by_height(submitted_height).await.unwrap();
     let square_width = header.dah.square_width() as u64;
 
-    // if the share was parity we would fail deserializing resulting shares
-    client
-        .share_get_range(&header, square_width / 2, square_width / 2 + 1)
+    let first_parity_share_in_first_row = client
+        .share_get_share(&header, 0, square_width / 2)
         .await
         .unwrap();
+    let first_ods_share_in_second_row = client.share_get_share(&header, 1, 0).await.unwrap();
+
+    // Try to get the first parity share in first row
+    let fetched_range = client
+        .share_get_range(&header, square_width / 2, square_width / 2 + 1)
+        .await
+        .unwrap()
+        .shares;
+    assert_eq!(fetched_range.len(), 1);
+
+    // Since parity data is ignored in `get_range` api, we shouldn't receive the parity share
+    assert!(first_parity_share_in_first_row.is_parity());
+    assert_ne!(first_parity_share_in_first_row, fetched_range[0]);
+    // but instead first share from 2nd row of ods
+    assert!(!first_ods_share_in_second_row.is_parity());
+    assert_eq!(first_ods_share_in_second_row, fetched_range[0]);
 }
 
 #[tokio::test]
