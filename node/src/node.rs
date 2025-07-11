@@ -390,6 +390,15 @@ where
             .get_sample(row_index, column_index, block_height, timeout)
             .await?;
 
+        // We want to immediately remove the sample from blockstore
+        // but **only if** it wasn't chosen for DASing. Otherwise we could
+        // accidentally remove samples needed for the block reconstruction.
+        //
+        // There's a small possibility of permanently storing this sample if
+        // persistent blockstore is used and user closes tab / kills process
+        // before the remove is called, but it is acceptable tradeoff to avoid complexity.
+        //
+        // TODO: It should be properly solved when we switch from bitswap to shrex.
         if let Some(metadata) = self.get_sampling_metadata(block_height).await? {
             let cid = sample_cid(row_index, column_index, block_height)?;
             if !metadata.cids.contains(&cid) {
