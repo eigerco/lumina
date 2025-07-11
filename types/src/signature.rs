@@ -40,6 +40,7 @@ pub mod uniffi_types {
     /// Signature
     #[derive(Record)]
     pub struct Signature {
+        /// Bytes of the signature
         pub signature: Vec<u8>,
     }
 
