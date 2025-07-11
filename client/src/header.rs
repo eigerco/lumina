@@ -6,7 +6,7 @@ use celestia_types::{ExtendedHeader, SyncState};
 use futures_util::{Stream, StreamExt};
 
 use crate::client::Context;
-use crate::{Error, Result};
+use crate::Result;
 
 /// Header API for quering bridge nodes.
 pub struct HeaderApi {

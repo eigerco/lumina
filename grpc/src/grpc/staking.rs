@@ -5,12 +5,12 @@ use celestia_proto::cosmos::staking::v1beta1::{
     QueryUnbondingDelegationResponse as RawQueryUnbondingDelegationResponse,
 };
 use celestia_types::state::{
-    AccAddress, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
+    AccAddress, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
     QueryUnbondingDelegationResponse, ValAddress,
 };
 
 use crate::grpc::{FromGrpcResponse, IntoGrpcParam};
-use crate::{Error, Result};
+use crate::Result;
 
 impl IntoGrpcParam<QueryDelegationRequest> for (&AccAddress, &ValAddress) {
     fn into_parameter(self) -> QueryDelegationRequest {

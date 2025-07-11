@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use celestia_grpc::DocSigner;
-use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::BlobClient;
 use celestia_types::nmt::{Namespace, NamespaceProof};
 use celestia_types::{Blob, Commitment};
@@ -10,6 +8,8 @@ use futures_util::{Stream, TryStreamExt};
 use crate::client::Context;
 use crate::tx::{TxConfig, TxInfo};
 use crate::{Error, Result};
+
+pub use celestia_rpc::blob::BlobsAtHeight;
 
 /// Blob API for quering bridge nodes.
 pub struct BlobApi {

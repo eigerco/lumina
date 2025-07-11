@@ -1,17 +1,10 @@
 use std::sync::Arc;
 
 use celestia_grpc::TxClient;
-use celestia_rpc::blob::BlobsAtHeight;
-use celestia_rpc::{
-    BlobClient, Client as RpcClient, DasClient, HeaderClient, ShareClient, StateClient,
-};
-use celestia_types::nmt::{Namespace, NamespaceProof};
-use celestia_types::state::Address;
-use celestia_types::Commitment;
-use celestia_types::{AppVersion, ExtendedHeader};
+use celestia_rpc::{Client as RpcClient, HeaderClient};
+use celestia_types::ExtendedHeader;
 use k256::ecdsa::signature::Keypair;
 use k256::ecdsa::SigningKey;
-use tendermint::chain::Id;
 use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
 use zeroize::Zeroizing;
 
@@ -123,6 +116,11 @@ impl Client {
         &self.blob
     }
 
+    /// Returns blobstream API accessor.
+    pub fn blobstream(&self) -> &BlobstreamApi {
+        &self.blobstream
+    }
+
     /// Returns header API accessor.
     pub fn header(&self) -> &HeaderApi {
         &self.header
@@ -156,7 +154,7 @@ impl ClientBuilder {
     }
 
     /// Set signer from a keypair.
-    pub fn keypair<S>(mut self, keypair: S) -> ClientBuilder
+    pub fn keypair<S>(self, keypair: S) -> ClientBuilder
     where
         S: DocSigner + Keypair<VerifyingKey = VerifyingKey> + 'static,
     {
@@ -165,7 +163,7 @@ impl ClientBuilder {
     }
 
     /// Set signer from a plaintext private key.
-    pub fn plaintext_private_key(mut self, s: &str) -> Result<ClientBuilder> {
+    pub fn plaintext_private_key(self, s: &str) -> Result<ClientBuilder> {
         let bytes = Zeroizing::new(hex::decode(s).map_err(|_| Error::InvalidPrivateKey)?);
         let signing_key = SigningKey::from_slice(&*bytes).map_err(|_| Error::InvalidPrivateKey)?;
         Ok(self.keypair(signing_key))
@@ -198,8 +196,8 @@ impl ClientBuilder {
             (Some(url), Some(pubkey), Some(signer)) => {
                 Some(TxClient::with_url(url, pubkey.to_owned(), signer).await?)
             }
-            (Some(url), None, None) => return Err(Error::SignerNotSet),
-            (None, Some(pubkey), Some(signer)) => return Err(Error::GrpcEndpointNotSet),
+            (Some(_url), None, None) => return Err(Error::SignerNotSet),
+            (None, Some(_pubkey), Some(_signer)) => return Err(Error::GrpcEndpointNotSet),
             (None, None, None) => None,
             _ => unreachable!(),
         };

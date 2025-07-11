@@ -18,8 +18,8 @@ use celestia_types::block::Block;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::AuthParams;
 use celestia_types::state::{
-    AccAddress, Address, Coin, PageRequest, PageResponse, QueryDelegationResponse,
-    QueryRedelegationsResponse, QueryUnbondingDelegationResponse, TxResponse, ValAddress,
+    AccAddress, Address, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
+    QueryUnbondingDelegationResponse, TxResponse, ValAddress,
 };
 use http_body::Body;
 use tonic::body::BoxBody;

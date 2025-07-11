@@ -4,24 +4,17 @@ use celestia_proto::cosmos::bank::v1beta1::MsgSend;
 use celestia_proto::cosmos::staking::v1beta1::{
     MsgBeginRedelegate, MsgCancelUnbondingDelegation, MsgDelegate, MsgUndelegate,
 };
-use celestia_rpc::blob::BlobsAtHeight;
-use celestia_rpc::{
-    BlobClient, Client as RpcClient, DasClient, HeaderClient, ShareClient, StateClient,
-};
-use celestia_types::nmt::{Namespace, NamespaceProof};
+use celestia_rpc::StateClient;
 use celestia_types::state::{
     AccAddress, Address, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
     QueryUnbondingDelegationResponse, ValAddress,
 };
-use celestia_types::Commitment;
-use celestia_types::{AppVersion, Blob};
-use tendermint::chain::Id;
-use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
+use celestia_types::Blob;
 
 use crate::client::Context;
-use crate::tx::{DocSigner, IntoAny, TxConfig, TxInfo};
+use crate::tx::{IntoAny, TxConfig, TxInfo};
 use crate::utils::height_i64;
-use crate::{Error, Result};
+use crate::Result;
 
 /// State API for quering and submiting TXs to a consensus node.
 pub struct StateApi {

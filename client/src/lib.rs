@@ -42,20 +42,6 @@
 //! [`celestia-rpc`]: celestia_rpc
 //! [`celestia-grpc`]: celestia_grpc
 
-use std::sync::Arc;
-
-use celestia_grpc::TxClient;
-use celestia_rpc::blob::BlobsAtHeight;
-use celestia_rpc::{
-    BlobClient, Client as RpcClient, DasClient, HeaderClient, ShareClient, StateClient,
-};
-use celestia_types::nmt::{Namespace, NamespaceProof};
-use celestia_types::state::Address;
-use celestia_types::Commitment;
-use celestia_types::{AppVersion, ExtendedHeader};
-use tendermint::chain::Id;
-use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
-
 mod blob;
 mod blobstream;
 mod client;
@@ -74,6 +60,11 @@ pub mod api {
     pub use crate::share::ShareApi;
     pub use crate::state::StateApi;
 
+    /// Blob API related types.
+    pub mod blob {
+        pub use crate::blob::BlobsAtHeight;
+    }
+
     /// Share API related types.
     pub mod share {
         #[doc(inline)]
@@ -84,7 +75,7 @@ pub mod api {
 /// TX related types.
 pub mod tx {
     #[doc(inline)]
-    pub use celestia_grpc::{DocSigner, IntoAny, TxConfig, TxInfo};
+    pub use celestia_grpc::{DocSigner, IntoAny, SignDoc, TxConfig, TxInfo};
 }
 
 pub use crate::client::{Client, ClientBuilder};

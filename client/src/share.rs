@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use celestia_rpc::{HeaderClient, ShareClient};
+use celestia_rpc::ShareClient;
 use celestia_types::nmt::Namespace;
 use celestia_types::row_namespace_data::NamespaceData;
 use celestia_types::sample::Sample;
-use celestia_types::{ExtendedDataSquare, Height, Share};
+use celestia_types::{ExtendedDataSquare, Share};
 
 use crate::client::Context;
 use crate::Result;
