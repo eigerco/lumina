@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use celestia_rpc::share::{GetRangeResponse, GetRowResponse};
 use celestia_rpc::{HeaderClient, ShareClient};
 use celestia_types::nmt::Namespace;
 use celestia_types::row_namespace_data::NamespaceData;
@@ -9,6 +8,8 @@ use celestia_types::{ExtendedDataSquare, Height, Share};
 
 use crate::client::Context;
 use crate::Result;
+
+pub use celestia_rpc::share::{GetRangeResponse, GetRowResponse, RowSide, SampleCoordinates};
 
 /// Share API for quering bridge nodes.
 pub struct ShareApi {
@@ -40,10 +41,11 @@ impl ShareApi {
     /// sample coordinates.
     ///
     /// `coordinates` is a list of `(row, column)`.
-    pub async fn get_samples<I>(&self, height: u64, coordinates: I) -> Result<Vec<Sample>>
-    where
-        I: IntoIterator<Item = (u16, u16)>,
-    {
+    pub async fn get_samples(
+        &self,
+        height: u64,
+        coordinates: &[SampleCoordinates],
+    ) -> Result<Vec<Sample>> {
         let header = self.ctx.get_header_validated(height).await?;
         Ok(self.ctx.rpc.share_get_samples(&header, coordinates).await?)
     }
@@ -81,6 +83,8 @@ impl ShareApi {
     }
 
     /// Retrieves a list of shares and their corresponding proof.
+    ///
+    /// The start and end index ignores parity shares and corresponds to ODS.
     pub async fn get_range(&self, height: u64, start: u64, end: u64) -> Result<GetRangeResponse> {
         let header = self.ctx.get_header_validated(height).await?;
         Ok(self.ctx.rpc.share_get_range(&header, start, end).await?)

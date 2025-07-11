@@ -14,7 +14,7 @@ use jsonrpsee::proc_macros::rpc;
 use serde::{Deserialize, Serialize};
 
 /// Response type for [`ShareClient::share_get_range`].
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct GetRangeResponse {
     /// Shares contained in given range.
@@ -24,7 +24,7 @@ pub struct GetRangeResponse {
 }
 
 /// Side of a row within the EDS.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum RowSide {
     /// The row data is on the left of the EDS (i.e. in the ODS).
@@ -36,7 +36,6 @@ pub enum RowSide {
 }
 
 /// Response type for [`ShareClient::share_get_row`].
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GetRowResponse {
     /// Shares contained in given range.
     pub shares: Vec<Share>,
@@ -44,15 +43,34 @@ pub struct GetRowResponse {
     pub side: RowSide,
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+struct RawGetRowResponse {
+    shares: Vec<RawShare>,
+    side: RowSide,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SampleCoordinates {
+    pub row: u16,
+    #[serde(rename = "col")]
+    pub column: u16,
+}
+
+impl SampleCoordinates {
+    pub fn new(row: u16, column: u16) -> Self {
+        SampleCoordinates { row, column }
+    }
+}
+
+impl From<(u16, u16)> for SampleCoordinates {
+    fn from(value: (u16, u16)) -> Self {
+        SampleCoordinates::new(value.0, value.1)
+    }
+}
+
 mod rpc {
     use super::*;
     use celestia_types::eds::RawExtendedDataSquare;
-
-    #[derive(Serialize)]
-    pub(crate) struct SampleCoords {
-        pub(crate) row: u16,
-        pub(crate) col: u16,
-    }
 
     #[rpc(client, namespace = "share", namespace_separator = ".")]
     pub(crate) trait Share {
@@ -71,11 +89,11 @@ mod rpc {
         async fn share_get_samples(
             &self,
             root: &ExtendedHeader,
-            indices: &[SampleCoords],
+            indices: &[SampleCoordinates],
         ) -> Result<Vec<RawSample>, Error>;
 
         #[method(name = "GetRow")]
-        async fn share_get_row(&self, height: u64, row: u64) -> Result<GetRowResponse, Error>;
+        async fn share_get_row(&self, height: u64, row: u64) -> Result<RawGetRowResponse, Error>;
 
         #[method(name = "GetShare")]
         async fn share_get_share(&self, height: u64, row: u64, col: u64)
@@ -119,11 +137,12 @@ pub trait ShareClient: ClientT {
 
             let raw_eds = rpc::ShareClient::share_get_eds(self, root.height().value()).await?;
 
+            // Correct `Share` construction and validation is done inside `ExtendedDataSquare::from_raw`
             ExtendedDataSquare::from_raw(raw_eds, app_version).map_err(custom_client_error)
         }
     }
 
-    /// GetRange gets a list of shares and their corresponding proof.
+    /// Retrieves a list of shares and their corresponding proof.
     ///
     /// The start and end index ignores parity shares and corresponds to ODS.
     fn share_get_range<'a, 'b, 'fut>(
@@ -154,33 +173,31 @@ pub trait ShareClient: ClientT {
     /// at the given sample coordinates.
     ///
     /// `coordinates` is a list of `(row, column)`.
-    fn share_get_samples<'a, 'b, 'fut, I>(
+    fn share_get_samples<'a, 'b, 'fut>(
         &'a self,
         root: &'b ExtendedHeader,
-        coordinates: I,
+        coordinates: &'b [SampleCoordinates],
     ) -> impl Future<Output = Result<Vec<Sample>, Error>> + Send + 'fut
     where
         'a: 'fut,
         'b: 'fut,
         Self: Sized + Sync + 'fut,
-        I: IntoIterator<Item = (u16, u16)>,
     {
-        let coordinates = coordinates
-            .into_iter()
-            .map(|(row, col)| rpc::SampleCoords { row, col })
-            .collect::<Vec<_>>();
-
         async move {
-            let app_version = root.app_version().map_err(custom_client_error)?;
+            let app = root.app_version().map_err(custom_client_error)?;
 
             let raw_samples = rpc::ShareClient::share_get_samples(self, root, &coordinates).await?;
             let mut samples = Vec::with_capacity(raw_samples.len());
 
-            for (coord, raw_sample) in coordinates.iter().zip(raw_samples.into_iter()) {
-                let sample_id = SampleId::new(coord.row, coord.col, root.height().value())
+            for (coords, raw_sample) in coordinates.iter().zip(raw_samples.into_iter()) {
+                let sample_id = SampleId::new(coords.row, coords.column, root.height().value())
                     .map_err(custom_client_error)?;
+
+                // Correct `Share` construction is done inside `Sample::from_raw`
                 let sample =
                     Sample::from_raw(sample_id, raw_sample).map_err(custom_client_error)?;
+                sample.share.validate(app).map_err(custom_client_error)?;
+
                 samples.push(sample);
             }
 
@@ -199,7 +216,34 @@ pub trait ShareClient: ClientT {
         'b: 'fut,
         Self: Sized + Sync + 'fut,
     {
-        rpc::ShareClient::share_get_row(self, root.height().value(), row)
+        async move {
+            let app = root.app_version().map_err(custom_client_error)?;
+            let square_width = root.dah.square_width();
+            let resp = rpc::ShareClient::share_get_row(self, root.height().value(), row).await?;
+
+            let shares = resp
+                .shares
+                .into_iter()
+                .enumerate()
+                .map(|(col, raw_share)| {
+                    let share = if is_ods_square(row, col as u64, square_width) {
+                        Share::from_raw(&raw_share.data)
+                    } else {
+                        Share::parity(&raw_share.data)
+                    }
+                    .map_err(custom_client_error)?;
+
+                    share.validate(app).map_err(custom_client_error)?;
+
+                    Ok(share)
+                })
+                .collect::<Result<Vec<_>, Error>>()?;
+
+            Ok(GetRowResponse {
+                shares,
+                side: resp.side,
+            })
+        }
     }
 
     /// GetShare gets a Share by coordinates in EDS.

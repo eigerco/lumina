@@ -73,6 +73,12 @@ pub mod api {
     pub use crate::header::HeaderApi;
     pub use crate::share::ShareApi;
     pub use crate::state::StateApi;
+
+    /// Share API related types.
+    pub mod share {
+        #[doc(inline)]
+        pub use crate::share::{GetRangeResponse, GetRowResponse, RowSide, SampleCoordinates};
+    }
 }
 
 /// TX related types.
