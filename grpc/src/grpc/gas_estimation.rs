@@ -24,6 +24,7 @@ pub enum TxPriority {
     High = 3,
 }
 
+/// Result of gas price and usage estimation
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(
@@ -31,7 +32,9 @@ pub enum TxPriority {
     wasm_bindgen::prelude::wasm_bindgen
 )]
 pub struct GasEstimate {
+    /// Gas price estimated based on last 5 blocks
     pub price: f64,
+    /// Simulated transaction gas usage
     pub usage: u64,
 }
 
