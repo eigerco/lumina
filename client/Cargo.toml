@@ -45,6 +45,9 @@ celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 tonic-web-wasm-client = "0.6.2"
 
 [dev-dependencies]
+lumina-utils = { workspace = true, features = ["test-utils"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
 
 [package.metadata.docs.rs]

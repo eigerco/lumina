@@ -289,6 +289,10 @@ pub enum Error {
     /// Missing redelegation entry
     #[error("Missing redelegation entry")]
     MissingRedelegationEntry,
+
+    /// Invalid Cosmos decimal
+    #[error("Invalid Cosmos decimal: {0}")]
+    InvalidCosmosDecimal(String),
 }
 
 impl From<prost::DecodeError> for Error {
@@ -729,6 +733,10 @@ pub enum UniffiError {
     /// Missing redelegation entry
     #[error("Missing redelegation entry")]
     MissingRedelegationEntry,
+
+    /// Invalid Cosmos decimal
+    #[error("Invalid Cosmos decimal: {0}")]
+    InvalidCosmosDecimal(String),
 }
 
 #[cfg(feature = "uniffi")]
@@ -815,6 +823,7 @@ impl From<Error> for UniffiError {
             Error::MissingUnbond => UniffiError::MissingUnbond,
             Error::MissingRedelegation => UniffiError::MissingRedelegation,
             Error::MissingRedelegationEntry => UniffiError::MissingRedelegationEntry,
+            Error::InvalidCosmosDecimal(s) => UniffiError::InvalidCosmosDecimal(s),
         }
     }
 }

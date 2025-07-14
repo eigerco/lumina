@@ -7,7 +7,8 @@ use celestia_proto::cosmos::staking::v1beta1::{
     QueryUnbondingDelegationResponse as RawQueryUnbondingDelegationResponse,
     Redelegation as RawRedelegation, RedelegationEntry as RawRedelegationEntry,
 };
-use serde::{Deserialize, Serialize};
+use rust_decimal::Decimal;
+use serde::Deserialize;
 use tendermint::Time;
 
 use crate::error::{Error, Result};
@@ -18,19 +19,31 @@ pub type PageRequest = RawPageRequest;
 pub type PageResponse = RawPageResponse;
 
 /// Status of the delegation between a delegator and a validator.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "RawQueryDelegationResponse")]
 pub struct QueryDelegationResponse {
+    /// A [`DelegationResponse`].
+    pub response: DelegationResponse,
+}
+
+/// Status of the delegation between a delegator and a validator.
+#[derive(Debug, Clone)]
+pub struct DelegationResponse {
+    /// A [`Delegation`].
     pub delegation: Delegation,
+    /// Number of tokens that are delegated.
     pub balance: Coin,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+/// Status of the delegation between a delegator and a validator.
+#[derive(Debug, Clone)]
 pub struct Delegation {
+    /// Address of the delegator.
     pub delegator_address: AccAddress,
+    /// Address of the validator.
     pub validator_address: ValAddress,
-    pub shares: String, // TODO
+    /// Number of shares that are delegated.
+    pub shares: Decimal,
 }
 
 impl TryFrom<RawQueryDelegationResponse> for QueryDelegationResponse {
@@ -48,36 +61,36 @@ impl TryFrom<RawQueryDelegationResponse> for QueryDelegationResponse {
                 Ok(Delegation {
                     delegator_address: val.delegator_address.parse()?,
                     validator_address: val.validator_address.parse()?,
-                    shares: val.shares,
+                    shares: parse_cosmos_dec(&val.shares)?,
                 })
             })?;
 
         let balance = resp.balance.ok_or(Error::MissingBalance)?.try_into()?;
 
         Ok(QueryDelegationResponse {
-            delegation,
-            balance,
+            response: DelegationResponse {
+                delegation,
+                balance,
+            },
         })
     }
 }
 
 /// Status of the unbonding between a delegator and a validator.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "RawQueryUnbondingDelegationResponse")]
 pub struct QueryUnbondingDelegationResponse {
     pub unbond: UnbondingDelegation,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(Debug, Clone)]
 pub struct UnbondingDelegation {
     pub delegator_address: AccAddress,
     pub validator_address: ValAddress,
     pub entries: Vec<UnbondingDelegationEntry>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(Debug, Clone)]
 pub struct UnbondingDelegationEntry {
     pub creation_height: Height,
     pub completion_time: Option<Time>,
@@ -135,22 +148,20 @@ impl TryFrom<RawQueryUnbondingDelegationResponse> for QueryUnbondingDelegationRe
 }
 
 /// Status of the redelegation between a delegator and a validator.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "RawQueryRedelegationsResponse")]
 pub struct QueryRedelegationsResponse {
     pub redelegation_responses: Vec<RedelegationResponse>,
     pub pagination: Option<PageResponse>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(Debug, Clone)]
 pub struct RedelegationResponse {
     pub redelegation: Redelegation,
     pub entries: Vec<RedelegationEntryResponse>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(Debug, Clone)]
 pub struct Redelegation {
     pub delegator_address: AccAddress,
     pub src_validator_address: ValAddress,
@@ -158,26 +169,24 @@ pub struct Redelegation {
     pub entries: Vec<RedelegationEntry>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(Debug, Clone)]
 pub struct RedelegationEntryResponse {
     pub redelegation_entry: RedelegationEntry,
     pub balance: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(Debug, Clone)]
 pub struct RedelegationEntry {
     pub creation_height: Height,
     pub completion_time: Option<Time>,
     pub initial_balance: u64,
-    pub shares_dst: String, // TODO
+    pub dest_shares: Decimal,
 }
 
 impl TryFrom<RawRedelegation> for Redelegation {
     type Error = Error;
 
-    fn try_from(value: RawRedelegation) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: RawRedelegation) -> Result<Self, Self::Error> {
         let entries = value
             .entries
             .into_iter()
@@ -196,7 +205,7 @@ impl TryFrom<RawRedelegation> for Redelegation {
 impl TryFrom<RawRedelegationEntry> for RedelegationEntry {
     type Error = Error;
 
-    fn try_from(value: RawRedelegationEntry) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: RawRedelegationEntry) -> Result<Self, Self::Error> {
         let initial_balance = value
             .initial_balance
             .as_str()
@@ -210,7 +219,7 @@ impl TryFrom<RawRedelegationEntry> for RedelegationEntry {
                 .map(|time| time.try_into())
                 .transpose()?,
             initial_balance,
-            shares_dst: value.shares_dst,
+            dest_shares: parse_cosmos_dec(&value.shares_dst)?,
         })
     }
 }
@@ -218,7 +227,7 @@ impl TryFrom<RawRedelegationEntry> for RedelegationEntry {
 impl TryFrom<RawQueryRedelegationsResponse> for QueryRedelegationsResponse {
     type Error = Error;
 
-    fn try_from(value: RawQueryRedelegationsResponse) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: RawQueryRedelegationsResponse) -> Result<Self, Self::Error> {
         let redelegation_responses = value
             .redelegation_responses
             .into_iter()
@@ -262,4 +271,18 @@ impl TryFrom<RawQueryRedelegationsResponse> for QueryRedelegationsResponse {
             pagination: value.pagination,
         })
     }
+}
+
+/// Parse Cosmos decimal
+///
+/// A Cosmos decimal is serialized as string and has 18 decimal places.
+///
+/// Ref: https://github.com/celestiaorg/cosmos-sdk/blob/5259747ebf054c2148032202d946945a2d1896c7/math/dec.go#L21
+fn parse_cosmos_dec(s: &str) -> Result<Decimal> {
+    let val = s
+        .parse::<i128>()
+        .map_err(|_| Error::InvalidCosmosDecimal(s.to_owned()))?;
+    let val = Decimal::try_from_i128_with_scale(val, 18)
+        .map_err(|_| Error::InvalidCosmosDecimal(s.to_owned()))?;
+    Ok(val)
 }

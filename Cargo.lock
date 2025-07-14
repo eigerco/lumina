@@ -703,6 +703,7 @@ dependencies = [
  "hex",
  "jsonrpsee-core",
  "k256",
+ "lumina-utils",
  "serde_json",
  "tendermint",
  "thiserror 2.0.12",
@@ -825,6 +826,7 @@ dependencies = [
  "nmt-rs",
  "prost",
  "rand",
+ "rust_decimal",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
@@ -4606,6 +4608,16 @@ checksum = "2e5347777e9aacb56039b0e1f28785929a8a3b709e87482e7442c72e7c12529d"
 dependencies = [
  "sha2 0.10.9",
  "walkdir",
+]
+
+[[package]]
+name = "rust_decimal"
+version = "1.37.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b203a6425500a03e0919c42d3c47caca51e79f1132046626d2c8871c5092035d"
+dependencies = [
+ "arrayvec",
+ "num-traits",
 ]
 
 [[package]]
