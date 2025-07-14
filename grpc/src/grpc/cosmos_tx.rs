@@ -106,6 +106,7 @@ mod wbg {
     use super::BroadcastMode;
     use wasm_bindgen::prelude::*;
 
+    /// BroadcastMode specifies the broadcast mode for the TxService.Broadcast RPC method.
     #[wasm_bindgen(js_name = BroadcastMode)]
     pub struct JsBroadcastMode(BroadcastMode);
 
