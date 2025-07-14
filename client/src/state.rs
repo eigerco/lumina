@@ -5,17 +5,17 @@ use celestia_proto::cosmos::staking::v1beta1::{
     MsgBeginRedelegate, MsgCancelUnbondingDelegation, MsgDelegate, MsgUndelegate,
 };
 use celestia_rpc::StateClient;
+use celestia_types::Blob;
 use celestia_types::state::{
     AccAddress, Address, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
     QueryUnbondingDelegationResponse, ValAddress,
 };
-use celestia_types::Blob;
 use k256::ecdsa::VerifyingKey;
 
+use crate::Result;
 use crate::client::Context;
 use crate::tx::{IntoAny, TxConfig, TxInfo};
 use crate::utils::height_i64;
-use crate::Result;
 
 /// State API for quering and submiting TXs to a consensus node.
 pub struct StateApi {
