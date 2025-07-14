@@ -10,6 +10,7 @@ use celestia_types::state::{
     QueryUnbondingDelegationResponse, ValAddress,
 };
 use celestia_types::Blob;
+use k256::ecdsa::VerifyingKey;
 
 use crate::client::Context;
 use crate::tx::{IntoAny, TxConfig, TxInfo};
@@ -24,6 +25,11 @@ pub struct StateApi {
 impl StateApi {
     pub(crate) fn new(ctx: Arc<Context>) -> StateApi {
         StateApi { ctx }
+    }
+
+    /// Returns the public key of the signer.
+    pub fn pubkey(&self) -> Result<VerifyingKey> {
+        self.ctx.pubkey().cloned()
     }
 
     /// Returns the address of signer.
@@ -73,7 +79,33 @@ impl StateApi {
     ///
     /// # Example
     /// ```no_run
-    /// // TODO
+    /// # use celestia_client::{Client, Result};
+    /// # use celestia_client::tx::TxConfig;
+    /// # const RPC_URL: &str = "http://localhost:26658";
+    /// # const GRPC_URL : &str = "http://localhost:19090";
+    /// # async fn docs() -> Result<()> {
+    /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
+    /// use celestia_types::state::{Address, Coin};
+    ///
+    /// let client = Client::builder()
+    ///     .rpc_url(RPC_URL)
+    ///     .grpc_url(GRPC_URL)
+    ///     .plaintext_private_key("...")?
+    ///     .build()
+    ///     .await?;
+    ///
+    /// let msg = MsgSend {
+    ///     from_address: client.state().account_address()?.to_string(),
+    ///     to_address: "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm".to_string(),
+    ///     amount: vec![Coin::utia(12345).into()],
+    /// };
+    ///
+    /// client
+    ///     .state()
+    ///     .submit_message(msg, TxConfig::default())
+    ///     .await?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
     where

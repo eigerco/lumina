@@ -144,7 +144,7 @@ where
 
     // cosmos.staking
 
-    /// TODO
+    /// Retrieves the delegation information between a delegator and a validator
     #[grpc_method(StakingQueryClient::delegation)]
     async fn query_delegation(
         &self,
@@ -152,7 +152,7 @@ where
         validator_address: &ValAddress,
     ) -> Result<QueryDelegationResponse>;
 
-    /// TODO
+    /// Retrieves the unbonding status between a delegator and a validator
     #[grpc_method(StakingQueryClient::unbonding_delegation)]
     async fn query_unbonding(
         &self,
@@ -160,7 +160,7 @@ where
         validator_address: &ValAddress,
     ) -> Result<QueryUnbondingDelegationResponse>;
 
-    /// TODO
+    /// Retrieves the status of the redelegations between a delegator and a validator
     #[grpc_method(StakingQueryClient::redelegations)]
     async fn query_redelegations(
         &self,
