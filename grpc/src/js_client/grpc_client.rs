@@ -22,7 +22,7 @@ pub struct GrpcClient {
 #[wasm_bindgen]
 impl GrpcClient {
     /// Create a new client connected with the given `url`
-    pub async fn new(url: String) -> Result<Self> {
+    pub async fn new(url: &str) -> Result<Self> {
         Ok(GrpcClient {
             client: InnerClient::with_grpcweb_url(url),
         })
@@ -50,7 +50,7 @@ impl GrpcClient {
     }
 
     /// Get balance of coins with given denom
-    pub async fn get_balance(&self, address: &str, denom: String) -> Result<JsCoin> {
+    pub async fn get_balance(&self, address: &str, denom: &str) -> Result<JsCoin> {
         Ok(self
             .client
             .get_balance(&address.parse()?, denom)
@@ -110,7 +110,7 @@ impl GrpcClient {
     pub async fn broadcast_tx(
         &self,
         tx_bytes: Vec<u8>,
-        mode: JsBroadcastMode,
+        mode: &JsBroadcastMode,
     ) -> Result<TxResponse> {
         self.client.broadcast_tx(tx_bytes, mode.into()).await
     }
