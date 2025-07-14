@@ -138,10 +138,40 @@ impl StateApi {
     /// handle updating client's gas price when consensus updates minimal
     /// gas price.
     ///
+    /// # Notes
+    ///
+    /// This is the same as [`BlobApi::submit`].
+    ///
     /// # Example
     /// ```no_run
-    /// // TODO
+    /// # use celestia_client::{Client, Result};
+    /// # use celestia_client::tx::TxConfig;
+    /// # const RPC_URL: &str = "http://localhost:26658";
+    /// # const GRPC_URL : &str = "http://localhost:19090";
+    /// # async fn docs() -> Result<()> {
+    /// use celestia_types::nmt::Namespace;
+    /// use celestia_types::state::{Address, Coin};
+    /// use celestia_types::{AppVersion, Blob};
+    ///
+    /// let client = Client::builder()
+    ///     .rpc_url(RPC_URL)
+    ///     .grpc_url(GRPC_URL)
+    ///     .plaintext_private_key("...")?
+    ///     .build()
+    ///     .await?;
+    ///
+    /// let ns = Namespace::new_v0(b"abcd").unwrap();
+    /// let blob = Blob::new(ns, "some data".into(), AppVersion::V3).unwrap();
+    ///
+    /// client
+    ///     .state()
+    ///     .submit_pay_for_blob(&[blob], TxConfig::default())
+    ///     .await?;
+    /// # Ok(())
+    /// # }
     /// ```
+    ///
+    /// [`BlobApi::submit`]: crate::BlobApi::submit
     pub async fn submit_pay_for_blob(&self, blobs: &[Blob], cfg: TxConfig) -> Result<TxInfo> {
         Ok(self.ctx.grpc()?.submit_blobs(blobs, cfg).await?)
     }
