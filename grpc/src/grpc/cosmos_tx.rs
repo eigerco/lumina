@@ -106,41 +106,46 @@ mod wbg {
     use super::BroadcastMode;
     use wasm_bindgen::prelude::*;
 
-    /// BroadcastMode specifies the broadcast mode for the TxService.Broadcast RPC method.
-    #[wasm_bindgen]
-    pub enum JsBroadcastMode {
+    #[wasm_bindgen(js_name = BroadcastMode)]
+    pub struct JsBroadcastMode(BroadcastMode);
+
+    #[wasm_bindgen(js_class = BroadcastMode)]
+    impl JsBroadcastMode {
         /// zero-value for mode ordering
-        Unspecified = 0,
+        #[wasm_bindgen(js_name = Unspecified, getter)]
+        pub fn unspecified() -> JsBroadcastMode {
+            BroadcastMode::Unspecified.into()
+        }
         /// BROADCAST_MODE_BLOCK defines a tx broadcasting mode where the client waits for
         /// the tx to be committed in a block.
-        Block = 1,
+        #[wasm_bindgen(js_name = Block, getter)]
+        pub fn block() -> JsBroadcastMode {
+            BroadcastMode::Block.into()
+        }
+
         /// BROADCAST_MODE_SYNC defines a tx broadcasting mode where the client waits for
         /// a CheckTx execution response only.
-        Sync = 2,
+        #[wasm_bindgen(js_name = Sync, getter)]
+        pub fn sync() -> JsBroadcastMode {
+            BroadcastMode::Sync.into()
+        }
         /// BROADCAST_MODE_ASYNC defines a tx broadcasting mode where the client returns
         /// immediately.
-        Async = 3,
+        #[wasm_bindgen(js_name = Async, getter)]
+        pub fn _async() -> JsBroadcastMode {
+            BroadcastMode::Async.into()
+        }
     }
 
     impl From<BroadcastMode> for JsBroadcastMode {
         fn from(value: BroadcastMode) -> Self {
-            match value {
-                BroadcastMode::Unspecified => JsBroadcastMode::Unspecified,
-                BroadcastMode::Block => JsBroadcastMode::Block,
-                BroadcastMode::Sync => JsBroadcastMode::Sync,
-                BroadcastMode::Async => JsBroadcastMode::Async,
-            }
+            JsBroadcastMode(value)
         }
     }
 
     impl From<JsBroadcastMode> for BroadcastMode {
         fn from(value: JsBroadcastMode) -> Self {
-            match value {
-                JsBroadcastMode::Unspecified => BroadcastMode::Unspecified,
-                JsBroadcastMode::Block => BroadcastMode::Block,
-                JsBroadcastMode::Sync => BroadcastMode::Sync,
-                JsBroadcastMode::Async => BroadcastMode::Async,
-            }
+            value.0
         }
     }
 }
