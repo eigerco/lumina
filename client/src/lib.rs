@@ -10,32 +10,37 @@
 //! Read-only mode:
 //!
 //! ```no_run
-//! # use celestia_client::Result;
+//! # use celestia_client::{Client, Result};
+//! # const RPC_URL: &str = "http://localhost:26658";
 //! # async fn docs() -> Result<()> {
 //! let client = Client::builder()
-//!     .rcp_url(RPC_URL)
+//!     .rpc_url(RPC_URL)
+//!     .build()
 //!     .await?;
 //!
 //! client.header().head().await?;
+//! # Ok(())
 //! # }
 //! ```
 //!
 //! Submit mode:
 //!
 //! ```no_run
-//! # use celestia_client::Result;
-//! # use k256::ecdsa::SigningKey;
+//! # use celestia_client::{Client, Result};
+//! # use celestia_client::tx::TxConfig;
 //! # const RPC_URL: &str = "http://localhost:26658";
 //! # const GRPC_URL : &str = "http://localhost:19090";
 //! # async fn docs() -> Result<()> {
 //! let client = Client::builder()
-//!     .rcp_url(RPC_URL)
+//!     .rpc_url(RPC_URL)
 //!     .grpc_url(GRPC_URL)
-//!     .plaintext_private_key("...")
+//!     .plaintext_private_key("...")?
+//!     .build()
 //!     .await?;
 //!
 //! let to_address = "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm".parse().unwrap();
-//! client.state().transfer(to_address, 12345, TxConfig::default()).await?;
+//! client.state().transfer(&to_address, 12345, TxConfig::default()).await?;
+//! # Ok(())
 //! # }
 //! ```
 //!

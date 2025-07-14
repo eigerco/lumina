@@ -3,8 +3,8 @@ use std::sync::Arc;
 use celestia_grpc::TxClient;
 use celestia_rpc::{Client as RpcClient, HeaderClient};
 use celestia_types::ExtendedHeader;
-use k256::ecdsa::SigningKey;
 use k256::ecdsa::signature::Keypair;
+use k256::ecdsa::SigningKey;
 use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
 use zeroize::Zeroizing;
 
@@ -33,39 +33,44 @@ pub(crate) struct Context {
 /// A high-level client for interacting with a Celestia node.
 ///
 /// There are two modes: read-only mode and submit mode. Read-only mode requires
-/// RPC endpoint and submit mode requires RPC/GRPC endpoints, and a signer.
+/// RPC endpoint and submit mode requires RPC/gRPC endpoints, and a signer.
 ///
 /// # Examples
 ///
 /// Read-only mode:
 ///
 /// ```no_run
-/// # use celestia_client::Result;
+/// # use celestia_client::{Client, Result};
+/// # const RPC_URL: &str = "http://localhost:26658";
 /// # async fn docs() -> Result<()> {
 /// let client = Client::builder()
-///     .rcp_url(RPC_URL)
+///     .rpc_url(RPC_URL)
+///     .build()
 ///     .await?;
 ///
 /// client.header().head().await?;
+/// # Ok(())
 /// # }
 /// ```
 ///
 /// Submit mode:
 ///
 /// ```no_run
-/// # use celestia_client::Result;
-/// # use k256::ecdsa::SigningKey;
+/// # use celestia_client::{Client, Result};
+/// # use celestia_client::tx::TxConfig;
 /// # const RPC_URL: &str = "http://localhost:26658";
 /// # const GRPC_URL : &str = "http://localhost:19090";
 /// # async fn docs() -> Result<()> {
 /// let client = Client::builder()
-///     .rcp_url(RPC_URL)
+///     .rpc_url(RPC_URL)
 ///     .grpc_url(GRPC_URL)
-///     .plaintext_private_key("...")
+///     .plaintext_private_key("...")?
+///     .build()
 ///     .await?;
 ///
 /// let to_address = "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm".parse().unwrap();
-/// client.state().transfer(to_address, 12345, TxConfig::default()).await?;
+/// client.state().transfer(&to_address, 12345, TxConfig::default()).await?;
+/// # Ok(())
 /// # }
 /// ```
 ///
@@ -187,7 +192,11 @@ impl ClientBuilder {
         self
     }
 
-    /// Set the GRPC endpoint.
+    /// Set the gRPC endpoint.
+    ///
+    /// # Notes
+    ///
+    /// In WASM the endpoint needs support gRPC-Web.
     pub fn grpc_url(mut self, url: &str) -> ClientBuilder {
         self.grpc_url = Some(url.to_owned());
         self

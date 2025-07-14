@@ -5,16 +5,16 @@ use celestia_proto::cosmos::staking::v1beta1::{
     MsgBeginRedelegate, MsgCancelUnbondingDelegation, MsgDelegate, MsgUndelegate,
 };
 use celestia_rpc::StateClient;
-use celestia_types::Blob;
 use celestia_types::state::{
     AccAddress, Address, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
     QueryUnbondingDelegationResponse, ValAddress,
 };
+use celestia_types::Blob;
 
-use crate::Result;
 use crate::client::Context;
 use crate::tx::{IntoAny, TxConfig, TxInfo};
 use crate::utils::height_i64;
+use crate::Result;
 
 /// State API for quering and submiting TXs to a consensus node.
 pub struct StateApi {
@@ -108,7 +108,7 @@ impl StateApi {
     ///
     /// # Example
     /// ```no_run
-    /// TODO
+    /// // TODO
     /// ```
     pub async fn submit_pay_for_blob(&self, blobs: &[Blob], cfg: TxConfig) -> Result<TxInfo> {
         Ok(self.ctx.grpc()?.submit_blobs(blobs, cfg).await?)
