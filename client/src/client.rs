@@ -3,8 +3,8 @@ use std::sync::Arc;
 use celestia_grpc::TxClient;
 use celestia_rpc::{Client as RpcClient, HeaderClient};
 use celestia_types::ExtendedHeader;
-use k256::ecdsa::signature::Keypair;
 use k256::ecdsa::SigningKey;
+use k256::ecdsa::signature::Keypair;
 use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
 use zeroize::Zeroizing;
 
