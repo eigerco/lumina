@@ -62,6 +62,7 @@ pub mod api {
 
     /// Blob API related types.
     pub mod blob {
+        #[doc(inline)]
         pub use crate::blob::BlobsAtHeight;
     }
 
@@ -105,6 +106,10 @@ pub enum Error {
     /// Client is in read-only mode.
     #[error("Client is constructed for read-only mode")]
     ReadOnlyMode,
+
+    /// RPC authentication token is not supported.
+    #[error("RPC authentication token is not supported")]
+    AuthTokenNotSupported,
 
     /// Invalid height.
     #[error("Invalid height: {0}")]

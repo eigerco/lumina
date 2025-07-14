@@ -18,9 +18,15 @@ use crate::tx::DocSigner;
 use crate::utils::DispatchedDocSigner;
 use crate::{Error, Result};
 
+#[cfg(not(target_arch = "wasm32"))]
+type Transport = tonic::transport::Channel;
+
+#[cfg(target_arch = "wasm32")]
+type Transport = tonic_web_wasm_client::Client;
+
 pub(crate) struct Context {
     pub(crate) rpc: RpcClient,
-    grpc: Option<TxClient<tonic::transport::Channel, DispatchedDocSigner>>,
+    grpc: Option<TxClient<Transport, DispatchedDocSigner>>,
     pubkey: Option<VerifyingKey>,
 }
 
@@ -85,7 +91,7 @@ pub struct ClientBuilder {
 }
 
 impl Context {
-    pub(crate) fn grpc(&self) -> Result<&TxClient<tonic::transport::Channel, DispatchedDocSigner>> {
+    pub(crate) fn grpc(&self) -> Result<&TxClient<Transport, DispatchedDocSigner>> {
         self.grpc.as_ref().ok_or(Error::ReadOnlyMode)
     }
 
@@ -146,7 +152,7 @@ impl ClientBuilder {
     /// Set signer and its public key.
     pub fn singer<S>(mut self, pubkey: VerifyingKey, signer: S) -> ClientBuilder
     where
-        S: DocSigner + 'static,
+        S: DocSigner + Sync + Send + 'static,
     {
         self.pubkey = Some(pubkey);
         self.signer = Some(DispatchedDocSigner::new(signer));
@@ -156,7 +162,7 @@ impl ClientBuilder {
     /// Set signer from a keypair.
     pub fn keypair<S>(self, keypair: S) -> ClientBuilder
     where
-        S: DocSigner + Keypair<VerifyingKey = VerifyingKey> + 'static,
+        S: DocSigner + Keypair<VerifyingKey = VerifyingKey> + Sync + Send + 'static,
     {
         let pubkey = keypair.verifying_key();
         self.singer(pubkey, keypair)
@@ -192,9 +198,22 @@ impl ClientBuilder {
         let rpc_url = self.rpc_url.as_ref().ok_or(Error::RpcEndpointNotSet)?;
         let rpc_auth_token = self.rpc_auth_token.as_deref();
 
-        let grpc = match (&self.grpc_url, &self.pubkey, self.signer.take()) {
+        #[cfg(target_arch = "wasm32")]
+        if rpc_auth_token.is_some() {
+            return Err(Error::AuthTokenNotSupported);
+        }
+
+        let grpc = match (&self.grpc_url, self.pubkey, self.signer.take()) {
             (Some(url), Some(pubkey), Some(signer)) => {
-                Some(TxClient::with_url(url, pubkey.to_owned(), signer).await?)
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    Some(TxClient::with_url(url, pubkey, signer).await?)
+                }
+
+                #[cfg(target_arch = "wasm32")]
+                {
+                    Some(TxClient::with_grpcweb_url(url, pubkey, signer).await?)
+                }
             }
             (Some(_url), None, None) => return Err(Error::SignerNotSet),
             (None, Some(_pubkey), Some(_signer)) => return Err(Error::GrpcEndpointNotSet),
@@ -202,12 +221,16 @@ impl ClientBuilder {
             _ => unreachable!(),
         };
 
+        #[cfg(not(target_arch = "wasm32"))]
         let rpc = RpcClient::new(rpc_url, rpc_auth_token).await?;
+
+        #[cfg(target_arch = "wasm32")]
+        let rpc = RpcClient::new(rpc_url).await?;
 
         let ctx = Arc::new(Context {
             rpc,
             grpc,
-            pubkey: self.pubkey.clone(),
+            pubkey: self.pubkey,
         });
 
         Ok(Client {

@@ -222,7 +222,7 @@ impl Fee {
     /// which means first tx signer is responsible for paying.
     pub fn new(utia_fee: u64, gas_limit: u64) -> Self {
         Fee {
-            amount: vec![Coin::utia(utia_fee.into())],
+            amount: vec![Coin::utia(utia_fee)],
             gas_limit,
             ..Default::default()
         }

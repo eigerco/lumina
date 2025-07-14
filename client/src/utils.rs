@@ -17,7 +17,7 @@ pub(crate) struct DispatchedDocSigner(Box<dyn DispatchedDocSignerTrait>);
 impl DispatchedDocSigner {
     pub(crate) fn new<S>(signer: S) -> DispatchedDocSigner
     where
-        S: DispatchedDocSignerTrait + 'static,
+        S: DispatchedDocSignerTrait,
     {
         DispatchedDocSigner(Box::new(signer))
     }
@@ -29,7 +29,7 @@ impl DocSigner for DispatchedDocSigner {
     }
 }
 
-pub(crate) trait DispatchedDocSignerTrait {
+pub(crate) trait DispatchedDocSignerTrait: Sync + Send + 'static {
     fn try_sign<'a>(
         &'a self,
         doc: SignDoc,
@@ -38,7 +38,7 @@ pub(crate) trait DispatchedDocSignerTrait {
 
 impl<T> DispatchedDocSignerTrait for T
 where
-    T: DocSigner,
+    T: DocSigner + Sync + Send + 'static,
 {
     fn try_sign<'a>(
         &'a self,

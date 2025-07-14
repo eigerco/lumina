@@ -90,21 +90,3 @@ impl ShareApi {
         Ok(self.ctx.rpc.share_get_range(&header, start, end).await?)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::Client;
-
-    use super::*;
-
-    #[tokio::test]
-    async fn shares_available() {
-        let client = Client::builder()
-            .rpc_url("ws://localhost:46658")
-            .build()
-            .await
-            .unwrap();
-
-        client.share().shares_available(3092).await.unwrap();
-    }
-}

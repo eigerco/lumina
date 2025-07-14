@@ -1,8 +1,8 @@
 //! celestia-node rpc types and methods related to shares
 //!
+use std::fmt;
 use std::future::Future;
 use std::marker::{Send, Sync};
-use std::{fmt, u16};
 
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::nmt::Namespace;
@@ -186,7 +186,7 @@ pub trait ShareClient: ClientT {
         async move {
             let app = root.app_version().map_err(custom_client_error)?;
 
-            let raw_samples = rpc::ShareClient::share_get_samples(self, root, &coordinates).await?;
+            let raw_samples = rpc::ShareClient::share_get_samples(self, root, coordinates).await?;
             let mut samples = Vec::with_capacity(raw_samples.len());
 
             for (coords, raw_sample) in coordinates.iter().zip(raw_samples.into_iter()) {

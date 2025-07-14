@@ -27,7 +27,7 @@ k256 = "0.13.4"
 serde_json = "1.0.140"
 tendermint.workspace = true
 thiserror = "2.0.12"
-tonic = "0.12.3"
+tonic = { version = "0.12.3", default-features = false }
 zeroize = "1.8.1"
 
 celestia-grpc.workspace = true
@@ -35,11 +35,17 @@ celestia-proto.workspace  = true
 celestia-rpc = { workspace = true, default-features = false }
 celestia-types.workspace = true
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tonic = { version = "0.12.3", default-features = false, features = [ "transport" ] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+celestia-grpc = { workspace = true, features = ["wasm-bindgen"] }
+celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }
+celestia-types = { workspace = true, features = ["wasm-bindgen"] }
+tonic-web-wasm-client = "0.6.2"
+
 [dev-dependencies]
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
-
-[features]
-wasm-bindgen = ["celestia-grpc/wasm-bindgen", "celestia-rpc/wasm-bindgen", "celestia-types/wasm-bindgen"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

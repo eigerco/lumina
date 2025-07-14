@@ -115,8 +115,8 @@ mod wbg {
     impl From<Coin> for JsCoin {
         fn from(value: Coin) -> JsCoin {
             let obj = make_object!(
-                "denom" => value.denom.into(),
-                "amount" => BigInt::from(value.amount)
+                "denom" => value.denom().into(),
+                "amount" => BigInt::from(value.amount())
             );
 
             obj.unchecked_into()
