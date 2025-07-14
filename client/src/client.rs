@@ -176,7 +176,7 @@ impl ClientBuilder {
     /// Set signer from a plaintext private key.
     pub fn plaintext_private_key(self, s: &str) -> Result<ClientBuilder> {
         let bytes = Zeroizing::new(hex::decode(s).map_err(|_| Error::InvalidPrivateKey)?);
-        let signing_key = SigningKey::from_slice(&*bytes).map_err(|_| Error::InvalidPrivateKey)?;
+        let signing_key = SigningKey::from_slice(&bytes).map_err(|_| Error::InvalidPrivateKey)?;
         Ok(self.keypair(signing_key))
     }
 
