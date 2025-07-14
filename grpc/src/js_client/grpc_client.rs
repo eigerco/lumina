@@ -110,7 +110,7 @@ impl GrpcClient {
     pub async fn broadcast_tx(
         &self,
         tx_bytes: Vec<u8>,
-        mode: &JsBroadcastMode,
+        mode: JsBroadcastMode,
     ) -> Result<TxResponse> {
         self.client.broadcast_tx(tx_bytes, mode.into()).await
     }

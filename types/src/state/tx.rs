@@ -974,6 +974,9 @@ mod wbg {
 
     use lumina_utils::make_object;
 
+    /// Event allows application developers to attach additional information to
+    /// ResponseBeginBlock, ResponseEndBlock, ResponseCheckTx and ResponseDeliverTx.
+    /// Later, transactions may be queried using these events.
     #[derive(Clone)]
     #[wasm_bindgen(getter_with_clone)]
     pub struct JsEvent {
@@ -998,6 +1001,7 @@ mod wbg {
         pub index: bool,
     }
 
+    /// EventAttribute is a single key-value pair, associated with an event.
     impl From<EventAttribute> for JsEventAttribute {
         fn from(value: EventAttribute) -> Self {
             JsEventAttribute {

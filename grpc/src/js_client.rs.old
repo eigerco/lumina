@@ -1,30 +1,29 @@
 use celestia_proto::cosmos::tx::v1beta1::SignDoc;
-use celestia_types::any::JsAny;
 use celestia_types::consts::appconsts::JsAppVersion;
-use celestia_types::state::auth::{JsAuthParams, JsBaseAccount};
-use celestia_types::state::JsCoin;
 use celestia_types::Blob;
 use js_sys::{BigInt, Function, Promise, Uint8Array};
 use k256::ecdsa::signature::Error as SignatureError;
 use k256::ecdsa::{Signature, VerifyingKey};
-use lumina_utils::make_object;
 use prost::Message;
+use tendermint_proto::google::protobuf::Any;
 use tonic_web_wasm_client::Client;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 
-use crate::tx::{DocSigner, JsTxConfig, JsTxInfo};
+use crate::grpc::{JsAuthParams, JsBaseAccount, JsCoin};
+use crate::tx::{DocSigner, IntoAny, JsTxConfig, JsTxInfo};
+use crate::utils::make_object;
 use crate::{Result, TxClient};
 
 /// Celestia grpc transaction client.
 #[wasm_bindgen(js_name = "TxClient")]
-pub struct JsTxClient {
+pub struct JsClient {
     client: TxClient<Client, JsSigner>,
 }
 
 #[wasm_bindgen(js_class = "TxClient")]
-impl JsTxClient {
+impl JsClient {
     /// Create a new transaction client with the specified account.
     ///
     /// Url must point to a [grpc-web proxy](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-WEB.md).
@@ -33,6 +32,7 @@ impl JsTxClient {
     /// ```js
     /// import { secp256k1 } from "@noble/curves/secp256k1";
     ///
+    /// const address = "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm";
     /// const privKey = "fdc8ac75dfa1c142dbcba77938a14dd03078052ce0b49a529dcf72a9885a3abb";
     /// const pubKey = secp256k1.getPublicKey(privKey);
     ///
@@ -42,7 +42,7 @@ impl JsTxClient {
     ///   return sig.toCompactRawBytes();
     /// };
     ///
-    /// const txClient = await new TxClient("http://127.0.0.1:18080", pubKey, signer);
+    /// const txClient = await new TxClient("http://127.0.0.1:18080", address, pubKey, signer);
     /// ```
     ///
     /// # Example with leap wallet
@@ -55,10 +55,10 @@ impl JsTxClient {
     ///     .then(sig => Uint8Array.from(atob(sig.signature.signature), c => c.charCodeAt(0)))
     /// }
     ///
-    /// const tx_client = await new TxClient("http://127.0.0.1:18080", keys.pubKey, signer)
+    /// const tx_client = await new TxClient("http://127.0.0.1:18080", keys.bech32Address, keys.pubKey, signer)
     /// ```
     #[wasm_bindgen(constructor)]
-    pub async fn new(url: &str, pubkey: Uint8Array, signer_fn: JsSignerFn) -> Result<JsTxClient> {
+    pub async fn new(url: String, pubkey: Uint8Array, signer_fn: JsSignerFn) -> Result<JsClient> {
         let signer = JsSigner { signer_fn };
         let pubkey = VerifyingKey::try_from(pubkey.to_vec().as_slice())?;
         let client = TxClient::with_grpcweb_url(url, pubkey, signer).await?;
@@ -164,7 +164,7 @@ impl JsTxClient {
 
     /// Get account
     #[wasm_bindgen(js_name = getAccount)]
-    pub async fn get_account(&self, account: &str) -> Result<JsBaseAccount> {
+    pub async fn get_account(&self, account: String) -> Result<JsBaseAccount> {
         self.client
             .get_account(&account.parse()?)
             .await
@@ -184,7 +184,7 @@ impl JsTxClient {
 
     /// Get balance of coins with given denom
     #[wasm_bindgen(js_name = getBalance)]
-    pub async fn get_balance(&self, address: &str, denom: &str) -> Result<JsCoin> {
+    pub async fn get_balance(&self, address: String, denom: String) -> Result<JsCoin> {
         self.client
             .get_balance(&address.parse()?, denom)
             .await
@@ -193,7 +193,7 @@ impl JsTxClient {
 
     /// Get balance of all coins
     #[wasm_bindgen(js_name = getAllBalances)]
-    pub async fn get_all_balances(&self, address: &str) -> Result<Vec<JsCoin>> {
+    pub async fn get_all_balances(&self, address: String) -> Result<Vec<JsCoin>> {
         self.client
             .get_all_balances(&address.parse()?)
             .await
@@ -202,7 +202,7 @@ impl JsTxClient {
 
     /// Get balance of all spendable coins
     #[wasm_bindgen(js_name = getSpendableBalances)]
-    pub async fn get_spendable_balances(&self, address: &str) -> Result<Vec<JsCoin>> {
+    pub async fn get_spendable_balances(&self, address: String) -> Result<Vec<JsCoin>> {
         self.client
             .get_spendable_balances(&address.parse()?)
             .await
@@ -327,5 +327,38 @@ impl From<SignDoc> for JsSignDoc {
         );
 
         obj.unchecked_into()
+    }
+}
+
+#[wasm_bindgen(typescript_custom_section)]
+const _: &str = "
+/**
+ * Protobuf Any type
+ */
+export interface ProtoAny {
+  typeUrl: string;
+  value: Uint8Array;
+}
+";
+
+#[wasm_bindgen]
+extern "C" {
+    /// Protobuf Any exposed to javascript
+    #[wasm_bindgen(typescript_type = "ProtoAny")]
+    pub type JsAny;
+
+    #[wasm_bindgen(method, getter, js_name = typeUrl)]
+    pub fn type_url(this: &JsAny) -> String;
+
+    #[wasm_bindgen(method, getter, js_name = value)]
+    pub fn value(this: &JsAny) -> Vec<u8>;
+}
+
+impl IntoAny for JsAny {
+    fn into_any(self) -> Any {
+        Any {
+            type_url: self.type_url(),
+            value: self.value(),
+        }
     }
 }

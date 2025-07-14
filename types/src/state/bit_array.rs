@@ -4,6 +4,7 @@ use celestia_proto::cosmos::crypto::multisig::v1beta1::CompactBitArray;
 
 use crate::Error;
 
+/// Vector of bits
 #[derive(Debug, Clone, PartialEq)]
 pub struct BitVector(pub BitVec<u8, Msb0>);
 
@@ -54,6 +55,7 @@ mod wbg {
     use super::BitVector;
     use wasm_bindgen::prelude::*;
 
+    /// Array of bits
     #[wasm_bindgen(getter_with_clone)]
     pub struct JsBitVector(pub Vec<u8>);
 
@@ -76,6 +78,7 @@ mod uniffi_types {
     use bitvec::vec::BitVec;
     use uniffi::Record;
 
+    /// Vector of bits
     #[derive(Record)]
     pub struct BitVector {
         bytes: Vec<u8>,
