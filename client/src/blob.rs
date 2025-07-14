@@ -130,6 +130,7 @@ impl BlobApi {
     }
 
     /// Subscribe to published blobs from the given namespace as they are included.
+    // TODO: Should we validate blobs?
     pub async fn subscribe(
         &self,
         namespace: Namespace,
