@@ -7,9 +7,11 @@ use std::time::Duration;
 use bytes::Bytes;
 use celestia_proto::cosmos::crypto::secp256k1;
 pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
+use celestia_types::any::IntoProtobufAny;
 use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
+use celestia_types::state::auth::Account;
 use celestia_types::state::auth::BaseAccount;
 use celestia_types::state::{
     AccAddress, Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
@@ -30,7 +32,7 @@ use tokio::sync::{Mutex, MutexGuard};
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
 
-use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxStatus};
+use crate::grpc::{BroadcastMode, GrpcClient, StdError, TxStatus};
 use crate::{Error, Result};
 
 #[cfg(feature = "uniffi")]
@@ -153,7 +155,7 @@ where
     /// ```
     pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
     where
-        M: IntoAny,
+        M: IntoProtobufAny,
     {
         let tx_body = RawTxBody {
             messages: vec![message.into_any()],
@@ -499,24 +501,6 @@ where
     }
 }
 
-/// Value convertion into protobuf's Any
-pub trait IntoAny {
-    /// Converts itself into protobuf's Any type
-    fn into_any(self) -> Any;
-}
-
-impl<T> IntoAny for T
-where
-    T: Name,
-{
-    fn into_any(self) -> Any {
-        Any {
-            type_url: T::type_url(),
-            value: self.encode_to_vec(),
-        }
-    }
-}
-
 /// A result of correctly submitted transaction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -567,7 +551,7 @@ mod wbg {
     use wasm_bindgen::{prelude::*, JsCast};
 
     use super::{TxConfig, TxInfo};
-    use crate::utils::make_object;
+    use lumina_utils::make_object;
 
     #[wasm_bindgen(typescript_custom_section)]
     const _: &str = "

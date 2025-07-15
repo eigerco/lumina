@@ -12,7 +12,7 @@ use tonic::transport::Channel;
 use uniffi::{Object, Record};
 
 use crate::tx::TxInfo;
-use crate::{DocSigner, IntoAny, SignDoc, TxConfig};
+use crate::{DocSigner, IntoProtobufAny, SignDoc, TxConfig};
 
 type Result<T, E = TransactionClientError> = std::result::Result<T, E>;
 
@@ -164,7 +164,7 @@ impl TxClient {
     }
 }
 
-impl IntoAny for AnyMsg {
+impl IntoProtobufAny for AnyMsg {
     fn into_any(self) -> Any {
         Any {
             type_url: self.r#type,
