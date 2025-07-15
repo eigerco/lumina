@@ -62,6 +62,7 @@ impl Proof {
 
 /// Proof type
 pub enum ProofType {
+    /// Bad encoding fraud proof.
     BadEncoding,
 }
 
