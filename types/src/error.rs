@@ -282,6 +282,10 @@ pub enum Error {
     #[error("Missing unbond")]
     MissingUnbond,
 
+    /// Missing completion time
+    #[error("Missing completion time")]
+    MissingCompletionTime,
+
     /// Missing redelegation
     #[error("Missing redelegation")]
     MissingRedelegation,
@@ -726,6 +730,10 @@ pub enum UniffiError {
     #[error("Missing unbond")]
     MissingUnbond,
 
+    /// Missing completion time
+    #[error("Missing completion time")]
+    MissingCompletionTime,
+
     /// Missing redelegation
     #[error("Missing redelegation")]
     MissingRedelegation,
@@ -821,6 +829,7 @@ impl From<Error> for UniffiError {
             Error::MissingDelegation => UniffiError::MissingDelegation,
             Error::MissingBalance => UniffiError::MissingBalance,
             Error::MissingUnbond => UniffiError::MissingUnbond,
+            Error::MissingCompletionTime => UniffiError::MissingCompletionTime,
             Error::MissingRedelegation => UniffiError::MissingRedelegation,
             Error::MissingRedelegationEntry => UniffiError::MissingRedelegationEntry,
             Error::InvalidCosmosDecimal(s) => UniffiError::InvalidCosmosDecimal(s),
