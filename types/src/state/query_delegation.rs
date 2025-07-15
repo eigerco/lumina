@@ -15,7 +15,9 @@ use crate::error::{Error, Result};
 use crate::state::{AccAddress, Coin, ValAddress};
 use crate::Height;
 
+/// Pagination details for the request.
 pub type PageRequest = RawPageRequest;
+/// Pagination details of the response.
 pub type PageResponse = RawPageResponse;
 
 /// Response type for the `QueryDelegation` RPC method.
@@ -170,7 +172,7 @@ impl TryFrom<RawQueryUnbondingDelegationResponse> for QueryUnbondingDelegationRe
 pub struct QueryRedelegationsResponse {
     /// List of redelegation responses, one per delegator–validator pair.
     pub redelegation_responses: Vec<RedelegationResponse>,
-    /// Pagination details for the response.
+    /// Pagination details of the response.
     pub pagination: Option<PageResponse>,
 }
 

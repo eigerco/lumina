@@ -52,6 +52,7 @@ pub enum Proof {
 }
 
 impl Proof {
+    /// Returns proof type.
     pub fn proof_type(&self) -> ProofType {
         match self {
             Proof::BadEncoding(_) => ProofType::BadEncoding,
@@ -59,11 +60,13 @@ impl Proof {
     }
 }
 
+/// Proof type
 pub enum ProofType {
     BadEncoding,
 }
 
 impl ProofType {
+    /// Returns the string representation.
     pub fn to_str(&self) -> &'static str {
         match self {
             ProofType::BadEncoding => BadEncodingFraudProof::TYPE,
@@ -72,7 +75,7 @@ impl ProofType {
 }
 
 impl Serialize for ProofType {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
