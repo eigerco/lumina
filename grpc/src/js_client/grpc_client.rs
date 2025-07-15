@@ -112,7 +112,7 @@ impl GrpcClient {
         tx_bytes: Vec<u8>,
         mode: &JsBroadcastMode,
     ) -> Result<TxResponse> {
-        self.client.broadcast_tx(tx_bytes, mode.into()).await
+        self.client.broadcast_tx(tx_bytes, (*mode).into()).await
     }
 
     /// Get Tx
