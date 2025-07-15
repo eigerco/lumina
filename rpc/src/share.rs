@@ -43,12 +43,6 @@ pub struct GetRowResponse {
     pub side: RowSide,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub(crate) struct RawGetRowResponse {
-    shares: Vec<RawShare>,
-    side: RowSide,
-}
-
 /// Position of a sample in a 2D grid.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SampleCoordinates {
@@ -76,8 +70,16 @@ mod rpc {
     use super::*;
     use celestia_types::eds::RawExtendedDataSquare;
 
+    // NOTE: This is `pub` because `rpc` proc-macro adds `pub` in `Share`.
+    // However we do not expose it outside of `share` module.
+    #[derive(Debug, Clone, PartialEq, Deserialize)]
+    pub struct RawGetRowResponse {
+        pub(crate) shares: Vec<RawShare>,
+        pub(crate) side: RowSide,
+    }
+
     #[rpc(client, namespace = "share", namespace_separator = ".")]
-    pub(crate) trait Share {
+    trait Share {
         #[method(name = "GetEDS")]
         async fn share_get_eds(&self, height: u64) -> Result<RawExtendedDataSquare, Error>;
 
