@@ -73,7 +73,7 @@ mod rpc {
     use celestia_types::eds::RawExtendedDataSquare;
 
     #[rpc(client, namespace = "share", namespace_separator = ".")]
-    pub(crate) trait Share {
+    trait Share {
         #[method(name = "GetEDS")]
         async fn share_get_eds(&self, height: u64) -> Result<RawExtendedDataSquare, Error>;
 
