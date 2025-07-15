@@ -326,14 +326,4 @@ impl StateApi {
 
         Ok(full_resp)
     }
-
-    /// TODO
-    pub async fn grant_fee(&self) -> Result<()> {
-        todo!();
-    }
-
-    /// TODO
-    pub async fn revoke_grant_fee(&self) -> Result<()> {
-        todo!();
-    }
 }
