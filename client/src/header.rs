@@ -48,7 +48,7 @@ impl HeaderApi {
         Ok(header)
     }
 
-    /// Returns the given range of [`ExtendedHeaders`] from the node's
+    /// Returns the given range of [`ExtendedHeader`]s from the node's
     /// header store and verifies that the returned headers are adjacent
     /// to each other.
     ///

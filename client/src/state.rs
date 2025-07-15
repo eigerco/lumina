@@ -48,8 +48,8 @@ impl StateApi {
     ///
     /// # Notes
     ///
-    /// This is the only method of [`StateApi`] that fallbacks to bridge node
-    /// if consensus node is not set in [`Client`].
+    /// This is the only method of [`StateApi`] that fallbacks to RPC endpoint
+    /// when gRPC endpoint wasn't set.
     pub async fn balance_for_address(&self, address: AccAddress) -> Result<u64> {
         let address = Address::AccAddress(address);
 
@@ -171,7 +171,7 @@ impl StateApi {
     /// # }
     /// ```
     ///
-    /// [`BlobApi::submit`]: crate::BlobApi::submit
+    /// [`BlobApi::submit`]: crate::api::BlobApi::submit
     pub async fn submit_pay_for_blob(&self, blobs: &[Blob], cfg: TxConfig) -> Result<TxInfo> {
         Ok(self.ctx.grpc()?.submit_blobs(blobs, cfg).await?)
     }

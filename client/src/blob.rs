@@ -57,7 +57,7 @@ impl BlobApi {
     /// # }
     /// ```
     ///
-    /// [`StateApi::submit_pay_for_blob`]: crate::StateApi::submit_pay_for_blob
+    /// [`StateApi::submit_pay_for_blob`]: crate::api::StateApi::submit_pay_for_blob
     pub async fn submit(&self, blobs: &[Blob], cfg: TxConfig) -> Result<TxInfo> {
         Ok(self.ctx.grpc()?.submit_blobs(blobs, cfg).await?)
     }
