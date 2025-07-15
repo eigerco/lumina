@@ -118,20 +118,22 @@ mod wbg {
         pub fn unspecified() -> JsBroadcastMode {
             BroadcastMode::Unspecified.into()
         }
-        /// BROADCAST_MODE_BLOCK defines a tx broadcasting mode where the client waits for
+
+        /// `BroadcastMode` `Block` defines a tx broadcasting mode where the client waits for
         /// the tx to be committed in a block.
         #[wasm_bindgen(js_name = Block, getter)]
         pub fn block() -> JsBroadcastMode {
             BroadcastMode::Block.into()
         }
 
-        /// BROADCAST_MODE_SYNC defines a tx broadcasting mode where the client waits for
+        /// `BroadcastMode` `Sync` defines a tx broadcasting mode where the client waits for
         /// a CheckTx execution response only.
         #[wasm_bindgen(js_name = Sync, getter)]
         pub fn sync() -> JsBroadcastMode {
             BroadcastMode::Sync.into()
         }
-        /// BROADCAST_MODE_ASYNC defines a tx broadcasting mode where the client returns
+
+        /// `BroadcastMode` `Async` defines a tx broadcasting mode where the client returns
         /// immediately.
         #[wasm_bindgen(js_name = Async, getter)]
         pub fn _async() -> JsBroadcastMode {
