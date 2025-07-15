@@ -772,6 +772,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "uniffi",
+ "wasm-bindgen",
  "wasm-bindgen-test",
 ]
 
@@ -821,6 +822,7 @@ dependencies = [
  "k256",
  "leopard-codec",
  "libp2p-identity",
+ "lumina-utils",
  "multiaddr",
  "multihash",
  "nmt-rs",
@@ -3444,6 +3446,7 @@ version = "0.2.0"
 dependencies = [
  "futures",
  "gloo-timers 0.3.0",
+ "js-sys",
  "pin-project",
  "send_wrapper 0.6.0",
  "tokio",

@@ -14,7 +14,7 @@ use k256::ecdsa::VerifyingKey;
 
 use crate::Result;
 use crate::client::Context;
-use crate::tx::{IntoAny, TxConfig, TxInfo};
+use crate::tx::{IntoProtobufAny, TxConfig, TxInfo};
 use crate::utils::height_i64;
 
 /// State API for quering and submiting TXs to a consensus node.
@@ -109,7 +109,7 @@ impl StateApi {
     /// ```
     pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
     where
-        M: IntoAny,
+        M: IntoProtobufAny,
     {
         Ok(self.ctx.grpc()?.submit_message(message, cfg).await?)
     }

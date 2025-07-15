@@ -1,5 +1,7 @@
 use celestia_proto::cosmos::base::v1beta1::Coin as RawCoin;
 use serde::{Deserialize, Serialize};
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use wasm_bindgen::prelude::*;
 
 use crate::{Error, Result};
 
@@ -7,10 +9,14 @@ use crate::{Error, Result};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "RawCoin", into = "RawCoin")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct Coin {
     /// Coin denomination
     denom: String,
-    /// The amount of coins.
+    /// Coin amount
     amount: u64,
 }
 
@@ -98,6 +104,47 @@ fn validate_denom(denom: &str) -> Result<()> {
         Ok(())
     } else {
         Err(Error::InvalidCoinDenomination(denom.to_owned()))
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use wbg::*;
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+mod wbg {
+    use super::Coin;
+    use js_sys::BigInt;
+    use wasm_bindgen::prelude::*;
+
+    use lumina_utils::make_object;
+
+    #[wasm_bindgen(typescript_custom_section)]
+    const _: &str = "
+    /**
+     * Coin
+     */
+    export interface Coin {
+      denom: string,
+      amount: bigint
+    }
+    ";
+
+    #[wasm_bindgen]
+    extern "C" {
+        /// Coin exposed to javascript
+        #[wasm_bindgen(typescript_type = "Coin")]
+        pub type JsCoin;
+    }
+
+    impl From<Coin> for JsCoin {
+        fn from(value: Coin) -> JsCoin {
+            let obj = make_object!(
+                "denom" => value.denom().into(),
+                "amount" => BigInt::from(value.amount())
+            );
+
+            obj.unchecked_into()
+        }
     }
 }
 

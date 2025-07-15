@@ -11,6 +11,8 @@ mod tx;
 pub use self::address::uniffi_types::AccountId as UniffiAccountId;
 pub use self::address::{AccAddress, Address, AddressKind, AddressTrait, ConsAddress, ValAddress};
 pub use self::coin::Coin;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use self::coin::JsCoin;
 pub use self::query_delegation::{
     Delegation, DelegationResponse, PageRequest, PageResponse, QueryDelegationResponse,
     QueryRedelegationsResponse, QueryUnbondingDelegationResponse, Redelegation, RedelegationEntry,

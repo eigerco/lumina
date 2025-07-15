@@ -81,7 +81,7 @@ pub mod api {
 /// TX related types.
 pub mod tx {
     #[doc(inline)]
-    pub use celestia_grpc::{DocSigner, IntoAny, SignDoc, TxConfig, TxInfo};
+    pub use celestia_grpc::{DocSigner, IntoProtobufAny, SignDoc, TxConfig, TxInfo};
 }
 
 pub use crate::client::{Client, ClientBuilder};

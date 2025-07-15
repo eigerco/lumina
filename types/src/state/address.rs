@@ -310,6 +310,7 @@ fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
     Ok((kind, Id::new(bytes)))
 }
 
+/// uniffi conversion types
 #[cfg(feature = "uniffi")]
 pub(crate) mod uniffi_types {
     use super::{AccAddress, Address as RustAddress, ConsAddress, Id, ValAddress};
