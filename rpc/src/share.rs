@@ -44,19 +44,23 @@ pub struct GetRowResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-struct RawGetRowResponse {
+pub(crate) struct RawGetRowResponse {
     shares: Vec<RawShare>,
     side: RowSide,
 }
 
+/// Position of a sample in a 2D grid.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SampleCoordinates {
+    /// Row index of the sample.
     pub row: u16,
+    /// Column index of the sample.
     #[serde(rename = "col")]
     pub column: u16,
 }
 
 impl SampleCoordinates {
+    /// Create new `SampleCoordinates` base on row and column.
     pub fn new(row: u16, column: u16) -> Self {
         SampleCoordinates { row, column }
     }
@@ -73,7 +77,7 @@ mod rpc {
     use celestia_types::eds::RawExtendedDataSquare;
 
     #[rpc(client, namespace = "share", namespace_separator = ".")]
-    trait Share {
+    pub(crate) trait Share {
         #[method(name = "GetEDS")]
         async fn share_get_eds(&self, height: u64) -> Result<RawExtendedDataSquare, Error>;
 

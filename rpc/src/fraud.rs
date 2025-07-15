@@ -1,3 +1,5 @@
+//! celestia-node rpc types and methods related to fraud proofs
+
 use jsonrpsee::proc_macros::rpc;
 
 pub use celestia_types::fraud_proof::{Proof, ProofType};

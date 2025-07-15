@@ -42,6 +42,7 @@ pub use crate::tx_config::{TxConfig, TxPriority};
 pub mod prelude {
     pub use crate::BlobClient;
     pub use crate::DasClient;
+    pub use crate::FraudClient;
     pub use crate::HeaderClient;
     #[cfg(feature = "p2p")]
     pub use crate::P2PClient;
