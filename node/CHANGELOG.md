@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1](https://github.com/eigerco/lumina/compare/lumina-node-v0.13.0...lumina-node-v0.13.1) - 2025-07-15
+
+### Other
+
+- updated the following local packages: celestia-proto, lumina-utils, lumina-utils, celestia-types, celestia-types, celestia-types, celestia-rpc
+
 ## [0.13.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.12.1...lumina-node-v0.13.0) - 2025-07-02
 
 ### Added

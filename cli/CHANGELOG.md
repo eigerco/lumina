@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/eigerco/lumina/compare/lumina-cli-v0.8.0...lumina-cli-v0.9.0) - 2025-07-15
+
+### Added
+
+- *(grpc,types,node)* [**breaking**] Wasm grpc client ([#654](https://github.com/eigerco/lumina/pull/654))
+- *(grpc)* Streamline TxClient creation API, add docs with example ([#673](https://github.com/eigerco/lumina/pull/673))
+
 ## [0.8.0](https://github.com/eigerco/lumina/compare/lumina-cli-v0.7.0...lumina-cli-v0.8.0) - 2025-07-02
 
 ### Added
