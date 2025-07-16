@@ -5,6 +5,7 @@ use celestia_types::block::Block;
 use celestia_types::state::auth::JsAuthParams;
 use celestia_types::state::auth::JsBaseAccount;
 use celestia_types::state::{JsCoin, TxResponse};
+use tonic_web_wasm_client::Client;
 
 use crate::grpc::GetTxResponse;
 use crate::grpc::TxStatusResponse;
@@ -13,7 +14,7 @@ use crate::Result;
 
 type InnerClient = crate::GrpcClient<tonic_web_wasm_client::Client>;
 
-/// Celestia GRPC client
+/// Celestia GRPC client, for builder see [`GrpcClientBuilder`]
 #[wasm_bindgen]
 pub struct GrpcClient {
     client: InnerClient,
@@ -21,13 +22,6 @@ pub struct GrpcClient {
 
 #[wasm_bindgen]
 impl GrpcClient {
-    /// Create a new client connected with the given `url`
-    pub async fn new(url: &str) -> Result<Self> {
-        Ok(GrpcClient {
-            client: InnerClient::with_grpcweb_url(url),
-        })
-    }
-
     /// Get auth params
     pub async fn get_auth_params(&self) -> Result<JsAuthParams> {
         Ok(self.client.get_auth_params().await?.into())
@@ -133,5 +127,11 @@ impl GrpcClient {
     /// Get status of the transaction
     pub async fn tx_status(&self, hash: &str) -> Result<TxStatusResponse> {
         self.client.tx_status(hash.parse()?).await
+    }
+}
+
+impl From<crate::GrpcClient<Client>> for GrpcClient {
+    fn from(client: crate::GrpcClient<Client>) -> Self {
+        GrpcClient { client }
     }
 }

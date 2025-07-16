@@ -68,6 +68,10 @@ pub enum Error {
     /// Signing error
     #[error(transparent)]
     SigningError(#[from] SignatureError),
+
+    /// Builder error
+    #[error("Keys and signer not set when building transaction client")]
+    MissingKeysAndSinger,
 }
 
 impl From<Status> for Error {
