@@ -90,7 +90,7 @@ async fn main() -> Result<()> {
         ns,
         b"some data to store".to_vec(),
         client.state().account_address()?,
-        AppVersion::V4,
+        AppVersion::V3,
     )?;
 
     // This is the hash of the blob and is needed for retrieving blob form chain.
