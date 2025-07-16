@@ -93,6 +93,22 @@ async fn get_verified_balance() {
 }
 
 #[async_test]
+async fn get_verified_balance_not_funded_account() {
+    let client = new_grpc_client();
+    let account = TestAccount::random();
+
+    let jrpc_client = new_jrpc_client().await;
+    let head = jrpc_client.header_network_head().await.unwrap();
+
+    let verified_balance = client
+        .get_verified_balance(&account.address, &head)
+        .await
+        .unwrap();
+
+    assert_eq!(Coin::utia(0), verified_balance);
+}
+
+#[async_test]
 async fn get_min_gas_price() {
     let client = new_grpc_client();
     let gas_price = client.get_min_gas_price().await.unwrap();
