@@ -100,7 +100,7 @@ where
     /// the provided header. This is due to the fact that for block N, the block's
     /// [`AppHash`] is the result of applying the previous block's transaction list.
     ///
-    /// [`AppHash`]: tendermint::hash::AppHash
+    /// [`AppHash`]: ::tendermint::hash::AppHash
     pub async fn get_verified_balance(
         &self,
         address: &Address,
