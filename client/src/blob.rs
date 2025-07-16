@@ -7,7 +7,7 @@ use futures_util::{Stream, TryStreamExt};
 
 use crate::client::Context;
 use crate::tx::{TxConfig, TxInfo};
-use crate::{Error, Result};
+use crate::Result;
 
 pub use celestia_rpc::blob::BlobsAtHeight;
 
@@ -72,13 +72,9 @@ impl BlobApi {
         let blob = self.ctx.rpc.blob_get(height, namespace, commitment).await?;
         let app_version = self.ctx.get_header_validated(height).await?.app_version()?;
 
-        blob.validate(app_version)?;
+        blob.validate_with_commitment(&commitment, app_version)?;
 
-        if commitment == blob.commitment {
-            Ok(blob)
-        } else {
-            Err(Error::InvalidBlobCommitment)
-        }
+        Ok(blob)
     }
 
     /// Retrieves all blobs under the given namespaces and height.

@@ -4,7 +4,6 @@ use std::str::FromStr;
 use bech32::Hrp;
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
-use tendermint::account::Id;
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::*;
 
@@ -13,6 +12,7 @@ use crate::consts::cosmos::*;
 use crate::{Error, Result};
 
 pub use k256::ecdsa::VerifyingKey;
+pub use tendermint::account::Id;
 
 /// A generic representation of an address in Celestia network.
 #[enum_dispatch(Address)]

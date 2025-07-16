@@ -1,51 +1,4 @@
-//! A high-level client for interacting with a Celestia node.
-//!
-//! It combines the functionality of [`celestia-rpc`] and [`celestia-grpc`] crates.
-//!
-//! There are two modes: read-only mode and submit mode. Read-only mode requires
-//! RPC endpoint and submit mode requires RPC/GRPC endpoints, and a signer.
-//!
-//! # Examples
-//!
-//! Read-only mode:
-//!
-//! ```no_run
-//! # use celestia_client::{Client, Result};
-//! # const RPC_URL: &str = "http://localhost:26658";
-//! # async fn docs() -> Result<()> {
-//! let client = Client::builder()
-//!     .rpc_url(RPC_URL)
-//!     .build()
-//!     .await?;
-//!
-//! client.header().head().await?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! Submit mode:
-//!
-//! ```no_run
-//! # use celestia_client::{Client, Result};
-//! # use celestia_client::tx::TxConfig;
-//! # const RPC_URL: &str = "http://localhost:26658";
-//! # const GRPC_URL : &str = "http://localhost:19090";
-//! # async fn docs() -> Result<()> {
-//! let client = Client::builder()
-//!     .rpc_url(RPC_URL)
-//!     .grpc_url(GRPC_URL)
-//!     .plaintext_private_key("...")?
-//!     .build()
-//!     .await?;
-//!
-//! let to_address = "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm".parse().unwrap();
-//! client.state().transfer(&to_address, 12345, TxConfig::default()).await?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! [`celestia-rpc`]: celestia_rpc
-//! [`celestia-grpc`]: celestia_grpc
+#![doc = include_str!("../README.md")]
 
 mod blob;
 mod blobstream;
@@ -119,10 +72,6 @@ pub enum Error {
     /// Invalid height.
     #[error("Invalid height: {0}")]
     InvalidHeight(u64),
-
-    /// Invalid commitment in blob.
-    #[error("Invalid blob commitment")]
-    InvalidBlobCommitment,
 
     /// Invalid private key.
     #[error("Invalid private key")]
