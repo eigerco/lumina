@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use celestia_grpc::{Error, TxConfig};
+use futures::FutureExt;
 use celestia_proto::cosmos::bank::v1beta1::MsgSend;
 use celestia_rpc::HeaderClient;
 use celestia_types::nmt::Namespace;
@@ -70,16 +71,25 @@ async fn get_verified_balance() {
     let account = load_account();
 
     let jrpc_client = new_jrpc_client().await;
-    let head = jrpc_client.header_network_head().await.unwrap();
+
+    let (head, expected_balance) = tokio::join!(
+        jrpc_client.header_network_head().map(Result::unwrap),
+        client.get_balance(&account.address, "utia").map(Result::unwrap)
+    );
+
+    // trustless balance queries represent state at header.height - 1, so
+    // we need to wait for a new head to compare it with the expected balance
+    let head = jrpc_client
+        .header_wait_for_height(head.height().value() + 1)
+        .await
+        .unwrap();
 
     let verified_balance = client
         .get_verified_balance(&account.address, &head)
         .await
         .unwrap();
 
-    let balance = client.get_balance(&account.address, "utia").await.unwrap();
-
-    assert_eq!(balance, verified_balance);
+    assert_eq!(expected_balance, verified_balance);
 }
 
 #[async_test]
