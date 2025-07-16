@@ -171,7 +171,7 @@ impl TryFrom<RawQueryUnbondingDelegationResponse> for QueryUnbondingDelegationRe
 #[serde(try_from = "RawQueryRedelegationsResponse")]
 pub struct QueryRedelegationsResponse {
     /// List of redelegation responses, one per delegator–validator pair.
-    pub redelegation_responses: Vec<RedelegationResponse>,
+    pub responses: Vec<RedelegationResponse>,
     /// Pagination details of the response.
     pub pagination: Option<PageResponse>,
 }
@@ -316,7 +316,7 @@ impl TryFrom<RawQueryRedelegationsResponse> for QueryRedelegationsResponse {
             .collect::<Result<Vec<_>>>()?;
 
         Ok(QueryRedelegationsResponse {
-            redelegation_responses,
+            responses: redelegation_responses,
             pagination: value.pagination,
         })
     }

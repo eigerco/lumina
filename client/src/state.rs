@@ -293,7 +293,7 @@ impl StateApi {
         let delegator_address = self.account_address()?;
 
         let mut full_resp = QueryRedelegationsResponse {
-            redelegation_responses: Vec::new(),
+            responses: Vec::new(),
             pagination: None,
         };
 
@@ -314,9 +314,7 @@ impl StateApi {
                 )
                 .await?;
 
-            full_resp
-                .redelegation_responses
-                .append(&mut resp.redelegation_responses);
+            full_resp.responses.append(&mut resp.responses);
 
             match resp.pagination {
                 Some(pagination) => next_key = pagination.next_key,
