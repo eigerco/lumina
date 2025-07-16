@@ -870,6 +870,7 @@ dependencies = [
  "rand_core",
  "send_wrapper 0.6.0",
  "serde",
+ "serde_json",
  "signature",
  "tendermint",
  "tendermint-proto",

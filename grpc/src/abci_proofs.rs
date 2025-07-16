@@ -98,6 +98,7 @@ impl ProofChain {
     /// until the last proof when the value is proven up to the expected uppermost root. Provided keys must match the leaves'
     /// keys starting from the lowermost leaf.
     ///
+    /// ```text
     ///                         root
     ///                       /      \
     ///                      /        \
@@ -115,6 +116,7 @@ impl ProofChain {
     ///         /     \    /     \
     ///       leaf     o  o       o
     ///  (with 1st key)
+    /// ```
     pub fn verify_membership(
         &self,
         root: impl AsRef<[u8]>,

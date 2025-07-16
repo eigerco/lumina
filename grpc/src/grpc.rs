@@ -11,14 +11,16 @@ use celestia_proto::cosmos::bank::v1beta1::query_client::QueryClient as BankQuer
 pub use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
-use celestia_proto::cosmos::base::tendermint::v1beta1::{AbciQueryRequest, AbciQueryResponse};
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::{Account, AuthParams};
-use celestia_types::state::{AccAddress, Address, AddressTrait, Coin, TxResponse, BOND_DENOM};
+use celestia_types::state::AbciQueryResponse;
+use celestia_types::state::{
+    AccAddress, Address, AddressTrait, Coin, ErrorCode, TxResponse, BOND_DENOM,
+};
 use celestia_types::ExtendedHeader;
 use http_body::Body;
 use tonic::body::BoxBody;
@@ -118,15 +120,10 @@ where
         // say that computed root is different than expected.
         let height = 1.max(header.height().value().saturating_sub(1));
 
-        let query = AbciQueryRequest {
-            data: prefixed_account_key.clone(),
-            path: "store/bank/key".into(),
-            height: height as i64,
-            prove: true,
-        };
-
-        let response = self.abci_query(query).await?;
-        if response.code != 0 {
+        let response = self
+            .abci_query(&prefixed_account_key, "store/bank/key", height, true)
+            .await?;
+        if response.code != ErrorCode::Success {
             return Err(Error::AbciQuery(response.code, response.log));
         }
 
@@ -135,6 +132,9 @@ where
             return Ok(Coin::utia(0));
         }
 
+        // NOTE: don't put `ProofChain` directly in the AbciQueryResponse, because
+        // it supports only small subset of proofs that are required for the balance
+        // queries
         let proof: ProofChain = response.proof_ops.unwrap_or_default().try_into()?;
         proof.verify_membership(
             &header.header.app_hash,
@@ -184,7 +184,13 @@ where
 
     /// Issue a direct ABCI query to the application
     #[grpc_method(TendermintServiceClient::abci_query)]
-    async fn abci_query(&self, query: AbciQueryRequest) -> Result<AbciQueryResponse>;
+    async fn abci_query(
+        &self,
+        data: impl AsRef<[u8]>,
+        path: impl Into<String>,
+        height: u64,
+        prove: bool,
+    ) -> Result<AbciQueryResponse>;
 
     // cosmos.tx
 

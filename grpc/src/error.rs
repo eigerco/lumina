@@ -1,4 +1,5 @@
-use celestia_types::{hash::Hash, state::ErrorCode};
+use celestia_types::hash::Hash;
+use celestia_types::state::ErrorCode;
 use k256::ecdsa::signature::Error as SignatureError;
 use tonic::Status;
 
@@ -71,10 +72,9 @@ pub enum Error {
     #[error("ABCI proof verification has failed: {0}")]
     AbciProof(#[from] ProofError),
 
-    // TODO: error code after wrapping of AbciQueryResponse
     /// ABCI query returned an error
     #[error("ABCI query returned an error (code {0}): {1}")]
-    AbciQuery(u32, String),
+    AbciQuery(ErrorCode, String),
 
     /// Signing error
     #[error(transparent)]
