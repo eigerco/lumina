@@ -7,7 +7,7 @@ use celestia_types::nmt::Namespace;
 use celestia_types::state::{Coin, ErrorCode};
 use celestia_types::{AppVersion, Blob};
 use lumina_utils::test_utils::async_test;
-use utils::{load_account, TestAccount};
+use utils::{load_account, new_jrpc_client, TestAccount};
 
 pub mod utils;
 
@@ -66,12 +66,10 @@ async fn get_balance() {
 
 #[async_test]
 async fn get_verified_balance() {
-    let jrpc_client = celestia_rpc::Client::new("ws://localhost:46658", None)
-        .await
-        .unwrap();
     let client = new_grpc_client();
     let account = load_account();
 
+    let jrpc_client = new_jrpc_client().await;
     let head = jrpc_client.header_network_head().await.unwrap();
 
     let verified_balance = client

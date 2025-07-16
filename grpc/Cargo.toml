@@ -70,6 +70,7 @@ rand_core = "0.6.4"
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }
 wasm-bindgen-futures = "0.4.43"
 wasm-bindgen-test.workspace = true
 
