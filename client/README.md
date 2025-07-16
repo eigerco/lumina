@@ -99,12 +99,12 @@ async fn main() -> Result<()> {
     // Submit the blob
     let tx_info = client.blob().submit(&[blob], TxConfig::default()).await?;
 
-    // Retrieve the blob
+    // Retrieve the blob. Blob is validated within the `get` method, so
+    // we don't need to do anything else.
     let received_blob = client
         .blob()
         .get(tx_info.height.value(), ns, commitment)
         .await?;
-    received_blob.validate_with_commitment(&commitment, AppVersion::V4)?;
 
     println!("Data: {:?}", str::from_utf8(&received_blob.data).unwrap());
 
