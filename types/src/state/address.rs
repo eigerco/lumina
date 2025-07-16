@@ -12,6 +12,8 @@ use crate::consts::appconsts;
 use crate::consts::cosmos::*;
 use crate::{Error, Result};
 
+pub use k256::ecdsa::VerifyingKey;
+
 /// A generic representation of an address in Celestia network.
 #[enum_dispatch(Address)]
 pub trait AddressTrait: FromStr + Display + private::Sealed {
@@ -65,6 +67,23 @@ pub enum Address {
     ValAddress,
     /// Consensus address.
     ConsAddress,
+}
+
+impl Address {
+    /// Create a account address for the provided account public key
+    pub fn from_account_veryfing_key(key: VerifyingKey) -> Self {
+        Address::AccAddress(key.into())
+    }
+
+    /// Create a validator address for the provided validator public key
+    pub fn from_validator_veryfing_key(key: VerifyingKey) -> Self {
+        Address::ValAddress(key.into())
+    }
+
+    /// Create a consensus address for the provided consensus public key
+    pub fn from_consensus_veryfing_key(key: VerifyingKey) -> Self {
+        Address::ConsAddress(key.into())
+    }
 }
 
 /// Address of an account.
@@ -237,6 +256,12 @@ macro_rules! impl_address_type {
             }
         }
 
+        impl From<VerifyingKey> for $name {
+            fn from(value: VerifyingKey) -> Self {
+                Self::new(Id::from(value))
+            }
+        }
+
         impl TryFrom<&[u8]> for $name {
             type Error = Error;
 
@@ -283,6 +308,7 @@ fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
     Ok((kind, Id::new(bytes)))
 }
 
+/// uniffi conversion types
 #[cfg(feature = "uniffi")]
 pub(crate) mod uniffi_types {
     use super::{AccAddress, Address as RustAddress, ConsAddress, Id, ValAddress};

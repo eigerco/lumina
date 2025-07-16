@@ -12,7 +12,7 @@ use tonic::transport::Channel;
 use uniffi::{Object, Record};
 
 use crate::tx::TxInfo;
-use crate::{DocSigner, IntoAny, SignDoc, TxConfig};
+use crate::{DocSigner, IntoProtobufAny, SignDoc, TxConfig};
 
 type Result<T, E = TransactionClientError> = std::result::Result<T, E>;
 
@@ -111,7 +111,6 @@ impl TxClient {
     #[uniffi::constructor(name = "create")]
     pub async fn new(
         url: String,
-        account_address: &Address,
         account_pubkey: Vec<u8>,
         signer: Arc<dyn UniffiSigner>,
     ) -> Result<Self> {
@@ -120,7 +119,7 @@ impl TxClient {
 
         let signer = UniffiSignerBox(signer);
 
-        let client = crate::TxClient::with_url(url, account_address, vk, signer).await?;
+        let client = crate::TxClient::with_url(url, vk, signer).await?;
 
         Ok(TxClient { client })
     }
@@ -165,7 +164,7 @@ impl TxClient {
     }
 }
 
-impl IntoAny for AnyMsg {
+impl IntoProtobufAny for AnyMsg {
     fn into_any(self) -> Any {
         Any {
             type_url: self.r#type,

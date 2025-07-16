@@ -7,7 +7,7 @@ use tendermint::public_key::PublicKey;
 use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
 
-use crate::state::Address;
+use crate::state::AccAddress;
 use crate::validation_error;
 use crate::Error;
 
@@ -17,6 +17,37 @@ pub use celestia_proto::cosmos::auth::v1beta1::Params as AuthParams;
 
 const COSMOS_ED25519_PUBKEY: &str = "/cosmos.crypto.ed25519.PubKey";
 const COSMOS_SECP256K1_PUBKEY: &str = "/cosmos.crypto.secp256k1.PubKey";
+
+// TODO: add vesting accounts
+/// Enum representing different types of account
+#[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum Account {
+    /// Base account type
+    Base(BaseAccount),
+    /// Account for modules that holds coins on a pool
+    Module(ModuleAccount),
+}
+
+impl std::ops::Deref for Account {
+    type Target = BaseAccount;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Account::Base(base) => base,
+            Account::Module(module) => &module.base_account,
+        }
+    }
+}
+
+impl std::ops::DerefMut for Account {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Account::Base(base) => base,
+            Account::Module(module) => &mut module.base_account,
+        }
+    }
+}
 
 /// [`BaseAccount`] defines a base account type.
 ///
@@ -28,7 +59,7 @@ const COSMOS_SECP256K1_PUBKEY: &str = "/cosmos.crypto.secp256k1.PubKey";
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BaseAccount {
     /// Bech32 `AccountId` of this account.
-    pub address: Address,
+    pub address: AccAddress,
     /// Optional `PublicKey` associated with this account.
     pub pub_key: Option<PublicKey>,
     /// `account_number` is the account number of the account in state
@@ -190,4 +221,108 @@ mod uniffi_types {
         try_lift: |value| Ok(value.try_into()?),
         lower: |value| value.into()
     });
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use wbg::*;
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+mod wbg {
+    use js_sys::{BigInt, Uint8Array};
+    use lumina_utils::make_object;
+    use tendermint::PublicKey;
+    use wasm_bindgen::{prelude::*, JsCast};
+
+    use super::{Account, AuthParams};
+
+    #[wasm_bindgen(typescript_custom_section)]
+    const _: &str = r#"
+    /**
+     * Public key
+     */
+    export interface PublicKey {
+      type: "ed25519" | "secp256k1",
+      value: Uint8Array
+    }
+
+    /**
+     * Common data of all account types
+     */
+    export interface BaseAccount {
+      address: string,
+      pubkey?: PublicKey,
+      accountNumber: bigint,
+      sequence: bigint
+    }
+
+    /**
+     * Auth module parameters
+     */
+    export interface AuthParams {
+      maxMemoCharacters: bigint,
+      txSigLimit: bigint,
+      txSizeCostPerByte: bigint,
+      sigVerifyCostEd25519: bigint,
+      sigVerifyCostSecp256k1: bigint
+    }
+    "#;
+
+    #[wasm_bindgen]
+    extern "C" {
+        /// Public key exposed to javascript.
+        #[derive(Clone, Debug)]
+        #[wasm_bindgen(typescript_type = "PublicKey")]
+        pub type JsPublicKey;
+
+        /// AuthParams exposed to JS
+        #[wasm_bindgen(typescript_type = "AuthParams")]
+        pub type JsAuthParams;
+
+        /// BaseAccount exposed to javascript.
+        #[wasm_bindgen(typescript_type = "BaseAccount")]
+        pub type JsBaseAccount;
+    }
+
+    impl From<AuthParams> for JsAuthParams {
+        fn from(value: AuthParams) -> JsAuthParams {
+            let obj = make_object!(
+                "maxMemoCharacters" => BigInt::from(value.max_memo_characters),
+                "txSigLimit" => BigInt::from(value.tx_sig_limit),
+                "txSizeCostPerByte" => BigInt::from(value.tx_size_cost_per_byte),
+                "sigVerifyCostEd25519" => BigInt::from(value.sig_verify_cost_ed25519),
+                "sigVerifyCostSecp256k1" => BigInt::from(value.sig_verify_cost_secp256k1)
+            );
+
+            obj.unchecked_into()
+        }
+    }
+
+    impl From<PublicKey> for JsPublicKey {
+        fn from(value: PublicKey) -> JsPublicKey {
+            let algo = match value {
+                PublicKey::Ed25519(..) => "ed25519",
+                PublicKey::Secp256k1(..) => "secp256k1",
+                _ => unreachable!("unsupported pubkey algo found"),
+            };
+            let obj = make_object!(
+                "type" => algo.into(),
+                "value" => Uint8Array::from(value.to_bytes().as_ref())
+            );
+
+            obj.unchecked_into()
+        }
+    }
+
+    impl From<Account> for JsBaseAccount {
+        fn from(value: Account) -> JsBaseAccount {
+            let obj = make_object!(
+                "address" => value.address.to_string().into(),
+                "pubkey" => value.pub_key.map(JsPublicKey::from).into(),
+                "accountNumber" => BigInt::from(value.account_number),
+                "sequence" => BigInt::from(value.sequence)
+            );
+
+            obj.unchecked_into()
+        }
+    }
 }

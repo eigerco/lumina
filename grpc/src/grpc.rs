@@ -17,8 +17,8 @@ use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
-use celestia_types::state::auth::AuthParams;
-use celestia_types::state::{Address, AddressTrait, Coin, TxResponse, BOND_DENOM};
+use celestia_types::state::auth::{Account, AuthParams};
+use celestia_types::state::{AccAddress, Address, AddressTrait, Coin, TxResponse, BOND_DENOM};
 use celestia_types::ExtendedHeader;
 use http_body::Body;
 use tonic::body::BoxBody;
@@ -42,14 +42,11 @@ mod blob;
 // cosmos.tx
 mod cosmos_tx;
 
-pub use crate::grpc::auth::Account;
 pub use crate::grpc::celestia_tx::{TxStatus, TxStatusResponse};
 pub use crate::grpc::cosmos_tx::{BroadcastMode, GetTxResponse};
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-pub use crate::grpc::auth::{JsAuthParams, JsBaseAccount, JsPublicKey};
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-pub use crate::grpc::bank::JsCoin;
+pub use crate::grpc::cosmos_tx::JsBroadcastMode;
 
 /// Error convertible to std, used by grpc transports
 pub type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -86,7 +83,7 @@ where
 
     /// Get account
     #[grpc_method(AuthQueryClient::account)]
-    async fn get_account(&self, account: &Address) -> Result<Account>;
+    async fn get_account(&self, account: &AccAddress) -> Result<Account>;
 
     /// Get accounts
     #[grpc_method(AuthQueryClient::accounts)]

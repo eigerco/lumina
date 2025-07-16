@@ -65,9 +65,24 @@ pub mod appconsts {
         pub const GAS_PER_BLOB_BYTE: u64 = 8;
     }
 
+    // celestia-app/pkg/appconsts/v4/app_consts
+    /// Consts of App v4.
+    pub mod v4 {
+        /// App version.
+        pub const VERSION: u64 = 4;
+        /// Maximum width of the original data square.
+        pub const SQUARE_SIZE_UPPER_BOUND: usize = 128;
+        /// Maximum width of a single subtree root when generating blob's commitment.
+        pub const SUBTREE_ROOT_THRESHOLD: u64 = 64;
+        /// Cost of each byte in a transaction (in units of gas).
+        pub const TX_SIZE_COST_PER_BYTE: u64 = 10;
+        /// Cost of each byte in blob (in units of gas).
+        pub const GAS_PER_BLOB_BYTE: u64 = 8;
+    }
+
     // celestia-app/pkg/appconsts/versioned_consts.go
     /// Latest App version.
-    pub const LATEST_VERSION: u64 = v3::VERSION;
+    pub const LATEST_VERSION: u64 = v4::VERSION;
 
     /// Enum with all valid App versions.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -80,6 +95,8 @@ pub mod appconsts {
         V2 = v2::VERSION,
         /// App v3
         V3 = v3::VERSION,
+        /// App v4
+        V4 = v4::VERSION,
     }
 
     /// Enum with all valid App versions.
@@ -93,6 +110,8 @@ pub mod appconsts {
         V2 = 2,
         /// App v3
         V3 = 3,
+        /// App v4
+        V4 = 4,
     }
 
     impl AppVersion {
@@ -103,14 +122,12 @@ pub mod appconsts {
 
         /// Creates `AppVersion` from a numeric value.
         pub fn from_u64(version: u64) -> Option<AppVersion> {
-            if version == v1::VERSION {
-                Some(AppVersion::V1)
-            } else if version == v2::VERSION {
-                Some(AppVersion::V2)
-            } else if version == v3::VERSION {
-                Some(AppVersion::V3)
-            } else {
-                None
+            match version {
+                v1::VERSION => Some(AppVersion::V1),
+                v2::VERSION => Some(AppVersion::V2),
+                v3::VERSION => Some(AppVersion::V3),
+                v4::VERSION => Some(AppVersion::V4),
+                _ => None,
             }
         }
 
@@ -150,6 +167,12 @@ pub mod appconsts {
             JsAppVersion(AppVersion::V3)
         }
 
+        /// App v4
+        #[wasm_bindgen(js_name = V4, getter)]
+        pub fn v4() -> JsAppVersion {
+            JsAppVersion(AppVersion::V4)
+        }
+
         /// Latest App version variant.
         pub fn latest() -> JsAppVersion {
             AppVersion::latest().into()
@@ -176,6 +199,7 @@ pub mod appconsts {
             AppVersion::V1 => v1::SQUARE_SIZE_UPPER_BOUND,
             AppVersion::V2 => v2::SQUARE_SIZE_UPPER_BOUND,
             AppVersion::V3 => v3::SQUARE_SIZE_UPPER_BOUND,
+            AppVersion::V4 => v4::SQUARE_SIZE_UPPER_BOUND,
         }
     }
 
@@ -185,6 +209,7 @@ pub mod appconsts {
             AppVersion::V1 => v1::SUBTREE_ROOT_THRESHOLD,
             AppVersion::V2 => v2::SUBTREE_ROOT_THRESHOLD,
             AppVersion::V3 => v3::SUBTREE_ROOT_THRESHOLD,
+            AppVersion::V4 => v4::SUBTREE_ROOT_THRESHOLD,
         }
     }
 
@@ -194,6 +219,7 @@ pub mod appconsts {
         // The value was the same as in v3 tho, so fall back to it.
         match app_version {
             AppVersion::V1 | AppVersion::V2 | AppVersion::V3 => v3::TX_SIZE_COST_PER_BYTE,
+            AppVersion::V4 => v4::TX_SIZE_COST_PER_BYTE,
         }
     }
 
@@ -203,6 +229,7 @@ pub mod appconsts {
         // The value was the same as in v3 tho, so fall back to it.
         match app_version {
             AppVersion::V1 | AppVersion::V2 | AppVersion::V3 => v3::GAS_PER_BLOB_BYTE,
+            AppVersion::V4 => v4::GAS_PER_BLOB_BYTE,
         }
     }
 

@@ -54,8 +54,8 @@ pub(crate) enum NodeCommand {
         height: u64,
     },
     RequestAllBlobs {
-        header: ExtendedHeader,
         namespace: Namespace,
+        block_height: u64,
         timeout_secs: Option<f64>,
     },
 }

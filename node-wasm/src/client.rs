@@ -9,7 +9,7 @@ use js_sys::Array;
 use libp2p::Multiaddr;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::network;
-use lumina_node::node::{NodeBuilder, MIN_PRUNING_DELAY, MIN_SAMPLING_WINDOW};
+use lumina_node::node::{NodeBuilder, DEFAULT_PRUNING_WINDOW_IN_MEMORY};
 use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
@@ -32,35 +32,36 @@ use crate::wrapper::node::{PeerTrackerInfoSnapshot, SyncingInfoSnapshot};
 pub struct WasmNodeConfig {
     /// A network to connect to.
     pub network: Network,
+
     /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
+
     /// Whether to store data in persistent memory or not.
     ///
     /// **Default value:** true
     #[wasm_bindgen(js_name = usePersistentMemory)]
     pub use_persistent_memory: bool,
+
     /// Sampling window defines maximum age of a block considered for syncing and sampling.
     ///
-    /// If this is not set, then default value will apply:
-    ///
-    /// * If `use_persistent_memory == true`, default value is 30 days.
-    /// * If `use_persistent_memory == false`, default value is 60 seconds.
-    ///
-    /// The minimum value that can be set is 60 seconds.
+    /// **Default value:** 2592000 seconds (30 days)\
+    /// **Minimum:** 60 seconds
     #[wasm_bindgen(js_name = customSamplingWindowSecs)]
     pub custom_sampling_window_secs: Option<u32>,
-    /// Pruning delay defines how much time the pruner should wait after sampling window in
-    /// order to prune the block.
+
+    /// Pruning window defines maximum age of a block for it to be retained in store.
+    ///
+    /// If pruning window is smaller than sampling window, then blocks will be pruned
+    /// right after they are sampled. This is useful when you want to keep low
+    /// memory footprint but still validate the blockchain.
     ///
     /// If this is not set, then default value will apply:
     ///
-    /// * If `use_persistent_memory == true`, default value is 1 hour.
-    /// * If `use_persistent_memory == false`, default value is 60 seconds.
-    ///
-    /// The minimum value that can be set is 60 seconds.
-    #[wasm_bindgen(js_name = customPruningDelaySecs)]
-    pub custom_pruning_delay_secs: Option<u32>,
+    /// * If `use_persistent_memory == true`, default value is 30 days plus 1 hour.
+    /// * If `use_persistent_memory == false`, default value is 0 seconds.
+    #[wasm_bindgen(js_name = customPruningWindowSecs)]
+    pub custom_pruning_window_secs: Option<u32>,
 }
 
 /// `NodeClient` is responsible for steering [`NodeWorker`] by sending it commands and receiving
@@ -260,13 +261,13 @@ impl NodeClient {
     #[wasm_bindgen(js_name = requestAllBlobs)]
     pub async fn request_all_blobs(
         &self,
-        header: &ExtendedHeader,
         namespace: &Namespace,
+        block_height: u64,
         timeout_secs: Option<f64>,
     ) -> Result<Vec<Blob>> {
         let command = NodeCommand::RequestAllBlobs {
-            header: header.clone(),
             namespace: *namespace,
+            block_height,
             timeout_secs,
         };
         let response = self.worker.exec(command).await?;
@@ -371,7 +372,7 @@ impl WasmNodeConfig {
             bootnodes,
             use_persistent_memory: true,
             custom_sampling_window_secs: None,
-            custom_pruning_delay_secs: None,
+            custom_pruning_window_secs: None,
         }
     }
 
@@ -394,9 +395,8 @@ impl WasmNodeConfig {
             NodeBuilder::new()
                 .store(EitherStore::Left(InMemoryStore::new()))
                 .blockstore(EitherBlockstore::Left(InMemoryBlockstore::new()))
-                // In-memory stores are memory hungry, so we lower sampling and pruining window.
-                .sampling_window(MIN_SAMPLING_WINDOW)
-                .pruning_delay(MIN_PRUNING_DELAY)
+                // In-memory stores are memory hungry, so we prune blocks as soon as possible.
+                .pruning_window(DEFAULT_PRUNING_WINDOW_IN_MEMORY)
         };
 
         let bootnodes = self
@@ -418,9 +418,9 @@ impl WasmNodeConfig {
             builder = builder.sampling_window(dur);
         }
 
-        if let Some(secs) = self.custom_pruning_delay_secs {
+        if let Some(secs) = self.custom_pruning_window_secs {
             let dur = Duration::from_secs(secs.into());
-            builder = builder.pruning_delay(dur);
+            builder = builder.pruning_window(dur);
         }
 
         Ok(builder)
@@ -512,16 +512,14 @@ mod tests {
             .await
             .expect("successful submission");
 
-        let header = rpc_client
-            .header_get_by_height(submitted_height)
-            .await
-            .expect("header for blob");
-
         let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
+        // Wait for the `client` node to sync until the `submitted_height`.
+        sleep(Duration::from_millis(100)).await;
+
         let mut blobs = client
-            .request_all_blobs(&header, &namespace, None)
+            .request_all_blobs(&namespace, submitted_height, None)
             .await
             .expect("to fetch blob");
 
@@ -550,7 +548,7 @@ mod tests {
                 bootnodes,
                 use_persistent_memory: false,
                 custom_sampling_window_secs: None,
-                custom_pruning_delay_secs: None,
+                custom_pruning_window_secs: None,
             })
             .await
             .unwrap();

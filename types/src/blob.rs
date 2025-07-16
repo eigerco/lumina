@@ -56,6 +56,10 @@ pub struct Blob {
 /// Params defines the parameters for the blob module.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(getter_with_clone, inspectable)
+)]
 pub struct BlobParams {
     /// Gas cost per blob byte
     pub gas_per_blob_byte: u32,
@@ -293,8 +297,7 @@ impl Blob {
             let version = share.info_byte().expect("non parity").version();
             if version != share_version {
                 return Err(Error::BlobSharesMetadataMismatch(format!(
-                    "expected share version ({}) got ({})",
-                    share_version, version
+                    "expected share version ({share_version}) got ({version})"
                 )));
             }
             if share.sequence_length().is_some() {

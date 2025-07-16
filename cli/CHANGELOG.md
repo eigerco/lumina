@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/eigerco/lumina/compare/lumina-cli-v0.7.0...lumina-cli-v0.8.0) - 2025-07-02
+
+### Added
+
+- *(node)* [**breaking**] Implement adaptive backward syncing/sampling ([#606](https://github.com/eigerco/lumina/pull/606))
+
+## [0.7.0](https://github.com/eigerco/lumina/compare/lumina-cli-v0.6.4...lumina-cli-v0.7.0) - 2025-06-20
+
+### Added
+
+- *(grpc)* [**breaking**] add memo field to TxConfig ([#659](https://github.com/eigerco/lumina/pull/659))
+
 ## [0.6.4](https://github.com/eigerco/lumina/compare/lumina-cli-v0.6.3...lumina-cli-v0.6.4) - 2025-06-09
 
 ### Other

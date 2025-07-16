@@ -849,7 +849,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc"
-version = "0.3.1"
+version = "0.4.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -870,6 +870,7 @@ dependencies = [
  "rand_core",
  "send_wrapper 0.6.0",
  "serde",
+ "signature",
  "tendermint",
  "tendermint-proto",
  "thiserror 1.0.69",
@@ -907,12 +908,13 @@ dependencies = [
  "tonic",
  "tonic-build",
  "uniffi",
+ "wasm-bindgen",
  "wasm-bindgen-test",
 ]
 
 [[package]]
 name = "celestia-rpc"
-version = "0.11.1"
+version = "0.11.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -937,7 +939,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.11.2"
+version = "0.12.0"
 dependencies = [
  "base64 0.22.1",
  "bech32",
@@ -953,8 +955,10 @@ dependencies = [
  "getrandom",
  "indoc",
  "js-sys",
+ "k256",
  "leopard-codec",
  "libp2p-identity",
+ "lumina-utils",
  "multiaddr",
  "multihash",
  "nmt-rs",
@@ -965,7 +969,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "serde_json",
  "serde_repr",
- "sha2 0.10.8",
+ "sha2 0.10.9",
  "tendermint",
  "tendermint-proto",
  "thiserror 1.0.69",
@@ -1506,7 +1510,7 @@ dependencies = [
  "ed25519",
  "rand_core",
  "serde",
- "sha2 0.10.8",
+ "sha2 0.10.9",
  "subtle",
  "zeroize",
 ]
@@ -1686,21 +1690,6 @@ checksum = "88a41f105fe1d5b6b34b2055e3dc59bb79b46b48b2040b9e6c7b4b5de097aa41"
 dependencies = [
  "autocfg",
 ]
-
-[[package]]
-name = "function_name"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1ab577a896d09940b5fe12ec5ae71f9d8211fff62c919c03a3750a9901e98a7"
-dependencies = [
- "function_name-proc-macro",
-]
-
-[[package]]
-name = "function_name-proc-macro"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673464e1e314dd67a0fd9544abc99e8eb28d0c7e3b69b033bcff9b2d00b87333"
 
 [[package]]
 name = "funty"
@@ -2831,7 +2820,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "once_cell",
- "sha2 0.10.8",
+ "sha2 0.10.9",
  "signature",
 ]
 
@@ -2863,9 +2852,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.168"
+version = "0.2.171"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aaeb2981e0606ca11d79718f8bb01164f1d6ed75080182d3abf017e6d244b6d"
+checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
 
 [[package]]
 name = "libm"
@@ -3061,7 +3050,7 @@ dependencies = [
  "rand",
  "regex",
  "serde",
- "sha2 0.10.8",
+ "sha2 0.10.9",
  "smallvec",
  "tracing",
  "void",
@@ -3104,7 +3093,7 @@ dependencies = [
  "quick-protobuf",
  "rand",
  "serde",
- "sha2 0.10.8",
+ "sha2 0.10.9",
  "thiserror 1.0.69",
  "tracing",
  "zeroize",
@@ -3131,7 +3120,7 @@ dependencies = [
  "quick-protobuf-codec",
  "rand",
  "serde",
- "sha2 0.10.8",
+ "sha2 0.10.9",
  "smallvec",
  "thiserror 1.0.69",
  "tracing",
@@ -3197,7 +3186,7 @@ dependencies = [
  "once_cell",
  "quick-protobuf",
  "rand",
- "sha2 0.10.8",
+ "sha2 0.10.9",
  "snow",
  "static_assertions",
  "thiserror 1.0.69",
@@ -3548,7 +3537,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-cli"
-version = "0.6.4"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3573,7 +3562,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "async-trait",
  "backoff",
@@ -3585,7 +3574,6 @@ dependencies = [
  "celestia-types",
  "cid",
  "dashmap 5.5.3",
- "function_name",
  "futures",
  "getrandom",
  "gloo-timers 0.3.0",
@@ -3624,7 +3612,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-uniffi"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "blockstore",
@@ -3645,7 +3633,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-wasm"
-version = "0.8.4"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "blockstore",
@@ -3687,6 +3675,7 @@ version = "0.2.0"
 dependencies = [
  "futures",
  "gloo-timers 0.3.0",
+ "js-sys",
  "pin-project",
  "send_wrapper 0.6.0",
  "tokio",
@@ -3854,7 +3843,7 @@ dependencies = [
  "multihash-derive",
  "ripemd",
  "sha1",
- "sha2 0.10.8",
+ "sha2 0.10.9",
  "sha3",
  "strobe-rs",
 ]
@@ -3988,7 +3977,7 @@ dependencies = [
  "borsh",
  "bytes",
  "serde",
- "sha2 0.10.8",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -4697,9 +4686,9 @@ dependencies = [
 
 [[package]]
 name = "redb"
-version = "2.3.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7c2a94325f9c5826b17c42af11067230f503747f870117a28180e85696e21ba"
+checksum = "34bc6763177194266fc3773e2b2bb3693f7b02fdf461e285aa33202e3164b74e"
 dependencies = [
  "libc",
 ]
@@ -4963,7 +4952,7 @@ version = "8.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e5347777e9aacb56039b0e1f28785929a8a3b709e87482e7442c72e7c12529d"
 dependencies = [
- "sha2 0.10.8",
+ "sha2 0.10.9",
  "walkdir",
 ]
 
@@ -5375,9 +5364,9 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.10.8"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "793db75ad2bcafc3ffa7c68b215fee268f537982cd901d132f89c6343f3a3dc8"
+checksum = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -5471,7 +5460,7 @@ dependencies = [
  "rand_core",
  "ring 0.17.8",
  "rustc_version 0.4.1",
- "sha2 0.10.8",
+ "sha2 0.10.9",
  "subtle",
 ]
 
@@ -5674,7 +5663,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "serde_repr",
- "sha2 0.10.8",
+ "sha2 0.10.9",
  "signature",
  "subtle",
  "subtle-encoding",

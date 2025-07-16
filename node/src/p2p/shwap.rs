@@ -98,8 +98,7 @@ pub(crate) fn get_block_container(expected_cid: &Cid, block: &[u8]) -> Result<Ve
     let block_cid = Cid::read_bytes(block.cid.as_slice())?;
     if block_cid != *expected_cid {
         return Err(P2pError::Shwap(format!(
-            "cid in block ({}) different than expected ({})",
-            block_cid, expected_cid
+            "cid in block ({block_cid}) different than expected ({expected_cid})",
         )));
     }
 

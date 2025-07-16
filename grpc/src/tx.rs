@@ -7,12 +7,14 @@ use std::time::Duration;
 use bytes::Bytes;
 use celestia_proto::cosmos::crypto::secp256k1;
 pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
+use celestia_types::any::IntoProtobufAny;
 use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
+use celestia_types::state::auth::Account;
 use celestia_types::state::auth::BaseAccount;
 use celestia_types::state::{
-    Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
+    AccAddress, Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
 };
 use celestia_types::{AppVersion, Height};
 use http_body::Body;
@@ -20,6 +22,8 @@ use k256::ecdsa::signature::{Error as SignatureError, Signer};
 use k256::ecdsa::{Signature, VerifyingKey};
 use lumina_utils::time::Interval;
 use prost::{Message, Name};
+#[cfg(not(target_arch = "wasm32"))]
+use signature::Keypair;
 use tendermint::chain::Id;
 use tendermint::PublicKey;
 use tendermint_proto::google::protobuf::Any;
@@ -28,7 +32,7 @@ use tokio::sync::{Mutex, MutexGuard};
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
 
-use crate::grpc::{Account, BroadcastMode, GrpcClient, StdError, TxStatus};
+use crate::grpc::{BroadcastMode, GrpcClient, StdError, TxStatus};
 use crate::{Error, Result};
 
 #[cfg(feature = "uniffi")]
@@ -85,15 +89,11 @@ where
     <T::ResponseBody as Body>::Error: Into<StdError> + Send,
     S: DocSigner,
 {
-    /// Create a new transaction client.
-    pub async fn new(
-        transport: T,
-        account_address: &Address,
-        account_pubkey: VerifyingKey,
-        signer: S,
-    ) -> Result<Self> {
+    /// Create a new transaction client with the specified account.
+    pub async fn new(transport: T, account_pubkey: VerifyingKey, signer: S) -> Result<Self> {
         let client = GrpcClient::new(transport);
-        let account = client.get_account(account_address).await?;
+        let account_address = AccAddress::from(account_pubkey);
+        let account = client.get_account(&account_address).await?;
         if let Some(pubkey) = account.pub_key {
             if pubkey != PublicKey::Secp256k1(account_pubkey) {
                 return Err(Error::PublicKeyMismatch);
@@ -130,15 +130,14 @@ where
     /// # async fn docs() {
     /// use celestia_grpc::{TxClient, TxConfig};
     /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
-    /// use celestia_types::state::{AccAddress, Coin};
+    /// use celestia_types::state::{Address, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
     /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
-    /// let public_key = *signing_key.verifying_key();
-    /// let address = AccAddress::new(public_key.into()).into();
+    /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
-    /// let tx_client = TxClient::with_url(grpc_url, &address, public_key, signing_key)
+    /// let tx_client = TxClient::with_url_and_keypair(grpc_url, signing_key)
     ///     .await
     ///     .unwrap();
     ///
@@ -156,16 +155,20 @@ where
     /// ```
     pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
     where
-        M: IntoAny,
+        M: IntoProtobufAny,
     {
         let tx_body = RawTxBody {
             messages: vec![message.into_any()],
+            memo: cfg.memo.clone().unwrap_or_default(),
             ..RawTxBody::default()
         };
 
         let mut retries = 0;
         let (tx_hash, sequence) = loop {
-            match self.sign_and_broadcast_tx(tx_body.clone(), cfg).await {
+            match self
+                .sign_and_broadcast_tx(tx_body.clone(), cfg.clone())
+                .await
+            {
                 Ok(resp) => break resp,
                 Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _))
                     if retries < 3 && cfg.gas_price.is_none() =>
@@ -189,17 +192,16 @@ where
     /// ```no_run
     /// # async fn docs() {
     /// use celestia_grpc::{TxClient, TxConfig};
-    /// use celestia_types::state::{AccAddress, Coin};
+    /// use celestia_types::state::{Address, Coin};
     /// use celestia_types::{AppVersion, Blob};
     /// use celestia_types::nmt::Namespace;
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
     /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
-    /// let public_key = *signing_key.verifying_key();
-    /// let address = AccAddress::new(public_key.into()).into();
+    /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
-    /// let tx_client = TxClient::with_url(grpc_url, &address, public_key, signing_key)
+    /// let tx_client = TxClient::with_url_and_keypair(grpc_url, signing_key)
     ///     .await
     ///     .unwrap();
     ///
@@ -222,7 +224,10 @@ where
 
         let mut retries = 0;
         let (tx_hash, sequence) = loop {
-            match self.sign_and_broadcast_blobs(blobs.to_vec(), cfg).await {
+            match self
+                .sign_and_broadcast_blobs(blobs.to_vec(), cfg.clone())
+                .await
+            {
                 Ok(resp) => break resp,
                 Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _))
                     if retries < 3 && cfg.gas_price.is_none() =>
@@ -306,6 +311,7 @@ where
         let pfb = MsgPayForBlobs::new(&blobs, account.address.clone())?;
         let pfb = RawTxBody {
             messages: vec![RawMsgPayForBlobs::from(pfb).into_any()],
+            memo: cfg.memo.unwrap_or_default(),
             ..RawTxBody::default()
         };
 
@@ -412,12 +418,39 @@ where
     /// settings of [`tonic::transport::Channel`].
     pub async fn with_url(
         url: impl Into<String>,
-        account_address: &Address,
         account_pubkey: VerifyingKey,
         signer: S,
     ) -> Result<Self> {
         let transport = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
-        Self::new(transport, account_address, account_pubkey, signer).await
+        Self::new(transport, account_pubkey, signer).await
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<S> TxClient<tonic::transport::Channel, S>
+where
+    S: DocSigner + Keypair<VerifyingKey = VerifyingKey>,
+{
+    /// Create a new client connected to the given `url` with default
+    /// settings of [`tonic::transport::Channel`].
+    /// Convenience function for cases where passed signer allows getting
+    /// veryfing key and there's no need to pass it separately.
+    ///
+    /// # Example with a static key
+    /// ```rust,no_run
+    /// # async fn docs() {
+    /// # use celestia_types::state::Address;
+    /// # use k256::ecdsa::SigningKey;
+    /// # use celestia_grpc::TxClient;
+    /// # const GRPC_URL : &str = "http://localhost:19090";
+    /// const HEX_SIGNING_KEY: &str = "393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839";
+    /// let signing_key = SigningKey::from_slice(&hex::decode(HEX_SIGNING_KEY).unwrap()).unwrap();
+    /// let client = TxClient::with_url_and_keypair(GRPC_URL, signing_key).await.unwrap();
+    /// # }
+    /// ```
+    pub async fn with_url_and_keypair(url: impl Into<String>, signer_keypair: S) -> Result<Self> {
+        let transport = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
+        Self::new(transport, signer_keypair.verifying_key(), signer_keypair).await
     }
 }
 
@@ -430,12 +463,11 @@ where
     /// settings of [`tonic_web_wasm_client::Client`].
     pub async fn with_grpcweb_url(
         url: impl Into<String>,
-        account_address: &Address,
         account_pubkey: VerifyingKey,
         signer: S,
     ) -> Result<Self> {
         let transport = tonic_web_wasm_client::Client::new(url.into());
-        Self::new(transport, account_address, account_pubkey, signer).await
+        Self::new(transport, account_pubkey, signer).await
     }
 }
 
@@ -469,24 +501,6 @@ where
     }
 }
 
-/// Value convertion into protobuf's Any
-pub trait IntoAny {
-    /// Converts itself into protobuf's Any type
-    fn into_any(self) -> Any;
-}
-
-impl<T> IntoAny for T
-where
-    T: Name,
-{
-    fn into_any(self) -> Any {
-        Any {
-            type_url: T::type_url(),
-            value: self.encode_to_vec(),
-        }
-    }
-}
-
 /// A result of correctly submitted transaction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -498,13 +512,15 @@ pub struct TxInfo {
 }
 
 /// Configuration for the transaction.
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxConfig {
     /// Custom gas limit for the transaction (in `utia`).
     pub gas_limit: Option<u64>,
     /// Custom gas price for fee calculation.
     pub gas_price: Option<f64>,
+    /// Memo for the transaction
+    pub memo: Option<String>,
 }
 
 impl TxConfig {
@@ -519,6 +535,12 @@ impl TxConfig {
         self.gas_price = Some(gas_price);
         self
     }
+
+    /// Attach memo to this config.
+    pub fn with_memo(mut self, memo: impl Into<String>) -> Self {
+        self.memo = Some(memo.into());
+        self
+    }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
@@ -529,7 +551,7 @@ mod wbg {
     use wasm_bindgen::{prelude::*, JsCast};
 
     use super::{TxConfig, TxInfo};
-    use crate::utils::make_object;
+    use lumina_utils::make_object;
 
     #[wasm_bindgen(typescript_custom_section)]
     const _: &str = "
@@ -547,6 +569,7 @@ mod wbg {
     export interface TxConfig {
       gasLimit?: bigint; // utia
       gasPrice?: number;
+      memo?: string;
     }
     ";
 
@@ -565,6 +588,9 @@ mod wbg {
 
         #[wasm_bindgen(method, getter, js_name = gasPrice)]
         pub fn gas_price(this: &JsTxConfig) -> Option<f64>;
+
+        #[wasm_bindgen(method, getter, js_name = memo)]
+        pub fn memo(this: &JsTxConfig) -> Option<String>;
     }
 
     impl From<TxInfo> for JsTxInfo {
@@ -583,6 +609,7 @@ mod wbg {
             TxConfig {
                 gas_limit: value.gas_limit(),
                 gas_price: value.gas_price(),
+                memo: value.memo(),
             }
         }
     }
@@ -612,7 +639,7 @@ pub async fn sign_tx(
     };
 
     let mut fee = Fee::new(fee, gas_limit);
-    fee.payer = Some(base_account.address.clone());
+    fee.payer = Some(Address::AccAddress(base_account.address.clone()));
 
     let auth_info = AuthInfo {
         signer_infos: vec![SignerInfo {

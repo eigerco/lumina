@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.12.1...lumina-node-v0.13.0) - 2025-07-02
+
+### Added
+
+- *(node)* [**breaking**] Use `block_height` for `Node::request_all_blobs` and return error on missing header ([#669](https://github.com/eigerco/lumina/pull/669))
+- *(node)* [**breaking**] Implement adaptive backward syncing/sampling ([#606](https://github.com/eigerco/lumina/pull/606))
+
+### Other
+
+- Fix uninlined-format-args clippy ([#671](https://github.com/eigerco/lumina/pull/671))
+
+## [0.12.1](https://github.com/eigerco/lumina/compare/lumina-node-v0.12.0...lumina-node-v0.12.1) - 2025-06-20
+
+### Other
+
+- *(node)* Fix lifetime warning on nightly ([#656](https://github.com/eigerco/lumina/pull/656))
+
 ## [0.12.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.11.0...lumina-node-v0.12.0) - 2025-06-09
 
 ### Added

@@ -20,14 +20,12 @@ use tracing::{debug, trace};
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
-use crate::store::{
-    Result, SamplingMetadata, SamplingStatus, Store, StoreError, StoreInsertionError,
-};
+use crate::store::{Result, SamplingMetadata, Store, StoreError, StoreInsertionError};
 use crate::utils::Counter;
 
 use super::utils::{deserialize_extended_header, deserialize_sampling_metadata};
 
-const SCHEMA_VERSION: u64 = 2;
+const SCHEMA_VERSION: u64 = 3;
 
 const HEIGHTS_TABLE: TableDefinition<'static, &[u8], u64> = TableDefinition::new("STORE.HEIGHTS");
 const HEADERS_TABLE: TableDefinition<'static, u64, &[u8]> = TableDefinition::new("STORE.HEADERS");
@@ -38,8 +36,9 @@ const SCHEMA_VERSION_TABLE: TableDefinition<'static, (), u64> =
 const RANGES_TABLE: TableDefinition<'static, &str, Vec<(u64, u64)>> =
     TableDefinition::new("STORE.RANGES");
 
-const ACCEPTED_SAMPING_RANGES_KEY: &str = "KEY.ACCEPTED_SAMPING_RANGES";
+const SAMPLED_RANGES_KEY: &str = "KEY.SAMPLED_RANGES";
 const HEADER_RANGES_KEY: &str = "KEY.HEADER_RANGES";
+const PRUNED_RANGES_KEY: &str = "KEY.PRUNED_RANGES";
 
 /// A [`Store`] implementation based on a [`redb`] database.
 #[derive(Debug)]
@@ -96,14 +95,14 @@ impl RedbStore {
                     Some(schema_version) => {
                         if schema_version > SCHEMA_VERSION {
                             let e = format!(
-                                "Incompatible database schema; found {}, expected {}.",
-                                schema_version, SCHEMA_VERSION
+                                "Incompatible database schema; found {schema_version}, expected {SCHEMA_VERSION}."
                             );
                             return Err(StoreError::OpenFailed(e));
                         }
 
                         // Do migrations
                         migrate_v1_to_v2(tx, &mut schema_version_table)?;
+                        migrate_v2_to_v3(tx, &mut schema_version_table)?;
                     }
                     None => {
                         // New database
@@ -280,6 +279,9 @@ impl RedbStore {
             let mut ranges_table = tx.open_table(RANGES_TABLE)?;
 
             let mut header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
+            let mut sampled_ranges = get_ranges(&ranges_table, SAMPLED_RANGES_KEY)?;
+            let mut pruned_ranges = get_ranges(&ranges_table, PRUNED_RANGES_KEY)?;
+
             let headers_range = head.height().value()..=tail.height().value();
 
             let (prev_exists, next_exists) = header_ranges
@@ -318,7 +320,16 @@ impl RedbStore {
             header_ranges
                 .insert_relaxed(&headers_range)
                 .expect("invalid range");
+            sampled_ranges
+                .remove_relaxed(&headers_range)
+                .expect("invalid range");
+            pruned_ranges
+                .remove_relaxed(&headers_range)
+                .expect("invalid range");
+
             set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
+            set_ranges(&mut ranges_table, SAMPLED_RANGES_KEY, &sampled_ranges)?;
+            set_ranges(&mut ranges_table, PRUNED_RANGES_KEY, &pruned_ranges)?;
 
             debug!("Inserted header range {headers_range:?}",);
 
@@ -331,18 +342,12 @@ impl RedbStore {
         Ok(())
     }
 
-    async fn update_sampling_metadata(
-        &self,
-        height: u64,
-        status: SamplingStatus,
-        cids: Vec<Cid>,
-    ) -> Result<()> {
+    async fn update_sampling_metadata(&self, height: u64, cids: Vec<Cid>) -> Result<()> {
         self.write_tx(move |tx| {
             let mut sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
-            let mut ranges_table = tx.open_table(RANGES_TABLE)?;
+            let ranges_table = tx.open_table(RANGES_TABLE)?;
 
             let header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
-            let mut sampling_ranges = get_ranges(&ranges_table, ACCEPTED_SAMPING_RANGES_KEY)?;
 
             if !header_ranges.contains(height) {
                 return Err(StoreError::NotFound);
@@ -352,8 +357,6 @@ impl RedbStore {
 
             let entry = match previous {
                 Some(mut previous) => {
-                    previous.status = status;
-
                     for cid in cids {
                         if !previous.cids.contains(&cid) {
                             previous.cids.push(cid);
@@ -362,28 +365,32 @@ impl RedbStore {
 
                     previous
                 }
-                None => SamplingMetadata { status, cids },
+                None => SamplingMetadata { cids },
             };
 
-            // make sure Result is Infallible and unwrap it later
             let serialized = entry.encode_vec();
-
             sampling_metadata_table.insert(height, &serialized[..])?;
 
-            match status {
-                SamplingStatus::Accepted => sampling_ranges
-                    .insert_relaxed(height..=height)
-                    .expect("invalid height"),
-                _ => sampling_ranges
-                    .remove_relaxed(height..=height)
-                    .expect("invalid height"),
+            Ok(())
+        })
+        .await
+    }
+
+    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
+        self.write_tx(move |tx| {
+            let mut ranges_table = tx.open_table(RANGES_TABLE)?;
+            let header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
+            let mut sampled_ranges = get_ranges(&ranges_table, SAMPLED_RANGES_KEY)?;
+
+            if !header_ranges.contains(height) {
+                return Err(StoreError::NotFound);
             }
 
-            set_ranges(
-                &mut ranges_table,
-                ACCEPTED_SAMPING_RANGES_KEY,
-                &sampling_ranges,
-            )?;
+            sampled_ranges
+                .insert_relaxed(height..=height)
+                .expect("invalid height");
+
+            set_ranges(&mut ranges_table, SAMPLED_RANGES_KEY, &sampled_ranges)?;
 
             Ok(())
         })
@@ -412,10 +419,18 @@ impl RedbStore {
         .await
     }
 
-    async fn get_sampling_ranges(&self) -> Result<BlockRanges> {
+    async fn get_sampled_ranges(&self) -> Result<BlockRanges> {
         self.read_tx(|tx| {
             let table = tx.open_table(RANGES_TABLE)?;
-            get_ranges(&table, ACCEPTED_SAMPING_RANGES_KEY)
+            get_ranges(&table, SAMPLED_RANGES_KEY)
+        })
+        .await
+    }
+
+    async fn get_pruned_ranges(&self) -> Result<BlockRanges> {
+        self.read_tx(|tx| {
+            let table = tx.open_table(RANGES_TABLE)?;
+            get_ranges(&table, PRUNED_RANGES_KEY)
         })
         .await
     }
@@ -425,18 +440,15 @@ impl RedbStore {
             let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let mut headers_table = tx.open_table(HEADERS_TABLE)?;
             let mut ranges_table = tx.open_table(RANGES_TABLE)?;
+            let mut sampling_metadata_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
 
             let mut header_ranges = get_ranges(&ranges_table, HEADER_RANGES_KEY)?;
+            let mut sampled_ranges = get_ranges(&ranges_table, SAMPLED_RANGES_KEY)?;
+            let mut pruned_ranges = get_ranges(&ranges_table, PRUNED_RANGES_KEY)?;
 
             if !header_ranges.contains(height) {
                 return Err(StoreError::NotFound);
             }
-
-            header_ranges
-                .remove_relaxed(height..=height)
-                .expect("valid range never fails");
-
-            set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
 
             let Some(header) = headers_table.remove(height)? else {
                 return Err(StoreError::StoredDataError(format!(
@@ -453,6 +465,22 @@ impl RedbStore {
                     "inconsistency between header and height_to_hash tables, hash {hash}"
                 )));
             }
+
+            sampling_metadata_table.remove(height)?;
+
+            header_ranges
+                .remove_relaxed(height..=height)
+                .expect("valid range never fails");
+            sampled_ranges
+                .remove_relaxed(height..=height)
+                .expect("valid range never fails");
+            pruned_ranges
+                .insert_relaxed(height..=height)
+                .expect("valid range never fails");
+
+            set_ranges(&mut ranges_table, HEADER_RANGES_KEY, &header_ranges)?;
+            set_ranges(&mut ranges_table, SAMPLED_RANGES_KEY, &sampled_ranges)?;
+            set_ranges(&mut ranges_table, PRUNED_RANGES_KEY, &pruned_ranges)?;
 
             Ok(())
         })
@@ -529,13 +557,12 @@ impl Store for RedbStore {
         self.insert(headers).await
     }
 
-    async fn update_sampling_metadata(
-        &self,
-        height: u64,
-        status: SamplingStatus,
-        cids: Vec<Cid>,
-    ) -> Result<()> {
-        self.update_sampling_metadata(height, status, cids).await
+    async fn update_sampling_metadata(&self, height: u64, cids: Vec<Cid>) -> Result<()> {
+        self.update_sampling_metadata(height, cids).await
+    }
+
+    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
+        self.mark_as_sampled(height).await
     }
 
     async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
@@ -546,8 +573,12 @@ impl Store for RedbStore {
         Ok(self.get_stored_ranges().await?)
     }
 
-    async fn get_accepted_sampling_ranges(&self) -> Result<BlockRanges> {
-        self.get_sampling_ranges().await
+    async fn get_sampled_ranges(&self) -> Result<BlockRanges> {
+        self.get_sampled_ranges().await
+    }
+
+    async fn get_pruned_ranges(&self) -> Result<BlockRanges> {
+        self.get_pruned_ranges().await
     }
 
     async fn remove_height(&self, height: u64) -> Result<()> {
@@ -720,13 +751,17 @@ fn migrate_v1_to_v2(
     const HEADER_HEIGHT_RANGES: TableDefinition<'static, u64, (u64, u64)> =
         TableDefinition::new("STORE.HEIGHT_RANGES");
 
-    let schema_version = schema_version_table.get(())?.map(|guard| guard.value());
+    let version = schema_version_table
+        .get(())?
+        .map(|guard| guard.value())
+        .expect("migrations never run on new db");
 
-    // We only migrate from v1
-    if schema_version != Some(1) {
+    if version >= 2 {
+        // Nothing to migrate.
         return Ok(());
     }
 
+    debug_assert_eq!(version, 1);
     warn!("Migrating DB schema from v1 to v2");
 
     let header_ranges_table = tx.open_table(HEADER_HEIGHT_RANGES)?;
@@ -747,6 +782,45 @@ fn migrate_v1_to_v2(
     schema_version_table.insert((), 2)?;
 
     Ok(())
+}
+
+fn migrate_v2_to_v3(
+    tx: &WriteTransaction,
+    schema_version_table: &mut Table<(), u64>,
+) -> Result<()> {
+    let version = schema_version_table
+        .get(())?
+        .map(|guard| guard.value())
+        .expect("migrations never run on new db");
+
+    if version >= 3 {
+        // Nothing to migrate.
+        return Ok(());
+    }
+
+    debug_assert_eq!(version, 2);
+    warn!("Migrating DB schema from v2 to v3");
+
+    // There are two chages in v3:
+    //
+    // * Removal of `SamplingStatus` in `SamplingMetadata`
+    // * Rename of sampled ranges database key
+    //
+    // For the first one we don't need to take any actions because it will
+    // be ingored by the deserializer.
+    let mut ranges_table = tx.open_table(RANGES_TABLE)?;
+    let sampled_ranges = get_ranges(&ranges_table, v2::SAMPLED_RANGES_KEY)?;
+    set_ranges(&mut ranges_table, SAMPLED_RANGES_KEY, &sampled_ranges)?;
+    ranges_table.remove(v2::SAMPLED_RANGES_KEY)?;
+
+    // Migrated to v3
+    schema_version_table.insert((), 3)?;
+
+    Ok(())
+}
+
+mod v2 {
+    pub(super) const SAMPLED_RANGES_KEY: &str = "KEY.ACCEPTED_SAMPING_RANGES";
 }
 
 #[cfg(test)]
@@ -833,6 +907,59 @@ pub mod tests {
 
         assert_eq!(store0.head_height().await.unwrap(), 15);
         assert_eq!(store1.head_height().await.unwrap(), 16);
+    }
+
+    #[tokio::test]
+    async fn migration_from_v2() {
+        const SCHEMA_VERSION_TABLE: TableDefinition<'static, (), u64> =
+            TableDefinition::new("STORE.SCHEMA_VERSION");
+        const RANGES_TABLE: TableDefinition<'static, &str, Vec<(u64, u64)>> =
+            TableDefinition::new("STORE.RANGES");
+
+        let db = Database::builder()
+            .create_with_backend(redb::backends::InMemoryBackend::new())
+            .unwrap();
+        let db = Arc::new(db);
+
+        // Prepare a v2 db
+        tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let tx = db.begin_write().unwrap();
+
+                {
+                    let mut schema_version_table = tx.open_table(SCHEMA_VERSION_TABLE).unwrap();
+                    schema_version_table.insert((), 2).unwrap();
+
+                    let mut ranges_table = tx.open_table(RANGES_TABLE).unwrap();
+                    ranges_table
+                        .insert(v2::SAMPLED_RANGES_KEY, vec![(123, 124)])
+                        .unwrap();
+                }
+
+                tx.commit().unwrap();
+            }
+        })
+        .await
+        .unwrap();
+
+        // Migrate and check store
+        let store = RedbStore::new(db.clone()).await.unwrap();
+        let ranges = store.get_sampled_ranges().await.unwrap();
+        assert_eq!(ranges, BlockRanges::try_from([123..=124]).unwrap());
+        store.close().await.unwrap();
+
+        // Check that old ranges were deleted
+        tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let tx = db.begin_read().unwrap();
+                let ranges_table = tx.open_table(RANGES_TABLE).unwrap();
+                assert!(ranges_table.get(v2::SAMPLED_RANGES_KEY).unwrap().is_none());
+            }
+        })
+        .await
+        .unwrap();
     }
 
     pub async fn create_store(path: Option<&Path>) -> RedbStore {

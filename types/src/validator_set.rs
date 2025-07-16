@@ -158,6 +158,162 @@ fn find_validator<'a>(vals: &'a Set, val_id: &account::Id) -> Option<(usize, &'a
         .find(|(_idx, val)| val.address == *val_id)
 }
 
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use wbg::*;
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+mod wbg {
+    use tendermint::validator;
+    use wasm_bindgen::prelude::*;
+
+    use crate::state::auth::JsPublicKey;
+
+    /// Validator set contains a vector of validators
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone, js_name = "ValidatorSet")]
+    pub struct JsValidatorSet {
+        /// Validators in the set
+        pub validators: Vec<JsValidatorInfo>,
+        /// Proposer
+        pub proposer: Option<JsValidatorInfo>,
+        /// Total voting power
+        pub total_voting_power: u64,
+    }
+
+    impl From<validator::Set> for JsValidatorSet {
+        fn from(value: validator::Set) -> Self {
+            JsValidatorSet {
+                validators: value.validators.into_iter().map(Into::into).collect(),
+                proposer: value.proposer.map(Into::into),
+                total_voting_power: value.total_voting_power.value(),
+            }
+        }
+    }
+
+    /// Validator information
+    #[derive(Clone, Debug)]
+    #[wasm_bindgen(getter_with_clone)]
+    pub struct JsValidatorInfo {
+        /// Validator account address
+        pub address: String,
+        /// Validator public key
+        pub pub_key: JsPublicKey,
+        /// Validator voting power
+        pub power: u64,
+        /// Validator name
+        pub name: Option<String>,
+        /// Validator proposer priority
+        pub proposer_priority: i64,
+    }
+
+    impl From<validator::Info> for JsValidatorInfo {
+        fn from(value: validator::Info) -> Self {
+            JsValidatorInfo {
+                address: value.address.to_string(),
+                pub_key: value.pub_key.into(),
+                power: value.power.into(),
+                name: value.name,
+                proposer_priority: value.proposer_priority.into(),
+            }
+        }
+    }
+}
+
+/// uniffi types
+#[cfg(feature = "uniffi")]
+pub mod uniffi_types {
+    use tendermint::public_key::PublicKey;
+    use tendermint::validator::Info as TendermintValidatorInfo;
+    use tendermint::validator::Set as TendermintValidatorSet;
+    use uniffi::Record;
+
+    use crate::error::UniffiConversionError;
+    use crate::state::UniffiAccountId;
+
+    /// Validator set contains a vector of validators
+    #[derive(Record)]
+    pub struct ValidatorSet {
+        /// Validators in the set
+        pub validators: Vec<ValidatorInfo>,
+        /// Proposer
+        pub proposer: Option<ValidatorInfo>,
+        /// Total voting power
+        pub total_voting_power: u64,
+    }
+
+    impl From<TendermintValidatorSet> for ValidatorSet {
+        fn from(value: TendermintValidatorSet) -> Self {
+            ValidatorSet {
+                validators: value.validators.into_iter().map(Into::into).collect(),
+                proposer: value.proposer.map(Into::into),
+                total_voting_power: value.total_voting_power.value(),
+            }
+        }
+    }
+
+    impl TryFrom<ValidatorSet> for TendermintValidatorSet {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: ValidatorSet) -> Result<Self, Self::Error> {
+            Ok(TendermintValidatorSet {
+                validators: value
+                    .validators
+                    .into_iter()
+                    .map(|v| v.try_into())
+                    .collect::<Result<Vec<_>, _>>()?,
+                proposer: value.proposer.map(TryInto::try_into).transpose()?,
+                total_voting_power: value
+                    .total_voting_power
+                    .try_into()
+                    .map_err(|_| UniffiConversionError::InvalidVotingPower)?,
+            })
+        }
+    }
+
+    /// Validator information
+    #[derive(Record)]
+    pub struct ValidatorInfo {
+        /// Validator account address
+        pub address: UniffiAccountId,
+        /// Validator public key
+        pub pub_key: PublicKey,
+        /// Validator voting power
+        pub power: u64,
+        /// Validator name
+        pub name: Option<String>,
+        /// Validator proposer priority
+        pub proposer_priority: i64,
+    }
+
+    impl From<TendermintValidatorInfo> for ValidatorInfo {
+        fn from(value: TendermintValidatorInfo) -> Self {
+            ValidatorInfo {
+                address: value.address.into(),
+                pub_key: value.pub_key,
+                power: value.power.into(),
+                name: value.name,
+                proposer_priority: value.proposer_priority.into(),
+            }
+        }
+    }
+
+    impl TryFrom<ValidatorInfo> for TendermintValidatorInfo {
+        type Error = UniffiConversionError;
+        fn try_from(value: ValidatorInfo) -> Result<Self, Self::Error> {
+            Ok(TendermintValidatorInfo {
+                address: value.address.try_into()?,
+                pub_key: value.pub_key,
+                power: value
+                    .power
+                    .try_into()
+                    .map_err(|_| UniffiConversionError::InvalidVotingPower)?,
+                name: value.name,
+                proposer_priority: value.proposer_priority.into(),
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

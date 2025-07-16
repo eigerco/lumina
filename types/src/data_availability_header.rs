@@ -357,6 +357,11 @@ impl RowProof {
         &self.row_roots
     }
 
+    /// Get the inclusion proofs of each row root in the data availability header.
+    pub fn proofs(&self) -> &[MerkleProof] {
+        &self.proofs
+    }
+
     /// Verify the proof against the hash of [`DataAvailabilityHeader`], proving
     /// the inclusion of rows.
     ///

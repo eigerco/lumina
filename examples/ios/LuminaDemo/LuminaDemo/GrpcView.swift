@@ -38,7 +38,7 @@ struct GrpcView : View {
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                 Button("Launch gRPC client") {
                     Task {
-                        await viewModel.startTxClient(url: url, accountAddress: accountAddress, accountSk: accountSk)
+                        await viewModel.startTxClient(url: url, accountSk: accountSk)
                     }
                 }
             } else {
@@ -79,14 +79,14 @@ class GrpcViewModel : ObservableObject {
     @Published var error: Error?
     @Published var isReady: Bool = false
     
-    func startTxClient(url: String, accountAddress: String, accountSk: String) async {
+    func startTxClient(url: String, accountSk: String) async {
         do {
-            let address = try parseBech32Address(bech32Address:accountAddress)
             let sk = try P256K.Signing.PrivateKey(dataRepresentation: try accountSk.bytes)
             let pk = sk.publicKey.dataRepresentation
             let signer = StaticSigner(sk: sk)
             
-            self.txClient = try await TxClient.create(url: url, accountAddress: address, accountPubkey: pk, signer: signer)
+            self.txClient = try await TxClient.create(url: url, accountPubkey: pk, signer: signer)
+            
             self.isReady = true
         } catch {
             self.error = error
