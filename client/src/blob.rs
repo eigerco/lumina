@@ -110,7 +110,7 @@ impl BlobApi {
             .await?)
     }
 
-    /// Checks whether a blob's given commitment is included at given height and under the namespace.
+    /// Checks whether a blob's given commitment is included in the namespace at the given height.
     pub async fn included(
         &self,
         height: u64,
