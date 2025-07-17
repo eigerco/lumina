@@ -3,7 +3,7 @@ A high-level client for interacting with a Celestia node.
 It combines the functionality of [`celestia-rpc`] and [`celestia-grpc`] crates.
 
 There are two modes: read-only mode and submit mode. Read-only mode requires
-RPC endpoint and submit mode requires RPC/GRPC endpoints, and a signer.
+RPC endpoint, while submit mode requires RPC and gRPC endpoints plus a signer.
 
 # Examples
 
