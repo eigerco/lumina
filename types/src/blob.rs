@@ -210,7 +210,7 @@ impl Blob {
         Ok(())
     }
 
-    /// Validate [`Blob`]s data with an already known [`Commitment`].
+    /// Validate [`Blob`]s data with a [`Commitment`].
     ///
     /// # Errors
     ///
@@ -225,13 +225,13 @@ impl Blob {
     /// #
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     /// #
-    /// # let known_commitment = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2)
+    /// # let commitment = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2)
     /// #     .unwrap()
     /// #     .commitment;
     ///
     /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2).unwrap();
     ///
-    /// assert!(blob.validate_with_commitment(&known_commitment, AppVersion::V2).is_ok());
+    /// assert!(blob.validate_with_commitment(&commitment, AppVersion::V2).is_ok());
     ///
     /// let other_commitment = Blob::new(namespace, b"bar".to_vec(), AppVersion::V2)
     ///     .unwrap()
@@ -241,13 +241,13 @@ impl Blob {
     /// ```
     pub fn validate_with_commitment(
         &self,
-        known_commitment: &Commitment,
+        commitment: &Commitment,
         app_version: AppVersion,
     ) -> Result<()> {
         self.validate(app_version)?;
 
-        if self.commitment != *known_commitment {
-            bail_validation!("blob commitment != known commitment");
+        if self.commitment != *commitment {
+            bail_validation!("blob commitment != commitment");
         }
 
         Ok(())

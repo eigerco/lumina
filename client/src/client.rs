@@ -34,7 +34,7 @@ pub(crate) struct Context {
 /// A high-level client for interacting with a Celestia node.
 ///
 /// There are two modes: read-only mode and submit mode. Read-only mode requires
-/// RPC endpoint and submit mode requires RPC/gRPC endpoints, and a signer.
+/// RPC endpoint, while submit mode requires RPC and gRPC endpoints plus a signer.
 ///
 /// # Examples
 ///
