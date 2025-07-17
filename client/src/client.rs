@@ -220,7 +220,7 @@ impl ClientBuilder {
     ///
     /// # Notes
     ///
-    /// In WASM the endpoint needs support gRPC-Web.
+    /// In WASM the endpoint needs to support gRPC-Web.
     pub fn grpc_url(mut self, url: &str) -> ClientBuilder {
         self.grpc_url = Some(url.to_owned());
         self
