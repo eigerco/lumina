@@ -125,7 +125,7 @@ impl BlobApi {
             .await?)
     }
 
-    /// Subscribe to published blobs from the given namespace as they are included.
+    /// Subscribe to blobs from the given namespace , returning them as they are being published.
     // TODO: Should we validate blobs?
     pub async fn subscribe(
         &self,
