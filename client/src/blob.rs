@@ -77,7 +77,7 @@ impl BlobApi {
         Ok(blob)
     }
 
-    /// Retrieves all blobs under the given namespaces and height.
+    /// Retrieves all blobs from the given namespaces and height.
     pub async fn get_all(
         &self,
         height: u64,
