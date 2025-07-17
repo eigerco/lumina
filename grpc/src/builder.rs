@@ -52,7 +52,8 @@ impl GrpcClientBuilder<(Endpoint, ClientTlsConfig), ()> {
         let (endpoint, tls_config) = self.connection;
         //let tls_config = self.tls_config.with_webpki_roots();
         Self {
-            connection: (endpoint, tls_config.with_webpki_roots())..self,
+            connection: (endpoint, tls_config.with_webpki_roots()),
+            ..self
         }
     }
 }
