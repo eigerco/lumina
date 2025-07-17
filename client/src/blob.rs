@@ -45,7 +45,7 @@ impl BlobApi {
     /// let client = Client::builder()
     ///     .rpc_url(RPC_URL)
     ///     .grpc_url(GRPC_URL)
-    ///     .plaintext_private_key("...")?
+    ///     .private_key_plaintext("...")
     ///     .build()
     ///     .await?;
     ///

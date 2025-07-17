@@ -1,3 +1,4 @@
+use std::fmt::{self, Debug};
 use std::sync::Arc;
 
 use celestia_grpc::TxClient;
@@ -64,7 +65,7 @@ pub(crate) struct Context {
 /// let client = Client::builder()
 ///     .rpc_url(RPC_URL)
 ///     .grpc_url(GRPC_URL)
-///     .plaintext_private_key("...")?
+///     .private_key_plaintext("...")
 ///     .build()
 ///     .await?;
 ///
@@ -91,8 +92,19 @@ pub struct ClientBuilder {
     rpc_url: Option<String>,
     rpc_auth_token: Option<String>,
     grpc_url: Option<String>,
-    pubkey: Option<VerifyingKey>,
-    signer: Option<DispatchedDocSigner>,
+    signer: Option<Signer>,
+}
+
+enum Signer {
+    PrivKeyPlaintext(Zeroizing<String>),
+    PrivKeyBytes(Zeroizing<Vec<u8>>),
+    Signer((VerifyingKey, DispatchedDocSigner)),
+}
+
+impl Debug for Signer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Signer { .. }")
+    }
 }
 
 impl Context {
@@ -155,12 +167,12 @@ impl ClientBuilder {
     }
 
     /// Set signer and its public key.
-    pub fn singer<S>(mut self, pubkey: VerifyingKey, signer: S) -> ClientBuilder
+    pub fn signer<S>(mut self, pubkey: VerifyingKey, signer: S) -> ClientBuilder
     where
         S: DocSigner + Sync + Send + 'static,
     {
-        self.pubkey = Some(pubkey);
-        self.signer = Some(DispatchedDocSigner::new(signer));
+        let signer = DispatchedDocSigner::new(signer);
+        self.signer = Some(Signer::Signer((pubkey, signer)));
         self
     }
 
@@ -170,14 +182,21 @@ impl ClientBuilder {
         S: DocSigner + Keypair<VerifyingKey = VerifyingKey> + Sync + Send + 'static,
     {
         let pubkey = keypair.verifying_key();
-        self.singer(pubkey, keypair)
+        self.signer(pubkey, keypair)
+    }
+
+    /// Set signer from a raw private key.
+    pub fn private_key(mut self, bytes: &[u8]) -> ClientBuilder {
+        let bytes = Zeroizing::new(bytes.to_vec());
+        self.signer = Some(Signer::PrivKeyBytes(bytes));
+        self
     }
 
     /// Set signer from a plaintext private key.
-    pub fn plaintext_private_key(self, s: &str) -> Result<ClientBuilder> {
-        let bytes = Zeroizing::new(hex::decode(s.trim()).map_err(|_| Error::InvalidPrivateKey)?);
-        let signing_key = SigningKey::from_slice(&bytes).map_err(|_| Error::InvalidPrivateKey)?;
-        Ok(self.keypair(signing_key))
+    pub fn private_key_plaintext(mut self, s: &str) -> ClientBuilder {
+        let s = Zeroizing::new(s.to_string());
+        self.signer = Some(Signer::PrivKeyPlaintext(s));
+        self
     }
 
     /// Set the RPC endpoint.
@@ -212,22 +231,30 @@ impl ClientBuilder {
             return Err(Error::AuthTokenNotSupported);
         }
 
-        let grpc = match (&self.grpc_url, self.pubkey, self.signer.take()) {
-            (Some(url), Some(pubkey), Some(signer)) => {
+        let signer = match self.signer.take() {
+            Some(Signer::Signer((pubkey, signer))) => Some((pubkey, signer)),
+            Some(Signer::PrivKeyBytes(bytes)) => Some(priv_key_signer(&bytes)?),
+            Some(Signer::PrivKeyPlaintext(s)) => {
+                let bytes =
+                    Zeroizing::new(hex::decode(s.trim()).map_err(|_| Error::InvalidPrivateKey)?);
+                Some(priv_key_signer(&bytes)?)
+            }
+            None => None,
+        };
+
+        let (pubkey, grpc) = match (&self.grpc_url, signer) {
+            (Some(url), Some((pubkey, signer))) => {
                 #[cfg(not(target_arch = "wasm32"))]
-                {
-                    Some(TxClient::with_url(url, pubkey, signer).await?)
-                }
+                let tx_client = TxClient::with_url(url, pubkey, signer).await?;
 
                 #[cfg(target_arch = "wasm32")]
-                {
-                    Some(TxClient::with_grpcweb_url(url, pubkey, signer).await?)
-                }
+                let tx_client = TxClient::with_grpcweb_url(url, pubkey, signer).await?;
+
+                (Some(pubkey), Some(tx_client))
             }
-            (Some(_url), None, None) => return Err(Error::SignerNotSet),
-            (None, Some(_pubkey), Some(_signer)) => return Err(Error::GrpcEndpointNotSet),
-            (None, None, None) => None,
-            _ => unreachable!(),
+            (Some(_url), None) => return Err(Error::SignerNotSet),
+            (None, Some((_pubkey, _signer))) => return Err(Error::GrpcEndpointNotSet),
+            (None, None) => (None, None),
         };
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -236,11 +263,7 @@ impl ClientBuilder {
         #[cfg(target_arch = "wasm32")]
         let rpc = RpcClient::new(rpc_url).await?;
 
-        let ctx = Arc::new(Context {
-            rpc,
-            grpc,
-            pubkey: self.pubkey,
-        });
+        let ctx = Arc::new(Context { rpc, grpc, pubkey });
 
         Ok(Client {
             blob: BlobApi::new(ctx.clone()),
@@ -251,4 +274,11 @@ impl ClientBuilder {
             state: StateApi::new(ctx.clone()),
         })
     }
+}
+
+fn priv_key_signer(bytes: &[u8]) -> Result<(VerifyingKey, DispatchedDocSigner)> {
+    let signing_key = SigningKey::from_slice(&bytes).map_err(|_| Error::InvalidPrivateKey)?;
+    let pubkey = signing_key.verifying_key().to_owned();
+    let signer = DispatchedDocSigner::new(signing_key);
+    Ok((pubkey, signer))
 }
