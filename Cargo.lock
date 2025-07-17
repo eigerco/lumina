@@ -694,6 +694,7 @@ dependencies = [
 name = "celestia-client"
 version = "0.1.0"
 dependencies = [
+ "async-stream",
  "bytes",
  "celestia-grpc",
  "celestia-proto",

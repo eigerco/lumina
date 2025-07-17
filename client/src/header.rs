@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use async_stream::try_stream;
 use celestia_rpc::HeaderClient;
 use celestia_types::hash::Hash;
 use celestia_types::{ExtendedHeader, SyncState};
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 
 use crate::client::Context;
 use crate::Result;
@@ -19,7 +20,6 @@ impl HeaderApi {
     }
 
     /// Returns the head from the node's header store.
-    // TODO: keep this name or `local_head`?
     pub async fn head(&self) -> Result<ExtendedHeader> {
         let header = self.ctx.rpc.header_local_head().await?;
         header.validate()?;
@@ -89,12 +89,26 @@ impl HeaderApi {
     }
 
     /// Subscribe to recent ExtendedHeaders from the network.
+    ///
+    /// Headers will be validated and verified with the one that was
+    /// previously received.
     pub async fn subscribe(&self) -> Result<impl Stream<Item = Result<ExtendedHeader>>> {
-        Ok(self.ctx.rpc.header_subscribe().await?.map(|item| {
-            item.map_err(Into::into).and_then(|header| {
+        let mut subscription = self.ctx.rpc.header_subscribe().await?;
+
+        Ok(try_stream! {
+            let mut prev_header: Option<ExtendedHeader> = None;
+
+            while let Some(item) = subscription.next().await {
+                let header = item?;
                 header.validate()?;
-                Ok(header)
-            })
-        }))
+
+                if let Some(ref prev_header) = prev_header {
+                    prev_header.verify_adjacent(&header)?;
+                }
+
+                prev_header = Some(header.clone());
+                yield header;
+            }
+        })
     }
 }
