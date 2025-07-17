@@ -282,7 +282,7 @@ impl ClientBuilder {
 }
 
 fn priv_key_signer(bytes: &[u8]) -> Result<(VerifyingKey, DispatchedDocSigner)> {
-    let signing_key = SigningKey::from_slice(&bytes).map_err(|_| Error::InvalidPrivateKey)?;
+    let signing_key = SigningKey::from_slice(bytes).map_err(|_| Error::InvalidPrivateKey)?;
     let pubkey = signing_key.verifying_key().to_owned();
     let signer = DispatchedDocSigner::new(signing_key);
     Ok((pubkey, signer))
