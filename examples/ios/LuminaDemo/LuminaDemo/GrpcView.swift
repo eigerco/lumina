@@ -86,6 +86,7 @@ class GrpcViewModel : ObservableObject {
             let signer = StaticSigner(sk: sk)
             
             self.txClient = try await TxClient.create(url: url, accountPubkey: pk, signer: signer)
+            
             self.isReady = true
         } catch {
             self.error = error

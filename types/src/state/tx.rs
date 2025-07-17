@@ -7,13 +7,20 @@ use serde_repr::Serialize_repr;
 use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::v0_34::abci::Event;
 use tendermint_proto::Protobuf;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use wasm_bindgen::prelude::*;
 
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use crate::any::JsAny;
 use crate::bail_validation;
 use crate::hash::Hash;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use crate::signature::JsSignature;
 use crate::state::bit_array::BitVector;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use crate::state::bit_array::JsBitVector;
 use crate::state::Address;
-use crate::Error;
-use crate::Height;
+use crate::{Error, Height};
 
 pub use celestia_proto::cosmos::base::abci::v1beta1::TxResponse as RawTxResponse;
 pub use celestia_proto::cosmos::base::v1beta1::Coin as RawCoin;
@@ -34,6 +41,10 @@ pub const BOND_DENOM: &str = "utia";
 /// [`Tx`] is the standard type used for broadcasting transactions.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct Tx {
     /// Processable content of the transaction
     pub body: TxBody,
@@ -47,12 +58,20 @@ pub struct Tx {
     ///
     /// Signatures are provided as raw bytes so as to support current and future signature types.
     /// [`AuthInfo`] should be introspected to determine the signature algorithm used.
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub signatures: Vec<Signature>,
 }
 
 /// [`TxBody`] of a transaction that all signers sign over.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct TxBody {
     /// `messages` is a list of messages to be executed. The required signers of
     /// those messages define the number and order of elements in `AuthInfo`'s
@@ -62,31 +81,59 @@ pub struct TxBody {
     /// By convention, the first required signer (usually from the first message)
     /// is referred to as the primary signer and pays the fee for the whole
     /// transaction.
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub messages: Vec<Any>,
     /// `memo` is any arbitrary memo to be added to the transaction.
     pub memo: String,
     /// `timeout` is the block height after which this transaction will not
     /// be processed by the chain
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub timeout_height: Height,
     /// `extension_options` are arbitrary options that can be added by chains
     /// when the default options are not sufficient. If any of these are present
     /// and can't be handled, the transaction will be rejected
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub extension_options: Vec<Any>,
     /// `extension_options` are arbitrary options that can be added by chains
     /// when the default options are not sufficient. If any of these are present
     /// and can't be handled, they will be ignored
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub non_critical_extension_options: Vec<Any>,
 }
 
 /// Response to a tx query
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct TxResponse {
     /// The block height
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub height: Height,
 
     /// The transaction hash.
     #[serde(with = "crate::serializers::hash")]
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub txhash: Hash,
 
     /// Namespace for the Code
@@ -115,6 +162,10 @@ pub struct TxResponse {
     pub gas_used: i64,
 
     /// The request transaction bytes.
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub tx: Option<Any>,
 
     /// Time of the previous block. For heights > 1, it's the weighted median of
@@ -126,12 +177,39 @@ pub struct TxResponse {
     /// these events include those emitted by processing all the messages and those
     /// emitted from the ante. Whereas Logs contains the events, with
     /// additional metadata, emitted only by processing the messages.
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub events: Vec<Event>,
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+impl TxResponse {
+    /// The block height
+    #[wasm_bindgen(getter)]
+    pub fn height(&self) -> u64 {
+        self.height.value()
+    }
+
+    /// Events defines all the events emitted by processing a transaction. Note,
+    /// these events include those emitted by processing all the messages and those
+    /// emitted from the ante. Whereas Logs contains the events, with
+    /// additional metadata, emitted only by processing the messages.
+    #[wasm_bindgen(getter)]
+    pub fn events(&self) -> Vec<JsEvent> {
+        self.events.iter().cloned().map(Into::into).collect()
+    }
 }
 
 /// [`AuthInfo`] describes the fee and signer modes that are used to sign a transaction.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct AuthInfo {
     /// Defines the signing modes for the required signers.
     ///
@@ -151,10 +229,18 @@ pub struct AuthInfo {
 /// signer.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct SignerInfo {
     /// public_key is the public key of the signer. It is optional for accounts
     /// that already exist in state. If unset, the verifier can use the required \
     /// signer address for this position and lookup the public key.
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub public_key: Option<Any>,
     /// mode_info describes the signing mode of the signer and is a nested
     /// structure to support nested multisig pubkey's
@@ -168,10 +254,66 @@ pub struct SignerInfo {
 /// ModeInfo describes the signing mode of a single or nested multisig signer.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(all(target_arch = "wasm32", feature = "wasm-bindgen"), wasm_bindgen)]
 pub struct ModeInfo {
     /// sum is the oneof that specifies whether this represents a single or nested
     /// multisig signer
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub sum: Sum,
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+impl ModeInfo {
+    /// Return signature mode for the stored signature(s)
+    pub fn signature_mode(&self) -> SignatureMode {
+        match self.sum {
+            Sum::Single { .. } => SignatureMode::Single,
+            Sum::Multi { .. } => SignatureMode::Multi,
+        }
+    }
+
+    /// Single is the mode info for a single signer. It is structured as a message
+    /// to allow for additional fields such as locale for SIGN_MODE_TEXTUAL in the
+    /// future
+    #[wasm_bindgen(getter)]
+    pub fn mode(&self) -> Option<i32> {
+        match self.sum {
+            Sum::Single { mode } => Some(mode),
+            _ => None,
+        }
+    }
+
+    /// Multi is the mode info for a multisig public key
+    /// bitarray specifies which keys within the multisig are signing
+    #[wasm_bindgen(getter)]
+    pub fn bitarray(&self) -> Option<JsBitVector> {
+        match &self.sum {
+            Sum::Multi { bitarray, .. } => Some(bitarray.clone().into()),
+            Sum::Single { .. } => None,
+        }
+    }
+
+    /// Multi is the mode info for a multisig public key
+    /// mode_infos is the corresponding modes of the signers of the multisig
+    /// which could include nested multisig public keys
+    #[wasm_bindgen(getter)]
+    pub fn mode_infos(&self) -> Option<Vec<ModeInfo>> {
+        match &self.sum {
+            Sum::Multi { mode_infos, .. } => Some(mode_infos.clone()),
+            Sum::Single { .. } => None,
+        }
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+pub enum SignatureMode {
+    Single,
+    Multi,
 }
 
 /// sum is the oneof that specifies whether this represents a single or nested
@@ -196,11 +338,85 @@ pub enum Sum {
     },
 }
 
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+impl Tx {
+    /// List of signatures that matches the length and order of [`AuthInfo`]’s `signer_info`s to
+    /// allow connecting signature meta information like public key and signing mode by position.
+    #[wasm_bindgen(getter)]
+    pub fn signatures(&self) -> Vec<JsSignature> {
+        self.signatures
+            .iter()
+            .map(|s| JsSignature::from(&s[..]))
+            .collect()
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+impl TxBody {
+    /// `messages` is a list of messages to be executed. The required signers of
+    /// those messages define the number and order of elements in `AuthInfo`'s
+    /// signer_infos and Tx's signatures. Each required signer address is added to
+    /// the list only the first time it occurs.
+    ///
+    /// By convention, the first required signer (usually from the first message)
+    /// is referred to as the primary signer and pays the fee for the whole
+    /// transaction.
+    pub fn messages(&self) -> Vec<JsAny> {
+        self.messages.iter().cloned().map(Into::into).collect()
+    }
+
+    /// `timeout` is the block height after which this transaction will not
+    /// be processed by the chain
+    #[wasm_bindgen(getter)]
+    pub fn timeout_height(&self) -> u64 {
+        self.timeout_height.value()
+    }
+
+    /// `extension_options` are arbitrary options that can be added by chains
+    /// when the default options are not sufficient. If any of these are present
+    /// and can't be handled, the transaction will be rejected
+    pub fn extension_options(&self) -> Vec<JsAny> {
+        self.extension_options
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect()
+    }
+
+    /// `extension_options` are arbitrary options that can be added by chains
+    /// when the default options are not sufficient. If any of these are present
+    /// and can't be handled, they will be ignored
+    pub fn non_critical_extension_options(&self) -> Vec<JsAny> {
+        self.non_critical_extension_options
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect()
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+impl SignerInfo {
+    /// public_key is the public key of the signer. It is optional for accounts
+    /// that already exist in state. If unset, the verifier can use the required \
+    /// signer address for this position and lookup the public key.
+    pub fn public_key(&self) -> Option<JsAny> {
+        self.public_key.clone().map(Into::into)
+    }
+}
+
 /// Fee includes the amount of coins paid in fees and the maximum
 /// gas to be used by the transaction. The ratio yields an effective "gasprice",
 /// which must be above some miminum to be accepted into the mempool.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct Fee {
     /// amount is the amount of coins to be paid as a fee
     pub amount: Vec<Coin>,
@@ -210,10 +426,18 @@ pub struct Fee {
     /// if unset, the first signer is responsible for paying the fees. If set, the specified account must pay the fees.
     /// the payer must be a tx signer (and thus have signed this field in AuthInfo).
     /// setting this field does *not* change the ordering of required signers for the transaction.
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub payer: Option<Address>,
     /// if set, the fee payer (either the first signer or the value of the payer field) requests that a fee grant be used
     /// to pay fees instead of the fee payer's own balance. If an appropriate fee grant does not exist or the chain does
     /// not support fee grants, this will fail
+    #[cfg_attr(
+        all(target_arch = "wasm32", feature = "wasm-bindgen"),
+        wasm_bindgen(skip)
+    )]
     pub granter: Option<Address>,
 }
 
@@ -233,9 +457,32 @@ impl Fee {
     }
 }
 
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[wasm_bindgen]
+impl Fee {
+    /// if unset, the first signer is responsible for paying the fees. If set, the specified account must pay the fees.
+    /// the payer must be a tx signer (and thus have signed this field in AuthInfo).
+    /// setting this field does *not* change the ordering of required signers for the transaction.
+    #[wasm_bindgen(getter)]
+    pub fn payer(&self) -> Option<String> {
+        self.payer.as_ref().map(|a| a.to_string())
+    }
+    /// if set, the fee payer (either the first signer or the value of the payer field) requests that a fee grant be used
+    /// to pay fees instead of the fee payer's own balance. If an appropriate fee grant does not exist or the chain does
+    /// not support fee grants, this will fail
+    #[wasm_bindgen(getter)]
+    pub fn granter(&self) -> Option<String> {
+        self.granter.as_ref().map(|a| a.to_string())
+    }
+}
+
 /// Coin defines a token with a denomination and an amount.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(
+    all(target_arch = "wasm32", feature = "wasm-bindgen"),
+    wasm_bindgen(getter_with_clone)
+)]
 pub struct Coin {
     /// Coin denomination
     pub denom: String,
@@ -257,6 +504,7 @@ impl Coin {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(all(target_arch = "wasm32", feature = "wasm-bindgen"), wasm_bindgen)]
 pub enum ErrorCode {
     // source https://github.com/celestiaorg/cosmos-sdk/blob/v1.25.1-sdk-v0.46.16/types/errors/errors.go#L38
     /// No error
@@ -711,6 +959,86 @@ impl TryFrom<RawCoin> for Coin {
                 .parse()
                 .map_err(|_| Error::InvalidCoinAmount(value.amount))?,
         })
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use wbg::*;
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+mod wbg {
+    use super::Coin;
+    use js_sys::BigInt;
+    use tendermint_proto::v0_34::abci::{Event, EventAttribute};
+    use wasm_bindgen::prelude::*;
+
+    use lumina_utils::make_object;
+
+    /// Event allows application developers to attach additional information to
+    /// ResponseBeginBlock, ResponseEndBlock, ResponseCheckTx and ResponseDeliverTx.
+    /// Later, transactions may be queried using these events.
+    #[derive(Clone)]
+    #[wasm_bindgen(getter_with_clone)]
+    pub struct JsEvent {
+        pub r#type: String,
+        pub attributes: Vec<JsEventAttribute>,
+    }
+
+    impl From<Event> for JsEvent {
+        fn from(value: Event) -> Self {
+            JsEvent {
+                r#type: value.r#type,
+                attributes: value.attributes.into_iter().map(Into::into).collect(),
+            }
+        }
+    }
+
+    #[derive(Clone)]
+    #[wasm_bindgen(getter_with_clone)]
+    pub struct JsEventAttribute {
+        pub key: Vec<u8>,
+        pub value: Vec<u8>,
+        pub index: bool,
+    }
+
+    /// EventAttribute is a single key-value pair, associated with an event.
+    impl From<EventAttribute> for JsEventAttribute {
+        fn from(value: EventAttribute) -> Self {
+            JsEventAttribute {
+                key: value.key.to_vec(),
+                value: value.value.to_vec(),
+                index: value.index,
+            }
+        }
+    }
+
+    #[wasm_bindgen(typescript_custom_section)]
+    const _: &str = "
+    /**
+     * Coin
+     */
+    export interface Coin {
+      denom: string,
+      amount: bigint
+    }
+    ";
+
+    #[wasm_bindgen]
+    extern "C" {
+        /// Coin exposed to javascript
+        #[wasm_bindgen(typescript_type = "Coin")]
+        pub type JsCoin;
+    }
+
+    impl From<Coin> for JsCoin {
+        fn from(value: Coin) -> JsCoin {
+            let obj = make_object!(
+                "denom" => value.denom.into(),
+                "amount" => BigInt::from(value.amount)
+            );
+
+            obj.unchecked_into()
+        }
     }
 }
 

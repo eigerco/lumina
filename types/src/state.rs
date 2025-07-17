@@ -14,6 +14,8 @@ pub use self::balance::Balance;
 pub use self::query_delegation::{
     QueryDelegationResponse, QueryRedelegationsResponse, QueryUnbondingDelegationResponse,
 };
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use self::tx::JsCoin;
 pub use self::tx::{
     AuthInfo, Coin, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, RawTxResponse, SignerInfo, Sum, Tx,
     TxBody, TxResponse, BOND_DENOM,
