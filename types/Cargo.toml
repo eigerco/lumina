@@ -41,8 +41,11 @@ sha2 = "0.10.6"
 thiserror = "1.0.61"
 time = { version = "0.3.36", default-features = false }
 uniffi = { version = "0.29.2", optional = true }
+k256 = "0.13.4"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+lumina-utils = { workspace = true, features = ["make-object"] }
+
 js-sys = { version = "0.3.76", optional = true }
 serde-wasm-bindgen = { version = "0.6.5", optional = true }
 wasm-bindgen = { workspace = true, optional = true }
@@ -65,7 +68,7 @@ default = ["p2p"]
 p2p = ["dep:libp2p-identity", "dep:multiaddr"]
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
 tonic = ["celestia-proto/tonic"]
-wasm-bindgen = ["dep:js-sys", "dep:serde-wasm-bindgen", "dep:wasm-bindgen", "nmt-rs/serde", "time/wasm-bindgen"]
+wasm-bindgen = ["dep:js-sys", "dep:serde-wasm-bindgen", "dep:wasm-bindgen", "nmt-rs/serde", "time/wasm-bindgen", "celestia-proto/wasm-bindgen"]
 uniffi = ["dep:uniffi", "celestia-proto/uniffi"]
 
 [package.metadata.docs.rs]

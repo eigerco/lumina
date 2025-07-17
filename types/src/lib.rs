@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
+pub mod any;
 pub mod blob;
 pub mod block;
 mod byzantine;
@@ -8,6 +9,11 @@ pub mod consts;
 mod data_availability_header;
 pub mod eds;
 mod error;
+#[cfg(any(
+    feature = "uniffi",
+    all(target_arch = "wasm32", feature = "wasm-bindgen")
+))]
+pub mod evidence;
 mod extended_header;
 pub mod fraud_proof;
 pub mod hash;
@@ -21,6 +27,11 @@ pub mod row_namespace_data;
 pub mod sample;
 pub mod serializers;
 mod share;
+#[cfg(any(
+    feature = "uniffi",
+    all(target_arch = "wasm32", feature = "wasm-bindgen")
+))]
+pub mod signature;
 pub mod state;
 mod sync;
 #[cfg(any(test, feature = "test-utils"))]

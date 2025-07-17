@@ -4,6 +4,7 @@ use celestia_proto::cosmos::crypto::multisig::v1beta1::CompactBitArray;
 
 use crate::Error;
 
+/// Vector of bits
 #[derive(Debug, Clone, PartialEq)]
 pub struct BitVector(pub BitVec<u8, Msb0>);
 
@@ -46,12 +47,38 @@ impl From<BitVector> for CompactBitArray {
     }
 }
 
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+pub use wbg::*;
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+mod wbg {
+    use super::BitVector;
+    use wasm_bindgen::prelude::*;
+
+    /// Array of bits
+    #[wasm_bindgen(getter_with_clone)]
+    pub struct JsBitVector(pub Vec<u8>);
+
+    impl From<BitVector> for JsBitVector {
+        fn from(value: BitVector) -> Self {
+            JsBitVector(
+                value
+                    .0
+                    .iter()
+                    .map(|v| if *v { 1 } else { 0 })
+                    .collect::<Vec<u8>>(),
+            )
+        }
+    }
+}
+
 #[cfg(feature = "uniffi")]
 mod uniffi_types {
     use super::BitVector as LuminaBitVector;
     use bitvec::vec::BitVec;
     use uniffi::Record;
 
+    /// Vector of bits
     #[derive(Record)]
     pub struct BitVector {
         bytes: Vec<u8>,
