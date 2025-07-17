@@ -90,7 +90,7 @@ impl StateApi {
     /// let client = Client::builder()
     ///     .rpc_url(RPC_URL)
     ///     .grpc_url(GRPC_URL)
-    ///     .private_key_plaintext("...")
+    ///     .private_key_hex("...")
     ///     .build()
     ///     .await?;
     ///
@@ -156,7 +156,7 @@ impl StateApi {
     /// let client = Client::builder()
     ///     .rpc_url(RPC_URL)
     ///     .grpc_url(GRPC_URL)
-    ///     .private_key_plaintext("...")
+    ///     .private_key_hex("...")
     ///     .build()
     ///     .await?;
     ///

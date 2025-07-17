@@ -65,7 +65,7 @@ pub(crate) struct Context {
 /// let client = Client::builder()
 ///     .rpc_url(RPC_URL)
 ///     .grpc_url(GRPC_URL)
-///     .private_key_plaintext("...")
+///     .private_key_hex("...")
 ///     .build()
 ///     .await?;
 ///
@@ -92,18 +92,23 @@ pub struct ClientBuilder {
     rpc_url: Option<String>,
     rpc_auth_token: Option<String>,
     grpc_url: Option<String>,
-    signer: Option<Signer>,
+    signer: Option<SignerKind>,
 }
 
-enum Signer {
-    PrivKeyPlaintext(Zeroizing<String>),
-    PrivKeyBytes(Zeroizing<Vec<u8>>),
+enum SignerKind {
     Signer((VerifyingKey, DispatchedDocSigner)),
+    PrivKeyBytes(Zeroizing<Vec<u8>>),
+    PrivKeyHex(Zeroizing<String>),
 }
 
-impl Debug for Signer {
+impl Debug for SignerKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Signer { .. }")
+        let s = match self {
+            SignerKind::Signer(..) => "SignerKind::Signer(..)",
+            SignerKind::PrivKeyBytes(..) => "SignerKind::PrivKeyBytes(..)",
+            SignerKind::PrivKeyHex(..) => "SignerKind::PrivKeyHex(..)",
+        };
+        f.write_str(s)
     }
 }
 
@@ -172,7 +177,7 @@ impl ClientBuilder {
         S: DocSigner + Sync + Send + 'static,
     {
         let signer = DispatchedDocSigner::new(signer);
-        self.signer = Some(Signer::Signer((pubkey, signer)));
+        self.signer = Some(SignerKind::Signer((pubkey, signer)));
         self
     }
 
@@ -188,14 +193,14 @@ impl ClientBuilder {
     /// Set signer from a raw private key.
     pub fn private_key(mut self, bytes: &[u8]) -> ClientBuilder {
         let bytes = Zeroizing::new(bytes.to_vec());
-        self.signer = Some(Signer::PrivKeyBytes(bytes));
+        self.signer = Some(SignerKind::PrivKeyBytes(bytes));
         self
     }
 
-    /// Set signer from a plaintext private key.
-    pub fn private_key_plaintext(mut self, s: &str) -> ClientBuilder {
+    /// Set signer from a hex formatted private key.
+    pub fn private_key_hex(mut self, s: &str) -> ClientBuilder {
         let s = Zeroizing::new(s.to_string());
-        self.signer = Some(Signer::PrivKeyPlaintext(s));
+        self.signer = Some(SignerKind::PrivKeyHex(s));
         self
     }
 
@@ -232,9 +237,9 @@ impl ClientBuilder {
         }
 
         let signer = match self.signer.take() {
-            Some(Signer::Signer((pubkey, signer))) => Some((pubkey, signer)),
-            Some(Signer::PrivKeyBytes(bytes)) => Some(priv_key_signer(&bytes)?),
-            Some(Signer::PrivKeyPlaintext(s)) => {
+            Some(SignerKind::Signer((pubkey, signer))) => Some((pubkey, signer)),
+            Some(SignerKind::PrivKeyBytes(bytes)) => Some(priv_key_signer(&bytes)?),
+            Some(SignerKind::PrivKeyHex(s)) => {
                 let bytes =
                     Zeroizing::new(hex::decode(s.trim()).map_err(|_| Error::InvalidPrivateKey)?);
                 Some(priv_key_signer(&bytes)?)

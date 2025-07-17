@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
     let client = Client::builder()
         .rpc_url(RPC_URL)
         .grpc_url(GRPC_URL)
-        .private_key_plaintext(&priv_key)
+        .private_key_hex(&priv_key)
         .build()
         .await?;
 
@@ -80,7 +80,7 @@ async fn main() -> Result<()> {
     let client = Client::builder()
         .rpc_url(RPC_URL)
         .grpc_url(GRPC_URL)
-        .private_key_plaintext(&priv_key)
+        .private_key_hex(&priv_key)
         .build()
         .await?;
 
