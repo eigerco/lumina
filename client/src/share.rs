@@ -6,8 +6,8 @@ use celestia_types::row_namespace_data::NamespaceData;
 use celestia_types::sample::Sample;
 use celestia_types::{ExtendedDataSquare, Share};
 
-use crate::Result;
 use crate::client::Context;
+use crate::Result;
 
 pub use celestia_rpc::share::{GetRangeResponse, GetRowResponse, RowSide, SampleCoordinates};
 

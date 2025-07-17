@@ -5,9 +5,9 @@ use celestia_types::nmt::{Namespace, NamespaceProof};
 use celestia_types::{Blob, Commitment};
 use futures_util::{Stream, TryStreamExt};
 
-use crate::Result;
 use crate::client::Context;
 use crate::tx::{TxConfig, TxInfo};
+use crate::Result;
 
 pub use celestia_rpc::blob::BlobsAtHeight;
 

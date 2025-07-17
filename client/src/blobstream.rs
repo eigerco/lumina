@@ -4,8 +4,8 @@ use bytes::Bytes;
 use celestia_rpc::blobstream::BlobstreamClient;
 use celestia_types::MerkleProof;
 
-use crate::Result;
 use crate::client::Context;
+use crate::Result;
 
 /// Blobstream API for quering bridge nodes.
 pub struct BlobstreamApi {

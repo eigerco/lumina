@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use celestia_rpc::FraudClient;
 use celestia_rpc::fraud::{Proof, ProofType};
+use celestia_rpc::FraudClient;
 use futures_util::{Stream, TryStreamExt};
 
-use crate::Result;
 use crate::client::Context;
+use crate::Result;
 
 /// Fraud API for quering bridge nodes.
 pub struct FraudApi {
