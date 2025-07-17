@@ -62,7 +62,7 @@ pub enum Error {
     Types(#[from] celestia_types::Error),
 
     /// Client is in read-only mode.
-    #[error("Client is constructed for read-only mode")]
+    #[error("Client is constructed for read-only mode, operation not supported")]
     ReadOnlyMode,
 
     /// RPC authentication token is not supported.
