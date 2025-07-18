@@ -139,3 +139,59 @@ impl BlobApi {
             .map_err(Into::into))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::new_client;
+    use celestia_types::AppVersion;
+    use lumina_utils::test_utils::async_test;
+
+    #[async_test]
+    async fn blob_submit_and_retrieve() {
+        let (_lock, client) = new_client().await;
+
+        let ns = Namespace::new_v0(b"mydata").unwrap();
+
+        let blob = Blob::new_with_signer(
+            ns,
+            b"some data to store".to_vec(),
+            client.state().account_address().unwrap(),
+            AppVersion::V3,
+        )
+        .unwrap();
+
+        let submitted_commitment = blob.commitment.clone();
+        let tx_info = client
+            .blob()
+            .submit(&[blob], TxConfig::default())
+            .await
+            .unwrap();
+
+        let received_blob = client
+            .blob()
+            .get(tx_info.height.value(), ns, submitted_commitment)
+            .await
+            .unwrap();
+
+        received_blob
+            .validate_with_commitment(&submitted_commitment, AppVersion::V3)
+            .unwrap();
+    }
+
+    #[async_test]
+    async fn blob_retrieve_unknown() {
+        let (_lock, client) = new_client().await;
+
+        let head = client.header().head().await.unwrap();
+
+        let ns = Namespace::new_v0(b"mydata").unwrap();
+        let commitment = Commitment::new(rand::random());
+
+        client
+            .blob()
+            .get(head.height().value(), ns, commitment)
+            .await
+            .unwrap_err();
+    }
+}

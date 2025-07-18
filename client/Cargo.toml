@@ -24,6 +24,7 @@ bytes = "1.10.1"
 futures-util = "0.3.31"
 hex = "0.4.3"
 jsonrpsee-core = "0.25.1"
+jsonrpsee-types = "0.25.1"
 k256 = "0.13.4"
 serde_json = "1.0.140"
 tendermint.workspace = true
@@ -43,10 +44,12 @@ tonic = { version = "0.12.3", default-features = false, features = [ "transport"
 celestia-grpc = { workspace = true, features = ["wasm-bindgen"] }
 celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
+getrandom = { version = "0.2.15", features = ["js"] }
 tonic-web-wasm-client = "0.6.2"
 
 [dev-dependencies]
 lumina-utils = { workspace = true, features = ["test-utils"] }
+rand = "0.8.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { version = "1.38.0", features = ["rt-multi-thread", "macros"] }

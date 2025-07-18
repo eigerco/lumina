@@ -264,6 +264,12 @@ macro_rules! impl_address_type {
             }
         }
 
+        impl From<&VerifyingKey> for $name {
+            fn from(value: &VerifyingKey) -> Self {
+                value.to_owned().into()
+            }
+        }
+
         impl TryFrom<&[u8]> for $name {
             type Error = Error;
 

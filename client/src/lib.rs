@@ -7,6 +7,8 @@ mod fraud;
 mod header;
 mod share;
 mod state;
+#[cfg(test)]
+mod test_utils;
 mod utils;
 
 /// API related types.
@@ -99,5 +101,25 @@ impl From<jsonrpsee_core::ClientError> for Error {
 impl From<serde_json::Error> for Error {
     fn from(value: serde_json::Error) -> Self {
         jsonrpsee_core::ClientError::ParseError(value).into()
+    }
+}
+
+impl Error {
+    /// Helper that returns the logical error of a gRPC call.
+    pub fn as_grpc_status(&self) -> Option<&tonic::Status> {
+        match self {
+            Error::Grpc(celestia_grpc::Error::TonicError(status)) => Some(&*status),
+            _ => None,
+        }
+    }
+
+    /// Helper that returns the logical error of an RPC call.
+    pub fn as_rpc_call_error(&self) -> Option<&jsonrpsee_types::error::ErrorObjectOwned> {
+        match self {
+            Error::Rpc(celestia_rpc::Error::JsonRpc(jsonrpsee_core::ClientError::Call(e))) => {
+                Some(e)
+            }
+            _ => None,
+        }
     }
 }

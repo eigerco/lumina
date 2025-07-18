@@ -41,7 +41,7 @@ impl StateApi {
     /// Retrieves the Celestia coin balance for the signer.
     pub async fn balance(&self) -> Result<u64> {
         let address = self.account_address()?;
-        self.balance_for_address(address).await
+        self.balance_for_address(&address).await
     }
 
     /// Retrieves the Celestia coin balance for the given address.
@@ -50,8 +50,8 @@ impl StateApi {
     ///
     /// This is the only method of [`StateApi`] that fallbacks to RPC endpoint
     /// when gRPC endpoint wasn't set.
-    pub async fn balance_for_address(&self, address: AccAddress) -> Result<u64> {
-        let address = Address::AccAddress(address);
+    pub async fn balance_for_address(&self, address: &AccAddress) -> Result<u64> {
+        let address = Address::AccAddress(address.to_owned());
 
         let grpc = match self.ctx.grpc() {
             Ok(grpc) => grpc,
@@ -143,6 +143,7 @@ impl StateApi {
     /// This is the same as [`BlobApi::submit`].
     ///
     /// # Example
+    ///
     /// ```no_run
     /// # use celestia_client::{Client, Result};
     /// # use celestia_client::tx::TxConfig;
@@ -323,5 +324,179 @@ impl StateApi {
         }
 
         Ok(full_resp)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use celestia_grpc::TxConfig;
+    use k256::ecdsa::SigningKey;
+    use lumina_utils::test_utils::async_test;
+    use tokio::time::sleep;
+
+    use crate::test_utils::{
+        new_client, new_client_random_account, new_read_only_client, node0_address,
+        validator_address,
+    };
+    use crate::Error;
+
+    #[async_test]
+    async fn transfer() {
+        let (_lock, client) = new_client().await;
+
+        let random_key = SigningKey::random(&mut rand::thread_rng());
+        let random_acc = random_key.verifying_key().into();
+
+        client
+            .state()
+            .transfer(&random_acc, 123, TxConfig::default())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            client
+                .state()
+                .balance_for_address(&random_acc)
+                .await
+                .unwrap(),
+            123
+        );
+    }
+
+    #[async_test]
+    async fn delegation() {
+        let client = new_client_random_account().await;
+        let validator_addr = validator_address();
+        let client_addr = client.state().account_address().unwrap();
+
+        // Test delegation
+        client
+            .state()
+            .delegate(&validator_addr, 100, TxConfig::default())
+            .await
+            .unwrap();
+
+        let del = client
+            .state()
+            .query_delegation(&validator_addr)
+            .await
+            .unwrap();
+
+        assert_eq!(del.response.balance, 100);
+        assert_eq!(del.response.delegation.delegator_address, client_addr);
+        assert_eq!(del.response.delegation.validator_address, validator_addr);
+        assert_eq!(del.response.delegation.shares, 100.into());
+
+        // Test unbonding
+        let unbond_tx_height = client
+            .state()
+            .undelegate(&validator_addr, 10, TxConfig::default())
+            .await
+            .unwrap()
+            .height
+            .value();
+
+        let unbond = client
+            .state()
+            .query_unbonding(&validator_addr)
+            .await
+            .unwrap();
+
+        assert_eq!(unbond.unbond.delegator_address, client_addr);
+        assert_eq!(unbond.unbond.validator_address, validator_addr);
+        assert_eq!(unbond.unbond.entries.len(), 1);
+        assert_eq!(
+            unbond.unbond.entries[0].creation_height.value(),
+            unbond_tx_height
+        );
+        assert_eq!(unbond.unbond.entries[0].initial_balance, 10);
+        assert_eq!(unbond.unbond.entries[0].balance, 10);
+
+        let del = client
+            .state()
+            .query_delegation(&validator_addr)
+            .await
+            .unwrap();
+
+        assert_eq!(del.response.balance, 90);
+        assert_eq!(del.response.delegation.delegator_address, client_addr);
+        assert_eq!(del.response.delegation.validator_address, validator_addr);
+        assert_eq!(del.response.delegation.shares, 90.into());
+
+        // Test partial cancel unbonding
+        client
+            .state()
+            .cancel_unbonding_delegation(&validator_addr, 3, unbond_tx_height, TxConfig::default())
+            .await
+            .unwrap();
+
+        let unbond = client
+            .state()
+            .query_unbonding(&validator_addr)
+            .await
+            .unwrap();
+
+        assert_eq!(unbond.unbond.delegator_address, client_addr);
+        assert_eq!(unbond.unbond.validator_address, validator_addr);
+        assert_eq!(unbond.unbond.entries.len(), 1);
+        assert_eq!(
+            unbond.unbond.entries[0].creation_height.value(),
+            unbond_tx_height
+        );
+        assert_eq!(unbond.unbond.entries[0].initial_balance, 7);
+        assert_eq!(unbond.unbond.entries[0].balance, 7);
+
+        let del = client
+            .state()
+            .query_delegation(&validator_addr)
+            .await
+            .unwrap();
+
+        assert_eq!(del.response.balance, 93);
+        assert_eq!(del.response.delegation.delegator_address, client_addr);
+        assert_eq!(del.response.delegation.validator_address, validator_addr);
+        assert_eq!(del.response.delegation.shares, 93.into());
+
+        // Test fully cancel unbonding
+        client
+            .state()
+            .cancel_unbonding_delegation(&validator_addr, 7, unbond_tx_height, TxConfig::default())
+            .await
+            .unwrap();
+
+        let err = client
+            .state()
+            .query_unbonding(&validator_addr)
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.as_grpc_status().unwrap().code(), tonic::Code::NotFound);
+
+        let del = client
+            .state()
+            .query_delegation(&validator_addr)
+            .await
+            .unwrap();
+
+        assert_eq!(del.response.balance, 100);
+        assert_eq!(del.response.delegation.delegator_address, client_addr);
+        assert_eq!(del.response.delegation.validator_address, validator_addr);
+        assert_eq!(del.response.delegation.shares, 100.into());
+    }
+
+    #[async_test]
+    async fn balance_for_address() {
+        let client_ro = new_read_only_client().await;
+
+        // Read only module allows calling `balance_for_address`
+        let addr = node0_address();
+        let balance = client_ro.state().balance_for_address(&addr).await.unwrap();
+        assert!(balance > 0);
+
+        // Read only module does not allow calling `balance`
+        let e = client_ro.state().balance().await.unwrap_err();
+        assert!(matches!(e, Error::ReadOnlyMode));
     }
 }
