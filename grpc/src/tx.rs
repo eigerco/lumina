@@ -454,23 +454,6 @@ where
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-impl<S> TxClient<tonic_web_wasm_client::Client, S>
-where
-    S: DocSigner,
-{
-    /// Create a new client connected to the given `url` with default
-    /// settings of [`tonic_web_wasm_client::Client`].
-    pub async fn with_grpcweb_url(
-        url: impl Into<String>,
-        account_pubkey: VerifyingKey,
-        signer: S,
-    ) -> Result<Self> {
-        let transport = tonic_web_wasm_client::Client::new(url.into());
-        Self::new(transport, account_pubkey, signer).await
-    }
-}
-
 impl<T, S> Deref for TxClient<T, S> {
     type Target = GrpcClient<T>;
 

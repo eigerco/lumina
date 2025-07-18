@@ -36,6 +36,7 @@ hex = "0.4.3"
 http-body = "1"
 k256 = "0.13.4"
 serde = "1.0.215"
+signature = "2.2.0"
 thiserror = "1.0.61"
 tokio = { version = "1.38.0", features = ["sync"] }
 tonic = { version = "0.12.3", default-features = false, features = [
@@ -45,8 +46,7 @@ uniffi = { version = "0.29.2", optional = true, features = ["tokio"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.38.0", features = ["time"] }
-tonic = { version = "0.12.3", default-features = false, features = [ "transport" ] }
-signature = "2.2.0"
+tonic = { version = "0.12.3", default-features = false, features = [ "transport", "tls-native-roots" ] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 futures = "0.3.30"
@@ -74,3 +74,5 @@ wasm-bindgen-test.workspace = true
 default = []
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
 uniffi = ["dep:uniffi", "dep:async-trait", "celestia-types/uniffi"]
+tls-native-roots = ["tonic/tls-native-roots"]
+tls-webpki-roots = ["tonic/tls-webpki-roots"]

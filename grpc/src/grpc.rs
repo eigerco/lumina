@@ -146,27 +146,6 @@ where
     async fn tx_status(&self, hash: Hash) -> Result<TxStatusResponse>;
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-impl GrpcClient<tonic::transport::Channel> {
-    /// Create a new client connected to the given `url` with default
-    /// settings of [`tonic::transport::Channel`].
-    pub fn with_url(url: impl Into<String>) -> Result<Self, tonic::transport::Error> {
-        let channel = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
-        Ok(Self { transport: channel })
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl GrpcClient<tonic_web_wasm_client::Client> {
-    /// Create a new client connected to the given `url` with default
-    /// settings of [`tonic_web_wasm_client::Client`].
-    pub fn with_grpcweb_url(url: impl Into<String>) -> Self {
-        Self {
-            transport: tonic_web_wasm_client::Client::new(url.into()),
-        }
-    }
-}
-
 impl<T> fmt::Debug for GrpcClient<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("GrpcClient { .. }")

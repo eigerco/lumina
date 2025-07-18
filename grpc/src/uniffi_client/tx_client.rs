@@ -5,7 +5,7 @@ use std::sync::Arc;
 use celestia_types::state::Address;
 use celestia_types::{AppVersion, Blob};
 use k256::ecdsa::signature::Error as K256Error;
-use k256::ecdsa::{Signature as DocSignature, VerifyingKey};
+use k256::ecdsa::Signature as DocSignature;
 use prost::Message;
 use tendermint_proto::google::protobuf::Any;
 use tonic::transport::Channel;
@@ -75,7 +75,7 @@ pub trait UniffiSigner: Sync + Send {
     async fn sign(&self, doc: SignDoc) -> Result<UniffiSignature, TransactionClientError>;
 }
 
-struct UniffiSignerBox(pub Arc<dyn UniffiSigner>);
+pub struct UniffiSignerBox(pub Arc<dyn UniffiSigner>);
 
 /// Message signature
 #[derive(Record)]
@@ -106,24 +106,6 @@ pub struct AnyMsg {
 
 #[uniffi::export(async_runtime = "tokio")]
 impl TxClient {
-    /// Create a new transaction client with the specified account.
-    // constructor cannot be named `new`, otherwise it doesn't show up in Kotlin ¯\_(ツ)_/¯
-    #[uniffi::constructor(name = "create")]
-    pub async fn new(
-        url: String,
-        account_pubkey: Vec<u8>,
-        signer: Arc<dyn UniffiSigner>,
-    ) -> Result<Self> {
-        let vk = VerifyingKey::from_sec1_bytes(&account_pubkey)
-            .map_err(|e| TransactionClientError::InvalidAccountPublicKey { msg: e.to_string() })?;
-
-        let signer = UniffiSignerBox(signer);
-
-        let client = crate::TxClient::with_url(url, vk, signer).await?;
-
-        Ok(TxClient { client })
-    }
-
     /// Last gas price fetched by the client
     pub fn last_seen_gas_price(&self) -> f64 {
         self.client.last_seen_gas_price()
@@ -182,6 +164,12 @@ impl DocSigner for UniffiSignerBox {
             Ok(s) => s.try_into().map_err(K256Error::from_source),
             Err(e) => Err(K256Error::from_source(e)),
         }
+    }
+}
+
+impl From<crate::TxClient<Channel, UniffiSignerBox>> for TxClient {
+    fn from(client: crate::TxClient<Channel, UniffiSignerBox>) -> TxClient {
+        TxClient { client }
     }
 }
 
