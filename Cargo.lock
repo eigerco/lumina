@@ -714,6 +714,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tonic-web-wasm-client",
+ "wasm-bindgen-test",
  "zeroize",
 ]
 

@@ -161,7 +161,7 @@ mod tests {
         )
         .unwrap();
 
-        let submitted_commitment = blob.commitment.clone();
+        let submitted_commitment = blob.commitment;
         let tx_info = client
             .blob()
             .submit(&[blob], TxConfig::default())

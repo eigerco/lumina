@@ -329,12 +329,9 @@ impl StateApi {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use celestia_grpc::TxConfig;
     use k256::ecdsa::SigningKey;
     use lumina_utils::test_utils::async_test;
-    use tokio::time::sleep;
 
     use crate::test_utils::{
         new_client, new_client_random_account, new_read_only_client, node0_address,

@@ -1,5 +1,8 @@
 #![doc = include_str!("../README.md")]
 
+#[cfg(all(target_arch = "wasm32", test))]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
 mod blob;
 mod blobstream;
 mod client;
@@ -108,7 +111,7 @@ impl Error {
     /// Helper that returns the logical error of a gRPC call.
     pub fn as_grpc_status(&self) -> Option<&tonic::Status> {
         match self {
-            Error::Grpc(celestia_grpc::Error::TonicError(status)) => Some(&*status),
+            Error::Grpc(celestia_grpc::Error::TonicError(status)) => Some(&**status),
             _ => None,
         }
     }

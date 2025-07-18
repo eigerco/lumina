@@ -1,19 +1,20 @@
-use std::pin::pin;
 use std::sync::OnceLock;
-use std::time::Duration;
 
 use celestia_types::state::{AccAddress, ValAddress};
-use futures_util::StreamExt;
 use k256::ecdsa::SigningKey;
 use tokio::sync::{Mutex, MutexGuard};
-use tokio::time::sleep;
 
 use crate::tx::TxConfig;
 use crate::Client;
 
 const TEST_PRIV_KEY: &str = include_str!("../../ci/credentials/node-0.plaintext-key");
 const TEST_RPC_URL: &str = "ws://localhost:26658";
+
+#[cfg(not(target_arch = "wasm32"))]
 const TEST_GRPC_URL: &str = "http://localhost:19090";
+
+#[cfg(target_arch = "wasm32")]
+const TEST_GRPC_URL: &str = "http://localhost:18080";
 
 // We have to sequence the tests which submits transactions.
 // Multiple independent tx clients don't work well in parallel

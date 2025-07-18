@@ -50,6 +50,8 @@ tonic-web-wasm-client = "0.6.2"
 [dev-dependencies]
 lumina-utils = { workspace = true, features = ["test-utils"] }
 rand = "0.8.5"
+tokio = { version = "1.38.0", features = ["sync"] }
+wasm-bindgen-test.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { version = "1.38.0", features = ["rt-multi-thread", "macros"] }
