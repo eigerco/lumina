@@ -1,6 +1,9 @@
-use celestia_types::{hash::Hash, state::ErrorCode};
+use celestia_types::hash::Hash;
+use celestia_types::state::ErrorCode;
 use k256::ecdsa::signature::Error as SignatureError;
 use tonic::Status;
+
+use crate::abci_proofs::ProofError;
 
 /// Alias for a `Result` with the error type [`celestia_grpc::Error`].
 ///
@@ -64,6 +67,14 @@ pub enum Error {
     /// Provided public key differs from one associated with account
     #[error("Provided public key differs from one associated with account")]
     PublicKeyMismatch,
+
+    /// ABCI proof verification has failed
+    #[error("ABCI proof verification has failed: {0}")]
+    AbciProof(#[from] ProofError),
+
+    /// ABCI query returned an error
+    #[error("ABCI query returned an error (code {0}): {1}")]
+    AbciQuery(ErrorCode, String),
 
     /// Signing error
     #[error(transparent)]

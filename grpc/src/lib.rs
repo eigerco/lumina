@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+mod abci_proofs;
 mod error;
 pub mod grpc;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
