@@ -40,7 +40,7 @@ impl HeaderApi {
         Ok(header)
     }
 
-    /// Returns the [`ExtendedHeader`] at the given height if it is
+    /// Returns the [`ExtendedHeader`] at the given height, if it is
     /// currently available.
     pub async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let header = self.ctx.rpc.header_get_by_height(height).await?;
