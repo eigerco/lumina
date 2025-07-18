@@ -29,15 +29,18 @@ pub enum GrpcClientBuilderError {
         msg: String,
     },
 
-    #[error("missing required tx client parameters")]
+    /// Missing account key and signer when creating [`TxClient`]
+    #[error("missing required TxClient parameters")]
     MissingAccountKeyAndSigner,
 
+    /// Error building client
     #[error("Error building client: {msg}")]
     ErrorBuildingClient {
         /// message
         msg: String,
     },
 
+    /// Error connecting to endpoint
     #[error("Error connecting to the endpoint {msg}")]
     ErrorConnecting {
         /// message

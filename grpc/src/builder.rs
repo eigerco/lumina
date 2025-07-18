@@ -27,10 +27,8 @@ impl GrpcClientBuilder<(Endpoint, ClientTlsConfig), ()> {
         let endpoint = Endpoint::from_shared(url.into())?.user_agent("celestia-grpc")?;
         let tls_config = ClientTlsConfig::new();
 
-        //let transport = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
         Ok(GrpcClientBuilder {
             connection: (endpoint, tls_config),
-            //tls_config,
             signer: (),
             account_pubkey: None,
         })
@@ -39,7 +37,6 @@ impl GrpcClientBuilder<(Endpoint, ClientTlsConfig), ()> {
     /// Enables the platform’s trusted certs.
     pub fn with_native_roots(self) -> Self {
         let (endpoint, tls_config) = self.connection;
-        //let tls_config = self.tls_config.with_native_roots();
         Self {
             connection: (endpoint, tls_config.with_native_roots()),
             ..self
@@ -50,7 +47,6 @@ impl GrpcClientBuilder<(Endpoint, ClientTlsConfig), ()> {
     #[cfg(feature = "tls-webpki-roots")]
     pub fn with_webpki_roots(self) -> Self {
         let (endpoint, tls_config) = self.connection;
-        //let tls_config = self.tls_config.with_webpki_roots();
         Self {
             connection: (endpoint, tls_config.with_webpki_roots()),
             ..self
@@ -64,7 +60,6 @@ impl<S> GrpcClientBuilder<(Endpoint, ClientTlsConfig), S> {
     pub fn connect(self) -> Result<GrpcClientBuilder<Channel, S>> {
         let (endpoint, tls_config) = self.connection;
         let connection = endpoint.tls_config(tls_config)?.connect_lazy();
-        //let connection = self.connection.tls_config(self.tls_config)?.connect_lazy();
         Ok(GrpcClientBuilder {
             connection,
             signer: self.signer,
@@ -123,35 +118,6 @@ impl<T> GrpcClientBuilder<T, ()> {
         }
     }
 }
-
-/*
-trait ToGrpcService2<S> {
-    fn connect(self) -> Result<S>;
-}
-
-trait ToGrpcService
-where
-    Self::Service: GrpcService<BoxBody> + Clone,
-    Self::Service::T::ResponseBody: Body<Data = Bytes> + Send + 'static,
-    <Self::Service::T::ResponseBody as Body>::Error: Into<StdError> + Send,
-{
-    type Service;
-
-    fn connect(self) -> Result<Self::Service> ;
-}
-
-impl ToGrpcService for ChannelBuilder {
-    type Service = Channel;
-
-    fn connect(self) -> Result<Channel> {
-        Ok(self.endpoint.tls_config(self.tls_config)?.connect_lazy())
-    }
-}
-struct ChannelBuilder {
-    endpoint: Endpoint,
-    tls_config: ClientTlsConfig,
-}
-*/
 
 impl<T> GrpcClientBuilder<T, ()>
 where
