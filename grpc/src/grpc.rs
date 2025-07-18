@@ -11,12 +11,16 @@ use celestia_proto::cosmos::bank::v1beta1::query_client::QueryClient as BankQuer
 pub use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
+use celestia_proto::cosmos::staking::v1beta1::query_client::QueryClient as StakingQueryClient;
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::{Account, AuthParams};
-use celestia_types::state::{AccAddress, Address, Coin, TxResponse};
+use celestia_types::state::{
+    AccAddress, Address, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
+    QueryUnbondingDelegationResponse, TxResponse, ValAddress,
+};
 use http_body::Body;
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
@@ -31,6 +35,8 @@ mod bank;
 mod node;
 // cosmos.base.tendermint
 mod tendermint;
+// cosmos.staking
+mod staking;
 // celestia.core.tx
 mod celestia_tx;
 // celestia.blob
@@ -132,6 +138,34 @@ where
     /// Broadcast prepared and serialised transaction
     #[grpc_method(TxServiceClient::simulate)]
     async fn simulate(&self, tx_bytes: Vec<u8>) -> Result<GasInfo>;
+
+    // cosmos.staking
+
+    /// Retrieves the delegation information between a delegator and a validator
+    #[grpc_method(StakingQueryClient::delegation)]
+    async fn query_delegation(
+        &self,
+        delegator_address: &AccAddress,
+        validator_address: &ValAddress,
+    ) -> Result<QueryDelegationResponse>;
+
+    /// Retrieves the unbonding status between a delegator and a validator
+    #[grpc_method(StakingQueryClient::unbonding_delegation)]
+    async fn query_unbonding(
+        &self,
+        delegator_address: &AccAddress,
+        validator_address: &ValAddress,
+    ) -> Result<QueryUnbondingDelegationResponse>;
+
+    /// Retrieves the status of the redelegations between a delegator and a validator
+    #[grpc_method(StakingQueryClient::redelegations)]
+    async fn query_redelegations(
+        &self,
+        delegator_address: &AccAddress,
+        src_validator_address: &ValAddress,
+        dest_validator_address: &ValAddress,
+        pagination: Option<PageRequest>,
+    ) -> Result<QueryRedelegationsResponse>;
 
     // celestia.blob
 

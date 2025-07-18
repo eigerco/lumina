@@ -194,17 +194,17 @@ pub enum Error {
     #[error("Invalid address: {0}")]
     InvalidAddress(String),
 
-    /// Invalid balance denomination.
-    #[error("Invalid balance denomination: {0}")]
-    InvalidBalanceDenomination(String),
-
-    /// Invalid balance amount.
-    #[error("Invalid balance amount: {0}")]
-    InvalidBalanceAmount(String),
-
     /// Invalid coin amount.
     #[error("Invalid coin amount: {0}")]
     InvalidCoinAmount(String),
+
+    /// Invalid coin denomination.
+    #[error("Invalid coin denomination: {0}")]
+    InvalidCoinDenomination(String),
+
+    /// Invalid balance
+    #[error("Invalid balance: {0:?}")]
+    InvalidBalance(String),
 
     /// Invalid Public Key
     #[error("Invalid Public Key")]
@@ -265,6 +265,38 @@ pub enum Error {
     /// Empty blob list provided when creating MsgPayForBlobs
     #[error("Empty blob list")]
     EmptyBlobList,
+
+    /// Missing delegation response
+    #[error("Missing belegation response")]
+    MissingDelegationResponse,
+
+    /// Missing delegation
+    #[error("Missing delegation")]
+    MissingDelegation,
+
+    /// Missing balance
+    #[error("Missing balance")]
+    MissingBalance,
+
+    /// Missing unbond
+    #[error("Missing unbond")]
+    MissingUnbond,
+
+    /// Missing completion time
+    #[error("Missing completion time")]
+    MissingCompletionTime,
+
+    /// Missing redelegation
+    #[error("Missing redelegation")]
+    MissingRedelegation,
+
+    /// Missing redelegation entry
+    #[error("Missing redelegation entry")]
+    MissingRedelegationEntry,
+
+    /// Invalid Cosmos decimal
+    #[error("Invalid Cosmos decimal: {0}")]
+    InvalidCosmosDecimal(String),
 }
 
 impl From<prost::DecodeError> for Error {
@@ -610,17 +642,17 @@ pub enum UniffiError {
     #[error("Invalid address: {0}")]
     InvalidAddress(String),
 
-    /// Invalid balance denomination.
-    #[error("Invalid balance denomination: {0}")]
-    InvalidBalanceDenomination(String),
-
-    /// Invalid balance amount.
-    #[error("Invalid balance amount: {0}")]
-    InvalidBalanceAmount(String),
-
     /// Invalid coin amount.
     #[error("Invalid coin amount: {0}")]
     InvalidCoinAmount(String),
+
+    /// Invalid coin denomination.
+    #[error("Invalid coin denomination: {0}")]
+    InvalidCoinDenomination(String),
+
+    /// Invalid balance
+    #[error("Invalid balance")]
+    InvalidBalance(String),
 
     /// Invalid Public Key
     #[error("Invalid Public Key")]
@@ -681,6 +713,38 @@ pub enum UniffiError {
     /// Empty blob list provided when creating MsgPayForBlobs
     #[error("Empty blob list")]
     EmptyBlobList,
+
+    /// Missing DelegationResponse
+    #[error("Missing DelegationResponse")]
+    MissingDelegationResponse,
+
+    /// Missing Delegation
+    #[error("Missing Delegation")]
+    MissingDelegation,
+
+    /// Missing Balance
+    #[error("Missing Balance")]
+    MissingBalance,
+
+    /// Missing unbond
+    #[error("Missing unbond")]
+    MissingUnbond,
+
+    /// Missing completion time
+    #[error("Missing completion time")]
+    MissingCompletionTime,
+
+    /// Missing redelegation
+    #[error("Missing redelegation")]
+    MissingRedelegation,
+
+    /// Missing redelegation entry
+    #[error("Missing redelegation entry")]
+    MissingRedelegationEntry,
+
+    /// Invalid Cosmos decimal
+    #[error("Invalid Cosmos decimal: {0}")]
+    InvalidCosmosDecimal(String),
 }
 
 #[cfg(feature = "uniffi")]
@@ -740,9 +804,9 @@ impl From<Error> for UniffiError {
                 UniffiError::InvalidAddressSize(s.try_into().expect("size to fit"))
             }
             Error::InvalidAddress(a) => UniffiError::InvalidAddress(a),
-            Error::InvalidBalanceDenomination(d) => UniffiError::InvalidBalanceDenomination(d),
-            Error::InvalidBalanceAmount(a) => UniffiError::InvalidBalanceAmount(a),
             Error::InvalidCoinAmount(a) => UniffiError::InvalidCoinAmount(a),
+            Error::InvalidCoinDenomination(d) => UniffiError::InvalidCoinDenomination(d),
+            Error::InvalidBalance(b) => UniffiError::InvalidBalance(b),
             Error::InvalidPublicKeyType(t) => UniffiError::InvalidPublicKeyType(t),
             Error::UnsupportedFraudProofType(t) => UniffiError::UnsupportedFraudProofType(t),
             Error::IndexOutOfRange(i, r) => UniffiError::IndexOutOfRange(
@@ -761,6 +825,14 @@ impl From<Error> for UniffiError {
             Error::MissingSigner => UniffiError::MissingSigner,
             Error::SignerNotSupported => UniffiError::SignerNotSupported,
             Error::EmptyBlobList => UniffiError::EmptyBlobList,
+            Error::MissingDelegationResponse => UniffiError::MissingDelegationResponse,
+            Error::MissingDelegation => UniffiError::MissingDelegation,
+            Error::MissingBalance => UniffiError::MissingBalance,
+            Error::MissingUnbond => UniffiError::MissingUnbond,
+            Error::MissingCompletionTime => UniffiError::MissingCompletionTime,
+            Error::MissingRedelegation => UniffiError::MissingRedelegation,
+            Error::MissingRedelegationEntry => UniffiError::MissingRedelegationEntry,
+            Error::InvalidCosmosDecimal(s) => UniffiError::InvalidCosmosDecimal(s),
         }
     }
 }
