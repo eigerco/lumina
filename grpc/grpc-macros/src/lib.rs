@@ -3,7 +3,7 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use proc_macro2::{Group, TokenStream as TokenStream2};
+use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, TokenStreamExt};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
@@ -11,9 +11,8 @@ use syn::{parse_macro_input, Attribute, FnArg, Ident, Signature, Token};
 
 #[derive(Debug)]
 struct GrpcMethod {
-    doc_hash: Token![#],
-    doc_group: Group,
-    attrs: Vec<Attribute>,
+    outer_attrs: Vec<Attribute>,
+    inner_attrs: Vec<Attribute>,
     signature: Signature,
     _terminating_semi: Token![;],
 }
@@ -21,9 +20,8 @@ struct GrpcMethod {
 impl Parse for GrpcMethod {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(GrpcMethod {
-            doc_hash: input.parse()?,
-            doc_group: input.parse()?,
-            attrs: input.call(Attribute::parse_inner)?,
+            outer_attrs: input.call(Attribute::parse_outer)?,
+            inner_attrs: input.call(Attribute::parse_inner)?,
             signature: input.parse()?,
             _terminating_semi: input.parse()?,
         })
@@ -34,13 +32,11 @@ impl GrpcMethod {
     fn instantiate_method(&self, tonic_method: GrpcMethodAttribute) -> TokenStream2 {
         let mut tokens = TokenStream2::new();
 
-        tokens.append_all(&self.attrs);
+        tokens.append_all(&self.inner_attrs);
+        tokens.append_all(&self.outer_attrs);
 
         let grpc_client_struct = tonic_method.client;
         let grpc_method_name = tonic_method.method;
-
-        let doc_hash = self.doc_hash;
-        let doc_group = &self.doc_group;
 
         let signature = self.signature.clone();
         let params: Vec<_> = self
@@ -56,7 +52,6 @@ impl GrpcMethod {
             .collect();
 
         let method = quote! {
-            #doc_hash #doc_group
             pub #signature {
                 // 256 mb, future proof as celesita blocks grow
                 const MAX_MSG_SIZE: usize = 256 * 1024 * 1024;
