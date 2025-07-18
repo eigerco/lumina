@@ -653,7 +653,7 @@ mod wbg {
                 gas_limit: value.gas_limit(),
                 gas_price: value.gas_price(),
                 memo: value.memo(),
-                priority: value.priority().unwrap_or(TxPriority::Medium),
+                priority: value.priority().unwrap_or_default(),
             }
         }
     }
