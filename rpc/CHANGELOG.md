@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.3](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.11.2...celestia-rpc-v0.11.3) - 2025-07-18
+
+### Other
+
+- *(rpc)* improve clarity of share get range ignoring parity test ([#681](https://github.com/eigerco/lumina/pull/681))
+
 ## [0.11.2](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.11.1...celestia-rpc-v0.11.2) - 2025-07-02
 
 ### Other
