@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use async_stream::try_stream;
 use celestia_rpc::BlobClient;
 use celestia_types::nmt::{Namespace, NamespaceProof};
 use celestia_types::{Blob, Commitment};
-use futures_util::{Stream, TryStreamExt};
+use futures_util::Stream;
 
 use crate::client::Context;
 use crate::tx::{TxConfig, TxInfo};
@@ -125,18 +126,47 @@ impl BlobApi {
             .await?)
     }
 
-    /// Subscribe to blobs from the given namespace , returning them as they are being published.
-    // TODO: Should we validate blobs?
+    /// Subscribe to blobs from the given namespace, returning
+    /// them as they are being published.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use std::pin::pin;
+    /// # use futures_util::StreamExt;
+    /// # use celestia_client::{Client, Result};
+    /// # const RPC_URL: &str = "ws://localhost:26658";
+    /// # async fn docs() -> Result<()> {
+    /// use celestia_types::nmt::Namespace;
+    ///
+    /// let client = Client::builder()
+    ///     .rpc_url(RPC_URL)
+    ///     .build()
+    ///     .await?;
+    ///
+    /// let ns = Namespace::new_v0(b"mydata").unwrap();
+    /// let mut blobs_rx = pin!(client.blob().subscribe(ns).await);
+    ///
+    /// while let Some(blobs) = blobs_rx.next().await {
+    ///     dbg!(blobs);
+    /// }
+    /// # Ok(())
+    /// # }
     pub async fn subscribe(
         &self,
         namespace: Namespace,
-    ) -> Result<impl Stream<Item = Result<BlobsAtHeight>>> {
-        Ok(self
-            .ctx
-            .rpc
-            .blob_subscribe(namespace)
-            .await?
-            .map_err(Into::into))
+    ) -> impl Stream<Item = Result<BlobsAtHeight>> {
+        let ctx = self.ctx.clone();
+
+        try_stream! {
+            let mut subscription = ctx.rpc.blob_subscribe(namespace).await?;
+
+            while let Some(item) = subscription.next().await {
+                let blobs = item?;
+                // TODO: Should we validate blobs?
+                yield blobs;
+            }
+        }
     }
 }
 

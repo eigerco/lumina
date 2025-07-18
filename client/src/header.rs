@@ -92,11 +92,34 @@ impl HeaderApi {
     ///
     /// Headers will be validated and verified with the one that was
     /// previously received.
-    pub async fn subscribe(&self) -> Result<impl Stream<Item = Result<ExtendedHeader>>> {
-        let mut subscription = self.ctx.rpc.header_subscribe().await?;
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use std::pin::pin;
+    /// # use futures_util::StreamExt;
+    /// # use celestia_client::{Client, Result};
+    /// # const RPC_URL: &str = "ws://localhost:26658";
+    /// # async fn docs() -> Result<()> {
+    /// let client = Client::builder()
+    ///     .rpc_url(RPC_URL)
+    ///     .build()
+    ///     .await?;
+    ///
+    /// let mut headers_rx = pin!(client.header().subscribe().await);
+    ///
+    /// while let Some(header) = headers_rx.next().await {
+    ///     dbg!(header);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn subscribe(&self) -> impl Stream<Item = Result<ExtendedHeader>> {
+        let ctx = self.ctx.clone();
 
-        Ok(try_stream! {
+        try_stream! {
             let mut prev_header: Option<ExtendedHeader> = None;
+            let mut subscription = ctx.rpc.header_subscribe().await?;
 
             while let Some(item) = subscription.next().await {
                 let header = item?;
@@ -109,6 +132,6 @@ impl HeaderApi {
                 prev_header = Some(header.clone());
                 yield header;
             }
-        })
+        }
     }
 }

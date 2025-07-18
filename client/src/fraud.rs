@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
+use async_stream::try_stream;
 use celestia_rpc::fraud::{Proof, ProofType};
 use celestia_rpc::FraudClient;
-use futures_util::{Stream, TryStreamExt};
+use futures_util::Stream;
 
 use crate::client::Context;
 use crate::Result;
@@ -23,15 +24,17 @@ impl FraudApi {
     }
 
     /// Subscribe to fraud proof by its type.
-    pub async fn subscribe(
-        &self,
-        proof_type: ProofType,
-    ) -> Result<impl Stream<Item = Result<Proof>>> {
-        Ok(self
-            .ctx
-            .rpc
-            .fraud_subscribe(proof_type)
-            .await?
-            .map_err(Into::into))
+    pub async fn subscribe(&self, proof_type: ProofType) -> impl Stream<Item = Result<Proof>> {
+        let ctx = self.ctx.clone();
+
+        try_stream! {
+            let mut subscription = ctx.rpc.fraud_subscribe(proof_type).await?;
+
+            while let Some(item) = subscription.next().await {
+                let proof = item?;
+                // TODO: Should we validate proof?
+                yield proof;
+            }
+        }
     }
 }

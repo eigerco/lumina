@@ -22,7 +22,7 @@ mod native {
     use jsonrpsee::core::traits::ToRpcParams;
     use jsonrpsee::core::ClientError;
     use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
-    use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
+    use jsonrpsee::ws_client::{PingConfig, WsClient, WsClientBuilder};
     use serde::de::DeserializeOwned;
 
     use crate::Error;
@@ -74,6 +74,7 @@ mod native {
                     WsClientBuilder::default()
                         .max_response_size(MAX_RESPONSE_SIZE as u32)
                         .set_headers(headers)
+                        .enable_ws_ping(PingConfig::default())
                         .build(conn_str)
                         .await?,
                 ),
