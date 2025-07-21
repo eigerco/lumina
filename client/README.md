@@ -93,7 +93,8 @@ async fn main() -> Result<()> {
         AppVersion::V3,
     )?;
 
-    // This is the hash of the blob and is needed for retrieving blob form chain.
+    // This is the hash of the blob which is needed later on for retrieving
+    // it form chain.
     let commitment = blob.commitment.clone();
 
     // Submit the blob
