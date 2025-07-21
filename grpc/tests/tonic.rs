@@ -8,7 +8,7 @@ use celestia_types::state::{Coin, ErrorCode};
 use celestia_types::{AppVersion, Blob};
 use futures::FutureExt;
 use lumina_utils::test_utils::async_test;
-use utils::{load_account, new_jrpc_client, TestAccount};
+use utils::{load_account, new_rpc_client, TestAccount};
 
 pub mod utils;
 
@@ -70,7 +70,7 @@ async fn get_verified_balance() {
     let client = new_grpc_client();
     let account = load_account();
 
-    let jrpc_client = new_jrpc_client().await;
+    let jrpc_client = new_rpc_client().await;
 
     let (head, expected_balance) = tokio::join!(
         jrpc_client.header_network_head().map(Result::unwrap),
@@ -99,7 +99,7 @@ async fn get_verified_balance_not_funded_account() {
     let client = new_grpc_client();
     let account = TestAccount::random();
 
-    let jrpc_client = new_jrpc_client().await;
+    let jrpc_client = new_rpc_client().await;
     let head = jrpc_client.header_network_head().await.unwrap();
 
     let verified_balance = client

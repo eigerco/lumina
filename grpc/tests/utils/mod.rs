@@ -73,7 +73,7 @@ mod imp {
         GrpcClient::with_url(CELESTIA_GRPC_URL).expect("creating client failed")
     }
 
-    pub async fn new_jrpc_client() -> Client {
+    pub async fn new_rpc_client() -> Client {
         Client::new(CELESTIA_RPC_URL, None).await.unwrap()
     }
 
@@ -105,7 +105,7 @@ mod imp {
     use std::future::Future;
 
     use celestia_grpc::{GrpcClient, TxClient};
-    use celestia_rpc::Client as JrpcClient;
+    use celestia_rpc::Client as RpcClient;
     use tokio::sync::oneshot;
     use tonic_web_wasm_client::Client;
     use wasm_bindgen_futures::spawn_local;
@@ -119,8 +119,8 @@ mod imp {
         GrpcClient::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL)
     }
 
-    pub async fn new_jrpc_client() -> JrpcClient {
-        JrpcClient::new(CELESTIA_RPC_URL).await.unwrap()
+    pub async fn new_rpc_client() -> RpcClient {
+        RpcClient::new(CELESTIA_RPC_URL).await.unwrap()
     }
 
     pub async fn new_tx_client() -> ((), TxClient<Client, SigningKey>) {
