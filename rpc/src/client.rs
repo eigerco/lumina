@@ -15,7 +15,6 @@ mod native {
     use std::fmt;
     use std::result::Result;
 
-    use celestia_types::consts::appconsts::{self, SHARE_SIZE};
     use http::{header, HeaderValue};
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
@@ -27,15 +26,7 @@ mod native {
 
     use crate::Error;
 
-    // NOTE: Always the largest `appconsts::*::SQUARE_SIZE_UPPER_BOUND` needs to be used.
-    const MAX_EDS_SIZE_BYTES: usize = appconsts::v3::SQUARE_SIZE_UPPER_BOUND
-        * appconsts::v3::SQUARE_SIZE_UPPER_BOUND
-        * 4
-        * SHARE_SIZE;
-
-    // The biggest response we might get is for requesting an EDS.
-    // Also, we allow 1 MB extra for any metadata they come with it.
-    const MAX_RESPONSE_SIZE: usize = MAX_EDS_SIZE_BYTES + 1024 * 1024;
+    const MAX_RESPONSE_SIZE: usize = 256 * 1024 * 1024;
 
     /// Json RPC client.
     pub enum Client {
