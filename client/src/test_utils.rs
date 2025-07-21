@@ -13,6 +13,7 @@ const TEST_RPC_URL: &str = "ws://localhost:26658";
 #[cfg(not(target_arch = "wasm32"))]
 const TEST_GRPC_URL: &str = "http://localhost:19090";
 
+/// gRPC-Web url
 #[cfg(target_arch = "wasm32")]
 const TEST_GRPC_URL: &str = "http://localhost:18080";
 
