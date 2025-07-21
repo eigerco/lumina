@@ -21,13 +21,17 @@ pub enum ProofError {
     #[error("Unsupported proof spec: {0}")]
     UnsupportedSpec(String),
 
-    ///Decoding from proto failed
+    /// Decoding from proto failed
     #[error("Decoding from proto failed: {0}")]
     Decode(#[from] prost::DecodeError),
 
     /// Existance proof missing in operation
     #[error("Existance proof missing in operation")]
     ExistanceProofMissing,
+
+    /// Uneven proofs and keys lengths
+    #[error("Uneven proofs ({0}) and keys ({1}) lenghts")]
+    UnevenProofsAndKeysLengths(usize, usize),
 
     /// Operation key is different than expected
     #[error("Operation key ({0:?}) is different than expected ({1:?})")]
@@ -125,10 +129,17 @@ impl ProofChain {
     ) -> Result<(), ProofError> {
         let root = root.as_ref();
         let mut current_leaf = leaf.as_ref();
+        let mut current_idx = 0;
+        // fuse the iterator to make sure it doesn't do any fancy logic
+        // to obey the checks
+        let mut keys = keys.into_iter().fuse();
 
-        for (i, key) in keys.into_iter().enumerate() {
+        while let Some(key) = keys.next() {
             let key = key.as_ref();
-            let proof = self.0.get(i).unwrap();
+            let proof = self
+                .0
+                .get(current_idx)
+                .ok_or(ProofError::ExistanceProofMissing)?;
 
             if key != proof.key {
                 return Err(ProofError::OperationKeyMismatch(
@@ -144,15 +155,21 @@ impl ProofChain {
             // current proof must prove current leaf to the root of the current tree,
             // which is at the same time the leaf for the next proof or the uppermost root
             // in case we are in proving the last tree
-            let current_root = self
-                .0
-                .get(i + 1)
-                .and_then(|proof| {
-                    proof
-                        .get_existence_proof(key)
-                        .map(|proof| proof.value.as_slice())
-                })
-                .unwrap_or(root);
+            let current_root = if let Some(proof) = self.0.get(current_idx + 1) {
+                proof
+                    .get_existence_proof(key)
+                    .map(|proof| proof.value.as_slice())
+                    .ok_or(ProofError::ExistanceProofMissing)?
+            } else {
+                // check that we used all keys already and we can prove to the uppermost root
+                if keys.next().is_some() {
+                    return Err(ProofError::UnevenProofsAndKeysLengths(
+                        current_idx,
+                        current_idx + 1,
+                    ));
+                }
+                root
+            };
 
             if !ics23::verify_membership::<Sha256Provider>(
                 &proof.proof,
@@ -165,6 +182,15 @@ impl ProofChain {
             }
 
             current_leaf = current_root;
+            current_idx += 1;
+        }
+
+        // check that we used all proofs during verification
+        if self.0.get(current_idx).is_some() {
+            return Err(ProofError::UnevenProofsAndKeysLengths(
+                current_idx,
+                current_idx - 1,
+            ));
         }
 
         Ok(())
