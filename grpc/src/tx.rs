@@ -268,24 +268,22 @@ where
 
     async fn sign_and_broadcast_tx(&self, tx: RawTxBody, cfg: TxConfig) -> Result<(Hash, u64)> {
         let account = self.account.lock().await;
-        let sign_tx = |tx, gas, fee| {
-            sign_tx(
-                tx,
-                self.chain_id.clone(),
-                &account,
-                &self.pubkey,
-                &self.signer,
-                gas,
-                fee,
-            )
-        };
 
         let (gas_limit, gas_price) = self
             .calculate_transaction_gas_params(&tx, &cfg, &account)
             .await?;
 
         let fee = (gas_limit as f64 * gas_price).ceil();
-        let tx = sign_tx(tx, gas_limit, fee as u64).await?;
+        let tx = sign_tx(
+            tx,
+            self.chain_id.clone(),
+            &account,
+            &self.pubkey,
+            &self.signer,
+            gas_limit,
+            fee as u64,
+        )
+        .await?;
 
         self.broadcast_tx_with_account(tx.encode_to_vec(), account)
             .await
@@ -567,24 +565,6 @@ mod wbg {
     }
 
     /**
-     * Transaction priority, if not provided default TxConfig uses medium priority.
-     */
-    export interface TxPriority {
-      /**
-       * Estimated gas price is the value at the end of the lowest 10% of gas prices from the last 5 blocks.
-       */
-      Low = 1,
-      /**
-       * Estimated gas price is the mean of all gas prices from the last 5 blocks.
-       */
-      Medium = 2,
-      /**
-       * Estimated gas price is the price at the start of the top 10% of transactions’ gas prices from the last 5 blocks.
-       */
-      High = 3,
-    }
-
-    /**
      * Transaction config.
      */
     export interface TxConfig {
@@ -614,10 +594,6 @@ mod wbg {
         /// TxInfo exposed to javascript
         #[wasm_bindgen(typescript_type = "TxInfo")]
         pub type JsTxInfo;
-
-        /// TxPriority exposed to javascript
-        #[wasm_bindgen(typescript_type = "TxPriority")]
-        pub type JsTxPriority;
 
         /// TxConfig exposed to javascript
         #[wasm_bindgen(typescript_type = "TxConfig")]

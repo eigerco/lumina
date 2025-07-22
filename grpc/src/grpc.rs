@@ -77,34 +77,33 @@ where
 
     // cosmos.auth
 
-    /// Params queries all parameters.
+    /// Get auth params
     #[grpc_method(AuthQueryClient::params)]
     async fn get_auth_params(&self) -> Result<AuthParams>;
 
-    /// Account returns account details based on address.
+    /// Get account
     #[grpc_method(AuthQueryClient::account)]
     async fn get_account(&self, account: &AccAddress) -> Result<Account>;
 
-    /// Accounts returns all the existing accounts
+    /// Get accounts
     #[grpc_method(AuthQueryClient::accounts)]
     async fn get_accounts(&self) -> Result<Vec<Account>>;
 
     // cosmos.bank
 
-    /// Balance queries the balance of a single coin for a single account.
+    /// Get balance of coins with given denom
     #[grpc_method(BankQueryClient::balance)]
     async fn get_balance(&self, address: &Address, denom: impl Into<String>) -> Result<Coin>;
 
-    /// AllBalances queries the balance of all coins for a single account.
+    /// Get balance of all coins
     #[grpc_method(BankQueryClient::all_balances)]
     async fn get_all_balances(&self, address: &Address) -> Result<Vec<Coin>>;
 
-    /// get_spendable_balances queries the spenable balance of all coins for a single
-    /// account.
+    /// Get balance of all spendable coins
     #[grpc_method(BankQueryClient::spendable_balances)]
     async fn get_spendable_balances(&self, address: &Address) -> Result<Vec<Coin>>;
 
-    /// get_total_supply queries the total supply of all coins.
+    /// Get total supply
     #[grpc_method(BankQueryClient::total_supply)]
     async fn get_total_supply(&self) -> Result<Vec<Coin>>;
 
@@ -116,11 +115,11 @@ where
 
     // cosmos.base.tendermint
 
-    /// get_latest_block returns the latest block.
+    /// Get latest block
     #[grpc_method(TendermintServiceClient::get_latest_block)]
     async fn get_latest_block(&self) -> Result<Block>;
 
-    /// get_block_by_height queries block for given height.
+    /// Get block by height
     #[grpc_method(TendermintServiceClient::get_block_by_height)]
     async fn get_block_by_height(&self, height: i64) -> Result<Block>;
 
@@ -130,29 +129,29 @@ where
     #[grpc_method(TxServiceClient::broadcast_tx)]
     async fn broadcast_tx(&self, tx_bytes: Vec<u8>, mode: BroadcastMode) -> Result<TxResponse>;
 
-    /// get_tx fetches a tx by hash.
+    /// Get Tx
     #[grpc_method(TxServiceClient::get_tx)]
     async fn get_tx(&self, hash: Hash) -> Result<GetTxResponse>;
 
-    /// simulate simulates executing a transaction for estimating gas usage.
+    /// Broadcast prepared and serialised transaction
     #[grpc_method(TxServiceClient::simulate)]
     async fn simulate(&self, tx_bytes: Vec<u8>) -> Result<GasInfo>;
 
     // celestia.blob
 
-    /// get_blob_params queries the blob parameters.
+    /// Get blob params
     #[grpc_method(BlobQueryClient::params)]
     async fn get_blob_params(&self) -> Result<BlobParams>;
 
     // celestia.core.tx
 
-    /// tx_status returns the status of a transaction.
+    /// Get status of the transaction
     #[grpc_method(TxStatusClient::tx_status)]
     async fn tx_status(&self, hash: Hash) -> Result<TxStatusResponse>;
 
     // celestia.core.gas_estimation
 
-    /// estimate_gas_price takes a transaction priority and estimates the gas price based
+    /// Estimate gas price for given transaction priority based
     /// on the gas prices of the transactions in the last five blocks.
     ///
     /// If no transaction is found in the last five blocks, return the network
@@ -160,8 +159,8 @@ where
     #[grpc_method(GasEstimatorClient::estimate_gas_price)]
     async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64>;
 
-    /// estimate_gas_price_and_usage takes a transaction priority and a transaction bytes
-    /// and estimates the gas price and the gas used for that transaction.
+    /// Estimate gas price for transaction with given priority and estimate gas usage for
+    /// privded serialised transaction.
     ///
     /// The gas price estimation is based on the gas prices of the transactions in the last five blocks.
     /// If no transaction is found in the last five blocks, return the network
