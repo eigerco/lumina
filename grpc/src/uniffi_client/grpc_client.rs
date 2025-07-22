@@ -44,7 +44,7 @@ pub struct GrpcClient {
 #[uniffi::export(async_runtime = "tokio")]
 impl GrpcClient {
     /// Create a new client connected with the given `url`
-    #[uniffi::constructor]
+    #[uniffi::constructor(name = "create")]
     // this function _must_ be async despite not awaiting, so that it executes in tokio runtime
     // context
     pub async fn new(url: String) -> Result<Self> {
