@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.12.0...celestia-types-v0.13.0) - 2025-07-23
+
+### Added
+
+- *(grpc)* [**breaking**] Trustless balance queries ([#677](https://github.com/eigerco/lumina/pull/677))
+- *(grpc,types,node)* [**breaking**] Wasm grpc client ([#654](https://github.com/eigerco/lumina/pull/654))
+- *(grpc)* Streamline TxClient creation API, add docs with example ([#673](https://github.com/eigerco/lumina/pull/673))
+
 ## [0.12.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.11.2...celestia-types-v0.12.0) - 2025-07-02
 
 ### Added
