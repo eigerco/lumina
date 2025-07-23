@@ -39,9 +39,22 @@ impl StateApi {
     }
 
     /// Retrieves the Celestia coin balance for the signer.
+    ///
+    /// # Notes
+    ///
+    /// This returns the verified balance which is the one that was reported by
+    /// the previous network block. In other words, if you transfer some coins,
+    /// you need to wait 1 more block in order to see the new balance. If you want
+    /// something more immediate then use [`StateApi::balance_unverified`].
     pub async fn balance(&self) -> Result<u64> {
         let address = self.account_address()?;
         self.balance_for_address(&address).await
+    }
+
+    /// Retrieves the Celestia coin balance for the signer.
+    pub async fn balance_unverified(&self) -> Result<u64> {
+        let address = self.account_address()?;
+        self.balance_for_address_unverified(&address).await
     }
 
     /// Retrieves the Celestia coin balance for the given address.
