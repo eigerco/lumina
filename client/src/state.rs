@@ -520,7 +520,19 @@ mod tests {
         let balance = client_ro.state().balance_for_address(&addr).await.unwrap();
         assert!(balance > 0);
 
+        // Read only module does not allow calling `balance_for_address_unverified`.
+        let e = client_ro
+            .state()
+            .balance_for_address_unverified(&addr)
+            .await
+            .unwrap_err();
+        assert!(matches!(e, Error::ReadOnlyMode));
+
         // Read only module does not allow calling `balance`
+        let e = client_ro.state().balance().await.unwrap_err();
+        assert!(matches!(e, Error::ReadOnlyMode));
+
+        // Read only module does not allow calling `balance_unverified`
         let e = client_ro.state().balance().await.unwrap_err();
         assert!(matches!(e, Error::ReadOnlyMode));
     }
