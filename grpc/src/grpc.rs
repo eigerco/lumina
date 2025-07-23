@@ -15,17 +15,21 @@ use celestia_proto::cosmos::staking::v1beta1::query_client::QueryClient as Staki
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
+use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::{Account, AuthParams};
 use celestia_types::state::{
-    AccAddress, Address, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
-    QueryUnbondingDelegationResponse, TxResponse, ValAddress,
+    AbciQueryResponse, AccAddress, Address, AddressTrait, Coin, ErrorCode, PageRequest,
+    QueryDelegationResponse, QueryRedelegationsResponse, QueryUnbondingDelegationResponse,
+    TxResponse, ValAddress, BOND_DENOM,
 };
+use celestia_types::ExtendedHeader;
 use http_body::Body;
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
 
-use crate::Result;
+use crate::abci_proofs::ProofChain;
+use crate::{Error, Result};
 
 // cosmos.auth
 mod auth;
@@ -93,6 +97,63 @@ where
 
     // cosmos.bank
 
+    /// Get balance of coins with [`BOND_DENOM`] for the given address, together with a proof,
+    /// and verify the returned balance against the corresponding block's [`AppHash`].
+    ///
+    /// NOTE: the balance returned is the balance reported by the parent block of
+    /// the provided header. This is due to the fact that for block N, the block's
+    /// [`AppHash`] is the result of applying the previous block's transaction list.
+    ///
+    /// [`AppHash`]: ::tendermint::hash::AppHash
+    pub async fn get_verified_balance(
+        &self,
+        address: &Address,
+        header: &ExtendedHeader,
+    ) -> Result<Coin> {
+        // construct the key for querying account's balance from bank state
+        let mut prefixed_account_key = Vec::with_capacity(1 + 1 + appconsts::SIGNER_SIZE + 4);
+        prefixed_account_key.push(0x02); // balances prefix
+        prefixed_account_key.push(address.as_bytes().len() as u8); // address length
+        prefixed_account_key.extend_from_slice(address.as_bytes()); // address
+        prefixed_account_key.extend_from_slice(BOND_DENOM.as_bytes()); // denom
+
+        // abci queries are possible only from 2nd block, but we can rely on the node to
+        // return an error if that is the case. We only want to prevent height == 0 here,
+        // because that will make node interpret that as a network head. It would also fail,
+        // on proof verification, but it would be harder to debug as the message would just
+        // say that computed root is different than expected.
+        let height = 1.max(header.height().value().saturating_sub(1));
+
+        let response = self
+            .abci_query(&prefixed_account_key, "store/bank/key", height, true)
+            .await?;
+        if response.code != ErrorCode::Success {
+            return Err(Error::AbciQuery(response.code, response.log));
+        }
+
+        // If account doesn't exist yet, just return 0
+        if response.value.is_empty() {
+            return Ok(Coin::utia(0));
+        }
+
+        // NOTE: don't put `ProofChain` directly in the AbciQueryResponse, because
+        // it supports only small subset of proofs that are required for the balance
+        // queries
+        let proof: ProofChain = response.proof_ops.unwrap_or_default().try_into()?;
+        proof.verify_membership(
+            &header.header.app_hash,
+            [prefixed_account_key.as_slice(), b"bank"],
+            &response.value,
+        )?;
+
+        let amount = str::from_utf8(&response.value)
+            .map_err(|_| Error::FailedToParseResponse)?
+            .parse()
+            .map_err(|_| Error::FailedToParseResponse)?;
+
+        Ok(Coin::utia(amount))
+    }
+
     /// Get balance of coins with given denom
     #[grpc_method(BankQueryClient::balance)]
     async fn get_balance(&self, address: &Address, denom: impl Into<String>) -> Result<Coin>;
@@ -124,6 +185,16 @@ where
     /// Get block by height
     #[grpc_method(TendermintServiceClient::get_block_by_height)]
     async fn get_block_by_height(&self, height: i64) -> Result<Block>;
+
+    /// Issue a direct ABCI query to the application
+    #[grpc_method(TendermintServiceClient::abci_query)]
+    async fn abci_query(
+        &self,
+        data: impl AsRef<[u8]>,
+        path: impl Into<String>,
+        height: u64,
+        prove: bool,
+    ) -> Result<AbciQueryResponse>;
 
     // cosmos.tx
 
