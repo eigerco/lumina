@@ -515,12 +515,12 @@ mod tests {
     async fn balance_for_address() {
         let client_ro = new_read_only_client().await;
 
-        // Read only module allows calling `balance_for_address`
+        // Read only mode allows calling `balance_for_address`
         let addr = node0_address();
         let balance = client_ro.state().balance_for_address(&addr).await.unwrap();
         assert!(balance > 0);
 
-        // Read only module does not allow calling `balance_for_address_unverified`.
+        // Read only mode does not allow calling `balance_for_address_unverified`.
         let e = client_ro
             .state()
             .balance_for_address_unverified(&addr)
@@ -528,11 +528,11 @@ mod tests {
             .unwrap_err();
         assert!(matches!(e, Error::ReadOnlyMode));
 
-        // Read only module does not allow calling `balance`
+        // Read only mode does not allow calling `balance`
         let e = client_ro.state().balance().await.unwrap_err();
         assert!(matches!(e, Error::ReadOnlyMode));
 
-        // Read only module does not allow calling `balance_unverified`
+        // Read only mode does not allow calling `balance_unverified`
         let e = client_ro.state().balance().await.unwrap_err();
         assert!(matches!(e, Error::ReadOnlyMode));
     }
