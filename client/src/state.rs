@@ -77,9 +77,6 @@ impl StateApi {
     }
 
     /// Retrieves the Celestia coin balance for the given address.
-    ///
-    /// # Notes
-    ///
     pub async fn balance_for_address_unverified(&self, address: &AccAddress) -> Result<u64> {
         Ok(self
             .ctx
