@@ -4,7 +4,7 @@ use celestia_proto::cosmos::bank::v1beta1::MsgSend;
 use celestia_proto::cosmos::staking::v1beta1::{
     MsgBeginRedelegate, MsgCancelUnbondingDelegation, MsgDelegate, MsgUndelegate,
 };
-use celestia_rpc::StateClient;
+use celestia_rpc::{HeaderClient, StateClient};
 use celestia_types::state::{
     AccAddress, Address, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
     QueryUnbondingDelegationResponse, ValAddress,
@@ -48,6 +48,11 @@ impl StateApi {
     ///
     /// # Notes
     ///
+    /// This returns the verified balance which is the one that was reported by
+    /// the previous network block. In other words, if you transfer some coins,
+    /// you need to wait 1 more block in order to see the new balance. If you want
+    /// something more immediate then use [`StateApi::balance_for_address_unverified`].
+    ///
     /// This is the only method of [`StateApi`] that fallbacks to RPC endpoint
     /// when gRPC endpoint wasn't set.
     pub async fn balance_for_address(&self, address: &AccAddress) -> Result<u64> {
@@ -65,10 +70,23 @@ impl StateApi {
             }
         };
 
-        // TODO: Verify balance with AbciQuery is ready.
-        let coin = grpc.get_balance(&address, "utia").await?;
+        let head = self.ctx.rpc.header_network_head().await?;
+        head.validate()?;
 
-        Ok(coin.amount())
+        Ok(grpc.get_verified_balance(&address, &head).await?.amount())
+    }
+
+    /// Retrieves the Celestia coin balance for the given address.
+    ///
+    /// # Notes
+    ///
+    pub async fn balance_for_address_unverified(&self, address: &AccAddress) -> Result<u64> {
+        Ok(self
+            .ctx
+            .grpc()?
+            .get_balance(&address.to_owned().into(), "utia")
+            .await?
+            .amount())
     }
 
     /// Submit given message to celestia network.
@@ -355,7 +373,7 @@ mod tests {
         assert_eq!(
             client
                 .state()
-                .balance_for_address(&random_acc)
+                .balance_for_address_unverified(&random_acc)
                 .await
                 .unwrap(),
             123
