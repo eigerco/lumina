@@ -7,8 +7,8 @@ use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::hash::uniffi_types::UniffiHash;
 use celestia_types::state::auth::{Account, AuthParams};
-use celestia_types::state::{AccAddress, Address, Coin, TxResponse};
-use celestia_types::UniffiConversionError;
+use celestia_types::state::{AbciQueryResponse, AccAddress, Address, Coin, TxResponse};
+use celestia_types::{ExtendedHeader, UniffiConversionError};
 
 use crate::grpc::{BroadcastMode, GasInfo, GetTxResponse, TxStatusResponse};
 
@@ -68,6 +68,22 @@ impl GrpcClient {
         Ok(self.client.get_accounts().await?)
     }
 
+    /// Get balance of coins with bond denom for the given address, together with a proof,
+    /// and verify the returned balance against the corresponding block's app hash.
+    ///
+    /// NOTE: the balance returned is the balance reported by the parent block of
+    /// the provided header. This is due to the fact that for block N, the block's
+    /// app hash. is the result of applying the previous block's transaction list.
+    ///
+    /// `header` argument is a json encoded [`ExtendedHeader`]
+    ///
+    /// [`ExtendedHeader`]: https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
+    pub async fn get_verified_balance(&self, address: &Address, header: &str) -> Result<Coin> {
+        let header: ExtendedHeader = serde_json::from_str(header)
+            .map_err(|e| GrpcClientError::UniffiConversionError { msg: e.to_string() })?;
+        Ok(self.client.get_verified_balance(address, &header).await?)
+    }
+
     /// Get balance of coins with given denom
     pub async fn get_balance(&self, address: &Address, denom: String) -> Result<Coin> {
         Ok(self.client.get_balance(address, denom).await?)
@@ -101,6 +117,17 @@ impl GrpcClient {
     /// Get block by height
     async fn get_block_by_height(&self, height: i64) -> Result<Block> {
         Ok(self.client.get_block_by_height(height).await?)
+    }
+
+    /// Issue a direct ABCI query to the application
+    async fn abci_query(
+        &self,
+        data: &[u8],
+        path: &str,
+        height: u64,
+        prove: bool,
+    ) -> Result<AbciQueryResponse> {
+        Ok(self.client.abci_query(data, path, height, prove).await?)
     }
 
     /// Broadcast prepared and serialised transaction

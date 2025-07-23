@@ -1,5 +1,6 @@
 //! Types and interfaces for accessing Celestia's state-relevant information.
 
+mod abci;
 mod address;
 pub mod auth;
 mod balance;
@@ -7,6 +8,7 @@ mod bit_array;
 mod query_delegation;
 mod tx;
 
+pub use self::abci::AbciQueryResponse;
 #[cfg(feature = "uniffi")]
 pub use self::address::uniffi_types::AccountId as UniffiAccountId;
 pub use self::address::{AccAddress, Address, AddressKind, AddressTrait, ConsAddress, ValAddress};
