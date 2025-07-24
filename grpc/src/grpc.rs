@@ -5,6 +5,7 @@ use std::fmt;
 use bytes::Bytes;
 use celestia_grpc_macros::grpc_method;
 use celestia_proto::celestia::blob::v1::query_client::QueryClient as BlobQueryClient;
+use celestia_proto::celestia::core::v1::gas_estimation::gas_estimator_client::GasEstimatorClient;
 use celestia_proto::celestia::core::v1::tx::tx_client::TxClient as TxStatusClient;
 use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQueryClient;
 use celestia_proto::cosmos::bank::v1beta1::query_client::QueryClient as BankQueryClient;
@@ -33,6 +34,8 @@ use crate::{Error, Result};
 mod auth;
 // cosmos.bank
 mod bank;
+// celestia.core.gas_estimation
+mod gas_estimation;
 // cosmos.base.node
 mod node;
 // cosmos.base.tendermint
@@ -46,6 +49,7 @@ mod cosmos_tx;
 
 pub use crate::grpc::celestia_tx::{TxStatus, TxStatusResponse};
 pub use crate::grpc::cosmos_tx::{BroadcastMode, GetTxResponse};
+pub use crate::grpc::gas_estimation::{GasEstimate, TxPriority};
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 pub use crate::grpc::cosmos_tx::JsBroadcastMode;
@@ -217,6 +221,31 @@ where
     /// Get status of the transaction
     #[grpc_method(TxStatusClient::tx_status)]
     async fn tx_status(&self, hash: Hash) -> Result<TxStatusResponse>;
+
+    // celestia.core.gas_estimation
+
+    /// Estimate gas price for given transaction priority based
+    /// on the gas prices of the transactions in the last five blocks.
+    ///
+    /// If no transaction is found in the last five blocks, return the network
+    /// min gas price.
+    #[grpc_method(GasEstimatorClient::estimate_gas_price)]
+    async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64>;
+
+    /// Estimate gas price for transaction with given priority and estimate gas usage for
+    /// privded serialised transaction.
+    ///
+    /// The gas price estimation is based on the gas prices of the transactions in the last five blocks.
+    /// If no transaction is found in the last five blocks, return the network
+    /// min gas price.
+    ///
+    /// The gas used is estimated using the state machine simulation.
+    #[grpc_method(GasEstimatorClient::estimate_gas_price_and_usage)]
+    async fn estimate_gas_price_and_usage(
+        &self,
+        priority: TxPriority,
+        tx_bytes: Vec<u8>,
+    ) -> Result<GasEstimate>;
 }
 
 #[cfg(not(target_arch = "wasm32"))]
