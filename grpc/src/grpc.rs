@@ -259,17 +259,17 @@ where
     /// Estimate gas price for given transaction priority based
     /// on the gas prices of the transactions in the last five blocks.
     ///
-    /// If no transaction is found in the last five blocks, return the network
-    /// min gas price.
+    /// If no transaction is found in the last five blocks, it returns the
+    /// network min gas price.
     #[grpc_method(GasEstimatorClient::estimate_gas_price)]
     async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64>;
 
-    /// Estimate gas price for transaction with given priority and estimate gas usage for
-    /// privded serialised transaction.
+    /// Estimate gas price for transaction with given priority and estimate gas usage
+    /// for provided serialised transaction.
     ///
-    /// The gas price estimation is based on the gas prices of the transactions in the last five blocks.
-    /// If no transaction is found in the last five blocks, return the network
-    /// min gas price.
+    /// The gas price estimation is based on the gas prices of the transactions
+    /// in the last five blocks. If no transaction is found in the last five blocks,
+    /// it returns the network min gas price.
     ///
     /// The gas used is estimated using the state machine simulation.
     #[grpc_method(GasEstimatorClient::estimate_gas_price_and_usage)]

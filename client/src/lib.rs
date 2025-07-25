@@ -39,6 +39,8 @@ pub mod api {
 /// TX related types.
 pub mod tx {
     #[doc(inline)]
+    pub use celestia_grpc::grpc::{GasEstimate, TxPriority};
+    #[doc(inline)]
     pub use celestia_grpc::{DocSigner, IntoProtobufAny, SignDoc, TxConfig, TxInfo};
 }
 
@@ -69,6 +71,10 @@ pub enum Error {
     /// Client is in read-only mode.
     #[error("Client is constructed for read-only mode, operation not supported")]
     ReadOnlyMode,
+
+    /// RPC chain-id and gGRPC chain-id missmatch.
+    #[error("Chain id of RPC endpoint missmatch with chain id of gRPC endpoint")]
+    ChainIdMissmatch,
 
     /// RPC authentication token is not supported.
     #[error("RPC authentication token is not supported")]

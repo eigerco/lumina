@@ -29,6 +29,7 @@ pub(crate) struct Context {
     pub(crate) rpc: RpcClient,
     grpc: Option<TxClient<Transport, DispatchedDocSigner>>,
     pubkey: Option<VerifyingKey>,
+    chain_id: tendermint::chain::Id,
 }
 
 /// A high-level client for interacting with a Celestia node.
@@ -78,6 +79,7 @@ pub(crate) struct Context {
 /// [`celestia-rpc`]: celestia_rpc
 /// [`celestia-grpc`]: celestia_grpc
 pub struct Client {
+    ctx: Arc<Context>,
     state: StateApi,
     blob: BlobApi,
     header: HeaderApi,
@@ -132,6 +134,10 @@ impl Client {
     /// Returns `ClientBuilder`.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
+    }
+
+    pub fn chain_id(&self) -> &tendermint::chain::Id {
+        &self.ctx.chain_id
     }
 
     /// Returns state API accessor.
@@ -218,7 +224,7 @@ impl ClientBuilder {
 
     /// Set the gRPC endpoint.
     ///
-    /// # Notes
+    /// # Note
     ///
     /// In WASM the endpoint needs to support gRPC-Web.
     pub fn grpc_url(mut self, url: &str) -> ClientBuilder {
@@ -268,9 +274,24 @@ impl ClientBuilder {
         #[cfg(target_arch = "wasm32")]
         let rpc = RpcClient::new(rpc_url).await?;
 
-        let ctx = Arc::new(Context { rpc, grpc, pubkey });
+        let head = rpc.header_network_head().await?;
+        head.validate()?;
+
+        if let Some(grpc) = &grpc {
+            if grpc.chain_id() != head.chain_id() {
+                return Err(Error::ChainIdMissmatch);
+            }
+        }
+
+        let ctx = Arc::new(Context {
+            rpc,
+            grpc,
+            pubkey,
+            chain_id: head.chain_id().to_owned(),
+        });
 
         Ok(Client {
+            ctx: ctx.clone(),
             blob: BlobApi::new(ctx.clone()),
             header: HeaderApi::new(ctx.clone()),
             share: ShareApi::new(ctx.clone()),

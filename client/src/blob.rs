@@ -24,11 +24,7 @@ impl BlobApi {
 
     /// Submit given blobs to celestia network.
     ///
-    /// When no gas price is specified through config, it will automatically
-    /// handle updating client's gas price when consensus updates minimal
-    /// gas price.
-    ///
-    /// # Notes
+    /// # Note
     ///
     /// This is the same as [`StateApi::submit_pay_for_blob`].
     ///

@@ -13,7 +13,7 @@ use celestia_types::Blob;
 use k256::ecdsa::VerifyingKey;
 
 use crate::client::Context;
-use crate::tx::{IntoProtobufAny, TxConfig, TxInfo};
+use crate::tx::{GasEstimate, IntoProtobufAny, TxConfig, TxInfo, TxPriority};
 use crate::utils::height_i64;
 use crate::Result;
 
@@ -99,11 +99,36 @@ impl StateApi {
             .amount())
     }
 
-    /// Submit given message to celestia network.
+    /// Estimate gas price for given transaction priority based
+    /// on the gas prices of the transactions in the last five blocks.
     ///
-    /// When no gas price is specified through config, it will automatically
-    /// handle updating client's gas price when consensus updates minimal
-    /// gas price.
+    /// If no transaction is found in the last five blocks, it returns the
+    /// network min gas price.
+    pub async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
+        Ok(self.ctx.grpc()?.estimate_gas_price(priority).await?)
+    }
+
+    /// Estimate gas price for transaction with given priority and estimate gas usage
+    /// for provided serialised transaction.
+    ///
+    /// The gas price estimation is based on the gas prices of the transactions
+    /// in the last five blocks. If no transaction is found in the last five blocks,
+    /// it returns the network min gas price.
+    ///
+    /// The gas used is estimated using the state machine simulation.
+    async fn estimate_gas_price_and_usage(
+        &self,
+        priority: TxPriority,
+        tx_bytes: Vec<u8>,
+    ) -> Result<GasEstimate> {
+        Ok(self
+            .ctx
+            .grpc()?
+            .estimate_gas_price_and_usage(priority, tx_bytes)
+            .await?)
+    }
+
+    /// Submit given message to celestia network.
     ///
     /// # Example
     /// ```no_run
@@ -162,11 +187,7 @@ impl StateApi {
 
     /// Builds, signs and submits a PayForBlob transaction.
     ///
-    /// When no gas price is specified through config, it will automatically
-    /// handle updating client's gas price when consensus updates minimal
-    /// gas price.
-    ///
-    /// # Notes
+    /// # Note
     ///
     /// This is the same as [`BlobApi::submit`].
     ///
