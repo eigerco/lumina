@@ -9,8 +9,10 @@ mod grpc_client;
 mod tx_client;
 
 use crate::builder::GrpcClientBuilder as RustBuilder;
-use grpc_client::GrpcClient;
-use tx_client::{TxClient, UniffiSigner, UniffiSignerBox};
+use tx_client::{UniffiSigner, UniffiSignerBox};
+
+pub use grpc_client::GrpcClient;
+pub use tx_client::TxClient;
 
 /// Errors returned when building Grpc Client
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -88,6 +90,8 @@ impl GrpcClientBuilder {
     // this function _must_ be async despite not awaiting, so that it executes in tokio runtime
     // context
     /// build gRPC read-only client. If you need to send messages, use [`build_tx_client`]
+    ///
+    /// [`build_tx_client`]: GrpcClientBuilder::build_tx_client
     #[uniffi::method(name = "buildClient")]
     pub async fn build_client(self: Arc<Self>) -> Result<GrpcClient, GrpcClientBuilderError> {
         Ok(RustBuilder::with_url(self.url.clone())?
