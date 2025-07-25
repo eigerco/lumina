@@ -158,7 +158,7 @@ impl GrpcClientBuilder {
         GrpcClientBuilder {
             url: self.url.clone(),
             signer: self.signer.clone(),
-            account_pubkey: self.account_pubkey.clone(),
+            account_pubkey: self.account_pubkey,
             native_roots: true,
             webpki_roots: self.webpki_roots,
         }
@@ -174,7 +174,7 @@ impl GrpcClientBuilder {
         GrpcClientBuilder {
             url: self.url.clone(),
             signer: self.signer.clone(),
-            account_pubkey: self.account_pubkey.clone(),
+            account_pubkey: self.account_pubkey,
             native_roots: self.native_roots,
             webpki_roots: true,
         }
