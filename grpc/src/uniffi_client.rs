@@ -173,7 +173,7 @@ impl GrpcClientBuilder {
     pub fn enable_webpki_roots(self: Arc<Self>) -> Self {
         GrpcClientBuilder {
             url: self.url.clone(),
-            signer: self.url.signer.clone(),
+            signer: self.signer.clone(),
             account_pubkey: self.account_pubkey.clone(),
             native_roots: self.native_roots,
             webpki_roots: true,
