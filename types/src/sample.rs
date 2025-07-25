@@ -9,7 +9,7 @@
 
 use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
-use celestia_proto::shwap::{Sample as RawSample, Share as RawShare};
+use celestia_proto::shwap::Share as RawShare;
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
@@ -20,6 +20,8 @@ use crate::eds::{AxisType, ExtendedDataSquare};
 use crate::nmt::NamespaceProof;
 use crate::row::{RowId, ROW_ID_SIZE};
 use crate::{bail_validation, DataAvailabilityHeader, Error, Result, Share};
+
+pub use celestia_proto::shwap::Sample as RawSample;
 
 /// Number of bytes needed to represent [`SampleId`] in `multihash`.
 const SAMPLE_ID_SIZE: usize = 12;

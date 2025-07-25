@@ -100,10 +100,6 @@ where
 
     /// Submit given message to celestia network.
     ///
-    /// When no gas price is specified through config, it will automatically
-    /// handle updating client's gas price when consensus updates minimal
-    /// gas price.
-    ///
     /// # Example
     /// ```no_run
     /// # async fn docs() {
@@ -160,10 +156,6 @@ where
     }
 
     /// Submit given blobs to celestia network.
-    ///
-    /// When no gas price is specified through config, it will automatically
-    /// handle updating client's gas price when consensus updates minimal
-    /// gas price.
     ///
     /// # Example
     /// ```no_run

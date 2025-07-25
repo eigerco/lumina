@@ -1,7 +1,7 @@
 use celestia_types::blob::RawBlob;
 use celestia_types::state::{
-    AccAddress, Address, Balance, QueryDelegationResponse, QueryRedelegationsResponse,
-    QueryUnbondingDelegationResponse, RawTxResponse, Uint, ValAddress,
+    AccAddress, Address, Coin, QueryDelegationResponse, QueryRedelegationsResponse,
+    QueryUnbondingDelegationResponse, RawTxResponse, ValAddress,
 };
 use jsonrpsee::proc_macros::rpc;
 
@@ -15,7 +15,7 @@ pub trait State {
 
     /// Balance retrieves the Celestia coin balance for the node's account/signer and verifies it against the corresponding block's AppHash.
     #[method(name = "Balance")]
-    async fn state_balance(&self) -> Result<Balance, Error>;
+    async fn state_balance(&self) -> Result<Coin, Error>;
 
     /// BalanceForAddress retrieves the Celestia coin balance for the given address and verifies the returned balance against the corresponding block's AppHash.
     ///
@@ -23,7 +23,7 @@ pub trait State {
     ///
     /// The balance returned is the balance reported by the block right before the node's current head (head-1). This is due to the fact that for block N, the block's `AppHash` is the result of applying the previous block's transaction list.
     #[method(name = "BalanceForAddress")]
-    async fn state_balance_for_address(&self, addr: &Address) -> Result<Balance, Error>;
+    async fn state_balance_for_address(&self, addr: &Address) -> Result<Coin, Error>;
 
     /// BeginRedelegate sends a user's delegated tokens to a new validator for redelegation.
     #[method(name = "BeginRedelegate")]
@@ -31,7 +31,7 @@ pub trait State {
         &self,
         src: &ValAddress,
         dest: &ValAddress,
-        amount: Uint,
+        amount: u64,
         config: TxConfig,
     ) -> Result<RawTxResponse, Error>;
 
@@ -40,8 +40,8 @@ pub trait State {
     async fn state_cancel_unbonding_delegation(
         &self,
         addr: &ValAddress,
-        amount: Uint,
-        height: Uint,
+        amount: u64,
+        height: u64,
         config: TxConfig,
     ) -> Result<RawTxResponse, Error>;
 
@@ -50,7 +50,7 @@ pub trait State {
     async fn state_delegate(
         &self,
         addr: &ValAddress,
-        amount: Uint,
+        amount: u64,
         config: TxConfig,
     ) -> Result<RawTxResponse, Error>;
 
@@ -93,7 +93,7 @@ pub trait State {
     async fn state_transfer(
         &self,
         to: &AccAddress,
-        amount: Uint,
+        amount: u64,
         config: TxConfig,
     ) -> Result<RawTxResponse, Error>;
 
@@ -102,7 +102,7 @@ pub trait State {
     async fn state_undelegate(
         &self,
         addr: &ValAddress,
-        amount: Uint,
+        amount: u64,
         config: TxConfig,
     ) -> Result<RawTxResponse, Error>;
 }

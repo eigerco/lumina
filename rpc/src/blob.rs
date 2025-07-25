@@ -65,5 +65,5 @@ pub trait Blob {
     ///
     /// Unsubscribe is not implemented by Celestia nodes.
     #[subscription(name = "Subscribe", unsubscribe = "Unsubscribe", item = BlobsAtHeight)]
-    async fn blob_subscribe(&self, namespace: Namespace) -> SubcriptionResult;
+    async fn blob_subscribe(&self, namespace: Namespace) -> SubscriptionResult;
 }

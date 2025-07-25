@@ -3,27 +3,29 @@ use celestia_types::MerkleProof;
 use jsonrpsee::proc_macros::rpc;
 use prost::bytes::Bytes;
 
-/// DataRootTupleInclusionProof is the binary merkle
-/// inclusion proof of a height to a data commitment.
-pub type DataRootTupleInclusionProof = MerkleProof;
-
 #[rpc(client, namespace = "blobstream", namespace_separator = ".")]
 pub trait Blobstream {
-    /// GetDataRootTupleRoot retrieves the data root tuple root for a given range from start to end
+    /// Collects the data roots over a provided ordered range of blocks, and then
+    /// creates a new Merkle root of those data roots.
+    ///
+    /// The range is end exclusive.
     #[method(name = "GetDataRootTupleRoot")]
+    // TODO: This should return `Hash` when celestia-node#4390 is released to mainnet.
     async fn blobstream_get_data_root_tuple_root(
         &self,
         start: u64,
         end: u64,
     ) -> Result<Bytes, Error>;
 
-    /// GetDataRootTupleInclusionProof returns a data root tuple inclusion proof for a given height
-    /// between a range from start to end
+    /// Creates an inclusion proof, for the data root tuple of block height `height`,
+    /// in the set of blocks defined by `start` and `end`.
+    ///
+    /// The range is end exclusive.
     #[method(name = "GetDataRootTupleInclusionProof")]
     async fn blobstream_get_data_root_tuple_inclusion_proof(
         &self,
         height: u64,
         start: u64,
         end: u64,
-    ) -> Result<DataRootTupleInclusionProof, Error>;
+    ) -> Result<MerkleProof, Error>;
 }

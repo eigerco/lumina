@@ -15,27 +15,18 @@ mod native {
     use std::fmt;
     use std::result::Result;
 
-    use celestia_types::consts::appconsts::{self, SHARE_SIZE};
     use http::{header, HeaderValue};
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
     use jsonrpsee::core::ClientError;
     use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
-    use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
+    use jsonrpsee::ws_client::{PingConfig, WsClient, WsClientBuilder};
     use serde::de::DeserializeOwned;
 
     use crate::Error;
 
-    // NOTE: Always the largest `appconsts::*::SQUARE_SIZE_UPPER_BOUND` needs to be used.
-    const MAX_EDS_SIZE_BYTES: usize = appconsts::v3::SQUARE_SIZE_UPPER_BOUND
-        * appconsts::v3::SQUARE_SIZE_UPPER_BOUND
-        * 4
-        * SHARE_SIZE;
-
-    // The biggest response we might get is for requesting an EDS.
-    // Also, we allow 1 MB extra for any metadata they come with it.
-    const MAX_RESPONSE_SIZE: usize = MAX_EDS_SIZE_BYTES + 1024 * 1024;
+    const MAX_RESPONSE_SIZE: usize = 256 * 1024 * 1024;
 
     /// Json RPC client.
     pub enum Client {
@@ -74,6 +65,7 @@ mod native {
                     WsClientBuilder::default()
                         .max_response_size(MAX_RESPONSE_SIZE as u32)
                         .set_headers(headers)
+                        .enable_ws_ping(PingConfig::default())
                         .build(conn_str)
                         .await?,
                 ),
@@ -159,11 +151,18 @@ mod native {
             }
         }
     }
+
+    impl fmt::Debug for Client {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("Client { .. }")
+        }
+    }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod wasm {
-    use std::{fmt, result::Result};
+    use std::fmt;
+    use std::result::Result;
 
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
@@ -254,6 +253,12 @@ mod wasm {
             N: DeserializeOwned,
         {
             self.client.subscribe_to_method(method).await
+        }
+    }
+
+    impl fmt::Debug for Client {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("Client { .. }")
         }
     }
 }
