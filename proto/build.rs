@@ -139,6 +139,7 @@ const PROTO_FILES: &[&str] = &[
     "vendor/celestia/blob/v1/query.proto",
     "vendor/celestia/blob/v1/tx.proto",
     "vendor/celestia/core/v1/da/data_availability_header.proto",
+    "vendor/celestia/core/v1/gas_estimation/gas_estimator.proto",
     "vendor/celestia/core/v1/proof/proof.proto",
     "vendor/celestia/core/v1/tx/tx.proto",
     "vendor/cosmos/auth/v1beta1/auth.proto",

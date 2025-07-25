@@ -10,7 +10,9 @@ use celestia_types::state::auth::{Account, AuthParams};
 use celestia_types::state::{AbciQueryResponse, AccAddress, Address, Coin, TxResponse};
 use celestia_types::{ExtendedHeader, UniffiConversionError};
 
-use crate::grpc::{BroadcastMode, GasInfo, GetTxResponse, TxStatusResponse};
+use crate::grpc::{
+    BroadcastMode, GasEstimate, GasInfo, GetTxResponse, TxPriority, TxStatusResponse,
+};
 
 /// Alias for a `Result` with the error type [`GrpcClientError`]
 pub type Result<T, E = GrpcClientError> = std::result::Result<T, E>;
@@ -153,6 +155,34 @@ impl GrpcClient {
     /// Get status of the transaction
     async fn tx_status(&self, hash: UniffiHash) -> Result<TxStatusResponse> {
         Ok(self.client.tx_status(hash.try_into()?).await?)
+    }
+
+    /// estimate_gas_price takes a transaction priority and estimates the gas price based
+    /// on the gas prices of the transactions in the last five blocks.
+    ///
+    /// If no transaction is found in the last five blocks, return the network
+    /// min gas price.
+    async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
+        Ok(self.client.estimate_gas_price(priority).await?)
+    }
+
+    /// estimate_gas_price_and_usage takes a transaction priority and a transaction bytes
+    /// and estimates the gas price and the gas used for that transaction.
+    ///
+    /// The gas price estimation is based on the gas prices of the transactions in the last five blocks.
+    /// If no transaction is found in the last five blocks, return the network
+    /// min gas price.
+    ///
+    /// The gas used is estimated using the state machine simulation.
+    async fn estimate_gas_price_and_usage(
+        &self,
+        priority: TxPriority,
+        tx_bytes: Vec<u8>,
+    ) -> Result<GasEstimate> {
+        Ok(self
+            .client
+            .estimate_gas_price_and_usage(priority, tx_bytes)
+            .await?)
     }
 }
 
