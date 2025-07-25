@@ -56,6 +56,8 @@ pub struct GrpcClientBuilder {
     url: String,
     signer: Option<Arc<dyn UniffiSigner>>,
     account_pubkey: Option<VerifyingKey>,
+    native_roots: bool,
+    webpki_roots: bool,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -67,6 +69,8 @@ impl GrpcClientBuilder {
             url,
             signer: None,
             account_pubkey: None,
+            native_roots: false,
+            webpki_roots: false,
         }
     }
 
@@ -84,6 +88,8 @@ impl GrpcClientBuilder {
             url: self.url.clone(),
             signer: Some(signer),
             account_pubkey: Some(vk),
+            native_roots: self.native_roots,
+            webpki_roots: self.webpki_roots,
         })
     }
 
@@ -94,7 +100,22 @@ impl GrpcClientBuilder {
     /// [`build_tx_client`]: GrpcClientBuilder::build_tx_client
     #[uniffi::method(name = "buildClient")]
     pub async fn build_client(self: Arc<Self>) -> Result<GrpcClient, GrpcClientBuilderError> {
-        Ok(RustBuilder::with_url(self.url.clone())?
+        let mut builder = RustBuilder::with_url(self.url.clone())?;
+
+        #[cfg(feature = "tls-native-roots")]
+        if self.native_roots {
+            builder = builder.with_native_roots().map_err(|e| {
+                GrpcClientBuilderError::ErrorBuildingClient {
+                    msg: format!("Could not get native roots: {e}"),
+                }
+            })?;
+        }
+        #[cfg(feature = "tls-webpki-roots")]
+        if self.webpki_roots {
+            builder = builder.with_webpki_roots();
+        }
+
+        Ok(builder
             .connect()
             .map_err(|e| GrpcClientBuilderError::ErrorConnecting { msg: e.to_string() })?
             .build_client()
@@ -125,6 +146,38 @@ impl GrpcClientBuilder {
             .await
             .map_err(|e| GrpcClientBuilderError::ErrorBuildingClient { msg: e.to_string() })?
             .into())
+    }
+}
+
+#[cfg(feature = "tls-native-roots")]
+#[uniffi::export]
+impl GrpcClientBuilder {
+    /// Enables the platform’s trusted certs.
+    #[uniffi::method(name = "enableNativeRoots")]
+    pub fn enable_native_roots(self: Arc<Self>) -> Self {
+        GrpcClientBuilder {
+            url: self.url.clone(),
+            signer: self.signer.clone(),
+            account_pubkey: self.account_pubkey.clone(),
+            native_roots: true,
+            webpki_roots: self.webpki_roots,
+        }
+    }
+}
+
+#[cfg(feature = "tls-webpki-roots")]
+#[uniffi::export]
+impl GrpcClientBuilder {
+    /// Enables the webpki roots.
+    #[uniffi::method(name = "enableWebpkiRoots")]
+    pub fn enable_webpki_roots(self: Arc<Self>) -> Self {
+        GrpcClientBuilder {
+            url: self.url.clone(),
+            signer: self.url.signer.clone(),
+            account_pubkey: self.account_pubkey.clone(),
+            native_roots: self.native_roots,
+            webpki_roots: true,
+        }
     }
 }
 

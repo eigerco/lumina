@@ -49,6 +49,7 @@ impl GrpcClientBuilder<(Endpoint, ClientTlsConfig), ()> {
     }
 
     /// Enables the platform’s trusted certs.
+    #[cfg(feature = "tls-native-roots")]
     pub fn with_native_roots(self) -> Result<Self, GrpcClientBuilderCertError> {
         let rustls_native_certs::CertificateResult { certs, errors, .. } =
             rustls_native_certs::load_native_certs();
