@@ -116,7 +116,7 @@ impl StateApi {
     /// it returns the network min gas price.
     ///
     /// The gas used is estimated using the state machine simulation.
-    async fn estimate_gas_price_and_usage(
+    pub async fn estimate_gas_price_and_usage(
         &self,
         priority: TxPriority,
         tx_bytes: Vec<u8>,
