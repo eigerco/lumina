@@ -2,11 +2,13 @@ use std::sync::Arc;
 
 use celestia_grpc::{Error, TxConfig};
 use celestia_proto::cosmos::bank::v1beta1::MsgSend;
+use celestia_rpc::HeaderClient;
 use celestia_types::nmt::Namespace;
 use celestia_types::state::{Coin, ErrorCode};
 use celestia_types::{AppVersion, Blob};
+use futures::FutureExt;
 use lumina_utils::test_utils::async_test;
-use utils::{load_account, TestAccount};
+use utils::{load_account, new_rpc_client, TestAccount};
 
 pub mod utils;
 
@@ -61,6 +63,51 @@ async fn get_balance() {
     let total_supply = client.get_total_supply().await.unwrap();
     assert!(!total_supply.is_empty());
     assert!(total_supply.iter().map(|c| c.amount).sum::<u64>() > 0);
+}
+
+#[async_test]
+async fn get_verified_balance() {
+    let client = new_grpc_client();
+    let account = load_account();
+
+    let jrpc_client = new_rpc_client().await;
+
+    let (head, expected_balance) = tokio::join!(
+        jrpc_client.header_network_head().map(Result::unwrap),
+        client
+            .get_balance(&account.address, "utia")
+            .map(Result::unwrap)
+    );
+
+    // trustless balance queries represent state at header.height - 1, so
+    // we need to wait for a new head to compare it with the expected balance
+    let head = jrpc_client
+        .header_wait_for_height(head.height().value() + 1)
+        .await
+        .unwrap();
+
+    let verified_balance = client
+        .get_verified_balance(&account.address, &head)
+        .await
+        .unwrap();
+
+    assert_eq!(expected_balance, verified_balance);
+}
+
+#[async_test]
+async fn get_verified_balance_not_funded_account() {
+    let client = new_grpc_client();
+    let account = TestAccount::random();
+
+    let jrpc_client = new_rpc_client().await;
+    let head = jrpc_client.header_network_head().await.unwrap();
+
+    let verified_balance = client
+        .get_verified_balance(&account.address, &head)
+        .await
+        .unwrap();
+
+    assert_eq!(Coin::utia(0), verified_balance);
 }
 
 #[async_test]

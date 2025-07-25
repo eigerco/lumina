@@ -61,12 +61,14 @@ mod imp {
     use std::{future::Future, sync::OnceLock};
 
     use celestia_grpc::{GrpcClient, TxClient};
+    use celestia_rpc::Client;
     use tokio::sync::{Mutex, MutexGuard};
     use tonic::transport::Channel;
 
     use super::*;
 
     pub const CELESTIA_GRPC_URL: &str = "http://localhost:19090";
+    pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
 
     pub fn new_grpc_client() -> GrpcClient<Channel> {
         GrpcClientBuilder::with_url(CELESTIA_GRPC_URL)
@@ -74,6 +76,10 @@ mod imp {
             .connect()
             .unwrap()
             .build_client()
+    }
+
+    pub async fn new_rpc_client() -> Client {
+        Client::new(CELESTIA_RPC_URL, None).await.unwrap()
     }
 
     // we have to sequence the tests which submits transactions.
@@ -109,6 +115,7 @@ mod imp {
     use std::future::Future;
 
     use celestia_grpc::{GrpcClient, TxClient};
+    use celestia_rpc::Client as RpcClient;
     use tokio::sync::oneshot;
     use tonic_web_wasm_client::Client;
     use wasm_bindgen_futures::spawn_local;
@@ -116,9 +123,14 @@ mod imp {
     use super::*;
 
     const CELESTIA_GRPCWEB_PROXY_URL: &str = "http://localhost:18080";
+    pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
 
     pub fn new_grpc_client() -> GrpcClient<Client> {
         GrpcClientBuilder::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL).build_client()
+    }
+
+    pub async fn new_rpc_client() -> RpcClient {
+        RpcClient::new(CELESTIA_RPC_URL).await.unwrap()
     }
 
     pub async fn new_tx_client() -> ((), TxClient<Client, SigningKey>) {

@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+mod abci_proofs;
 mod builder;
 mod error;
 pub mod grpc;

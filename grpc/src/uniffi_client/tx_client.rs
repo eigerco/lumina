@@ -106,9 +106,9 @@ pub struct AnyMsg {
 
 #[uniffi::export(async_runtime = "tokio")]
 impl TxClient {
-    /// Last gas price fetched by the client
-    pub fn last_seen_gas_price(&self) -> f64 {
-        self.client.last_seen_gas_price()
+    /// Query for the current minimum gas price
+    pub async fn get_min_gas_price(&self) -> Result<f64> {
+        Ok(self.client.get_min_gas_price().await?)
     }
 
     /// AppVersion of the client

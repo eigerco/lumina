@@ -2,14 +2,11 @@ use wasm_bindgen::prelude::*;
 
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
-use celestia_types::state::auth::JsAuthParams;
-use celestia_types::state::auth::JsBaseAccount;
-use celestia_types::state::{JsCoin, TxResponse};
-use tonic_web_wasm_client::Client;
+use celestia_types::state::auth::{JsAuthParams, JsBaseAccount};
+use celestia_types::state::{AbciQueryResponse, JsCoin, TxResponse};
+use celestia_types::ExtendedHeader;
 
-use crate::grpc::GetTxResponse;
-use crate::grpc::TxStatusResponse;
-use crate::grpc::{GasInfo, JsBroadcastMode};
+use crate::grpc::{GasInfo, GetTxResponse, JsBroadcastMode, TxStatusResponse};
 use crate::Result;
 
 type InnerClient = crate::GrpcClient<tonic_web_wasm_client::Client>;
@@ -41,6 +38,24 @@ impl GrpcClient {
             .into_iter()
             .map(Into::into)
             .collect())
+    }
+
+    /// Get balance of coins with bond denom for the given address, together with a proof,
+    /// and verify the returned balance against the corresponding block's app hash.
+    ///
+    /// NOTE: the balance returned is the balance reported by the parent block of
+    /// the provided header. This is due to the fact that for block N, the block's
+    /// app hash is the result of applying the previous block's transaction list.
+    pub async fn get_verified_balance(
+        &self,
+        address: &str,
+        header: &ExtendedHeader,
+    ) -> Result<JsCoin> {
+        Ok(self
+            .client
+            .get_verified_balance(&address.parse()?, header)
+            .await?
+            .into())
     }
 
     /// Get balance of coins with given denom
@@ -100,6 +115,17 @@ impl GrpcClient {
         self.client.get_block_by_height(height).await
     }
 
+    /// Issue a direct ABCI query to the application
+    pub async fn abci_query(
+        &self,
+        data: Vec<u8>,
+        path: &str,
+        height: u64,
+        prove: bool,
+    ) -> Result<AbciQueryResponse> {
+        self.client.abci_query(data, path, height, prove).await
+    }
+
     /// Broadcast prepared and serialised transaction
     pub async fn broadcast_tx(
         &self,
@@ -130,8 +156,8 @@ impl GrpcClient {
     }
 }
 
-impl From<crate::GrpcClient<Client>> for GrpcClient {
-    fn from(client: crate::GrpcClient<Client>) -> Self {
+impl From<InnerClient> for GrpcClient {
+    fn from(client: InnerClient) -> Self {
         GrpcClient { client }
     }
 }

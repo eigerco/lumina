@@ -22,11 +22,12 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
-use crate::blockstore::InMemoryBlockstore;
+use crate::blockstore::{InMemoryBlockstore, SampleBlockstore};
 use crate::daser::{
     Daser, DaserArgs, DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY, DEFAULT_CONCURENCY_LIMIT,
 };
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
+use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pArgs};
 use crate::pruner::{Pruner, PrunerArgs};
 use crate::store::{InMemoryStore, SamplingMetadata, Store, StoreError};
@@ -98,7 +99,7 @@ where
 {
     event_channel: EventChannel,
     p2p: Option<Arc<P2p>>,
-    blockstore: Option<Arc<B>>,
+    blockstore: Option<Arc<SampleBlockstore<B>>>,
     store: Option<Arc<S>>,
     syncer: Option<Arc<Syncer<S>>>,
     daser: Option<Arc<Daser>>,
@@ -142,7 +143,7 @@ where
         let event_channel = EventChannel::new();
         let event_sub = event_channel.subscribe();
         let store = Arc::new(config.store);
-        let blockstore = Arc::new(config.blockstore);
+        let blockstore = Arc::new(SampleBlockstore::new(config.blockstore));
 
         let p2p = Arc::new(
             P2p::start(P2pArgs {
@@ -384,10 +385,32 @@ where
         block_height: u64,
         timeout: Option<Duration>,
     ) -> Result<Sample> {
-        Ok(self
+        let sample = self
             .p2p()
             .get_sample(row_index, column_index, block_height, timeout)
-            .await?)
+            .await?;
+
+        // We want to immediately remove the sample from blockstore
+        // but **only if** it wasn't chosen for DASing. Otherwise we could
+        // accidentally remove samples needed for the block reconstruction.
+        //
+        // There's a small possibility of permanently storing this sample if
+        // persistent blockstore is used and user closes tab / kills process
+        // before the remove is called, but it is acceptable tradeoff to avoid complexity.
+        //
+        // TODO: It should be properly solved when we switch from bitswap to shrex.
+        if let Some(metadata) = self.get_sampling_metadata(block_height).await? {
+            let cid = sample_cid(row_index, column_index, block_height)?;
+            if !metadata.cids.contains(&cid) {
+                let blockstore = self
+                    .blockstore
+                    .as_ref()
+                    .expect("Blockstore not initialized");
+                let _ = blockstore.remove(&cid).await;
+            }
+        }
+
+        Ok(sample)
     }
 
     /// Request a verified [`RowNamespaceData`] from the network.
