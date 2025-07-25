@@ -136,6 +136,7 @@ impl Client {
         ClientBuilder::new()
     }
 
+    /// Returns chain id of the network.
     pub fn chain_id(&self) -> &tendermint::chain::Id {
         &self.ctx.chain_id
     }
