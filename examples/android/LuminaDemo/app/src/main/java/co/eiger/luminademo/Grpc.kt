@@ -28,11 +28,11 @@ import fr.acinq.secp256k1.Secp256k1
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import uniffi.celestia_grpc.GrpcClientBuilder
 import uniffi.celestia_grpc.TxClient
 import uniffi.celestia_grpc.TxInfo
 import uniffi.celestia_grpc.UniffiSignature
 import uniffi.celestia_grpc.UniffiSigner
-import uniffi.celestia_grpc.parseBech32Address
 import uniffi.celestia_grpc.protoEncodeSignDoc
 import uniffi.celestia_proto.SignDoc
 import uniffi.celestia_types.AppVersion
@@ -95,15 +95,14 @@ fun GrpcUi(modifier: Modifier = Modifier) {
                     Log.d("gRPC_TxClient", "Launching TxClient, params: url=${url.text}, address=${address.text}, skHex=${skHex.text}, pkHex=${pkHex.text}")
                     val url = url.text.toString()
                     try {
-                        val address = parseBech32Address(address.text.toString())
                         val skBytes = Hex.decode(skHex.text.toString())
                         val pkBytes = Hex.decode(pkHex.text.toString())
 
                         val signer = StaticSigner(skBytes)
 
-                        grpcClient = TxClient.create(
-                            url = url.toString(), accountPubkey = pkBytes, signer
-                        )
+                        grpcClient = GrpcClientBuilder.create(url)
+                            .withPubkeyAndSigner(accountPubkey = pkBytes, signer)
+                            .buildTxClient();
                     } catch (e : Exception) {
                         error = "Error creating TxClient: ${e.message}"
                         Log.e("gRPC_TxClient", "Error creating TxClient: ${e.message}", e)

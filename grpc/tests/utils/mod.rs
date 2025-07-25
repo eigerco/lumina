@@ -1,3 +1,4 @@
+use celestia_grpc::GrpcClientBuilder;
 use celestia_types::state::{AccAddress, Address};
 use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
 use tendermint::public_key::Secp256k1 as VerifyingKey;
@@ -70,7 +71,11 @@ mod imp {
     pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
 
     pub fn new_grpc_client() -> GrpcClient<Channel> {
-        GrpcClient::with_url(CELESTIA_GRPC_URL).expect("creating client failed")
+        GrpcClientBuilder::with_url(CELESTIA_GRPC_URL)
+            .unwrap()
+            .connect()
+            .unwrap()
+            .build_client()
     }
 
     pub async fn new_rpc_client() -> Client {
@@ -85,7 +90,12 @@ mod imp {
         let lock = LOCK.get_or_init(|| Mutex::new(())).lock().await;
 
         let creds = load_account();
-        let client = TxClient::with_url_and_keypair(CELESTIA_GRPC_URL, creds.signing_key)
+        let client = GrpcClientBuilder::with_url(CELESTIA_GRPC_URL)
+            .unwrap()
+            .with_signer_keypair(creds.signing_key)
+            .connect()
+            .unwrap()
+            .build_tx_client()
             .await
             .unwrap();
 
@@ -116,7 +126,7 @@ mod imp {
     pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
 
     pub fn new_grpc_client() -> GrpcClient<Client> {
-        GrpcClient::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL)
+        GrpcClientBuilder::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL).build_client()
     }
 
     pub async fn new_rpc_client() -> RpcClient {
@@ -125,13 +135,11 @@ mod imp {
 
     pub async fn new_tx_client() -> ((), TxClient<Client, SigningKey>) {
         let creds = load_account();
-        let client = TxClient::with_grpcweb_url(
-            CELESTIA_GRPCWEB_PROXY_URL,
-            creds.verifying_key,
-            creds.signing_key,
-        )
-        .await
-        .unwrap();
+        let client = GrpcClientBuilder::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL)
+            .with_signer_keypair(creds.signing_key)
+            .build_tx_client()
+            .await
+            .unwrap();
 
         ((), client)
     }

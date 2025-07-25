@@ -45,16 +45,6 @@ pub struct GrpcClient {
 
 #[uniffi::export(async_runtime = "tokio")]
 impl GrpcClient {
-    /// Create a new client connected with the given `url`
-    #[uniffi::constructor]
-    // this function _must_ be async despite not awaiting, so that it executes in tokio runtime
-    // context
-    pub async fn new(url: String) -> Result<Self> {
-        Ok(GrpcClient {
-            client: InnerClient::with_url(url).map_err(crate::Error::TransportError)?,
-        })
-    }
-
     /// Get auth params
     pub async fn get_auth_params(&self) -> Result<AuthParams> {
         Ok(self.client.get_auth_params().await?)
@@ -183,6 +173,12 @@ impl GrpcClient {
             .client
             .estimate_gas_price_and_usage(priority, tx_bytes)
             .await?)
+    }
+}
+
+impl From<InnerClient> for GrpcClient {
+    fn from(client: InnerClient) -> GrpcClient {
+        GrpcClient { client }
     }
 }
 

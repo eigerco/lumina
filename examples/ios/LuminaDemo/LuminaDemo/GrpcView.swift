@@ -85,7 +85,10 @@ class GrpcViewModel : ObservableObject {
             let pk = sk.publicKey.dataRepresentation
             let signer = StaticSigner(sk: sk)
             
-            self.txClient = try await TxClient.create(url: url, accountPubkey: pk, signer: signer)
+            self.txClient = try await GrpcClientBuilder
+                .create(url: url)
+                .withPubkeyAndSigner(accountPubkey: pk, signer: signer)
+                .buildTxClient()
             
             self.isReady = true
         } catch {
