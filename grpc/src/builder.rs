@@ -10,6 +10,20 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 use crate::grpc::StdError;
 use crate::{DocSigner, GrpcClient, Result, TxClient};
 
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(thiserror::Error, Debug)]
+pub enum GrpcClientBuilderCertError {
+    /// Error handling certificate root
+    #[error(transparent)]
+    WebpkiError(#[from] webpki::Error),
+
+    /// Could not import system certificates
+    #[error("Could not import platform certificates: {errors:?}")]
+    RustlsNativeCertsError {
+        errors: Vec<rustls_native_certs::Error>,
+    },
+}
+
 /// Builder for [`GrpcClient`] and [`TxClient`]
 #[derive(Clone)]
 pub struct GrpcClientBuilder<T, S> {
@@ -35,20 +49,35 @@ impl GrpcClientBuilder<(Endpoint, ClientTlsConfig), ()> {
     }
 
     /// Enables the platform’s trusted certs.
-    pub fn with_native_roots(self) -> Self {
-        let (endpoint, tls_config) = self.connection;
-        Self {
-            connection: (endpoint, tls_config.with_native_roots()),
-            ..self
+    pub fn with_native_roots(self) -> Result<Self, GrpcClientBuilderCertError> {
+        let rustls_native_certs::CertificateResult { certs, errors, .. } =
+            rustls_native_certs::load_native_certs();
+
+        if certs.is_empty() {
+            return Err(errors.into());
         }
+        let (endpoint, tls_config) = self.connection;
+
+        let tls_config = tls_config.trust_anchors(
+            certs
+                .into_iter()
+                .map(|c| Ok(webpki::anchor_from_trusted_cert(&c)?.to_owned()))
+                .collect::<Result<Vec<_>, GrpcClientBuilderCertError>>()?,
+        );
+
+        Ok(Self {
+            connection: (endpoint, tls_config),
+            ..self
+        })
     }
 
     /// Enables the webpki roots.
     #[cfg(feature = "tls-webpki-roots")]
     pub fn with_webpki_roots(self) -> Self {
+        let roots = webpki_roots::TLS_SERVER_ROOTS.iter().cloned();
         let (endpoint, tls_config) = self.connection;
         Self {
-            connection: (endpoint, tls_config.with_webpki_roots()),
+            connection: (endpoint, tls_config.trust_anchors(roots)),
             ..self
         }
     }
@@ -147,5 +176,12 @@ where
             self.signer,
         )
         .await
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<Vec<rustls_native_certs::Error>> for GrpcClientBuilderCertError {
+    fn from(errors: Vec<rustls_native_certs::Error>) -> Self {
+        GrpcClientBuilderCertError::RustlsNativeCertsError { errors }
     }
 }

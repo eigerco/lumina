@@ -42,11 +42,16 @@ tokio = { version = "1.38.0", features = ["sync"] }
 tonic = { version = "0.12.3", default-features = false, features = [
   "codegen", "prost"
 ]}
+tracing = "0.1.40"
 uniffi = { version = "0.29.2", optional = true, features = ["tokio"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.38.0", features = ["time"] }
 tonic = { version = "0.12.3", default-features = false, features = [ "transport", "tls-native-roots" ] }
+rustls-native-certs = { version = "0.8.1", optional = true }
+webpki-roots = { version = "1.0.2", optional = true }
+rustls-webpki = { version = "0.103.4", optional = true }
+rustls = "0.23.29"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 futures = "0.3.30"
@@ -71,8 +76,8 @@ wasm-bindgen-futures = "0.4.43"
 wasm-bindgen-test.workspace = true
 
 [features]
-default = []
+default = ['tls-native-roots']
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
 uniffi = ["dep:uniffi", "dep:async-trait", "celestia-types/uniffi"]
-tls-native-roots = ["tonic/tls-native-roots"]
-tls-webpki-roots = ["tonic/tls-webpki-roots"]
+tls-native-roots = ["dep:rustls-native-certs", "dep:rustls-webpki"]
+tls-webpki-roots = ["dep:webpki-roots", "dep:rustls-webpki"]
