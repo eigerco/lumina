@@ -27,7 +27,7 @@ impl HeaderApi {
         Ok(header)
     }
 
-    /// Provides the Syncer's view of the current network head.
+    /// Returns the latest head header announced in the network.
     pub async fn network_head(&self) -> Result<ExtendedHeader> {
         let header = self.ctx.rpc.header_network_head().await?;
         header.validate()?;
