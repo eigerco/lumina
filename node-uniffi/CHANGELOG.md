@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.2.0...lumina-node-uniffi-v0.3.0) - 2025-07-28
+
+### Added
+
+- *(node)* [**breaking**] enforce 7 days sampling window - CIP-36 ([#698](https://github.com/eigerco/lumina/pull/698))
+
 ## [0.2.0](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.1.4...lumina-node-uniffi-v0.2.0) - 2025-07-02
 
 ### Added

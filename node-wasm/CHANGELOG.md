@@ -1,4 +1,18 @@
 # Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.10.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.9.0...lumina-node-wasm-v0.10.0) - 2025-07-28
+
+### Added
+
+- *(node)* [**breaking**] enforce 7 days sampling window - CIP-36 ([#698](https://github.com/eigerco/lumina/pull/698))
+# Changelog
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
