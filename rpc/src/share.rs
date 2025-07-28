@@ -36,6 +36,7 @@ pub enum RowSide {
 }
 
 /// Response type for [`ShareClient::share_get_row`].
+#[derive(Debug, Clone, PartialEq)]
 pub struct GetRowResponse {
     /// Shares contained in given range.
     pub shares: Vec<Share>,
