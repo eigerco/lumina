@@ -17,6 +17,7 @@ pub mod evidence;
 mod extended_header;
 pub mod fraud_proof;
 pub mod hash;
+pub mod height;
 mod merkle_proof;
 pub mod nmt;
 #[cfg(feature = "p2p")]
