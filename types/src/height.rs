@@ -32,7 +32,7 @@ impl IntoHeight for Height {
 
 impl IntoHeight for u64 {
     fn into_height(self) -> Result<Height, HeightConversionError> {
-        Ok(Height::try_from(self).map_err(|_| HeightConversionError::Overflow)?)
+        Height::try_from(self).map_err(|_| HeightConversionError::Overflow)
     }
 }
 
