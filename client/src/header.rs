@@ -72,7 +72,7 @@ impl HeaderApi {
         Ok(headers)
     }
 
-    /// Blocks until the header at the given height has been processed by the store.
+    /// Blocks until the header at the given height has been synced by the node.
     pub async fn wait_for_height(&self, height: u64) -> Result<ExtendedHeader> {
         let header = self.ctx.rpc.header_wait_for_height(height).await?;
         header.validate()?;
