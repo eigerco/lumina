@@ -235,12 +235,33 @@ pub trait ShareClient: ClientT {
             let square_width = root.dah.square_width();
             let resp = rpc::ShareClient::share_get_row(self, root.height().value(), row).await?;
 
+            let expected_len = match resp.side {
+                RowSide::Left | RowSide::Right => square_width / 2,
+                RowSide::Both => square_width,
+            };
+
+            if resp.shares.len() != usize::from(expected_len) {
+                return Err(Error::Custom(format!(
+                    "GetRowResponse::shares should have length of {} but received {}",
+                    expected_len,
+                    resp.shares.len(),
+                )));
+            }
+
             let shares = resp
                 .shares
                 .into_iter()
                 .enumerate()
-                .map(|(col, raw_share)| {
-                    let share = if is_ods_square(row, col as u64, square_width) {
+                .map(|(relative_col, raw_share)| {
+                    let relative_col = u16::try_from(relative_col)
+                        .expect("square_width and expected_len already validated this");
+
+                    let col = match resp.side {
+                        RowSide::Left | RowSide::Both => relative_col,
+                        RowSide::Right => (square_width / 2) + relative_col,
+                    };
+
+                    let share = if is_ods_square(row, col.into(), square_width) {
                         Share::from_raw(&raw_share.data)
                     } else {
                         Share::parity(&raw_share.data)
