@@ -2,10 +2,10 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use async_stream::try_stream;
-use celestia_rpc::fraud::{Proof, ProofType};
 use celestia_rpc::FraudClient;
 use futures_util::{Stream, StreamExt};
 
+use crate::api::fraud::{Proof, ProofType};
 use crate::client::Context;
 use crate::Result;
 

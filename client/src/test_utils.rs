@@ -1,10 +1,9 @@
 use std::sync::OnceLock;
 
-use celestia_types::state::{AccAddress, ValAddress};
-use k256::ecdsa::SigningKey;
 use tokio::sync::{Mutex, MutexGuard};
 
-use crate::tx::TxConfig;
+use crate::tx::{SigningKey, TxConfig};
+use crate::types::state::{AccAddress, ValAddress};
 use crate::Client;
 
 const TEST_PRIV_KEY: &str = include_str!("../../ci/credentials/node-0.plaintext-key");

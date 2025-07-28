@@ -3,15 +3,14 @@ use std::sync::Arc;
 
 use async_stream::try_stream;
 use celestia_rpc::BlobClient;
-use celestia_types::nmt::{Namespace, NamespaceProof};
-use celestia_types::{Blob, Commitment};
 use futures_util::{Stream, StreamExt};
 
+use crate::api::blob::BlobsAtHeight;
 use crate::client::Context;
 use crate::tx::{TxConfig, TxInfo};
+use crate::types::nmt::{Namespace, NamespaceProof};
+use crate::types::{Blob, Commitment};
 use crate::Result;
-
-pub use celestia_rpc::blob::BlobsAtHeight;
 
 /// Blob API for quering bridge nodes.
 pub struct BlobApi {

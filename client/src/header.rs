@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use async_stream::try_stream;
 use celestia_rpc::HeaderClient;
-use celestia_types::hash::Hash;
-use celestia_types::{ExtendedHeader, SyncState};
 use futures_util::{Stream, StreamExt};
 
 use crate::client::Context;
+use crate::types::hash::Hash;
+use crate::types::{ExtendedHeader, SyncState};
 use crate::Result;
 
 /// Header API for quering bridge nodes.

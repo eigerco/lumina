@@ -26,13 +26,21 @@ pub mod api {
     /// Blob API related types.
     pub mod blob {
         #[doc(inline)]
-        pub use crate::blob::BlobsAtHeight;
+        pub use celestia_rpc::blob::BlobsAtHeight;
     }
 
     /// Share API related types.
     pub mod share {
         #[doc(inline)]
-        pub use crate::share::{GetRangeResponse, GetRowResponse, RowSide, SampleCoordinates};
+        pub use celestia_rpc::share::{
+            GetRangeResponse, GetRowResponse, RowSide, SampleCoordinates,
+        };
+    }
+
+    /// Fraud API related types.
+    pub mod fraud {
+        #[doc(inline)]
+        pub use celestia_rpc::fraud::{Proof, ProofType};
     }
 }
 
@@ -42,7 +50,23 @@ pub mod tx {
     pub use celestia_grpc::grpc::{GasEstimate, TxPriority};
     #[doc(inline)]
     pub use celestia_grpc::{DocSigner, IntoProtobufAny, SignDoc, TxConfig, TxInfo};
+    #[doc(inline)]
+    pub use k256::ecdsa::signature::{Error as SignatureError, Keypair};
+    #[doc(inline)]
+    pub use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
 }
+
+/// Re-export of [`celestia-proto`].
+///
+/// [`celestia-proto`]: celestia_proto
+#[doc(inline)]
+pub use celestia_proto as proto;
+
+/// Re-export of [`celestia-types`].
+///
+/// [`celestia-types`]: celestia_types
+#[doc(inline)]
+pub use celestia_types as types;
 
 pub use crate::client::{Client, ClientBuilder};
 

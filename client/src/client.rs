@@ -3,10 +3,6 @@ use std::sync::Arc;
 
 use celestia_grpc::TxClient;
 use celestia_rpc::{Client as RpcClient, HeaderClient};
-use celestia_types::ExtendedHeader;
-use k256::ecdsa::signature::Keypair;
-use k256::ecdsa::SigningKey;
-use tendermint::crypto::default::ecdsa_secp256k1::VerifyingKey;
 use zeroize::Zeroizing;
 
 use crate::blob::BlobApi;
@@ -15,7 +11,8 @@ use crate::fraud::FraudApi;
 use crate::header::HeaderApi;
 use crate::share::ShareApi;
 use crate::state::StateApi;
-use crate::tx::DocSigner;
+use crate::tx::{DocSigner, Keypair, SigningKey, VerifyingKey};
+use crate::types::ExtendedHeader;
 use crate::utils::DispatchedDocSigner;
 use crate::{Error, Result};
 

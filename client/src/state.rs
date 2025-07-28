@@ -1,19 +1,19 @@
 use std::sync::Arc;
 
-use celestia_proto::cosmos::bank::v1beta1::MsgSend;
-use celestia_proto::cosmos::staking::v1beta1::{
+use celestia_rpc::{HeaderClient, StateClient};
+
+use crate::client::Context;
+use crate::proto::cosmos::bank::v1beta1::MsgSend;
+use crate::proto::cosmos::staking::v1beta1::{
     MsgBeginRedelegate, MsgCancelUnbondingDelegation, MsgDelegate, MsgUndelegate,
 };
-use celestia_rpc::{HeaderClient, StateClient};
-use celestia_types::state::{
+use crate::tx::VerifyingKey;
+use crate::tx::{GasEstimate, IntoProtobufAny, TxConfig, TxInfo, TxPriority};
+use crate::types::state::{
     AccAddress, Address, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
     QueryUnbondingDelegationResponse, ValAddress,
 };
-use celestia_types::Blob;
-use k256::ecdsa::VerifyingKey;
-
-use crate::client::Context;
-use crate::tx::{GasEstimate, IntoProtobufAny, TxConfig, TxInfo, TxPriority};
+use crate::types::Blob;
 use crate::utils::height_i64;
 use crate::Result;
 

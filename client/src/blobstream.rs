@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use celestia_rpc::blobstream::BlobstreamClient;
-use celestia_types::MerkleProof;
 
 use crate::client::Context;
+use crate::types::MerkleProof;
 use crate::Result;
 
 /// Blobstream API for quering bridge nodes.

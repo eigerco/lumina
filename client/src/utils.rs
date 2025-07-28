@@ -2,10 +2,7 @@ use std::fmt::{self, Debug};
 use std::future::Future;
 use std::pin::Pin;
 
-use k256::ecdsa::signature::Error as SignatureError;
-use k256::ecdsa::Signature;
-
-use crate::tx::{DocSigner, SignDoc};
+use crate::tx::{DocSigner, SignDoc, Signature, SignatureError};
 use crate::{Error, Result};
 
 pub(crate) fn height_i64(height: u64) -> Result<i64> {
