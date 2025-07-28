@@ -175,7 +175,7 @@ mod tests {
 
     #[async_test]
     async fn blob_submit_and_retrieve() {
-        let (_lock, client) = new_client().await;
+        let client = new_client().await;
 
         let ns = Namespace::new_v0(b"mydata").unwrap();
 
@@ -207,7 +207,7 @@ mod tests {
 
     #[async_test]
     async fn blob_retrieve_unknown() {
-        let (_lock, client) = new_client().await;
+        let client = new_client().await;
 
         let head = client.header().head().await.unwrap();
 

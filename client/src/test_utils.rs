@@ -19,7 +19,7 @@ const TEST_GRPC_URL: &str = "http://localhost:18080";
 // We have to sequence the tests which submits transactions.
 // Multiple independent tx clients don't work well in parallel
 // as they break each other's account.sequence
-pub(crate) async fn new_client() -> (MutexGuard<'static, ()>, Client) {
+async fn node0_client() -> (MutexGuard<'static, ()>, Client) {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     let lock = LOCK.get_or_init(|| Mutex::new(())).lock().await;
 
@@ -42,17 +42,16 @@ pub(crate) async fn new_read_only_client() -> Client {
         .unwrap()
 }
 
-// This needs to be called *before* `new_client`, otherwise it will deadlock.
-pub(crate) async fn new_client_random_account() -> Client {
-    let (_lock, client) = new_client().await;
+pub(crate) async fn new_client() -> Client {
+    let (_lock, client) = node0_client().await;
 
     let random_key = SigningKey::random(&mut rand::thread_rng());
     let random_acc = random_key.verifying_key().into();
 
-    // Fund the account with 2000 utai
+    // Fund the account with 20000 utai
     client
         .state()
-        .transfer(&random_acc, 2000, TxConfig::default())
+        .transfer(&random_acc, 20000, TxConfig::default())
         .await
         .unwrap();
 

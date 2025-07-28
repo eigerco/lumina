@@ -370,15 +370,12 @@ mod tests {
     use k256::ecdsa::SigningKey;
     use lumina_utils::test_utils::async_test;
 
-    use crate::test_utils::{
-        new_client, new_client_random_account, new_read_only_client, node0_address,
-        validator_address,
-    };
+    use crate::test_utils::{new_client, new_read_only_client, node0_address, validator_address};
     use crate::Error;
 
     #[async_test]
     async fn transfer() {
-        let (_lock, client) = new_client().await;
+        let client = new_client().await;
 
         let random_key = SigningKey::random(&mut rand::thread_rng());
         let random_acc = random_key.verifying_key().into();
@@ -401,7 +398,7 @@ mod tests {
 
     #[async_test]
     async fn delegation() {
-        let client = new_client_random_account().await;
+        let client = new_client().await;
         let validator_addr = validator_address();
         let client_addr = client.address().unwrap();
 
