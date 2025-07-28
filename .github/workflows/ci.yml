@@ -213,7 +213,7 @@ jobs:
     - name: Setup Java JDK
       uses: actions/setup-java@v4.0.0
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'adopt'
 
     - name: Setup toolchain
