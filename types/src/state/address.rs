@@ -311,48 +311,19 @@ fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
 /// uniffi conversion types
 #[cfg(feature = "uniffi")]
 pub(crate) mod uniffi_types {
-    use super::{AccAddress, Address as RustAddress, ConsAddress, Id, ValAddress};
-    use uniffi::{Enum, Record};
+    use super::{Address, Id};
+    use uniffi::Record;
 
     use crate::error::UniffiConversionError;
 
-    // uniffi does not play well with enum_dispatch
-    #[derive(Enum)]
-    pub enum Address {
-        /// Account address.
-        Account(AccountId),
-        /// Validator address.
-        Validator(AccountId),
-        /// Consensus address.
-        Consensus(AccountId),
-    }
-
-    impl TryFrom<Address> for RustAddress {
-        type Error = UniffiConversionError;
-
-        fn try_from(value: Address) -> Result<Self, Self::Error> {
-            Ok(match value {
-                Address::Account(id) => RustAddress::from(AccAddress { id: id.try_into()? }),
-                Address::Validator(id) => RustAddress::from(ValAddress { id: id.try_into()? }),
-                Address::Consensus(id) => RustAddress::from(ConsAddress { id: id.try_into()? }),
-            })
-        }
-    }
-
-    impl From<RustAddress> for Address {
-        fn from(value: RustAddress) -> Self {
-            match value {
-                RustAddress::AccAddress(v) => Address::Account(v.id.into()),
-                RustAddress::ValAddress(v) => Address::Validator(v.id.into()),
-                RustAddress::ConsAddress(v) => Address::Consensus(v.id.into()),
-            }
-        }
-    }
-
-    uniffi::custom_type!(RustAddress, Address);
+    uniffi::custom_type!(Address, String, {
+        remote,
+        try_lift: |address| Ok(address.parse()?),
+        lower: |address| format!("{address}")
+    });
 
     /// Account ID
-    #[derive(Record)]
+    #[derive(Record, Clone)]
     pub struct AccountId {
         /// id value
         pub id: Vec<u8>,
