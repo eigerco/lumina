@@ -1,9 +1,10 @@
+use std::pin::Pin;
 use std::sync::Arc;
 
 use async_stream::try_stream;
 use celestia_rpc::fraud::{Proof, ProofType};
 use celestia_rpc::FraudClient;
-use futures_util::Stream;
+use futures_util::{Stream, StreamExt};
 
 use crate::client::Context;
 use crate::Result;
@@ -24,7 +25,10 @@ impl FraudApi {
     }
 
     /// Subscribe to fraud proof by its type.
-    pub async fn subscribe(&self, proof_type: ProofType) -> impl Stream<Item = Result<Proof>> {
+    pub async fn subscribe(
+        &self,
+        proof_type: ProofType,
+    ) -> Pin<Box<dyn Stream<Item = Result<Proof>> + Send + 'static>> {
         let ctx = self.ctx.clone();
 
         try_stream! {
@@ -36,5 +40,6 @@ impl FraudApi {
                 yield proof;
             }
         }
+        .boxed()
     }
 }

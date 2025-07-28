@@ -1,10 +1,11 @@
+use std::pin::Pin;
 use std::sync::Arc;
 
 use async_stream::try_stream;
 use celestia_rpc::HeaderClient;
 use celestia_types::hash::Hash;
 use celestia_types::{ExtendedHeader, SyncState};
-use futures_util::Stream;
+use futures_util::{Stream, StreamExt};
 
 use crate::client::Context;
 use crate::Result;
@@ -96,7 +97,6 @@ impl HeaderApi {
     /// # Example
     ///
     /// ```no_run
-    /// # use std::pin::pin;
     /// # use futures_util::StreamExt;
     /// # use celestia_client::{Client, Result};
     /// # const RPC_URL: &str = "ws://localhost:26658";
@@ -106,7 +106,7 @@ impl HeaderApi {
     ///     .build()
     ///     .await?;
     ///
-    /// let mut headers_rx = pin!(client.header().subscribe().await);
+    /// let mut headers_rx = client.header().subscribe().await;
     ///
     /// while let Some(header) = headers_rx.next().await {
     ///     dbg!(header);
@@ -114,7 +114,9 @@ impl HeaderApi {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn subscribe(&self) -> impl Stream<Item = Result<ExtendedHeader>> {
+    pub async fn subscribe(
+        &self,
+    ) -> Pin<Box<dyn Stream<Item = Result<ExtendedHeader>> + Send + 'static>> {
         let ctx = self.ctx.clone();
 
         try_stream! {
@@ -133,5 +135,6 @@ impl HeaderApi {
                 yield header;
             }
         }
+        .boxed()
     }
 }

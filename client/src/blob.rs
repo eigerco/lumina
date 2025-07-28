@@ -1,10 +1,11 @@
+use std::pin::Pin;
 use std::sync::Arc;
 
 use async_stream::try_stream;
 use celestia_rpc::BlobClient;
 use celestia_types::nmt::{Namespace, NamespaceProof};
 use celestia_types::{Blob, Commitment};
-use futures_util::Stream;
+use futures_util::{Stream, StreamExt};
 
 use crate::client::Context;
 use crate::tx::{TxConfig, TxInfo};
@@ -128,7 +129,6 @@ impl BlobApi {
     /// # Example
     ///
     /// ```no_run
-    /// # use std::pin::pin;
     /// # use futures_util::StreamExt;
     /// # use celestia_client::{Client, Result};
     /// # const RPC_URL: &str = "ws://localhost:26658";
@@ -141,7 +141,7 @@ impl BlobApi {
     ///     .await?;
     ///
     /// let ns = Namespace::new_v0(b"mydata").unwrap();
-    /// let mut blobs_rx = pin!(client.blob().subscribe(ns).await);
+    /// let mut blobs_rx = client.blob().subscribe(ns).await;
     ///
     /// while let Some(blobs) = blobs_rx.next().await {
     ///     dbg!(blobs);
@@ -151,7 +151,7 @@ impl BlobApi {
     pub async fn subscribe(
         &self,
         namespace: Namespace,
-    ) -> impl Stream<Item = Result<BlobsAtHeight>> {
+    ) -> Pin<Box<dyn Stream<Item = Result<BlobsAtHeight>> + Send + 'static>> {
         let ctx = self.ctx.clone();
 
         try_stream! {
@@ -163,6 +163,7 @@ impl BlobApi {
                 yield blobs;
             }
         }
+        .boxed()
     }
 }
 
