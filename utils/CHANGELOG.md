@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/eigerco/lumina/compare/lumina-utils-v0.2.0...lumina-utils-v0.3.0) - 2025-07-28
+
+### Added
+
+- *(grpc,types,node)* [**breaking**] Wasm grpc client ([#654](https://github.com/eigerco/lumina/pull/654))
+
 ## [0.2.0](https://github.com/eigerco/lumina/compare/lumina-utils-v0.1.0...lumina-utils-v0.2.0) - 2025-05-26
 
 ### Fixed

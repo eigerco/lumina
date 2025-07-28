@@ -1,4 +1,18 @@
 # Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.9.1](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.9.0...lumina-node-wasm-v0.9.1) - 2025-07-28
+
+### Other
+
+- updated the following local packages: lumina-utils, celestia-types, celestia-rpc, lumina-node, celestia-grpc
+# Changelog
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
