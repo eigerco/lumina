@@ -3,9 +3,13 @@ import XCTest
 
 final class LuminaNodeTests: XCTestCase {
     func testRequestHeader() async throws {
-        let config = NodeConfig(basePath: nil, network: .mainnet, bootnodes: nil,
-                                samplingWindowSecs: nil, pruningWindowSecs: nil,
-                                batchSize: nil, ed25519SecretKeyBytes: nil)
+        let config = NodeConfig(
+            basePath: nil,
+            network: .mainnet,
+            bootnodes: nil,
+            pruningWindowSecs: nil,
+            batchSize: nil,
+            ed25519SecretKeyBytes: nil)
         let node = try LuminaNode(config: config)
 
         let _ = try await node.start()
