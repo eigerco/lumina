@@ -49,9 +49,9 @@ impl HeaderApi {
         Ok(header)
     }
 
-    /// Returns the given range of [`ExtendedHeader`]s from the node's
-    /// header store and verifies that the returned headers are adjacent
-    /// to each other.
+    /// Returns the given range of [`ExtendedHeader`]s from the node
+    /// and verifies that they form a confirmed and continuous chain
+    /// starting from the `from` header.
     ///
     /// The range is exclusive from both sides.
     pub async fn get_range_by_height(
