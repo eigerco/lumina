@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use celestia_types::state::Address;
 use celestia_types::{AppVersion, Blob};
 use k256::ecdsa::signature::Error as K256Error;
 use k256::ecdsa::{Signature as DocSignature, VerifyingKey};
@@ -214,13 +213,4 @@ impl From<crate::Error> for TransactionClientError {
 #[uniffi::export]
 fn proto_encode_sign_doc(sign_doc: SignDoc) -> Vec<u8> {
     sign_doc.encode_to_vec()
-}
-
-#[uniffi::export]
-fn parse_bech32_address(bech32_address: String) -> Result<Address> {
-    bech32_address
-        .parse()
-        .map_err(|e| TransactionClientError::InvalidAccountId {
-            msg: format!("{e}"),
-        })
 }
