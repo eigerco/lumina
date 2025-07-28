@@ -41,21 +41,9 @@ impl Coin {
         self.amount
     }
 
-    /// Amount setter.
-    pub fn set_amount(&mut self, amount: u64) {
-        self.amount = amount;
-    }
-
     /// Denomination getter.
     pub fn denom(&self) -> &str {
         self.denom.as_str()
-    }
-
-    /// Denomination setter.
-    pub fn set_denom(&mut self, denom: &str) -> Result<()> {
-        validate_denom(denom)?;
-        self.denom = denom.to_owned();
-        Ok(())
     }
 }
 
@@ -186,9 +174,6 @@ mod tests {
     #[test]
     fn invalid_coin_denom() {
         Coin::new("0bc", 1234).unwrap_err();
-
-        let mut coin = Coin::utia(1);
-        coin.set_denom("0bc").unwrap_err();
     }
 
     #[test]
