@@ -6,7 +6,7 @@ pub use celestia_types::fraud_proof::{Proof, ProofType};
 
 #[rpc(client, namespace = "fraud", namespace_separator = ".")]
 pub trait Fraud {
-    /// Fetches fraud proofs from by their type.
+    /// Fetches fraud proofs by their type.
     #[method(name = "Get")]
     async fn fraud_get(&self, proof_type: ProofType) -> Result<Vec<Proof>, Error>;
 
