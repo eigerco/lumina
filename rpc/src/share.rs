@@ -180,20 +180,27 @@ pub trait ShareClient: ClientT {
     /// at the given sample coordinates.
     ///
     /// `coordinates` is a list of `(row, column)`.
-    fn share_get_samples<'a, 'b, 'fut>(
+    fn share_get_samples<'a, 'b, 'fut, I, C>(
         &'a self,
         root: &'b ExtendedHeader,
-        coordinates: &'b [SampleCoordinates],
+        coordinates: I,
     ) -> impl Future<Output = Result<Vec<Sample>, Error>> + Send + 'fut
     where
         'a: 'fut,
         'b: 'fut,
         Self: Sized + Sync + 'fut,
+        I: IntoIterator<Item = C>,
+        C: Into<SampleCoordinates>,
     {
+        let coordinates = coordinates
+            .into_iter()
+            .map(|c| c.into())
+            .collect::<Vec<_>>();
+
         async move {
             let app = root.app_version().map_err(custom_client_error)?;
 
-            let raw_samples = rpc::ShareClient::share_get_samples(self, root, coordinates).await?;
+            let raw_samples = rpc::ShareClient::share_get_samples(self, root, &coordinates).await?;
             let mut samples = Vec::with_capacity(raw_samples.len());
 
             for (coords, raw_sample) in coordinates.iter().zip(raw_samples.into_iter()) {

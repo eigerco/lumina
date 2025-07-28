@@ -40,11 +40,11 @@ impl ShareApi {
     /// sample coordinates.
     ///
     /// `coordinates` is a list of `(row, column)`.
-    pub async fn get_samples(
-        &self,
-        height: u64,
-        coordinates: &[SampleCoordinates],
-    ) -> Result<Vec<Sample>> {
+    pub async fn get_samples<I, C>(&self, height: u64, coordinates: I) -> Result<Vec<Sample>>
+    where
+        I: IntoIterator<Item = C>,
+        C: Into<SampleCoordinates>,
+    {
         let header = self.ctx.get_header_validated(height).await?;
         Ok(self.ctx.rpc.share_get_samples(&header, coordinates).await?)
     }
