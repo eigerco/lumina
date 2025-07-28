@@ -7,7 +7,6 @@ use crate::proto::cosmos::bank::v1beta1::MsgSend;
 use crate::proto::cosmos::staking::v1beta1::{
     MsgBeginRedelegate, MsgCancelUnbondingDelegation, MsgDelegate, MsgUndelegate,
 };
-use crate::tx::VerifyingKey;
 use crate::tx::{GasEstimate, IntoProtobufAny, TxConfig, TxInfo, TxPriority};
 use crate::types::state::{
     AccAddress, Address, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
@@ -27,17 +26,6 @@ impl StateApi {
         StateApi { ctx }
     }
 
-    /// Returns the public key of the signer.
-    pub fn pubkey(&self) -> Result<VerifyingKey> {
-        self.ctx.pubkey().cloned()
-    }
-
-    /// Returns the address of signer.
-    pub fn account_address(&self) -> Result<AccAddress> {
-        let pubkey = self.ctx.pubkey()?.to_owned();
-        Ok(AccAddress::new(pubkey.into()))
-    }
-
     /// Retrieves the Celestia coin balance for the signer.
     ///
     /// # Notes
@@ -47,13 +35,13 @@ impl StateApi {
     /// you need to wait 1 more block in order to see the new balance. If you want
     /// something more immediate then use [`StateApi::balance_unverified`].
     pub async fn balance(&self) -> Result<u64> {
-        let address = self.account_address()?;
+        let address = self.ctx.address()?;
         self.balance_for_address(&address).await
     }
 
     /// Retrieves the Celestia coin balance for the signer.
     pub async fn balance_unverified(&self) -> Result<u64> {
-        let address = self.account_address()?;
+        let address = self.ctx.address()?;
         self.balance_for_address_unverified(&address).await
     }
 
@@ -148,7 +136,7 @@ impl StateApi {
     ///     .await?;
     ///
     /// let msg = MsgSend {
-    ///     from_address: client.state().account_address()?.to_string(),
+    ///     from_address: client.address()?.to_string(),
     ///     to_address: "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm".to_string(),
     ///     amount: vec![Coin::utia(12345).into()],
     /// };
@@ -174,7 +162,7 @@ impl StateApi {
         amount: u64,
         cfg: TxConfig,
     ) -> Result<TxInfo> {
-        let from_address = self.account_address()?;
+        let from_address = self.ctx.address()?;
 
         let msg = MsgSend {
             from_address: from_address.to_string(),
@@ -234,7 +222,7 @@ impl StateApi {
         creation_height: u64,
         cfg: TxConfig,
     ) -> Result<TxInfo> {
-        let delegator_address = self.account_address()?;
+        let delegator_address = self.ctx.address()?;
 
         let msg = MsgCancelUnbondingDelegation {
             delegator_address: delegator_address.to_string(),
@@ -254,7 +242,7 @@ impl StateApi {
         amount: u64,
         cfg: TxConfig,
     ) -> Result<TxInfo> {
-        let delegator_address = self.account_address()?;
+        let delegator_address = self.ctx.address()?;
 
         let msg = MsgBeginRedelegate {
             delegator_address: delegator_address.to_string(),
@@ -273,7 +261,7 @@ impl StateApi {
         amount: u64,
         cfg: TxConfig,
     ) -> Result<TxInfo> {
-        let delegator_address = self.account_address()?;
+        let delegator_address = self.ctx.address()?;
 
         let msg = MsgUndelegate {
             delegator_address: delegator_address.to_string(),
@@ -291,7 +279,7 @@ impl StateApi {
         amount: u64,
         cfg: TxConfig,
     ) -> Result<TxInfo> {
-        let delegator_address = self.account_address()?;
+        let delegator_address = self.ctx.address()?;
 
         let msg = MsgDelegate {
             delegator_address: delegator_address.to_string(),
@@ -307,7 +295,7 @@ impl StateApi {
         &self,
         validator_address: &ValAddress,
     ) -> Result<QueryDelegationResponse> {
-        let delegator_address = self.account_address()?;
+        let delegator_address = self.ctx.address()?;
 
         let resp = self
             .ctx
@@ -323,7 +311,7 @@ impl StateApi {
         &self,
         validator_address: &ValAddress,
     ) -> Result<QueryUnbondingDelegationResponse> {
-        let delegator_address = self.account_address()?;
+        let delegator_address = self.ctx.address()?;
 
         let resp = self
             .ctx
@@ -340,7 +328,7 @@ impl StateApi {
         src_validator_address: &ValAddress,
         dest_validator_address: &ValAddress,
     ) -> Result<QueryRedelegationsResponse> {
-        let delegator_address = self.account_address()?;
+        let delegator_address = self.ctx.address()?;
 
         let mut full_resp = QueryRedelegationsResponse {
             responses: Vec::new(),
@@ -415,7 +403,7 @@ mod tests {
     async fn delegation() {
         let client = new_client_random_account().await;
         let validator_addr = validator_address();
-        let client_addr = client.state().account_address().unwrap();
+        let client_addr = client.address().unwrap();
 
         // Test delegation
         client

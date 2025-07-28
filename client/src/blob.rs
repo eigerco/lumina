@@ -182,7 +182,7 @@ mod tests {
         let blob = Blob::new_with_signer(
             ns,
             b"some data to store".to_vec(),
-            client.state().account_address().unwrap(),
+            client.address().unwrap(),
             AppVersion::V3,
         )
         .unwrap();

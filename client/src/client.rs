@@ -12,6 +12,7 @@ use crate::header::HeaderApi;
 use crate::share::ShareApi;
 use crate::state::StateApi;
 use crate::tx::{DocSigner, Keypair, SigningKey, VerifyingKey};
+use crate::types::state::AccAddress;
 use crate::types::ExtendedHeader;
 use crate::utils::DispatchedDocSigner;
 use crate::{Error, Result};
@@ -120,6 +121,11 @@ impl Context {
         self.pubkey.as_ref().ok_or(Error::ReadOnlyMode)
     }
 
+    pub(crate) fn address(&self) -> Result<AccAddress> {
+        let pubkey = self.pubkey()?.to_owned();
+        Ok(AccAddress::new(pubkey.into()))
+    }
+
     pub(crate) async fn get_header_validated(&self, height: u64) -> Result<ExtendedHeader> {
         let header = self.rpc.header_get_by_height(height).await?;
         header.validate()?;
@@ -136,6 +142,16 @@ impl Client {
     /// Returns chain id of the network.
     pub fn chain_id(&self) -> &tendermint::chain::Id {
         &self.ctx.chain_id
+    }
+
+    /// Returns the public key of the signer.
+    pub fn pubkey(&self) -> Result<VerifyingKey> {
+        self.ctx.pubkey().cloned()
+    }
+
+    /// Returns the address of signer.
+    pub fn address(&self) -> Result<AccAddress> {
+        self.ctx.address()
     }
 
     /// Returns state API accessor.

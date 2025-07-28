@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
     let blob = Blob::new_with_signer(
         ns,
         b"some data to store".to_vec(),
-        client.state().account_address()?,
+        client.address()?,
         AppVersion::V3,
     )?;
 
