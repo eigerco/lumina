@@ -49,9 +49,8 @@ impl HeaderApi {
         Ok(header)
     }
 
-    /// Returns the given range of [`ExtendedHeader`]s from the node
-    /// and verifies that they form a confirmed and continuous chain
-    /// starting from the `from` header.
+    /// Returns the given range headers from the node and verifies that they
+    /// form a confirmed and continuous chain starting from the `from` header.
     ///
     /// The range is exclusive from both sides.
     pub async fn get_range_by_height(
@@ -89,7 +88,7 @@ impl HeaderApi {
         Ok(self.ctx.rpc.header_sync_wait().await?)
     }
 
-    /// Subscribe to recent ExtendedHeaders from the network.
+    /// Subscribe to recent headers from the network.
     ///
     /// Headers will be validated and verified with the one that was
     /// previously received.

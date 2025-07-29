@@ -21,8 +21,7 @@ impl ShareApi {
     }
 
     /// Performs a subjective validation to check if the shares committed to the
-    /// ExtendedHeader at the specified height are available and retrievable from
-    /// the network.
+    /// header at the specified height are available and retrievable from the network.
     ///
     /// Returns `Ok(())` if shares are available.
     pub async fn shares_available(&self, height: u64) -> Result<()> {
