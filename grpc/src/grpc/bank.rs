@@ -34,7 +34,7 @@ impl IntoGrpcParam<QueryAllBalancesRequest> for &Address {
         QueryAllBalancesRequest {
             address: self.to_string(),
             pagination: None,
-            resolve_denom: true,
+            resolve_denom: false,
         }
     }
 }
