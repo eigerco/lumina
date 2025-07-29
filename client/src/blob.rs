@@ -32,17 +32,15 @@ impl BlobApi {
     /// ```no_run
     /// # use celestia_client::{Client, Result};
     /// # use celestia_client::tx::TxConfig;
-    /// # const RPC_URL: &str = "http://localhost:26658";
-    /// # const GRPC_URL : &str = "http://localhost:19090";
     /// # async fn docs() -> Result<()> {
     /// use celestia_types::nmt::Namespace;
     /// use celestia_types::state::{Address, Coin};
     /// use celestia_types::{AppVersion, Blob};
     ///
     /// let client = Client::builder()
-    ///     .rpc_url(RPC_URL)
-    ///     .grpc_url(GRPC_URL)
-    ///     .private_key_hex("...")
+    ///     .rpc_url("ws://localhost:26658")
+    ///     .grpc_url("http://localhost:9090")
+    ///     .private_key_hex("393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839")
     ///     .build()
     ///     .await?;
     ///
@@ -130,12 +128,11 @@ impl BlobApi {
     /// ```no_run
     /// # use futures_util::StreamExt;
     /// # use celestia_client::{Client, Result};
-    /// # const RPC_URL: &str = "ws://localhost:26658";
     /// # async fn docs() -> Result<()> {
     /// use celestia_types::nmt::Namespace;
     ///
     /// let client = Client::builder()
-    ///     .rpc_url(RPC_URL)
+    ///     .rpc_url("ws://localhost:26658")
     ///     .build()
     ///     .await?;
     ///

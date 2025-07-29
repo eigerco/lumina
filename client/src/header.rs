@@ -98,10 +98,9 @@ impl HeaderApi {
     /// ```no_run
     /// # use futures_util::StreamExt;
     /// # use celestia_client::{Client, Result};
-    /// # const RPC_URL: &str = "ws://localhost:26658";
     /// # async fn docs() -> Result<()> {
     /// let client = Client::builder()
-    ///     .rpc_url(RPC_URL)
+    ///     .rpc_url("ws://localhost:26658")
     ///     .build()
     ///     .await?;
     ///

@@ -12,12 +12,10 @@ Read-only mode:
 ```rust,no_run
 use celestia_client::{Client, Result};
 
-const RPC_URL: &str = "ws://localhost:26658";
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let client = Client::builder()
-        .rpc_url(RPC_URL)
+        .rpc_url("ws://localhost:26658")
         .build()
         .await?;
 
@@ -36,18 +34,12 @@ use std::env;
 use celestia_client::{Client, Result};
 use celestia_client::tx::TxConfig;
 
-const RPC_URL: &str = "ws://localhost:26658";
-const GRPC_URL : &str = "http://localhost:19090";
-
 #[tokio::main]
 async fn main() -> Result<()> {
-    let priv_key = env::var("CELESTIA_PRIV_KEY")
-        .expect("Environment variable CELESTIA_PRIV_KEY not set");
-
     let client = Client::builder()
-        .rpc_url(RPC_URL)
-        .grpc_url(GRPC_URL)
-        .private_key_hex(&priv_key)
+        .rpc_url("ws://localhost:26658")
+        .grpc_url("http://localhost:9090")
+        .private_key_hex("393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839")
         .build()
         .await?;
 
@@ -69,18 +61,12 @@ use celestia_client::tx::TxConfig;
 use celestia_types::nmt::Namespace;
 use celestia_types::{AppVersion, Blob};
 
-const RPC_URL: &str = "ws://localhost:26658";
-const GRPC_URL: &str = "http://localhost:19090";
-
 #[tokio::main]
 async fn main() -> Result<()> {
-    let priv_key = env::var("CELESTIA_PRIV_KEY")
-        .expect("Environment variable CELESTIA_PRIV_KEY not set");
-
     let client = Client::builder()
-        .rpc_url(RPC_URL)
-        .grpc_url(GRPC_URL)
-        .private_key_hex(&priv_key)
+        .rpc_url("ws://localhost:26658")
+        .grpc_url("http://localhost:9090")
+        .private_key_hex("393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839")
         .build()
         .await?;
 
