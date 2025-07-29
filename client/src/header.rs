@@ -27,7 +27,7 @@ impl HeaderApi {
         Ok(header)
     }
 
-    /// Returns the latest head header announced in the network.
+    /// Returns the latest header announced in the network.
     pub async fn network_head(&self) -> Result<ExtendedHeader> {
         let header = self.ctx.rpc.header_network_head().await?;
         header.validate()?;
