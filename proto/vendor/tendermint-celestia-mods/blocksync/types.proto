@@ -1,0 +1,23 @@
+syntax = "proto3";
+package tendermint_celestia_mods.blocksync;
+
+import "tendermint/blocksync/types.proto";
+import "tendermint/types/types.proto";
+import "tendermint-celestia-mods/types/block.proto";
+import "tendermint-celestia-mods/types/types.proto";
+
+// BlockResponse returns block to the requested
+message BlockResponse {
+  tendermint_celestia_mods.types.Block block      = 1;
+  tendermint.types.ExtendedCommit      ext_commit = 2;
+}
+
+message Message {
+  oneof sum {
+    tendermint.blocksync.BlockRequest    block_request     = 1;
+    tendermint.blocksync.NoBlockResponse no_block_response = 2;
+    BlockResponse                        block_response    = 3;
+    tendermint.blocksync.StatusRequest   status_request    = 4;
+    tendermint.blocksync.StatusResponse  status_response   = 5;
+  }
+}

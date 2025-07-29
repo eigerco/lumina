@@ -1,75 +1,108 @@
 syntax = "proto3";
 package tendermint_celestia_mods.abci;
 
+// For more information on gogo.proto, see:
+// https://github.com/cosmos/gogoproto/blob/master/extensions.md
+import "tendermint/abci/types.proto";
+import "tendermint/crypto/proof.proto";
+import "tendermint/crypto/keys.proto";
+import "tendermint/types/params.proto";
+import "tendermint/types/validator.proto";
 import "tendermint/types/types.proto";
 import "google/protobuf/timestamp.proto";
-import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
+import "gogoproto/gogo.proto";
 
-import "tendermint-celestia-mods/types/types.proto";
-import "tendermint/abci/types.proto";
-
-// This file is copied from http://github.com/tendermint/abci
 // NOTE: When using custom types, mind the warnings.
-// https://github.com/gogo/protobuf/blob/master/custom_types.md#warnings-and-issues
+// https://github.com/cosmos/gogoproto/blob/master/custom_types.md#warnings-and-issues
+
+service ABCI {
+  rpc Echo(tendermint.abci.RequestEcho) returns (tendermint.abci.ResponseEcho);
+  rpc Flush(tendermint.abci.RequestFlush) returns (tendermint.abci.ResponseFlush);
+  rpc Info(tendermint.abci.RequestInfo) returns (ResponseInfo);
+  rpc CheckTx(tendermint.abci.RequestCheckTx) returns (ResponseCheckTx);
+  rpc Query(tendermint.abci.RequestQuery) returns (tendermint.abci.ResponseQuery);
+  rpc Commit(tendermint.abci.RequestCommit) returns (tendermint.abci.ResponseCommit);
+  rpc InitChain(tendermint.abci.RequestInitChain) returns (ResponseInitChain);
+  rpc ListSnapshots(tendermint.abci.RequestListSnapshots) returns (tendermint.abci.ResponseListSnapshots);
+  rpc OfferSnapshot(RequestOfferSnapshot) returns (tendermint.abci.ResponseOfferSnapshot);
+  rpc LoadSnapshotChunk(tendermint.abci.RequestLoadSnapshotChunk)
+      returns (tendermint.abci.ResponseLoadSnapshotChunk);
+  rpc ApplySnapshotChunk(tendermint.abci.RequestApplySnapshotChunk)
+      returns (tendermint.abci.ResponseApplySnapshotChunk);
+  rpc PrepareProposal(tendermint.abci.RequestPrepareProposal) returns (ResponsePrepareProposal);
+  rpc ProcessProposal(RequestProcessProposal) returns (tendermint.abci.ResponseProcessProposal);
+  rpc ExtendVote(tendermint.abci.RequestExtendVote) returns (tendermint.abci.ResponseExtendVote);
+  rpc VerifyVoteExtension(tendermint.abci.RequestVerifyVoteExtension) returns (tendermint.abci.ResponseVerifyVoteExtension);
+  rpc FinalizeBlock(RequestFinalizeBlock) returns (ResponseFinalizeBlock);
+}
 
 //----------------------------------------
 // Request types
 
 message Request {
   oneof value {
-    tendermint.abci.RequestEcho               echo                 = 1;
-    tendermint.abci.RequestFlush              flush                = 2;
-    tendermint.abci.RequestInfo               info                 = 3;
-    tendermint.abci.RequestSetOption          set_option           = 4;
-    tendermint.abci.RequestInitChain          init_chain           = 5;
-    tendermint.abci.RequestQuery              query                = 6;
-    tendermint.abci.RequestBeginBlock         begin_block          = 7;
-    tendermint.abci.RequestCheckTx            check_tx             = 8;
-    tendermint.abci.RequestDeliverTx          deliver_tx           = 9;
-    tendermint.abci.RequestEndBlock           end_block            = 10;
-    tendermint.abci.RequestCommit             commit               = 11;
-    tendermint.abci.RequestListSnapshots      list_snapshots       = 12;
-    RequestOfferSnapshot      offer_snapshot       = 13;
-    tendermint.abci.RequestLoadSnapshotChunk  load_snapshot_chunk  = 14;
-    tendermint.abci.RequestApplySnapshotChunk apply_snapshot_chunk = 15;
-    RequestPrepareProposal    prepare_proposal     = 16;
-    RequestProcessProposal    process_proposal     = 17;
+    tendermint.abci.RequestEcho                echo                  = 1;
+    tendermint.abci.RequestFlush               flush                 = 2;
+    tendermint.abci.RequestInfo                info                  = 3;
+    tendermint.abci.RequestInitChain           init_chain            = 5;
+    tendermint.abci.RequestQuery               query                 = 6;
+    tendermint.abci.RequestCheckTx             check_tx              = 8;
+    tendermint.abci.RequestCommit              commit                = 11;
+    tendermint.abci.RequestListSnapshots       list_snapshots        = 12;
+    RequestOfferSnapshot                       offer_snapshot        = 13;
+    tendermint.abci.RequestLoadSnapshotChunk   load_snapshot_chunk   = 14;
+    tendermint.abci.RequestApplySnapshotChunk  apply_snapshot_chunk  = 15;
+    tendermint.abci.RequestPrepareProposal     prepare_proposal      = 16;
+    RequestProcessProposal                     process_proposal      = 17;
+    tendermint.abci.RequestExtendVote          extend_vote           = 18;
+    tendermint.abci.RequestVerifyVoteExtension verify_vote_extension = 19;
+    RequestFinalizeBlock                       finalize_block        = 20;
   }
-}
-
-message TimeoutsInfo {
-  google.protobuf.Duration timeout_propose = 1 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
-  google.protobuf.Duration timeout_commit  = 2 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+  reserved 4, 7, 9, 10;  // SetOption, BeginBlock, DeliverTx, EndBlock
 }
 
 // offers a snapshot to the application
 message RequestOfferSnapshot {
   tendermint.abci.Snapshot snapshot    = 1;  // snapshot offered by peers
-  bytes    app_hash    = 2;  // light client-verified app hash for snapshot height
-  uint64   app_version = 3;  // The application version at which the snapshot was taken
-}
-
-message RequestPrepareProposal {
-  // BlockData is a slice of candidate transactions that may be included in a
-  // block. BlockData is sent to the application so that the application can
-  // filter and re-arrange the slice of candidate transactions.
-  tendermint_celestia_mods.types.Data block_data = 1;
-  // BlockDataSize is the maximum size (in bytes) that BlockData should be.
-  int64 block_data_size = 2;
-  // chain_id is a unique identifier for the blockchain network this proposal
-  // belongs to (e.g. mocha-1).
-  string chain_id = 3;
-  // height is the height of the proposal block
-  int64 height = 4;
-  // time is the time that will end up in the header. This is the voting power
-  // weighted median of the last commit.
-  google.protobuf.Timestamp time = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  bytes                    app_hash    = 2;  // light client-verified app hash for snapshot height
+  uint64                   app_version = 3;
 }
 
 message RequestProcessProposal {
-  tendermint.types.Header header     = 1 [(gogoproto.nullable) = false];
-  tendermint_celestia_mods.types.Data   block_data = 2;
+  repeated bytes                       txs                  = 1;
+  tendermint.abci.CommitInfo           proposed_last_commit = 2 [(gogoproto.nullable) = false];
+  repeated tendermint.abci.Misbehavior misbehavior          = 3 [(gogoproto.nullable) = false];
+  // hash is the merkle root hash of the fields of the proposed block.
+  bytes                     hash                 = 4;
+  int64                     height               = 5;
+  google.protobuf.Timestamp time                 = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  bytes                     next_validators_hash = 7;
+  // address of the public key of the original proposer of the block.
+  bytes  proposer_address = 8;
+  uint64 square_size      = 9;
+  bytes  data_root_hash   = 10;
+
+  // header is the header of the block that is being processed
+  // this is needed for v3 to sync with nova as the header is stored in state
+  tendermint.types.Header header = 20;
+}
+
+message RequestFinalizeBlock {
+  repeated bytes                       txs                 = 1;
+  tendermint.abci.CommitInfo           decided_last_commit = 2 [(gogoproto.nullable) = false];
+  repeated tendermint.abci.Misbehavior misbehavior         = 3 [(gogoproto.nullable) = false];
+  // hash is the merkle root hash of the fields of the decided block.
+  bytes                     hash                 = 4;
+  int64                     height               = 5;
+  google.protobuf.Timestamp time                 = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  bytes                     next_validators_hash = 7;
+  // proposer_address is the address of the public key of the original proposer of the block.
+  bytes proposer_address = 8;
+
+  // header is the header of the block that is being finalized
+  // this is needed for v3 to sync with nova as the header is stored in state
+  tendermint.types.Header header = 20;
 }
 
 //----------------------------------------
@@ -77,32 +110,25 @@ message RequestProcessProposal {
 
 message Response {
   oneof value {
-    tendermint.abci.ResponseException          exception            = 1;
-    tendermint.abci.ResponseEcho               echo                 = 2;
-    tendermint.abci.ResponseFlush              flush                = 3;
-    ResponseInfo               info                 = 4;
-    tendermint.abci.ResponseSetOption          set_option           = 5;
-    ResponseInitChain          init_chain           = 6;
-    tendermint.abci.ResponseQuery              query                = 7;
-    tendermint.abci.ResponseBeginBlock         begin_block          = 8;
-    tendermint.abci.ResponseCheckTx            check_tx             = 9;
-    tendermint.abci.ResponseDeliverTx          deliver_tx           = 10;
-    ResponseEndBlock           end_block            = 11;
-    tendermint.abci.ResponseCommit             commit               = 12;
-    tendermint.abci.ResponseListSnapshots      list_snapshots       = 13;
-    tendermint.abci.ResponseOfferSnapshot      offer_snapshot       = 14;
-    tendermint.abci.ResponseLoadSnapshotChunk  load_snapshot_chunk  = 15;
-    tendermint.abci.ResponseApplySnapshotChunk apply_snapshot_chunk = 16;
-    ResponsePrepareProposal    prepare_proposal     = 17;
-    ResponseProcessProposal    process_proposal     = 18;
+    tendermint.abci.ResponseException           exception             = 1;
+    tendermint.abci.ResponseEcho                echo                  = 2;
+    tendermint.abci.ResponseFlush               flush                 = 3;
+    ResponseInfo                                info                  = 4;
+    ResponseInitChain                           init_chain            = 6;
+    tendermint.abci.ResponseQuery               query                 = 7;
+    ResponseCheckTx                             check_tx              = 9;
+    tendermint.abci.ResponseCommit              commit                = 12;
+    tendermint.abci.ResponseListSnapshots       list_snapshots        = 13;
+    tendermint.abci.ResponseOfferSnapshot       offer_snapshot        = 14;
+    tendermint.abci.ResponseLoadSnapshotChunk   load_snapshot_chunk   = 15;
+    tendermint.abci.ResponseApplySnapshotChunk  apply_snapshot_chunk  = 16;
+    ResponsePrepareProposal                     prepare_proposal      = 17;
+    tendermint.abci.ResponseProcessProposal     process_proposal      = 18;
+    tendermint.abci.ResponseExtendVote          extend_vote           = 19;
+    tendermint.abci.ResponseVerifyVoteExtension verify_vote_extension = 20;
+    ResponseFinalizeBlock                       finalize_block        = 21;
   }
-}
-
-message ResponseInitChain {
-  tendermint.abci.ConsensusParams          consensus_params = 1;
-  repeated tendermint.abci.ValidatorUpdate validators       = 2 [(gogoproto.nullable) = false];
-  bytes                    app_hash         = 3;
-  TimeoutsInfo             timeouts         = 4 [(gogoproto.nullable) = false];
+  reserved 5, 8, 10, 11;  // SetOption, BeginBlock, DeliverTx, EndBlock
 }
 
 message ResponseInfo {
@@ -114,52 +140,64 @@ message ResponseInfo {
   int64 last_block_height   = 4;
   bytes last_block_app_hash = 5;
 
-  TimeoutsInfo timeouts = 6 [(gogoproto.nullable) = false];
+  TimeoutInfo timeout_info = 6 [(gogoproto.nullable) = false];
 }
 
-message ResponseEndBlock {
-  repeated tendermint.abci.ValidatorUpdate validator_updates       = 1 [(gogoproto.nullable) = false];
-  tendermint.abci.ConsensusParams          consensus_param_updates = 2;
-  repeated tendermint.abci.Event           events                  = 3
+message ResponseInitChain {
+  tendermint.types.ConsensusParams         consensus_params = 1;
+  repeated tendermint.abci.ValidatorUpdate validators       = 2 [(gogoproto.nullable) = false];
+  bytes                                    app_hash         = 3;
+
+  TimeoutInfo timeout_info = 4 [(gogoproto.nullable) = false];
+}
+
+message ResponseCheckTx {
+  uint32                         code       = 1;
+  bytes                          data       = 2;
+  string                         log        = 3;  // nondeterministic
+  string                         info       = 4;  // nondeterministic
+  int64                          gas_wanted = 5 [json_name = "gas_wanted"];
+  int64                          gas_used   = 6 [json_name = "gas_used"];
+  repeated tendermint.abci.Event events     = 7
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
-  TimeoutsInfo timeouts = 4 [(gogoproto.nullable) = false];
+  string codespace = 8;
+
+  // These reserved fields were used until v0.37 by the priority mempool (now
+  // removed).
+  reserved 9 to 11;
+  reserved "sender",  "mempool_error";
+
+  // these fields are used in the priority mempool
+  bytes  address  = 15;
+  int64 priority = 16;
+  uint64 sequence = 17;
 }
 
 message ResponsePrepareProposal {
-  tendermint_celestia_mods.types.Data block_data = 1;
+  repeated bytes txs            = 1;
+  uint64         square_size    = 2;
+  bytes          data_root_hash = 3;
 }
 
-message ResponseProcessProposal {
-  Result         result   = 1;
-  repeated bytes evidence = 2;
+message ResponseFinalizeBlock {
+  // set of block events emmitted as part of executing the block
+  repeated tendermint.abci.Event events = 1
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
+  // the result of executing each transaction including the events
+  // the particular transction emitted. This should match the order
+  // of the transactions delivered in the block itself
+  repeated tendermint.abci.ExecTxResult tx_results = 2;
+  // a list of updates to the validator set. These will reflect the validator set at current height + 2.
+  repeated tendermint.abci.ValidatorUpdate validator_updates = 3 [(gogoproto.nullable) = false];
+  // updates to the consensus params, if any.
+  tendermint.types.ConsensusParams consensus_param_updates = 4;
+  // app_hash is the hash of the applications' state which is used to confirm that execution of the transactions was deterministic. It is up to the application to decide which algorithm to use.
+  bytes app_hash = 5;
 
-  enum Result {
-    UNKNOWN = 0;  // Unknown result, invalidate
-    ACCEPT  = 1;  // proposal verified, vote on the proposal
-    REJECT  = 2;  // proposal invalidated
-  }
+  TimeoutInfo timeout_info = 6 [(gogoproto.nullable) = false];
 }
 
-
-//----------------------------------------
-// Service Definition
-
-service ABCIApplication {
-  rpc Echo(tendermint.abci.RequestEcho) returns (tendermint.abci.ResponseEcho);
-  rpc Flush(tendermint.abci.RequestFlush) returns (tendermint.abci.ResponseFlush);
-  rpc Info(tendermint.abci.RequestInfo) returns (ResponseInfo);
-  rpc SetOption(tendermint.abci.RequestSetOption) returns (tendermint.abci.ResponseSetOption);
-  rpc DeliverTx(tendermint.abci.RequestDeliverTx) returns (tendermint.abci.ResponseDeliverTx);
-  rpc CheckTx(tendermint.abci.RequestCheckTx) returns (tendermint.abci.ResponseCheckTx);
-  rpc Query(tendermint.abci.RequestQuery) returns (tendermint.abci.ResponseQuery);
-  rpc Commit(tendermint.abci.RequestCommit) returns (tendermint.abci.ResponseCommit);
-  rpc InitChain(tendermint.abci.RequestInitChain) returns (ResponseInitChain);
-  rpc BeginBlock(tendermint.abci.RequestBeginBlock) returns (tendermint.abci.ResponseBeginBlock);
-  rpc EndBlock(tendermint.abci.RequestEndBlock) returns (ResponseEndBlock);
-  rpc ListSnapshots(tendermint.abci.RequestListSnapshots) returns (tendermint.abci.ResponseListSnapshots);
-  rpc OfferSnapshot(RequestOfferSnapshot) returns (tendermint.abci.ResponseOfferSnapshot);
-  rpc LoadSnapshotChunk(tendermint.abci.RequestLoadSnapshotChunk) returns (tendermint.abci.ResponseLoadSnapshotChunk);
-  rpc ApplySnapshotChunk(tendermint.abci.RequestApplySnapshotChunk) returns (tendermint.abci.ResponseApplySnapshotChunk);
-  rpc PrepareProposal(RequestPrepareProposal) returns (ResponsePrepareProposal);
-  rpc ProcessProposal(RequestProcessProposal) returns (ResponseProcessProposal);
+message TimeoutInfo {
+  google.protobuf.Duration timeout_propose = 1 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+  google.protobuf.Duration timeout_commit  = 2 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
 }

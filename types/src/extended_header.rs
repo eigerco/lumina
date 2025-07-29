@@ -579,8 +579,8 @@ mod custom_serde {
     use celestia_proto::celestia::core::v1::da::DataAvailabilityHeader;
     use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
     use serde::{Deserialize, Serialize};
-    use tendermint_proto::v0_34::types::Commit as RawCommit;
-    use tendermint_proto::v0_34::types::{BlockId, CommitSig, Header, ValidatorSet};
+    use tendermint_proto::v0_38::types::Commit as RawCommit;
+    use tendermint_proto::v0_38::types::{BlockId, CommitSig, Header, ValidatorSet};
 
     #[derive(Deserialize, Serialize)]
     pub(super) struct SerdeExtendedHeader {

@@ -3,13 +3,13 @@
 set -xeuo pipefail
 
 # Tags
-CELESTIA_APP="3.10.3"
-COMETBFT="0.34.35"
-COSMOS_PULSAR="1.0.0-alpha7"
-COSMOS_PROTOBUF="1.4.11"
+CELESTIA_APP="5.0.0-rc0"
+COMETBFT="0.38.17"
+COSMOS_PULSAR="1.0.0-beta.5"
+COSMOS_PROTOBUF="1.7.0"
+COSMOS_SDK="1.29.4-sdk-v0.50.14"
 # Branches
 CELESTIA_NODE="main"
-COSMOS_SDK="release/v0.46.x-celestia"
 NMT="main"
 GO_HEADER="main"
 GO_SQUARE="main"
@@ -37,12 +37,12 @@ mkdir -p ../target/proto-vendor-src
 
 # when switching from tag to branch or vice versa, make sure to update the link below appropriately, note the `v' prefix for tag
 extract_urls ../target/proto-vendor-src \
-    "https://github.com/celestiaorg/celestia-app/archive/refs/tags/v${CELESTIA_APP}.tar.gz" \
     "https://github.com/cometbft/cometbft/archive/refs/tags/v${COMETBFT}.tar.gz" \
     "https://github.com/cosmos/cosmos-proto/archive/refs/tags/v${COSMOS_PULSAR}.tar.gz" \
     "https://github.com/cosmos/gogoproto/archive/refs/tags/v${COSMOS_PROTOBUF}.tar.gz" \
+    "https://github.com/celestiaorg/celestia-app/archive/refs/tags/v${CELESTIA_APP}.tar.gz" \
+    "https://github.com/celestiaorg/cosmos-sdk/archive/refs/tags/v${COSMOS_SDK}.tar.gz" \
     "https://github.com/celestiaorg/celestia-node/archive/refs/heads/${CELESTIA_NODE}.tar.gz" \
-    "https://github.com/celestiaorg/cosmos-sdk/archive/refs/heads/${COSMOS_SDK}.tar.gz" \
     "https://github.com/celestiaorg/nmt/archive/refs/heads/${NMT}.tar.gz" \
     "https://github.com/celestiaorg/go-header/archive/refs/heads/${GO_HEADER}.tar.gz" \
     "https://github.com/celestiaorg/go-square/archive/refs/heads/${GO_SQUARE}.tar.gz" \
@@ -60,9 +60,12 @@ cp -r "../target/proto-vendor-src/go-header-${GO_HEADER//\//-}/p2p/pb" vendor/go
 rm -rf vendor/go-square
 cp -r "../target/proto-vendor-src/go-square-${GO_SQUARE//\/-}/proto" vendor/go-square
 
+rm -rf vendor/amino
+cp -r "../target/proto-vendor-src/cosmos-sdk-${COSMOS_SDK//\//-}/proto/amino" vendor/amino
+
 rm -rf vendor/cosmos
 mkdir -p vendor/cosmos
-cp -r "../target/proto-vendor-src/cosmos-sdk-${COSMOS_SDK//\//-}/proto/cosmos/"{auth,bank,base,msg,staking,crypto,tx} vendor/cosmos
+cp -r "../target/proto-vendor-src/cosmos-sdk-${COSMOS_SDK//\//-}/proto/cosmos/"{auth,bank,base,crypto,msg,query,staking,tx} vendor/cosmos
 
 rm -rf vendor/cosmos_proto
 cp -r "../target/proto-vendor-src/cosmos-proto-${COSMOS_PULSAR//\//-}/proto/cosmos_proto" vendor
