@@ -1,48 +1,11 @@
-use std::fmt;
-use std::future::Future;
-use std::ops::Deref;
-use std::time::Duration;
-
-use bytes::Bytes;
-use celestia_proto::cosmos::crypto::secp256k1;
-use celestia_types::any::IntoProtobufAny;
-use celestia_types::blob::{Blob, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::hash::Hash;
-use celestia_types::state::auth::Account;
-use celestia_types::state::auth::BaseAccount;
-use celestia_types::state::{
-    AccAddress, Address, AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
-};
-use celestia_types::{AppVersion, Height};
-use http_body::Body;
-use k256::ecdsa::signature::{Error as SignatureError, Signer};
-use k256::ecdsa::{Signature, VerifyingKey};
-use lumina_utils::time::Interval;
-use prost::{Message, Name};
-#[cfg(not(target_arch = "wasm32"))]
-use signature::Keypair;
-use tendermint::chain::Id;
-use tendermint::PublicKey;
-use tendermint_proto::google::protobuf::Any;
-use tendermint_proto::Protobuf;
-use tokio::sync::{Mutex, MutexGuard};
-use tonic::body::BoxBody;
-use tonic::client::GrpcService;
+use celestia_types::Height;
 
-use crate::grpc::{BroadcastMode, GasEstimate, GrpcClient, StdError, TxPriority, TxStatus};
-use crate::{Error, Result};
+use crate::grpc::TxPriority;
 
 pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 
-#[cfg(feature = "uniffi")]
-uniffi::use_remote_type!(celestia_types::Hash);
-
-// Multiplier used to adjust the gas limit given by gas estimation service
-const DEFAULT_GAS_MULTIPLIER: f64 = 1.1;
-
-// source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
-const BLOB_TX_TYPE_ID: &str = "BLOB";
-
+/*
 /// A client for submitting messages and transactions to celestia.
 ///
 /// Client handles management of the accounts sequence (nonce), thus
@@ -216,11 +179,6 @@ where
         self.confirm_tx(tx_hash, sequence).await
     }
 
-    /// Query for the current minimum gas price
-    pub async fn get_min_gas_price(&self) -> Result<f64> {
-        self.client.get_min_gas_price().await
-    }
-
     /// Get client's chain id
     pub fn chain_id(&self) -> &Id {
         &self.chain_id
@@ -246,6 +204,7 @@ where
                 (gas_limit, gas_price)
             }
             (None, maybe_gas_price) => {
+                /*
                 let tx = sign_tx(
                     tx_body.clone(),
                     self.chain_id.clone(),
@@ -256,9 +215,10 @@ where
                     1,
                 )
                 .await?;
+                */
                 let GasEstimate { price, usage } = self
                     .client
-                    .estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
+                    .estimate_gas_price_and_usage(cfg.priority, todo!()) //tx.encode_to_vec())
                     .await?;
                 let gas_limit = (usage as f64 * DEFAULT_GAS_MULTIPLIER) as u64;
                 (gas_limit, maybe_gas_price.unwrap_or(price))
@@ -274,6 +234,7 @@ where
             .await?;
 
         let fee = (gas_limit as f64 * gas_price).ceil();
+        /*
         let tx = sign_tx(
             tx,
             self.chain_id.clone(),
@@ -284,8 +245,10 @@ where
             fee as u64,
         )
         .await?;
+        */
 
-        self.broadcast_tx_with_account(tx.encode_to_vec(), account)
+        self.broadcast_tx_with_account(todo!(), //tx.encode_to_vec(),
+        account)
             .await
     }
 
@@ -310,6 +273,7 @@ where
             .await?;
 
         let fee = (gas_limit as f64 * gas_price).ceil() as u64;
+        /*
         let tx = sign_tx(
             pfb,
             self.chain_id.clone(),
@@ -320,10 +284,11 @@ where
             fee,
         )
         .await?;
+        */
 
         let blobs = blobs.into_iter().map(Into::into).collect();
         let blob_tx = RawBlobTx {
-            tx: tx.encode_to_vec(),
+            tx: todo!(), //tx.encode_to_vec(),
             blobs,
             type_id: BLOB_TX_TYPE_ID.to_string(),
         };
@@ -470,22 +435,7 @@ impl<T, S> fmt::Debug for TxClient<T, S> {
         f.write_str("TxClient { .. }")
     }
 }
-
-/// Signer capable of producing ecdsa signature using secp256k1 curve.
-pub trait DocSigner {
-    /// Try to sign the provided sign doc.
-    fn try_sign(&self, doc: SignDoc) -> impl Future<Output = Result<Signature, SignatureError>>;
-}
-
-impl<T> DocSigner for T
-where
-    T: Signer<Signature>,
-{
-    async fn try_sign(&self, doc: SignDoc) -> Result<Signature, SignatureError> {
-        let bytes = doc.encode_to_vec();
-        self.try_sign(&bytes)
-    }
-}
+*/
 
 /// A result of correctly submitted transaction.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -633,55 +583,4 @@ mod wbg {
             }
         }
     }
-}
-
-/// Sign `tx_body` and the transaction metadata as the `base_account` using `signer`
-pub async fn sign_tx(
-    tx_body: RawTxBody,
-    chain_id: Id,
-    base_account: &BaseAccount,
-    verifying_key: &VerifyingKey,
-    signer: &impl DocSigner,
-    gas_limit: u64,
-    fee: u64,
-) -> Result<RawTx> {
-    // From https://github.com/celestiaorg/cosmos-sdk/blob/v1.25.0-sdk-v0.46.16/proto/cosmos/tx/signing/v1beta1/signing.proto#L24
-    const SIGNING_MODE_INFO: ModeInfo = ModeInfo {
-        sum: Sum::Single { mode: 1 },
-    };
-
-    let public_key = secp256k1::PubKey {
-        key: verifying_key.to_encoded_point(true).as_bytes().to_vec(),
-    };
-
-    let public_key_as_any = Any {
-        type_url: secp256k1::PubKey::type_url(),
-        value: public_key.encode_to_vec(),
-    };
-
-    let mut fee = Fee::new(fee, gas_limit);
-    fee.payer = Some(Address::AccAddress(base_account.address.clone()));
-
-    let auth_info = AuthInfo {
-        signer_infos: vec![SignerInfo {
-            public_key: Some(public_key_as_any),
-            mode_info: SIGNING_MODE_INFO,
-            sequence: base_account.sequence,
-        }],
-        fee,
-    };
-
-    let doc = SignDoc {
-        body_bytes: tx_body.encode_to_vec(),
-        auth_info_bytes: auth_info.clone().encode_vec(),
-        chain_id: chain_id.into(),
-        account_number: base_account.account_number,
-    };
-    let signature = signer.try_sign(doc).await?;
-
-    Ok(RawTx {
-        auth_info: Some(auth_info.into()),
-        body: Some(tx_body),
-        signatures: vec![signature.to_bytes().to_vec()],
-    })
 }

@@ -2,33 +2,45 @@
 
 use std::fmt;
 
+use ::tendermint::chain::Id;
 use bytes::Bytes;
+use celestia_types::any::IntoProtobufAny;
+use http_body::Body;
+use k256::ecdsa::VerifyingKey;
+use lumina_utils::time::Interval;
+use prost::Message;
+use std::time::Duration;
+use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
+use tonic::body::BoxBody;
+use tonic::client::GrpcService;
+
 use celestia_grpc_macros::grpc_method;
 use celestia_proto::celestia::blob::v1::query_client::QueryClient as BlobQueryClient;
 use celestia_proto::celestia::core::v1::gas_estimation::gas_estimator_client::GasEstimatorClient;
 use celestia_proto::celestia::core::v1::tx::tx_client::TxClient as TxStatusClient;
 use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQueryClient;
 use celestia_proto::cosmos::bank::v1beta1::query_client::QueryClient as BankQueryClient;
-pub use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
-use celestia_types::blob::BlobParams;
+use celestia_types::blob::{BlobParams, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::block::Block;
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
-use celestia_types::state::auth::{Account, AuthParams};
-use celestia_types::state::AbciQueryResponse;
+use celestia_types::state::auth::{Account, AuthParams, BaseAccount};
+use celestia_types::state::{AbciQueryResponse, RawTxBody};
 use celestia_types::state::{
     AccAddress, Address, AddressTrait, Coin, ErrorCode, TxResponse, BOND_DENOM,
 };
-use celestia_types::ExtendedHeader;
-use http_body::Body;
-use tonic::body::BoxBody;
-use tonic::client::GrpcService;
+use celestia_types::{AppVersion, Blob, ExtendedHeader};
 
 use crate::abci_proofs::ProofChain;
-use crate::{Error, Result};
+use crate::signer::sign_tx;
+use crate::tx::TxInfo;
+use crate::{DocSigner, Error, Result, TxConfig};
+
+#[cfg(feature = "uniffi")]
+uniffi::use_remote_type!(celestia_types::Hash);
 
 // cosmos.auth
 mod auth;
@@ -50,6 +62,7 @@ mod cosmos_tx;
 pub use crate::grpc::celestia_tx::{TxStatus, TxStatusResponse};
 pub use crate::grpc::cosmos_tx::{BroadcastMode, GetTxResponse};
 pub use crate::grpc::gas_estimation::{GasEstimate, TxPriority};
+pub use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 pub use crate::grpc::cosmos_tx::JsBroadcastMode;
@@ -57,20 +70,87 @@ pub use crate::grpc::cosmos_tx::JsBroadcastMode;
 /// Error convertible to std, used by grpc transports
 pub type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
-/// Struct wrapping all the tonic types and doing type conversion behind the scenes.
-pub struct GrpcClient<T> {
-    transport: T,
+// source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
+const BLOB_TX_TYPE_ID: &str = "BLOB";
+// Multiplier used to adjust the gas limit given by gas estimation service
+const DEFAULT_GAS_MULTIPLIER: f64 = 1.1;
+
+struct AccountBits {
+    account: Account,
+
+    app_version: AppVersion,
+    chain_id: Id,
 }
 
-impl<T> GrpcClient<T> {
+pub struct SignerBits<S> {
+    pub signer: S,
+
+    pubkey: VerifyingKey,
+}
+
+impl<S> SignerBits<S> {
+    pub fn address(&self) -> AccAddress {
+        AccAddress::from(self.pubkey)
+    }
+
+    pub fn verifying_key(&self) -> &VerifyingKey {
+        &self.pubkey
+    }
+}
+
+/*
+impl<S> FullSigner for SignerBits<S>
+where
+    S: DocSigner + Send + Sync + 'static,
+{
+    /*
+    fn try_sign<'a>(
+        &'a self,
+        doc: celestia_proto::cosmos::tx::v1beta1::SignDoc,
+    //) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>> {
+    ) -> impl Future<Output = Result<DocSignature, SignatureError>> + Send {
+        DocSigner::try_sign(&self.signer, doc)
+    }
+    */
+
+    async fn try_sign<'a>(
+            &'a self,
+            doc: celestia_proto::cosmos::tx::v1beta1::SignDoc,
+        ) -> Result<DocSignature, SignatureError> {
+        todo!()
+    }
+
+    /*
+    async fn try_sign(&self, doc: celestia_proto::cosmos::tx::v1beta1::SignDoc) -> Result<DocSignature, SignatureError> {
+        self.signer.try_sign(doc).await
+    }
+    */
+
+    fn verifying_key(&self) -> &VerifyingKey {
+        &self.pubkey
+    }
+}
+*/
+
+/// Struct wrapping all the tonic types and doing type conversion behind the scenes.
+pub struct GrpcClient<T, S> {
+    transport: T,
+
+    account: Mutex<Option<AccountBits>>,
+
+    signer: Option<SignerBits<S>>,
+}
+
+impl<T, S> GrpcClient<T, S> {
     /// Get the underlying transport.
     pub fn into_inner(self) -> T {
         self.transport
     }
 }
 
-impl<T> GrpcClient<T>
+impl<T, S> GrpcClient<T, S>
 where
+    S: DocSigner,
     T: GrpcService<BoxBody> + Clone,
     T::Error: Into<StdError>,
     T::ResponseBody: Body<Data = Bytes> + Send + 'static,
@@ -78,7 +158,11 @@ where
 {
     /// Create a new client wrapping given transport
     pub fn new(transport: T) -> Self {
-        Self { transport }
+        Self {
+            transport,
+            account: None.into(),
+            signer: None,
+        }
     }
 
     // cosmos.auth
@@ -246,15 +330,337 @@ where
         priority: TxPriority,
         tx_bytes: Vec<u8>,
     ) -> Result<GasEstimate>;
+
+    /// Submit given message to celestia network.
+    ///
+    /// When no gas price is specified through config, it will automatically
+    /// handle updating client's gas price when consensus updates minimal
+    /// gas price.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # async fn docs() {
+    /// use celestia_grpc::{TxClient, TxConfig};
+    /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
+    /// use celestia_types::state::{Address, Coin};
+    /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
+    ///
+    /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
+    /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
+    /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
+    ///
+    /// let tx_client = TxClient::with_url_and_keypair(grpc_url, signing_key)
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// let msg = MsgSend {
+    ///     from_address: address.to_string(),
+    ///     to_address: "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm".to_string(),
+    ///     amount: vec![Coin::utia(12345).into()],
+    /// };
+    ///
+    /// tx_client
+    ///     .submit_message(msg.clone(), TxConfig::default())
+    ///     .await
+    ///     .unwrap();
+    /// # }
+    /// ```
+    pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
+    where
+        M: IntoProtobufAny,
+    {
+        let tx_body = RawTxBody {
+            messages: vec![message.into_any()],
+            memo: cfg.memo.clone().unwrap_or_default(),
+            ..RawTxBody::default()
+        };
+
+        let mut retries = 0;
+        let (tx_hash, sequence) = loop {
+            match self
+                .sign_and_broadcast_tx(tx_body.clone(), cfg.clone())
+                .await
+            {
+                Ok(resp) => break resp,
+                Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _)) if retries < 3 => {
+                    retries += 1;
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+        };
+        self.confirm_tx(tx_hash, sequence).await
+    }
+
+    /// Submit given blobs to celestia network.
+    ///
+    /// When no gas price is specified through config, it will automatically
+    /// handle updating client's gas price when consensus updates minimal
+    /// gas price.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # async fn docs() {
+    /// use celestia_grpc::{TxClient, TxConfig};
+    /// use celestia_types::state::{Address, Coin};
+    /// use celestia_types::{AppVersion, Blob};
+    /// use celestia_types::nmt::Namespace;
+    /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
+    ///
+    /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
+    /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
+    /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
+    ///
+    /// let tx_client = TxClient::with_url_and_keypair(grpc_url, signing_key)
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// let ns = Namespace::new_v0(b"abcd").unwrap();
+    /// let blob = Blob::new(ns, "some data".into(), AppVersion::V3).unwrap();
+    ///
+    /// tx_client
+    ///     .submit_blobs(&[blob], TxConfig::default())
+    ///     .await
+    ///     .unwrap();
+    /// # }
+    /// ```
+    pub async fn submit_blobs(&self, blobs: &[Blob], cfg: TxConfig) -> Result<TxInfo> {
+        if blobs.is_empty() {
+            return Err(Error::TxEmptyBlobList);
+        }
+        let app_version = self.app_version().await?;
+        for blob in blobs {
+            blob.validate(app_version)?;
+        }
+
+        let mut retries = 0;
+        let (tx_hash, sequence) = loop {
+            match self
+                .sign_and_broadcast_blobs(blobs.to_vec(), cfg.clone())
+                .await
+            {
+                Ok(resp) => break resp,
+                Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _)) if retries < 3 => {
+                    retries += 1;
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+        };
+        self.confirm_tx(tx_hash, sequence).await
+    }
+
+    async fn account_load(&self) -> Result<(MappedMutexGuard<'_, AccountBits>, &SignerBits<S>)> {
+        let signer = self.signer.as_ref().ok_or(Error::NoAccount)?;
+        let mut account_guard = self.account.lock().await;
+
+        if account_guard.is_none() {
+            let account = self.get_account(&signer.address()).await?;
+
+            let block = self.get_latest_block().await?;
+            let app_version = block.header.version.app;
+            let app_version = AppVersion::from_u64(app_version)
+                .ok_or(celestia_types::Error::UnsupportedAppVersion(app_version))?;
+            let chain_id = block.header.chain_id;
+
+            *account_guard = Some(AccountBits {
+                account,
+                app_version,
+                chain_id,
+            })
+        }
+        let mapped_guard = MutexGuard::map(account_guard, |acc| {
+            acc.as_mut().expect("account data present")
+        });
+
+        Ok((mapped_guard, signer))
+    }
+
+    /// compute gas limit and gas price according to provided TxConfig for serialised
+    /// transaction, potentially calling gas estimation service
+    async fn calculate_transaction_gas_params(
+        &self,
+        tx_body: &RawTxBody,
+        cfg: &TxConfig,
+        chain_id: Id,
+        account: &BaseAccount,
+    ) -> Result<(u64, f64)> {
+        let signer = self.signer.as_ref().ok_or(Error::NoAccount)?;
+
+        Ok(match (cfg.gas_limit, cfg.gas_price) {
+            (Some(gas_limit), Some(gas_price)) => (gas_limit, gas_price),
+            (Some(gas_limit), None) => {
+                let gas_price = self.estimate_gas_price(cfg.priority).await?;
+                (gas_limit, gas_price)
+            }
+            (None, maybe_gas_price) => {
+                let tx = sign_tx(tx_body.clone(), chain_id, account, signer, 0, 1).await?;
+
+                let GasEstimate { price, usage } = self
+                    .estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
+                    .await?;
+                let gas_limit = (usage as f64 * DEFAULT_GAS_MULTIPLIER) as u64;
+                (gas_limit, maybe_gas_price.unwrap_or(price))
+            }
+        })
+    }
+
+    async fn sign_and_broadcast_blobs(
+        &self,
+        blobs: Vec<Blob>,
+        cfg: TxConfig,
+    ) -> Result<(Hash, u64)> {
+        // lock the account; tx signing and broadcast must be atomic
+        // because node requires all transactions to be sequenced by account.sequence
+        let (account, signer) = self.account_load().await?;
+
+        let pfb = MsgPayForBlobs::new(&blobs, account.account.address.clone())?;
+        let pfb = RawTxBody {
+            messages: vec![RawMsgPayForBlobs::from(pfb).into_any()],
+            memo: cfg.memo.clone().unwrap_or_default(),
+            ..RawTxBody::default()
+        };
+
+        let (gas_limit, gas_price) = self
+            .calculate_transaction_gas_params(
+                &pfb,
+                &cfg,
+                account.chain_id.clone(),
+                &account.account,
+            )
+            .await?;
+
+        let fee = (gas_limit as f64 * gas_price).ceil() as u64;
+        let tx = sign_tx(
+            pfb,
+            account.chain_id.clone(),
+            &account.account,
+            signer,
+            gas_limit,
+            fee,
+        )
+        .await?;
+
+        let blobs = blobs.into_iter().map(Into::into).collect();
+        let blob_tx = RawBlobTx {
+            tx: tx.encode_to_vec(),
+            blobs,
+            type_id: BLOB_TX_TYPE_ID.to_string(),
+        };
+
+        self.broadcast_tx_with_account(blob_tx.encode_to_vec(), account)
+            .await
+    }
+
+    async fn sign_and_broadcast_tx(&self, tx: RawTxBody, cfg: TxConfig) -> Result<(Hash, u64)> {
+        let (account, signer) = self.account_load().await?;
+
+        let (gas_limit, gas_price) = self
+            .calculate_transaction_gas_params(&tx, &cfg, account.chain_id.clone(), &account.account)
+            .await?;
+
+        let fee = (gas_limit as f64 * gas_price).ceil();
+        let tx = sign_tx(
+            tx,
+            account.chain_id.clone(),
+            &account.account,
+            signer,
+            gas_limit,
+            fee as u64,
+        )
+        .await?;
+
+        self.broadcast_tx_with_account(tx.encode_to_vec(), account)
+            .await
+    }
+
+    async fn broadcast_tx_with_account(
+        &self,
+        tx: Vec<u8>,
+        mut account: MappedMutexGuard<'_, AccountBits>,
+    ) -> Result<(Hash, u64)> {
+        let resp = self.broadcast_tx(tx, BroadcastMode::Sync).await?;
+
+        if resp.code != ErrorCode::Success {
+            return Err(Error::TxBroadcastFailed(
+                resp.txhash,
+                resp.code,
+                resp.raw_log,
+            ));
+        }
+
+        let tx_sequence = account.account.sequence;
+        account.account.sequence += 1;
+
+        Ok((resp.txhash, tx_sequence))
+    }
+
+    async fn confirm_tx(&self, hash: Hash, sequence: u64) -> Result<TxInfo> {
+        let mut interval = Interval::new(Duration::from_millis(500)).await;
+
+        loop {
+            let tx_status = self.tx_status(hash).await?;
+            match tx_status.status {
+                TxStatus::Pending => interval.tick().await,
+                TxStatus::Committed => {
+                    if tx_status.execution_code == ErrorCode::Success {
+                        return Ok(TxInfo {
+                            hash,
+                            height: tx_status.height,
+                        });
+                    } else {
+                        return Err(Error::TxExecutionFailed(
+                            hash,
+                            tx_status.execution_code,
+                            tx_status.error,
+                        ));
+                    }
+                }
+                // node will treat this transaction like if it never happened, so
+                // we need to revert the account's sequence to the one of evicted tx.
+                // all transactions that were already submitted after this one will fail
+                // due to incorrect sequence number.
+                TxStatus::Evicted => {
+                    let mut acc = self.account.lock().await;
+                    acc.as_mut().expect("account data present").account.sequence = sequence;
+                    return Err(Error::TxEvicted(hash));
+                }
+                // this case should never happen for node that accepted a broadcast
+                // however we handle it the same as evicted for extra safety
+                TxStatus::Unknown => {
+                    let mut acc = self.account.lock().await;
+                    acc.as_mut().expect("account data present").account.sequence = sequence;
+                    return Err(Error::TxNotFound(hash));
+                }
+            }
+        }
+    }
+
+    /// Get client's app version
+    pub async fn app_version(&self) -> Result<AppVersion> {
+        let (account, _) = self.account_load().await?;
+        Ok(account.app_version)
+    }
+
+    /// Get client's chain id
+    pub async fn chain_id(&self) -> Result<Id> {
+        let (account, _) = self.account_load().await?;
+        Ok(account.chain_id.clone())
+    }
 }
 
+/*
 #[cfg(not(target_arch = "wasm32"))]
 impl GrpcClient<tonic::transport::Channel> {
     /// Create a new client connected to the given `url` with default
     /// settings of [`tonic::transport::Channel`].
     pub fn with_url(url: impl Into<String>) -> Result<Self, tonic::transport::Error> {
         let channel = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
-        Ok(Self { transport: channel })
+        Ok(Self {
+            transport: channel,
+            account: None.into(),
+            signer: None,
+        })
     }
 }
 
@@ -265,11 +671,14 @@ impl GrpcClient<tonic_web_wasm_client::Client> {
     pub fn with_grpcweb_url(url: impl Into<String>) -> Self {
         Self {
             transport: tonic_web_wasm_client::Client::new(url.into()),
+            account: None.into(),
+            signer: None,
         }
     }
 }
+*/
 
-impl<T> fmt::Debug for GrpcClient<T> {
+impl<T, S> fmt::Debug for GrpcClient<T, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("GrpcClient { .. }")
     }

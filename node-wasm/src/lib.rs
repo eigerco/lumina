@@ -9,7 +9,7 @@ pub mod utils;
 mod worker;
 mod wrapper;
 
-pub use celestia_grpc::TxClient;
+pub use celestia_grpc::GrpcClient;
 
 #[cfg(test)]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);

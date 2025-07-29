@@ -1,5 +1,6 @@
 //! GRPC transaction client wrapper for uniffi
 
+
 use std::sync::Arc;
 
 use celestia_types::state::Address;
@@ -12,10 +13,11 @@ use tonic::transport::Channel;
 use uniffi::{Object, Record};
 
 use crate::tx::TxInfo;
-use crate::{DocSigner, IntoProtobufAny, SignDoc, TxConfig};
+use crate::{IntoProtobufAny, SignDoc, TxConfig};
 
-type Result<T, E = TransactionClientError> = std::result::Result<T, E>;
+//type Result<T, E = TransactionClientError> = std::result::Result<T, E>;
 
+/*
 /// Errors returned from TxClient
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum TransactionClientError {
@@ -47,63 +49,17 @@ pub enum TransactionClientError {
         msg: String,
     },
 }
+*/
 
-/// Trait that implements signing the transaction.
-///
-/// Example usage:
-/// ```swift
-/// // uses 21-DOT-DEV/swift-secp256k1
-/// final class StaticSigner : UniffiSigner {
-///     let sk : P256K.Signing.PrivateKey
-///     
-///     init(sk: P256K.Signing.PrivateKey) {
-///         self.sk = sk
-///     }
-///     
-///     func sign(doc: SignDoc) async throws -> UniffiSignature {
-///         let messageData = protoEncodeSignDoc(signDoc: doc);
-///         let signature = try! sk.signature(for: messageData)
-///         return try! UniffiSignature (bytes: signature.compactRepresentation)
-///     }
-/// }
-/// ```
-#[uniffi::export(with_foreign)]
-#[async_trait::async_trait]
-pub trait UniffiSigner: Sync + Send {
-    /// sign provided `SignDoc` using secp256k1. Use helper proto_encode_sign_doc to
-    /// get canonical protobuf byte encoding of the message.
-    async fn sign(&self, doc: SignDoc) -> Result<UniffiSignature, TransactionClientError>;
-}
-
-struct UniffiSignerBox(pub Arc<dyn UniffiSigner>);
-
-/// Message signature
-#[derive(Record)]
-pub struct UniffiSignature {
-    /// signature bytes
-    pub bytes: Vec<u8>,
-}
-
+/*
 /// Celestia GRPC transaction client
 #[derive(Object)]
 pub struct TxClient {
-    client: crate::TxClient<Channel, UniffiSignerBox>,
+    //client: crate::TxClient<Channel, UniffiSignerBox>,
 }
+*/
 
-/// Any contains an arbitrary serialized protocol buffer message along with a URL that
-/// describes the type of the serialized message.
-#[derive(Record)]
-pub struct AnyMsg {
-    /// A URL/resource name that uniquely identifies the type of the serialized protocol
-    /// buffer message. This string must contain at least one “/” character. The last
-    /// segment of the URL’s path must represent the fully qualified name of the type
-    /// (as in path/google.protobuf.Duration). The name should be in a canonical form
-    /// (e.g., leading “.” is not accepted).
-    pub r#type: String,
-    /// Must be a valid serialized protocol buffer of the above specified type.
-    pub value: Vec<u8>,
-}
-
+/*
 #[uniffi::export(async_runtime = "tokio")]
 impl TxClient {
     /// Create a new transaction client with the specified account.
@@ -163,46 +119,9 @@ impl TxClient {
         Ok(self.client.submit_message(message, config).await?)
     }
 }
+*/
 
-impl IntoProtobufAny for AnyMsg {
-    fn into_any(self) -> Any {
-        Any {
-            type_url: self.r#type,
-            value: self.value,
-        }
-    }
-}
-
-impl DocSigner for UniffiSignerBox {
-    async fn try_sign(
-        &self,
-        doc: SignDoc,
-    ) -> Result<tendermint::signature::Secp256k1Signature, K256Error> {
-        match self.0.sign(doc).await {
-            Ok(s) => s.try_into().map_err(K256Error::from_source),
-            Err(e) => Err(K256Error::from_source(e)),
-        }
-    }
-}
-
-impl From<DocSignature> for UniffiSignature {
-    fn from(value: DocSignature) -> Self {
-        UniffiSignature {
-            bytes: value.to_vec(),
-        }
-    }
-}
-
-impl TryFrom<UniffiSignature> for DocSignature {
-    type Error = TransactionClientError;
-
-    fn try_from(value: UniffiSignature) -> std::result::Result<Self, Self::Error> {
-        DocSignature::from_slice(&value.bytes).map_err(|e| TransactionClientError::SigningError {
-            msg: format!("invalid signature {e}"),
-        })
-    }
-}
-
+/*
 impl From<crate::Error> for TransactionClientError {
     fn from(value: crate::Error) -> Self {
         TransactionClientError::GrpcError {
@@ -210,17 +129,4 @@ impl From<crate::Error> for TransactionClientError {
         }
     }
 }
-
-#[uniffi::export]
-fn proto_encode_sign_doc(sign_doc: SignDoc) -> Vec<u8> {
-    sign_doc.encode_to_vec()
-}
-
-#[uniffi::export]
-fn parse_bech32_address(bech32_address: String) -> Result<Address> {
-    bech32_address
-        .parse()
-        .map_err(|e| TransactionClientError::InvalidAccountId {
-            msg: format!("{e}"),
-        })
-}
+*/

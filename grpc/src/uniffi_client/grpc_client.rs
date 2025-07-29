@@ -1,18 +1,26 @@
 //! GRPC client wrapper for uniffi
 
+use std::sync::Arc;
+
+use prost::Message;
+use tendermint_proto::google::protobuf::Any;
 use tonic::transport::Channel;
-use uniffi::Object;
+use uniffi::{Object, Record};
 
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::hash::uniffi_types::UniffiHash;
 use celestia_types::state::auth::{Account, AuthParams};
 use celestia_types::state::{AbciQueryResponse, AccAddress, Address, Coin, TxResponse};
+use celestia_types::{AppVersion, Blob};
 use celestia_types::{ExtendedHeader, UniffiConversionError};
 
 use crate::grpc::{
     BroadcastMode, GasEstimate, GasInfo, GetTxResponse, TxPriority, TxStatusResponse,
 };
+use crate::tx::TxInfo;
+use crate::{IntoProtobufAny, SignDoc, TxConfig};
+use crate::signer::UniffiSignerBox;
 
 /// Alias for a `Result` with the error type [`GrpcClientError`]
 pub type Result<T, E = GrpcClientError> = std::result::Result<T, E>;
@@ -33,9 +41,30 @@ pub enum GrpcClientError {
         /// error message
         msg: String,
     },
+
+    /// Invalid account public key
+    #[error("invalid account public key")]
+    InvalidAccountPublicKey {
+        /// error message
+        msg: String,
+    },
+
+    /// Invalid account id
+    #[error("invalid account id: {msg}")]
+    InvalidAccountId {
+        ///error message
+        msg: String,
+    },
+
+    /// Error occured during signing
+    #[error("error while signing: {msg}")]
+    SigningError {
+        /// error message
+        msg: String,
+    },
 }
 
-type InnerClient = crate::GrpcClient<Channel>;
+type InnerClient = crate::GrpcClient<Channel, UniffiSignerBox>;
 
 /// Celestia GRPC client
 #[derive(Object)]
@@ -43,8 +72,23 @@ pub struct GrpcClient {
     client: InnerClient,
 }
 
+/// Any contains an arbitrary serialized protocol buffer message along with a URL that
+/// describes the type of the serialized message.
+#[derive(Record)]
+pub struct AnyMsg {
+    /// A URL/resource name that uniquely identifies the type of the serialized protocol
+    /// buffer message. This string must contain at least one “/” character. The last
+    /// segment of the URL’s path must represent the fully qualified name of the type
+    /// (as in path/google.protobuf.Duration). The name should be in a canonical form
+    /// (e.g., leading “.” is not accepted).
+    pub r#type: String,
+    /// Must be a valid serialized protocol buffer of the above specified type.
+    pub value: Vec<u8>,
+}
+
 #[uniffi::export(async_runtime = "tokio")]
 impl GrpcClient {
+    /*
     /// Create a new client connected with the given `url`
     #[uniffi::constructor]
     // this function _must_ be async despite not awaiting, so that it executes in tokio runtime
@@ -54,6 +98,7 @@ impl GrpcClient {
             client: InnerClient::with_url(url).map_err(crate::Error::TransportError)?,
         })
     }
+    */
 
     /// Get auth params
     pub async fn get_auth_params(&self) -> Result<AuthParams> {
@@ -174,7 +219,7 @@ impl GrpcClient {
     /// min gas price.
     ///
     /// The gas used is estimated using the state machine simulation.
-    async fn estimate_gas_price_and_usage(
+    pub async fn estimate_gas_price_and_usage(
         &self,
         priority: TxPriority,
         tx_bytes: Vec<u8>,
@@ -183,6 +228,49 @@ impl GrpcClient {
             .client
             .estimate_gas_price_and_usage(priority, tx_bytes)
             .await?)
+    }
+
+    /// AppVersion of the client
+    pub async fn app_version(&self) -> Result<AppVersion> {
+        Ok(self.client.app_version().await?)
+    }
+
+    /// Submit blobs to the celestia network.
+    ///
+    /// When no `TxConfig` is provided, client will automatically calculate needed
+    /// gas and update the `gasPrice`, if network agreed on a new minimal value.
+    /// To enforce specific values use a `TxConfig`.
+    pub async fn submit_blobs(
+        &self,
+        blobs: Vec<Arc<Blob>>,
+        config: Option<TxConfig>,
+    ) -> Result<TxInfo> {
+        let blobs = Vec::from_iter(blobs.into_iter().map(Arc::<Blob>::unwrap_or_clone));
+        let config = config.unwrap_or_default();
+        Ok(self.client.submit_blobs(&blobs, config).await?)
+    }
+
+    /// Submit message to the celestia network.
+    ///
+    /// When no `TxConfig` is provided, client will automatically calculate needed
+    /// gas and update the `gasPrice`, if network agreed on a new minimal value.
+    /// To enforce specific values use a `TxConfig`.
+    pub async fn submit_message(
+        &self,
+        message: AnyMsg,
+        config: Option<TxConfig>,
+    ) -> Result<TxInfo> {
+        let config = config.unwrap_or_default();
+        Ok(self.client.submit_message(message, config).await?)
+    }
+}
+
+impl IntoProtobufAny for AnyMsg {
+    fn into_any(self) -> Any {
+        Any {
+            type_url: self.r#type,
+            value: self.value,
+        }
     }
 }
 
@@ -200,4 +288,18 @@ impl From<UniffiConversionError> for GrpcClientError {
             msg: value.to_string(),
         }
     }
+}
+
+#[uniffi::export]
+pub fn proto_encode_sign_doc(sign_doc: SignDoc) -> Vec<u8> {
+    sign_doc.encode_to_vec()
+}
+
+#[uniffi::export]
+pub fn parse_bech32_address(bech32_address: String) -> Result<Address> {
+    bech32_address
+        .parse()
+        .map_err(|e| GrpcClientError::InvalidAccountId {
+            msg: format!("{e}"),
+        })
 }

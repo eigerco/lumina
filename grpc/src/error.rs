@@ -79,6 +79,10 @@ pub enum Error {
     /// Signing error
     #[error(transparent)]
     SigningError(#[from] SignatureError),
+
+    /// No account
+    #[error("no account")]
+    NoAccount,
 }
 
 impl From<Status> for Error {
