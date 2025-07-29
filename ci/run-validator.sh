@@ -60,7 +60,7 @@ create_or_import_key() {
 
   if [ ! -e "$key_file" ]; then
     # if key don't exist yet, then create and export it
-    echo "Creating a new keys for the $node_name"
+    echo "Creating a new key for the $node_name"
     celestia-appd keys add "$node_name" --keyring-backend "test"
     # export it
     echo "password" | celestia-appd keys export "$node_name" --keyring-backend "test" > "$key_file.lock"
