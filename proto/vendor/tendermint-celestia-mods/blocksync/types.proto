@@ -4,7 +4,6 @@ package tendermint_celestia_mods.blocksync;
 import "tendermint/blocksync/types.proto";
 import "tendermint/types/types.proto";
 import "tendermint-celestia-mods/types/block.proto";
-import "tendermint-celestia-mods/types/types.proto";
 
 // BlockResponse returns block to the requested
 message BlockResponse {
