@@ -632,7 +632,7 @@ fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16,
 mod tests {
     use super::*;
     use crate::events::{EventChannel, EventSubscriber};
-    use crate::node::DEFAULT_SAMPLING_WINDOW;
+    use crate::node::SAMPLING_WINDOW;
     use crate::p2p::shwap::convert_cid;
     use crate::p2p::P2pCmd;
     use crate::store::InMemoryStore;
@@ -725,7 +725,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
-            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: SAMPLING_WINDOW,
             concurrency_limit: 1,
             additional_headersub_concurrency: DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY,
         })
@@ -754,7 +754,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
-            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: SAMPLING_WINDOW,
             concurrency_limit: 1,
             additional_headersub_concurrency: DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY,
         })
@@ -781,7 +781,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
-            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: SAMPLING_WINDOW,
             concurrency_limit: 1,
             additional_headersub_concurrency: DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY,
         })
@@ -904,7 +904,7 @@ mod tests {
             event_pub: events.publisher(),
             p2p: Arc::new(mock),
             store: store.clone(),
-            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: SAMPLING_WINDOW,
             concurrency_limit,
             additional_headersub_concurrency,
         })

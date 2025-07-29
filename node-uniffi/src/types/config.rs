@@ -25,9 +25,7 @@ pub struct NodeConfig {
     /// Custom list of bootstrap peers to connect to.
     /// If None, uses the canonical bootnodes for the network.
     pub bootnodes: Option<Vec<String>>,
-    /// Custom sampling window in seconds. Default is 30 days.
-    pub sampling_window_secs: Option<u32>,
-    /// Custom pruning window in seconds. Default is 30 days plus 1 hour if base path is set
+    /// Custom pruning window in seconds. Default is 7 days plus 1 hour if base path is set
     /// and 0 seconds if not.
     pub pruning_window_secs: Option<u32>,
     /// Maximum number of headers in batch while syncing. Default is 128.
@@ -82,10 +80,6 @@ impl NodeConfig {
                 .map_err(|e| LuminaError::network(format!("Invalid Ed25519 key: {e}")))?;
 
             builder = builder.keypair(keypair);
-        }
-
-        if let Some(secs) = self.sampling_window_secs {
-            builder = builder.sampling_window(Duration::from_secs(secs.into()));
         }
 
         if let Some(secs) = self.pruning_window_secs {

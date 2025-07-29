@@ -741,7 +741,7 @@ mod tests {
     use super::*;
     use crate::block_ranges::{BlockRange, BlockRangeExt};
     use crate::events::EventChannel;
-    use crate::node::{HeaderExError, DEFAULT_PRUNING_WINDOW, DEFAULT_SAMPLING_WINDOW};
+    use crate::node::{HeaderExError, DEFAULT_PRUNING_WINDOW, SAMPLING_WINDOW};
     use crate::p2p::header_session;
     use crate::store::InMemoryStore;
     use crate::test_utils::{gen_filled_store, MockP2pHandle};
@@ -833,7 +833,7 @@ mod tests {
             store: Arc::new(InMemoryStore::new()),
             event_pub: events.publisher(),
             batch_size: 512,
-            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: SAMPLING_WINDOW,
             pruning_window: DEFAULT_PRUNING_WINDOW,
         })
         .unwrap();
@@ -943,7 +943,7 @@ mod tests {
     #[async_test]
     async fn slow_sync() {
         let pruning_window = Duration::from_secs(600);
-        let sampling_window = DEFAULT_SAMPLING_WINDOW;
+        let sampling_window = SAMPLING_WINDOW;
 
         let mut gen = ExtendedHeaderGenerator::new();
 
@@ -1034,7 +1034,7 @@ mod tests {
             store: store.clone(),
             event_pub: events.publisher(),
             batch_size: 512,
-            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: SAMPLING_WINDOW,
             pruning_window: DEFAULT_PRUNING_WINDOW,
         })
         .unwrap();
@@ -1266,7 +1266,7 @@ mod tests {
     async fn initialized_syncer(
         head: ExtendedHeader,
     ) -> (Syncer<InMemoryStore>, Arc<InMemoryStore>, MockP2pHandle) {
-        initialized_syncer_with_windows(head, DEFAULT_SAMPLING_WINDOW, DEFAULT_PRUNING_WINDOW).await
+        initialized_syncer_with_windows(head, SAMPLING_WINDOW, DEFAULT_PRUNING_WINDOW).await
     }
 
     async fn initialized_syncer_with_windows(

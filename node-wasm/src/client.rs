@@ -43,13 +43,6 @@ pub struct WasmNodeConfig {
     #[wasm_bindgen(js_name = usePersistentMemory)]
     pub use_persistent_memory: bool,
 
-    /// Sampling window defines maximum age of a block considered for syncing and sampling.
-    ///
-    /// **Default value:** 2592000 seconds (30 days)\
-    /// **Minimum:** 60 seconds
-    #[wasm_bindgen(js_name = customSamplingWindowSecs)]
-    pub custom_sampling_window_secs: Option<u32>,
-
     /// Pruning window defines maximum age of a block for it to be retained in store.
     ///
     /// If pruning window is smaller than sampling window, then blocks will be pruned
@@ -58,7 +51,7 @@ pub struct WasmNodeConfig {
     ///
     /// If this is not set, then default value will apply:
     ///
-    /// * If `use_persistent_memory == true`, default value is 30 days plus 1 hour.
+    /// * If `use_persistent_memory == true`, default value is 7 days plus 1 hour.
     /// * If `use_persistent_memory == false`, default value is 0 seconds.
     #[wasm_bindgen(js_name = customPruningWindowSecs)]
     pub custom_pruning_window_secs: Option<u32>,
@@ -371,7 +364,6 @@ impl WasmNodeConfig {
             network,
             bootnodes,
             use_persistent_memory: true,
-            custom_sampling_window_secs: None,
             custom_pruning_window_secs: None,
         }
     }
@@ -412,11 +404,6 @@ impl WasmNodeConfig {
             .network(network)
             .sync_batch_size(128)
             .bootnodes(bootnodes);
-
-        if let Some(secs) = self.custom_sampling_window_secs {
-            let dur = Duration::from_secs(secs.into());
-            builder = builder.sampling_window(dur);
-        }
 
         if let Some(secs) = self.custom_pruning_window_secs {
             let dur = Duration::from_secs(secs.into());
@@ -547,7 +534,6 @@ mod tests {
                 network: Network::Private,
                 bootnodes,
                 use_persistent_memory: false,
-                custom_sampling_window_secs: None,
                 custom_pruning_window_secs: None,
             })
             .await
