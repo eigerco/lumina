@@ -20,7 +20,7 @@ impl HeaderApi {
         HeaderApi { ctx }
     }
 
-    /// Returns the latest head header synchronized by the node.
+    /// Returns the latest header synchronized by the node.
     pub async fn head(&self) -> Result<ExtendedHeader> {
         let header = self.ctx.rpc.header_local_head().await?;
         header.validate()?;
