@@ -996,8 +996,8 @@ mod wbg {
     #[derive(Clone)]
     #[wasm_bindgen(getter_with_clone)]
     pub struct JsEventAttribute {
-        pub key: Vec<u8>,
-        pub value: Vec<u8>,
+        pub key: String,
+        pub value: String,
         pub index: bool,
     }
 
@@ -1005,8 +1005,8 @@ mod wbg {
     impl From<EventAttribute> for JsEventAttribute {
         fn from(value: EventAttribute) -> Self {
             JsEventAttribute {
-                key: value.key.to_vec(),
-                value: value.value.to_vec(),
+                key: value.key,
+                value: value.value,
                 index: value.index,
             }
         }
