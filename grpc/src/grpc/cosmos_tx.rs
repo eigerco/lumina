@@ -119,8 +119,8 @@ mod wbg {
             BroadcastMode::Unspecified.into()
         }
 
-        /// `BroadcastMode` `Block` defines a tx broadcasting mode where the client waits for
-        /// the tx to be committed in a block.
+        /// DEPRECATED: use `BroadcastMode` `Sync` instead,
+        /// `BroadcastMode` `Block` is not supported by the SDK from v0.47.x onwards.
         #[wasm_bindgen(js_name = Block, getter)]
         pub fn block() -> JsBroadcastMode {
             BroadcastMode::Block.into()
