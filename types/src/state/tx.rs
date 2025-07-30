@@ -19,11 +19,10 @@ use crate::signature::JsSignature;
 use crate::state::bit_array::BitVector;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 use crate::state::bit_array::JsBitVector;
-use crate::state::Address;
+use crate::state::{Address, Coin};
 use crate::{Error, Height};
 
 pub use celestia_proto::cosmos::base::abci::v1beta1::TxResponse as RawTxResponse;
-pub use celestia_proto::cosmos::base::v1beta1::Coin as RawCoin;
 pub use celestia_proto::cosmos::tx::v1beta1::mode_info::Sum as RawSum;
 pub use celestia_proto::cosmos::tx::v1beta1::mode_info::{Multi, Single};
 pub use celestia_proto::cosmos::tx::v1beta1::AuthInfo as RawAuthInfo;
@@ -447,10 +446,7 @@ impl Fee {
     /// which means first tx signer is responsible for paying.
     pub fn new(utia_fee: u64, gas_limit: u64) -> Self {
         Fee {
-            amount: vec![Coin {
-                denom: BOND_DENOM.to_string(),
-                amount: utia_fee,
-            }],
+            amount: vec![Coin::utia(utia_fee)],
             gas_limit,
             ..Default::default()
         }
@@ -473,30 +469,6 @@ impl Fee {
     #[wasm_bindgen(getter)]
     pub fn granter(&self) -> Option<String> {
         self.granter.as_ref().map(|a| a.to_string())
-    }
-}
-
-/// Coin defines a token with a denomination and an amount.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(
-    all(target_arch = "wasm32", feature = "wasm-bindgen"),
-    wasm_bindgen(getter_with_clone)
-)]
-pub struct Coin {
-    /// Coin denomination
-    pub denom: String,
-    /// Coin amount
-    pub amount: u64,
-}
-
-impl Coin {
-    /// Create a coin with given amount of `utia`.
-    pub fn utia(amount: u64) -> Self {
-        Self {
-            denom: "utia".into(),
-            amount,
-        }
     }
 }
 
@@ -939,40 +911,13 @@ impl From<Sum> for RawSum {
     }
 }
 
-impl From<Coin> for RawCoin {
-    fn from(value: Coin) -> Self {
-        RawCoin {
-            denom: value.denom,
-            amount: value.amount.to_string(),
-        }
-    }
-}
-
-impl TryFrom<RawCoin> for Coin {
-    type Error = Error;
-
-    fn try_from(value: RawCoin) -> Result<Self, Self::Error> {
-        Ok(Coin {
-            denom: value.denom,
-            amount: value
-                .amount
-                .parse()
-                .map_err(|_| Error::InvalidCoinAmount(value.amount))?,
-        })
-    }
-}
-
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 pub use wbg::*;
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod wbg {
-    use super::Coin;
-    use js_sys::BigInt;
     use tendermint_proto::v0_34::abci::{Event, EventAttribute};
     use wasm_bindgen::prelude::*;
-
-    use lumina_utils::make_object;
 
     /// Event allows application developers to attach additional information to
     /// ResponseBeginBlock, ResponseEndBlock, ResponseCheckTx and ResponseDeliverTx.
@@ -1009,35 +954,6 @@ mod wbg {
                 value: value.value.to_vec(),
                 index: value.index,
             }
-        }
-    }
-
-    #[wasm_bindgen(typescript_custom_section)]
-    const _: &str = "
-    /**
-     * Coin
-     */
-    export interface Coin {
-      denom: string,
-      amount: bigint
-    }
-    ";
-
-    #[wasm_bindgen]
-    extern "C" {
-        /// Coin exposed to javascript
-        #[wasm_bindgen(typescript_type = "Coin")]
-        pub type JsCoin;
-    }
-
-    impl From<Coin> for JsCoin {
-        fn from(value: Coin) -> JsCoin {
-            let obj = make_object!(
-                "denom" => value.denom.into(),
-                "amount" => BigInt::from(value.amount)
-            );
-
-            obj.unchecked_into()
         }
     }
 }

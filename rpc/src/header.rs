@@ -34,7 +34,7 @@ pub trait Header {
     ///
     /// Unsubscribe is not implemented by Celestia nodes.
     #[subscription(name = "Subscribe", unsubscribe = "Unsubscribe", item = ExtendedHeader)]
-    async fn header_subscribe(&self) -> SubcriptionResult;
+    async fn header_subscribe(&self) -> SubscriptionResult;
 
     /// SyncState returns the current state of the header Syncer.
     #[method(name = "SyncState")]
