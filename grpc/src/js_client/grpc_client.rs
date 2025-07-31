@@ -14,7 +14,7 @@ use crate::Result;
 
 type InnerClient = crate::GrpcClient<tonic_web_wasm_client::Client>;
 
-/// Celestia GRPC client
+/// Celestia GRPC client, for builder see [`GrpcClientBuilder`]
 #[wasm_bindgen]
 pub struct GrpcClient {
     client: InnerClient,
@@ -22,15 +22,6 @@ pub struct GrpcClient {
 
 #[wasm_bindgen]
 impl GrpcClient {
-    /// Create a new client connected with the given `url`
-    pub async fn new(url: &str) -> Result<Self> {
-        Ok(GrpcClient {
-            client: InnerClient::with_grpcweb_url(url),
-        })
-    }
-
-    // cosmos.auth
-
     /// Get auth params
     #[wasm_bindgen(js_name = getAuthParams)]
     pub async fn get_auth_params(&self) -> Result<JsAuthParams> {
@@ -276,5 +267,11 @@ impl GrpcClient {
         let tx_config = tx_config.map(Into::into).unwrap_or_default();
         let tx = self.client.submit_message(message, tx_config).await?;
         Ok(tx.into())
+    }
+}
+
+impl From<InnerClient> for GrpcClient {
+    fn from(client: InnerClient) -> Self {
+        GrpcClient { client }
     }
 }

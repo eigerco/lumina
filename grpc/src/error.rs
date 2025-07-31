@@ -83,6 +83,10 @@ pub enum Error {
     /// No account
     #[error("no account")]
     NoAccount,
+
+    /// Builder error
+    #[error("Keys and signer not set when building transaction client")]
+    MissingKeysAndSinger,
 }
 
 impl From<Status> for Error {

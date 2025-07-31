@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod abci_proofs;
+mod builder;
 mod error;
 pub mod grpc;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
@@ -11,6 +12,7 @@ mod tx;
 pub mod uniffi_client;
 mod utils;
 
+pub use crate::builder::GrpcClientBuilder;
 pub use crate::error::{Error, Result};
 pub use crate::grpc::GrpcClient;
 pub use crate::signer::DocSigner;

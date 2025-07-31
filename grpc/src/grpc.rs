@@ -9,6 +9,7 @@ use http_body::Body;
 use k256::ecdsa::VerifyingKey;
 use lumina_utils::time::Interval;
 use prost::Message;
+use signature::Keypair;
 use std::time::Duration;
 use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 use tonic::body::BoxBody;
@@ -35,9 +36,9 @@ use celestia_types::state::{
 use celestia_types::{AppVersion, Blob, ExtendedHeader};
 
 use crate::abci_proofs::ProofChain;
-use crate::signer::sign_tx;
+use crate::signer::{sign_tx, FullSigner, KeypairExt};
 use crate::tx::TxInfo;
-use crate::{DocSigner, Error, Result, TxConfig};
+use crate::{Error, Result, TxConfig};
 
 #[cfg(feature = "uniffi")]
 uniffi::use_remote_type!(celestia_types::Hash);
@@ -82,13 +83,22 @@ struct AccountBits {
     chain_id: Id,
 }
 
-pub struct SignerBits<S> {
-    pub signer: S,
+pub struct SignerBits {
+    pub(crate) signer: Box<dyn FullSigner>,
 
-    pubkey: VerifyingKey,
+    pub(crate) pubkey: VerifyingKey,
 }
 
-impl<S> SignerBits<S> {
+impl Keypair for SignerBits {
+    type VerifyingKey = VerifyingKey;
+
+    fn verifying_key(&self) -> Self::VerifyingKey {
+        self.pubkey
+    }
+}
+
+/*
+impl SignerBits<S> {
     pub fn address(&self) -> AccAddress {
         AccAddress::from(self.pubkey)
     }
@@ -97,6 +107,7 @@ impl<S> SignerBits<S> {
         &self.pubkey
     }
 }
+*/
 
 /*
 impl<S> FullSigner for SignerBits<S>
@@ -133,35 +144,35 @@ where
 */
 
 /// Struct wrapping all the tonic types and doing type conversion behind the scenes.
-pub struct GrpcClient<T, S> {
+pub struct GrpcClient<T> {
     transport: T,
 
     account: Mutex<Option<AccountBits>>,
 
-    signer: Option<SignerBits<S>>,
+    signer: Option<SignerBits>,
 }
 
-impl<T, S> GrpcClient<T, S> {
+impl<T> GrpcClient<T> {
     /// Get the underlying transport.
     pub fn into_inner(self) -> T {
         self.transport
     }
 }
 
-impl<T, S> GrpcClient<T, S>
+impl<T> GrpcClient<T>
 where
-    S: DocSigner,
+    //S: DocSigner,
     T: GrpcService<BoxBody> + Clone,
     T::Error: Into<StdError>,
     T::ResponseBody: Body<Data = Bytes> + Send + 'static,
     <T::ResponseBody as Body>::Error: Into<StdError> + Send,
 {
     /// Create a new client wrapping given transport
-    pub fn new(transport: T) -> Self {
+    pub(crate) fn new(transport: T, signer: Option<SignerBits>) -> Self {
         Self {
             transport,
             account: None.into(),
-            signer: None,
+            signer,
         }
     }
 
@@ -450,7 +461,7 @@ where
         self.confirm_tx(tx_hash, sequence).await
     }
 
-    async fn account_load(&self) -> Result<(MappedMutexGuard<'_, AccountBits>, &SignerBits<S>)> {
+    async fn account_load(&self) -> Result<(MappedMutexGuard<'_, AccountBits>, &SignerBits)> {
         let signer = self.signer.as_ref().ok_or(Error::NoAccount)?;
         let mut account_guard = self.account.lock().await;
 
@@ -649,36 +660,7 @@ where
     }
 }
 
-/*
-#[cfg(not(target_arch = "wasm32"))]
-impl GrpcClient<tonic::transport::Channel> {
-    /// Create a new client connected to the given `url` with default
-    /// settings of [`tonic::transport::Channel`].
-    pub fn with_url(url: impl Into<String>) -> Result<Self, tonic::transport::Error> {
-        let channel = tonic::transport::Endpoint::from_shared(url.into())?.connect_lazy();
-        Ok(Self {
-            transport: channel,
-            account: None.into(),
-            signer: None,
-        })
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl GrpcClient<tonic_web_wasm_client::Client> {
-    /// Create a new client connected to the given `url` with default
-    /// settings of [`tonic_web_wasm_client::Client`].
-    pub fn with_grpcweb_url(url: impl Into<String>) -> Self {
-        Self {
-            transport: tonic_web_wasm_client::Client::new(url.into()),
-            account: None.into(),
-            signer: None,
-        }
-    }
-}
-*/
-
-impl<T, S> fmt::Debug for GrpcClient<T, S> {
+impl<T> fmt::Debug for GrpcClient<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("GrpcClient { .. }")
     }

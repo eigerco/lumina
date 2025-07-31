@@ -20,7 +20,6 @@ use crate::grpc::{
 };
 use crate::tx::TxInfo;
 use crate::{IntoProtobufAny, SignDoc, TxConfig};
-use crate::signer::UniffiSignerBox;
 
 /// Alias for a `Result` with the error type [`GrpcClientError`]
 pub type Result<T, E = GrpcClientError> = std::result::Result<T, E>;
@@ -64,7 +63,7 @@ pub enum GrpcClientError {
     },
 }
 
-type InnerClient = crate::GrpcClient<Channel, UniffiSignerBox>;
+type InnerClient = crate::GrpcClient<Channel>;
 
 /// Celestia GRPC client
 #[derive(Object)]
@@ -88,18 +87,6 @@ pub struct AnyMsg {
 
 #[uniffi::export(async_runtime = "tokio")]
 impl GrpcClient {
-    /*
-    /// Create a new client connected with the given `url`
-    #[uniffi::constructor]
-    // this function _must_ be async despite not awaiting, so that it executes in tokio runtime
-    // context
-    pub async fn new(url: String) -> Result<Self> {
-        Ok(GrpcClient {
-            client: InnerClient::with_url(url).map_err(crate::Error::TransportError)?,
-        })
-    }
-    */
-
     /// Get auth params
     pub async fn get_auth_params(&self) -> Result<AuthParams> {
         Ok(self.client.get_auth_params().await?)
@@ -271,6 +258,12 @@ impl IntoProtobufAny for AnyMsg {
             type_url: self.r#type,
             value: self.value,
         }
+    }
+}
+
+impl From<InnerClient> for GrpcClient {
+    fn from(client: InnerClient) -> GrpcClient {
+        GrpcClient { client }
     }
 }
 

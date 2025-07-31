@@ -1,15 +1,19 @@
 use std::future::Future;
+use std::pin::Pin;
 
 use ::tendermint::chain::Id;
 use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use k256::ecdsa::signature::Signer;
 use prost::{Message, Name};
+use signature::Keypair;
 use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
 
 use celestia_proto::cosmos::crypto::secp256k1;
 use celestia_types::state::auth::BaseAccount;
-use celestia_types::state::{AuthInfo, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum};
+use celestia_types::state::{
+    AccAddress, AuthInfo, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
+};
 
 use crate::Result;
 
@@ -32,38 +36,46 @@ where
     }
 }
 
-/*
-pub(crate) trait FullSigner: Sync + Send + 'static {
-    fn try_sign<'a>(
-        &'a self,
-        doc: SignDoc,
-    //) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>>;
-    ) -> impl Future<Output = Result<DocSignature, SignatureError>> + Send;
+pub(crate) trait KeypairExt {
+    fn address(&self) -> AccAddress;
+}
 
-    //async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError>;
-
-    fn verifying_key(&self) -> &VerifyingKey;
-
+impl<T> KeypairExt for T
+where
+    T: Keypair,
+    T::VerifyingKey: Into<AccAddress>,
+{
     fn address(&self) -> AccAddress {
-        AccAddress::from(*self.verifying_key())
+        self.verifying_key().into()
     }
 }
 
-pub(crate) type BoxedFullSigner = Arc<dyn FullSigner + Send>;
-*/
+pub trait FullSigner: Send + Sync + 'static {
+    fn try_sign<'a>(
+        &'a self,
+        doc: SignDoc,
+    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>>;
+    //) -> impl Future<Output = Result<DocSignature, SignatureError>> + Send;
+
+    //async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError>;
+
+    //fn verifying_key(&self) -> &VerifyingKey;
+
+    //fn address(&self) -> AccAddress { AccAddress::from(*self.verifying_key()) }
+}
+
+//pub(crate) type BoxedFullSigner = Box<dyn FullSigner + Send>;
 
 /// Sign `tx_body` and the transaction metadata as the `base_account` using `signer`
-pub async fn sign_tx<S>(
+pub async fn sign_tx(
     tx_body: RawTxBody,
     chain_id: Id,
     base_account: &BaseAccount,
-    signer: &crate::grpc::SignerBits<S>,
+    signer: &crate::grpc::SignerBits,
     //signer: BoxedFullSigner,
     gas_limit: u64,
     fee: u64,
-) -> Result<RawTx> 
-where S: DocSigner
-{
+) -> Result<RawTx> {
     // From https://github.com/celestiaorg/cosmos-sdk/blob/v1.25.0-sdk-v0.46.16/proto/cosmos/tx/signing/v1beta1/signing.proto#L24
     const SIGNING_MODE_INFO: ModeInfo = ModeInfo {
         sum: Sum::Single { mode: 1 },
@@ -167,6 +179,16 @@ mod uniffi_types {
 
     pub(crate) struct UniffiSignerBox(pub Arc<dyn UniffiSigner>);
 
+    impl FullSigner for UniffiSignerBox {
+        fn try_sign<'a>(
+            &'a self,
+            doc: SignDoc,
+        ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>>
+        {
+            Box::pin(DocSigner::try_sign(self, doc))
+        }
+    }
+
     /// Message signature
     #[derive(Record)]
     pub struct UniffiSignature {
@@ -214,10 +236,11 @@ mod wbg {
 
     use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 
-    use lumina_utils::make_object;
-    use wasm_bindgen_futures::JsFuture;
-    use wasm_bindgen::prelude::*;
     use js_sys::{BigInt, Function, Promise, Uint8Array};
+    use lumina_utils::make_object;
+    use send_wrapper::SendWrapper;
+    use wasm_bindgen::prelude::*;
+    use wasm_bindgen_futures::JsFuture;
 
     /// A helper to encode the SignDoc with protobuf to get bytes to sign directly.
     #[wasm_bindgen(js_name = protoEncodeSignDoc)]
@@ -227,7 +250,15 @@ mod wbg {
 
     /// Signer that uses a javascript function for signing.
     pub struct JsSigner {
-        signer_fn: JsSignerFn,
+        signer_fn: SendWrapper<JsSignerFn>,
+    }
+
+    impl JsSigner {
+        pub fn new(function: JsSignerFn) -> Self {
+            Self {
+                signer_fn: SendWrapper::new(function),
+            }
+        }
     }
 
     impl DocSigner for JsSigner {
@@ -260,23 +291,33 @@ mod wbg {
         }
     }
 
+    impl FullSigner for JsSigner {
+        fn try_sign<'a>(
+            &'a self,
+            doc: SignDoc,
+        ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>>
+        {
+            Box::pin(SendWrapper::new(DocSigner::try_sign(self, doc)))
+        }
+    }
+
     #[wasm_bindgen(typescript_custom_section)]
     const _: &str = "
-/**
- * A payload to be signed
- */
-export interface SignDoc {
-  bodyBytes: Uint8Array;
-  authInfoBytes: Uint8Array;
-  chainId: string;
-  accountNumber: bigint;
-}
+    /**
+     * A payload to be signed
+     */
+    export interface SignDoc {
+      bodyBytes: Uint8Array;
+      authInfoBytes: Uint8Array;
+      chainId: string;
+      accountNumber: bigint;
+    }
 
-/**
- * A function that produces a signature of a payload
- */
-export type SignerFn = ((arg: SignDoc) => Uint8Array) | ((arg: SignDoc) => Promise<Uint8Array>);
-";
+    /**
+     * A function that produces a signature of a payload
+     */
+    export type SignerFn = ((arg: SignDoc) => Uint8Array) | ((arg: SignDoc) => Promise<Uint8Array>);
+    ";
 
     #[wasm_bindgen]
     extern "C" {
