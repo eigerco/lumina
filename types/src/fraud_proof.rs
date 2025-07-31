@@ -51,6 +51,39 @@ pub enum Proof {
     BadEncoding(BadEncodingFraudProof),
 }
 
+impl Proof {
+    /// Returns proof type.
+    pub fn proof_type(&self) -> ProofType {
+        match self {
+            Proof::BadEncoding(_) => ProofType::BadEncoding,
+        }
+    }
+}
+
+/// Proof type
+pub enum ProofType {
+    /// Bad encoding fraud proof.
+    BadEncoding,
+}
+
+impl ProofType {
+    /// Returns the string representation.
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            ProofType::BadEncoding => BadEncodingFraudProof::TYPE,
+        }
+    }
+}
+
+impl Serialize for ProofType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.to_str().serialize(serializer)
+    }
+}
+
 impl TryFrom<RawFraudProof> for Proof {
     type Error = Error;
 

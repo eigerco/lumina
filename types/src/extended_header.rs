@@ -229,9 +229,15 @@ impl ExtendedHeader {
     ///
     /// Ensures that the untrusted header can be trusted by verifying it against `self`.
     ///
+    /// # Note
+    ///
+    /// This method does not do validation for optimization purposes.
+    /// Validation should be done from before and ideally with
+    /// [`ExtendedHeader::decode_and_validate`].
+    ///
     /// # Errors
     ///
-    /// If validation fails, this function will return an error with a reason of failure.
+    /// If verification fails, this function will return an error with a reason of failure.
     ///
     /// Please note that if verifying unadjacent headers, the verification will always
     /// fail if the validator set commiting those blocks was changed. If that is the case,
@@ -309,6 +315,33 @@ impl ExtendedHeader {
         )?;
 
         Ok(())
+    }
+
+    /// Verify an untrusted header and make sure they are adjacent to `self`.
+    ///
+    /// Ensures that the untrusted header is adjacent and can be trusted
+    /// by verifying it against `self`.
+    ///
+    /// # Note
+    ///
+    /// This method does not do validation for optimization purposes.
+    /// Validation should be done from before and ideally with
+    /// [`ExtendedHeader::decode_and_validate`].
+    ///
+    /// # Errors
+    ///
+    /// If verification fails, this function will return an error with a reason of failure.
+    pub fn verify_adjacent(&self, untrusted: &ExtendedHeader) -> Result<()> {
+        // Check is first untrusted is adjacent to `self`.
+        if self.height().increment() != untrusted.height() {
+            bail_verification!(
+                "untrusted header height ({}) not adjacent to the current trusted ({})",
+                untrusted.height(),
+                self.height(),
+            );
+        }
+
+        self.verify(untrusted)
     }
 
     /// Verify a chain of adjacent untrusted headers.

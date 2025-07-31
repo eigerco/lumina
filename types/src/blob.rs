@@ -112,6 +112,10 @@ impl Blob {
 
     /// Create a new blob with the given data within the [`Namespace`] and with given signer.
     ///
+    /// # Notes
+    ///
+    /// `signer` is verified by consensus node when blob gets submitted.
+    ///
     /// # Errors
     ///
     /// This function propagates any error from the [`Commitment`] creation. Also [`AppVersion`]
@@ -201,6 +205,49 @@ impl Blob {
 
         if self.commitment != computed_commitment {
             bail_validation!("blob commitment != localy computed commitment")
+        }
+
+        Ok(())
+    }
+
+    /// Validate [`Blob`]s data with a [`Commitment`].
+    ///
+    /// # Errors
+    ///
+    /// If validation fails, this function will return an error with a reason of failure.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use celestia_types::Blob;
+    /// # use celestia_types::consts::appconsts::AppVersion;
+    /// # use celestia_types::nmt::Namespace;
+    /// #
+    /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
+    /// #
+    /// # let commitment = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2)
+    /// #     .unwrap()
+    /// #     .commitment;
+    ///
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2).unwrap();
+    ///
+    /// assert!(blob.validate_with_commitment(&commitment, AppVersion::V2).is_ok());
+    ///
+    /// let other_commitment = Blob::new(namespace, b"bar".to_vec(), AppVersion::V2)
+    ///     .unwrap()
+    ///     .commitment;
+    ///
+    /// assert!(blob.validate_with_commitment(&other_commitment, AppVersion::V2).is_err());
+    /// ```
+    pub fn validate_with_commitment(
+        &self,
+        commitment: &Commitment,
+        app_version: AppVersion,
+    ) -> Result<()> {
+        self.validate(app_version)?;
+
+        if self.commitment != *commitment {
+            bail_validation!("blob commitment != commitment");
         }
 
         Ok(())

@@ -12,15 +12,17 @@ use celestia_proto::cosmos::bank::v1beta1::query_client::QueryClient as BankQuer
 pub use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
+use celestia_proto::cosmos::staking::v1beta1::query_client::QueryClient as StakingQueryClient;
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::{Account, AuthParams};
-use celestia_types::state::AbciQueryResponse;
 use celestia_types::state::{
-    AccAddress, Address, AddressTrait, Coin, ErrorCode, TxResponse, BOND_DENOM,
+    AbciQueryResponse, AccAddress, Address, AddressTrait, Coin, ErrorCode, PageRequest,
+    QueryDelegationResponse, QueryRedelegationsResponse, QueryUnbondingDelegationResponse,
+    TxResponse, ValAddress, BOND_DENOM,
 };
 use celestia_types::ExtendedHeader;
 use http_body::Body;
@@ -40,6 +42,8 @@ mod gas_estimation;
 mod node;
 // cosmos.base.tendermint
 mod tendermint;
+// cosmos.staking
+mod staking;
 // celestia.core.tx
 mod celestia_tx;
 // celestia.blob
@@ -210,6 +214,37 @@ where
     #[grpc_method(TxServiceClient::simulate)]
     async fn simulate(&self, tx_bytes: Vec<u8>) -> Result<GasInfo>;
 
+    // cosmos.staking
+
+    /// Retrieves the delegation information between a delegator and a validator
+    // TODO: Expose this to JS and  UniFFI
+    #[grpc_method(StakingQueryClient::delegation)]
+    async fn query_delegation(
+        &self,
+        delegator_address: &AccAddress,
+        validator_address: &ValAddress,
+    ) -> Result<QueryDelegationResponse>;
+
+    /// Retrieves the unbonding status between a delegator and a validator
+    // TODO: Expose this to JS and  UniFFI
+    #[grpc_method(StakingQueryClient::unbonding_delegation)]
+    async fn query_unbonding(
+        &self,
+        delegator_address: &AccAddress,
+        validator_address: &ValAddress,
+    ) -> Result<QueryUnbondingDelegationResponse>;
+
+    /// Retrieves the status of the redelegations between a delegator and a validator
+    // TODO: Expose this to JS and  UniFFI
+    #[grpc_method(StakingQueryClient::redelegations)]
+    async fn query_redelegations(
+        &self,
+        delegator_address: &AccAddress,
+        src_validator_address: &ValAddress,
+        dest_validator_address: &ValAddress,
+        pagination: Option<PageRequest>,
+    ) -> Result<QueryRedelegationsResponse>;
+
     // celestia.blob
 
     /// Get blob params
@@ -227,17 +262,17 @@ where
     /// Estimate gas price for given transaction priority based
     /// on the gas prices of the transactions in the last five blocks.
     ///
-    /// If no transaction is found in the last five blocks, return the network
-    /// min gas price.
+    /// If no transaction is found in the last five blocks, it returns the
+    /// network min gas price.
     #[grpc_method(GasEstimatorClient::estimate_gas_price)]
     async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64>;
 
-    /// Estimate gas price for transaction with given priority and estimate gas usage for
-    /// privded serialised transaction.
+    /// Estimate gas price for transaction with given priority and estimate gas usage
+    /// for provided serialised transaction.
     ///
-    /// The gas price estimation is based on the gas prices of the transactions in the last five blocks.
-    /// If no transaction is found in the last five blocks, return the network
-    /// min gas price.
+    /// The gas price estimation is based on the gas prices of the transactions
+    /// in the last five blocks. If no transaction is found in the last five blocks,
+    /// it returns the network min gas price.
     ///
     /// The gas used is estimated using the state machine simulation.
     #[grpc_method(GasEstimatorClient::estimate_gas_price_and_usage)]
