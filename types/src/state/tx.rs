@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 use serde_repr::Serialize_repr;
 use tendermint_proto::google::protobuf::Any;
-use tendermint_proto::v0_34::abci::Event;
+use tendermint_proto::v0_38::abci::Event;
 use tendermint_proto::Protobuf;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 use wasm_bindgen::prelude::*;
@@ -916,7 +916,7 @@ pub use wbg::*;
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod wbg {
-    use tendermint_proto::v0_34::abci::{Event, EventAttribute};
+    use tendermint_proto::v0_38::abci::{Event, EventAttribute};
     use wasm_bindgen::prelude::*;
 
     /// Event allows application developers to attach additional information to
@@ -941,8 +941,8 @@ mod wbg {
     #[derive(Clone)]
     #[wasm_bindgen(getter_with_clone)]
     pub struct JsEventAttribute {
-        pub key: Vec<u8>,
-        pub value: Vec<u8>,
+        pub key: String,
+        pub value: String,
         pub index: bool,
     }
 
@@ -950,8 +950,8 @@ mod wbg {
     impl From<EventAttribute> for JsEventAttribute {
         fn from(value: EventAttribute) -> Self {
             JsEventAttribute {
-                key: value.key.to_vec(),
-                value: value.value.to_vec(),
+                key: value.key,
+                value: value.value,
                 index: value.index,
             }
         }
@@ -963,8 +963,7 @@ impl Protobuf<RawAuthInfo> for AuthInfo {}
 
 #[cfg(feature = "uniffi")]
 mod uniffi_types {
-    use bytes::Bytes;
-    use tendermint_proto::v0_34::abci::{Event, EventAttribute};
+    use tendermint_proto::v0_38::abci::{Event, EventAttribute};
 
     #[uniffi::remote(Record)]
     pub struct Event {
@@ -974,8 +973,8 @@ mod uniffi_types {
 
     #[uniffi::remote(Record)]
     pub struct EventAttribute {
-        pub key: Bytes,
-        pub value: Bytes,
+        pub key: String,
+        pub value: String,
         pub index: bool,
     }
 }

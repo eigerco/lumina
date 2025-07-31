@@ -318,7 +318,7 @@ pub mod uniffi_types {
 mod tests {
     use super::*;
 
-    use tendermint_proto::v0_34::types::ValidatorSet as RawValidatorSet;
+    use tendermint_proto::v0_38::types::ValidatorSet as RawValidatorSet;
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;

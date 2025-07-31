@@ -13,8 +13,8 @@ message WantTx {
 
 message Message {
   oneof sum {
-    tendermint.mempool.Txs    txs     = 1;
-    SeenTx seen_tx = 2;
-    WantTx want_tx = 3;
+    tendermint.mempool.Txs txs     = 1;
+    SeenTx                 seen_tx = 2;
+    WantTx                 want_tx = 3;
   }
 }
