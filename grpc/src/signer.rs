@@ -15,6 +15,7 @@ use celestia_types::state::{
     AccAddress, AuthInfo, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
 };
 
+use crate::client::SignerBits;
 use crate::Result;
 
 pub type DocSignature = k256::ecdsa::Signature;
@@ -23,12 +24,12 @@ pub type SignatureError = k256::ecdsa::signature::Error;
 /// Signer capable of producing ecdsa signature using secp256k1 curve.
 pub trait DocSigner {
     /// Try to sign the provided sign doc.
-    fn try_sign(&self, doc: SignDoc) -> impl Future<Output = Result<DocSignature, SignatureError>>;
+    fn try_sign(&self, doc: SignDoc) -> impl Future<Output = Result<DocSignature, SignatureError>> + Send;
 }
 
 impl<T> DocSigner for T
 where
-    T: Signer<DocSignature>,
+    T: Signer<DocSignature> + Send + Sync,
 {
     async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
         let bytes = doc.encode_to_vec();
@@ -64,6 +65,16 @@ pub trait FullSigner: Send + Sync + 'static {
     //fn address(&self) -> AccAddress { AccAddress::from(*self.verifying_key()) }
 }
 
+impl<T> FullSigner for T
+where T: DocSigner + Send + Sync + 'static {
+    fn try_sign<'a>(
+        &'a self,
+        doc: SignDoc,
+    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>> {
+        Box::pin(DocSigner::try_sign(self, doc))
+    }
+}
+
 //pub(crate) type BoxedFullSigner = Box<dyn FullSigner + Send>;
 
 /// Sign `tx_body` and the transaction metadata as the `base_account` using `signer`
@@ -71,7 +82,7 @@ pub async fn sign_tx(
     tx_body: RawTxBody,
     chain_id: Id,
     base_account: &BaseAccount,
-    signer: &crate::grpc::SignerBits,
+    signer: &SignerBits,
     //signer: BoxedFullSigner,
     gas_limit: u64,
     fee: u64,
@@ -178,16 +189,6 @@ mod uniffi_types {
     }
 
     pub(crate) struct UniffiSignerBox(pub Arc<dyn UniffiSigner>);
-
-    impl FullSigner for UniffiSignerBox {
-        fn try_sign<'a>(
-            &'a self,
-            doc: SignDoc,
-        ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>>
-        {
-            Box::pin(DocSigner::try_sign(self, doc))
-        }
-    }
 
     /// Message signature
     #[derive(Record)]

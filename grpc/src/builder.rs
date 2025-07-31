@@ -7,7 +7,8 @@ use tonic::client::GrpcService;
 #[cfg(not(target_arch = "wasm32"))]
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 
-use crate::grpc::{SignerBits, StdError};
+use crate::client::StdError;
+use crate::client::SignerBits;
 use crate::signer::FullSigner;
 use crate::GrpcClient;
 
@@ -30,7 +31,7 @@ pub enum GrpcClientBuilderError {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) struct NativeTransportBits {
+pub struct NativeTransportBits {
     url: String,
     load_native_roots: bool,
     load_webpki_roots: bool,

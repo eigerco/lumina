@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use k256::ecdsa::VerifyingKey;
 use uniffi::Object;
+use celestia_types::Hash;
 
 mod grpc_client;
 
@@ -13,6 +14,8 @@ use crate::signer::{UniffiSigner, UniffiSignerBox};
 pub use grpc_client::GrpcClient;
 
 type RustBuilder = crate::builder::GrpcClientBuilder<NativeTransportBits>;
+
+uniffi::use_remote_type!(celestia_types::Hash);
 
 /// Errors returned when building Grpc Client
 #[derive(Debug, thiserror::Error, uniffi::Error)]

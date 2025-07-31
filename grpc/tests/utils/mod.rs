@@ -60,7 +60,7 @@ pub fn load_account() -> TestAccount {
 mod imp {
     use std::{future::Future, sync::OnceLock};
 
-    use celestia_grpc::{GrpcClient, TxClient};
+    use celestia_grpc::GrpcClient;
     use celestia_rpc::Client;
     use tokio::sync::{Mutex, MutexGuard};
     use tonic::transport::Channel;
@@ -72,10 +72,8 @@ mod imp {
 
     pub fn new_grpc_client() -> GrpcClient<Channel> {
         GrpcClientBuilder::with_url(CELESTIA_GRPC_URL)
+            .build()
             .unwrap()
-            .connect()
-            .unwrap()
-            .build_client()
     }
 
     pub async fn new_rpc_client() -> Client {
@@ -85,18 +83,14 @@ mod imp {
     // we have to sequence the tests which submits transactions.
     // multiple independent tx clients don't work well in parallel
     // as they break each other's account.sequence
-    pub async fn new_tx_client() -> (MutexGuard<'static, ()>, TxClient<Channel, SigningKey>) {
+    pub async fn new_tx_client() -> (MutexGuard<'static, ()>, GrpcClient<Channel>) {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         let lock = LOCK.get_or_init(|| Mutex::new(())).lock().await;
 
         let creds = load_account();
         let client = GrpcClientBuilder::with_url(CELESTIA_GRPC_URL)
-            .unwrap()
             .with_signer_keypair(creds.signing_key)
-            .connect()
-            .unwrap()
-            .build_tx_client()
-            .await
+            .build()
             .unwrap();
 
         (lock, client)
@@ -126,7 +120,7 @@ mod imp {
     pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
 
     pub fn new_grpc_client() -> GrpcClient<Client> {
-        GrpcClientBuilder::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL).build_client()
+        GrpcClientBuilder::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL).build()
     }
 
     pub async fn new_rpc_client() -> RpcClient {
@@ -137,9 +131,7 @@ mod imp {
         let creds = load_account();
         let client = GrpcClientBuilder::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL)
             .with_signer_keypair(creds.signing_key)
-            .build_tx_client()
-            .await
-            .unwrap();
+            .build();
 
         ((), client)
     }
