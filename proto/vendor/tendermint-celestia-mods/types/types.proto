@@ -1,14 +1,12 @@
 syntax = "proto3";
 package tendermint_celestia_mods.types;
 
-// Data contains all the information needed for a consensus full node to
-// reconstruct an extended data square.
+// Data contains the set of transactions included in the block
 message Data {
-  // Txs that will be applied to state in block.Height + 1 because deferred execution.
-  // This means that the block.AppHash of this block does not include these txs.
-  // NOTE: not all txs here are valid. We're just agreeing on the order first.
+  // Txs that will be applied by state @ block.Height+1.
+  // NOTE: not all txs here are valid.  We're just agreeing on the order first.
+  // This means that block.AppHash does not include these txs.
   repeated bytes txs = 1;
-
   reserved 2, 3, 4;
   // field number 2 is reserved for intermediate state roots
   // field number 3 is reserved for evidence

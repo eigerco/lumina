@@ -12,6 +12,8 @@ mod gas_estimation;
 mod node;
 // cosmos.base.tendermint
 mod tendermint;
+// cosmos.staking
+mod staking;
 // celestia.core.tx
 mod celestia_tx;
 // celestia.blob

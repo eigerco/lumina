@@ -4,7 +4,6 @@ use std::str::FromStr;
 use bech32::Hrp;
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
-use tendermint::account::Id;
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::*;
 
@@ -13,6 +12,7 @@ use crate::consts::cosmos::*;
 use crate::{Error, Result};
 
 pub use k256::ecdsa::VerifyingKey;
+pub use tendermint::account::Id;
 
 /// A generic representation of an address in Celestia network.
 #[enum_dispatch(Address)]
@@ -105,6 +105,7 @@ pub struct AccAddress {
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
     wasm_bindgen(inspectable)
 )]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ValAddress {
     id: Id,
 }
@@ -116,6 +117,7 @@ pub struct ValAddress {
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
     wasm_bindgen(inspectable)
 )]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ConsAddress {
     id: Id,
 }
@@ -262,6 +264,12 @@ macro_rules! impl_address_type {
             }
         }
 
+        impl From<&VerifyingKey> for $name {
+            fn from(value: &VerifyingKey) -> Self {
+                value.to_owned().into()
+            }
+        }
+
         impl TryFrom<&[u8]> for $name {
             type Error = Error;
 
@@ -311,48 +319,19 @@ fn string_to_kind_and_id(s: &str) -> Result<(AddressKind, Id)> {
 /// uniffi conversion types
 #[cfg(feature = "uniffi")]
 pub(crate) mod uniffi_types {
-    use super::{AccAddress, Address as RustAddress, ConsAddress, Id, ValAddress};
-    use uniffi::{Enum, Record};
+    use super::{Address, Id};
+    use uniffi::Record;
 
     use crate::error::UniffiConversionError;
 
-    // uniffi does not play well with enum_dispatch
-    #[derive(Enum)]
-    pub enum Address {
-        /// Account address.
-        Account(AccountId),
-        /// Validator address.
-        Validator(AccountId),
-        /// Consensus address.
-        Consensus(AccountId),
-    }
-
-    impl TryFrom<Address> for RustAddress {
-        type Error = UniffiConversionError;
-
-        fn try_from(value: Address) -> Result<Self, Self::Error> {
-            Ok(match value {
-                Address::Account(id) => RustAddress::from(AccAddress { id: id.try_into()? }),
-                Address::Validator(id) => RustAddress::from(ValAddress { id: id.try_into()? }),
-                Address::Consensus(id) => RustAddress::from(ConsAddress { id: id.try_into()? }),
-            })
-        }
-    }
-
-    impl From<RustAddress> for Address {
-        fn from(value: RustAddress) -> Self {
-            match value {
-                RustAddress::AccAddress(v) => Address::Account(v.id.into()),
-                RustAddress::ValAddress(v) => Address::Validator(v.id.into()),
-                RustAddress::ConsAddress(v) => Address::Consensus(v.id.into()),
-            }
-        }
-    }
-
-    uniffi::custom_type!(RustAddress, Address);
+    uniffi::custom_type!(Address, String, {
+        remote,
+        try_lift: |address| Ok(address.parse()?),
+        lower: |address| format!("{address}")
+    });
 
     /// Account ID
-    #[derive(Record)]
+    #[derive(Record, Clone)]
     pub struct AccountId {
         /// id value
         pub id: Vec<u8>,

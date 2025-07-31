@@ -21,20 +21,26 @@ use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQuer
 use celestia_proto::cosmos::bank::v1beta1::query_client::QueryClient as BankQueryClient;
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
+use celestia_proto::cosmos::staking::v1beta1::query_client::QueryClient as StakingQueryClient;
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
 use celestia_types::blob::{BlobParams, MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::block::Block;
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
 use celestia_types::state::auth::{Account, AuthParams, BaseAccount};
-use celestia_types::state::{AbciQueryResponse, RawTxBody};
+use celestia_types::state::{
+    AbciQueryResponse, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
+    QueryUnbondingDelegationResponse, RawTxBody, ValAddress,
+};
 use celestia_types::state::{
     AccAddress, Address, AddressTrait, Coin, ErrorCode, TxResponse, BOND_DENOM,
 };
 use celestia_types::{AppVersion, Blob, ExtendedHeader};
 
-use crate::grpc::{TxStatus, TxStatusResponse, BroadcastMode, GetTxResponse, GasEstimate, TxPriority, GasInfo};
 use crate::abci_proofs::ProofChain;
+use crate::grpc::{
+    BroadcastMode, GasEstimate, GasInfo, GetTxResponse, TxPriority, TxStatus, TxStatusResponse,
+};
 use crate::signer::{sign_tx, FullSigner, KeypairExt};
 use crate::tx::TxInfo;
 use crate::{Error, Result, TxConfig};
@@ -230,6 +236,37 @@ where
     #[grpc_method(TxServiceClient::simulate)]
     async fn simulate(&self, tx_bytes: Vec<u8>) -> Result<GasInfo>;
 
+    // cosmos.staking
+
+    /// Retrieves the delegation information between a delegator and a validator
+    // TODO: Expose this to JS and  UniFFI
+    #[grpc_method(StakingQueryClient::delegation)]
+    async fn query_delegation(
+        &self,
+        delegator_address: &AccAddress,
+        validator_address: &ValAddress,
+    ) -> Result<QueryDelegationResponse>;
+
+    /// Retrieves the unbonding status between a delegator and a validator
+    // TODO: Expose this to JS and  UniFFI
+    #[grpc_method(StakingQueryClient::unbonding_delegation)]
+    async fn query_unbonding(
+        &self,
+        delegator_address: &AccAddress,
+        validator_address: &ValAddress,
+    ) -> Result<QueryUnbondingDelegationResponse>;
+
+    /// Retrieves the status of the redelegations between a delegator and a validator
+    // TODO: Expose this to JS and  UniFFI
+    #[grpc_method(StakingQueryClient::redelegations)]
+    async fn query_redelegations(
+        &self,
+        delegator_address: &AccAddress,
+        src_validator_address: &ValAddress,
+        dest_validator_address: &ValAddress,
+        pagination: Option<PageRequest>,
+    ) -> Result<QueryRedelegationsResponse>;
+
     // celestia.blob
 
     /// Get blob params
@@ -252,10 +289,11 @@ where
     #[grpc_method(GasEstimatorClient::estimate_gas_price)]
     async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64>;
 
-    /// Estimate gas price for transaction with given priority and estimate gas usage for
-    /// privded serialised transaction.
+    /// Estimate gas price for transaction with given priority and estimate gas usage
+    /// for the provided serialised transaction.
     ///
-    /// The gas price estimation is based on the gas prices of the transactions in the last five blocks.
+    /// The gas price estimation is based on the gas prices of the transactions
+    /// in the last five blocks.
     /// If no transaction is found in the last five blocks, return the network
     /// min gas price.
     ///
@@ -268,10 +306,6 @@ where
     ) -> Result<GasEstimate>;
 
     /// Submit given message to celestia network.
-    ///
-    /// When no gas price is specified through config, it will automatically
-    /// handle updating client's gas price when consensus updates minimal
-    /// gas price.
     ///
     /// # Example
     /// ```no_run
@@ -330,10 +364,6 @@ where
     }
 
     /// Submit given blobs to celestia network.
-    ///
-    /// When no gas price is specified through config, it will automatically
-    /// handle updating client's gas price when consensus updates minimal
-    /// gas price.
     ///
     /// # Example
     /// ```no_run

@@ -1,4 +1,22 @@
 # Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.13.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.12.0...celestia-types-v0.13.0) - 2025-07-29
+
+### Added
+
+- *(types)* [**breaking**] Add appconsts for v5 upgrade ([#705](https://github.com/eigerco/lumina/pull/705))
+- *(grpc)* [**breaking**] Expose entire GrpcClient API plus required type changes  ([#655](https://github.com/eigerco/lumina/pull/655))
+- *(grpc)* [**breaking**] Trustless balance queries ([#677](https://github.com/eigerco/lumina/pull/677))
+- *(grpc,types,node)* [**breaking**] Wasm grpc client ([#654](https://github.com/eigerco/lumina/pull/654))
+- *(grpc)* Streamline TxClient creation API, add docs with example ([#673](https://github.com/eigerco/lumina/pull/673))
+# Changelog
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

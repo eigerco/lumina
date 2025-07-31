@@ -7,28 +7,12 @@ use tonic::client::GrpcService;
 #[cfg(not(target_arch = "wasm32"))]
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 
-use crate::client::StdError;
 use crate::client::SignerBits;
+use crate::client::StdError;
 use crate::signer::FullSigner;
 use crate::GrpcClient;
-
 #[cfg(not(target_arch = "wasm32"))]
-#[derive(thiserror::Error, Debug)]
-pub enum GrpcClientBuilderError {
-    /// Error from tonic transport
-    #[error(transparent)]
-    TonicTransportError(#[from] tonic::transport::Error),
-
-    /// Error handling certificate root
-    #[error(transparent)]
-    Webpki(#[from] webpki::Error),
-
-    /// Could not import system certificates
-    #[error("Could not import platform certificates: {errors:?}")]
-    RustlsNativeCerts {
-        errors: Vec<rustls_native_certs::Error>,
-    },
-}
+use crate::GrpcClientBuilderError;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub struct NativeTransportBits {
@@ -197,12 +181,5 @@ where
     /// Build [`GrpcClient`]
     pub fn build(self) -> GrpcClient<T> {
         GrpcClient::new(self.transport_setup, self.signer_bits)
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl From<Vec<rustls_native_certs::Error>> for GrpcClientBuilderError {
-    fn from(errors: Vec<rustls_native_certs::Error>) -> Self {
-        GrpcClientBuilderError::RustlsNativeCerts { errors }
     }
 }

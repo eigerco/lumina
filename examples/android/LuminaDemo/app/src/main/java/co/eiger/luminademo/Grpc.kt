@@ -45,7 +45,6 @@ import kotlin.Result.Companion.failure
 
 // values that work with lumina docker ci setup
 const val TEST_CI_NODE_URL = "http://10.0.0.50:19090"
-const val TEST_CI_ADDRESS = "celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9"
 const val TEST_CI_SK_HEX = "393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839"
 const val TEST_CI_PK_HEX = "031e57072482b4344234163fdd5d46f95f2e02124a586016dcfc958d837f1c0b39"
 
@@ -55,7 +54,6 @@ const val TEST_CI_PK_HEX = "031e57072482b4344234163fdd5d46f95f2e02124a586016dcfc
 @Composable
 fun GrpcUi(modifier: Modifier = Modifier) {
     val url = rememberTextFieldState(initialText = TEST_CI_NODE_URL)
-    val address = rememberTextFieldState(initialText = TEST_CI_ADDRESS)
     val skHex = rememberTextFieldState(initialText = TEST_CI_SK_HEX)
     val pkHex = rememberTextFieldState(initialText = TEST_CI_PK_HEX)
 
@@ -73,12 +71,6 @@ fun GrpcUi(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth(),
             )
             TextField(
-                state = address,
-                label = { Text("Address") },
-                lineLimits = TextFieldLineLimits.SingleLine,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            TextField(
                 state = skHex,
                 label = { Text("Secret Key (Hex)") },
                 lineLimits = TextFieldLineLimits.SingleLine,
@@ -92,7 +84,7 @@ fun GrpcUi(modifier: Modifier = Modifier) {
             )
             Button(onClick = {
                 coroutineScope.launch(Dispatchers.Main) {
-                    Log.d("gRPC_TxClient", "Launching TxClient, params: url=${url.text}, address=${address.text}, skHex=${skHex.text}, pkHex=${pkHex.text}")
+                    Log.d("gRPC_TxClient", "Launching TxClient, params: url=${url.text}, skHex=${skHex.text}, pkHex=${pkHex.text}")
                     val url = url.text.toString()
                     try {
                         val skBytes = Hex.decode(skHex.text.toString())
@@ -102,7 +94,7 @@ fun GrpcUi(modifier: Modifier = Modifier) {
 
                         grpcClient = GrpcClientBuilder.create(url)
                             .withPubkeyAndSigner(accountPubkey = pkBytes, signer)
-                            .buildTxClient();
+                            .build();
                     } catch (e : Exception) {
                         error = "Error creating TxClient: ${e.message}"
                         Log.e("gRPC_TxClient", "Error creating TxClient: ${e.message}", e)

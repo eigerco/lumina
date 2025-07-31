@@ -24,7 +24,10 @@ pub type SignatureError = k256::ecdsa::signature::Error;
 /// Signer capable of producing ecdsa signature using secp256k1 curve.
 pub trait DocSigner {
     /// Try to sign the provided sign doc.
-    fn try_sign(&self, doc: SignDoc) -> impl Future<Output = Result<DocSignature, SignatureError>> + Send;
+    fn try_sign(
+        &self,
+        doc: SignDoc,
+    ) -> impl Future<Output = Result<DocSignature, SignatureError>> + Send;
 }
 
 impl<T> DocSigner for T
@@ -66,7 +69,9 @@ pub trait FullSigner: Send + Sync + 'static {
 }
 
 impl<T> FullSigner for T
-where T: DocSigner + Send + Sync + 'static {
+where
+    T: DocSigner + Send + Sync + 'static,
+{
     fn try_sign<'a>(
         &'a self,
         doc: SignDoc,

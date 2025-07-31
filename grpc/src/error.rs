@@ -89,6 +89,24 @@ pub enum Error {
     MissingKeysAndSinger,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(thiserror::Error, Debug)]
+pub enum GrpcClientBuilderError {
+    /// Error from tonic transport
+    #[error(transparent)]
+    TonicTransportError(#[from] tonic::transport::Error),
+
+    /// Error handling certificate root
+    #[error(transparent)]
+    Webpki(#[from] webpki::Error),
+
+    /// Could not import system certificates
+    #[error("Could not import platform certificates: {errors:?}")]
+    RustlsNativeCerts {
+        errors: Vec<rustls_native_certs::Error>,
+    },
+}
+
 impl From<Status> for Error {
     fn from(value: Status) -> Self {
         Error::TonicError(Box::new(value))
@@ -99,5 +117,12 @@ impl From<Status> for Error {
 impl From<Error> for wasm_bindgen::JsValue {
     fn from(error: Error) -> wasm_bindgen::JsValue {
         error.to_string().into()
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<Vec<rustls_native_certs::Error>> for GrpcClientBuilderError {
+    fn from(errors: Vec<rustls_native_certs::Error>) -> Self {
+        GrpcClientBuilderError::RustlsNativeCerts { errors }
     }
 }

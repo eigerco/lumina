@@ -38,7 +38,6 @@ class LuminaViewModel: ObservableObject {
             basePath: cacheDir,
             network: network,
             bootnodes: nil,
-            samplingWindowSecs: nil,
             pruningWindowSecs: nil,
             batchSize: nil,
             ed25519SecretKeyBytes: nil

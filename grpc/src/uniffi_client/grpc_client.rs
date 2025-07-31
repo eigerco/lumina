@@ -11,7 +11,7 @@ use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::hash::uniffi_types::UniffiHash;
 use celestia_types::state::auth::{Account, AuthParams};
-use celestia_types::state::{AbciQueryResponse, AccAddress, Address, Coin, TxResponse};
+use celestia_types::state::{AbciQueryResponse, Coin, TxResponse};
 use celestia_types::{AppVersion, Blob};
 use celestia_types::{ExtendedHeader, UniffiConversionError};
 
@@ -93,8 +93,8 @@ impl GrpcClient {
     }
 
     /// Get account
-    pub async fn get_account(&self, account: &AccAddress) -> Result<Account> {
-        Ok(self.client.get_account(account).await?)
+    pub async fn get_account(&self, account: &str) -> Result<Account> {
+        Ok(self.client.get_account(&account.parse()?).await?)
     }
 
     /// Get accounts
@@ -112,25 +112,31 @@ impl GrpcClient {
     /// `header` argument is a json encoded [`ExtendedHeader`]
     ///
     /// [`ExtendedHeader`]: https://docs.rs/celestia-types/latest/celestia_types/struct.ExtendedHeader.html
-    pub async fn get_verified_balance(&self, address: &Address, header: &str) -> Result<Coin> {
+    pub async fn get_verified_balance(&self, address: &str, header: &str) -> Result<Coin> {
         let header: ExtendedHeader = serde_json::from_str(header)
             .map_err(|e| GrpcClientError::UniffiConversionError { msg: e.to_string() })?;
-        Ok(self.client.get_verified_balance(address, &header).await?)
+        Ok(self
+            .client
+            .get_verified_balance(&address.parse()?, &header)
+            .await?)
     }
 
     /// Get balance of coins with given denom
-    pub async fn get_balance(&self, address: &Address, denom: String) -> Result<Coin> {
-        Ok(self.client.get_balance(address, denom).await?)
+    pub async fn get_balance(&self, address: &str, denom: String) -> Result<Coin> {
+        Ok(self.client.get_balance(&address.parse()?, denom).await?)
     }
 
     /// Get balance of all coins
-    pub async fn get_all_balances(&self, address: &Address) -> Result<Vec<Coin>> {
-        Ok(self.client.get_all_balances(address).await?)
+    pub async fn get_all_balances(&self, address: &str) -> Result<Vec<Coin>> {
+        Ok(self.client.get_all_balances(&address.parse()?).await?)
     }
 
     /// Get balance of all spendable coins
-    pub async fn get_spendable_balances(&self, address: &Address) -> Result<Vec<Coin>> {
-        Ok(self.client.get_spendable_balances(address).await?)
+    pub async fn get_spendable_balances(&self, address: &str) -> Result<Vec<Coin>> {
+        Ok(self
+            .client
+            .get_spendable_balances(&address.parse()?)
+            .await?)
     }
 
     /// Get total supply
@@ -139,17 +145,17 @@ impl GrpcClient {
     }
 
     /// Get Minimum Gas price
-    async fn get_min_gas_price(&self) -> Result<f64> {
+    pub async fn get_min_gas_price(&self) -> Result<f64> {
         Ok(self.client.get_min_gas_price().await?)
     }
 
     /// Get latest block
-    async fn get_latest_block(&self) -> Result<Block> {
+    pub async fn get_latest_block(&self) -> Result<Block> {
         Ok(self.client.get_latest_block().await?)
     }
 
     /// Get block by height
-    async fn get_block_by_height(&self, height: i64) -> Result<Block> {
+    pub async fn get_block_by_height(&self, height: i64) -> Result<Block> {
         Ok(self.client.get_block_by_height(height).await?)
     }
 
@@ -175,17 +181,17 @@ impl GrpcClient {
     }
 
     /// Broadcast prepared and serialised transaction
-    async fn simulate(&self, tx_bytes: Vec<u8>) -> Result<GasInfo> {
+    pub async fn simulate(&self, tx_bytes: Vec<u8>) -> Result<GasInfo> {
         Ok(self.client.simulate(tx_bytes).await?)
     }
 
     /// Get blob params
-    async fn get_blob_params(&self) -> Result<BlobParams> {
+    pub async fn get_blob_params(&self) -> Result<BlobParams> {
         Ok(self.client.get_blob_params().await?)
     }
 
     /// Get status of the transaction
-    async fn tx_status(&self, hash: UniffiHash) -> Result<TxStatusResponse> {
+    pub async fn tx_status(&self, hash: UniffiHash) -> Result<TxStatusResponse> {
         Ok(self.client.tx_status(hash.try_into()?).await?)
     }
 
@@ -288,11 +294,8 @@ pub fn proto_encode_sign_doc(sign_doc: SignDoc) -> Vec<u8> {
     sign_doc.encode_to_vec()
 }
 
-#[uniffi::export]
-pub fn parse_bech32_address(bech32_address: String) -> Result<Address> {
-    bech32_address
-        .parse()
-        .map_err(|e| GrpcClientError::InvalidAccountId {
-            msg: format!("{e}"),
-        })
+impl From<celestia_types::Error> for GrpcClientError {
+    fn from(value: celestia_types::Error) -> Self {
+        crate::Error::from(value).into()
+    }
 }

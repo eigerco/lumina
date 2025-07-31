@@ -54,6 +54,7 @@ static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     (".cosmos.base.tendermint.v1beta1.ProofOps", UNIFFI_RECORD),
     (".cosmos.base.v1beta1.Coin", SERIALIZED_DEFAULT),
     (".cosmos.base.query.v1beta1.PageResponse", SERIALIZED_DEFAULT),
+    (".cosmos.base.query.v1beta1.PageResponse", UNIFFI_RECORD),
     (".cosmos.staking.v1beta1.QueryDelegationResponse", SERIALIZED_DEFAULT),
     (".cosmos.staking.v1beta1.DelegationResponse", SERIALIZED_DEFAULT),
     (".cosmos.staking.v1beta1.Delegation", SERIALIZED_DEFAULT),
@@ -82,7 +83,7 @@ static CUSTOM_TYPE_ATTRIBUTES: &[(&str, &str)] = &[
     // Celestia's mods
     (".tendermint_celestia_mods.types.Block", SERIALIZED),
     (".tendermint_celestia_mods.types.Data", SERIALIZED),
-    (".tendermint_celestia_mods.abci.TimeoutsInfo", SERIALIZED),
+    (".tendermint_celestia_mods.abci.TimeoutInfo", SERIALIZED),
     (".tendermint_celestia_mods.abci.ResponseInfo", SERIALIZED),
 ];
 
@@ -130,7 +131,8 @@ static EXTERN_PATHS: &[(&str, &str)] = &[
     (".google.protobuf.Any", "::tendermint_proto::google::protobuf::Any"),
     (".google.protobuf.Duration", "::tendermint_proto::google::protobuf::Duration"),
     (".google.protobuf.Timestamp", "::tendermint_proto::google::protobuf::Timestamp"),
-    (".tendermint", "::tendermint_proto::v0_34"),
+    // Must be kept in sync with cometbft version
+    (".tendermint", "::tendermint_proto::v0_38"),
 ];
 
 const PROTO_FILES: &[&str] = &[
@@ -155,6 +157,7 @@ const PROTO_FILES: &[&str] = &[
     "vendor/cosmos/crypto/multisig/v1beta1/multisig.proto",
     "vendor/cosmos/crypto/secp256k1/keys.proto",
     "vendor/cosmos/staking/v1beta1/query.proto",
+    "vendor/cosmos/staking/v1beta1/tx.proto",
     "vendor/cosmos/tx/v1beta1/service.proto",
     "vendor/cosmos/tx/v1beta1/tx.proto",
     "vendor/go-header/p2p/pb/header_request.proto",
@@ -164,8 +167,9 @@ const PROTO_FILES: &[&str] = &[
     "vendor/share/shwap/p2p/bitswap/pb/bitswap.proto",
     "vendor/share/shwap/pb/shwap.proto",
     "vendor/tendermint-celestia-mods/abci/types.proto",
-    "vendor/tendermint-celestia-mods/blockchain/types.proto",
+    "vendor/tendermint-celestia-mods/blocksync/types.proto",
     "vendor/tendermint-celestia-mods/mempool/types.proto",
+    "vendor/tendermint-celestia-mods/rpc/grpc/types.proto",
     "vendor/tendermint-celestia-mods/state/types.proto",
     "vendor/tendermint-celestia-mods/store/types.proto",
     "vendor/tendermint-celestia-mods/types/block.proto",

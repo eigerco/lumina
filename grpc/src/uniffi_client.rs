@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
+use celestia_types::Hash;
 use k256::ecdsa::VerifyingKey;
 use uniffi::Object;
-use celestia_types::Hash;
 
 mod grpc_client;
 
@@ -153,20 +153,18 @@ impl GrpcClientBuilder {
     }
 }
 
-impl From<crate::builder::GrpcClientBuilderError> for GrpcClientBuilderError {
-    fn from(error: crate::builder::GrpcClientBuilderError) -> Self {
+impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
+    fn from(error: crate::GrpcClientBuilderError) -> Self {
         match error {
-            crate::builder::GrpcClientBuilderError::Webpki(error) => {
-                GrpcClientBuilderError::Webpki {
-                    msg: error.to_string(),
-                }
-            }
-            crate::builder::GrpcClientBuilderError::RustlsNativeCerts { errors } => {
+            crate::GrpcClientBuilderError::Webpki(error) => GrpcClientBuilderError::Webpki {
+                msg: error.to_string(),
+            },
+            crate::GrpcClientBuilderError::RustlsNativeCerts { errors } => {
                 GrpcClientBuilderError::RustlsNativeCerts {
                     errors: errors.into_iter().map(|e| e.to_string()).collect(),
                 }
             }
-            crate::builder::GrpcClientBuilderError::TonicTransportError(error) => {
+            crate::GrpcClientBuilderError::TonicTransportError(error) => {
                 GrpcClientBuilderError::TonicTransportError {
                     msg: error.to_string(),
                 }

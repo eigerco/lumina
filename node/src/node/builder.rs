@@ -18,12 +18,10 @@ const HOUR: u64 = 60 * 60;
 const DAY: u64 = 24 * HOUR;
 
 /// Default maximum age of blocks [`Node`] will synchronise, sample, and store.
-pub const DEFAULT_SAMPLING_WINDOW: Duration = Duration::from_secs(30 * DAY);
-/// Minimum configurable sampling window that can be used in [`NodeBuilder`].
-pub const MIN_SAMPLING_WINDOW: Duration = Duration::from_secs(60);
+pub const SAMPLING_WINDOW: Duration = Duration::from_secs(7 * DAY);
 
 /// Default maximum age of blocks before they get pruned.
-pub const DEFAULT_PRUNING_WINDOW: Duration = Duration::from_secs(30 * DAY + HOUR);
+pub const DEFAULT_PRUNING_WINDOW: Duration = Duration::from_secs(7 * DAY + HOUR);
 /// Default pruninig window for in-memory stores.
 pub const DEFAULT_PRUNING_WINDOW_IN_MEMORY: Duration = Duration::from_secs(0);
 
@@ -40,7 +38,6 @@ where
     bootnodes: Vec<Multiaddr>,
     listen: Vec<Multiaddr>,
     sync_batch_size: Option<u64>,
-    sampling_window: Option<Duration>,
     pruning_window: Option<Duration>,
 }
 
@@ -50,10 +47,6 @@ pub enum NodeBuilderError {
     /// Network is not specified
     #[error("Network is not specified")]
     NetworkNotSpecified,
-
-    /// Sampling window is smaller than [`MIN_SAMPLING_WINDOW`].
-    #[error("Sampling window is {0:?} but cannot be smaller than {MIN_SAMPLING_WINDOW:?}")]
-    SamplingWindowTooSmall(Duration),
 
     /// Builder failed to resolve dnsaddr multiaddresses for bootnodes
     #[error("Could not resolve any of the bootnode addresses")]
@@ -89,7 +82,6 @@ impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
             bootnodes: Vec::new(),
             listen: Vec::new(),
             sync_batch_size: None,
-            sampling_window: None,
             pruning_window: None,
         }
     }
@@ -136,7 +128,6 @@ where
             bootnodes: self.bootnodes,
             listen: self.listen,
             sync_batch_size: self.sync_batch_size,
-            sampling_window: self.sampling_window,
             pruning_window: self.pruning_window,
         }
     }
@@ -156,7 +147,6 @@ where
             bootnodes: self.bootnodes,
             listen: self.listen,
             sync_batch_size: self.sync_batch_size,
-            sampling_window: self.sampling_window,
             pruning_window: self.pruning_window,
         }
     }
@@ -213,19 +203,6 @@ where
         }
     }
 
-    /// Set sampling window.
-    ///
-    /// Sampling window defines maximum age of a block considered for syncing and sampling.
-    ///
-    /// **Default:** 30 days.\
-    /// **Minimum:** 60 seconds.
-    pub fn sampling_window(self, dur: Duration) -> Self {
-        NodeBuilder {
-            sampling_window: Some(dur),
-            ..self
-        }
-    }
-
     /// Set pruning window.
     ///
     /// Pruning window defines maximum age of a block for it to be retained in store.
@@ -235,7 +212,7 @@ where
     /// memory footprint but still validate the blockchain.
     ///
     /// **Default if [`InMemoryStore`]/[`InMemoryBlockstore`] are used:** 0 seconds.\
-    /// **Default:** 30 days plus 1 hour.\
+    /// **Default:** 7 days plus 1 hour.\
     pub fn pruning_window(self, dur: Duration) -> Self {
         NodeBuilder {
             pruning_window: Some(dur),
@@ -276,17 +253,8 @@ where
         // `Node` is memory hungry when in-memory stores are used and the user may not
         // expect they should set a smaller sampling window to reduce that. For user-friendliness
         // sake, use smaller default sampling window, if we're running in memory.
-        //
-        // If user implements their own in-memory stores then they are responsible
-        // to set the sampling window to something smaller than `DEFAULT_SAMPLING_WINDOW`.
         let in_memory_stores_used = TypeId::of::<S>() == TypeId::of::<InMemoryStore>()
             || TypeId::of::<B>() == TypeId::of::<InMemoryBlockstore>();
-
-        let sampling_window = self.sampling_window.unwrap_or(DEFAULT_SAMPLING_WINDOW);
-
-        if sampling_window < MIN_SAMPLING_WINDOW {
-            return Err(NodeBuilderError::SamplingWindowTooSmall(sampling_window));
-        }
 
         let pruning_window = if let Some(dur) = self.pruning_window {
             dur
@@ -296,7 +264,7 @@ where
             DEFAULT_PRUNING_WINDOW
         };
 
-        info!("Sampling window: {sampling_window:?}, Pruning window: {pruning_window:?}",);
+        info!("Sampling window: {SAMPLING_WINDOW:?}, Pruning window: {pruning_window:?}",);
 
         Ok(NodeConfig {
             blockstore: self.blockstore,
@@ -306,7 +274,7 @@ where
             p2p_bootnodes: bootnodes,
             p2p_listen_on: self.listen,
             sync_batch_size: self.sync_batch_size.unwrap_or(512),
-            sampling_window,
+            sampling_window: SAMPLING_WINDOW,
             pruning_window,
         })
     }

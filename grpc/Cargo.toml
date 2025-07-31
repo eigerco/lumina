@@ -1,6 +1,6 @@
 [package]
 name = "celestia-grpc"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "A client for interacting with Celestia validator nodes gRPC"
@@ -22,7 +22,7 @@ categories = [
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-celestia-grpc-macros = { version = "0.2.1", path = "grpc-macros" }
+celestia-grpc-macros = { version = "0.3.0", path = "grpc-macros" }
 celestia-proto = { workspace = true, features = ["tonic"] }
 celestia-types.workspace = true
 prost.workspace = true

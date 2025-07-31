@@ -2,27 +2,18 @@ syntax = "proto3";
 package tendermint_celestia_mods.state;
 
 import "gogoproto/gogo.proto";
-import "tendermint/abci/types.proto";
+import "tendermint/state/types.proto";
 import "tendermint/types/types.proto";
 import "tendermint/types/validator.proto";
 import "tendermint/types/params.proto";
-import "google/protobuf/timestamp.proto";
-
-import "tendermint/state/types.proto";
 import "tendermint-celestia-mods/abci/types.proto";
-
-// ABCIResponses retains the responses
-// of the various ABCI calls during block processing.
-// It is persisted to disk for each height before calling Commit.
-message ABCIResponses {
-  repeated tendermint.abci.ResponseDeliverTx deliver_txs = 1;
-  tendermint_celestia_mods.abci.ResponseEndBlock           end_block   = 2;
-  tendermint.abci.ResponseBeginBlock         begin_block = 3;
-}
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 message ABCIResponsesInfo {
-  ABCIResponses abci_responses = 1;
-  int64         height         = 2;
+  tendermint.state.LegacyABCIResponses                legacy_abci_responses   = 1;
+  int64                                               height                  = 2;
+  tendermint_celestia_mods.abci.ResponseFinalizeBlock response_finalize_block = 3;
 }
 
 message State {
@@ -62,5 +53,12 @@ message State {
   bytes app_hash = 13;
 
   // timeouts to be used for the next block height
-  tendermint_celestia_mods.abci.TimeoutsInfo timeouts = 15 [(gogoproto.nullable) = false];
+  TimeoutInfo timeout_info = 15 [(gogoproto.nullable) = false];
+}
+
+// TimeoutInfo represents the timeout info for the next block height
+// this is recreated from ABCI here as we had a proto merged registry issue in the app.
+message TimeoutInfo {
+  google.protobuf.Duration timeout_propose = 1 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+  google.protobuf.Duration timeout_commit  = 2 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
 }

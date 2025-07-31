@@ -19,7 +19,7 @@ async fn account_address() {
 async fn balance() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let balance = client.state_balance().await.unwrap();
-    assert_eq!(balance.denom, "utia");
+    assert_eq!(balance.denom(), "utia");
 }
 
 #[tokio::test]

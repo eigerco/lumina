@@ -47,11 +47,6 @@ pub(crate) struct Params {
     #[arg(long)]
     pub(crate) in_memory_store: bool,
 
-    /// Sampling window defines maximum age of a block considered for syncing and sampling.
-    #[arg(long)]
-    #[clap(value_parser = parse_duration::parse)]
-    pub(crate) sampling_window: Option<Duration>,
-
     /// Pruning window defines maximum age of a block for it to be retained in store.
     #[arg(long)]
     #[clap(value_parser = parse_duration::parse)]
@@ -69,10 +64,6 @@ pub(crate) async fn run(args: Params) -> Result<()> {
         .store(store)
         .blockstore(blockstore)
         .network(args.network.clone());
-
-    if let Some(sampling_window) = args.sampling_window {
-        node_builder = node_builder.sampling_window(sampling_window);
-    }
 
     if let Some(pruning_window) = args.pruning_window {
         node_builder = node_builder.pruning_window(pruning_window);

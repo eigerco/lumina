@@ -592,7 +592,7 @@ mod test {
     use super::*;
     use crate::blockstore::InMemoryBlockstore;
     use crate::events::{EventChannel, EventSubscriber, TryRecvError};
-    use crate::node::{DEFAULT_PRUNING_WINDOW, DEFAULT_SAMPLING_WINDOW};
+    use crate::node::{DEFAULT_PRUNING_WINDOW, SAMPLING_WINDOW};
     use crate::store::InMemoryStore;
     use crate::test_utils::{gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt};
     use lumina_utils::test_utils::async_test;
@@ -958,7 +958,7 @@ mod test {
             event_pub: events.publisher(),
             block_time: Duration::from_secs(1),
             pruning_window: DEFAULT_PRUNING_WINDOW,
-            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: SAMPLING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -989,7 +989,7 @@ mod test {
             event_pub: events.publisher(),
             block_time: Duration::from_secs(1),
             pruning_window: DEFAULT_PRUNING_WINDOW,
-            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: SAMPLING_WINDOW,
         });
 
         sleep(Duration::from_secs(1)).await;
@@ -1059,7 +1059,7 @@ mod test {
             event_pub: events.publisher(),
             block_time: Duration::from_secs(1),
             pruning_window: DEFAULT_PRUNING_WINDOW,
-            sampling_window: DEFAULT_SAMPLING_WINDOW,
+            sampling_window: SAMPLING_WINDOW,
         });
 
         assert_eq!(
