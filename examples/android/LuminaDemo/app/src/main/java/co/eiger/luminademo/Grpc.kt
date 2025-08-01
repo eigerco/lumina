@@ -28,6 +28,7 @@ import fr.acinq.secp256k1.Secp256k1
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import uniffi.celestia_grpc.GrpcClientBuilder
 import uniffi.celestia_grpc.TxClient
 import uniffi.celestia_grpc.TxInfo
 import uniffi.celestia_grpc.UniffiSignature
@@ -91,9 +92,9 @@ fun GrpcUi(modifier: Modifier = Modifier) {
 
                         val signer = StaticSigner(skBytes)
 
-                        grpcClient = TxClient.create(
-                            url = url, accountPubkey = pkBytes, signer
-                        )
+                        grpcClient = GrpcClientBuilder.create(url)
+                            .withPubkeyAndSigner(accountPubkey = pkBytes, signer)
+                            .build();
                     } catch (e : Exception) {
                         error = "Error creating TxClient: ${e.message}"
                         Log.e("gRPC_TxClient", "Error creating TxClient: ${e.message}", e)
