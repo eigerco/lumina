@@ -41,7 +41,7 @@ use crate::abci_proofs::ProofChain;
 use crate::grpc::{
     BroadcastMode, GasEstimate, GasInfo, GetTxResponse, TxPriority, TxStatus, TxStatusResponse,
 };
-use crate::signer::{sign_tx, FullSigner, KeypairExt};
+use crate::signer::{sign_tx, DispatchedDocSigner, KeypairExt};
 use crate::tx::TxInfo;
 use crate::{Error, Result, TxConfig};
 
@@ -61,7 +61,7 @@ struct AccountBits {
 }
 
 pub struct SignerBits {
-    pub(crate) signer: Box<dyn FullSigner>,
+    pub(crate) signer: DispatchedDocSigner,
 
     pub(crate) pubkey: VerifyingKey,
 }

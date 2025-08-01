@@ -1,4 +1,7 @@
-use std::future::Future;
+//! Types related to signing transactions
+
+use std::fmt;
+use std::future::{ready, Future};
 use std::pin::Pin;
 
 use ::tendermint::chain::Id;
@@ -18,25 +21,52 @@ use celestia_types::state::{
 use crate::client::SignerBits;
 use crate::Result;
 
+/// ECDSA/secp256k1 signature used for signing transactions
 pub type DocSignature = k256::ecdsa::Signature;
+/// Signature error
 pub type SignatureError = k256::ecdsa::signature::Error;
 
 /// Signer capable of producing ecdsa signature using secp256k1 curve.
-pub trait DocSigner {
+pub trait DocSigner: Send + Sync {
     /// Try to sign the provided sign doc.
     fn try_sign(
         &self,
         doc: SignDoc,
-    ) -> impl Future<Output = Result<DocSignature, SignatureError>> + Send;
+    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send>>;
 }
 
 impl<T> DocSigner for T
 where
     T: Signer<DocSignature> + Send + Sync,
 {
-    async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
+    fn try_sign(
+        &self,
+        doc: SignDoc,
+    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send>> {
         let bytes = doc.encode_to_vec();
-        self.try_sign(&bytes)
+        Box::pin(ready(self.try_sign(&bytes)))
+    }
+}
+
+/// Workaround for dispatching `DocSigner`
+pub struct DispatchedDocSigner(Box<dyn DocSigner>);
+
+impl DispatchedDocSigner {
+    pub fn new<S>(signer: S) -> DispatchedDocSigner
+    where
+        S: DocSigner + 'static,
+    {
+        DispatchedDocSigner(Box::new(signer))
+    }
+}
+
+impl DocSigner for DispatchedDocSigner {
+    //async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
+    fn try_sign(
+        &self,
+        doc: SignDoc,
+    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send>> {
+        Box::pin(self.0.try_sign(doc))
     }
 }
 
@@ -54,33 +84,11 @@ where
     }
 }
 
-pub trait FullSigner: Send + Sync + 'static {
-    fn try_sign<'a>(
-        &'a self,
-        doc: SignDoc,
-    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>>;
-    //) -> impl Future<Output = Result<DocSignature, SignatureError>> + Send;
-
-    //async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError>;
-
-    //fn verifying_key(&self) -> &VerifyingKey;
-
-    //fn address(&self) -> AccAddress { AccAddress::from(*self.verifying_key()) }
-}
-
-impl<T> FullSigner for T
-where
-    T: DocSigner + Send + Sync + 'static,
-{
-    fn try_sign<'a>(
-        &'a self,
-        doc: SignDoc,
-    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>> {
-        Box::pin(DocSigner::try_sign(self, doc))
+impl fmt::Debug for DispatchedDocSigner {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("DispatchedDocSigner { .. }")
     }
 }
-
-//pub(crate) type BoxedFullSigner = Box<dyn FullSigner + Send>;
 
 /// Sign `tx_body` and the transaction metadata as the `base_account` using `signer`
 pub async fn sign_tx(
@@ -88,7 +96,6 @@ pub async fn sign_tx(
     chain_id: Id,
     base_account: &BaseAccount,
     signer: &SignerBits,
-    //signer: BoxedFullSigner,
     gas_limit: u64,
     fee: u64,
 ) -> Result<RawTx> {
@@ -146,6 +153,7 @@ mod uniffi_types {
 
     use k256::ecdsa::signature::Error as K256Error;
     use std::sync::Arc;
+    use tendermint::signature::Secp256k1Signature;
     use uniffi::Record;
 
     /// Errors returned from [`GrpcClient`]
@@ -193,7 +201,8 @@ mod uniffi_types {
         async fn sign(&self, doc: SignDoc) -> Result<UniffiSignature, SigningError>;
     }
 
-    pub(crate) struct UniffiSignerBox(pub Arc<dyn UniffiSigner>);
+    /// Non-rust signer coming from uniffi
+    pub struct UniffiSignerBox(pub Arc<dyn UniffiSigner>);
 
     /// Message signature
     #[derive(Record)]
@@ -203,14 +212,30 @@ mod uniffi_types {
     }
 
     impl DocSigner for UniffiSignerBox {
-        async fn try_sign(
+        fn try_sign(
             &self,
             doc: SignDoc,
-        ) -> Result<tendermint::signature::Secp256k1Signature, K256Error> {
-            match self.0.sign(doc).await {
-                Ok(s) => s.try_into().map_err(K256Error::from_source),
+        ) -> Pin<Box<dyn Future<Output = Result<Secp256k1Signature, K256Error>> + Send>> {
+            /*
+            Box::new(
+                self.0.clone().sign(doc).map(|s| match s {
+                Ok(s) => Secp256k1Signature::try_from(s).map_err(K256Error::from_source),
                 Err(e) => Err(K256Error::from_source(e)),
-            }
+            }));
+            */
+            let signer = self.0.clone();
+            Box::pin(async move {
+                /*
+                signer.sign(doc).map(|s| match s {
+                    Ok(s) => Secp256k1Signature::try_from(s).map_err(K256Error::from_source),
+                    Err(e) => Err(K256Error::from_source(e)),
+                })
+                */
+                match signer.sign(doc).await {
+                    Ok(s) => Secp256k1Signature::try_from(s).map_err(K256Error::from_source),
+                    Err(e) => Err(K256Error::from_source(e)),
+                }
+            })
         }
     }
 

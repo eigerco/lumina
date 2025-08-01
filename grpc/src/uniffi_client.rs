@@ -15,8 +15,6 @@ pub use grpc_client::GrpcClient;
 
 type RustBuilder = crate::builder::GrpcClientBuilder<NativeTransportBits>;
 
-uniffi::use_remote_type!(celestia_types::Hash);
-
 /// Errors returned when building Grpc Client
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum GrpcClientBuilderError {

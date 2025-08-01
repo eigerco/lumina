@@ -10,9 +10,9 @@ use crate::abci_proofs::ProofError;
 /// [`celestia_grpc::Error`]: crate::Error
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-/// Representation of all the errors that can occur when interacting with [`celestia_grpc`].
+/// Representation of all the errors that can occur when interacting with [`GrpcClient`].
 ///
-/// [`celestia_grpc`]: crate
+/// [`GrpcClient`]: crate::GrpcClient
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Tonic error
@@ -89,6 +89,11 @@ pub enum Error {
     MissingKeysAndSinger,
 }
 
+/// Representation of all the errors that can occur when building [`GrpcClient`] using
+/// [`GrpcClientBuilder`]
+///
+/// [`GrpcClient`]: crate::GrpcClient
+/// [`GrpcClientBuilder`]: crate::GrpcClientBuilder
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(thiserror::Error, Debug)]
 pub enum GrpcClientBuilderError {
@@ -103,6 +108,7 @@ pub enum GrpcClientBuilderError {
     /// Could not import system certificates
     #[error("Could not import platform certificates: {errors:?}")]
     RustlsNativeCerts {
+        /// List of errors
         errors: Vec<rustls_native_certs::Error>,
     },
 }

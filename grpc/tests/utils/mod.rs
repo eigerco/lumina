@@ -108,7 +108,7 @@ mod imp {
 mod imp {
     use std::future::Future;
 
-    use celestia_grpc::{GrpcClient, TxClient};
+    use celestia_grpc::GrpcClient;
     use celestia_rpc::Client as RpcClient;
     use tokio::sync::oneshot;
     use tonic_web_wasm_client::Client;
@@ -127,7 +127,7 @@ mod imp {
         RpcClient::new(CELESTIA_RPC_URL).await.unwrap()
     }
 
-    pub async fn new_tx_client() -> ((), TxClient<Client, SigningKey>) {
+    pub async fn new_tx_client() -> ((), GrpcClient<Client>) {
         let creds = load_account();
         let client = GrpcClientBuilder::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL)
             .with_signer_keypair(creds.signing_key)

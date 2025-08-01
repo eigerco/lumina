@@ -1,5 +1,8 @@
 //! Types and client for the celestia grpc
 
+#[cfg(feature = "uniffi")]
+use celestia_types::Hash;
+
 use crate::Result;
 
 // cosmos.auth
@@ -28,6 +31,9 @@ pub use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 pub use crate::grpc::cosmos_tx::JsBroadcastMode;
+
+#[cfg(feature = "uniffi")]
+uniffi::use_remote_type!(celestia_types::Hash);
 
 pub(crate) trait FromGrpcResponse<T> {
     fn try_from_response(self) -> Result<T>;

@@ -9,7 +9,8 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 
 use crate::client::SignerBits;
 use crate::client::StdError;
-use crate::signer::FullSigner;
+use crate::signer::DispatchedDocSigner;
+use crate::DocSigner;
 use crate::GrpcClient;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::GrpcClientBuilderError;
@@ -105,15 +106,18 @@ impl<T> GrpcClientBuilder<T> {
     }
 
     /// Add signer and a public key
-    pub fn with_pubkey_and_signer<S: FullSigner>(
+    pub fn with_pubkey_and_signer<S>(
         self,
         account_pubkey: VerifyingKey,
         signer: S,
-    ) -> GrpcClientBuilder<T> {
+    ) -> GrpcClientBuilder<T>
+    where
+        S: DocSigner + 'static,
+    {
         GrpcClientBuilder {
             transport_setup: self.transport_setup,
             signer_bits: Some(SignerBits {
-                signer: Box::new(signer),
+                signer: DispatchedDocSigner::new(signer),
                 pubkey: account_pubkey,
             }),
         }
@@ -122,13 +126,13 @@ impl<T> GrpcClientBuilder<T> {
     /// Add signer and associated public key
     pub fn with_signer_keypair<S>(self, signer: S) -> GrpcClientBuilder<T>
     where
-        S: FullSigner + Keypair<VerifyingKey = VerifyingKey>,
+        S: DocSigner + Keypair<VerifyingKey = VerifyingKey> + 'static,
     {
         let pubkey = signer.verifying_key();
         GrpcClientBuilder {
             transport_setup: self.transport_setup,
             signer_bits: Some(SignerBits {
-                signer: Box::new(signer),
+                signer: DispatchedDocSigner::new(signer),
                 pubkey,
             }),
         }
@@ -137,6 +141,7 @@ impl<T> GrpcClientBuilder<T> {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl GrpcClientBuilder<NativeTransportBits> {
+    /// Build [`GrpcClient`]
     pub fn build(self) -> Result<GrpcClient<Channel>, GrpcClientBuilderError> {
         let mut tls_config = ClientTlsConfig::new();
 
