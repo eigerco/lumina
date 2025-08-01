@@ -265,10 +265,8 @@ mod wbg {
                 signer_fn: SendWrapper::new(function),
             }
         }
-    }
 
-    impl DocSigner for JsSigner {
-        async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
+        async fn js_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
             let msg = JsSignDoc::from(doc);
 
             let mut res = self.signer_fn.call1(&JsValue::null(), &msg).map_err(|e| {
@@ -297,13 +295,9 @@ mod wbg {
         }
     }
 
-    impl FullSigner for JsSigner {
-        fn try_sign<'a>(
-            &'a self,
-            doc: SignDoc,
-        ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>>
-        {
-            Box::pin(SendWrapper::new(DocSigner::try_sign(self, doc)))
+    impl DocSigner for JsSigner {
+        async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
+            SendWrapper::new(self.js_sign(doc)).await
         }
     }
 
