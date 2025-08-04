@@ -135,6 +135,12 @@ static EXTERN_PATHS: &[(&str, &str)] = &[
     (".tendermint", "::tendermint_proto::v0_38"),
 ];
 
+const DISABLE_COMMENTS: &[&str] = &[
+    // Comment there contains a link to another class in proto.style. Once we convert it to
+    // rust comment rustdoc expect rust::style class path, breaking cargo doc check.
+    "google.api.Http",
+];
+
 const PROTO_FILES: &[&str] = &[
     "vendor/celestia/blob/v1/params.proto",
     "vendor/celestia/blob/v1/query.proto",
@@ -211,6 +217,8 @@ fn prost_build(fds: FileDescriptorSet) {
         config.extern_path(proto_path, rust_path);
     }
 
+    config.disable_comments(DISABLE_COMMENTS);
+
     config
         .include_file("mod.rs")
         .enable_type_names()
@@ -223,6 +231,8 @@ fn prost_build(fds: FileDescriptorSet) {
 fn tonic_build(fds: FileDescriptorSet) {
     let mut prost_config = prost_build::Config::new();
     prost_config.enable_type_names();
+
+    prost_config.disable_comments(DISABLE_COMMENTS);
 
     let mut tonic_config = tonic_build::configure()
         .include_file("mod.rs")
