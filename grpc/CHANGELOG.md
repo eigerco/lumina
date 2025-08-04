@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.5.0...celestia-grpc-v0.6.0) - 2025-08-04
+
+### Added
+
+- *(proto,types)* [**breaking**] Update protos and switch to tendermint v0.38 ([#707](https://github.com/eigerco/lumina/pull/707))
+- [**breaking**] Implement `celestia-client` crate ([#682](https://github.com/eigerco/lumina/pull/682))
+
 ## [0.5.0](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.4.1...celestia-grpc-v0.5.0) - 2025-07-29
 
 ### Added

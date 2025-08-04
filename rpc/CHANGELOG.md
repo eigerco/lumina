@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.11.3...celestia-rpc-v0.12.0) - 2025-08-04
+
+### Added
+
+- [**breaking**] Implement `celestia-client` crate ([#682](https://github.com/eigerco/lumina/pull/682))
+
 ## [0.11.3](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.11.2...celestia-rpc-v0.11.3) - 2025-07-29
 
 ### Other
