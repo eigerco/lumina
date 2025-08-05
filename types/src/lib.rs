@@ -17,7 +17,7 @@ pub mod evidence;
 mod extended_header;
 pub mod fraud_proof;
 pub mod hash;
-pub mod height;
+mod height;
 mod merkle_proof;
 pub mod nmt;
 #[cfg(feature = "p2p")]
@@ -52,6 +52,7 @@ pub use crate::eds::{AxisType, ExtendedDataSquare};
 pub use crate::error::*;
 pub use crate::extended_header::*;
 pub use crate::fraud_proof::FraudProof;
+pub use crate::height::TryIntoHeight;
 pub use crate::merkle_proof::MerkleProof;
 pub use crate::share::*;
 pub use crate::sync::*;
