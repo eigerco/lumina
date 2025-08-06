@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use celestia_types::Hash;
 use k256::ecdsa::VerifyingKey;
 use uniffi::Object;
 
