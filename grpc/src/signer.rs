@@ -286,6 +286,7 @@ mod wbg {
     }
 
     impl JsSigner {
+        /// Create a new signer out of a function
         pub fn new(function: JsSignerFn) -> Self {
             Self {
                 signer_fn: SendWrapper::new(function),
@@ -349,21 +350,29 @@ mod wbg {
 
     #[wasm_bindgen]
     extern "C" {
+        /// A function that produces a signature of a payload
         #[wasm_bindgen(extends = Function, typescript_type = "SignerFn")]
         pub type JsSignerFn;
 
+        /// Payload that is being signed
         #[wasm_bindgen(typescript_type = "SignDoc")]
         pub type JsSignDoc;
 
+        /// Protobuf serialisation of TxBody, that matches the
+        /// representation in TxRaw
         #[wasm_bindgen(method, getter, js_name = bodyBytes)]
         pub fn body_bytes(this: &JsSignDoc) -> Vec<u8>;
 
+        /// Protobuf serialisation of AuthInfo that matches the representation
+        /// in TxRaw.
         #[wasm_bindgen(method, getter, js_name = authInfoBytes)]
         pub fn auth_info_bytes(this: &JsSignDoc) -> Vec<u8>;
 
+        /// Identifier of the chain the signed transaction targets
         #[wasm_bindgen(method, getter, js_name = chainId)]
         pub fn chain_id(this: &JsSignDoc) -> String;
 
+        /// Account number of the account in state
         #[wasm_bindgen(method, getter, js_name = accountNumber)]
         pub fn account_number(this: &JsSignDoc) -> u64;
     }

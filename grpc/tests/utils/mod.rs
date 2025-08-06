@@ -120,7 +120,9 @@ mod imp {
     pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
 
     pub fn new_grpc_client() -> GrpcClient<Client> {
-        GrpcClientBuilder::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL).build().unwrap()
+        GrpcClientBuilder::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL)
+            .build()
+            .unwrap()
     }
 
     pub async fn new_rpc_client() -> RpcClient {
