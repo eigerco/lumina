@@ -11,9 +11,12 @@ use celestia_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQuer
 use celestia_proto::cosmos::bank::v1beta1::query_client::QueryClient as BankQueryClient;
 pub use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
 use celestia_proto::cosmos::base::node::v1beta1::service_client::ServiceClient as ConfigServiceClient;
+use celestia_proto::cosmos::base::node::v1beta1::ConfigResponse;
 use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient;
 use celestia_proto::cosmos::staking::v1beta1::query_client::QueryClient as StakingQueryClient;
 use celestia_proto::cosmos::tx::v1beta1::service_client::ServiceClient as TxServiceClient;
+use celestia_proto::tendermint_celestia_mods::rpc::grpc::block_api_client::BlockApiClient;
+use celestia_proto::tendermint_celestia_mods::rpc::grpc::StatusResponse;
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::consts::appconsts;
@@ -50,6 +53,8 @@ mod celestia_tx;
 mod blob;
 // cosmos.tx
 mod cosmos_tx;
+// tendermint.rpc.grpc
+mod tendermint_rpc;
 
 pub use crate::grpc::celestia_tx::{TxStatus, TxStatusResponse};
 pub use crate::grpc::cosmos_tx::{BroadcastMode, GetTxResponse};
@@ -176,9 +181,24 @@ where
 
     // cosmos.base.node
 
-    /// Get Minimum Gas price
+    /// Get node's minimum gas price
     #[grpc_method(ConfigServiceClient::config)]
     async fn get_min_gas_price(&self) -> Result<f64>;
+
+    /// Get node's config
+    #[grpc_method(ConfigServiceClient::config)]
+    async fn get_node_config(&self) -> Result<ConfigResponse>;
+
+    // tendermint.rpc.grpc
+    // TODO: expose all api's from this module
+
+    /// Get node's status
+    ///
+    /// Please note that this uses `tendermint.rpc.grpc.BlockAPI` from
+    /// `celestia-core` fork of commetbft rather than `cosmos.base.node.v1beta1.Service`
+    /// to get more celestia specific info.
+    #[grpc_method(BlockApiClient::status)]
+    async fn get_node_status(&self) -> Result<StatusResponse>;
 
     // cosmos.base.tendermint
 
@@ -320,7 +340,7 @@ pub(crate) trait IntoGrpcParam<T> {
 
 macro_rules! make_empty_params {
     ($request_type:ident) => {
-        impl crate::grpc::IntoGrpcParam<$request_type> for () {
+        impl $crate::grpc::IntoGrpcParam<$request_type> for () {
             fn into_parameter(self) -> $request_type {
                 $request_type {}
             }
@@ -328,4 +348,15 @@ macro_rules! make_empty_params {
     };
 }
 
+macro_rules! make_response_identity {
+    ($response_type:ident) => {
+        impl $crate::grpc::FromGrpcResponse<$response_type> for $response_type {
+            fn try_from_response(self) -> $crate::Result<$response_type> {
+                Ok(self)
+            }
+        }
+    };
+}
+
 pub(crate) use make_empty_params;
+pub(crate) use make_response_identity;

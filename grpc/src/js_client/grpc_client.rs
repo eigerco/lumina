@@ -1,5 +1,6 @@
 use wasm_bindgen::prelude::*;
 
+use celestia_proto::tendermint_celestia_mods::rpc::grpc::StatusResponse;
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::state::auth::{JsAuthParams, JsBaseAccount};
@@ -107,9 +108,18 @@ impl GrpcClient {
             .collect())
     }
 
-    /// Get Minimum Gas price
+    /// Get node's minimum gas price
     pub async fn get_min_gas_price(&self) -> Result<f64> {
         self.client.get_min_gas_price().await
+    }
+
+    /// Get node's status
+    ///
+    /// Please note that this uses `tendermint.rpc.grpc.BlockAPI` from
+    /// `celestia-core` fork of commetbft rather than `cosmos.base.node.v1beta1.Service`
+    /// to get more celestia specific info.
+    pub async fn get_node_status(&self) -> Result<StatusResponse> {
+        self.client.get_node_status().await
     }
 
     /// Get latest block

@@ -1,6 +1,6 @@
 use celestia_proto::cosmos::base::node::v1beta1::{ConfigRequest, ConfigResponse};
 
-use crate::grpc::{make_empty_params, FromGrpcResponse};
+use crate::grpc::{make_empty_params, make_response_identity, FromGrpcResponse};
 use crate::{Error, Result};
 
 impl FromGrpcResponse<f64> for ConfigResponse {
@@ -18,5 +18,7 @@ impl FromGrpcResponse<f64> for ConfigResponse {
         Ok(min_gas_price)
     }
 }
+
+make_response_identity!(ConfigResponse);
 
 make_empty_params!(ConfigRequest);
