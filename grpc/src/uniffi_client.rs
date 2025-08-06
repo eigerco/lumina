@@ -80,7 +80,6 @@ impl GrpcClientBuilder {
         let vk = VerifyingKey::from_sec1_bytes(&account_pubkey)
             .map_err(|e| GrpcClientBuilderError::InvalidAccountPublicKey { msg: e.to_string() })?;
 
-        //Ok(Self { inner: self.inner.with_pubkey_and_signer(vk, todo!()) //signer) })
         Ok(GrpcClientBuilder {
             url: self.url.clone(),
             signer: Some(signer),

@@ -159,7 +159,7 @@ mod uniffi_types {
 
     /// Errors returned from [`GrpcClient`]
     #[derive(Debug, thiserror::Error, uniffi::Error)]
-    pub enum SigningError {
+    pub enum SignerError {
         /// Error during uniffi types conversion
         #[error("uniffi conversion error: {msg}")]
         UniffiConversionError {
@@ -199,7 +199,7 @@ mod uniffi_types {
     pub trait UniffiSigner: Sync + Send {
         /// sign provided `SignDoc` using secp256k1. Use helper proto_encode_sign_doc to
         /// get canonical protobuf byte encoding of the message.
-        async fn sign(&self, doc: SignDoc) -> Result<UniffiSignature, SigningError>;
+        async fn sign(&self, doc: SignDoc) -> Result<UniffiSignature, SignerError>;
     }
 
     /// Non-rust signer coming from uniffi
@@ -217,21 +217,8 @@ mod uniffi_types {
             &self,
             doc: SignDoc,
         ) -> Pin<Box<dyn Future<Output = Result<Secp256k1Signature, K256Error>> + Send>> {
-            /*
-            Box::new(
-                self.0.clone().sign(doc).map(|s| match s {
-                Ok(s) => Secp256k1Signature::try_from(s).map_err(K256Error::from_source),
-                Err(e) => Err(K256Error::from_source(e)),
-            }));
-            */
             let signer = self.0.clone();
             Box::pin(async move {
-                /*
-                signer.sign(doc).map(|s| match s {
-                    Ok(s) => Secp256k1Signature::try_from(s).map_err(K256Error::from_source),
-                    Err(e) => Err(K256Error::from_source(e)),
-                })
-                */
                 match signer.sign(doc).await {
                     Ok(s) => Secp256k1Signature::try_from(s).map_err(K256Error::from_source),
                     Err(e) => Err(K256Error::from_source(e)),
@@ -249,10 +236,10 @@ mod uniffi_types {
     }
 
     impl TryFrom<UniffiSignature> for DocSignature {
-        type Error = SigningError;
+        type Error = SignerError;
 
         fn try_from(value: UniffiSignature) -> std::result::Result<Self, Self::Error> {
-            DocSignature::from_slice(&value.bytes).map_err(|e| SigningError::SigningError {
+            DocSignature::from_slice(&value.bytes).map_err(|e| SignerError::SigningError {
                 msg: format!("invalid signature {e}"),
             })
         }

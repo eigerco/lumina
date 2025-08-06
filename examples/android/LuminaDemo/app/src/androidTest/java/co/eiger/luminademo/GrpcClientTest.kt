@@ -13,7 +13,8 @@ const val GRPC_URL = "http://10.0.2.2:19090"
 class GrpcClientTest {
     @Test
     fun getMinGasPrice() = runTest {
-        val grpc = GrpcClientBuilder.create(GRPC_URL).buildClient()
+        val grpc = GrpcClientBuilder.
+            withUrl(GRPC_URL).buildClient()
         val minGasPrice = grpc.getMinGasPrice()
         assert(minGasPrice > 0)
     }
