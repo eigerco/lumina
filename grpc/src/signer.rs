@@ -52,6 +52,7 @@ where
 pub struct DispatchedDocSigner(Box<dyn DocSigner>);
 
 impl DispatchedDocSigner {
+    /// Create a new signer
     pub fn new<S>(signer: S) -> DispatchedDocSigner
     where
         S: DocSigner + 'static,

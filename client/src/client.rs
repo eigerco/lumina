@@ -267,11 +267,9 @@ impl ClientBuilder {
         let (pubkey, grpc) = match (&self.grpc_url, signer) {
             (Some(url), Some((pubkey, signer))) => {
                 #[cfg(not(target_arch = "wasm32"))]
-                //let tx_client = TxClient::with_url(url, pubkey, signer).await?;
                 let builder = GrpcClientBuilder::with_url(url).with_native_roots();
 
                 #[cfg(target_arch = "wasm32")]
-                //let tx_client = TxClient::with_grpcweb_url(url, pubkey, signer).await?;
                 let builder = GrpcClientBuilder::with_grpcweb_url(url);
 
                 let client = builder.with_pubkey_and_signer(pubkey, signer).build()?;

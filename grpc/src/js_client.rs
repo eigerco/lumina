@@ -91,6 +91,10 @@ impl GrpcClientBuilder {
     /// build gRPC read-only client. If you need to send messages, use [`build_tx_client`]
     #[wasm_bindgen(js_name = build)]
     pub async fn build(self) -> Result<GrpcClient> {
-        Ok(self.inner.build().into())
+        Ok(self
+            .inner
+            .build()
+            .expect("client creation successful")
+            .into())
     }
 }

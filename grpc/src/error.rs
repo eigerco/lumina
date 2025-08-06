@@ -94,18 +94,20 @@ pub enum Error {
 ///
 /// [`GrpcClient`]: crate::GrpcClient
 /// [`GrpcClientBuilder`]: crate::GrpcClientBuilder
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(thiserror::Error, Debug)]
 pub enum GrpcClientBuilderError {
     /// Error from tonic transport
     #[error(transparent)]
+    #[cfg(not(target_arch = "wasm32"))]
     TonicTransportError(#[from] tonic::transport::Error),
 
     /// Error handling certificate root
     #[error(transparent)]
+    #[cfg(not(target_arch = "wasm32"))]
     Webpki(#[from] webpki::Error),
 
     /// Could not import system certificates
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("Could not import platform certificates: {errors:?}")]
     RustlsNativeCerts {
         /// List of errors

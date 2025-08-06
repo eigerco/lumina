@@ -15,7 +15,6 @@ mod utils;
 
 pub use crate::builder::GrpcClientBuilder;
 pub use crate::client::GrpcClient;
-#[cfg(not(target_arch = "wasm32"))]
 pub use crate::error::GrpcClientBuilderError;
 pub use crate::error::{Error, Result};
 pub use crate::signer::DocSigner;

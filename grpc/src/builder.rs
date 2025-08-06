@@ -12,7 +12,6 @@ use crate::client::StdError;
 use crate::signer::DispatchedDocSigner;
 use crate::DocSigner;
 use crate::GrpcClient;
-#[cfg(not(target_arch = "wasm32"))]
 use crate::GrpcClientBuilderError;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -184,7 +183,7 @@ where
     <T::ResponseBody as Body>::Error: Into<StdError> + Send,
 {
     /// Build [`GrpcClient`]
-    pub fn build(self) -> GrpcClient<T> {
-        GrpcClient::new(self.transport_setup, self.signer_bits)
+    pub fn build(self) -> Result<GrpcClient<T>, GrpcClientBuilderError> {
+        Ok(GrpcClient::new(self.transport_setup, self.signer_bits))
     }
 }
