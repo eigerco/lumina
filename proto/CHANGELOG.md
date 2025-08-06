@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.8.0...celestia-proto-v0.9.0) - 2025-08-06
+
+### Added
+
+- *(proto,types)* [**breaking**] Update protos and switch to tendermint v0.38 ([#707](https://github.com/eigerco/lumina/pull/707))
+- [**breaking**] Implement `celestia-client` crate ([#682](https://github.com/eigerco/lumina/pull/682))
+
+### Fixed
+
+- *(proto,docs)* Sanitise google.api comments from protobuf before passing them to rustdoc ([#717](https://github.com/eigerco/lumina/pull/717))
+- *(doc)* Fix incorrectly concatenated changelogs ([#713](https://github.com/eigerco/lumina/pull/713))
+
 ## [0.8.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.7.2...celestia-proto-v0.8.0) - 2025-07-29
 
 ### Added
