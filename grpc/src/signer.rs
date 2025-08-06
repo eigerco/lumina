@@ -290,39 +290,41 @@ mod wbg {
                 signer_fn: SendWrapper::new(function),
             }
         }
-
-        async fn js_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
-            let msg = JsSignDoc::from(doc);
-
-            let mut res = self.signer_fn.call1(&JsValue::null(), &msg).map_err(|e| {
-                let err = format!("Error calling signer fn: {e:?}");
-                SignatureError::from_source(err)
-            })?;
-
-            // if signer_fn is async, await it
-            if res.has_type::<Promise>() {
-                let promise = res.unchecked_into::<Promise>();
-                res = JsFuture::from(promise).await.map_err(|e| {
-                    let err = format!("Error awaiting signer promise: {e:?}");
-                    SignatureError::from_source(err)
-                })?
-            }
-
-            let sig = res.dyn_into::<Uint8Array>().map_err(|orig| {
-                let err = format!(
-                    "Signature must be Uint8Array, found: {}",
-                    orig.js_typeof().as_string().expect("typeof returns string")
-                );
-                SignatureError::from_source(err)
-            })?;
-
-            DocSignature::from_slice(&sig.to_vec()).map_err(SignatureError::from_source)
-        }
     }
 
     impl DocSigner for JsSigner {
-        async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
-            SendWrapper::new(self.js_sign(doc)).await
+        fn try_sign(
+            &self,
+            doc: SignDoc,
+        ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send>> {
+            let msg = JsSignDoc::from(doc);
+            let signer_fn = self.signer_fn.clone();
+
+            Box::pin(SendWrapper::new(async move {
+                let mut res = signer_fn.call1(&JsValue::null(), &msg).map_err(|e| {
+                    let err = format!("Error calling signer fn: {e:?}");
+                    SignatureError::from_source(err)
+                })?;
+
+                // if signer_fn is async, await it
+                if res.has_type::<Promise>() {
+                    let promise = res.unchecked_into::<Promise>();
+                    res = JsFuture::from(promise).await.map_err(|e| {
+                        let err = format!("Error awaiting signer promise: {e:?}");
+                        SignatureError::from_source(err)
+                    })?
+                }
+
+                let sig = res.dyn_into::<Uint8Array>().map_err(|orig| {
+                    let err = format!(
+                        "Signature must be Uint8Array, found: {}",
+                        orig.js_typeof().as_string().expect("typeof returns string")
+                    );
+                    SignatureError::from_source(err)
+                })?;
+
+                DocSignature::from_slice(&sig.to_vec()).map_err(SignatureError::from_source)
+            }))
         }
     }
 
