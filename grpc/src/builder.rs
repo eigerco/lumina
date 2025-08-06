@@ -21,7 +21,7 @@ pub struct NativeTransportBits {
     load_webpki_roots: bool,
 }
 
-/// Builder for [`GrpcClient`] and [`TxClient`]
+/// Builder for [`GrpcClient`]
 pub struct GrpcClientBuilder<T> {
     transport_setup: T,
     signer_bits: Option<SignerBits>,

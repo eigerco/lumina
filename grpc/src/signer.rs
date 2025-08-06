@@ -157,7 +157,7 @@ mod uniffi_types {
     use tendermint::signature::Secp256k1Signature;
     use uniffi::Record;
 
-    /// Errors returned from [`GrpcClient`]
+    /// Errors returned from [`UniffiSigner`]
     #[derive(Debug, thiserror::Error, uniffi::Error)]
     pub enum SignerError {
         /// Error during uniffi types conversion

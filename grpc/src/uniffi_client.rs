@@ -46,7 +46,7 @@ pub enum GrpcClientBuilderError {
     },
 }
 
-/// Builder for creating either read [`GrpcClient`] or message sending capable [`TxClient`]
+/// Builder for [`GrpcClient`]
 #[derive(Object)]
 pub struct GrpcClientBuilder {
     url: String,
