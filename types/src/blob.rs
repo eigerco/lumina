@@ -95,7 +95,7 @@ impl Blob {
     ///     }"#},
     /// );
     /// ```
-    pub fn new(namespace: Namespace, data: Vec<u8>, app_version: AppVersion) -> Result<Blob> {
+    pub fn new(namespace: Namespace, data: Vec<u8>, app_version: AppVersion, signer: Option<AppVersion>) -> Result<Blob> {
         let share_version = appconsts::SHARE_VERSION_ZERO;
         let commitment =
             Commitment::from_blob(namespace, &data[..], share_version, None, app_version)?;
@@ -106,7 +106,7 @@ impl Blob {
             share_version,
             commitment,
             index: None,
-            signer: None,
+            signer,
         })
     }
 
