@@ -17,7 +17,7 @@ async fn submit_blob() {
 
     // create a blob that you want to submit
     let my_namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
-    let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), AppVersion::V2)
+    let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), None,  AppVersion::V2)
         .expect("Failed to create a blob");
 
     // submit it

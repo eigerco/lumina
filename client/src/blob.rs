@@ -45,7 +45,7 @@ impl BlobApi {
     ///     .await?;
     ///
     /// let ns = Namespace::new_v0(b"abcd").unwrap();
-    /// let blob = Blob::new(ns, "some data".into(), AppVersion::V3).unwrap();
+    /// let blob = Blob::new(ns, "some data".into(), None, AppVersion::V3).unwrap();
     ///
     /// client.blob().submit(&[blob], TxConfig::default()).await?;
     /// # Ok(())
@@ -176,10 +176,10 @@ mod tests {
 
         let ns = Namespace::new_v0(b"mydata").unwrap();
 
-        let blob = Blob::new_with_signer(
+        let blob = Blob::new(
             ns,
             b"some data to store".to_vec(),
-            client.address().unwrap(),
+            Some(client.address().unwrap()),
             AppVersion::V3,
         )
         .unwrap();
