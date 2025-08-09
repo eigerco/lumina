@@ -518,7 +518,7 @@ mod tests {
         let rpc_client = Client::new(WS_URL).await.unwrap();
         let namespace = Namespace::new_v0(&[0xCD, 0xDC, 0xCD, 0xDC, 0xCD, 0xDC]).unwrap();
         let data = b"Hello, World";
-        let blobs = vec![Blob::new(namespace, data.to_vec(), AppVersion::V3).unwrap()];
+        let blobs = vec![Blob::new(namespace, data.to_vec(), None, AppVersion::V3).unwrap()];
 
         let submitted_height = rpc_client
             .blob_submit(&blobs, TxConfig::default())
