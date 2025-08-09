@@ -82,38 +82,33 @@ impl Blob {
     /// # Example
     ///
     /// ```
-    /// use celestia_types::{AppVersion, Blob, nmt::Namespace};
+    /// use celestia_types::{AppVersion, Blob, nmt::Namespace, state::AccAddress};
     ///
     /// let my_namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
-    /// let blob_unsigned = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), AppVersion::V2, None)
-    ///     .expect("Failed to create a blob");
-    ///
+    /// let signer: AccAddress = "celestia1377k5an3f94v6wyaceu0cf4nq6gk2jtpc46g7h"
+    ///     .parse()
+    ///     .unwrap();
+    /// let blob_signed = Blob::new(
+    ///     my_namespace,
+    ///     b"some data to store on blockchain".to_vec(),
+    ///     Some(signer),
+    ///     AppVersion::V5,
+    /// )
+    /// .expect("Failed to create a signed blob");
+
+    /// let actual_signed = serde_json::to_string_pretty(&blob_signed).unwrap();
+    /// let expected_signed = indoc::indoc! {r#"{
+    ///   "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
+    ///   "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
+    ///   "share_version": 1,
+    ///   "commitment": "AUpLKHYnlrfK0cX6DcGyryFMld1nJia+cjkCwXFTFgA=",
+    ///   "index": -1,
+    ///   "signer": "j71qdnFJas04ncZ4/CazBpFlSWE="
+    /// }"#};
+
     /// assert_eq!(
-    ///     &serde_json::to_string_pretty(&blob_unsigned).unwrap(),
-    ///     indoc::indoc! {r#"{
-    ///       "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
-    ///       "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
-    ///       "share_version": 0,
-    ///       "commitment": "m0A4feU6Fqd5Zy9td3M7lntG8A3PKqe6YdugmAsWz28=",
-    ///       "index": -1,
-    ///       "signer": null
-    ///     }"#},
-    /// );
-    ///
-    /// let signer = AccAddress::from_str("Yjc3XldhbdYke5i8aSlggYxCCLE=")?;
-    /// let blob_signed = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), AppVersion::V5, Some(signer))
-    ///     .expect("Failed to create a signed blob");
-    ///
-    /// assert_eq!(
-    ///     &serde_json::to_string_pretty(&blob_signed).unwrap(),
-    ///     indoc::indoc! {r#"{
-    ///       "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
-    ///       "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
-    ///       "share_version": 0,
-    ///       "commitment": "m0A4feU6Fqd5Zy9td3M7lntG8A3PKqe6YdugmAsWz28=",
-    ///       "index": -1,
-    ///       "signer": "Yjc3XldhbdYke5i8aSlggYxCCLE="
-    ///     }"#},
+    ///     serde_json::from_str::<serde_json::Value>(&actual_signed).unwrap(),
+    ///     serde_json::from_str::<serde_json::Value>(expected_signed).unwrap()
     /// );
     /// ```
     pub fn new(
@@ -132,8 +127,13 @@ impl Blob {
             share_version = appconsts::SHARE_VERSION_ONE;
         }
 
-        let commitment =
-            Commitment::from_blob(namespace, &data[..], share_version, None, app_version)?;
+        let commitment = Commitment::from_blob(
+            namespace,
+            &data[..],
+            share_version,
+            signer.as_ref(),
+            app_version,
+        )?;
 
         Ok(Blob {
             namespace,
@@ -184,11 +184,11 @@ impl Blob {
     /// #
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let mut blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2).unwrap();
+    /// let mut blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V2).unwrap();
     ///
     /// assert!(blob.validate(AppVersion::V2).is_ok());
     ///
-    /// let other_blob = Blob::new(namespace, b"bar".to_vec(), AppVersion::V2).unwrap();
+    /// let other_blob = Blob::new(namespace, b"bar".to_vec(), None, AppVersion::V2).unwrap();
     /// blob.commitment = other_blob.commitment;
     ///
     /// assert!(blob.validate(AppVersion::V2).is_err());
@@ -224,15 +224,15 @@ impl Blob {
     /// #
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     /// #
-    /// # let commitment = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2)
+    /// # let commitment = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V2)
     /// #     .unwrap()
     /// #     .commitment;
     ///
-    /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2).unwrap();
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V2).unwrap();
     ///
     /// assert!(blob.validate_with_commitment(&commitment, AppVersion::V2).is_ok());
     ///
-    /// let other_commitment = Blob::new(namespace, b"bar".to_vec(), AppVersion::V2)
+    /// let other_commitment = Blob::new(namespace, b"bar".to_vec(), None, AppVersion::V2)
     ///     .unwrap()
     ///     .commitment;
     ///
@@ -269,7 +269,7 @@ impl Blob {
     /// # use celestia_types::nmt::Namespace;
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2).unwrap();
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V2).unwrap();
     /// let shares = blob.to_shares().unwrap();
     ///
     /// assert_eq!(shares.len(), 1);
@@ -303,7 +303,7 @@ impl Blob {
     /// # use celestia_types::nmt::Namespace;
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V2).unwrap();
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V2).unwrap();
     /// let shares = blob.to_shares().unwrap();
     ///
     /// let reconstructed = Blob::reconstruct(&shares, AppVersion::V2).unwrap();
@@ -387,8 +387,8 @@ impl Blob {
     /// # let namespace2 = Namespace::new_v0(&[2, 3, 4, 5, 6]).expect("Invalid namespace");
     ///
     /// let blobs = vec![
-    ///     Blob::new(namespace1, b"foo".to_vec(), AppVersion::V2).unwrap(),
-    ///     Blob::new(namespace2, b"bar".to_vec(), AppVersion::V2).unwrap(),
+    ///     Blob::new(namespace1, b"foo".to_vec(), None, AppVersion::V2).unwrap(),
+    ///     Blob::new(namespace2, b"bar".to_vec(), None, AppVersion::V2).unwrap(),
     /// ];
     /// let shares: Vec<_> = blobs.iter().flat_map(|blob| blob.to_shares().unwrap()).collect();
     ///
@@ -430,7 +430,7 @@ impl Blob {
     /// # use celestia_types::nmt::Namespace;
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let blob = Blob::new(namespace, b"foo".to_vec(), AppVersion::V3).unwrap();
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V3).unwrap();
     /// let shares_len = blob.shares_len();
     ///
     /// let blob_shares = blob.to_shares().unwrap();
@@ -721,6 +721,62 @@ mod tests {
         .unwrap()
     }
 
+    #[test]
+    fn create_new_blob_unsigned() {
+        let my_namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
+        let blob_unsigned = Blob::new(
+            my_namespace,
+            b"some data to store on blockchain".to_vec(),
+            None,
+            AppVersion::V2,
+        )
+        .expect("Failed to create a blob");
+
+        let actual_unsigned = serde_json::to_string_pretty(&blob_unsigned).unwrap();
+        let expected_unsigned = indoc::indoc! {r#"{
+          "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
+          "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
+          "share_version": 0,
+          "commitment": "m0A4feU6Fqd5Zy9td3M7lntG8A3PKqe6YdugmAsWz28=",
+          "index": -1,
+          "signer": null
+        }"#};
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&actual_unsigned).unwrap(),
+            serde_json::from_str::<serde_json::Value>(expected_unsigned).unwrap()
+        );
+    }
+
+    #[test]
+    fn create_new_blob_signed() {
+        let my_namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
+        let signer: AccAddress = "celestia1377k5an3f94v6wyaceu0cf4nq6gk2jtpc46g7h"
+            .parse()
+            .unwrap();
+        let blob_signed = Blob::new(
+            my_namespace,
+            b"some data to store on blockchain".to_vec(),
+            Some(signer),
+            AppVersion::V5,
+        )
+        .expect("Failed to create a signed blob");
+
+        let actual_signed = serde_json::to_string_pretty(&blob_signed).unwrap();
+        let expected_signed = indoc::indoc! {r#"{
+          "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
+          "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
+          "share_version": 1,
+          "commitment": "AUpLKHYnlrfK0cX6DcGyryFMld1nJia+cjkCwXFTFgA=",
+          "index": -1,
+          "signer": "j71qdnFJas04ncZ4/CazBpFlSWE="
+        }"#};
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&actual_signed).unwrap(),
+            serde_json::from_str::<serde_json::Value>(expected_signed).unwrap()
+        );
+    }
     #[test]
     fn create_from_raw() {
         let expected = sample_blob();
