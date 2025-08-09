@@ -33,7 +33,7 @@ async fn get_shares_by_namespace() {
     let blobs: Vec<_> = (0..4)
         .map(|_| {
             let data = random_bytes(1024);
-            Blob::new(namespace, data.clone(), AppVersion::V2).unwrap()
+            Blob::new(namespace, data.clone(), None, AppVersion::V2).unwrap()
         })
         .collect();
 
@@ -74,7 +74,7 @@ async fn get_shares_range() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data.clone(), None, AppVersion::V2).unwrap();
     let commitment = blob.commitment;
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
@@ -126,7 +126,7 @@ async fn get_shares_range_ignores_parity() {
 
     let namespace = random_ns();
     let data = random_bytes(100);
-    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data.clone(), None, AppVersion::V2).unwrap();
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
     let header = client.header_get_by_height(submitted_height).await.unwrap();
@@ -159,7 +159,7 @@ async fn get_shares_by_namespace_wrong_ns() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data.clone(), None, AppVersion::V2).unwrap();
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
@@ -200,7 +200,7 @@ async fn get_shares_by_namespace_wrong_ns_out_of_range() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data.clone(), None, AppVersion::V2).unwrap();
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
@@ -226,7 +226,7 @@ async fn get_shares_by_namespace_wrong_roots() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data.clone(), None, AppVersion::V2).unwrap();
 
     blob_submit(&client, &[blob]).await.unwrap();
 
@@ -245,7 +245,7 @@ async fn get_eds() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = vec![1, 2, 3, 4];
-    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data.clone(), None, AppVersion::V2).unwrap();
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
@@ -266,7 +266,7 @@ async fn get_shares_by_row() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data.clone(), None, AppVersion::V2).unwrap();
     let commitment = blob.commitment;
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();

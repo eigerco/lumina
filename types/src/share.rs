@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn share_v0_structure() {
         let ns = Namespace::new_v0(b"foo").unwrap();
-        let blob = Blob::new(ns, vec![7; 512], AppVersion::V2).unwrap();
+        let blob = Blob::new(ns, vec![7; 512], None, AppVersion::V2).unwrap();
 
         let shares = blob.to_shares().unwrap();
 
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn share_v1_structure() {
         let ns = Namespace::new_v0(b"foo").unwrap();
-        let blob = Blob::new_with_signer(ns, vec![7; 512], [5; 20].into(), AppVersion::V3).unwrap();
+        let blob = Blob::new(ns, vec![7; 512], Some([5; 20].into()), AppVersion::V3).unwrap();
 
         let shares = blob.to_shares().unwrap();
 

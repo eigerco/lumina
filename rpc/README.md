@@ -11,13 +11,13 @@ use celestia_types::{AppVersion, Blob, nmt::Namespace};
 async fn submit_blob() {
     // create a client to the celestia node
     let token = std::env::var("CELESTIA_NODE_AUTH_TOKEN").expect("Token not provided");
-    let client = Client::new("ws://localhost:36658", Some(&token))
+    let client = Client::new("ws://localhost:36658")
         .await
         .expect("Failed creating rpc client");
 
     // create a blob that you want to submit
     let my_namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
-    let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), AppVersion::V2)
+    let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), None,  AppVersion::V2)
         .expect("Failed to create a blob");
 
     // submit it

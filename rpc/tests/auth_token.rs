@@ -1,5 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
+use std::slice::from_ref;
+
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::Blob;
 
@@ -15,7 +17,7 @@ const CELESTIA_BRIDGE_RPC_URL: &str = "ws://localhost:36658";
 async fn blob_submit_using_bridge_node() {
     let namespace = random_ns();
     let data = random_bytes(5);
-    let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data, None, AppVersion::V2).unwrap();
 
     let unauthorized_client =
         new_test_client_with_url(AuthLevel::Skip, CELESTIA_BRIDGE_RPC_URL).await;
@@ -28,10 +30,10 @@ async fn blob_submit_using_bridge_node() {
 
         match auth_level {
             AuthLevel::Read => {
-                blob_submit(&client, &[blob.clone()]).await.unwrap_err();
+                blob_submit(&client, from_ref(&blob)).await.unwrap_err();
             }
             _ => {
-                blob_submit(&client, &[blob.clone()]).await.unwrap();
+                blob_submit(&client, from_ref(&blob)).await.unwrap();
             }
         }
     }

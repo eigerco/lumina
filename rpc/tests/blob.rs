@@ -1,6 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::cmp::Ordering;
+use std::slice::from_ref;
 use std::time::Duration;
 
 use celestia_rpc::blob::BlobsAtHeight;
@@ -21,9 +22,9 @@ async fn blob_submit_and_get() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5);
-    let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data, None, AppVersion::V2).unwrap();
 
-    let submitted_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
+    let submitted_height = blob_submit(&client, from_ref(&blob)).await.unwrap();
 
     let dah = client
         .header_get_by_height(submitted_height)
@@ -62,9 +63,9 @@ async fn blob_submit_and_get_with_signer() {
     };
     let namespace = random_ns();
     let data = random_bytes(5);
-    let blob = Blob::new_with_signer(namespace, data, address, AppVersion::V3).unwrap();
+    let blob = Blob::new(namespace, data, Some(address), AppVersion::V3).unwrap();
 
-    let submitted_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
+    let submitted_height = blob_submit(&client, from_ref(&blob)).await.unwrap();
 
     let received_blob = client
         .blob_get(submitted_height, namespace, blob.commitment)
@@ -81,8 +82,8 @@ async fn blob_submit_and_get_all() {
     let namespaces = &[random_ns(), random_ns()];
 
     let blobs = &[
-        Blob::new(namespaces[0], random_bytes(5), AppVersion::V2).unwrap(),
-        Blob::new(namespaces[1], random_bytes(15), AppVersion::V2).unwrap(),
+        Blob::new(namespaces[0], random_bytes(5), None, AppVersion::V2).unwrap(),
+        Blob::new(namespaces[1], random_bytes(15), None, AppVersion::V2).unwrap(),
     ];
 
     let submitted_height = blob_submit(&client, &blobs[..]).await.unwrap();
@@ -115,9 +116,9 @@ async fn blob_submit_and_get_large() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024 * 1024);
-    let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data, None, AppVersion::V2).unwrap();
 
-    let submitted_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
+    let submitted_height = blob_submit(&client, from_ref(&blob)).await.unwrap();
 
     // It takes a while for a node to process large blob
     // so we need to wait a bit
@@ -153,24 +154,24 @@ async fn blob_subscribe() {
     assert!(received_blobs.blobs.is_none());
 
     // submit and receive blob
-    let blob = Blob::new(namespace, random_bytes(10), AppVersion::V2).unwrap();
-    let current_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
+    let blob = Blob::new(namespace, random_bytes(10), None, AppVersion::V2).unwrap();
+    let current_height = blob_submit(&client, from_ref(&blob)).await.unwrap();
 
     let received = blobs_at_height(current_height, &mut incoming_blobs).await;
     assert_eq!(received.len(), 1);
     assert_blob_equal_to_sent(&received[0], &blob);
 
     // submit blob to another ns
-    let blob_another_ns = Blob::new(random_ns(), random_bytes(10), AppVersion::V2).unwrap();
+    let blob_another_ns = Blob::new(random_ns(), random_bytes(10), None, AppVersion::V2).unwrap();
     let current_height = blob_submit(&client, &[blob_another_ns]).await.unwrap();
 
     let received = blobs_at_height(current_height, &mut incoming_blobs).await;
     assert!(received.is_empty());
 
     // submit and receive few blobs
-    let blob1 = Blob::new(namespace, random_bytes(10), AppVersion::V2).unwrap();
-    let blob2 = Blob::new(random_ns(), random_bytes(10), AppVersion::V2).unwrap(); // different ns
-    let blob3 = Blob::new(namespace, random_bytes(10), AppVersion::V2).unwrap();
+    let blob1 = Blob::new(namespace, random_bytes(10), None, AppVersion::V2).unwrap();
+    let blob2 = Blob::new(random_ns(), random_bytes(10), None, AppVersion::V2).unwrap(); // different ns
+    let blob3 = Blob::new(namespace, random_bytes(10), None, AppVersion::V2).unwrap();
     let current_height = blob_submit(&client, &[blob1.clone(), blob2, blob3.clone()])
         .await
         .unwrap();
@@ -194,7 +195,7 @@ async fn blob_submit_with_different_tx_config() {
     ];
 
     for config in configs {
-        let blob = Blob::new(random_ns(), random_bytes(10), AppVersion::V3).unwrap();
+        let blob = Blob::new(random_ns(), random_bytes(10), None, AppVersion::V3).unwrap();
         blob_submit_with_config(&client, &[blob], config)
             .await
             .unwrap();
@@ -206,7 +207,7 @@ async fn blob_submit_too_large() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5 * 1024 * 1024);
-    let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data, None, AppVersion::V2).unwrap();
 
     blob_submit(&client, &[blob]).await.unwrap_err();
 }
@@ -216,9 +217,9 @@ async fn blob_get_get_proof_wrong_ns() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5);
-    let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data, None, AppVersion::V2).unwrap();
 
-    let submitted_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
+    let submitted_height = blob_submit(&client, from_ref(&blob)).await.unwrap();
 
     client
         .blob_get(submitted_height, random_ns(), blob.commitment)
@@ -236,10 +237,10 @@ async fn blob_get_get_proof_wrong_commitment() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(5);
-    let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data, None, AppVersion::V2).unwrap();
     let commitment = Commitment::new(random_bytes_array());
 
-    let submitted_height = blob_submit(&client, &[blob.clone()]).await.unwrap();
+    let submitted_height = blob_submit(&client, from_ref(&blob)).await.unwrap();
 
     client
         .blob_get(submitted_height, namespace, commitment)
