@@ -549,7 +549,7 @@ impl Blob {
         data: Vec<u8>,
         app_version: &appconsts::JsAppVersion,
     ) -> Result<Blob> {
-        Self::new(*namespace, data, (*app_version).into())
+        Self::new(*namespace, data, None, (*app_version).into())
     }
 
     /// Clone a blob creating a new deep copy of it.
