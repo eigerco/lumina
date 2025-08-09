@@ -17,7 +17,7 @@ const CELESTIA_BRIDGE_RPC_URL: &str = "ws://localhost:36658";
 async fn blob_submit_using_bridge_node() {
     let namespace = random_ns();
     let data = random_bytes(5);
-    let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data, None, AppVersion::V2).unwrap();
 
     let unauthorized_client =
         new_test_client_with_url(AuthLevel::Skip, CELESTIA_BRIDGE_RPC_URL).await;

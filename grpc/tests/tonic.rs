@@ -144,7 +144,7 @@ async fn submit_and_get_tx() {
     let (_lock, tx_client) = new_tx_client().await;
 
     let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
-    let blobs = vec![Blob::new(namespace, "bleb".into(), AppVersion::V3).unwrap()];
+    let blobs = vec![Blob::new(namespace, "bleb".into(), None, AppVersion::V3).unwrap()];
 
     let tx = tx_client
         .submit_blobs(&blobs, TxConfig::default().with_memo("foo"))
@@ -167,7 +167,10 @@ async fn submit_blobs_parallel() {
             spawn(async move {
                 let namespace = Namespace::new_v0(&[1, 2, n]).unwrap();
                 let blobs =
-                    vec![Blob::new(namespace, format!("bleb{n}").into(), AppVersion::V3).unwrap()];
+                    vec![
+                        Blob::new(namespace, format!("bleb{n}").into(), None, AppVersion::V3)
+                            .unwrap(),
+                    ];
 
                 let response = tx_client
                     .submit_blobs(&blobs, TxConfig::default())
@@ -189,7 +192,7 @@ async fn submit_blobs_insufficient_gas_price_and_limit() {
     let (_lock, tx_client) = new_tx_client().await;
 
     let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
-    let blobs = vec![Blob::new(namespace, "bleb".into(), AppVersion::V3).unwrap()];
+    let blobs = vec![Blob::new(namespace, "bleb".into(), None, AppVersion::V3).unwrap()];
 
     let err = tx_client
         .submit_blobs(&blobs, TxConfig::default().with_gas_limit(10000))
