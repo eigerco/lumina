@@ -68,11 +68,16 @@ pub struct BlobParams {
 }
 
 impl Blob {
-    /// Create a new blob with the given data within the [`Namespace`].
+    /// Create a new blob with the given data within the [`Namespace`], with optional signer.
+    ///
+    /// # Notes
+    ///
+    /// If present onchain, `signer` was verified by consensus node on blob submission.
     ///
     /// # Errors
     ///
     /// This function propagates any error from the [`Commitment`] creation.
+    /// To use `signer = Some(address)`, [`AppVersion`] must be at least [`AppVersion::V3`].
     ///
     /// # Example
     ///
@@ -80,11 +85,11 @@ impl Blob {
     /// use celestia_types::{AppVersion, Blob, nmt::Namespace};
     ///
     /// let my_namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
-    /// let blob = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), AppVersion::V2)
+    /// let blob_unsigned = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), AppVersion::V2, None)
     ///     .expect("Failed to create a blob");
     ///
     /// assert_eq!(
-    ///     &serde_json::to_string_pretty(&blob).unwrap(),
+    ///     &serde_json::to_string_pretty(&blob_unsigned).unwrap(),
     ///     indoc::indoc! {r#"{
     ///       "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
     ///       "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
@@ -94,47 +99,41 @@ impl Blob {
     ///       "signer": null
     ///     }"#},
     /// );
+    ///
+    /// let signer = AccAddress::from_str("Yjc3XldhbdYke5i8aSlggYxCCLE=")?;
+    /// let blob_signed = Blob::new(my_namespace, b"some data to store on blockchain".to_vec(), AppVersion::V5, Some(signer))
+    ///     .expect("Failed to create a signed blob");
+    ///
+    /// assert_eq!(
+    ///     &serde_json::to_string_pretty(&blob_signed).unwrap(),
+    ///     indoc::indoc! {r#"{
+    ///       "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
+    ///       "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
+    ///       "share_version": 0,
+    ///       "commitment": "m0A4feU6Fqd5Zy9td3M7lntG8A3PKqe6YdugmAsWz28=",
+    ///       "index": -1,
+    ///       "signer": "Yjc3XldhbdYke5i8aSlggYxCCLE="
+    ///     }"#},
+    /// );
     /// ```
-    pub fn new(namespace: Namespace, data: Vec<u8>, app_version: AppVersion, signer: Option<AppVersion>) -> Result<Blob> {
-        let share_version = appconsts::SHARE_VERSION_ZERO;
-        let commitment =
-            Commitment::from_blob(namespace, &data[..], share_version, None, app_version)?;
-
-        Ok(Blob {
-            namespace,
-            data,
-            share_version,
-            commitment,
-            index: None,
-            signer,
-        })
-    }
-
-    /// Create a new blob with the given data within the [`Namespace`] and with given signer.
-    ///
-    /// # Notes
-    ///
-    /// `signer` is verified by consensus node when blob gets submitted.
-    ///
-    /// # Errors
-    ///
-    /// This function propagates any error from the [`Commitment`] creation. Also [`AppVersion`]
-    /// must be at least [`AppVersion::V3`].
-    pub fn new_with_signer(
+    pub fn new(
         namespace: Namespace,
         data: Vec<u8>,
-        signer: AccAddress,
+        signer: Option<AccAddress>,
         app_version: AppVersion,
     ) -> Result<Blob> {
-        let signer = Some(signer);
-        let share_version = appconsts::SHARE_VERSION_ONE;
-        let commitment = Commitment::from_blob(
-            namespace,
-            &data[..],
-            share_version,
-            signer.as_ref(),
-            app_version,
-        )?;
+        let mut share_version = appconsts::SHARE_VERSION_ZERO;
+
+        if signer.is_some() {
+            let app_version = app_version.as_u64();
+            if app_version < 3 {
+                return Err(Error::UnsupportedAppVersion(app_version));
+            }
+            share_version = appconsts::SHARE_VERSION_ONE;
+        }
+
+        let commitment =
+            Commitment::from_blob(namespace, &data[..], share_version, None, app_version)?;
 
         Ok(Blob {
             namespace,
@@ -357,11 +356,11 @@ impl Blob {
         data.truncate(blob_len as usize);
 
         if share_version == appconsts::SHARE_VERSION_ZERO {
-            Self::new(namespace, data, app_version)
+            Self::new(namespace, data, None, app_version)
         } else if share_version == appconsts::SHARE_VERSION_ONE {
             // shouldn't happen as we have user namespace, seq start, and share v1
             let signer = signer.ok_or(Error::MissingSigner)?;
-            Self::new_with_signer(namespace, data, signer, app_version)
+            Self::new(namespace, data, Some(signer), app_version)
         } else {
             Err(Error::UnsupportedShareVersion(share_version))
         }
@@ -466,7 +465,7 @@ impl Blob {
         app_version: AppVersion,
     ) -> UniffiResult<Self> {
         let namespace = Arc::unwrap_or_clone(namespace);
-        Ok(Blob::new(namespace, data, app_version)?)
+        Ok(Blob::new(namespace, data, None, app_version)?)
     }
 
     /// Create a new blob with the given data within the [`Namespace`] and with given signer.
@@ -483,7 +482,7 @@ impl Blob {
         app_version: AppVersion,
     ) -> UniffiResult<Blob> {
         let namespace = Arc::unwrap_or_clone(namespace);
-        Ok(Blob::new_with_signer(namespace, data, signer, app_version)?)
+        Ok(Blob::new(namespace, data, Some(signer), app_version)?)
     }
 
     /// A [`Namespace`] the [`Blob`] belongs to.
@@ -809,7 +808,7 @@ mod tests {
             let len = rand::random::<usize>() % (1024 * 1024) + 1;
             let data = random_bytes(len);
             let ns = Namespace::const_v0(rand::random());
-            let blob = Blob::new(ns, data, AppVersion::V2).unwrap();
+            let blob = Blob::new(ns, data, None, AppVersion::V2).unwrap();
 
             let shares = blob.to_shares().unwrap();
             assert_eq!(blob, Blob::reconstruct(&shares, AppVersion::V2).unwrap());
@@ -824,7 +823,7 @@ mod tests {
             let ns = Namespace::const_v0(rand::random());
             let signer = rand::random::<[u8; 20]>().into();
 
-            let blob = Blob::new_with_signer(ns, data, signer, AppVersion::V3).unwrap();
+            let blob = Blob::new(ns, data, Some(signer), AppVersion::V3).unwrap();
             let shares = blob.to_shares().unwrap();
 
             Blob::reconstruct(&shares, AppVersion::V2).unwrap_err();
@@ -845,7 +844,7 @@ mod tests {
         let len = rand::random::<usize>() % (1024 * 1024) + 1;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
-        let mut shares = Blob::new(ns, data, AppVersion::V2)
+        let mut shares = Blob::new(ns, data, None, AppVersion::V2)
             .unwrap()
             .to_shares()
             .unwrap();
@@ -871,7 +870,7 @@ mod tests {
         }) {
             let len = (rand::random::<usize>() % 1023 + 1) * 2;
             let data = random_bytes(len);
-            let shares = Blob::new(ns.unwrap(), data, AppVersion::V2)
+            let shares = Blob::new(ns.unwrap(), data, None, AppVersion::V2)
                 .unwrap()
                 .to_shares()
                 .unwrap();
@@ -888,7 +887,7 @@ mod tests {
         let len = rand::random::<usize>() % 1024 * 1024 + 2048;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
-        let shares = Blob::new(ns, data, AppVersion::V2)
+        let shares = Blob::new(ns, data, None, AppVersion::V2)
             .unwrap()
             .to_shares()
             .unwrap();
@@ -905,7 +904,7 @@ mod tests {
         let len = rand::random::<usize>() % (1024 * 1024) + 512;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
-        let mut shares = Blob::new(ns, data, AppVersion::V2)
+        let mut shares = Blob::new(ns, data, None, AppVersion::V2)
             .unwrap()
             .to_shares()
             .unwrap();
@@ -925,7 +924,7 @@ mod tests {
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
         let ns2 = Namespace::const_v0(rand::random());
-        let mut shares = Blob::new(ns, data, AppVersion::V2)
+        let mut shares = Blob::new(ns, data, None, AppVersion::V2)
             .unwrap()
             .to_shares()
             .unwrap();
@@ -944,7 +943,7 @@ mod tests {
         let len = rand::random::<usize>() % (1024 * 1024) + 512;
         let data = random_bytes(len);
         let ns = Namespace::const_v0(rand::random());
-        let mut shares = Blob::new(ns, data, AppVersion::V2)
+        let mut shares = Blob::new(ns, data, None, AppVersion::V2)
             .unwrap()
             .to_shares()
             .unwrap();
@@ -965,7 +964,7 @@ mod tests {
                 let len = rand::random::<usize>() % (1024 * 1024) + 512;
                 let data = random_bytes(len);
                 let ns = Namespace::const_v0(rand::random());
-                Blob::new(ns, data, AppVersion::V2).unwrap()
+                Blob::new(ns, data, None, AppVersion::V2).unwrap()
             })
             .collect();
 
