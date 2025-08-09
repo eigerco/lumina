@@ -429,7 +429,7 @@ pub fn generate_eds(square_width: usize, app_version: AppVersion) -> ExtendedDat
     // first blob is bigger so that it spans over 2 rows
     let blob_shares = (rand::random::<usize>() % (ods_width - 1)) + ods_width + 1;
     let data = random_bytes(blob_len(blob_shares));
-    let blob = Blob::new(namespaces[0], data, app_version).unwrap();
+    let blob = Blob::new(namespaces[0], data, None, app_version).unwrap();
     shares.extend(blob.to_shares().unwrap().iter().map(Share::to_vec));
 
     // namespace padding
@@ -442,7 +442,7 @@ pub fn generate_eds(square_width: usize, app_version: AppVersion) -> ExtendedDat
     for ns in &namespaces {
         let blob_shares = (rand::random::<usize>() % (ods_width - 1)) + 1;
         let data = random_bytes(blob_len(blob_shares));
-        let blob = Blob::new(*ns, data, app_version).unwrap();
+        let blob = Blob::new(*ns, data, None, app_version).unwrap();
         shares.extend(blob.to_shares().unwrap().iter().map(Share::to_vec));
 
         let padding_ns = if ns != namespaces.last().unwrap() {
