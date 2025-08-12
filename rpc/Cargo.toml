@@ -19,6 +19,7 @@ categories = [
 ]
 
 [dependencies]
+celestia-proto.workspace = true
 celestia-types.workspace = true
 
 async-trait = "0.1.80"
