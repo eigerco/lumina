@@ -9,7 +9,7 @@ RPC endpoint, while submit mode requires RPC and gRPC endpoints plus a signer.
 
 Read-only mode:
 
-```rust,no_run
+```rust,no_run,ignore-wasm32
 use celestia_client::{Client, Result};
 
 #[tokio::main]

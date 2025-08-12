@@ -101,7 +101,7 @@ where
     /// Submit given message to celestia network.
     ///
     /// # Example
-    /// ```no_run
+    /// ```no_run,ignore-wasm32
     /// # async fn docs() {
     /// use celestia_grpc::{TxClient, TxConfig};
     /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
@@ -158,7 +158,7 @@ where
     /// Submit given blobs to celestia network.
     ///
     /// # Example
-    /// ```no_run
+    /// ```no_run,ignore-wasm32
     /// # async fn docs() {
     /// use celestia_grpc::{TxClient, TxConfig};
     /// use celestia_types::state::{Address, Coin};
