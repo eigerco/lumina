@@ -273,7 +273,7 @@ async fn get_samples() {
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
     let header = client.header_get_by_height(submitted_height).await.unwrap();
 
-    let parity_idx = header.dah.square_width();
+    let parity_idx = header.dah.square_width() / 2;
 
     let ods_shares = (0..parity_idx).flat_map(|x| iter::repeat(x).zip(0..parity_idx));
     let parity_shares =
