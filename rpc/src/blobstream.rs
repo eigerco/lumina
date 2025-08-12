@@ -10,6 +10,8 @@ use celestia_types::MerkleProof;
 use jsonrpsee::core::client::{ClientT, Error};
 use jsonrpsee::proc_macros::rpc;
 
+use crate::custom_client_error;
+
 mod rpc {
     use super::*;
 
@@ -62,13 +64,10 @@ pub trait BlobstreamClient: ClientT {
                 .await?;
 
             if root.len() == 2 * HASH_SIZE {
-                root.parse::<Hash>()
-                    .map_err(|e| Error::Custom(e.to_string()))
+                root.parse::<Hash>().map_err(custom_client_error)
             } else {
-                let decoded = BASE64
-                    .decode(&root)
-                    .map_err(|e| Error::Custom(e.to_string()))?;
-                Hash::try_from(decoded).map_err(|e| Error::Custom(e.to_string()))
+                let decoded = BASE64.decode(&root).map_err(custom_client_error)?;
+                Hash::try_from(decoded).map_err(custom_client_error)
             }
         }
     }

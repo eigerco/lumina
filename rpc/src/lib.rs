@@ -1,6 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
+use std::fmt;
+
+use jsonrpsee::core::client::Error as JsonrpseeError;
+
 pub mod blob;
 pub mod blobstream;
 pub mod client;
@@ -50,4 +54,9 @@ pub mod prelude {
     pub use crate::P2PClient;
     pub use crate::ShareClient;
     pub use crate::StateClient;
+}
+
+// helper to map errors to jsonrpsee using Display
+fn custom_client_error<E: fmt::Display>(error: E) -> JsonrpseeError {
+    JsonrpseeError::Custom(error.to_string())
 }

@@ -30,6 +30,7 @@ pub fn random_ns_range(start: Namespace, end: Namespace) -> Namespace {
 }
 
 pub fn random_bytes(length: usize) -> Vec<u8> {
+    let length = 1.max(length);
     let mut bytes = vec![0; length];
     rand::thread_rng().fill_bytes(&mut bytes);
     bytes

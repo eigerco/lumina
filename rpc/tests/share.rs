@@ -1,5 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
+use std::iter;
+
 use celestia_rpc::prelude::*;
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
@@ -258,6 +260,35 @@ async fn get_eds() {
 
         let column_root = eds.column_nmt(i).unwrap().root();
         assert_eq!(column_root, header.dah.column_root(i).unwrap());
+    }
+}
+
+#[tokio::test]
+async fn get_samples() {
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
+    let namespace = random_ns();
+    let data = random_bytes(1024);
+    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+
+    let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
+    let header = client.header_get_by_height(submitted_height).await.unwrap();
+
+    let parity_idx = header.dah.square_width();
+
+    let ods_shares = (0..parity_idx).flat_map(|x| iter::repeat(x).zip(0..parity_idx));
+    let parity_shares =
+        (parity_idx..2 * parity_idx).flat_map(|x| iter::repeat(x).zip(parity_idx..2 * parity_idx));
+
+    for sample in client.share_get_samples(&header, ods_shares).await.unwrap() {
+        assert!(!sample.share.is_parity());
+    }
+
+    for sample in client
+        .share_get_samples(&header, parity_shares)
+        .await
+        .unwrap()
+    {
+        assert!(sample.share.is_parity());
     }
 }
 
