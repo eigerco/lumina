@@ -608,6 +608,8 @@ impl From<ExtendedHeader> for RawExtendedHeader {
     }
 }
 
+// TODO: get rid of this after a release or two
+// https://github.com/eigerco/lumina/issues/683
 mod custom_serde {
     use celestia_proto::celestia::core::v1::da::DataAvailabilityHeader;
     use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
@@ -625,6 +627,7 @@ mod custom_serde {
 
     #[derive(Deserialize, Serialize)]
     pub(super) struct SerdeCommit {
+        #[serde(with = "celestia_proto::serializers::maybe_from_str")]
         height: i64,
         round: i32,
         block_id: Option<BlockId>,
@@ -673,6 +676,56 @@ mod custom_serde {
                 block_id: value.block_id,
                 signatures: value.signatures,
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::SerdeCommit;
+
+        #[test]
+        fn deserialize_quoted_and_unquoted_commit_height() {
+            let unquoted = r#"{
+                "height": 27,
+                "round": 0,
+                "block_id": {
+                  "hash": "6F754536418C0574629379BA6F145C62C86DAEAA8F5772FA1AD5D5AEB4FE5B97",
+                  "parts": {
+                    "total": 1,
+                    "hash": "791BF8972B46DA4582779629D7E3D925510178D3930A4F6CA82FB88636FDA2C6"
+                  }
+                },
+                "signatures": [
+                  {
+                    "block_id_flag": 2,
+                    "validator_address": "F1F83230835AA69A1AD6EA68C6D894A4106B8E53",
+                    "timestamp": "2023-06-23T10:47:18.421006821Z",
+                    "signature": "/2U/PzplnCuSi2jjlOxCdwfVh2+wPQZQoWYOH/AMzwR1iQ/G68yxmamZbaen2c4Z06KUVJMcP7WtbBKtciy5AA=="
+                  }
+                ]
+            }"#;
+            serde_json::from_str::<SerdeCommit>(unquoted).unwrap();
+
+            let quoted = r#"{
+                "height": "27",
+                "round": 0,
+                "block_id": {
+                  "hash": "6F754536418C0574629379BA6F145C62C86DAEAA8F5772FA1AD5D5AEB4FE5B97",
+                  "parts": {
+                    "total": 1,
+                    "hash": "791BF8972B46DA4582779629D7E3D925510178D3930A4F6CA82FB88636FDA2C6"
+                  }
+                },
+                "signatures": [
+                  {
+                    "block_id_flag": 2,
+                    "validator_address": "F1F83230835AA69A1AD6EA68C6D894A4106B8E53",
+                    "timestamp": "2023-06-23T10:47:18.421006821Z",
+                    "signature": "/2U/PzplnCuSi2jjlOxCdwfVh2+wPQZQoWYOH/AMzwR1iQ/G68yxmamZbaen2c4Z06KUVJMcP7WtbBKtciy5AA=="
+                  }
+                ]
+            }"#;
+            serde_json::from_str::<SerdeCommit>(quoted).unwrap();
         }
     }
 }
