@@ -40,6 +40,7 @@ mod rpc {
     }
 }
 
+/// Client implementation for the Blobstream RPC API.
 // TODO: get rid of this after a release or two
 // https://github.com/eigerco/lumina/issues/683
 pub trait BlobstreamClient: ClientT {
