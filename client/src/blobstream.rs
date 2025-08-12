@@ -21,7 +21,7 @@ impl BlobstreamApi {
     /// creates a new Merkle root of those data roots.
     ///
     /// The range is end exclusive.
-    pub async fn get_data_root_ruple_root(&self, start: u64, end: u64) -> Result<Hash> {
+    pub async fn get_data_root_tuple_root(&self, start: u64, end: u64) -> Result<Hash> {
         Ok(self
             .ctx
             .rpc
