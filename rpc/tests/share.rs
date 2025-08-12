@@ -293,6 +293,31 @@ async fn get_samples() {
 }
 
 #[tokio::test]
+async fn get_samples_wrong_coords() {
+    let client = new_test_client(AuthLevel::Skip).await.unwrap();
+    let namespace = random_ns();
+    let data = random_bytes(1024);
+    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+
+    let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
+    let header = client.header_get_by_height(submitted_height).await.unwrap();
+
+    let square_width = header.dah.square_width();
+
+    for coords in [
+        (square_width - 1, square_width),
+        (square_width, square_width - 1),
+        (square_width, square_width),
+        (square_width * 2, square_width * 2),
+    ] {
+        client
+            .share_get_samples(&header, [coords])
+            .await
+            .unwrap_err();
+    }
+}
+
+#[tokio::test]
 async fn get_shares_by_row() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
