@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
 
 Submit mode:
 
-```rust,no_run
+```rust,no_run,ignore-wasm32
 use std::env;
 
 use celestia_client::{Client, Result};
@@ -53,13 +53,13 @@ async fn main() -> Result<()> {
 
 Submitting and retrieving a blob:
 
-```rust,no_run
+```rust,no_run,ignore-wasm32
 use std::env;
 
 use celestia_client::{Client, Result};
 use celestia_client::tx::TxConfig;
-use celestia_types::nmt::Namespace;
-use celestia_types::{AppVersion, Blob};
+use celestia_client::types::nmt::Namespace;
+use celestia_client::types::{AppVersion, Blob};
 
 #[tokio::main]
 async fn main() -> Result<()> {
