@@ -627,7 +627,7 @@ mod custom_serde {
 
     #[derive(Deserialize, Serialize)]
     pub(super) struct SerdeCommit {
-        #[serde(with = "celestia_proto::serializers::maybe_from_str")]
+        #[serde(with = "celestia_proto::serializers::maybe_quoted")]
         height: i64,
         round: i32,
         block_id: Option<BlockId>,

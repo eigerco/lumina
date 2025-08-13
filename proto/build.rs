@@ -12,7 +12,7 @@ const SERIALIZED_DEFAULT: &str =
 const TRANSPARENT: &str = r#"#[serde(transparent)]"#;
 const BASE64STRING: &str = r#"#[serde(with = "crate::serializers::bytes::base64string")]"#;
 const QUOTED_WITH_DEFAULT: &str = r#"#[serde(with = "crate::serializers::from_str", default)]"#;
-const MAYBE_QUOTED: &str = r#"#[serde(with = "crate::serializers::maybe_from_str")]"#;
+const MAYBE_QUOTED: &str = r#"#[serde(with = "crate::serializers::maybe_quoted")]"#;
 const VEC_BASE64STRING: &str = r#"#[serde(with = "crate::serializers::bytes::vec_base64string")]"#;
 const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_timestamp")]"#;
 const OPTION_PROTOBUF_DURATION: &str =
