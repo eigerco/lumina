@@ -97,9 +97,9 @@ mod rpc {
         #[method(name = "GetSamples")]
         async fn share_get_samples(
             &self,
-            root: &ExtendedHeader,
+            height: u64,
             indices: &[SampleCoordinates],
-        ) -> Result<Vec<GetSamplesSample>, Error>;
+        ) -> Result<Vec<RawSample>, Error>;
 
         #[method(name = "GetRow")]
         async fn share_get_row(&self, height: u64, row: u64) -> Result<RawGetRowResponse, Error>;
@@ -201,19 +201,14 @@ pub trait ShareClient: ClientT {
 
         async move {
             let app = root.app_version().map_err(custom_client_error)?;
+            let height = root.height().value();
 
-            let raw_samples = rpc::ShareClient::share_get_samples(self, root, &coordinates).await?;
+            let raw_samples =
+                rpc::ShareClient::share_get_samples(self, height, &coordinates).await?;
             let mut samples = Vec::with_capacity(raw_samples.len());
 
             for (coords, raw_sample) in coordinates.iter().zip(raw_samples.into_iter()) {
-                let raw_sample = RawSample {
-                    share: Some(RawShare {
-                        data: raw_sample.share.data,
-                    }),
-                    proof: Some(raw_sample.proof),
-                    proof_type: raw_sample.proof_type,
-                };
-                let sample_id = SampleId::new(coords.row, coords.column, root.height().value())
+                let sample_id = SampleId::new(coords.row, coords.column, height)
                     .map_err(custom_client_error)?;
 
                 // Correct `Share` construction is done inside `Sample::from_raw`
@@ -366,20 +361,4 @@ impl<T> ShareClient for T where T: ClientT {}
 fn is_ods_square(row: u64, column: u64, square_width: u16) -> bool {
     let ods_width = square_width / 2;
     row < ods_width as u64 && column < ods_width as u64
-}
-
-// share returned from share.GetSamples, it's not `serde = transparent` so `{"data": "AAAAAAbase64="}`
-#[derive(Default, Deserialize)]
-struct GetSamplesShare {
-    #[serde(with = "celestia_proto::serializers::bytes::base64string")]
-    data: Vec<u8>,
-}
-
-// get samples version of sample, differs from [`RawSample`] in `share`
-#[derive(Default, Deserialize)]
-#[serde(default)]
-struct GetSamplesSample {
-    share: GetSamplesShare,
-    proof: RawProof,
-    proof_type: i32,
 }
