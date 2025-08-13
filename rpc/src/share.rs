@@ -3,7 +3,6 @@
 use std::future::Future;
 use std::marker::{Send, Sync};
 
-use celestia_proto::proof::pb::Proof as RawProof;
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::nmt::Namespace;
 use celestia_types::row_namespace_data::NamespaceData;
