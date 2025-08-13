@@ -701,7 +701,6 @@ name = "celestia-client"
 version = "0.1.0"
 dependencies = [
  "async-stream",
- "bytes",
  "celestia-grpc",
  "celestia-proto",
  "celestia-rpc",
@@ -797,6 +796,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
+ "celestia-proto",
  "celestia-types",
  "dotenvy",
  "futures",
@@ -805,7 +805,6 @@ dependencies = [
  "jsonrpsee",
  "libp2p",
  "nmt-rs",
- "prost",
  "rand",
  "serde",
  "serde_repr",

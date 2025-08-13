@@ -1,6 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
+use std::fmt;
+
+use jsonrpsee::core::client::Error as JsonrpseeError;
+
 pub mod blob;
 pub mod blobstream;
 pub mod client;
@@ -15,6 +19,7 @@ mod state;
 mod tx_config;
 
 pub use crate::blob::BlobClient;
+pub use crate::blobstream::BlobstreamClient;
 #[cfg(any(
     not(target_arch = "wasm32"),
     all(target_arch = "wasm32", feature = "wasm-bindgen")
@@ -41,6 +46,7 @@ pub use crate::tx_config::{TxConfig, TxPriority};
 /// Re-exports of all the RPC traits.
 pub mod prelude {
     pub use crate::BlobClient;
+    pub use crate::BlobstreamClient;
     pub use crate::DasClient;
     pub use crate::FraudClient;
     pub use crate::HeaderClient;
@@ -48,4 +54,9 @@ pub mod prelude {
     pub use crate::P2PClient;
     pub use crate::ShareClient;
     pub use crate::StateClient;
+}
+
+// helper to map errors to jsonrpsee using Display
+fn custom_client_error<E: fmt::Display>(error: E) -> JsonrpseeError {
+    JsonrpseeError::Custom(error.to_string())
 }

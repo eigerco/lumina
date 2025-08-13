@@ -19,8 +19,8 @@ categories = [
 ]
 
 [dependencies]
+celestia-proto.workspace = true
 celestia-types.workspace = true
-prost.workspace = true
 
 async-trait = "0.1.80"
 jsonrpsee = { version = "0.25.1", features = ["client-core", "macros"] }

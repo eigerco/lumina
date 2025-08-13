@@ -2,7 +2,7 @@
 
 A crate to configure, run and interact with Celestia's data availability nodes.
 
-```rust,no_run
+```rust,no_run,ignore-wasm32
 use std::sync::Arc;
 
 use lumina_node::blockstore::RedbBlockstore;
