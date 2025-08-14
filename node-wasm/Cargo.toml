@@ -77,6 +77,12 @@ wasm-bindgen-test.workspace = true
 celestia-rpc = { workspace = true, features = ["wasm-bindgen", "p2p"] }
 rexie = "0.6.2"
 
+[dependencies]
+idb = "0.6.4"
+libp2p-identity = "0.2.12"
+send_wrapper = "0.6.0"
+thiserror = "1.0.61"
+
 [package.metadata.docs.rs]
 targets = ["wasm32-unknown-unknown"]
 

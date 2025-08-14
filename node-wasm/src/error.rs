@@ -136,11 +136,13 @@ from_display! {
     tendermint::error::Error,
     libp2p::identity::ParseError,
     libp2p::multiaddr::Error,
+    libp2p::identity::DecodingError,
     celestia_types::Error,
     lumina_node::node::NodeError,
     lumina_node::store::StoreError,
     crate::worker::WorkerError,
     tokio::sync::oneshot::error::RecvError,
+    crate::key_registry::Error,
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for Error {
