@@ -72,6 +72,7 @@ impl NamedLock {
         Ok(NamedLockGuard { resolve_fn })
     }
 
+    #[allow(dead_code)]
     pub async fn lock(&self) -> Result<NamedLockGuard, Error> {
         self.lock_impl(true).await
     }
@@ -194,7 +195,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn lock_unlock() {
-        let lock = NamedLock::create("foo");
+        let lock = NamedLock::create("foo").expect("lock creation ok");
 
         {
             let _guard = lock.try_lock().await.expect("valid lock");

@@ -5,7 +5,7 @@ pub mod client;
 mod commands;
 pub mod error;
 mod key_registry;
-pub mod lock;
+pub(crate) mod lock;
 mod ports;
 pub mod utils;
 mod worker;

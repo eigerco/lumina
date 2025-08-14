@@ -142,7 +142,7 @@ from_display! {
     lumina_node::store::StoreError,
     crate::worker::WorkerError,
     tokio::sync::oneshot::error::RecvError,
-    crate::key_registry::Error,
+    crate::key_registry::KeyRegistryError,
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for Error {

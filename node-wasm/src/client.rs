@@ -40,6 +40,8 @@ pub struct WasmNodeConfig {
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
 
+    /// Optionally start with a provided private key used as libp2p identity. Expects 32 bytes
+    /// containing ed25519 secret key.
     #[wasm_bindgen(getter_with_clone)]
     pub identity_key: Option<Vec<u8>>,
 
@@ -559,6 +561,7 @@ mod tests {
             .start(&WasmNodeConfig {
                 network: Network::Private,
                 bootnodes,
+                identity_key: None,
                 use_persistent_memory: false,
                 custom_pruning_window_secs: None,
             })

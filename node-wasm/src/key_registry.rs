@@ -2,8 +2,8 @@ use idb::{Database, DatabaseEvent, Factory, KeyRange, ObjectStoreParams, Query, 
 use js_sys::Uint8Array;
 use libp2p_identity::Keypair;
 use send_wrapper::SendWrapper;
-use serde_wasm_bindgen::{from_value, to_value};
-use tracing::{info, trace, warn};
+use serde_wasm_bindgen::to_value;
+use tracing::{info, warn};
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::lock::{Error as LockError, NamedLock, NamedLockGuard};
@@ -18,7 +18,7 @@ pub struct KeyRegistry {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
+pub enum KeyRegistryError {
     /// IndexedDb contains invalid data
     #[error("could not deserialise keypair data from db")]
     InvalidKeypairData,
@@ -34,7 +34,7 @@ pub enum Error {
     LockManagerUnavailable(crate::error::Error),
 }
 
-pub type Result<T, E = Error> = std::result::Result<T, E>;
+pub type Result<T, E = KeyRegistryError> = std::result::Result<T, E>;
 
 impl KeyRegistry {
     pub async fn new() -> Result<Self> {
@@ -91,7 +91,7 @@ impl KeyRegistry {
                 match decode_keypair(key) {
                     Ok(keypair) => match try_lock_key(&keypair).await {
                         Ok(guard) => return Ok(Some((keypair, guard))),
-                        Err(Error::KeyLocked) => info!("Key already used"), // TODO: add peerid log?
+                        Err(KeyRegistryError::KeyLocked) => info!("Key already used"), // TODO: add peerid log?
                         Err(e) => warn!("Unexpected error acquiring the lock: {e}"),
                     },
                     Err(e) => warn!("Could not deserialize key: {e}"),
@@ -156,8 +156,9 @@ fn encode_keypair(keypair: &Keypair) -> JsValue {
 fn decode_keypair(value: JsValue) -> Result<Keypair> {
     let array = value
         .dyn_into::<Uint8Array>()
-        .map_err(|_| Error::InvalidKeypairData)?;
-    Keypair::from_protobuf_encoding(&array.to_vec()).map_err(|_| Error::InvalidKeypairData)
+        .map_err(|_| KeyRegistryError::InvalidKeypairData)?;
+    Keypair::from_protobuf_encoding(&array.to_vec())
+        .map_err(|_| KeyRegistryError::InvalidKeypairData)
 }
 
 async fn try_lock_key(keypair: &Keypair) -> Result<NamedLockGuard> {
@@ -168,11 +169,13 @@ async fn try_lock_key(keypair: &Keypair) -> Result<NamedLockGuard> {
     Ok(lock.try_lock().await?)
 }
 
-impl From<LockError> for Error {
+impl From<LockError> for KeyRegistryError {
     fn from(value: LockError) -> Self {
         match value {
-            LockError::WouldBlock => Error::KeyLocked,
-            LockError::LockManagerUnavailable(e) => Error::LockManagerUnavailable(e.into()),
+            LockError::WouldBlock => KeyRegistryError::KeyLocked,
+            LockError::LockManagerUnavailable(e) => {
+                KeyRegistryError::LockManagerUnavailable(e.into())
+            }
         }
     }
 }
