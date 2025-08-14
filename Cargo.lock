@@ -3456,7 +3456,6 @@ dependencies = [
  "instant",
  "js-sys",
  "libp2p",
- "libp2p-identity",
  "lumina-node",
  "lumina-utils",
  "rexie",

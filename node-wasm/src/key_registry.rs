@@ -1,6 +1,6 @@
 use idb::{Database, DatabaseEvent, Factory, KeyRange, ObjectStoreParams, Query, TransactionMode};
 use js_sys::Uint8Array;
-use libp2p_identity::Keypair;
+use libp2p::identity::Keypair;
 use send_wrapper::SendWrapper;
 use serde_wasm_bindgen::to_value;
 use tracing::{info, warn};
