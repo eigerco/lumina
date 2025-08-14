@@ -62,7 +62,6 @@ impl DispatchedDocSigner {
 }
 
 impl DocSigner for DispatchedDocSigner {
-    //async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
     fn try_sign(
         &self,
         doc: SignDoc,

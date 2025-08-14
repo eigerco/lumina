@@ -55,14 +55,12 @@ const DEFAULT_GAS_MULTIPLIER: f64 = 1.1;
 
 struct AccountBits {
     account: Account,
-
     app_version: AppVersion,
     chain_id: Id,
 }
 
 pub struct SignerBits {
     pub(crate) signer: DispatchedDocSigner,
-
     pub(crate) pubkey: VerifyingKey,
 }
 
@@ -77,9 +75,7 @@ impl Keypair for SignerBits {
 /// Struct wrapping all the tonic types and doing type conversion behind the scenes.
 pub struct GrpcClient<T> {
     transport: T,
-
     account: Mutex<Option<AccountBits>>,
-
     signer: Option<SignerBits>,
 }
 
@@ -92,7 +88,6 @@ impl<T> GrpcClient<T> {
 
 impl<T> GrpcClient<T>
 where
-    //S: DocSigner,
     T: GrpcService<BoxBody> + Clone,
     T::Error: Into<StdError>,
     T::ResponseBody: Body<Data = Bytes> + Send + 'static,
@@ -102,7 +97,7 @@ where
     pub(crate) fn new(transport: T, signer: Option<SignerBits>) -> Self {
         Self {
             transport,
-            account: None.into(),
+            account: Mutex::new(None),
             signer,
         }
     }

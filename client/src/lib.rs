@@ -57,6 +57,7 @@ pub mod tx {
 }
 
 use celestia_grpc::GrpcClientBuilderError;
+
 /// Re-export of [`celestia-proto`].
 ///
 /// [`celestia-proto`]: celestia_proto
