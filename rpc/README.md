@@ -4,7 +4,7 @@ A collection of traits for interacting with Celestia data availability nodes RPC
 
 This crate builds on top of the [`jsonrpsee`](https://docs.rs/jsonrpsee) clients.
 
-```rust,no_run
+```rust,no_run,ignore-wasm32
 use celestia_rpc::{BlobClient, Client, TxConfig};
 use celestia_types::{AppVersion, Blob, nmt::Namespace};
 

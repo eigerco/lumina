@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.14.0...lumina-node-v0.15.0) - 2025-08-13
+
+### Added
+
+- *(proto,types,rpc)* [**breaking**] upgrade to celestia-node v0.25 ([#720](https://github.com/eigerco/lumina/pull/720))
+
+### Fixed
+
+- *(doc)* Fix incorrectly concatenated changelogs ([#713](https://github.com/eigerco/lumina/pull/713))
+
 ## [0.14.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.13.0...lumina-node-v0.14.0) - 2025-07-29
 
 ### Added
@@ -16,13 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - *(node)* [**breaking**] Make blockstore only store samples ([#653](https://github.com/eigerco/lumina/pull/653))
-# Changelog
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
 
 ## [0.13.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.12.1...lumina-node-v0.13.0) - 2025-07-02
 

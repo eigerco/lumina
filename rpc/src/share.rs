@@ -1,6 +1,5 @@
 //! celestia-node rpc types and methods related to shares
-//!
-use std::fmt;
+
 use std::future::Future;
 use std::marker::{Send, Sync};
 
@@ -12,6 +11,8 @@ use celestia_types::{ExtendedDataSquare, ExtendedHeader, RawShare, Share, ShareP
 use jsonrpsee::core::client::{ClientT, Error};
 use jsonrpsee::proc_macros::rpc;
 use serde::{Deserialize, Serialize};
+
+use crate::custom_client_error;
 
 /// Response type for [`ShareClient::share_get_range`].
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -95,7 +96,7 @@ mod rpc {
         #[method(name = "GetSamples")]
         async fn share_get_samples(
             &self,
-            root: &ExtendedHeader,
+            height: u64,
             indices: &[SampleCoordinates],
         ) -> Result<Vec<RawSample>, Error>;
 
@@ -199,12 +200,14 @@ pub trait ShareClient: ClientT {
 
         async move {
             let app = root.app_version().map_err(custom_client_error)?;
+            let height = root.height().value();
 
-            let raw_samples = rpc::ShareClient::share_get_samples(self, root, &coordinates).await?;
+            let raw_samples =
+                rpc::ShareClient::share_get_samples(self, height, &coordinates).await?;
             let mut samples = Vec::with_capacity(raw_samples.len());
 
             for (coords, raw_sample) in coordinates.iter().zip(raw_samples.into_iter()) {
-                let sample_id = SampleId::new(coords.row, coords.column, root.height().value())
+                let sample_id = SampleId::new(coords.row, coords.column, height)
                     .map_err(custom_client_error)?;
 
                 // Correct `Share` construction is done inside `Sample::from_raw`
@@ -357,8 +360,4 @@ impl<T> ShareClient for T where T: ClientT {}
 fn is_ods_square(row: u64, column: u64, square_width: u16) -> bool {
     let ods_width = square_width / 2;
     row < ods_width as u64 && column < ods_width as u64
-}
-
-fn custom_client_error<E: fmt::Display>(error: E) -> Error {
-    Error::Custom(error.to_string())
 }

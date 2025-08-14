@@ -7,18 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.11.3...celestia-rpc-v0.12.0) - 2025-08-13
+
+### Added
+
+- *(proto,types,rpc)* [**breaking**] upgrade to celestia-node v0.25 ([#720](https://github.com/eigerco/lumina/pull/720))
+- [**breaking**] Implement `celestia-client` crate ([#682](https://github.com/eigerco/lumina/pull/682))
+
+### Fixed
+
+- *(doc)* Fix incorrectly concatenated changelogs ([#713](https://github.com/eigerco/lumina/pull/713))
+
 ## [0.11.3](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.11.2...celestia-rpc-v0.11.3) - 2025-07-29
 
 ### Other
 
 - *(rpc)* improve clarity of share get range ignoring parity test ([#681](https://github.com/eigerco/lumina/pull/681))
-# Changelog
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
 
 ## [0.11.2](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.11.1...celestia-rpc-v0.11.2) - 2025-07-02
 

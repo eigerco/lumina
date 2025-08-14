@@ -12,6 +12,7 @@ const SERIALIZED_DEFAULT: &str =
 const TRANSPARENT: &str = r#"#[serde(transparent)]"#;
 const BASE64STRING: &str = r#"#[serde(with = "crate::serializers::bytes::base64string")]"#;
 const QUOTED_WITH_DEFAULT: &str = r#"#[serde(with = "crate::serializers::from_str", default)]"#;
+const MAYBE_QUOTED: &str = r#"#[serde(with = "crate::serializers::maybe_quoted")]"#;
 const VEC_BASE64STRING: &str = r#"#[serde(with = "crate::serializers::bytes::vec_base64string")]"#;
 const OPTION_TIMESTAMP: &str = r#"#[serde(with = "crate::serializers::option_timestamp")]"#;
 const OPTION_PROTOBUF_DURATION: &str =
@@ -93,6 +94,10 @@ static CUSTOM_FIELD_ATTRIBUTES: &[(&str, &str)] = &[
     (".celestia.core.v1.da.DataAvailabilityHeader.row_roots", VEC_BASE64STRING),
     (".celestia.core.v1.proof.NMTProof.leaf_hash", BASE64STRING),
     (".celestia.core.v1.proof.NMTProof.nodes", VEC_BASE64STRING),
+    // TODO: replace with quoted in a release or two
+    // https://github.com/eigerco/lumina/issues/683
+    (".celestia.core.v1.proof.Proof.index", MAYBE_QUOTED),
+    (".celestia.core.v1.proof.Proof.total", MAYBE_QUOTED),
     (".celestia.core.v1.proof.Proof.aunts", VEC_BASE64STRING),
     (".celestia.core.v1.proof.Proof.leaf_hash", BASE64STRING),
     (".celestia.core.v1.proof.RowProof.root", BASE64STRING),
@@ -180,11 +185,50 @@ const PROTO_FILES: &[&str] = &[
 const INCLUDES: &[&str] = &["vendor", "vendor/nmt"];
 
 fn main() {
-    let fds = protox_compile();
+    let mut fds = protox_compile();
+
+    sanitise_commments(&mut fds);
+
     #[cfg(not(feature = "tonic"))]
     prost_build(fds);
     #[cfg(feature = "tonic")]
     tonic_build(fds)
+}
+
+fn sanitise_commments(fds: &mut FileDescriptorSet) {
+    // Google protobuf types contain protobuf-style markdown links,
+    // which break in rustdoc, due to different path separator (. vs :)
+    let sanitise = |s: &str| {
+        s.replace("[HttpRule][google.api.HttpRule]", "[HttpRule]")
+            .replace(
+                "[HttpRule.body][google.api.HttpRule.body]",
+                "[HttpRule].body",
+            )
+            .replace(
+                "[selector][google.api.DocumentationRule.selector]",
+                "DocumentationRule.selector",
+            )
+    };
+
+    for fd in fds.file.iter_mut() {
+        if fd.package() == "google.api" {
+            let source_code_info = fd.source_code_info.as_mut().expect("proto metdata");
+
+            for location in &mut source_code_info.location {
+                let leading_comment = location.leading_comments.as_deref().map(sanitise);
+                let trailing_comment = location.trailing_comments.as_deref().map(sanitise);
+                let leading_detached_comment = location
+                    .leading_detached_comments
+                    .iter()
+                    .map(|s| sanitise(s))
+                    .collect();
+
+                location.leading_comments = leading_comment;
+                location.trailing_comments = trailing_comment;
+                location.leading_detached_comments = leading_detached_comment;
+            }
+        }
+    }
 }
 
 fn protox_compile() -> FileDescriptorSet {
