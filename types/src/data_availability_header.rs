@@ -684,5 +684,4 @@ mod tests {
 
         DataAvailabilityHeader::new(row_roots, col_roots, AppVersion::V2).unwrap()
     }
-
 }
