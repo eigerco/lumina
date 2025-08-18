@@ -226,4 +226,3 @@ mod tests {
         assert_eq!(proof, deserialized);
     }
 }
-
