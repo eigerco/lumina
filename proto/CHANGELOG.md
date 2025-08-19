@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1](https://github.com/eigerco/lumina/compare/celestia-proto-v0.9.0...celestia-proto-v0.9.1) - 2025-08-19
+
+### Fixed
+
+- *(proto,types)* fix binary serialization of maybe_quoted ([#724](https://github.com/eigerco/lumina/pull/724))
+
 ## [0.9.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.8.0...celestia-proto-v0.9.0) - 2025-08-13
 
 ### Added
