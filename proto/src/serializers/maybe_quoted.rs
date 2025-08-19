@@ -1,5 +1,7 @@
 //! A [`from_str`] serializer that additionally allows deserializing `T` using its own [`Deserialize`] impl.
 //!
+//! Binary serializers will only use the [`from_str`].
+//!
 //! [`from_str`]: crate::serializers::from_str
 
 use std::fmt::Display;
@@ -26,8 +28,12 @@ where
         Quoted(CowStr<'a>),
     }
 
-    match MaybeQuoted::deserialize(deserializer)? {
-        MaybeQuoted::Direct(t) => Ok(t),
-        MaybeQuoted::Quoted(s) => s.parse().map_err(serde::de::Error::custom),
+    if deserializer.is_human_readable() {
+        match MaybeQuoted::deserialize(deserializer)? {
+            MaybeQuoted::Direct(t) => Ok(t),
+            MaybeQuoted::Quoted(s) => s.parse().map_err(serde::de::Error::custom),
+        }
+    } else {
+        crate::serializers::from_str::deserialize(deserializer)
     }
 }

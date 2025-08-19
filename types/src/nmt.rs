@@ -928,4 +928,12 @@ mod tests {
         assert_eq!(hash.max_namespace(), *Namespace::new_v0(&[9]).unwrap());
         assert_eq!(hash.hash(), [0xFF; 32]);
     }
+
+    #[test]
+    fn test_serialize_namespace_with_bincode() {
+        let ns = Namespace::new_v0(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).unwrap();
+        let serialized = bincode::serialize(&ns).unwrap();
+        let deserialized: Namespace = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(ns, deserialized);
+    }
 }
