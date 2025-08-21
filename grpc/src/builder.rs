@@ -1,14 +1,21 @@
+use std::error::Error as StdError;
+
 use bytes::Bytes;
 use http_body::Body;
 use k256::ecdsa::VerifyingKey;
 use signature::Keypair;
-use tonic::body::BoxBody;
+use tonic::body::Body as TonicBody;
 use tonic::client::GrpcService;
+use tonic::codegen::Service;
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(feature = "tls-native-roots", feature = "tls-webpki-roots")
+))]
+use tonic::transport::ClientTlsConfig;
 #[cfg(not(target_arch = "wasm32"))]
-use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
+use tonic::transport::{Channel, Endpoint};
 
 use crate::client::SignerBits;
-use crate::client::StdError;
 use crate::signer::DispatchedDocSigner;
 use crate::DocSigner;
 use crate::GrpcClient;
@@ -84,9 +91,9 @@ impl GrpcClientBuilder<NativeTransportBits> {
 
 #[cfg(target_arch = "wasm32")]
 impl GrpcClientBuilder<tonic_web_wasm_client::Client> {
-    /// Create a new client connected to the given `url` with default
+    /// Create a new client connected to the given grpc-web `url` with default
     /// settings of [`tonic_web_wasm_client::Client`].
-    pub fn with_grpcweb_url(url: impl Into<String>) -> Self {
+    pub fn with_url(url: impl Into<String>) -> Self {
         let connection = tonic_web_wasm_client::Client::new(url.into());
         GrpcClientBuilder {
             transport_setup: connection,
@@ -167,9 +174,15 @@ impl GrpcClientBuilder<NativeTransportBits> {
             tls_config = tls_config.trust_anchors(roots);
         }
 
+        #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
         let channel = Endpoint::from_shared(self.transport_setup.url)?
             .user_agent("celestia-grpc")?
             .tls_config(tls_config)?
+            .connect_lazy();
+
+        #[cfg(not(any(feature = "tls-native-roots", feature = "tls-webpki-roots")))]
+        let channel = Endpoint::from_shared(self.transport_setup.url)?
+            .user_agent("celestia-grpc")?
             .connect_lazy();
 
         Ok(GrpcClient::new(channel, self.signer_bits))
@@ -178,9 +191,10 @@ impl GrpcClientBuilder<NativeTransportBits> {
 
 impl<T> GrpcClientBuilder<T>
 where
-    T: GrpcService<BoxBody> + Clone,
-    T::ResponseBody: Body<Data = Bytes> + Send + 'static,
-    <T::ResponseBody as Body>::Error: Into<StdError> + Send,
+    T: GrpcService<TonicBody> + Service<http::Request<TonicBody>> + Clone,
+    <T as Service<http::Request<TonicBody>>>::Error: StdError + Send,
+    <T as GrpcService<TonicBody>>::ResponseBody: Body<Data = Bytes> + Send + 'static,
+    <<T as GrpcService<TonicBody>>::ResponseBody as http_body::Body>::Error: StdError + Send + Sync,
 {
     /// Build [`GrpcClient`]
     pub fn build(self) -> Result<GrpcClient<T>, GrpcClientBuilderError> {

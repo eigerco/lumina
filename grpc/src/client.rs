@@ -1,3 +1,4 @@
+use std::error::Error as StdError;
 use std::fmt;
 
 use ::tendermint::chain::Id;
@@ -10,8 +11,9 @@ use prost::Message;
 use signature::Keypair;
 use std::time::Duration;
 use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
-use tonic::body::BoxBody;
+use tonic::body::Body as TonicBody;
 use tonic::client::GrpcService;
+use tonic::codegen::Service;
 
 use celestia_grpc_macros::grpc_method;
 use celestia_proto::celestia::blob::v1::query_client::QueryClient as BlobQueryClient;
@@ -44,9 +46,6 @@ use crate::grpc::{
 use crate::signer::{sign_tx, DispatchedDocSigner, KeypairExt};
 use crate::tx::TxInfo;
 use crate::{Error, Result, TxConfig};
-
-/// Error convertible to std, used by grpc transports
-pub type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
 const BLOB_TX_TYPE_ID: &str = "BLOB";
@@ -88,10 +87,10 @@ impl<T> GrpcClient<T> {
 
 impl<T> GrpcClient<T>
 where
-    T: GrpcService<BoxBody> + Clone,
-    T::Error: Into<StdError>,
-    T::ResponseBody: Body<Data = Bytes> + Send + 'static,
-    <T::ResponseBody as Body>::Error: Into<StdError> + Send,
+    T: GrpcService<TonicBody> + Service<http::Request<TonicBody>> + Clone,
+    <T as Service<http::Request<TonicBody>>>::Error: StdError + Send,
+    <T as GrpcService<TonicBody>>::ResponseBody: Body<Data = Bytes> + Send + 'static,
+    <<T as GrpcService<TonicBody>>::ResponseBody as http_body::Body>::Error: StdError + Send + Sync,
 {
     /// Create a new client wrapping given transport
     pub(crate) fn new(transport: T, signer: Option<SignerBits>) -> Self {

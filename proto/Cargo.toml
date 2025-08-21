@@ -20,7 +20,7 @@ prost-types.workspace = true
 serde = { version = "1.0.203", features = ["derive"] }
 subtle-encoding = { version = "0.5", default-features = false, features = ["std", "hex"] }
 tendermint-proto.workspace = true
-tonic = { version = "0.12.3", optional = true, default-features = false, features = [
+tonic = { version = "0.13.1", optional = true, default-features = false, features = [
   "codegen", "prost"
 ]}
 uniffi = { version = "0.29.2", optional = true }
@@ -31,8 +31,8 @@ wasm-bindgen = { workspace = true, optional = true }
 [build-dependencies]
 prost-build.workspace = true
 prost-types.workspace = true
-protox = "0.7.1"
-tonic-build = { version = "0.12.3", default-features = false, optional = true, features = [ "prost" ]}
+protox = "0.8.0"
+tonic-build = { version = "0.13.1", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test.workspace = true

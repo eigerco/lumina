@@ -1,0 +1,14 @@
+[package]
+name = "grpc-tonic-meta"
+version = "0.1.0"
+edition = "2024"
+description = "Helper meta-package so that we can enable TLS on tonic without breaking wasm"
+
+[lib]
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tonic = { workspace = true, default-features = false }
+
+[features]
+tls-native-roots = ["tonic/tls-native-roots"]
+tls-webpki-roots = ["tonic/tls-webpki-roots"]

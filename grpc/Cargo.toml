@@ -23,6 +23,7 @@ crate-type = ["cdylib", "lib"]
 
 [dependencies]
 celestia-grpc-macros = { version = "0.3.0", path = "grpc-macros" }
+grpc-tonic-meta = { version = "0.1.0", path = "grpc-tonic-meta" }
 celestia-proto = { workspace = true, features = ["tonic"] }
 celestia-types.workspace = true
 prost.workspace = true
@@ -34,6 +35,7 @@ async-trait = { version = "0.1.88", optional = true }
 bytes = "1.8"
 hex = "0.4.3"
 http-body = "1"
+http-body-util = "0.1.3"
 ics23 = { version = "0.12.0", default-features = false, features = ["std"] }
 k256 = "0.13.4"
 serde = "1.0.215"
@@ -41,16 +43,17 @@ serde_json = { version = "1.0.140", optional = true }
 signature = "2.2.0"
 thiserror = "1.0.61"
 tokio = { version = "1.38.0", features = ["sync"] }
-tonic = { version = "0.12.3", default-features = false, features = [
-  "codegen", "prost"
+tonic = { workspace = true, features = [
+  "codegen",
 ]}
 tracing = "0.1.40"
 uniffi = { version = "0.29.2", optional = true, features = ["tokio"] }
 futures = "0.3.30"
+http = "1.3.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.38.0", features = ["time"] }
-tonic = { version = "0.12.3", default-features = false, features = [ "transport", "tls-native-roots" ] }
+tonic = { workspace = true, features = [ "transport" ] }
 rustls-native-certs = { version = "0.8.1", optional = true }
 webpki-roots = { version = "1.0.2", optional = true }
 rustls-webpki = { version = "0.103.4", optional = true }
@@ -59,11 +62,11 @@ rustls = { version = "0.23.29", default-features = false, features = [
 ]}
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+tonic-web-wasm-client.workspace = true
 futures = "0.3.30"
 getrandom = { version = "0.2.15", features = ["js"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 send_wrapper = { version = "0.6.0", features = ["futures"] }
-tonic-web-wasm-client = "0.6"
 
 js-sys = { version = "0.3.70", optional = true }
 wasm-bindgen = { version = "0.2.93", optional = true }
@@ -87,5 +90,7 @@ wasm-bindgen-test.workspace = true
 default = ['tls-native-roots']
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
 uniffi = ["dep:uniffi", "dep:async-trait", "dep:serde_json", "celestia-types/uniffi"]
-tls-native-roots = ["dep:rustls-native-certs", "dep:rustls-webpki"]
-tls-webpki-roots = ["dep:webpki-roots", "dep:rustls-webpki"]
+tls-native-roots = ["dep:rustls-native-certs", "dep:rustls-webpki", "grpc-tonic-meta/tls-native-roots"]
+#tls-native-roots = ["dep:rustls-native-certs", "dep:rustls-webpki"]
+tls-webpki-roots = ["dep:webpki-roots", "dep:rustls-webpki", "grpc-tonic-meta/tls-webpki-roots"]
+#tls-webpki-roots = ["dep:webpki-roots", "dep:rustls-webpki"]
