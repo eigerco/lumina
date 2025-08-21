@@ -270,7 +270,7 @@ impl ClientBuilder {
                 let builder = GrpcClientBuilder::with_url(url).with_native_roots();
 
                 #[cfg(target_arch = "wasm32")]
-                let builder = GrpcClientBuilder::with_grpcweb_url(url);
+                let builder = GrpcClientBuilder::with_url(url);
 
                 let client = builder.with_pubkey_and_signer(pubkey, signer).build()?;
 

@@ -1,6 +1,9 @@
 //! A build script generating rust types from protobuf definitions.
 
+#[cfg(not(feature = "tonic"))]
+use prost_types::FileDescriptorSet;
 use std::collections::HashSet;
+#[cfg(feature = "tonic")]
 use tonic_build::FileDescriptorSet;
 
 const DEFAULT: &str = r#"#[serde(default)]"#;

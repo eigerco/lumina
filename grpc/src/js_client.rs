@@ -70,7 +70,7 @@ impl GrpcClientBuilder {
     #[wasm_bindgen(js_name = withUrl)]
     pub fn with_url(url: String) -> Self {
         Self {
-            inner: RustBuilder::with_grpcweb_url(url),
+            inner: RustBuilder::with_url(url),
         }
     }
 
