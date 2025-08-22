@@ -58,7 +58,7 @@ struct AccountBits {
     chain_id: Id,
 }
 
-pub struct SignerBits {
+pub(crate) struct SignerBits {
     pub(crate) signer: DispatchedDocSigner,
     pub(crate) pubkey: VerifyingKey,
 }
@@ -71,7 +71,9 @@ impl Keypair for SignerBits {
     }
 }
 
-/// Struct wrapping all the tonic types and doing type conversion behind the scenes.
+/// gRPC client for the Celestia network
+///
+/// Under the hood, this struct wraps tonic and does type conversion
 pub struct GrpcClient<T> {
     transport: T,
     account: Mutex<Option<AccountBits>>,
@@ -416,7 +418,7 @@ where
         self.confirm_tx(tx_hash, sequence).await
     }
 
-    async fn account_load(&self) -> Result<(MappedMutexGuard<'_, AccountBits>, &SignerBits)> {
+    async fn load_account(&self) -> Result<(MappedMutexGuard<'_, AccountBits>, &SignerBits)> {
         let signer = self.signer.as_ref().ok_or(Error::NoAccount)?;
         let mut account_guard = self.account.lock().await;
 
@@ -460,7 +462,16 @@ where
                 (gas_limit, gas_price)
             }
             (None, maybe_gas_price) => {
-                let tx = sign_tx(tx_body.clone(), chain_id, account, signer, 0, 1).await?;
+                let tx = sign_tx(
+                    tx_body.clone(),
+                    chain_id,
+                    account,
+                    &signer.verifying_key(),
+                    &signer.signer,
+                    0,
+                    1,
+                )
+                .await?;
 
                 let GasEstimate { price, usage } = self
                     .estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
@@ -478,7 +489,7 @@ where
     ) -> Result<(Hash, u64)> {
         // lock the account; tx signing and broadcast must be atomic
         // because node requires all transactions to be sequenced by account.sequence
-        let (account, signer) = self.account_load().await?;
+        let (account, signer) = self.load_account().await?;
 
         let pfb = MsgPayForBlobs::new(&blobs, account.account.address.clone())?;
         let pfb = RawTxBody {
@@ -501,7 +512,8 @@ where
             pfb,
             account.chain_id.clone(),
             &account.account,
-            signer,
+            &signer.verifying_key(),
+            &signer.signer,
             gas_limit,
             fee,
         )
@@ -519,7 +531,7 @@ where
     }
 
     async fn sign_and_broadcast_tx(&self, tx: RawTxBody, cfg: TxConfig) -> Result<(Hash, u64)> {
-        let (account, signer) = self.account_load().await?;
+        let (account, signer) = self.load_account().await?;
 
         let (gas_limit, gas_price) = self
             .calculate_transaction_gas_params(&tx, &cfg, account.chain_id.clone(), &account.account)
@@ -530,7 +542,8 @@ where
             tx,
             account.chain_id.clone(),
             &account.account,
-            signer,
+            &signer.verifying_key(),
+            &signer.signer,
             gas_limit,
             fee as u64,
         )
@@ -603,14 +616,20 @@ where
     }
 
     /// Get client's app version
+    ///
+    /// Note that this function _may_ try to load the account information from the network and as
+    /// such requires signed to be set up.
     pub async fn app_version(&self) -> Result<AppVersion> {
-        let (account, _) = self.account_load().await?;
+        let (account, _) = self.load_account().await?;
         Ok(account.app_version)
     }
 
     /// Get client's chain id
+    ///
+    /// Note that this function _may_ try to load the account information from the network and as
+    /// such requires signed to be set up.
     pub async fn chain_id(&self) -> Result<Id> {
-        let (account, _) = self.account_load().await?;
+        let (account, _) = self.load_account().await?;
         Ok(account.chain_id.clone())
     }
 }

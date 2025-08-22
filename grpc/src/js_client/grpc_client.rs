@@ -9,6 +9,7 @@ use celestia_types::state::{AbciQueryResponse, JsCoin, TxResponse};
 use celestia_types::{Blob, ExtendedHeader};
 
 use crate::grpc::{GasInfo, GetTxResponse, JsBroadcastMode, TxPriority, TxStatusResponse};
+use crate::js_client::{GrpcClientBuilder, RustBuilder};
 use crate::tx::{JsTxConfig, JsTxInfo};
 use crate::Result;
 
@@ -22,6 +23,12 @@ pub struct GrpcClient {
 
 #[wasm_bindgen]
 impl GrpcClient {
+    /// Create a builder for [`GrpcClient`] connected to `url`
+    #[wasm_bindgen(js_name = withUrl)]
+    pub fn with_url(url: String) -> GrpcClientBuilder {
+        RustBuilder::with_url(url).into()
+    }
+
     /// Get auth params
     #[wasm_bindgen(js_name = getAuthParams)]
     pub async fn get_auth_params(&self) -> Result<JsAuthParams> {
@@ -181,7 +188,7 @@ impl GrpcClient {
     ///
     /// If no transaction is found in the last five blocks, return the network
     /// min gas price.
-    #[wasm_bindgen(js_name = getEstimateGasPrice)]
+    #[wasm_bindgen(js_name = estimateGasPrice)]
     pub async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
         self.client.estimate_gas_price(priority).await
     }

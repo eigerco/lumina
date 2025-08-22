@@ -7,6 +7,7 @@ use std::pin::Pin;
 use ::tendermint::chain::Id;
 use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use k256::ecdsa::signature::Signer;
+use k256::ecdsa::VerifyingKey;
 use prost::{Message, Name};
 use signature::Keypair;
 use tendermint_proto::google::protobuf::Any;
@@ -18,7 +19,6 @@ use celestia_types::state::{
     AccAddress, AuthInfo, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
 };
 
-use crate::client::SignerBits;
 use crate::Result;
 
 /// ECDSA/secp256k1 signature used for signing transactions
@@ -90,12 +90,25 @@ impl fmt::Debug for DispatchedDocSigner {
     }
 }
 
+/*
+pub async fn sign_tx(
+    tx_body: RawTxBody,
+    chain_id: Id,
+    base_account: &BaseAccount,
+    verifying_key: &VerifyingKey,
+    signer: &impl DocSigner,
+    gas_limit: u64,
+    fee: u64,
+) -> Result<RawTx> {
+    */
+
 /// Sign `tx_body` and the transaction metadata as the `base_account` using `signer`
 pub async fn sign_tx(
     tx_body: RawTxBody,
     chain_id: Id,
     base_account: &BaseAccount,
-    signer: &SignerBits,
+    verifying_key: &VerifyingKey,
+    signer: &impl DocSigner,
     gas_limit: u64,
     fee: u64,
 ) -> Result<RawTx> {
@@ -105,11 +118,7 @@ pub async fn sign_tx(
     };
 
     let public_key = secp256k1::PubKey {
-        key: signer
-            .verifying_key()
-            .to_encoded_point(true)
-            .as_bytes()
-            .to_vec(),
+        key: verifying_key.to_encoded_point(true).as_bytes().to_vec(),
     };
 
     let public_key_as_any = Any {
@@ -118,7 +127,7 @@ pub async fn sign_tx(
     };
 
     let mut fee = Fee::new(fee, gas_limit);
-    fee.payer = Some(signer.address().into());
+    fee.payer = Some(base_account.address.clone().into());
 
     let auth_info = AuthInfo {
         signer_infos: vec![SignerInfo {
@@ -135,7 +144,7 @@ pub async fn sign_tx(
         chain_id: chain_id.into(),
         account_number: base_account.account_number,
     };
-    let signature = signer.signer.try_sign(doc).await?;
+    let signature = signer.try_sign(doc).await?;
 
     Ok(RawTx {
         auth_info: Some(auth_info.into()),

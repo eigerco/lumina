@@ -10,6 +10,7 @@ window.Blob = Blob;
 window.Namespace = Namespace;
 window.TxPriority = TxPriority;
 window.BroadcastMode = BroadcastMode;
+window.GrpcClient = GrpcClient;
 
 // cat ci/credentials/node-0.address
 window.node0Addr = "celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9";
@@ -25,15 +26,9 @@ async function createTxClient() {
     return sig.toCompactRawBytes();
   };
 
-  window.grpcClient = await new GrpcClient(
-    "http://127.0.0.1:18080",
-  );
-
-  const txClient = await new TxClient(
-    "http://127.0.0.1:18080",
-    pubKey,
-    signer
-  );
+  const txClient = await GrpcClient.withUrl("http://127.0.0.1:18080")
+    .withPubkeyAndSigner(pubKey, signer)
+    .build();
   return txClient;
 }
 

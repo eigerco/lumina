@@ -38,7 +38,7 @@ type RustBuilder = crate::builder::GrpcClientBuilder<tonic_web_wasm_client::Clie
 ///   return sig.toCompactRawBytes();
 /// };
 ///
-/// const txClient = await GrpcClientBuilder
+/// const txClient = await GrpcClient
 ///   .withUrl("http://127.0.0.1:18080")
 ///   .withPubkeyAndSigner(pubKey, signer)
 ///   .build();
@@ -66,14 +66,6 @@ pub struct GrpcClientBuilder {
 
 #[wasm_bindgen]
 impl GrpcClientBuilder {
-    /// Create a builder for [`GrpcClient`] connected to `url`
-    #[wasm_bindgen(js_name = withUrl)]
-    pub fn with_url(url: String) -> Self {
-        Self {
-            inner: RustBuilder::with_url(url),
-        }
-    }
-
     /// Add public key and signer to the client being built
     #[wasm_bindgen(js_name = withPubkeyAndSigner)]
     pub fn with_pubkey_and_signer(
@@ -88,7 +80,7 @@ impl GrpcClientBuilder {
         })
     }
 
-    /// build gRPC read-only client. If you need to send messages, use [`build_tx_client`]
+    /// build gRPC client
     #[wasm_bindgen(js_name = build)]
     pub async fn build(self) -> Result<GrpcClient> {
         Ok(self
@@ -96,5 +88,11 @@ impl GrpcClientBuilder {
             .build()
             .expect("client creation successful")
             .into())
+    }
+}
+
+impl From<RustBuilder> for GrpcClientBuilder {
+    fn from(inner: RustBuilder) -> Self {
+        Self { inner }
     }
 }
