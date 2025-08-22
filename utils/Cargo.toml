@@ -43,7 +43,7 @@ make-object = ["dep:js-sys"]
 # because with any of those, tonic fails to build for wasm, but the `[features]`
 # section cannot be combined with target based cfg's.
 tonic-tls-native-roots-except-wasm32 = ["dep:tonic", "tonic/tls-native-roots"]
-tonic-tls-webpki-roots-except-wasm32 = ["dep:tonic", "tonic/tls-native-roots"]
+tonic-tls-webpki-roots-except-wasm32 = ["dep:tonic", "tonic/tls-webpki-roots"]
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["tonic"]
