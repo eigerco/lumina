@@ -37,15 +37,15 @@ impl NamedLock {
     }
 
     async fn lock_impl(&self, block: bool) -> Result<NamedLockGuard, Error> {
-        // what follows is a rough translaction of mdn example into rust
-        // https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API#advanced_use
-        let (promise, resolve_fn, _reject) = promise_with_resolvers();
-
-        let (tx, rx) = oneshot::channel();
+        let (unlock_tx, unlock_rx) = oneshot::channel();
+        let (would_block_tx, would_block_rx) = oneshot::channel();
 
         let cb: Function = Closure::once_into_js(move |lock: JsValue| {
-            let _ = tx.send(lock);
-            promise
+            future_to_promise(async move {
+                let _ = would_block_tx.send(lock.is_falsy());
+                let _ = unlock_rx.await;
+                Ok(JsValue::null())
+            })
         })
         .unchecked_into();
 
