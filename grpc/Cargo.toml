@@ -86,11 +86,12 @@ celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }
 wasm-bindgen-futures = "0.4.43"
 wasm-bindgen-test.workspace = true
 
+[package.metadata.cargo-udeps.ignore]
+normal = ["grpc-tonic-meta"]
+
 [features]
 default = ['tls-native-roots']
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
 uniffi = ["dep:uniffi", "dep:async-trait", "dep:serde_json", "celestia-types/uniffi"]
 tls-native-roots = ["grpc-tonic-meta/tls-native-roots"]
-#tls-native-roots = ["dep:rustls-native-certs", "dep:rustls-webpki"]
 tls-webpki-roots = ["grpc-tonic-meta/tls-webpki-roots"]
-#tls-webpki-roots = ["dep:webpki-roots", "dep:rustls-webpki"]

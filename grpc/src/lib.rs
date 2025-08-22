@@ -20,8 +20,10 @@ pub use crate::signer::DocSigner;
 pub use crate::tx::{SignDoc, TxConfig, TxInfo};
 pub use celestia_types::any::IntoProtobufAny;
 
+/// Type alias for GrpcClient builder using native tonic transport
 #[cfg(not(target_arch = "wasm32"))]
 pub type ClientBuilder = GrpcClientBuilder<builder::NativeTransportBits>;
+/// Type alias for GrpcClient builder using wasm32 client transport
 #[cfg(target_arch = "wasm32")]
 pub type ClientBuilder = GrpcClientBuilder<tonic_web_wasm_client::Client>;
 

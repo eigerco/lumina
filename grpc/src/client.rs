@@ -103,6 +103,7 @@ where
         }
     }
 
+    /// Create a builder for [`GrpcClient`] connected to `url`
     pub fn with_url(url: impl Into<String>) -> crate::ClientBuilder {
         crate::ClientBuilder::with_url(url)
     }
