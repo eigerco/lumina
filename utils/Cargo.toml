@@ -23,6 +23,10 @@ wasm-bindgen-test = { optional = true, workspace = true }
 web-time = { optional = true, version = "1.1.0" }
 js-sys = { optional = true, version = "0.3.77"}
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# used for optional tonic tls workaround, see [features]
+tonic = { workspace = true, default-features = false, optional = true }
+
 [dev-dependencies]
 web-time = "1.1.0"
 
@@ -33,3 +37,13 @@ token = ["dep:tokio-util"]
 time = ["dep:gloo-timers", "dep:tokio", "dep:send_wrapper", "dep:futures", "dep:pin-project", "dep:web-time"]
 test-utils = ["dep:wasm-bindgen-test"]
 make-object = ["dep:js-sys"]
+
+# Since this crate only depends on tonic on non-wasm32 targets, selecting below
+# features allow control of tonic's tls features excluding wasm32. This is helpful
+# because with any of those, tonic fails to build for wasm, but the `[features]`
+# section cannot be combined with target based cfg's.
+tonic-tls-native-roots-except-wasm32 = ["dep:tonic", "tonic/tls-native-roots"]
+tonic-tls-webpki-roots-except-wasm32 = ["dep:tonic", "tonic/tls-native-roots"]
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["tonic"]

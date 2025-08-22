@@ -23,7 +23,6 @@ crate-type = ["cdylib", "lib"]
 
 [dependencies]
 celestia-grpc-macros = { version = "0.3.0", path = "grpc-macros" }
-grpc-tonic-meta = { version = "0.1.0", path = "grpc-tonic-meta" }
 celestia-proto = { workspace = true, features = ["tonic"] }
 celestia-types.workspace = true
 prost.workspace = true
@@ -53,13 +52,8 @@ http = "1.3.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.38.0", features = ["time"] }
-tonic = { workspace = true, features = [ "transport" ] }
+tonic = { workspace = true, features = [ "transport", "_tls-any" ] }
 rustls-native-certs = { version = "0.8.1", optional = true }
-#webpki-roots = { version = "1.0.2", optional = true }
-#rustls-webpki = { version = "0.103.4", optional = true }
-#rustls = { version = "0.23.29", default-features = false, optional = true, features = [
-  #"std", "ring"
-#]}
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tonic-web-wasm-client.workspace = true
@@ -86,12 +80,9 @@ celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }
 wasm-bindgen-futures = "0.4.43"
 wasm-bindgen-test.workspace = true
 
-[package.metadata.cargo-udeps.ignore]
-normal = ["grpc-tonic-meta"]
-
 [features]
 default = ['tls-native-roots']
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
 uniffi = ["dep:uniffi", "dep:async-trait", "dep:serde_json", "celestia-types/uniffi"]
-tls-native-roots = ["grpc-tonic-meta/tls-native-roots"]
-tls-webpki-roots = ["grpc-tonic-meta/tls-webpki-roots"]
+tls-native-roots = ["lumina-utils/tonic-tls-native-roots-except-wasm32"]
+tls-webpki-roots = ["lumina-utils/tonic-tls-webpki-roots-except-wasm32"]
