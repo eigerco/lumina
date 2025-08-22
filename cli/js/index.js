@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import { AppVersion, Blob, Namespace, NodeConfig, TxClient, BroadcastMode, GrpcClien, TxPriority, protoEncodeSignDoc, spawnNode } from "lumina-node";
+import { AppVersion, Blob, Namespace, NodeConfig, BroadcastMode, GrpcClient, TxPriority, protoEncodeSignDoc, spawnNode } from "lumina-node";
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { Registry } from "@cosmjs/proto-signing";
 

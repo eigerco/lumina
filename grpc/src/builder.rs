@@ -17,15 +17,12 @@ use tonic::transport::{Channel, Endpoint};
 
 use crate::client::SignerBits;
 use crate::signer::DispatchedDocSigner;
-use crate::DocSigner;
-use crate::GrpcClient;
-use crate::GrpcClientBuilderError;
+use crate::{DocSigner, GrpcClient, GrpcClientBuilderError};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub struct NativeTransportBits {
     url: String,
-    load_native_roots: bool,
-    load_webpki_roots: bool,
+    tls: bool,
 }
 
 /// Builder for [`GrpcClient`]
@@ -43,46 +40,20 @@ impl GrpcClientBuilder<NativeTransportBits> {
         GrpcClientBuilder {
             transport_setup: NativeTransportBits {
                 url: url.into(),
-                load_native_roots: false,
-                load_webpki_roots: false,
+                tls: false,
             },
             signer_bits: None,
         }
     }
 
-    /// Enables the platform’s trusted certs.
-    #[cfg(feature = "tls-native-roots")]
-    pub fn with_native_roots(self) -> Self {
-        let NativeTransportBits {
-            url,
-            load_webpki_roots,
-            ..
-        } = self.transport_setup;
-
+    /// Enables loading the certificate roots which were enabled by feature flags
+    /// `tls-webpki-roots` and `tls-native-roots`.
+    #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
+    pub fn with_default_tls(self) -> Self {
         Self {
             transport_setup: NativeTransportBits {
-                url,
-                load_native_roots: true,
-                load_webpki_roots,
-            },
-            ..self
-        }
-    }
-
-    /// Enables the webpki roots.
-    #[cfg(feature = "tls-webpki-roots")]
-    pub fn with_webpki_roots(self) -> Self {
-        let NativeTransportBits {
-            url,
-            load_native_roots,
-            ..
-        } = self.transport_setup;
-
-        Self {
-            transport_setup: NativeTransportBits {
-                url,
-                load_native_roots,
-                load_webpki_roots: true,
+                url: self.transport_setup.url,
+                tls: true,
             },
             ..self
         }
@@ -152,26 +123,13 @@ impl GrpcClientBuilder<NativeTransportBits> {
         let mut tls_config = ClientTlsConfig::new();
 
         #[cfg(feature = "tls-native-roots")]
-        if self.transport_setup.load_native_roots {
-            let rustls_native_certs::CertificateResult { certs, errors, .. } =
-                rustls_native_certs::load_native_certs();
-
-            if certs.is_empty() {
-                return Err(errors.into());
-            }
-
-            tls_config = tls_config.trust_anchors(
-                certs
-                    .into_iter()
-                    .map(|c| Ok(webpki::anchor_from_trusted_cert(&c)?.to_owned()))
-                    .collect::<Result<Vec<_>, GrpcClientBuilderError>>()?,
-            );
+        if self.transport_setup.tls {
+            tls_config = tls_config.with_native_roots();
         }
 
         #[cfg(feature = "tls-webpki-roots")]
-        if self.transport_setup.load_webpki_roots {
-            let roots = webpki_roots::TLS_SERVER_ROOTS.iter().cloned();
-            tls_config = tls_config.trust_anchors(roots);
+        if self.transport_setup.tls {
+            tls_config = tls_config.with_webpki_roots();
         }
 
         #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]

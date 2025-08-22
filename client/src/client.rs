@@ -2,7 +2,7 @@ use std::fmt::{self, Debug};
 use std::sync::Arc;
 
 use celestia_grpc::signer::DispatchedDocSigner;
-use celestia_grpc::{GrpcClient, GrpcClientBuilder};
+use celestia_grpc::{ClientBuilder as GrpcClientBuilder, GrpcClient};
 use celestia_rpc::{Client as RpcClient, HeaderClient};
 use zeroize::Zeroizing;
 
@@ -266,11 +266,13 @@ impl ClientBuilder {
 
         let (pubkey, grpc) = match (&self.grpc_url, signer) {
             (Some(url), Some((pubkey, signer))) => {
-                #[cfg(not(target_arch = "wasm32"))]
-                let builder = GrpcClientBuilder::with_url(url).with_native_roots();
-
-                #[cfg(target_arch = "wasm32")]
                 let builder = GrpcClientBuilder::with_url(url);
+
+                #[cfg(all(
+                    not(target_arch = "wasm32"),
+                    any(feature = "tls-webpki-roots", feature = "tls-native-roots")
+                ))]
+                let builder = builder.with_default_tls();
 
                 let client = builder.with_pubkey_and_signer(pubkey, signer).build()?;
 

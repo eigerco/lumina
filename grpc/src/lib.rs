@@ -15,11 +15,15 @@ mod utils;
 
 pub use crate::builder::GrpcClientBuilder;
 pub use crate::client::GrpcClient;
-pub use crate::error::GrpcClientBuilderError;
-pub use crate::error::{Error, Result};
+pub use crate::error::{Error, GrpcClientBuilderError, Result};
 pub use crate::signer::DocSigner;
 pub use crate::tx::{SignDoc, TxConfig, TxInfo};
 pub use celestia_types::any::IntoProtobufAny;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub type ClientBuilder = GrpcClientBuilder<builder::NativeTransportBits>;
+#[cfg(target_arch = "wasm32")]
+pub type ClientBuilder = GrpcClientBuilder<tonic_web_wasm_client::Client>;
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();

@@ -100,19 +100,6 @@ pub enum GrpcClientBuilderError {
     #[error(transparent)]
     #[cfg(not(target_arch = "wasm32"))]
     TonicTransportError(#[from] tonic::transport::Error),
-
-    /// Error handling certificate root
-    #[error(transparent)]
-    #[cfg(not(target_arch = "wasm32"))]
-    Webpki(#[from] webpki::Error),
-
-    /// Could not import system certificates
-    #[cfg(not(target_arch = "wasm32"))]
-    #[error("Could not import platform certificates: {errors:?}")]
-    RustlsNativeCerts {
-        /// List of errors
-        errors: Vec<rustls_native_certs::Error>,
-    },
 }
 
 impl From<Status> for Error {
@@ -125,12 +112,5 @@ impl From<Status> for Error {
 impl From<Error> for wasm_bindgen::JsValue {
     fn from(error: Error) -> wasm_bindgen::JsValue {
         error.to_string().into()
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl From<Vec<rustls_native_certs::Error>> for GrpcClientBuilderError {
-    fn from(errors: Vec<rustls_native_certs::Error>) -> Self {
-        GrpcClientBuilderError::RustlsNativeCerts { errors }
     }
 }

@@ -101,6 +101,10 @@ where
         }
     }
 
+    pub fn with_url(url: impl Into<String>) -> crate::ClientBuilder {
+        crate::ClientBuilder::with_url(url)
+    }
+
     // cosmos.auth
 
     /// Get auth params

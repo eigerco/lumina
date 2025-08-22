@@ -55,11 +55,11 @@ http = "1.3.1"
 tokio = { version = "1.38.0", features = ["time"] }
 tonic = { workspace = true, features = [ "transport" ] }
 rustls-native-certs = { version = "0.8.1", optional = true }
-webpki-roots = { version = "1.0.2", optional = true }
-rustls-webpki = { version = "0.103.4", optional = true }
-rustls = { version = "0.23.29", default-features = false, features = [
-  "std", "ring"
-]}
+#webpki-roots = { version = "1.0.2", optional = true }
+#rustls-webpki = { version = "0.103.4", optional = true }
+#rustls = { version = "0.23.29", default-features = false, optional = true, features = [
+  #"std", "ring"
+#]}
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tonic-web-wasm-client.workspace = true
@@ -90,7 +90,7 @@ wasm-bindgen-test.workspace = true
 default = ['tls-native-roots']
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
 uniffi = ["dep:uniffi", "dep:async-trait", "dep:serde_json", "celestia-types/uniffi"]
-tls-native-roots = ["dep:rustls-native-certs", "dep:rustls-webpki", "grpc-tonic-meta/tls-native-roots"]
+tls-native-roots = ["grpc-tonic-meta/tls-native-roots"]
 #tls-native-roots = ["dep:rustls-native-certs", "dep:rustls-webpki"]
-tls-webpki-roots = ["dep:webpki-roots", "dep:rustls-webpki", "grpc-tonic-meta/tls-webpki-roots"]
+tls-webpki-roots = ["grpc-tonic-meta/tls-webpki-roots"]
 #tls-webpki-roots = ["dep:webpki-roots", "dep:rustls-webpki"]

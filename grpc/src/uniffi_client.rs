@@ -52,8 +52,7 @@ pub struct GrpcClientBuilder {
     url: String,
     signer: Option<Arc<dyn UniffiSigner>>,
     account_pubkey: Option<VerifyingKey>,
-    native_roots: bool,
-    webpki_roots: bool,
+    tls: bool,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -65,8 +64,7 @@ impl GrpcClientBuilder {
             url,
             signer: None,
             account_pubkey: None,
-            native_roots: false,
-            webpki_roots: false,
+            tls: false,
         }
     }
 
@@ -84,8 +82,7 @@ impl GrpcClientBuilder {
             url: self.url.clone(),
             signer: Some(signer),
             account_pubkey: Some(vk),
-            native_roots: self.native_roots,
-            webpki_roots: self.webpki_roots,
+            tls: self.tls,
         })
     }
 
@@ -96,14 +93,9 @@ impl GrpcClientBuilder {
     pub async fn build(self: Arc<Self>) -> Result<GrpcClient, GrpcClientBuilderError> {
         let mut builder = RustBuilder::with_url(self.url.clone());
 
-        #[cfg(feature = "tls-native-roots")]
-        if self.native_roots {
-            builder = builder.with_native_roots();
-        }
-
-        #[cfg(feature = "tls-webpki-roots")]
-        if self.webpki_roots {
-            builder = builder.with_webpki_roots();
+        #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
+        if self.tls {
+            builder = builder.with_default_tls();
         }
 
         if let Some(signer) = self.signer.clone() {
@@ -117,34 +109,18 @@ impl GrpcClientBuilder {
     }
 }
 
-#[cfg(feature = "tls-native-roots")]
+#[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
 #[uniffi::export]
 impl GrpcClientBuilder {
-    /// Enable the platform trusted certs.
-    #[uniffi::method(name = "withNativeRoots")]
-    pub fn with_native_roots(self: Arc<Self>) -> Self {
+    /// Enables loading the certificate roots which were enabled by feature flags
+    /// `tls-webpki-roots` and `tls-native-roots`.
+    #[uniffi::method(name = "withDefaultTls")]
+    pub fn with_default_tls(self: Arc<Self>) -> Self {
         GrpcClientBuilder {
             url: self.url.clone(),
             signer: self.signer.clone(),
             account_pubkey: self.account_pubkey,
-            native_roots: true,
-            webpki_roots: self.webpki_roots,
-        }
-    }
-}
-
-#[cfg(feature = "tls-webpki-roots")]
-#[uniffi::export]
-impl GrpcClientBuilder {
-    /// Enable webpki roots.
-    #[uniffi::method(name = "withWebpkiRoots")]
-    pub fn with_webpki_roots(self: Arc<Self>) -> Self {
-        GrpcClientBuilder {
-            url: self.url.clone(),
-            signer: self.signer.clone(),
-            account_pubkey: self.account_pubkey,
-            native_roots: self.native_roots,
-            webpki_roots: true,
+            tls: true,
         }
     }
 }
@@ -152,14 +128,6 @@ impl GrpcClientBuilder {
 impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
     fn from(error: crate::GrpcClientBuilderError) -> Self {
         match error {
-            crate::GrpcClientBuilderError::Webpki(error) => GrpcClientBuilderError::Webpki {
-                msg: error.to_string(),
-            },
-            crate::GrpcClientBuilderError::RustlsNativeCerts { errors } => {
-                GrpcClientBuilderError::RustlsNativeCerts {
-                    errors: errors.into_iter().map(|e| e.to_string()).collect(),
-                }
-            }
             crate::GrpcClientBuilderError::TonicTransportError(error) => {
                 GrpcClientBuilderError::TonicTransportError {
                     msg: error.to_string(),
