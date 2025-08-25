@@ -1,7 +1,8 @@
 use std::fmt::{self, Debug};
 use std::sync::Arc;
 
-use celestia_grpc::TxClient;
+use celestia_grpc::signer::DispatchedDocSigner;
+use celestia_grpc::{ClientBuilder as GrpcClientBuilder, GrpcClient};
 use celestia_rpc::{Client as RpcClient, HeaderClient};
 use zeroize::Zeroizing;
 
@@ -14,7 +15,6 @@ use crate::state::StateApi;
 use crate::tx::{DocSigner, Keypair, SigningKey, VerifyingKey};
 use crate::types::state::AccAddress;
 use crate::types::ExtendedHeader;
-use crate::utils::DispatchedDocSigner;
 use crate::{Error, Result};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -25,7 +25,7 @@ type Transport = tonic_web_wasm_client::Client;
 
 pub(crate) struct Context {
     pub(crate) rpc: RpcClient,
-    grpc: Option<TxClient<Transport, DispatchedDocSigner>>,
+    grpc: Option<GrpcClient<Transport>>,
     pubkey: Option<VerifyingKey>,
     chain_id: tendermint::chain::Id,
 }
@@ -110,7 +110,7 @@ impl Debug for SignerKind {
 }
 
 impl Context {
-    pub(crate) fn grpc(&self) -> Result<&TxClient<Transport, DispatchedDocSigner>> {
+    pub(crate) fn grpc(&self) -> Result<&GrpcClient<Transport>> {
         self.grpc.as_ref().ok_or(Error::ReadOnlyMode)
     }
 
@@ -266,13 +266,17 @@ impl ClientBuilder {
 
         let (pubkey, grpc) = match (&self.grpc_url, signer) {
             (Some(url), Some((pubkey, signer))) => {
-                #[cfg(not(target_arch = "wasm32"))]
-                let tx_client = TxClient::with_url(url, pubkey, signer).await?;
+                let builder = GrpcClientBuilder::with_url(url);
 
-                #[cfg(target_arch = "wasm32")]
-                let tx_client = TxClient::with_grpcweb_url(url, pubkey, signer).await?;
+                #[cfg(all(
+                    not(target_arch = "wasm32"),
+                    any(feature = "tls-webpki-roots", feature = "tls-native-roots")
+                ))]
+                let builder = builder.with_default_tls();
 
-                (Some(pubkey), Some(tx_client))
+                let client = builder.with_pubkey_and_signer(pubkey, signer).build()?;
+
+                (Some(pubkey), Some(client))
             }
             (Some(_url), None) => return Err(Error::SignerNotSet),
             (None, Some((_pubkey, _signer))) => return Err(Error::GrpcEndpointNotSet),
@@ -289,7 +293,7 @@ impl ClientBuilder {
         head.validate()?;
 
         if let Some(grpc) = &grpc {
-            if grpc.chain_id() != head.chain_id() {
+            if &grpc.chain_id().await? != head.chain_id() {
                 return Err(Error::ChainIdMissmatch);
             }
         }

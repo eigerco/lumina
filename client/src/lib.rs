@@ -56,6 +56,8 @@ pub mod tx {
     pub use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
 }
 
+use celestia_grpc::GrpcClientBuilderError;
+
 /// Re-export of [`celestia-proto`].
 ///
 /// [`celestia-proto`]: celestia_proto
@@ -84,9 +86,13 @@ pub enum Error {
     #[error("RPC error: {0}")]
     Rpc(#[from] celestia_rpc::Error),
 
-    /// Celestia GRPC error.
-    #[error("GRPC error: {0}")]
+    /// Celestia gRPC error.
+    #[error("gRPC error: {0}")]
     Grpc(#[from] celestia_grpc::Error),
+
+    /// gRPC client builder error.
+    #[error("gRPC client builder error: {0}")]
+    GrpcBuilder(#[from] GrpcClientBuilderError),
 
     /// Celestia types error.
     #[error("Celestia types error: {0}")]
@@ -96,7 +102,7 @@ pub enum Error {
     #[error("Client is constructed for read-only mode, operation not supported")]
     ReadOnlyMode,
 
-    /// RPC chain-id and gGRPC chain-id missmatch.
+    /// RPC chain-id and gRPC chain-id missmatch.
     #[error("Chain id of RPC endpoint missmatch with chain id of gRPC endpoint")]
     ChainIdMissmatch,
 
@@ -117,11 +123,11 @@ pub enum Error {
     RpcEndpointNotSet,
 
     /// Signer is not set.
-    #[error("GRPC endpoint is set but singer is not")]
+    #[error("gRPC endpoint is set but singer is not")]
     SignerNotSet,
 
-    /// GRPC endpoint is not set.
-    #[error("Signer is set but GRPC endpoint is not")]
+    /// gRPC endpoint is not set.
+    #[error("Signer is set but gRPC endpoint is not")]
     GrpcEndpointNotSet,
 }
 

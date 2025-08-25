@@ -17,11 +17,14 @@ tendermint-proto = "0.40.4"
 
 libp2p = "0.54.1"
 nmt-rs = "0.2.1"
-prost = "0.13.3"
-prost-build = "0.13.3"
-prost-types = "0.13.3"
+prost = "0.13.5"
+prost-build = "0.13.5"
+prost-types = "0.13.5"
 wasm-bindgen = "0.2.100"
 wasm-bindgen-test = "0.3.49"
+# also upgrade manually in `proto/Cargo.toml`
+tonic = { version = "0.13.1", default-features = false }
+tonic-web-wasm-client = "0.7.1"
 
 [patch.crates-io]
 # Uncomment to apply local changes

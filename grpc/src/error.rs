@@ -10,9 +10,9 @@ use crate::abci_proofs::ProofError;
 /// [`celestia_grpc::Error`]: crate::Error
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-/// Representation of all the errors that can occur when interacting with [`celestia_grpc`].
+/// Representation of all the errors that can occur when interacting with [`GrpcClient`].
 ///
-/// [`celestia_grpc`]: crate
+/// [`GrpcClient`]: crate::GrpcClient
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Tonic error
@@ -79,6 +79,27 @@ pub enum Error {
     /// Signing error
     #[error(transparent)]
     SigningError(#[from] SignatureError),
+
+    /// No account
+    #[error("no account")]
+    NoAccount,
+
+    /// Builder error
+    #[error("Keys and signer not set when building transaction client")]
+    MissingKeysAndSinger,
+}
+
+/// Representation of all the errors that can occur when building [`GrpcClient`] using
+/// [`GrpcClientBuilder`]
+///
+/// [`GrpcClient`]: crate::GrpcClient
+/// [`GrpcClientBuilder`]: crate::GrpcClientBuilder
+#[derive(thiserror::Error, Debug)]
+pub enum GrpcClientBuilderError {
+    /// Error from tonic transport
+    #[error(transparent)]
+    #[cfg(not(target_arch = "wasm32"))]
+    TonicTransportError(#[from] tonic::transport::Error),
 }
 
 impl From<Status> for Error {

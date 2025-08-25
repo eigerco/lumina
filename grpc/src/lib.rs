@@ -1,19 +1,31 @@
 #![doc = include_str!("../README.md")]
 
 mod abci_proofs;
+mod builder;
+mod client;
 mod error;
 pub mod grpc;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod js_client;
+pub mod signer;
 mod tx;
 #[cfg(all(not(target_arch = "wasm32"), feature = "uniffi"))]
 pub mod uniffi_client;
 mod utils;
 
-pub use crate::error::{Error, Result};
-pub use crate::grpc::GrpcClient;
-pub use crate::tx::{DocSigner, SignDoc, TxClient, TxConfig, TxInfo};
+pub use crate::builder::GrpcClientBuilder;
+pub use crate::client::GrpcClient;
+pub use crate::error::{Error, GrpcClientBuilderError, Result};
+pub use crate::signer::DocSigner;
+pub use crate::tx::{SignDoc, TxConfig, TxInfo};
 pub use celestia_types::any::IntoProtobufAny;
+
+/// Type alias for GrpcClient builder using native tonic transport
+#[cfg(not(target_arch = "wasm32"))]
+pub type ClientBuilder = GrpcClientBuilder<builder::NativeTransportBits>;
+/// Type alias for GrpcClient builder using wasm32 client transport
+#[cfg(target_arch = "wasm32")]
+pub type ClientBuilder = GrpcClientBuilder<tonic_web_wasm_client::Client>;
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();
