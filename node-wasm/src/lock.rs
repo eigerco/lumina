@@ -137,8 +137,8 @@ mod tests {
 
     use super::*;
 
-    use lumina_utils::time::sleep;
     use lumina_utils::executor::spawn;
+    use lumina_utils::time::sleep;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     #[wasm_bindgen_test]
@@ -146,7 +146,9 @@ mod tests {
         const LOCK_NAME: &str = "lock_unlock";
         {
             let _guard = NamedLock::try_lock(LOCK_NAME).await.expect("lock ok");
-            NamedLock::try_lock(LOCK_NAME).await.expect_err("locked lock");
+            NamedLock::try_lock(LOCK_NAME)
+                .await
+                .expect_err("locked lock");
         }
 
         // XXX: a bit nasty, but we need to yield back to js for unlock to register
@@ -162,7 +164,9 @@ mod tests {
 
         let (tx, rx) = oneshot::channel();
         spawn(async move {
-        NamedLock::try_lock(LOCK_NAME).await.expect_err("should be locked now");
+            NamedLock::try_lock(LOCK_NAME)
+                .await
+                .expect_err("should be locked now");
             let _sync_lock = NamedLock::lock(LOCK_NAME).await;
             rx.await.unwrap();
         });
@@ -171,7 +175,9 @@ mod tests {
         drop(lock);
 
         lumina_utils::executor::yield_now().await;
-        NamedLock::try_lock(LOCK_NAME).await.expect_err("should be locked");
+        NamedLock::try_lock(LOCK_NAME)
+            .await
+            .expect_err("should be locked");
 
         tx.send(()).unwrap();
         lumina_utils::executor::yield_now().await;
