@@ -1,10 +1,9 @@
 //! Types related to signing transactions
 
 use std::fmt;
-use std::future::{ready, Future};
-use std::pin::Pin;
 
 use ::tendermint::chain::Id;
+use async_trait::async_trait;
 use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use k256::ecdsa::signature::Signer;
 use k256::ecdsa::VerifyingKey;
@@ -27,24 +26,20 @@ pub type DocSignature = k256::ecdsa::Signature;
 pub type SignatureError = k256::ecdsa::signature::Error;
 
 /// Signer capable of producing ecdsa signature using secp256k1 curve.
+#[async_trait]
 pub trait DocSigner: Send + Sync {
     /// Try to sign the provided sign doc.
-    fn try_sign(
-        &self,
-        doc: SignDoc,
-    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send>>;
+    async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError>;
 }
 
+#[async_trait]
 impl<T> DocSigner for T
 where
-    T: Signer<DocSignature> + Send + Sync,
+    T: Signer<DocSignature> + Send + Sync + 'static,
 {
-    fn try_sign(
-        &self,
-        doc: SignDoc,
-    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send>> {
+    async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
         let bytes = doc.encode_to_vec();
-        Box::pin(ready(self.try_sign(&bytes)))
+        self.try_sign(&bytes)
     }
 }
 
@@ -61,12 +56,10 @@ impl DispatchedDocSigner {
     }
 }
 
+#[async_trait]
 impl DocSigner for DispatchedDocSigner {
-    fn try_sign(
-        &self,
-        doc: SignDoc,
-    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send>> {
-        Box::pin(self.0.try_sign(doc))
+    async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
+        self.0.try_sign(doc).await
     }
 }
 
@@ -220,11 +213,18 @@ mod uniffi_types {
         pub bytes: Vec<u8>,
     }
 
+    #[async_trait]
     impl DocSigner for UniffiSignerBox {
-        fn try_sign(
+        async fn try_sign(
             &self,
             doc: SignDoc,
-        ) -> Pin<Box<dyn Future<Output = Result<Secp256k1Signature, K256Error>> + Send>> {
+            //) -> Pin<Box<dyn Future<Output = Result<Secp256k1Signature, K256Error>> + Send>> {
+        ) -> Result<Secp256k1Signature, K256Error> {
+            match self.0.sign(doc).await {
+                Ok(s) => Secp256k1Signature::try_from(s).map_err(K256Error::from_source),
+                Err(e) => Err(K256Error::from_source(e)),
+            }
+            /*
             let signer = self.0.clone();
             Box::pin(async move {
                 match signer.sign(doc).await {
@@ -232,6 +232,7 @@ mod uniffi_types {
                     Err(e) => Err(K256Error::from_source(e)),
                 }
             })
+                */
         }
     }
 
@@ -289,39 +290,39 @@ mod wbg {
         }
     }
 
+    #[async_trait]
     impl DocSigner for JsSigner {
-        fn try_sign(
-            &self,
-            doc: SignDoc,
-        ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send>> {
-            let msg = JsSignDoc::from(doc);
-            let signer_fn = self.signer_fn.clone();
-
-            Box::pin(SendWrapper::new(async move {
-                let mut res = signer_fn.call1(&JsValue::null(), &msg).map_err(|e| {
-                    let err = format!("Error calling signer fn: {e:?}");
-                    SignatureError::from_source(err)
-                })?;
-
-                // if signer_fn is async, await it
-                if res.has_type::<Promise>() {
-                    let promise = res.unchecked_into::<Promise>();
-                    res = JsFuture::from(promise).await.map_err(|e| {
-                        let err = format!("Error awaiting signer promise: {e:?}");
+        async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
+            let result_or_promise = SendWrapper::new(
+                self.signer_fn
+                    .call1(&JsValue::null(), &JsSignDoc::from(doc))
+                    .map_err(|e| {
+                        let err = format!("Error calling signer fn: {e:?}");
                         SignatureError::from_source(err)
-                    })?
-                }
+                    })?,
+            );
 
-                let sig = res.dyn_into::<Uint8Array>().map_err(|orig| {
-                    let err = format!(
-                        "Signature must be Uint8Array, found: {}",
-                        orig.js_typeof().as_string().expect("typeof returns string")
-                    );
+            // if signer_fn is async, await it
+            let result = if result_or_promise.has_type::<Promise>() {
+                let promise = result_or_promise.take().unchecked_into::<Promise>();
+                let future = SendWrapper::new(JsFuture::from(promise));
+                future.await.map_err(|e| {
+                    let err = format!("Error awaiting signer promise: {e:?}");
                     SignatureError::from_source(err)
-                })?;
+                })?
+            } else {
+                result_or_promise.take()
+            };
 
-                DocSignature::from_slice(&sig.to_vec()).map_err(SignatureError::from_source)
-            }))
+            let sig = result.dyn_into::<Uint8Array>().map_err(|orig| {
+                let err = format!(
+                    "Signature must be Uint8Array, found: {}",
+                    orig.js_typeof().as_string().expect("typeof returns string")
+                );
+                SignatureError::from_source(err)
+            })?;
+
+            DocSignature::from_slice(&sig.to_vec()).map_err(SignatureError::from_source)
         }
     }
 

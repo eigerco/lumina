@@ -30,7 +30,7 @@ tendermint-proto.workspace = true
 tendermint.workspace = true
 lumina-utils = { workspace = true, features = ["time"] }
 
-async-trait = { version = "0.1.88", optional = true }
+async-trait = "0.1.88"
 bytes = "1.8"
 hex = "0.4.3"
 http-body = "1"
@@ -83,6 +83,6 @@ wasm-bindgen-test.workspace = true
 [features]
 default = ['tls-native-roots']
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
-uniffi = ["dep:uniffi", "dep:async-trait", "dep:serde_json", "celestia-types/uniffi"]
+uniffi = ["dep:uniffi", "dep:serde_json", "celestia-types/uniffi"]
 tls-native-roots = ["lumina-utils/tonic-tls-native-roots-except-wasm32"]
 tls-webpki-roots = ["lumina-utils/tonic-tls-webpki-roots-except-wasm32"]
