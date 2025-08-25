@@ -20,7 +20,7 @@ use web_sys::BroadcastChannel;
 use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::error::{Context, Result};
 use crate::key_registry::KeyRegistry;
-use crate::lock::NamedLockGuard;
+use crate::lock::NamedLock;
 use crate::ports::WorkerClient;
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, timeout, Network,
@@ -379,7 +379,7 @@ impl WasmNodeConfig {
 
     pub(crate) async fn into_node_builder(
         self,
-    ) -> Result<(NamedLockGuard, NodeBuilder<WasmBlockstore, WasmStore>)> {
+    ) -> Result<(NamedLock, NodeBuilder<WasmBlockstore, WasmStore>)> {
         let network = network::Network::from(self.network);
         let network_id = network.id();
 
@@ -388,11 +388,9 @@ impl WasmNodeConfig {
             let guard = KeyRegistry::lock_key(&keypair).await?;
 
             (keypair, guard)
-        } else if self.use_persistent_memory {
+        } else {
             let registry = KeyRegistry::new().await?;
             registry.get_key().await?
-        } else {
-            KeyRegistry::get_ephemeral_key().await
         };
 
         let mut builder = if self.use_persistent_memory {

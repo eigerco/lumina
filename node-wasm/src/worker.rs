@@ -22,7 +22,7 @@ use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMet
 use crate::client::WasmNodeConfig;
 use crate::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
 use crate::error::{Context, Error, Result};
-use crate::lock::NamedLockGuard;
+use crate::lock::NamedLock;
 use crate::ports::WorkerServer;
 use crate::utils::random_id;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -61,7 +61,7 @@ pub struct NodeWorker {
 struct NodeWorkerInstance {
     node: Node<WasmBlockstore, WasmStore>,
     events_channel_name: String,
-    _key_lock: NamedLockGuard,
+    _p2p_identity_lock: NamedLock,
 }
 
 #[wasm_bindgen]
@@ -142,7 +142,7 @@ impl NodeWorkerInstance {
         Ok(Self {
             node,
             events_channel_name: events_channel_name.to_owned(),
-            _key_lock: key_lock,
+            _p2p_identity_lock: key_lock,
         })
     }
 

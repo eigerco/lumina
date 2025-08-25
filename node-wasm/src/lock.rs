@@ -7,6 +7,7 @@ use lumina_utils::make_object;
 use serde_wasm_bindgen::to_value;
 use tokio::sync::oneshot;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::future_to_promise;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -18,28 +19,19 @@ pub enum Error {
 }
 
 pub struct NamedLock {
-    lock_manager: LockManager,
-    name: String,
-}
-
-pub struct NamedLockGuard {
-    resolve_fn: Function,
+    _unlock_tx: oneshot::Sender<()>,
 }
 
 impl NamedLock {
-    pub fn create(name: impl Into<String>) -> Result<Self, Error> {
-        let lock_manager = get_lock_manager().map_err(Error::LockManagerUnavailable)?;
-
-        Ok(NamedLock {
-            lock_manager,
-            name: name.into(),
-        })
+    pub async fn try_lock(name: &str) -> Result<NamedLock, Error> {
+        NamedLock::lock_impl(name, false).await
     }
 
-    async fn lock_impl(&self, block: bool) -> Result<NamedLockGuard, Error> {
+    async fn lock_impl(name: &str, block: bool) -> Result<NamedLock, Error> {
+        let lock_manager = get_lock_manager().map_err(Error::LockManagerUnavailable)?;
+
         let (unlock_tx, unlock_rx) = oneshot::channel();
         let (would_block_tx, would_block_rx) = oneshot::channel();
-
         let cb: Function = Closure::once_into_js(move |lock: JsValue| {
             future_to_promise(async move {
                 let _ = would_block_tx.send(lock.is_falsy());
@@ -57,46 +49,26 @@ impl NamedLock {
 
         // fn returns a promise that gets resolved when the callback returns,
         // which is useless for us. Actual lock is gets passed to the callback
-        let _promise = self
-            .lock_manager
-            .request_with_options_and_callback(&self.name, &opts, &cb);
+        let _promise = lock_manager.request_with_options_and_callback(name, &opts, &cb);
 
-        let lock = rx.await.expect("valid singleshot channel");
+        let would_block = would_block_rx.await.expect("valid singleshot channel");
 
         // only case where callback above is called with a falsy value is when we're in
         // non-blocking mode and the lock is already taken
-        if !lock.is_truthy() {
+        if would_block {
             return Err(Error::WouldBlock);
         }
 
-        Ok(NamedLockGuard { resolve_fn })
-    }
-
-    #[allow(dead_code)]
-    pub async fn lock(&self) -> Result<NamedLockGuard, Error> {
-        self.lock_impl(true).await
-    }
-
-    pub async fn try_lock(&self) -> Result<NamedLockGuard, Error> {
-        self.lock_impl(false).await
-    }
-}
-
-impl Drop for NamedLockGuard {
-    fn drop(&mut self) {
-        let _ = self.resolve_fn.call0(&JsValue::NULL);
+        Ok(NamedLock {
+            _unlock_tx: unlock_tx,
+        })
     }
 }
 
 impl fmt::Debug for NamedLock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NamedLock({})", self.name)
-    }
-}
-
-impl fmt::Debug for NamedLockGuard {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("NamedLockGuard { .. }")
+        //write!(f, "NamedLock { .. }", self.name)
+        f.write_str("NamedLock { .. }")
     }
 }
 
@@ -108,16 +80,6 @@ extern "C" {
     /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/LockManager)
     pub type LockManager;
 
-    #[wasm_bindgen(method, structural, js_class = "LockManager", js_name = query)]
-    /// The `query()` method.
-    /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/LockManager/query)
-    pub fn query(this: &LockManager) -> Promise;
-
-    #[wasm_bindgen(method, structural, js_class = "LockManager", js_name = request)]
-    /// The `request()` method.
-    /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/LockManager/request)
-    pub fn request_with_callback(this: &LockManager, name: &str, callback: &Function) -> Promise;
-
     #[wasm_bindgen(method, structural, js_class = "LockManager", js_name = request)]
     /// The `request()` method.
     /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/LockManager/request)
@@ -127,27 +89,6 @@ extern "C" {
         options: &JsValue,
         callback: &Function,
     ) -> Promise;
-}
-
-fn promise_with_resolvers() -> (Promise, Function, Function) {
-    let a = js::Promise::with_resolvers();
-
-    let promise = Reflect::get(&a, &to_value("promise").unwrap())
-        .unwrap()
-        .dyn_into::<Promise>()
-        .expect("valid cast");
-
-    let resolve = Reflect::get(&a, &to_value("resolve").unwrap())
-        .unwrap()
-        .dyn_into::<Function>()
-        .expect("valid cast");
-
-    let reject = Reflect::get(&a, &to_value("reject").unwrap())
-        .unwrap()
-        .dyn_into::<Function>()
-        .expect("valid cast");
-
-    (promise, resolve, reject)
 }
 
 mod js {
@@ -189,22 +130,18 @@ fn get_lock_manager() -> Result<LockManager, JsError> {
 mod tests {
     use super::*;
 
-    use lumina_utils::time::sleep;
-    use std::time::Duration;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     #[wasm_bindgen_test]
     async fn lock_unlock() {
-        let lock = NamedLock::create("foo").expect("lock creation ok");
-
         {
-            let _guard = lock.try_lock().await.expect("valid lock");
-            let _locked_guard = lock.try_lock().await.expect_err("locked lock");
+            let _guard = NamedLock::try_lock("foo").await.expect("lock ok");
+            NamedLock::try_lock("foo").await.expect_err("locked lock");
         }
 
-        // XXX: a bit nasty, but we need to yield back to js for it to register the unlock
-        sleep(Duration::from_millis(1)).await;
+        // XXX: a bit nasty, but we need to yield back to js for unlock to register
+        lumina_utils::executor::yield_now().await;
 
-        let _guard = lock.try_lock().await.expect("valid lock");
+        let _guard = NamedLock::try_lock("foo").await.expect("valid lock");
     }
 }

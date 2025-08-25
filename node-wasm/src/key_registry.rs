@@ -6,12 +6,14 @@ use serde_wasm_bindgen::to_value;
 use tracing::{info, warn};
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::lock::{Error as LockError, NamedLock, NamedLockGuard};
+use crate::lock::{Error as LockError, NamedLock};
 
 const DB_NAME: &str = "identity_registry";
 const DB_VERSION: u32 = 1;
 
-const KEY_STORE_NAME: &str = "🗝️";
+const KEY_STORE_NAME: &str = "libp2p_identity";
+
+const MAX_KEYS: usize = 512;
 
 pub struct KeyRegistry {
     db: SendWrapper<Database>,
@@ -60,49 +62,43 @@ impl KeyRegistry {
         })
     }
 
-    async fn get_first_unused_key(&self) -> Result<Option<(Keypair, NamedLockGuard)>> {
-        const KEY_BATCH_SIZE: usize = 512;
+    async fn get_first_unused_key(&self) -> Result<Option<(Keypair, NamedLock)>> {
         let tx = self
             .db
             .transaction(&[KEY_STORE_NAME], TransactionMode::ReadWrite)?;
 
         let store = tx.object_store(KEY_STORE_NAME)?;
 
-        let mut offset = 0;
+        let key_range = KeyRange::bound(
+            &to_value(&0).expect("successful conversion"),
+            &to_value(&MAX_KEYS).expect("successful conversion"),
+            Some(false),
+            Some(true),
+        )
+        .expect("valid key range");
 
-        loop {
-            let key_range = KeyRange::bound(
-                &to_value(&offset).expect("successful conversion"),
-                &to_value(&(offset + KEY_BATCH_SIZE)).expect("successful conversion"),
-                Some(false),
-                Some(true),
-            )
-            .expect("valid key range");
+        let keys = store
+            .get_all(Some(Query::KeyRange(key_range)), None)?
+            .await?;
 
-            let keys = store
-                .get_all(Some(Query::KeyRange(key_range)), None)?
-                .await?;
-
-            if keys.is_empty() {
-                return Ok(None);
-            }
-
-            for key in keys {
-                match decode_keypair(key) {
-                    Ok(keypair) => match try_lock_key(&keypair).await {
-                        Ok(guard) => return Ok(Some((keypair, guard))),
-                        Err(KeyRegistryError::KeyLocked) => info!("Key already used"), // TODO: add peerid log?
-                        Err(e) => warn!("Unexpected error acquiring the lock: {e}"),
-                    },
-                    Err(e) => warn!("Could not deserialize key: {e}"),
-                };
-            }
-
-            offset += KEY_BATCH_SIZE;
+        if keys.is_empty() {
+            return Ok(None);
         }
+
+        for key in keys {
+            match decode_keypair(key) {
+                Ok(keypair) => match try_lock_key(&keypair).await {
+                    Ok(guard) => return Ok(Some((keypair, guard))),
+                    Err(KeyRegistryError::KeyLocked) => info!("Key already used"), // TODO: add peerid log?
+                    Err(e) => warn!("Unexpected error acquiring the lock: {e}"),
+                },
+                Err(e) => warn!("Could not deserialize key: {e}"),
+            };
+        }
+        Ok(None)
     }
 
-    pub async fn get_key(&self) -> Result<(Keypair, NamedLockGuard)> {
+    pub async fn get_key(&self) -> Result<(Keypair, NamedLock)> {
         match self.get_first_unused_key().await {
             Ok(k) => {
                 if let Some(key_and_lock) = k {
@@ -133,16 +129,7 @@ impl KeyRegistry {
         Ok((keypair, guard))
     }
 
-    pub async fn get_ephemeral_key() -> (Keypair, NamedLockGuard) {
-        let keypair = Keypair::generate_ed25519();
-        let guard = try_lock_key(&keypair)
-            .await
-            .expect("newly generated key to be unique");
-
-        (keypair, guard)
-    }
-
-    pub async fn lock_key(keypair: &Keypair) -> Result<NamedLockGuard> {
+    pub async fn lock_key(keypair: &Keypair) -> Result<NamedLock> {
         try_lock_key(keypair).await
     }
 }
@@ -161,12 +148,10 @@ fn decode_keypair(value: JsValue) -> Result<Keypair> {
         .map_err(|_| KeyRegistryError::InvalidKeypairData)
 }
 
-async fn try_lock_key(keypair: &Keypair) -> Result<NamedLockGuard> {
+async fn try_lock_key(keypair: &Keypair) -> Result<NamedLock> {
     let peer_id = keypair.public().to_peer_id().to_base58();
 
-    let lock = NamedLock::create(peer_id)?;
-
-    Ok(lock.try_lock().await?)
+    Ok(NamedLock::try_lock(&peer_id).await?)
 }
 
 impl From<LockError> for KeyRegistryError {
