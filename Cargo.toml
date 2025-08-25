@@ -9,7 +9,7 @@ lumina-node-wasm = { version = "0.10.1", path = "node-wasm" }
 lumina-utils = { version = "0.3.0", path = "utils" }
 celestia-client = { version = "0.1.0", path = "client" }
 celestia-proto = { version = "0.9.0", path = "proto" }
-celestia-grpc = { version = "0.6.0", path = "grpc" }
+celestia-grpc = { version = "0.6.0", path = "grpc", default-features = false }
 celestia-rpc = { version = "0.12.0", path = "rpc", default-features = false }
 celestia-types = { version = "0.14.0", path = "types", default-features = false }
 tendermint = { version = "0.40.4", default-features = false }
@@ -20,11 +20,11 @@ nmt-rs = "0.2.1"
 prost = "0.13.5"
 prost-build = "0.13.5"
 prost-types = "0.13.5"
-wasm-bindgen = "0.2.100"
-wasm-bindgen-test = "0.3.49"
-# also upgrade manually in `proto/Cargo.toml`
 tonic = { version = "0.13.1", default-features = false }
 tonic-web-wasm-client = "0.7.1"
+tonic-build = { version = "0.13.1" }
+wasm-bindgen = "0.2.100"
+wasm-bindgen-test = "0.3.49"
 
 [patch.crates-io]
 # Uncomment to apply local changes
