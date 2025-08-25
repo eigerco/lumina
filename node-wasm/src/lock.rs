@@ -27,6 +27,11 @@ impl NamedLock {
         NamedLock::lock_impl(name, false).await
     }
 
+    #[cfg(test)]
+    pub async fn lock(name: &str) -> Result<NamedLock, Error> {
+        NamedLock::lock_impl(name, true).await
+    }
+
     async fn lock_impl(name: &str, block: bool) -> Result<NamedLock, Error> {
         let lock_manager = get_lock_manager().map_err(Error::LockManagerUnavailable)?;
 
@@ -128,20 +133,48 @@ fn get_lock_manager() -> Result<LockManager, JsError> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
+    use lumina_utils::time::sleep;
+    use lumina_utils::executor::spawn;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     #[wasm_bindgen_test]
     async fn lock_unlock() {
+        const LOCK_NAME: &str = "lock_unlock";
         {
-            let _guard = NamedLock::try_lock("foo").await.expect("lock ok");
-            NamedLock::try_lock("foo").await.expect_err("locked lock");
+            let _guard = NamedLock::try_lock(LOCK_NAME).await.expect("lock ok");
+            NamedLock::try_lock(LOCK_NAME).await.expect_err("locked lock");
         }
 
         // XXX: a bit nasty, but we need to yield back to js for unlock to register
         lumina_utils::executor::yield_now().await;
 
-        let _guard = NamedLock::try_lock("foo").await.expect("valid lock");
+        let _guard = NamedLock::try_lock(LOCK_NAME).await.expect("valid lock");
+    }
+
+    #[wasm_bindgen_test]
+    async fn blocking_lock_interop() {
+        const LOCK_NAME: &str = "blocking_lock_interop";
+        let lock = NamedLock::try_lock(LOCK_NAME).await.expect("lock ok");
+
+        let (tx, rx) = oneshot::channel();
+        spawn(async move {
+        NamedLock::try_lock(LOCK_NAME).await.expect_err("should be locked now");
+            let _sync_lock = NamedLock::lock(LOCK_NAME).await;
+            rx.await.unwrap();
+        });
+
+        sleep(Duration::from_millis(100)).await;
+        drop(lock);
+
+        lumina_utils::executor::yield_now().await;
+        NamedLock::try_lock(LOCK_NAME).await.expect_err("should be locked");
+
+        tx.send(()).unwrap();
+        lumina_utils::executor::yield_now().await;
+        NamedLock::try_lock(LOCK_NAME).await.expect("unlocked");
     }
 }
