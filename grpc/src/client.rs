@@ -1,6 +1,7 @@
 use std::error::Error as StdError;
 use std::fmt;
 
+use futures::future::BoxFuture;
 use ::tendermint::chain::Id;
 use bytes::Bytes;
 use celestia_types::any::IntoProtobufAny;
@@ -46,6 +47,7 @@ use crate::grpc::{
 use crate::signer::{sign_tx, DispatchedDocSigner, KeypairExt};
 use crate::tx::TxInfo;
 use crate::{Error, Result, TxConfig};
+use crate::builder::GrpcClientBuilder;
 
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
 const BLOB_TX_TYPE_ID: &str = "BLOB";
@@ -71,6 +73,7 @@ impl Keypair for SignerBits {
     }
 }
 
+/*
 pub struct GrpcClient2 {
     transport: BoxedTransport
 }
@@ -78,23 +81,26 @@ pub struct GrpcClient2 {
 impl GrpcClient2{ 
     #[grpc_method(AuthQueryClient::params)]
     async fn get_auth_params(&self) -> Result<AuthParams>;
-    }
+}
+*/
 
 /// gRPC client for the Celestia network
 ///
 /// Under the hood, this struct wraps tonic and does type conversion
-pub struct GrpcClient<T> {
-    transport: T,
+pub struct GrpcClient {
+    transport: BoxedTransport,
     account: Mutex<Option<AccountBits>>,
     signer: Option<SignerBits>,
 }
 
+/*
 impl<T> GrpcClient<T> {
     /// Get the underlying transport.
     pub fn into_inner(self) -> T {
         self.transport
     }
 }
+*/
 
 /*
 pub trait Transport = where
@@ -118,35 +124,98 @@ use dyn_clone::DynClone;
 //type TonicGrpcService = GrpcService<TonicBody>;
 //type TonicService = Service<http::Request<TonicBody>>;
 
-trait GrpcTransport : GrpcService<TonicBody> + Service<http::Request<TonicBody>> + DynClone {}
+/*
+trait GrpcTransport : GrpcService<TonicBody> /*+ Service<http::Request<TonicBody>>*/ + DynClone {}
 
 type BoxedTransport = Box<dyn GrpcTransport<
 
-    Response = dyn Body<Data = Bytes, Error = dyn StdError>,
-    ResponseBody = dyn Body<Data = Bytes, Error = dyn StdError>,
+    //Response = dyn Body<Data = Bytes, Error = dyn StdError>,
+    ResponseBody = dyn Body<Data = Bytes, Error = Error> + Send,
 
-    Error = dyn StdError,
+    Error = dyn StdError +Send +Sync,
 
-    <Self as GrpcService<TonicBody>> ::Error = dyn StdError,
+    Future = ()
+
+    //<Self as GrpcService<TonicBody>> ::Error = dyn StdError,
 
     //ResponseBody = dyn Body<Data = Bytes, Error = dyn StdError>,
     //GrpcService<TonicBody>::Error = dyn StdError,
     //Future = ()>
 >
 >;
+*/
 
+type BoxError = Box<dyn StdError + Sync + Send + 'static>;
+
+type BoxBody = Box<dyn Body<Data = Bytes, Error = Box<dyn StdError + Send +Sync>>>;
+
+pub trait GrpcTransport:
+    GrpcService<
+        TonicBody,
+        ResponseBody = BoxBody,
+        Error = BoxError,
+        Future = BoxFuture<'static, http::Response< BoxBody >>,
+    > + Service<
+        http::Request<TonicBody>,
+        Error = BoxError,
+        Future = BoxFuture<'static, Result<http::Response<TonicBody>, BoxError>>,
+        Response = http::Response<TonicBody>,
+    > + DynClone
+{
+}
+
+fn test() {
+        let channel = tonic::transport::Endpoint::from_shared("foo").unwrap();
+        let boxed: BoxedTransport2 = Box::new(channel);
+        let mut client = TendermintServiceClient :: new(
+            boxed
+            //self.transport.clone(),
+                );
+                //.max_decoding_message_size(MAX_MSG_SIZE)
+                //.max_encoding_message_size(MAX_MSG_SIZE);
+
+                /*
+                let param = crate::grpc::IntoGrpcParam::into_parameter(( #( #params ),* ));
+                let request = ::tonic::Request::new(param);
+                let response = client. #grpc_method_name (request).await;
+                crate::grpc::FromGrpcResponse::try_from_response(response?.into_inner())
+                */
+}
+
+type NiceRequest = http::Request<TonicBody>;
+type NiceResponse = http::Response<BoxBody>;
+
+pub trait NiceService: Service<
+    NiceRequest,
+    Response = NiceResponse,
+    Error = BoxError,
+    Future = BoxFuture<'static, Result<NiceResponse, BoxError>>
+> {}
+
+//impl<T> NiceService  for T where T: Service<NiceRequest> {}
+
+pub(crate) type BoxedTransport = Box<dyn GrpcTransport>;
+
+pub(crate) type BoxedTransport2 = Box<dyn Service<
+NiceRequest,
+Response = NiceResponse,
+Error=BoxError,
+    Future = BoxFuture<'static, Result<NiceResponse, BoxError>>
+>>;
 
 //type GrpcTransport = Box<dyn GrpcService<TonicBody> + Service<http::Request<TonicBody>>>; 
 
-impl<T> GrpcClient<T>
+impl GrpcClient
+/*
 where
     T: GrpcService<TonicBody> + Service<http::Request<TonicBody>> + Clone,
     <T as Service<http::Request<TonicBody>>>::Error: StdError + Send,
     <T as GrpcService<TonicBody>>::ResponseBody: Body<Data = Bytes> + Send + 'static,
     <<T as GrpcService<TonicBody>>::ResponseBody as http_body::Body>::Error: StdError + Send + Sync,
+    */
 {
     /// Create a new client wrapping given transport
-    pub(crate) fn new(transport: T, signer: Option<SignerBits>) -> Self {
+    pub(crate) fn new(transport: BoxedTransport, signer: Option<SignerBits>) -> Self {
         Self {
             transport,
             account: Mutex::new(None),
@@ -155,13 +224,12 @@ where
     }
 
     /// Create a builder for [`GrpcClient`] connected to `url`
-    pub fn with_url(url: impl Into<String>) -> crate::ClientBuilder {
-        crate::ClientBuilder::with_url(url)
+    pub fn with_url(url: impl Into<String>) -> GrpcClientBuilder {
+        GrpcClientBuilder::with_url(url)
     }
 
     // cosmos.auth
 
-    /*
     /// Get auth params
     #[grpc_method(AuthQueryClient::params)]
     async fn get_auth_params(&self) -> Result<AuthParams>;
@@ -685,10 +753,9 @@ where
         let (account, _) = self.load_account().await?;
         Ok(account.chain_id.clone())
     }
-    */
 }
 
-impl<T> fmt::Debug for GrpcClient<T> {
+impl fmt::Debug for GrpcClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("GrpcClient { .. }")
     }
