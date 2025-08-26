@@ -733,6 +733,7 @@ dependencies = [
  "celestia-proto",
  "celestia-rpc",
  "celestia-types",
+ "dyn-clone",
  "futures",
  "getrandom",
  "gloo-timers 0.3.0",
@@ -1330,6 +1331,12 @@ name = "dtoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcbb2bf8e87535c23f7a8a321e364ce21462d0ff10cb6407820e8e96dfff6653"
+
+[[package]]
+name = "dyn-clone"
+version = "1.0.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "ecdsa"

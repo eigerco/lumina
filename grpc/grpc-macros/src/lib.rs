@@ -57,7 +57,8 @@ impl GrpcMethod {
                 const MAX_MSG_SIZE: usize = 256 * 1024 * 1024;
 
                 let mut client = #grpc_client_struct :: new(
-                    self.transport.clone(),
+                    dyn_clone::clone_box(&*self.transport)
+                    //self.transport.clone(),
                 )
                 .max_decoding_message_size(MAX_MSG_SIZE)
                 .max_encoding_message_size(MAX_MSG_SIZE);

@@ -71,6 +71,15 @@ impl Keypair for SignerBits {
     }
 }
 
+pub struct GrpcClient2 {
+    transport: BoxedTransport
+}
+
+impl GrpcClient2{ 
+    #[grpc_method(AuthQueryClient::params)]
+    async fn get_auth_params(&self) -> Result<AuthParams>;
+    }
+
 /// gRPC client for the Celestia network
 ///
 /// Under the hood, this struct wraps tonic and does type conversion
@@ -86,6 +95,48 @@ impl<T> GrpcClient<T> {
         self.transport
     }
 }
+
+/*
+pub trait Transport = where
+    Self: tonic::client::GrpcService<TonicBody>,
+    Self::Error: Into<tonic::codegen::StdError>,
+    Self::ResponseBody:
+        tonic::codegen::Body<Data = tonic::codegen::Bytes> + Send + 'static,
+    <Self::ResponseBody as tonic::codegen::Body>::Error:
+        Into<tonic::codegen::StdError> + Send;
+
+type BoxedTransport = Box< dyn Transport<
+ResponseBody = TonicBody,
+Error = dyn StdError,
+Future = (),
+>>;
+*/
+use dyn_clone::DynClone;
+
+//dyn_clone::clone_trait_object!(GrpcTransport);
+
+//type TonicGrpcService = GrpcService<TonicBody>;
+//type TonicService = Service<http::Request<TonicBody>>;
+
+trait GrpcTransport : GrpcService<TonicBody> + Service<http::Request<TonicBody>> + DynClone {}
+
+type BoxedTransport = Box<dyn GrpcTransport<
+
+    Response = dyn Body<Data = Bytes, Error = dyn StdError>,
+    ResponseBody = dyn Body<Data = Bytes, Error = dyn StdError>,
+
+    Error = dyn StdError,
+
+    <Self as GrpcService<TonicBody>> ::Error = dyn StdError,
+
+    //ResponseBody = dyn Body<Data = Bytes, Error = dyn StdError>,
+    //GrpcService<TonicBody>::Error = dyn StdError,
+    //Future = ()>
+>
+>;
+
+
+//type GrpcTransport = Box<dyn GrpcService<TonicBody> + Service<http::Request<TonicBody>>>; 
 
 impl<T> GrpcClient<T>
 where
@@ -110,6 +161,7 @@ where
 
     // cosmos.auth
 
+    /*
     /// Get auth params
     #[grpc_method(AuthQueryClient::params)]
     async fn get_auth_params(&self) -> Result<AuthParams>;
@@ -633,6 +685,7 @@ where
         let (account, _) = self.load_account().await?;
         Ok(account.chain_id.clone())
     }
+    */
 }
 
 impl<T> fmt::Debug for GrpcClient<T> {
