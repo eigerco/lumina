@@ -278,16 +278,14 @@ impl DocSigner for JsSigner {
         }
 
         // if signer_fn is async, await it
-        let promise = SendWrapper::new(sig_or_promise.unchecked_into::<Promise>());
+        let promise = sig_or_promise.unchecked_into::<Promise>();
+        let future = SendWrapper::new(JsFuture::from(promise));
         async move {
-            let res = SendWrapper::new(JsFuture::from(promise.take()))
-                .await
-                .map_err(|e| {
-                    let err = format!("Error awaiting signer promise: {e:?}");
-                    SignatureError::from_source(err)
-                })?;
-
-            try_into_signature(res)
+            let ret = future.await.map_err(|e| {
+                let err = format!("Error awaiting signer promise: {e:?}");
+                SignatureError::from_source(err)
+            })?;
+            try_into_signature(ret)
         }
         .boxed()
     }
