@@ -656,6 +656,15 @@ mod tests {
         proof.verify(dah_root).unwrap_err();
     }
 
+    #[test]
+    fn test_serialize_row_proof_with_bincode() {
+        let dah = random_dah(16);
+        let proof = dah.row_proof(0..=1).unwrap();
+        let serialized = bincode::serialize(&proof).unwrap();
+        let deserialized: RowProof = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(proof, deserialized);
+    }
+
     fn random_dah(square_width: u16) -> DataAvailabilityHeader {
         let namespaces: Vec<_> = (0..square_width)
             .map(|n| Namespace::new_v0(&[n as u8]).unwrap())
