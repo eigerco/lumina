@@ -10,6 +10,8 @@ use http_body::Frame;
 use tonic::body::Body as TonicBody;
 use tonic::codegen::Service;
 
+dyn_clone::clone_trait_object!(AbstractTransport);
+
 type BoxError = Box<dyn StdError + Sync + Send + 'static>;
 
 pub(crate) struct BoxedBody {
@@ -35,15 +37,6 @@ pub trait AbstractBody {
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Bytes>, BoxError>>>;
 }
-
-/*
-impl<T> AbstractBody for Box<T> where T: AbstractBody {
-    fn poll_frame_inner(self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll<Option<Result<Frame<Bytes>, BoxError>>> {
-            self.poll_frame_inner(cx)
-    }
-}
-*/
 
 #[cfg(not(target_arch = "wasm32"))]
 impl<T> AbstractBody for T
@@ -100,8 +93,6 @@ impl Clone for BoxedTransport {
     }
 }
 
-dyn_clone::clone_trait_object!(AbstractTransport);
-
 trait AbstractTransport: DynClone {
     fn poll_ready(
         &mut self,
@@ -110,46 +101,6 @@ trait AbstractTransport: DynClone {
 
     fn call(&mut self, req: http::Request<TonicBody>) -> AbstractFuture;
 }
-
-// https://github.com/bevyengine/bevy/blob/ad444fa720297080de75b9be1437f3250ac7fc84/crates/bevy_tasks/src/lib.rs
-#[cfg(not(target_arch = "wasm32"))]
-mod conditional_send {
-    /// Use [`ConditionalSend`] to mark an optional Send trait bound. Useful as on certain platforms (eg. WASM),
-    /// futures aren't Send.
-    pub trait ConditionalSend: Send {}
-    impl<T: Send> ConditionalSend for T {}
-}
-
-/*
-pub trait AbstractResponseBound {
-    fn boxed(self) -> http::Response<BoxBody>;
-}
-#[cfg(not(target_arch = "wasm32"))]
-impl<T> AbstractResponseBound for http::Response<T> where T: tonic::transport::Body {
-    fn boxed(self) -> http::Response<BoxBody> {
-
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl<T> AbstractResponseBound for http::Response<T>
-where
-    T: http_body::Body<Data = Bytes> + Send + Sync + Unpin ,
-    //<T as http_body::Body>::Data : Bytes,
-{
-    fn boxed(self) -> http::Response<BoxBody> {
-        self.map(|body| Box::new(body) )
-    }
-}
-*/
-
-/*
-pub trait AbstractBody {}
-//#[cfg(not(target_arch = "wasm32"))]
-impl<T> AbstractBody for T where T: tonic::transport::Body {}
-#[cfg(target_arch = "wasm32")]
-impl<T> AbstractBody for T where T: http_body::Body {}
-*/
 
 trait AbstractResponse {
     fn boxed(self) -> http::Response<BoxedBody>;
@@ -166,9 +117,8 @@ where
 
 impl<T> AbstractTransport for T
 where
-    //T: Service<http::Request<TonicBody>, Response = http::Response<B>> + Clone,
     T: Service<http::Request<TonicBody>> + Clone,
-    <T as Service<http::Request<TonicBody>>>::Response: AbstractResponse, // + Clone,
+    <T as Service<http::Request<TonicBody>>>::Response: AbstractResponse,
     <T as Service<http::Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
     <T as Service<http::Request<TonicBody>>>::Future: ConditionalSend + 'static,
 {
@@ -180,7 +130,6 @@ where
     }
 
     fn call(&mut self, req: http::Request<TonicBody>) -> AbstractFuture {
-        //Box::pin(Service::call(self, req).map_err(box_err))
         Box::pin(Service::call(self, req).map(|response| match response {
             Ok(response) => Ok(response.boxed()),
             Err(e) => Err(box_err(e)),
@@ -188,8 +137,6 @@ where
     }
 }
 
-//type AbstractResponse<B> = http::Response<B>;
-//type AbstractError = BoxError;
 type BoxedResponse = http::Response<BoxedBody>;
 type AbstractFuture = BoxedFuture<'static, Result<BoxedResponse, BoxError>>;
 
@@ -212,14 +159,12 @@ impl Service<http::Request<TonicBody>> for BoxedTransport {
 
 pub(crate) fn boxed<T, B>(transport: T) -> BoxedTransport
 where
-    B: AbstractBody + Send + Unpin + 'static, // TODO :rmeove?
+    B: AbstractBody + Send + Unpin + 'static,
     T: Service<http::Request<TonicBody>, Response = http::Response<B>>
         + Send
         + Sync
-        //+ Unpin
         + Clone
         + 'static,
-    //<T as Service<http::Request<TonicBody>>>::Response: Body + Send,
     <T as Service<http::Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
     <T as Service<http::Request<TonicBody>>>::Future: ConditionalSend + 'static,
 {
@@ -241,34 +186,22 @@ fn box_err<E: StdError + Send + Sync + 'static>(e: E) -> BoxError {
     Box::new(e)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use celestia_proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient;
-
-    #[cfg(not(target_arch = "wasm32"))]
-    fn can_box_endpoint() {
-        let channel = tonic::transport::Endpoint::from_shared("foo")
-            .unwrap()
-            .connect_lazy();
-
-        let mut client = ServiceClient::new(boxed(channel));
-        let _ = client.get_latest_block(GetLatestBlockRequest {});
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    fn can_box_wasm_client() {
-        let channel = tonic_web_wasm_client::Client::new("foo".to_string());
-
-        let mut client = ServiceClient::new(boxed(channel));
-        let _ = client.get_latest_block(GetLatestBlockRequest {});
-    }
+// conditional send taken from:
+// https://github.com/bevyengine/bevy/blob/ad444fa720297080de75b9be1437f3250ac7fc84/crates/bevy_tasks/src/lib.rs
+#[cfg(not(target_arch = "wasm32"))]
+mod conditional_send {
+    /// Use [`ConditionalSend`] to mark an optional Send trait bound. Useful as on certain platforms (eg. WASM),
+    /// futures aren't Send.
+    pub trait ConditionalSend: Send {}
+    impl<T: Send> ConditionalSend for T {}
 }
 
 #[cfg(target_arch = "wasm32")]
-#[allow(missing_docs)]
 mod conditional_send {
+    /// Use [`ConditionalSend`] to mark an optional Send trait bound. Useful as on certain platforms (eg. WASM),
+    /// futures aren't Send.
     pub trait ConditionalSend {}
+
     impl<T> ConditionalSend for T {}
 }
 

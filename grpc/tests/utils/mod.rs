@@ -63,7 +63,6 @@ mod imp {
     use celestia_grpc::GrpcClient;
     use celestia_rpc::Client;
     use tokio::sync::{Mutex, MutexGuard};
-    use tonic::transport::Channel;
 
     use super::*;
 
@@ -111,7 +110,6 @@ mod imp {
     use celestia_grpc::GrpcClient;
     use celestia_rpc::Client as RpcClient;
     use tokio::sync::oneshot;
-    use tonic_web_wasm_client::Client;
     use wasm_bindgen_futures::spawn_local;
 
     use super::*;
@@ -129,7 +127,7 @@ mod imp {
         RpcClient::new(CELESTIA_RPC_URL).await.unwrap()
     }
 
-    pub async fn new_tx_client() -> ((), GrpcClient<Client>) {
+    pub async fn new_tx_client() -> ((), GrpcClient) {
         let creds = load_account();
         let client = GrpcClientBuilder::with_url(CELESTIA_GRPCWEB_PROXY_URL)
             .with_signer_keypair(creds.signing_key)

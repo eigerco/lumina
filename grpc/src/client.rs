@@ -7,8 +7,8 @@ use std::pin::Pin;
 use ::tendermint::chain::Id;
 use bytes::Bytes;
 use celestia_types::any::IntoProtobufAny;
+use dyn_clone::DynClone;
 use futures::future::BoxFuture;
-//use http_body::Body;
 use k256::ecdsa::VerifyingKey;
 use lumina_utils::time::Interval;
 use prost::Message;
@@ -77,17 +77,6 @@ impl Keypair for SignerBits {
     }
 }
 
-/*
-pub struct GrpcClient2 {
-    transport: BoxedTransport
-}
-
-impl GrpcClient2{
-    #[grpc_method(AuthQueryClient::params)]
-    async fn get_auth_params(&self) -> Result<AuthParams>;
-}
-*/
-
 /// gRPC client for the Celestia network
 ///
 /// Under the hood, this struct wraps tonic and does type conversion
@@ -97,117 +86,9 @@ pub struct GrpcClient {
     signer: Option<SignerBits>,
 }
 
-/*
-impl<T> GrpcClient<T> {
-    /// Get the underlying transport.
-    pub fn into_inner(self) -> T {
-        self.transport
-    }
-}
-*/
-
-/*
-pub trait Transport = where
-    Self: tonic::client::GrpcService<TonicBody>,
-    Self::Error: Into<tonic::codegen::StdError>,
-    Self::ResponseBody:
-        tonic::codegen::Body<Data = tonic::codegen::Bytes> + Send + 'static,
-    <Self::ResponseBody as tonic::codegen::Body>::Error:
-        Into<tonic::codegen::StdError> + Send;
-
-type BoxedTransport = Box< dyn Transport<
-ResponseBody = TonicBody,
-Error = dyn StdError,
-Future = (),
->>;
-*/
-use dyn_clone::DynClone;
-
-//dyn_clone::clone_trait_object!(GrpcTransport);
-
-//type TonicGrpcService = GrpcService<TonicBody>;
-//type TonicService = Service<http::Request<TonicBody>>;
-
-/*
-trait GrpcTransport : GrpcService<TonicBody> /*+ Service<http::Request<TonicBody>>*/ + DynClone {}
-
-type BoxedTransport = Box<dyn GrpcTransport<
-
-    //Response = dyn Body<Data = Bytes, Error = dyn StdError>,
-    ResponseBody = dyn Body<Data = Bytes, Error = Error> + Send,
-
-    Error = dyn StdError +Send +Sync,
-
-    Future = ()
-
-    //<Self as GrpcService<TonicBody>> ::Error = dyn StdError,
-
-    //ResponseBody = dyn Body<Data = Bytes, Error = dyn StdError>,
-    //GrpcService<TonicBody>::Error = dyn StdError,
-    //Future = ()>
->
->;
-*/
-
-//type BoxError = Box<dyn StdError + Sync + Send + 'static>;
-
-//type BoxBody = Box<dyn Body<Data = Bytes, Error = Box<dyn StdError + Send +Sync>>>;
-
-/*
-pub trait GrpcTransport:
-    GrpcService<
-        TonicBody,
-        ResponseBody = BoxBody,
-        Error = BoxError,
-        Future = BoxFuture<'static, http::Response< BoxBody >>,
-    > + Service<
-        http::Request<TonicBody>,
-        Error = BoxError,
-        Future = BoxFuture<'static, Result<http::Response<TonicBody>, BoxError>>,
-        Response = http::Response<TonicBody>,
-    > + DynClone
-{
-}
-*/
-
-/*
-//type NiceBody = Pin<Box< dyn Body<Data = Bytes, Error = Box<dyn StdError + Send +Sync>> + Send >>;
-type NiceBody = Pin<Box< dyn Body<Data = Bytes, Error = Box<dyn StdError + Send +Sync>> + Send >>;
-//type NiceBody = ResponseFuture;
-//
-type TonicError = tonic::transport::Error;
-
-pub trait NiceService: Service<
-    NiceRequest,
-    Response = NiceResponse,
-    Error = TonicError,
-    Future = BoxFuture<'static, Result<NiceResponse, BoxError>>
-> {}
-
-//impl<T> NiceService  for T where T: Service<NiceRequest> {}
-*/
-
-//pub(crate) type BoxedTransport = Box<dyn GrpcTransport>;
-//type NiceBody = http_body_util::combinators::BoxBody<Bytes, BoxError>;
-
-//type GrpcTransport = Box<dyn GrpcService<TonicBody> + Service<http::Request<TonicBody>>>;
-
-impl GrpcClient
-where
-/*
-where
-    T: GrpcService<TonicBody> + Service<http::Request<TonicBody>> + Clone,
-    <T as Service<http::Request<TonicBody>>>::Error: StdError + Send,
-    <T as GrpcService<TonicBody>>::ResponseBody: Body<Data = Bytes> + Send + 'static,
-    <<T as GrpcService<TonicBody>>::ResponseBody as http_body::Body>::Error: StdError + Send + Sync,
-    */
-{
+impl GrpcClient {
     /// Create a new client wrapping given transport
-    pub(crate) fn new(transport: BoxedTransport, signer: Option<SignerBits>) -> Self
-//where 
-    //B: Body<Data = Bytes> + Send + 'static,
-    //<B as Body>::Error: StdError + Send + Sync,
-    {
+    pub(crate) fn new(transport: BoxedTransport, signer: Option<SignerBits>) -> Self {
         Self {
             transport,
             account: Mutex::new(None),
