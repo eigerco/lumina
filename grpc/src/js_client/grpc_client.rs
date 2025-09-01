@@ -9,16 +9,14 @@ use celestia_types::state::{AbciQueryResponse, JsCoin, TxResponse};
 use celestia_types::{Blob, ExtendedHeader};
 
 use crate::grpc::{GasInfo, GetTxResponse, JsBroadcastMode, TxPriority, TxStatusResponse};
-use crate::js_client::{GrpcClientBuilder, RustBuilder};
+use crate::js_client::GrpcClientBuilder;
 use crate::tx::{JsTxConfig, JsTxInfo};
 use crate::Result;
-
-type InnerClient = crate::GrpcClient<tonic_web_wasm_client::Client>;
 
 /// Celestia GRPC client, for builder see [`GrpcClientBuilder`]
 #[wasm_bindgen]
 pub struct GrpcClient {
-    client: InnerClient,
+    client: crate::GrpcClient,
 }
 
 #[wasm_bindgen]
@@ -26,7 +24,7 @@ impl GrpcClient {
     /// Create a builder for [`GrpcClient`] connected to `url`
     #[wasm_bindgen(js_name = withUrl)]
     pub fn with_url(url: String) -> GrpcClientBuilder {
-        RustBuilder::with_url(url).into()
+        crate::GrpcClientBuilder::with_url(url).into()
     }
 
     /// Get auth params
@@ -277,8 +275,8 @@ impl GrpcClient {
     }
 }
 
-impl From<InnerClient> for GrpcClient {
-    fn from(client: InnerClient) -> Self {
+impl From<crate::GrpcClient> for GrpcClient {
+    fn from(client: crate::GrpcClient) -> Self {
         GrpcClient { client }
     }
 }

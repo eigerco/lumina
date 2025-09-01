@@ -7,12 +7,9 @@ use uniffi::Object;
 
 mod grpc_client;
 
-use crate::builder::NativeTransportBits;
 use crate::signer::{UniffiSigner, UniffiSignerBox};
 
 pub use grpc_client::GrpcClient;
-
-type RustBuilder = crate::builder::GrpcClientBuilder<NativeTransportBits>;
 
 /// Errors returned when building Grpc Client
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -24,19 +21,9 @@ pub enum GrpcClientBuilderError {
         msg: String,
     },
 
-    /// Error handling certificate root
-    #[error("webpki error: {msg}")]
-    Webpki {
-        /// error message
-        msg: String,
-    },
-
-    /// Could not import system certificates
-    #[error("Could not import platform certificates: {errors:?}")]
-    RustlsNativeCerts {
-        /// error messages
-        errors: Vec<String>,
-    },
+    /// Tried to enable tls on pre-configured transport
+    #[error("Cannot enable tls on manually configured transport")]
+    CannotEnableTlsOnManualTransport,
 
     /// Invalid account public key
     #[error("invalid account public key")]
@@ -86,16 +73,29 @@ impl GrpcClientBuilder {
         })
     }
 
+    /// Enables loading the certificate roots which were enabled by feature flags
+    /// `tls-webpki-roots` and `tls-native-roots`.
+    #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
+    #[uniffi::method(name = "withDefaultTls")]
+    pub fn with_default_tls(self: Arc<Self>) -> Self {
+        GrpcClientBuilder {
+            url: self.url.clone(),
+            signer: self.signer.clone(),
+            account_pubkey: self.account_pubkey,
+            tls: true,
+        }
+    }
+
     // this function _must_ be async despite not awaiting, so that it executes in tokio runtime
     // context
     /// Build the gRPC client.
     #[uniffi::method(name = "build")]
     pub async fn build(self: Arc<Self>) -> Result<GrpcClient, GrpcClientBuilderError> {
-        let mut builder = RustBuilder::with_url(self.url.clone());
+        let mut builder = crate::GrpcClientBuilder::with_url(self.url.clone());
 
         #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
         if self.tls {
-            builder = builder.with_default_tls();
+            builder = builder.with_default_tls()?;
         }
 
         if let Some(signer) = self.signer.clone() {
@@ -109,22 +109,6 @@ impl GrpcClientBuilder {
     }
 }
 
-#[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
-#[uniffi::export]
-impl GrpcClientBuilder {
-    /// Enables loading the certificate roots which were enabled by feature flags
-    /// `tls-webpki-roots` and `tls-native-roots`.
-    #[uniffi::method(name = "withDefaultTls")]
-    pub fn with_default_tls(self: Arc<Self>) -> Self {
-        GrpcClientBuilder {
-            url: self.url.clone(),
-            signer: self.signer.clone(),
-            account_pubkey: self.account_pubkey,
-            tls: true,
-        }
-    }
-}
-
 impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
     fn from(error: crate::GrpcClientBuilderError) -> Self {
         match error {
@@ -132,6 +116,9 @@ impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
                 GrpcClientBuilderError::TonicTransportError {
                     msg: error.to_string(),
                 }
+            }
+            crate::GrpcClientBuilderError::CannotEnableTlsOnManualTransport => {
+                GrpcClientBuilderError::CannotEnableTlsOnManualTransport
             }
         }
     }

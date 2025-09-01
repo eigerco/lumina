@@ -56,13 +56,11 @@ impl GrpcMethod {
                 // 256 mb, future proof as celesita blocks grow
                 const MAX_MSG_SIZE: usize = 256 * 1024 * 1024;
 
-                //let a:  () = *dyn_clone::clone_box(&*self.transport);
                 let mut client = #grpc_client_struct :: new(
-                    dyn_clone::clone_box(&*self.transport)
-                    //self.transport.clone(),
-                );
-                //.max_decoding_message_size(MAX_MSG_SIZE)
-                //.max_encoding_message_size(MAX_MSG_SIZE);
+                    self.transport.clone()
+                )
+                .max_decoding_message_size(MAX_MSG_SIZE)
+                .max_encoding_message_size(MAX_MSG_SIZE);
 
                 let param = crate::grpc::IntoGrpcParam::into_parameter(( #( #params ),* ));
                 let request = ::tonic::Request::new(param);

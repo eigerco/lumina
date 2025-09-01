@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use prost::Message;
 use tendermint_proto::google::protobuf::Any;
-use tonic::transport::Channel;
 use uniffi::{Object, Record};
 
 use celestia_types::blob::BlobParams;
@@ -63,12 +62,10 @@ pub enum GrpcClientError {
     },
 }
 
-type InnerClient = crate::GrpcClient<Channel>;
-
 /// Celestia GRPC client
 #[derive(Object)]
 pub struct GrpcClient {
-    client: InnerClient,
+    client: crate::GrpcClient,
 }
 
 /// Any contains an arbitrary serialized protocol buffer message along with a URL that
@@ -267,8 +264,8 @@ impl IntoProtobufAny for AnyMsg {
     }
 }
 
-impl From<InnerClient> for GrpcClient {
-    fn from(client: InnerClient) -> GrpcClient {
+impl From<crate::GrpcClient> for GrpcClient {
+    fn from(client: crate::GrpcClient) -> GrpcClient {
         GrpcClient { client }
     }
 }

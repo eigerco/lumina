@@ -100,7 +100,7 @@ pub enum GrpcClientBuilderError {
     #[error(transparent)]
     #[cfg(not(target_arch = "wasm32"))]
     TonicTransportError(#[from] tonic::transport::Error),
-    
+
     /// Attempted to enable tls when using pre-prepared transport
     #[error("Cannot enable tls on manual transport")]
     CannotEnableTlsOnManualTransport,

@@ -9,8 +9,6 @@ mod grpc_client;
 
 use grpc_client::GrpcClient;
 
-type RustBuilder = crate::builder::GrpcClientBuilder<tonic_web_wasm_client::Client>;
-
 /// Builder for [`GrpcClient`] and [`TxClient`].
 ///
 /// Url must point to a [grpc-web proxy](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-WEB.md).
@@ -61,7 +59,7 @@ type RustBuilder = crate::builder::GrpcClientBuilder<tonic_web_wasm_client::Clie
 /// ```
 #[wasm_bindgen]
 pub struct GrpcClientBuilder {
-    inner: RustBuilder,
+    inner: crate::GrpcClientBuilder,
 }
 
 #[wasm_bindgen]
@@ -91,8 +89,8 @@ impl GrpcClientBuilder {
     }
 }
 
-impl From<RustBuilder> for GrpcClientBuilder {
-    fn from(inner: RustBuilder) -> Self {
+impl From<crate::GrpcClientBuilder> for GrpcClientBuilder {
+    fn from(inner: crate::GrpcClientBuilder) -> Self {
         Self { inner }
     }
 }

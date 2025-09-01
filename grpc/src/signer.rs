@@ -83,18 +83,6 @@ impl fmt::Debug for DispatchedDocSigner {
     }
 }
 
-/*
-pub async fn sign_tx(
-    tx_body: RawTxBody,
-    chain_id: Id,
-    base_account: &BaseAccount,
-    verifying_key: &VerifyingKey,
-    signer: &impl DocSigner,
-    gas_limit: u64,
-    fee: u64,
-) -> Result<RawTx> {
-    */
-
 /// Sign `tx_body` and the transaction metadata as the `base_account` using `signer`
 pub async fn sign_tx(
     tx_body: RawTxBody,

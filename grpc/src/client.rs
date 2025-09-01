@@ -1,11 +1,14 @@
+#![allow(unused)]
+
 use std::error::Error as StdError;
 use std::fmt;
+use std::pin::Pin;
 
-use futures::future::BoxFuture;
 use ::tendermint::chain::Id;
 use bytes::Bytes;
 use celestia_types::any::IntoProtobufAny;
-use http_body::Body;
+use futures::future::BoxFuture;
+//use http_body::Body;
 use k256::ecdsa::VerifyingKey;
 use lumina_utils::time::Interval;
 use prost::Message;
@@ -41,13 +44,14 @@ use celestia_types::state::{
 use celestia_types::{AppVersion, Blob, ExtendedHeader};
 
 use crate::abci_proofs::ProofChain;
+use crate::boxed::{BoxedTransport, ConditionalSend};
+use crate::builder::GrpcClientBuilder;
 use crate::grpc::{
     BroadcastMode, GasEstimate, GasInfo, GetTxResponse, TxPriority, TxStatus, TxStatusResponse,
 };
 use crate::signer::{sign_tx, DispatchedDocSigner, KeypairExt};
 use crate::tx::TxInfo;
 use crate::{Error, Result, TxConfig};
-use crate::builder::GrpcClientBuilder;
 
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
 const BLOB_TX_TYPE_ID: &str = "BLOB";
@@ -78,7 +82,7 @@ pub struct GrpcClient2 {
     transport: BoxedTransport
 }
 
-impl GrpcClient2{ 
+impl GrpcClient2{
     #[grpc_method(AuthQueryClient::params)]
     async fn get_auth_params(&self) -> Result<AuthParams>;
 }
@@ -145,10 +149,11 @@ type BoxedTransport = Box<dyn GrpcTransport<
 >;
 */
 
-type BoxError = Box<dyn StdError + Sync + Send + 'static>;
+//type BoxError = Box<dyn StdError + Sync + Send + 'static>;
 
-type BoxBody = Box<dyn Body<Data = Bytes, Error = Box<dyn StdError + Send +Sync>>>;
+//type BoxBody = Box<dyn Body<Data = Bytes, Error = Box<dyn StdError + Send +Sync>>>;
 
+/*
 pub trait GrpcTransport:
     GrpcService<
         TonicBody,
@@ -163,49 +168,32 @@ pub trait GrpcTransport:
     > + DynClone
 {
 }
+*/
 
-fn test() {
-        let channel = tonic::transport::Endpoint::from_shared("foo").unwrap();
-        let boxed: BoxedTransport2 = Box::new(channel);
-        let mut client = TendermintServiceClient :: new(
-            boxed
-            //self.transport.clone(),
-                );
-                //.max_decoding_message_size(MAX_MSG_SIZE)
-                //.max_encoding_message_size(MAX_MSG_SIZE);
-
-                /*
-                let param = crate::grpc::IntoGrpcParam::into_parameter(( #( #params ),* ));
-                let request = ::tonic::Request::new(param);
-                let response = client. #grpc_method_name (request).await;
-                crate::grpc::FromGrpcResponse::try_from_response(response?.into_inner())
-                */
-}
-
-type NiceRequest = http::Request<TonicBody>;
-type NiceResponse = http::Response<BoxBody>;
+/*
+//type NiceBody = Pin<Box< dyn Body<Data = Bytes, Error = Box<dyn StdError + Send +Sync>> + Send >>;
+type NiceBody = Pin<Box< dyn Body<Data = Bytes, Error = Box<dyn StdError + Send +Sync>> + Send >>;
+//type NiceBody = ResponseFuture;
+//
+type TonicError = tonic::transport::Error;
 
 pub trait NiceService: Service<
     NiceRequest,
     Response = NiceResponse,
-    Error = BoxError,
+    Error = TonicError,
     Future = BoxFuture<'static, Result<NiceResponse, BoxError>>
 > {}
 
 //impl<T> NiceService  for T where T: Service<NiceRequest> {}
+*/
 
-pub(crate) type BoxedTransport = Box<dyn GrpcTransport>;
+//pub(crate) type BoxedTransport = Box<dyn GrpcTransport>;
+//type NiceBody = http_body_util::combinators::BoxBody<Bytes, BoxError>;
 
-pub(crate) type BoxedTransport2 = Box<dyn Service<
-NiceRequest,
-Response = NiceResponse,
-Error=BoxError,
-    Future = BoxFuture<'static, Result<NiceResponse, BoxError>>
->>;
-
-//type GrpcTransport = Box<dyn GrpcService<TonicBody> + Service<http::Request<TonicBody>>>; 
+//type GrpcTransport = Box<dyn GrpcService<TonicBody> + Service<http::Request<TonicBody>>>;
 
 impl GrpcClient
+where
 /*
 where
     T: GrpcService<TonicBody> + Service<http::Request<TonicBody>> + Clone,
@@ -215,7 +203,11 @@ where
     */
 {
     /// Create a new client wrapping given transport
-    pub(crate) fn new(transport: BoxedTransport, signer: Option<SignerBits>) -> Self {
+    pub(crate) fn new(transport: BoxedTransport, signer: Option<SignerBits>) -> Self
+//where 
+    //B: Body<Data = Bytes> + Send + 'static,
+    //<B as Body>::Error: StdError + Send + Sync,
+    {
         Self {
             transport,
             account: Mutex::new(None),

@@ -2,7 +2,7 @@ use std::fmt::{self, Debug};
 use std::sync::Arc;
 
 use celestia_grpc::signer::DispatchedDocSigner;
-use celestia_grpc::{ClientBuilder as GrpcClientBuilder, GrpcClient};
+use celestia_grpc::{GrpcClient, GrpcClientBuilder};
 use celestia_rpc::{Client as RpcClient, HeaderClient};
 use zeroize::Zeroizing;
 
@@ -17,15 +17,9 @@ use crate::types::state::AccAddress;
 use crate::types::ExtendedHeader;
 use crate::{Error, Result};
 
-#[cfg(not(target_arch = "wasm32"))]
-type Transport = tonic::transport::Channel;
-
-#[cfg(target_arch = "wasm32")]
-type Transport = tonic_web_wasm_client::Client;
-
 pub(crate) struct Context {
     pub(crate) rpc: RpcClient,
-    grpc: Option<GrpcClient<Transport>>,
+    grpc: Option<GrpcClient>,
     pubkey: Option<VerifyingKey>,
     chain_id: tendermint::chain::Id,
 }
@@ -110,7 +104,7 @@ impl Debug for SignerKind {
 }
 
 impl Context {
-    pub(crate) fn grpc(&self) -> Result<&GrpcClient<Transport>> {
+    pub(crate) fn grpc(&self) -> Result<&GrpcClient> {
         self.grpc.as_ref().ok_or(Error::ReadOnlyMode)
     }
 
@@ -272,7 +266,7 @@ impl ClientBuilder {
                     not(target_arch = "wasm32"),
                     any(feature = "tls-webpki-roots", feature = "tls-native-roots")
                 ))]
-                let builder = builder.with_default_tls();
+                let builder = builder.with_default_tls()?;
 
                 let client = builder.with_pubkey_and_signer(pubkey, signer).build()?;
 
