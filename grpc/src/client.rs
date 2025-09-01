@@ -1,23 +1,12 @@
-#![allow(unused)]
-
-use std::error::Error as StdError;
 use std::fmt;
-use std::pin::Pin;
 
 use ::tendermint::chain::Id;
-use bytes::Bytes;
 use celestia_types::any::IntoProtobufAny;
-use dyn_clone::DynClone;
-use futures::future::BoxFuture;
 use k256::ecdsa::VerifyingKey;
 use lumina_utils::time::Interval;
 use prost::Message;
-use signature::Keypair;
 use std::time::Duration;
 use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
-use tonic::body::Body as TonicBody;
-use tonic::client::GrpcService;
-use tonic::codegen::Service;
 
 use celestia_grpc_macros::grpc_method;
 use celestia_proto::celestia::blob::v1::query_client::QueryClient as BlobQueryClient;
@@ -44,12 +33,12 @@ use celestia_types::state::{
 use celestia_types::{AppVersion, Blob, ExtendedHeader};
 
 use crate::abci_proofs::ProofChain;
-use crate::boxed::{BoxedTransport, ConditionalSend};
+use crate::boxed::BoxedTransport;
 use crate::builder::GrpcClientBuilder;
 use crate::grpc::{
     BroadcastMode, GasEstimate, GasInfo, GetTxResponse, TxPriority, TxStatus, TxStatusResponse,
 };
-use crate::signer::{sign_tx, DispatchedDocSigner, KeypairExt};
+use crate::signer::{sign_tx, DispatchedDocSigner};
 use crate::tx::TxInfo;
 use crate::{Error, Result, TxConfig};
 
@@ -58,23 +47,15 @@ const BLOB_TX_TYPE_ID: &str = "BLOB";
 // Multiplier used to adjust the gas limit given by gas estimation service
 const DEFAULT_GAS_MULTIPLIER: f64 = 1.1;
 
-struct AccountBits {
+struct AccountState {
     account: Account,
     app_version: AppVersion,
     chain_id: Id,
 }
 
-pub(crate) struct SignerBits {
+pub(crate) struct SignerConfig {
     pub(crate) signer: DispatchedDocSigner,
     pub(crate) pubkey: VerifyingKey,
-}
-
-impl Keypair for SignerBits {
-    type VerifyingKey = VerifyingKey;
-
-    fn verifying_key(&self) -> Self::VerifyingKey {
-        self.pubkey
-    }
 }
 
 /// gRPC client for the Celestia network
@@ -82,13 +63,13 @@ impl Keypair for SignerBits {
 /// Under the hood, this struct wraps tonic and does type conversion
 pub struct GrpcClient {
     transport: BoxedTransport,
-    account: Mutex<Option<AccountBits>>,
-    signer: Option<SignerBits>,
+    account: Mutex<Option<AccountState>>,
+    signer: Option<SignerConfig>,
 }
 
 impl GrpcClient {
     /// Create a new client wrapping given transport
-    pub(crate) fn new(transport: BoxedTransport, signer: Option<SignerBits>) -> Self {
+    pub(crate) fn new(transport: BoxedTransport, signer: Option<SignerConfig>) -> Self {
         Self {
             transport,
             account: Mutex::new(None),
@@ -412,12 +393,13 @@ impl GrpcClient {
         self.confirm_tx(tx_hash, sequence).await
     }
 
-    async fn load_account(&self) -> Result<(MappedMutexGuard<'_, AccountBits>, &SignerBits)> {
+    async fn load_account(&self) -> Result<(MappedMutexGuard<'_, AccountState>, &SignerConfig)> {
         let signer = self.signer.as_ref().ok_or(Error::NoAccount)?;
         let mut account_guard = self.account.lock().await;
 
         if account_guard.is_none() {
-            let account = self.get_account(&signer.address()).await?;
+            let address = AccAddress::from(signer.pubkey);
+            let account = self.get_account(&address).await?;
 
             let block = self.get_latest_block().await?;
             let app_version = block.header.version.app;
@@ -425,7 +407,7 @@ impl GrpcClient {
                 .ok_or(celestia_types::Error::UnsupportedAppVersion(app_version))?;
             let chain_id = block.header.chain_id;
 
-            *account_guard = Some(AccountBits {
+            *account_guard = Some(AccountState {
                 account,
                 app_version,
                 chain_id,
@@ -460,7 +442,7 @@ impl GrpcClient {
                     tx_body.clone(),
                     chain_id,
                     account,
-                    &signer.verifying_key(),
+                    &signer.pubkey,
                     &signer.signer,
                     0,
                     1,
@@ -506,7 +488,7 @@ impl GrpcClient {
             pfb,
             account.chain_id.clone(),
             &account.account,
-            &signer.verifying_key(),
+            &signer.pubkey,
             &signer.signer,
             gas_limit,
             fee,
@@ -536,7 +518,7 @@ impl GrpcClient {
             tx,
             account.chain_id.clone(),
             &account.account,
-            &signer.verifying_key(),
+            &signer.pubkey,
             &signer.signer,
             gas_limit,
             fee as u64,
@@ -550,7 +532,7 @@ impl GrpcClient {
     async fn broadcast_tx_with_account(
         &self,
         tx: Vec<u8>,
-        mut account: MappedMutexGuard<'_, AccountBits>,
+        mut account: MappedMutexGuard<'_, AccountState>,
     ) -> Result<(Hash, u64)> {
         let resp = self.broadcast_tx(tx, BroadcastMode::Sync).await?;
 

@@ -8,15 +8,12 @@ use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use k256::ecdsa::signature::Signer;
 use k256::ecdsa::VerifyingKey;
 use prost::{Message, Name};
-use signature::Keypair;
 use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
 
 use celestia_proto::cosmos::crypto::secp256k1;
 use celestia_types::state::auth::BaseAccount;
-use celestia_types::state::{
-    AccAddress, AuthInfo, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum,
-};
+use celestia_types::state::{AuthInfo, Fee, ModeInfo, RawTx, RawTxBody, SignerInfo, Sum};
 
 use crate::Result;
 
@@ -60,20 +57,6 @@ impl DispatchedDocSigner {
 impl DocSigner for DispatchedDocSigner {
     async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
         self.0.try_sign(doc).await
-    }
-}
-
-pub(crate) trait KeypairExt {
-    fn address(&self) -> AccAddress;
-}
-
-impl<T> KeypairExt for T
-where
-    T: Keypair,
-    T::VerifyingKey: Into<AccAddress>,
-{
-    fn address(&self) -> AccAddress {
-        self.verifying_key().into()
     }
 }
 

@@ -6,7 +6,7 @@ use tonic::body::Body as TonicBody;
 use tonic::codegen::Service;
 
 use crate::boxed::{boxed, AbstractBody, BoxedTransport, ConditionalSend};
-use crate::client::SignerBits;
+use crate::client::SignerConfig;
 use crate::signer::DispatchedDocSigner;
 use crate::{DocSigner, GrpcClient, GrpcClientBuilderError};
 
@@ -20,7 +20,7 @@ enum TransportSetup {
 /// Builder for [`GrpcClient`]
 pub struct GrpcClientBuilder {
     transport: TransportSetup,
-    signer_bits: Option<SignerBits>,
+    signer_bits: Option<SignerConfig>,
 }
 
 impl GrpcClientBuilder {
@@ -83,7 +83,7 @@ impl GrpcClientBuilder {
     {
         GrpcClientBuilder {
             transport: self.transport,
-            signer_bits: Some(SignerBits {
+            signer_bits: Some(SignerConfig {
                 signer: DispatchedDocSigner::new(signer),
                 pubkey: account_pubkey,
             }),
@@ -98,7 +98,7 @@ impl GrpcClientBuilder {
         let pubkey = signer.verifying_key();
         GrpcClientBuilder {
             transport: self.transport,
-            signer_bits: Some(SignerBits {
+            signer_bits: Some(SignerConfig {
                 signer: DispatchedDocSigner::new(signer),
                 pubkey,
             }),
