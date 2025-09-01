@@ -64,8 +64,13 @@ impl GrpcMethod {
 
                 let param = crate::grpc::IntoGrpcParam::into_parameter(( #( #params ),* ));
                 let request = ::tonic::Request::new(param);
-                let response = client. #grpc_method_name (request).await;
-                crate::grpc::FromGrpcResponse::try_from_response(response?.into_inner())
+
+                let fut = client. #grpc_method_name (request);
+
+                #[cfg(target_arch = "wasm32")]
+                let fut = ::send_wrapper::SendWrapper::new(fut);
+
+                crate::grpc::FromGrpcResponse::try_from_response(fut.await?.into_inner())
             }
         };
 
