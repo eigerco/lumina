@@ -1,6 +1,6 @@
 [package]
 name = "celestia-rpc"
-version = "0.11.3"
+version = "0.12.1"
 edition = "2021"
 license = "Apache-2.0"
 description = "A collection of traits for interacting with Celestia data availability nodes RPC"
@@ -19,8 +19,8 @@ categories = [
 ]
 
 [dependencies]
+celestia-proto.workspace = true
 celestia-types.workspace = true
-prost.workspace = true
 
 async-trait = "0.1.80"
 jsonrpsee = { version = "0.25.1", features = ["client-core", "macros"] }

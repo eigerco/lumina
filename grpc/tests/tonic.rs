@@ -265,3 +265,22 @@ async fn submit_message_insufficient_gas_price_and_limit() {
         Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _)
     ));
 }
+
+#[async_test]
+async fn tx_client_is_send_and_sync() {
+    fn is_send_and_sync<T: Send + Sync>(_: &T) {}
+    fn is_send<T: Send>(_: &T) {}
+
+    let (_lock, tx_client) = new_tx_client().await;
+    is_send_and_sync(&tx_client);
+
+    is_send(&tx_client.submit_blobs(&[], TxConfig::default()));
+    is_send(&tx_client.submit_message(
+        MsgSend {
+            from_address: "".into(),
+            to_address: "".into(),
+            amount: vec![],
+        },
+        TxConfig::default(),
+    ));
+}

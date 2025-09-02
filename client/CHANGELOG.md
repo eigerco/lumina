@@ -1,0 +1,21 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.1](https://github.com/eigerco/lumina/compare/celestia-client-v0.1.0...celestia-client-v0.1.1) - 2025-08-19
+
+### Other
+
+- updated the following local packages: celestia-proto, celestia-types, celestia-types, celestia-rpc, celestia-rpc, celestia-grpc, celestia-grpc
+
+## [0.1.0](https://github.com/eigerco/lumina/releases/tag/celestia-client-v0.1.0) - 2025-08-13
+
+### Added
+
+- *(proto,types,rpc)* [**breaking**] upgrade to celestia-node v0.25 ([#720](https://github.com/eigerco/lumina/pull/720))
+- [**breaking**] Implement `celestia-client` crate ([#682](https://github.com/eigerco/lumina/pull/682))

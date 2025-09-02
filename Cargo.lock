@@ -698,10 +698,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-stream",
- "bytes",
  "celestia-grpc",
  "celestia-proto",
  "celestia-rpc",
@@ -727,7 +726,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -773,7 +772,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "0.8.0"
+version = "0.9.1"
 dependencies = [
  "bytes",
  "prost",
@@ -793,11 +792,12 @@ dependencies = [
 
 [[package]]
 name = "celestia-rpc"
-version = "0.11.3"
+version = "0.12.1"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
+ "celestia-proto",
  "celestia-types",
  "dotenvy",
  "futures",
@@ -806,7 +806,6 @@ dependencies = [
  "jsonrpsee",
  "libp2p",
  "nmt-rs",
- "prost",
  "rand",
  "serde",
  "serde_repr",
@@ -818,7 +817,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.13.0"
+version = "0.14.1"
 dependencies = [
  "base64 0.22.1",
  "bech32",
@@ -3347,7 +3346,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-cli"
-version = "0.9.0"
+version = "0.9.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -3372,7 +3371,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node"
-version = "0.14.0"
+version = "0.15.1"
 dependencies = [
  "async-trait",
  "backoff",
@@ -3422,7 +3421,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-uniffi"
-version = "0.3.0"
+version = "0.3.2"
 dependencies = [
  "async-trait",
  "blockstore",
@@ -3443,7 +3442,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-wasm"
-version = "0.10.0"
+version = "0.10.2"
 dependencies = [
  "anyhow",
  "blockstore",

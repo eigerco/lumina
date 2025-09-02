@@ -5,7 +5,7 @@
         "Eiger <hello@eiger.co>"
     ],
     "description": "Lumina node for Celestia, running in browser",
-    "version": "0.10.0",
+    "version": "0.10.2",
     "license": "Apache-2.0",
     "repository": {
         "type": "git",

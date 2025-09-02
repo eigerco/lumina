@@ -54,11 +54,11 @@ pub enum TransactionClientError {
 /// // uses 21-DOT-DEV/swift-secp256k1
 /// final class StaticSigner : UniffiSigner {
 ///     let sk : P256K.Signing.PrivateKey
-///     
+///
 ///     init(sk: P256K.Signing.PrivateKey) {
 ///         self.sk = sk
 ///     }
-///     
+///
 ///     func sign(doc: SignDoc) async throws -> UniffiSignature {
 ///         let messageData = protoEncodeSignDoc(signDoc: doc);
 ///         let signature = try! sk.signature(for: messageData)

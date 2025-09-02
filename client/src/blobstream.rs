@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use bytes::Bytes;
 use celestia_rpc::blobstream::BlobstreamClient;
 
 use crate::client::Context;
+use crate::types::hash::Hash;
 use crate::types::MerkleProof;
 use crate::Result;
 
@@ -21,7 +21,7 @@ impl BlobstreamApi {
     /// creates a new Merkle root of those data roots.
     ///
     /// The range is end exclusive.
-    pub async fn get_data_root_tuple_root(&self, start: u64, end: u64) -> Result<Bytes> {
+    pub async fn get_data_root_tuple_root(&self, start: u64, end: u64) -> Result<Hash> {
         Ok(self
             .ctx
             .rpc

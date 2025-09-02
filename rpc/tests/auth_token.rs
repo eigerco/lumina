@@ -1,5 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
+use std::slice;
+
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::Blob;
 
@@ -28,10 +30,12 @@ async fn blob_submit_using_bridge_node() {
 
         match auth_level {
             AuthLevel::Read => {
-                blob_submit(&client, &[blob.clone()]).await.unwrap_err();
+                blob_submit(&client, slice::from_ref(&blob))
+                    .await
+                    .unwrap_err();
             }
             _ => {
-                blob_submit(&client, &[blob.clone()]).await.unwrap();
+                blob_submit(&client, slice::from_ref(&blob)).await.unwrap();
             }
         }
     }

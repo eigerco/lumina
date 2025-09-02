@@ -206,3 +206,23 @@ impl From<NamespaceProof> for RawNmtProof {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_serialize_namespace_proof_with_bincode() {
+        let nmt_proof = NmtNamespaceProof::PresenceProof {
+            proof: NmtProof {
+                siblings: vec![],
+                range: 0..1,
+            },
+            ignore_max_ns: false,
+        };
+        let proof = NamespaceProof::from(nmt_proof);
+        let serialized = bincode::serialize(&proof).unwrap();
+        let deserialized: NamespaceProof = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(proof, deserialized);
+    }
+}

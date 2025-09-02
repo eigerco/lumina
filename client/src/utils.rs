@@ -31,7 +31,7 @@ pub(crate) trait DispatchedDocSignerTrait: Sync + Send + 'static {
     fn try_sign<'a>(
         &'a self,
         doc: SignDoc,
-    ) -> Pin<Box<dyn Future<Output = Result<Signature, SignatureError>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<Signature, SignatureError>> + Send + 'a>>;
 }
 
 impl<T> DispatchedDocSignerTrait for T
@@ -41,7 +41,7 @@ where
     fn try_sign<'a>(
         &'a self,
         doc: SignDoc,
-    ) -> Pin<Box<dyn Future<Output = Result<Signature, SignatureError>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Signature, SignatureError>> + Send + 'a>> {
         Box::pin(DocSigner::try_sign(self, doc))
     }
 }
