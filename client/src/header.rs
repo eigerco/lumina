@@ -136,3 +136,30 @@ impl HeaderApi {
         .boxed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::test_utils::is_serialisable_deserialisable;
+
+    #[allow(dead_code)]
+    #[allow(unused_variables)]
+    #[allow(unreachable_code)]
+    #[allow(clippy::diverging_sub_expression)]
+    async fn enforce_serde_bounds() {
+        // intentionally no-run, compile only test
+        let api = HeaderApi::new(unimplemented!());
+
+        is_serialisable_deserialisable(api.head().await.unwrap());
+        is_serialisable_deserialisable(api.network_head().await.unwrap());
+        let hash = unimplemented!();
+        is_serialisable_deserialisable(api.get_by_hash(hash).await.unwrap());
+        is_serialisable_deserialisable(api.get_by_height(0).await.unwrap());
+        let header = unimplemented!();
+        is_serialisable_deserialisable(api.get_range_by_height(header, 0).await.unwrap());
+        is_serialisable_deserialisable(api.wait_for_height(0).await.unwrap());
+        is_serialisable_deserialisable(api.sync_state().await.unwrap());
+        is_serialisable_deserialisable(api.subscribe().await.next().await.unwrap().unwrap());
+    }
+}

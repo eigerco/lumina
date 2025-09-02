@@ -14,7 +14,7 @@ use jsonrpsee::proc_macros::rpc;
 use serde::{Deserialize, Serialize};
 
 /// Response type for [`ShareClient::share_get_range`].
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct GetRangeResponse {
     /// Shares contained in given range.
@@ -24,7 +24,7 @@ pub struct GetRangeResponse {
 }
 
 /// Side of a row within the EDS.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum RowSide {
     /// The row data is on the left of the EDS (i.e. in the ODS).
@@ -36,7 +36,7 @@ pub enum RowSide {
 }
 
 /// Response type for [`ShareClient::share_get_row`].
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GetRowResponse {
     /// Shares contained in given range.
     pub shares: Vec<Share>,

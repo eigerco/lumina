@@ -1,5 +1,6 @@
 use std::sync::OnceLock;
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, MutexGuard};
 
 use crate::tx::{SigningKey, TxConfig};
@@ -73,3 +74,6 @@ pub(crate) fn node0_address() -> AccAddress {
     let s = include_str!("../../ci/credentials/node-0.addr");
     s.trim().parse().expect("invalid account address")
 }
+
+pub(crate) fn is_serialisable_deserialisable<'a, T: Serialize + Deserialize<'a>>(_: T) {}
+pub(crate) fn is_serialisable<T: Serialize>(_: T) {}

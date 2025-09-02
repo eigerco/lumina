@@ -21,7 +21,7 @@ impl BlobstreamApi {
     /// creates a new Merkle root of those data roots.
     ///
     /// The range is end exclusive.
-    pub async fn get_data_root_ruple_root(&self, start: u64, end: u64) -> Result<Bytes> {
+    pub async fn get_data_root_tuple_root(&self, start: u64, end: u64) -> Result<Bytes> {
         Ok(self
             .ctx
             .rpc
@@ -44,5 +44,28 @@ impl BlobstreamApi {
             .rpc
             .blobstream_get_data_root_tuple_inclusion_proof(height, start, end)
             .await?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::test_utils::is_serialisable_deserialisable;
+
+    #[allow(dead_code)]
+    #[allow(unused_variables)]
+    #[allow(unreachable_code)]
+    #[allow(clippy::diverging_sub_expression)]
+    async fn enforce_serde_bounds() {
+        // intentionally no run, compile only test
+        let api = BlobstreamApi::new(unimplemented!());
+
+        is_serialisable_deserialisable(api.get_data_root_tuple_root(0, 0).await.unwrap());
+        is_serialisable_deserialisable(
+            api.get_data_root_tuple_inclusion_proof(0, 0, 0)
+                .await
+                .unwrap(),
+        );
     }
 }

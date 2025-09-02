@@ -19,6 +19,7 @@ use k256::ecdsa::signature::{Error as SignatureError, Signer};
 use k256::ecdsa::{Signature, VerifyingKey};
 use lumina_utils::time::Interval;
 use prost::{Message, Name};
+use serde::{Deserialize, Serialize};
 #[cfg(not(target_arch = "wasm32"))]
 use signature::Keypair;
 use tendermint::chain::Id;
@@ -480,7 +481,7 @@ where
 }
 
 /// A result of correctly submitted transaction.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxInfo {
     /// Hash of the transaction.

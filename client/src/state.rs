@@ -362,11 +362,16 @@ impl StateApi {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use celestia_grpc::TxConfig;
     use k256::ecdsa::SigningKey;
     use lumina_utils::test_utils::async_test;
 
-    use crate::test_utils::{new_client, new_read_only_client, node0_address, validator_address};
+    use crate::test_utils::{
+        is_serialisable_deserialisable, new_client, new_read_only_client, node0_address,
+        validator_address,
+    };
     use crate::Error;
 
     #[async_test]
@@ -537,5 +542,50 @@ mod tests {
         // Read only mode does not allow calling `balance_unverified`
         let e = client_ro.state().balance().await.unwrap_err();
         assert!(matches!(e, Error::ReadOnlyMode));
+    }
+
+    #[allow(dead_code)]
+    #[allow(unused_variables)]
+    #[allow(unreachable_code)]
+    #[allow(clippy::diverging_sub_expression)]
+    async fn enforce_serde_bounds() {
+        // intentionally no-run, compile only test
+        let api = StateApi::new(unimplemented!());
+
+        let cfg = TxConfig::default();
+        let val_addr: ValAddress = unimplemented!();
+        let address = unimplemented!();
+
+        is_serialisable_deserialisable(api.balance().await.unwrap());
+        is_serialisable_deserialisable(api.balance_unverified().await.unwrap());
+        is_serialisable_deserialisable(api.balance_for_address(address).await.unwrap());
+        is_serialisable_deserialisable(api.balance_for_address_unverified(address).await.unwrap());
+        is_serialisable_deserialisable(api.estimate_gas_price(TxPriority::Low).await.unwrap());
+        is_serialisable_deserialisable(
+            api.estimate_gas_price_and_usage(TxPriority::Low, Vec::new())
+                .await
+                .unwrap(),
+        );
+        is_serialisable_deserialisable(api.submit_message((), cfg).await.unwrap());
+        is_serialisable_deserialisable(api.transfer(address, 0, cfg).await.unwrap());
+        let blobs = unimplemented!();
+        is_serialisable_deserialisable(api.submit_pay_for_blob(blobs, cfg).await.unwrap());
+        is_serialisable_deserialisable(
+            api.cancel_unbonding_delegation(&val_addr, 0, 0, cfg)
+                .await
+                .unwrap(),
+        );
+        is_serialisable_deserialisable(
+            api.begin_redelegate(&val_addr, &val_addr, 0, cfg)
+                .await
+                .unwrap(),
+        );
+        is_serialisable_deserialisable(api.undelegate(&val_addr, 0, cfg).await.unwrap());
+        is_serialisable_deserialisable(api.delegate(&val_addr, 0, cfg).await.unwrap());
+        is_serialisable_deserialisable(api.query_delegation(&val_addr).await.unwrap());
+        is_serialisable_deserialisable(api.query_unbonding(&val_addr).await.unwrap());
+        is_serialisable_deserialisable(
+            api.query_redelegations(&val_addr, &val_addr).await.unwrap(),
+        );
     }
 }
