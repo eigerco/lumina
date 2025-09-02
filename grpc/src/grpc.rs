@@ -54,6 +54,7 @@ mod cosmos_tx;
 pub use crate::grpc::celestia_tx::{TxStatus, TxStatusResponse};
 pub use crate::grpc::cosmos_tx::{BroadcastMode, GetTxResponse};
 pub use crate::grpc::gas_estimation::{GasEstimate, TxPriority};
+pub use crate::grpc::node::ConfigResponse;
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 pub use crate::grpc::cosmos_tx::JsBroadcastMode;
@@ -176,9 +177,9 @@ where
 
     // cosmos.base.node
 
-    /// Get Minimum Gas price
+    /// Get node configuration
     #[grpc_method(ConfigServiceClient::config)]
-    async fn get_min_gas_price(&self) -> Result<f64>;
+    async fn get_node_config(&self) -> Result<ConfigResponse>;
 
     // cosmos.base.tendermint
 

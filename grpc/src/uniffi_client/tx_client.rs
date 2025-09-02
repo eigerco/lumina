@@ -54,11 +54,11 @@ pub enum TransactionClientError {
 /// // uses 21-DOT-DEV/swift-secp256k1
 /// final class StaticSigner : UniffiSigner {
 ///     let sk : P256K.Signing.PrivateKey
-///     
+///
 ///     init(sk: P256K.Signing.PrivateKey) {
 ///         self.sk = sk
 ///     }
-///     
+///
 ///     func sign(doc: SignDoc) async throws -> UniffiSignature {
 ///         let messageData = protoEncodeSignDoc(signDoc: doc);
 ///         let signature = try! sk.signature(for: messageData)
@@ -121,11 +121,6 @@ impl TxClient {
         let client = crate::TxClient::with_url(url, vk, signer).await?;
 
         Ok(TxClient { client })
-    }
-
-    /// Query for the current minimum gas price
-    pub async fn get_min_gas_price(&self) -> Result<f64> {
-        Ok(self.client.get_min_gas_price().await?)
     }
 
     /// AppVersion of the client

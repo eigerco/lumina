@@ -1,14 +1,12 @@
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-use wasm_bindgen::prelude::*;
-
 use celestia_proto::cosmos::base::abci::v1beta1::GasInfo;
-use celestia_types::hash::Hash;
-
 use celestia_proto::cosmos::tx::v1beta1::{
     BroadcastTxRequest, BroadcastTxResponse, GetTxRequest as RawGetTxRequest,
     GetTxResponse as RawGetTxResponse, SimulateRequest, SimulateResponse,
 };
+use celestia_types::hash::Hash;
 use celestia_types::state::{Tx, TxResponse};
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use wasm_bindgen::prelude::*;
 
 use crate::grpc::{FromGrpcResponse, IntoGrpcParam};
 use crate::{Error, Result};

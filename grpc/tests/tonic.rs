@@ -111,10 +111,12 @@ async fn get_verified_balance_not_funded_account() {
 }
 
 #[async_test]
-async fn get_min_gas_price() {
+async fn get_node_config() {
     let client = new_grpc_client();
-    let gas_price = client.get_min_gas_price().await.unwrap();
-    assert!(gas_price > 0.0);
+    let config = client.get_node_config().await.unwrap();
+
+    // we don't set any explicit value for it in ci setup
+    assert!(config.minimum_gas_price.unwrap() > 0.0);
 }
 
 #[async_test]

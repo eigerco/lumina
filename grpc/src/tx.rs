@@ -208,11 +208,6 @@ where
         self.confirm_tx(tx_hash, sequence).await
     }
 
-    /// Query for the current minimum gas price
-    pub async fn get_min_gas_price(&self) -> Result<f64> {
-        self.client.get_min_gas_price().await
-    }
-
     /// Get client's chain id
     pub fn chain_id(&self) -> &Id {
         &self.chain_id

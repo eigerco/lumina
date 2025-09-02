@@ -1,21 +1,58 @@
-use celestia_proto::cosmos::base::node::v1beta1::{ConfigRequest, ConfigResponse};
+use celestia_proto::cosmos::base::node::v1beta1::{
+    ConfigRequest, ConfigResponse as RawConfigResponse,
+};
+use celestia_types::state::BOND_DENOM;
+use serde::{Deserialize, Serialize};
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+use wasm_bindgen::prelude::*;
 
 use crate::grpc::{make_empty_params, FromGrpcResponse};
 use crate::{Error, Result};
 
-impl FromGrpcResponse<f64> for ConfigResponse {
-    fn try_from_response(self) -> Result<f64> {
-        const UNITS_SUFFIX: &str = "utia";
+/// Response holding consensus node configuration.
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(all(target_arch = "wasm32", feature = "wasm-bindgen"), wasm_bindgen)]
+pub struct ConfigResponse {
+    /// Minimum gas price for the node to accept tx. Value is in `utia` denom.
+    pub minimum_gas_price: Option<f64>,
 
-        let min_gas_price_with_suffix = self.minimum_gas_price;
-        let min_gas_price_str = min_gas_price_with_suffix
-            .strip_suffix(UNITS_SUFFIX)
-            .ok_or(Error::FailedToParseResponse)?;
-        let min_gas_price = min_gas_price_str
-            .parse::<f64>()
-            .map_err(|_| Error::FailedToParseResponse)?;
+    /// How many recent blocks are stored by the node.
+    pub pruning_keep_recent: u64,
 
-        Ok(min_gas_price)
+    /// Amount of blocks used as an interval to trigger prunning.
+    pub pruning_interval: u64,
+
+    /// A height at which the node should stop advancing state.
+    pub halt_height: u64,
+}
+
+impl FromGrpcResponse<ConfigResponse> for RawConfigResponse {
+    fn try_from_response(self) -> Result<ConfigResponse> {
+        let minimum_gas_price = if self.minimum_gas_price.is_empty() {
+            None
+        } else {
+            Some(
+                self.minimum_gas_price
+                    .strip_suffix(BOND_DENOM)
+                    .ok_or(Error::FailedToParseResponse)?
+                    .parse()
+                    .map_err(|_| Error::FailedToParseResponse)?,
+            )
+        };
+
+        Ok(ConfigResponse {
+            minimum_gas_price,
+            pruning_keep_recent: self
+                .pruning_keep_recent
+                .parse()
+                .map_err(|_| Error::FailedToParseResponse)?,
+            pruning_interval: self
+                .pruning_interval
+                .parse()
+                .map_err(|_| Error::FailedToParseResponse)?,
+            halt_height: self.halt_height,
+        })
     }
 }
 
