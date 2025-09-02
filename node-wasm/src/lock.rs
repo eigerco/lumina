@@ -4,6 +4,7 @@ use std::fmt;
 
 use js_sys::{Function, Object, Promise, Reflect};
 use lumina_utils::make_object;
+use lumina_utils::token::{Token, TokenTriggerDropGuard};
 use serde_wasm_bindgen::to_value;
 use tokio::sync::oneshot;
 use wasm_bindgen::prelude::*;
@@ -19,7 +20,7 @@ pub enum Error {
 }
 
 pub struct NamedLock {
-    _unlock_tx: oneshot::Sender<()>,
+    _unlock_guard: TokenTriggerDropGuard,
 }
 
 impl NamedLock {
@@ -35,12 +36,13 @@ impl NamedLock {
     async fn lock_impl(name: &str, block: bool) -> Result<NamedLock, Error> {
         let lock_manager = get_lock_manager().map_err(Error::LockManagerUnavailable)?;
 
-        let (unlock_tx, unlock_rx) = oneshot::channel();
+        let unlock_token = Token::new();
+        let unlock_token_guard = unlock_token.trigger_drop_guard();
         let (would_block_tx, would_block_rx) = oneshot::channel();
         let cb: Function = Closure::once_into_js(move |lock: JsValue| {
             future_to_promise(async move {
                 let _ = would_block_tx.send(lock.is_falsy());
-                let _ = unlock_rx.await;
+                unlock_token.triggered().await;
                 Ok(JsValue::null())
             })
         })
@@ -65,7 +67,7 @@ impl NamedLock {
         }
 
         Ok(NamedLock {
-            _unlock_tx: unlock_tx,
+            _unlock_guard: unlock_token_guard,
         })
     }
 }
