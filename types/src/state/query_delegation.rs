@@ -377,19 +377,6 @@ impl From<QueryRedelegationsResponse> for RawQueryRedelegationsResponse {
                             .into_iter()
                             .map(Into::into)
                             .collect(),
-                        /*
-                            |entry| {
-                            RawRedelegationEntry {
-                                creation_height: entry.creation_height.into(),
-                                completion_time: Some(entry.completion_time.into()),
-                                initial_balance: entry.initial_balance.to_string(),
-                                shares_dst: entry.dest_shares.to_string(),
-                                unbonding_id: entry.unbonding_id,
-                                unbonding_on_hold_ref_count: entry.unbonding_on_hold_ref_count,
-                            }
-                        }
-                        ).collect(),
-                        */
                     }),
                     entries: response
                         .entries
