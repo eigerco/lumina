@@ -484,7 +484,7 @@ where
 }
 
 /// A result of correctly submitted transaction.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxInfo {
     /// Hash of the transaction.
