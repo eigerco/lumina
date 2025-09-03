@@ -46,7 +46,7 @@ pub struct GetRowResponse {
 }
 
 /// Position of a sample in a 2D grid.
-#[derive(Debug, Copy, Clone, PartialEq, Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SampleCoordinates {
     /// Row index of the sample.
     pub row: u16,

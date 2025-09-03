@@ -8,7 +8,7 @@ use crate::grpc::{FromGrpcResponse, IntoGrpcParam};
 use crate::Result;
 
 /// TxPriority is the priority level of the requested gas price.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[cfg_attr(
     all(feature = "wasm-bindgen", target_arch = "wasm32"),

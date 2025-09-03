@@ -141,7 +141,7 @@ impl HeaderApi {
 mod tests {
     use super::*;
 
-    use crate::test_utils::is_serialisable_deserialisable;
+    use crate::test_utils::ensure_serializable_deserializable;
 
     #[allow(dead_code)]
     #[allow(unused_variables)]
@@ -153,15 +153,15 @@ mod tests {
 
         let _: () = api.sync_wait().await.unwrap();
 
-        is_serialisable_deserialisable(api.head().await.unwrap());
-        is_serialisable_deserialisable(api.network_head().await.unwrap());
-        let hash = unimplemented!();
-        is_serialisable_deserialisable(api.get_by_hash(hash).await.unwrap());
-        is_serialisable_deserialisable(api.get_by_height(0).await.unwrap());
-        let header = unimplemented!();
-        is_serialisable_deserialisable(api.get_range_by_height(header, 0).await.unwrap());
-        is_serialisable_deserialisable(api.wait_for_height(0).await.unwrap());
-        is_serialisable_deserialisable(api.sync_state().await.unwrap());
-        is_serialisable_deserialisable(api.subscribe().await.next().await.unwrap().unwrap());
+        ensure_serializable_deserializable(api.head().await.unwrap());
+        ensure_serializable_deserializable(api.network_head().await.unwrap());
+        let hash = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.get_by_hash(hash).await.unwrap());
+        ensure_serializable_deserializable(api.get_by_height(0).await.unwrap());
+        let header = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.get_range_by_height(&header, 0).await.unwrap());
+        ensure_serializable_deserializable(api.wait_for_height(0).await.unwrap());
+        ensure_serializable_deserializable(api.sync_state().await.unwrap());
+        ensure_serializable_deserializable(api.subscribe().await.next().await.unwrap().unwrap());
     }
 }

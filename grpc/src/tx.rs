@@ -494,7 +494,7 @@ pub struct TxInfo {
 }
 
 /// Configuration for the transaction.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxConfig {
     /// Custom gas limit for the transaction (in `utia`). By default, client will

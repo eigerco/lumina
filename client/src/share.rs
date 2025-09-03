@@ -93,7 +93,7 @@ impl ShareApi {
 mod tests {
     use super::*;
 
-    use crate::test_utils::{is_serialisable, is_serialisable_deserialisable};
+    use crate::test_utils::{ensure_serializable, ensure_serializable_deserializable};
 
     #[allow(dead_code)]
     #[allow(unused_variables)]
@@ -103,17 +103,17 @@ mod tests {
         // intentionally no-run, compile only test
         let api = ShareApi::new(unimplemented!());
 
-        let coordinates = [SampleCoordinates::new(0, 0)];
-
         let _: () = api.shares_available(0).await.unwrap();
 
-        is_serialisable(api.get_samples(0, coordinates).await.unwrap());
-        is_serialisable(api.get_eds(0).await.unwrap());
+        let coordinates: Vec<SampleCoordinates> =
+            ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable(api.get_samples(0, coordinates).await.unwrap());
+        ensure_serializable(api.get_eds(0).await.unwrap());
 
-        is_serialisable_deserialisable(api.get(0, 0, 0).await.unwrap());
-        is_serialisable_deserialisable(api.get_row(0, 0).await.unwrap());
-        let namespace = unimplemented!();
-        is_serialisable_deserialisable(api.get_namespace_data(0, namespace).await.unwrap());
-        is_serialisable_deserialisable(api.get_range(0, 0, 0).await.unwrap());
+        ensure_serializable_deserializable(api.get(0, 0, 0).await.unwrap());
+        ensure_serializable_deserializable(api.get_row(0, 0).await.unwrap());
+        let namespace = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.get_namespace_data(0, namespace).await.unwrap());
+        ensure_serializable_deserializable(api.get_range(0, 0, 0).await.unwrap());
     }
 }

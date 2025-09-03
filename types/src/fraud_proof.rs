@@ -2,7 +2,9 @@
 //!
 //! A fraud proof is a proof of the detected malicious action done to the network.
 
-use serde::{Deserialize, Serialize, Serializer};
+use std::fmt;
+
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use tendermint::block::Height;
 use tendermint_proto::Protobuf;
 
@@ -61,6 +63,7 @@ impl Proof {
 }
 
 /// Proof type
+#[derive(Clone, Copy, Debug)]
 pub enum ProofType {
     /// Bad encoding fraud proof.
     BadEncoding,
@@ -81,6 +84,35 @@ impl Serialize for ProofType {
         S: Serializer,
     {
         self.to_str().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ProofType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ProofTypeVisitor;
+
+        impl<'de> de::Visitor<'de> for ProofTypeVisitor {
+            type Value = ProofType;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string representing proof type: 'badencoding'")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<ProofType, E>
+            where
+                E: de::Error,
+            {
+                match value {
+                    BadEncodingFraudProof::TYPE => Ok(ProofType::BadEncoding),
+                    _ => Err(E::invalid_value(de::Unexpected::Str(value), &self)),
+                }
+            }
+        }
+
+        deserializer.deserialize_str(ProofTypeVisitor)
     }
 }
 

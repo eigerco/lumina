@@ -51,7 +51,7 @@ impl BlobstreamApi {
 mod tests {
     use super::*;
 
-    use crate::test_utils::is_serialisable_deserialisable;
+    use crate::test_utils::ensure_serializable_deserializable;
 
     #[allow(dead_code)]
     #[allow(unused_variables)]
@@ -61,8 +61,8 @@ mod tests {
         // intentionally no run, compile only test
         let api = BlobstreamApi::new(unimplemented!());
 
-        is_serialisable_deserialisable(api.get_data_root_tuple_root(0, 0).await.unwrap());
-        is_serialisable_deserialisable(
+        ensure_serializable_deserializable(api.get_data_root_tuple_root(0, 0).await.unwrap());
+        ensure_serializable_deserializable(
             api.get_data_root_tuple_inclusion_proof(0, 0, 0)
                 .await
                 .unwrap(),

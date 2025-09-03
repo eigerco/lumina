@@ -369,7 +369,7 @@ mod tests {
     use lumina_utils::test_utils::async_test;
 
     use crate::test_utils::{
-        is_serialisable_deserialisable, new_client, new_read_only_client, node0_address,
+        ensure_serializable_deserializable, new_client, new_read_only_client, node0_address,
         validator_address,
     };
     use crate::Error;
@@ -552,39 +552,41 @@ mod tests {
         // intentionally no-run, compile only test
         let api = StateApi::new(unimplemented!());
 
-        let cfg = TxConfig::default();
-        let val_addr: ValAddress = unimplemented!();
-        let address = unimplemented!();
+        let cfg = ensure_serializable_deserializable(TxConfig::default());
+        let val_addr: ValAddress = ensure_serializable_deserializable(unimplemented!());
+        let acc_addr: AccAddress = ensure_serializable_deserializable(unimplemented!());
 
-        is_serialisable_deserialisable(api.balance().await.unwrap());
-        is_serialisable_deserialisable(api.balance_unverified().await.unwrap());
-        is_serialisable_deserialisable(api.balance_for_address(address).await.unwrap());
-        is_serialisable_deserialisable(api.balance_for_address_unverified(address).await.unwrap());
-        is_serialisable_deserialisable(api.estimate_gas_price(TxPriority::Low).await.unwrap());
-        is_serialisable_deserialisable(
+        ensure_serializable_deserializable(api.balance().await.unwrap());
+        ensure_serializable_deserializable(api.balance_unverified().await.unwrap());
+        ensure_serializable_deserializable(api.balance_for_address(&acc_addr).await.unwrap());
+        ensure_serializable_deserializable(
+            api.balance_for_address_unverified(&acc_addr).await.unwrap(),
+        );
+        ensure_serializable_deserializable(api.estimate_gas_price(TxPriority::Low).await.unwrap());
+        ensure_serializable_deserializable(
             api.estimate_gas_price_and_usage(TxPriority::Low, Vec::new())
                 .await
                 .unwrap(),
         );
-        is_serialisable_deserialisable(api.submit_message((), cfg).await.unwrap());
-        is_serialisable_deserialisable(api.transfer(address, 0, cfg).await.unwrap());
-        let blobs = unimplemented!();
-        is_serialisable_deserialisable(api.submit_pay_for_blob(blobs, cfg).await.unwrap());
-        is_serialisable_deserialisable(
+        ensure_serializable_deserializable(api.submit_message((), cfg).await.unwrap());
+        ensure_serializable_deserializable(api.transfer(&acc_addr, 0, cfg).await.unwrap());
+        let blobs: Vec<_> = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.submit_pay_for_blob(&blobs, cfg).await.unwrap());
+        ensure_serializable_deserializable(
             api.cancel_unbonding_delegation(&val_addr, 0, 0, cfg)
                 .await
                 .unwrap(),
         );
-        is_serialisable_deserialisable(
+        ensure_serializable_deserializable(
             api.begin_redelegate(&val_addr, &val_addr, 0, cfg)
                 .await
                 .unwrap(),
         );
-        is_serialisable_deserialisable(api.undelegate(&val_addr, 0, cfg).await.unwrap());
-        is_serialisable_deserialisable(api.delegate(&val_addr, 0, cfg).await.unwrap());
-        is_serialisable_deserialisable(api.query_delegation(&val_addr).await.unwrap());
-        is_serialisable_deserialisable(api.query_unbonding(&val_addr).await.unwrap());
-        is_serialisable_deserialisable(
+        ensure_serializable_deserializable(api.undelegate(&val_addr, 0, cfg).await.unwrap());
+        ensure_serializable_deserializable(api.delegate(&val_addr, 0, cfg).await.unwrap());
+        ensure_serializable_deserializable(api.query_delegation(&val_addr).await.unwrap());
+        ensure_serializable_deserializable(api.query_unbonding(&val_addr).await.unwrap());
+        ensure_serializable_deserializable(
             api.query_redelegations(&val_addr, &val_addr).await.unwrap(),
         );
     }

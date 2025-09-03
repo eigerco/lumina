@@ -75,5 +75,9 @@ pub(crate) fn node0_address() -> AccAddress {
     s.trim().parse().expect("invalid account address")
 }
 
-pub(crate) fn is_serialisable_deserialisable<'a, T: Serialize + Deserialize<'a>>(_: T) {}
-pub(crate) fn is_serialisable<T: Serialize>(_: T) {}
+pub(crate) fn ensure_serializable_deserializable<'a, T: Serialize + Deserialize<'a>>(v: T) -> T {
+    v
+}
+pub(crate) fn ensure_serializable<T: Serialize>(v: T) -> T {
+    v
+}

@@ -48,7 +48,7 @@ impl FraudApi {
 mod tests {
     use super::*;
 
-    use crate::test_utils::is_serialisable_deserialisable;
+    use crate::test_utils::ensure_serializable_deserializable;
 
     #[allow(dead_code)]
     #[allow(unused_variables)]
@@ -58,10 +58,10 @@ mod tests {
         // intentionally no-run, compile only test
         let api = FraudApi::new(unimplemented!());
 
-        let proof_type = unimplemented!();
-        is_serialisable_deserialisable(api.get(proof_type).await.unwrap());
-        let proof_type = unimplemented!();
-        is_serialisable_deserialisable(
+        let proof_type = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.get(proof_type).await.unwrap());
+        let proof_type = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(
             api.subscribe(proof_type)
                 .await
                 .next()
