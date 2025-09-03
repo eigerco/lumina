@@ -94,7 +94,6 @@ impl TryFrom<RawQueryDelegationResponse> for QueryDelegationResponse {
 
 impl From<QueryDelegationResponse> for RawQueryDelegationResponse {
     fn from(value: QueryDelegationResponse) -> Self {
-        // XXX: can we assume denom is utia?
         let balance = Coin::utia(value.response.balance);
         let delegation = value.response.delegation;
         RawQueryDelegationResponse {
