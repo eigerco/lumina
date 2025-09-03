@@ -108,12 +108,16 @@ mod tests {
         let coordinates: Vec<SampleCoordinates> =
             ensure_serializable_deserializable(unimplemented!());
         ensure_serializable(api.get_samples(0, coordinates).await.unwrap());
+
         ensure_serializable(api.get_eds(0).await.unwrap());
 
         ensure_serializable_deserializable(api.get(0, 0, 0).await.unwrap());
+
         ensure_serializable_deserializable(api.get_row(0, 0).await.unwrap());
+
         let namespace = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(api.get_namespace_data(0, namespace).await.unwrap());
+
         ensure_serializable_deserializable(api.get_range(0, 0, 0).await.unwrap());
     }
 }

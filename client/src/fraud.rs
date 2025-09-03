@@ -60,6 +60,7 @@ mod tests {
 
         let proof_type = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(api.get(proof_type).await.unwrap());
+
         let proof_type = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(
             api.subscribe(proof_type)

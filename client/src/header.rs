@@ -154,14 +154,21 @@ mod tests {
         let _: () = api.sync_wait().await.unwrap();
 
         ensure_serializable_deserializable(api.head().await.unwrap());
+
         ensure_serializable_deserializable(api.network_head().await.unwrap());
+
         let hash = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(api.get_by_hash(hash).await.unwrap());
+
         ensure_serializable_deserializable(api.get_by_height(0).await.unwrap());
         let header = ensure_serializable_deserializable(unimplemented!());
+
         ensure_serializable_deserializable(api.get_range_by_height(&header, 0).await.unwrap());
+
         ensure_serializable_deserializable(api.wait_for_height(0).await.unwrap());
+
         ensure_serializable_deserializable(api.sync_state().await.unwrap());
+
         ensure_serializable_deserializable(api.subscribe().await.next().await.unwrap().unwrap());
     }
 }

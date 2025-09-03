@@ -557,35 +557,50 @@ mod tests {
         let acc_addr: AccAddress = ensure_serializable_deserializable(unimplemented!());
 
         ensure_serializable_deserializable(api.balance().await.unwrap());
+
         ensure_serializable_deserializable(api.balance_unverified().await.unwrap());
+
         ensure_serializable_deserializable(api.balance_for_address(&acc_addr).await.unwrap());
+
         ensure_serializable_deserializable(
             api.balance_for_address_unverified(&acc_addr).await.unwrap(),
         );
+
         ensure_serializable_deserializable(api.estimate_gas_price(TxPriority::Low).await.unwrap());
+
         ensure_serializable_deserializable(
             api.estimate_gas_price_and_usage(TxPriority::Low, Vec::new())
                 .await
                 .unwrap(),
         );
+
         ensure_serializable_deserializable(api.submit_message((), cfg).await.unwrap());
+
         ensure_serializable_deserializable(api.transfer(&acc_addr, 0, cfg).await.unwrap());
+
         let blobs: Vec<_> = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(api.submit_pay_for_blob(&blobs, cfg).await.unwrap());
+
         ensure_serializable_deserializable(
             api.cancel_unbonding_delegation(&val_addr, 0, 0, cfg)
                 .await
                 .unwrap(),
         );
+
         ensure_serializable_deserializable(
             api.begin_redelegate(&val_addr, &val_addr, 0, cfg)
                 .await
                 .unwrap(),
         );
+
         ensure_serializable_deserializable(api.undelegate(&val_addr, 0, cfg).await.unwrap());
+
         ensure_serializable_deserializable(api.delegate(&val_addr, 0, cfg).await.unwrap());
+
         ensure_serializable_deserializable(api.query_delegation(&val_addr).await.unwrap());
+
         ensure_serializable_deserializable(api.query_unbonding(&val_addr).await.unwrap());
+
         ensure_serializable_deserializable(
             api.query_redelegations(&val_addr, &val_addr).await.unwrap(),
         );

@@ -229,14 +229,18 @@ mod tests {
         let blobs: Vec<_> = ensure_serializable_deserializable(unimplemented!());
         let cfg = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(api.submit(&blobs, cfg).await.unwrap());
+
         let namespace = ensure_serializable_deserializable(unimplemented!());
         let commitment = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(api.get(0, namespace, commitment).await.unwrap());
+
         let namespaces: Vec<_> = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(api.get_all(0, &namespaces).await.unwrap());
+
         let namespace = ensure_serializable_deserializable(unimplemented!());
         let commitment = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(api.get_proof(0, namespace, commitment).await.unwrap());
+
         let namespace = ensure_serializable_deserializable(unimplemented!());
         let proof = ensure_serializable_deserializable(unimplemented!());
         let commitment = ensure_serializable_deserializable(unimplemented!());
@@ -245,6 +249,7 @@ mod tests {
                 .await
                 .unwrap(),
         );
+
         let namespace = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(
             api.subscribe(namespace)

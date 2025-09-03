@@ -62,6 +62,7 @@ mod tests {
         let api = BlobstreamApi::new(unimplemented!());
 
         ensure_serializable_deserializable(api.get_data_root_tuple_root(0, 0).await.unwrap());
+
         ensure_serializable_deserializable(
             api.get_data_root_tuple_inclusion_proof(0, 0, 0)
                 .await
