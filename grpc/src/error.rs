@@ -102,8 +102,8 @@ pub enum GrpcClientBuilderError {
     TonicTransportError(#[from] tonic::transport::Error),
 
     /// Attempted to enable tls when using pre-prepared transport
-    #[error("Cannot enable tls on manual transport")]
-    CannotEnableTlsOnManualTransport,
+    #[error("Cannot enable tls on custom transport")]
+    CannotEnableTlsOnCustomTransport,
 }
 
 impl From<Status> for Error {

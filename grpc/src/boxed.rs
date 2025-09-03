@@ -12,7 +12,7 @@ use tonic::codegen::Service;
 
 dyn_clone::clone_trait_object!(AbstractTransport);
 
-type BoxError = Box<dyn StdError + Sync + Send + 'static>;
+type BoxedError = Box<dyn StdError + Sync + Send + 'static>;
 
 pub(crate) struct BoxedBody {
     inner: Box<dyn AbstractBody + Unpin + Send + 'static>,
@@ -69,9 +69,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Bytes>, BoxError>>> {
-        let Poll::Ready(ready) = self.poll_frame(cx) else {
-            return Poll::Pending;
-        };
+        let ready = ready!(self.poll_frame(cx));
 
         let Some(result) = ready else {
             return Poll::Ready(None);
@@ -96,8 +94,8 @@ impl Clone for BoxedTransport {
 trait AbstractTransport: DynClone {
     fn poll_ready(
         &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), BoxError>>;
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), BoxError>>;
 
     fn call(&mut self, req: http::Request<TonicBody>) -> AbstractFuture;
 }
@@ -212,4 +210,4 @@ pub trait ConditionalSendFuture: Future + ConditionalSend {}
 impl<T: Future + ConditionalSend> ConditionalSendFuture for T {}
 
 /// An owned and dynamically typed Future used when you can't statically type your result or need to add some indirection.
-pub type BoxedFuture<'a, T> = core::pin::Pin<Box<dyn ConditionalSendFuture<Output = T> + 'a>>;
+pub type BoxedFuture<'a, T> = Pin<Box<dyn ConditionalSendFuture<Output = T> + 'a>>;

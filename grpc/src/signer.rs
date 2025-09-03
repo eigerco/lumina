@@ -189,21 +189,11 @@ mod uniffi_types {
         async fn try_sign(
             &self,
             doc: SignDoc,
-            //) -> Pin<Box<dyn Future<Output = Result<Secp256k1Signature, K256Error>> + Send>> {
         ) -> Result<Secp256k1Signature, K256Error> {
             match self.0.sign(doc).await {
                 Ok(s) => Secp256k1Signature::try_from(s).map_err(K256Error::from_source),
                 Err(e) => Err(K256Error::from_source(e)),
             }
-            /*
-            let signer = self.0.clone();
-            Box::pin(async move {
-                match signer.sign(doc).await {
-                    Ok(s) => Secp256k1Signature::try_from(s).map_err(K256Error::from_source),
-                    Err(e) => Err(K256Error::from_source(e)),
-                }
-            })
-                */
         }
     }
 

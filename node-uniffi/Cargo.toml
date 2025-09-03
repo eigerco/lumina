@@ -41,4 +41,3 @@ tonic.workspace = true
 default = ['tls-webpki-roots']
 tls-native-roots = ["celestia-grpc/tls-native-roots"]
 tls-webpki-roots = ["celestia-grpc/tls-webpki-roots"]
-
