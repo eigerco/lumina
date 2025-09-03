@@ -713,6 +713,7 @@ dependencies = [
  "k256",
  "lumina-utils",
  "rand",
+ "serde",
  "serde_json",
  "tendermint",
  "thiserror 2.0.12",
@@ -4658,6 +4659,7 @@ checksum = "b203a6425500a03e0919c42d3c47caca51e79f1132046626d2c8871c5092035d"
 dependencies = [
  "arrayvec",
  "num-traits",
+ "serde",
 ]
 
 [[package]]

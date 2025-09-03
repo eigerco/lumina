@@ -88,3 +88,36 @@ impl ShareApi {
         Ok(self.ctx.rpc.share_get_range(&header, start, end).await?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::test_utils::{ensure_serializable, ensure_serializable_deserializable};
+
+    #[allow(dead_code)]
+    #[allow(unused_variables)]
+    #[allow(unreachable_code)]
+    #[allow(clippy::diverging_sub_expression)]
+    async fn enforce_serde_bounds() {
+        // intentionally no-run, compile only test
+        let api = ShareApi::new(unimplemented!());
+
+        let _: () = api.shares_available(0).await.unwrap();
+
+        let coordinates: Vec<SampleCoordinates> =
+            ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable(api.get_samples(0, coordinates).await.unwrap());
+
+        ensure_serializable(api.get_eds(0).await.unwrap());
+
+        ensure_serializable_deserializable(api.get(0, 0, 0).await.unwrap());
+
+        ensure_serializable_deserializable(api.get_row(0, 0).await.unwrap());
+
+        let namespace = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.get_namespace_data(0, namespace).await.unwrap());
+
+        ensure_serializable_deserializable(api.get_range(0, 0, 0).await.unwrap());
+    }
+}

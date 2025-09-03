@@ -43,3 +43,32 @@ impl FraudApi {
         .boxed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::test_utils::ensure_serializable_deserializable;
+
+    #[allow(dead_code)]
+    #[allow(unused_variables)]
+    #[allow(unreachable_code)]
+    #[allow(clippy::diverging_sub_expression)]
+    async fn enforce_serde_bounds() {
+        // intentionally no-run, compile only test
+        let api = FraudApi::new(unimplemented!());
+
+        let proof_type = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.get(proof_type).await.unwrap());
+
+        let proof_type = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(
+            api.subscribe(proof_type)
+                .await
+                .next()
+                .await
+                .unwrap()
+                .unwrap(),
+        );
+    }
+}

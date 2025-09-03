@@ -136,3 +136,39 @@ impl HeaderApi {
         .boxed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::test_utils::ensure_serializable_deserializable;
+
+    #[allow(dead_code)]
+    #[allow(unused_variables)]
+    #[allow(unreachable_code)]
+    #[allow(clippy::diverging_sub_expression)]
+    async fn enforce_serde_bounds() {
+        // intentionally no-run, compile only test
+        let api = HeaderApi::new(unimplemented!());
+
+        let _: () = api.sync_wait().await.unwrap();
+
+        ensure_serializable_deserializable(api.head().await.unwrap());
+
+        ensure_serializable_deserializable(api.network_head().await.unwrap());
+
+        let hash = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.get_by_hash(hash).await.unwrap());
+
+        ensure_serializable_deserializable(api.get_by_height(0).await.unwrap());
+
+        let header = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.get_range_by_height(&header, 0).await.unwrap());
+
+        ensure_serializable_deserializable(api.wait_for_height(0).await.unwrap());
+
+        ensure_serializable_deserializable(api.sync_state().await.unwrap());
+
+        ensure_serializable_deserializable(api.subscribe().await.next().await.unwrap().unwrap());
+    }
+}
