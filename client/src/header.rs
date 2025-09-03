@@ -161,8 +161,8 @@ mod tests {
         ensure_serializable_deserializable(api.get_by_hash(hash).await.unwrap());
 
         ensure_serializable_deserializable(api.get_by_height(0).await.unwrap());
-        let header = ensure_serializable_deserializable(unimplemented!());
 
+        let header = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(api.get_range_by_height(&header, 0).await.unwrap());
 
         ensure_serializable_deserializable(api.wait_for_height(0).await.unwrap());
