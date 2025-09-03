@@ -104,6 +104,9 @@ mod tests {
         let api = ShareApi::new(unimplemented!());
 
         let coordinates = [SampleCoordinates::new(0, 0)];
+
+        let _: () = api.shares_available(0).await.unwrap();
+
         is_serialisable(api.get_samples(0, coordinates).await.unwrap());
         is_serialisable(api.get_eds(0).await.unwrap());
 

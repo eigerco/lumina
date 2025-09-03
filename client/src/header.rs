@@ -151,6 +151,8 @@ mod tests {
         // intentionally no-run, compile only test
         let api = HeaderApi::new(unimplemented!());
 
+        let _: () = api.sync_wait().await.unwrap();
+
         is_serialisable_deserialisable(api.head().await.unwrap());
         is_serialisable_deserialisable(api.network_head().await.unwrap());
         let hash = unimplemented!();
