@@ -115,8 +115,9 @@ async fn get_node_config() {
     let client = new_grpc_client();
     let config = client.get_node_config().await.unwrap();
 
-    // we don't set any explicit value for it in ci setup
-    assert!(config.minimum_gas_price.unwrap() > 0.0);
+    // we don't set any explicit value for it in the config
+    // so it should be empty since v6
+    assert!(config.minimum_gas_price.is_none());
 }
 
 #[async_test]
