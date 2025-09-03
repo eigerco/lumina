@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/eigerco/lumina/compare/celestia-client-v0.1.1...celestia-client-v0.1.2) - 2025-09-03
+
+### Added
+
+- *(client,grpc)* make sure all returned futures are Send ([#729](https://github.com/eigerco/lumina/pull/729))
+
 ## [0.1.1](https://github.com/eigerco/lumina/compare/celestia-client-v0.1.0...celestia-client-v0.1.1) - 2025-08-19
 
 ### Other
