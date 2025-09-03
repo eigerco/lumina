@@ -459,14 +459,17 @@ impl<T, S> fmt::Debug for TxClient<T, S> {
 }
 
 /// Signer capable of producing ecdsa signature using secp256k1 curve.
-pub trait DocSigner {
+pub trait DocSigner: Sync {
     /// Try to sign the provided sign doc.
-    fn try_sign(&self, doc: SignDoc) -> impl Future<Output = Result<Signature, SignatureError>>;
+    fn try_sign(
+        &self,
+        doc: SignDoc,
+    ) -> impl Future<Output = Result<Signature, SignatureError>> + Send;
 }
 
 impl<T> DocSigner for T
 where
-    T: Signer<Signature>,
+    T: Signer<Signature> + Sync,
 {
     async fn try_sign(&self, doc: SignDoc) -> Result<Signature, SignatureError> {
         let bytes = doc.encode_to_vec();

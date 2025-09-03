@@ -9,6 +9,7 @@ use k256::ecdsa::signature::Error as SignatureError;
 use k256::ecdsa::{Signature, VerifyingKey};
 use lumina_utils::make_object;
 use prost::Message;
+use send_wrapper::SendWrapper;
 use tonic_web_wasm_client::Client;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -60,7 +61,7 @@ impl JsTxClient {
     /// ```
     #[wasm_bindgen(constructor)]
     pub async fn new(url: &str, pubkey: Uint8Array, signer_fn: JsSignerFn) -> Result<JsTxClient> {
-        let signer = JsSigner { signer_fn };
+        let signer = JsSigner::new(signer_fn);
         let pubkey = VerifyingKey::try_from(pubkey.to_vec().as_slice())?;
         let client = TxClient::with_grpcweb_url(url, pubkey, signer).await?;
         Ok(Self { client })
@@ -239,37 +240,56 @@ pub fn proto_encode_sign_doc(sign_doc: JsSignDoc) -> Vec<u8> {
 
 /// Signer that uses a javascript function for signing.
 pub struct JsSigner {
-    signer_fn: JsSignerFn,
+    signer_fn: SendWrapper<JsSignerFn>,
+}
+
+impl JsSigner {
+    fn new(signer_fn: JsSignerFn) -> Self {
+        Self {
+            signer_fn: SendWrapper::new(signer_fn),
+        }
+    }
 }
 
 impl DocSigner for JsSigner {
     async fn try_sign(&self, doc: SignDoc) -> Result<Signature, SignatureError> {
-        let msg = JsSignDoc::from(doc);
+        let promise = {
+            let msg = JsSignDoc::from(doc);
 
-        let mut res = self.signer_fn.call1(&JsValue::null(), &msg).map_err(|e| {
-            let err = format!("Error calling signer fn: {e:?}");
-            SignatureError::from_source(err)
-        })?;
+            let sig_or_promise = self.signer_fn.call1(&JsValue::null(), &msg).map_err(|e| {
+                let err = format!("Error calling signer fn: {e:?}");
+                SignatureError::from_source(err)
+            })?;
 
-        // if signer_fn is async, await it
-        if res.has_type::<Promise>() {
-            let promise = res.unchecked_into::<Promise>();
-            res = JsFuture::from(promise).await.map_err(|e| {
+            // we got the sig already, so return it
+            if !sig_or_promise.has_type::<Promise>() {
+                return try_into_signature(sig_or_promise);
+            }
+
+            sig_or_promise.unchecked_into::<Promise>()
+        };
+
+        let sig = SendWrapper::new(JsFuture::from(promise))
+            .await
+            .map_err(|e| {
                 let err = format!("Error awaiting signer promise: {e:?}");
                 SignatureError::from_source(err)
-            })?
-        }
+            })?;
 
-        let sig = res.dyn_into::<Uint8Array>().map_err(|orig| {
-            let err = format!(
-                "Signature must be Uint8Array, found: {}",
-                orig.js_typeof().as_string().expect("typeof returns string")
-            );
-            SignatureError::from_source(err)
-        })?;
-
-        Signature::from_slice(&sig.to_vec()).map_err(SignatureError::from_source)
+        try_into_signature(sig)
     }
+}
+
+fn try_into_signature(val: JsValue) -> Result<Signature, SignatureError> {
+    let sig = val.dyn_into::<Uint8Array>().map_err(|orig| {
+        let err = format!(
+            "Signature must be Uint8Array, found: {}",
+            orig.js_typeof().as_string().expect("typeof returns string")
+        );
+        SignatureError::from_source(err)
+    })?;
+
+    Signature::from_slice(&sig.to_vec()).map_err(SignatureError::from_source)
 }
 
 #[wasm_bindgen(typescript_custom_section)]
