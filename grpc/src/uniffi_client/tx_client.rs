@@ -123,11 +123,6 @@ impl TxClient {
         Ok(TxClient { client })
     }
 
-    /// Query for the current minimum gas price
-    pub async fn get_min_gas_price(&self) -> Result<f64> {
-        Ok(self.client.get_min_gas_price().await?)
-    }
-
     /// AppVersion of the client
     pub fn app_version(&self) -> AppVersion {
         self.client.app_version()

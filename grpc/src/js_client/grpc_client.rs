@@ -1,12 +1,11 @@
-use wasm_bindgen::prelude::*;
-
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::state::auth::{JsAuthParams, JsBaseAccount};
 use celestia_types::state::{AbciQueryResponse, JsCoin, TxResponse};
 use celestia_types::ExtendedHeader;
+use wasm_bindgen::prelude::*;
 
-use crate::grpc::{GasInfo, GetTxResponse, JsBroadcastMode, TxStatusResponse};
+use crate::grpc::{ConfigResponse, GasInfo, GetTxResponse, JsBroadcastMode, TxStatusResponse};
 use crate::Result;
 
 type InnerClient = crate::GrpcClient<tonic_web_wasm_client::Client>;
@@ -107,9 +106,9 @@ impl GrpcClient {
             .collect())
     }
 
-    /// Get Minimum Gas price
-    pub async fn get_min_gas_price(&self) -> Result<f64> {
-        self.client.get_min_gas_price().await
+    /// Get node configuration
+    pub async fn get_node_config(&self) -> Result<ConfigResponse> {
+        self.client.get_node_config().await
     }
 
     /// Get latest block

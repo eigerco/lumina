@@ -67,12 +67,6 @@ impl JsTxClient {
         Ok(Self { client })
     }
 
-    /// Query for the current minimum gas price
-    #[wasm_bindgen(js_name = minGasPrice)]
-    pub async fn min_gas_price(&self) -> Result<f64> {
-        self.client.get_min_gas_price().await
-    }
-
     /// estimate_gas_price takes a transaction priority and estimates the gas price based
     /// on the gas prices of the transactions in the last five blocks.
     ///
