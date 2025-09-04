@@ -166,7 +166,7 @@ impl BlobApi {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::new_client;
+    use crate::test_utils::{ensure_serializable_deserializable, new_client};
     use celestia_types::AppVersion;
     use lumina_utils::test_utils::async_test;
 
@@ -216,5 +216,48 @@ mod tests {
             .get(head.height().value(), ns, commitment)
             .await
             .unwrap_err();
+    }
+
+    #[allow(dead_code)]
+    #[allow(unused_variables)]
+    #[allow(unreachable_code)]
+    #[allow(clippy::diverging_sub_expression)]
+    async fn enforce_serde_bounds() {
+        // intentionally no-run, compile only test
+        let api = BlobApi::new(unimplemented!());
+
+        let blobs: Vec<_> = ensure_serializable_deserializable(unimplemented!());
+        let cfg = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.submit(&blobs, cfg).await.unwrap());
+
+        let namespace = ensure_serializable_deserializable(unimplemented!());
+        let commitment = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.get(0, namespace, commitment).await.unwrap());
+
+        let namespaces: Vec<_> = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.get_all(0, &namespaces).await.unwrap());
+
+        let namespace = ensure_serializable_deserializable(unimplemented!());
+        let commitment = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(api.get_proof(0, namespace, commitment).await.unwrap());
+
+        let namespace = ensure_serializable_deserializable(unimplemented!());
+        let proof = ensure_serializable_deserializable(unimplemented!());
+        let commitment = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(
+            api.included(0, namespace, &proof, commitment)
+                .await
+                .unwrap(),
+        );
+
+        let namespace = ensure_serializable_deserializable(unimplemented!());
+        ensure_serializable_deserializable(
+            api.subscribe(namespace)
+                .await
+                .next()
+                .await
+                .unwrap()
+                .unwrap(),
+        );
     }
 }

@@ -36,7 +36,8 @@ use crate::abci_proofs::ProofChain;
 use crate::boxed::BoxedTransport;
 use crate::builder::GrpcClientBuilder;
 use crate::grpc::{
-    BroadcastMode, GasEstimate, GasInfo, GetTxResponse, TxPriority, TxStatus, TxStatusResponse,
+    BroadcastMode, ConfigResponse, GasEstimate, GasInfo, GetTxResponse, TxPriority, TxStatus,
+    TxStatusResponse,
 };
 use crate::signer::{sign_tx, DispatchedDocSigner};
 use crate::tx::TxInfo;
@@ -44,8 +45,6 @@ use crate::{Error, Result, TxConfig};
 
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
 const BLOB_TX_TYPE_ID: &str = "BLOB";
-// Multiplier used to adjust the gas limit given by gas estimation service
-const DEFAULT_GAS_MULTIPLIER: f64 = 1.1;
 
 struct AccountState {
     account: Account,
@@ -173,9 +172,9 @@ impl GrpcClient {
 
     // cosmos.base.node
 
-    /// Get Minimum Gas price
+    /// Get node configuration
     #[grpc_method(ConfigServiceClient::config)]
-    async fn get_min_gas_price(&self) -> Result<f64>;
+    async fn get_node_config(&self) -> Result<ConfigResponse>;
 
     // cosmos.base.tendermint
 
@@ -321,20 +320,8 @@ impl GrpcClient {
             ..RawTxBody::default()
         };
 
-        let mut retries = 0;
-        let (tx_hash, sequence) = loop {
-            match self
-                .sign_and_broadcast_tx(tx_body.clone(), cfg.clone())
-                .await
-            {
-                Ok(resp) => break resp,
-                Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _)) if retries < 3 => {
-                    retries += 1;
-                    continue;
-                }
-                Err(e) => return Err(e),
-            }
-        };
+        let (tx_hash, sequence) = self.sign_and_broadcast_tx(tx_body, cfg).await?;
+
         self.confirm_tx(tx_hash, sequence).await
     }
 
@@ -376,20 +363,8 @@ impl GrpcClient {
             blob.validate(app_version)?;
         }
 
-        let mut retries = 0;
-        let (tx_hash, sequence) = loop {
-            match self
-                .sign_and_broadcast_blobs(blobs.to_vec(), cfg.clone())
-                .await
-            {
-                Ok(resp) => break resp,
-                Err(Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _)) if retries < 3 => {
-                    retries += 1;
-                    continue;
-                }
-                Err(e) => return Err(e),
-            }
-        };
+        let (tx_hash, sequence) = self.sign_and_broadcast_blobs(blobs.to_vec(), cfg).await?;
+
         self.confirm_tx(tx_hash, sequence).await
     }
 
@@ -452,8 +427,7 @@ impl GrpcClient {
                 let GasEstimate { price, usage } = self
                     .estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
                     .await?;
-                let gas_limit = (usage as f64 * DEFAULT_GAS_MULTIPLIER) as u64;
-                (gas_limit, maybe_gas_price.unwrap_or(price))
+                (usage, maybe_gas_price.unwrap_or(price))
             }
         })
     }
@@ -502,7 +476,7 @@ impl GrpcClient {
             type_id: BLOB_TX_TYPE_ID.to_string(),
         };
 
-        self.broadcast_tx_with_account(blob_tx.encode_to_vec(), account)
+        self.broadcast_tx_with_account(blob_tx.encode_to_vec(), cfg, account)
             .await
     }
 
@@ -525,23 +499,32 @@ impl GrpcClient {
         )
         .await?;
 
-        self.broadcast_tx_with_account(tx.encode_to_vec(), account)
+        self.broadcast_tx_with_account(tx.encode_to_vec(), cfg, account)
             .await
     }
 
     async fn broadcast_tx_with_account(
         &self,
         tx: Vec<u8>,
+        cfg: TxConfig,
         mut account: MappedMutexGuard<'_, AccountState>,
     ) -> Result<(Hash, u64)> {
         let resp = self.broadcast_tx(tx, BroadcastMode::Sync).await?;
 
         if resp.code != ErrorCode::Success {
-            return Err(Error::TxBroadcastFailed(
-                resp.txhash,
-                resp.code,
-                resp.raw_log,
-            ));
+            // if transaction failed due to insufficient fee, include info
+            // whether gas price was estimated or explicitely set
+            let message = if resp.code == ErrorCode::InsufficientFee {
+                if cfg.gas_price.is_some() {
+                    format!("Gas price was set via config. {}", resp.raw_log)
+                } else {
+                    format!("Gas price was estimated. {}", resp.raw_log)
+                }
+            } else {
+                resp.raw_log
+            };
+
+            return Err(Error::TxBroadcastFailed(resp.txhash, resp.code, message));
         }
 
         let tx_sequence = account.account.sequence;

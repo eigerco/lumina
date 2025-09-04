@@ -46,3 +46,27 @@ impl BlobstreamApi {
             .await?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::test_utils::ensure_serializable_deserializable;
+
+    #[allow(dead_code)]
+    #[allow(unused_variables)]
+    #[allow(unreachable_code)]
+    #[allow(clippy::diverging_sub_expression)]
+    async fn enforce_serde_bounds() {
+        // intentionally no run, compile only test
+        let api = BlobstreamApi::new(unimplemented!());
+
+        ensure_serializable_deserializable(api.get_data_root_tuple_root(0, 0).await.unwrap());
+
+        ensure_serializable_deserializable(
+            api.get_data_root_tuple_inclusion_proof(0, 0, 0)
+                .await
+                .unwrap(),
+        );
+    }
+}

@@ -2,12 +2,13 @@ use celestia_proto::celestia::core::v1::gas_estimation::{
     EstimateGasPriceAndUsageRequest, EstimateGasPriceAndUsageResponse, EstimateGasPriceRequest,
     EstimateGasPriceResponse,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::grpc::{FromGrpcResponse, IntoGrpcParam};
 use crate::Result;
 
 /// TxPriority is the priority level of the requested gas price.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[cfg_attr(
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
@@ -25,7 +26,7 @@ pub enum TxPriority {
 }
 
 /// Result of gas price and usage estimation
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(
     all(feature = "wasm-bindgen", target_arch = "wasm32"),

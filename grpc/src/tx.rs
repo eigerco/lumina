@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use celestia_types::hash::Hash;
 use celestia_types::Height;
 
@@ -6,7 +8,7 @@ use crate::grpc::TxPriority;
 pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 
 /// A result of correctly submitted transaction.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxInfo {
     /// Hash of the transaction.
@@ -16,7 +18,7 @@ pub struct TxInfo {
 }
 
 /// Configuration for the transaction.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxConfig {
     /// Custom gas limit for the transaction (in `utia`). By default, client will

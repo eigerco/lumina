@@ -15,7 +15,8 @@ use celestia_types::{AppVersion, Blob};
 use celestia_types::{ExtendedHeader, UniffiConversionError};
 
 use crate::grpc::{
-    BroadcastMode, GasEstimate, GasInfo, GetTxResponse, TxPriority, TxStatusResponse,
+    BroadcastMode, ConfigResponse, GasEstimate, GasInfo, GetTxResponse, TxPriority,
+    TxStatusResponse,
 };
 use crate::tx::TxInfo;
 use crate::{IntoProtobufAny, SignDoc, TxConfig};
@@ -141,9 +142,9 @@ impl GrpcClient {
         Ok(self.client.get_total_supply().await?)
     }
 
-    /// Get Minimum Gas price
-    pub async fn get_min_gas_price(&self) -> Result<f64> {
-        Ok(self.client.get_min_gas_price().await?)
+    /// Get node configuration
+    pub async fn get_node_config(&self) -> Result<ConfigResponse> {
+        Ok(self.client.get_node_config().await?)
     }
 
     /// Get latest block

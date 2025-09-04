@@ -1,14 +1,17 @@
-use celestia_types::any::JsAny;
-use celestia_types::consts::appconsts::JsAppVersion;
 use wasm_bindgen::prelude::*;
 
+use celestia_types::any::JsAny;
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
+use celestia_types::consts::appconsts::JsAppVersion;
 use celestia_types::state::auth::{JsAuthParams, JsBaseAccount};
 use celestia_types::state::{AbciQueryResponse, JsCoin, TxResponse};
 use celestia_types::{Blob, ExtendedHeader};
 
-use crate::grpc::{GasInfo, GetTxResponse, JsBroadcastMode, TxPriority, TxStatusResponse};
+use crate::grpc::{
+    ConfigResponse, GasInfo, GetTxResponse, JsBroadcastMode, TxPriority, TxStatusResponse,
+    TxStatusResponse,
+};
 use crate::js_client::GrpcClientBuilder;
 use crate::tx::{JsTxConfig, JsTxInfo};
 use crate::Result;
@@ -118,10 +121,9 @@ impl GrpcClient {
             .collect())
     }
 
-    /// Get Minimum Gas price
-    #[wasm_bindgen(js_name = getMinGasPrice)]
-    pub async fn get_min_gas_price(&self) -> Result<f64> {
-        self.client.get_min_gas_price().await
+    /// Get node configuration
+    pub async fn get_node_config(&self) -> Result<ConfigResponse> {
+        self.client.get_node_config().await
     }
 
     /// Get latest block
