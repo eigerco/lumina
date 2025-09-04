@@ -84,9 +84,9 @@ pub enum Error {
     #[error("no account")]
     NoAccount,
 
-    /// Builder error
-    #[error("Keys and signer not set when building transaction client")]
-    MissingKeysAndSinger,
+    /// Client was not constructed with a signer
+    #[error("Client was not constructed with a signer")]
+    MissingSinger,
 }
 
 /// Representation of all the errors that can occur when building [`GrpcClient`] using
