@@ -9,7 +9,6 @@ use tonic::codegen::Service;
 
 use crate::boxed::{boxed, BoxedTransport};
 use crate::client::SignerConfig;
-use crate::signer::DispatchedDocSigner;
 use crate::{DocSigner, GrpcClient, GrpcClientBuilderError};
 
 use imp::build_transport;
@@ -81,7 +80,7 @@ impl GrpcClientBuilder {
         GrpcClientBuilder {
             transport: self.transport,
             signer_bits: Some(SignerConfig {
-                signer: DispatchedDocSigner::new(signer),
+                signer: Box::new(signer),
                 pubkey: account_pubkey,
             }),
         }
@@ -96,7 +95,7 @@ impl GrpcClientBuilder {
         GrpcClientBuilder {
             transport: self.transport,
             signer_bits: Some(SignerConfig {
-                signer: DispatchedDocSigner::new(signer),
+                signer: Box::new(signer),
                 pubkey,
             }),
         }
@@ -126,14 +125,9 @@ mod imp {
     ) -> Result<BoxedTransport, tonic::transport::Error> {
         let mut tls_config = ClientTlsConfig::new();
 
-        #[cfg(feature = "tls-native-roots")]
+        #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
         if tls {
-            tls_config = tls_config.with_native_roots();
-        }
-
-        #[cfg(feature = "tls-webpki-roots")]
-        if tls {
-            tls_config = tls_config.with_webpki_roots();
+            tls_config = tls_config.with_enabled_roots();
         }
 
         let channel = Endpoint::from_shared(url)?

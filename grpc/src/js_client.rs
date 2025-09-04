@@ -74,7 +74,7 @@ impl GrpcClientBuilder {
         let signer = JsSigner::new(signer_fn);
         let account_pubkey = VerifyingKey::try_from(account_pubkey.to_vec().as_slice())?;
         Ok(Self {
-            inner: self.inner.with_pubkey_and_signer(account_pubkey, signer),
+            inner: self.inner.pubkey_and_signer(account_pubkey, signer),
         })
     }
 

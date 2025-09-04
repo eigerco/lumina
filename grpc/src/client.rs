@@ -39,7 +39,7 @@ use crate::grpc::{
     BroadcastMode, ConfigResponse, GasEstimate, GasInfo, GetTxResponse, TxPriority, TxStatus,
     TxStatusResponse,
 };
-use crate::signer::{sign_tx, DispatchedDocSigner};
+use crate::signer::{sign_tx, BoxedSigner};
 use crate::tx::TxInfo;
 use crate::{Error, Result, TxConfig};
 
@@ -53,7 +53,7 @@ struct AccountState {
 }
 
 pub(crate) struct SignerConfig {
-    pub(crate) signer: DispatchedDocSigner,
+    pub(crate) signer: BoxedSigner,
     pub(crate) pubkey: VerifyingKey,
 }
 

@@ -1,7 +1,5 @@
 //! Types related to signing transactions
 
-use std::fmt;
-
 use ::tendermint::chain::Id;
 use async_trait::async_trait;
 use celestia_proto::cosmos::tx::v1beta1::SignDoc;
@@ -22,6 +20,8 @@ pub type DocSignature = k256::ecdsa::Signature;
 /// Signature error
 pub type SignatureError = k256::ecdsa::signature::Error;
 
+pub(crate) type BoxedSigner = Box<dyn DocSigner>;
+
 /// Signer capable of producing ecdsa signature using secp256k1 curve.
 #[async_trait]
 pub trait DocSigner: Send + Sync {
@@ -40,29 +40,10 @@ where
     }
 }
 
-/// Workaround for dispatching `DocSigner`
-pub struct DispatchedDocSigner(Box<dyn DocSigner>);
-
-impl DispatchedDocSigner {
-    /// Create a new signer
-    pub fn new<S>(signer: S) -> DispatchedDocSigner
-    where
-        S: DocSigner + 'static,
-    {
-        DispatchedDocSigner(Box::new(signer))
-    }
-}
-
 #[async_trait]
-impl DocSigner for DispatchedDocSigner {
+impl DocSigner for BoxedSigner {
     async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
-        self.0.try_sign(doc).await
-    }
-}
-
-impl fmt::Debug for DispatchedDocSigner {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("DispatchedDocSigner { .. }")
+        (**self).try_sign(doc).await
     }
 }
 

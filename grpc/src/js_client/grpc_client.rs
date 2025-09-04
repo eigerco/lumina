@@ -10,7 +10,6 @@ use celestia_types::{Blob, ExtendedHeader};
 
 use crate::grpc::{
     ConfigResponse, GasInfo, GetTxResponse, JsBroadcastMode, TxPriority, TxStatusResponse,
-    TxStatusResponse,
 };
 use crate::js_client::GrpcClientBuilder;
 use crate::tx::{JsTxConfig, JsTxInfo};

@@ -1,7 +1,6 @@
 use std::fmt::{self, Debug};
 use std::sync::Arc;
 
-use celestia_grpc::signer::DispatchedDocSigner;
 use celestia_grpc::{GrpcClient, GrpcClientBuilder};
 use celestia_rpc::{Client as RpcClient, HeaderClient};
 use zeroize::Zeroizing;
@@ -15,6 +14,7 @@ use crate::state::StateApi;
 use crate::tx::{DocSigner, Keypair, SigningKey, VerifyingKey};
 use crate::types::state::AccAddress;
 use crate::types::ExtendedHeader;
+use crate::utils::DispatchedDocSigner;
 use crate::{Error, Result};
 
 pub(crate) struct Context {
