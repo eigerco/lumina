@@ -1,8 +1,9 @@
 use std::ops::DerefMut;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use std::{error::Error as StdError, future::Future};
 
+use blockstore::cond_send::CondSend;
 use bytes::Bytes;
 use dyn_clone::{clone_box, DynClone};
 use futures::FutureExt;
@@ -12,16 +13,44 @@ use tonic::codegen::Service;
 
 dyn_clone::clone_trait_object!(AbstractTransport);
 
+type BoxedResponse = http::Response<BoxedBody>;
 type BoxedError = Box<dyn StdError + Sync + Send + 'static>;
+type BoxedResponseFuture =
+    Pin<Box<dyn ConditionalSendFuture<Output = Result<BoxedResponse, BoxedError>> + 'static>>;
+
+pub(crate) struct BoxedTransport {
+    inner: Box<dyn AbstractTransport + Send + Sync>,
+}
 
 pub(crate) struct BoxedBody {
     inner: Box<dyn AbstractBody + Unpin + Send + 'static>,
 }
 
+pub(crate) trait ConditionalSendFuture: Future + CondSend {}
+
+trait AbstractBody {
+    fn poll_frame_inner(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Bytes>, BoxedError>>>;
+}
+
+impl<T: Future + CondSend> ConditionalSendFuture for T {}
+
+trait AbstractTransport: DynClone {
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), BoxedError>>;
+
+    fn call(&mut self, req: http::Request<TonicBody>) -> BoxedResponseFuture;
+}
+
+trait AbstractResponse {
+    fn boxed(self) -> http::Response<BoxedBody>;
+}
+
 impl http_body::Body for BoxedBody {
     type Data = Bytes;
 
-    type Error = BoxError;
+    type Error = BoxedError;
 
     fn poll_frame(
         mut self: Pin<&mut BoxedBody>,
@@ -31,35 +60,6 @@ impl http_body::Body for BoxedBody {
     }
 }
 
-pub trait AbstractBody {
-    fn poll_frame_inner(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Frame<Bytes>, BoxError>>>;
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl<T> AbstractBody for T
-where
-    T: tonic::transport::Body<Data = Bytes> + Send + 'static,
-    <T as tonic::transport::Body>::Error: StdError + Send + Sync + 'static,
-{
-    fn poll_frame_inner(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Frame<Bytes>, BoxError>>> {
-        let Poll::Ready(ready) = tonic::transport::Body::poll_frame(self, cx) else {
-            return Poll::Pending;
-        };
-        let Some(result) = ready else {
-            return Poll::Ready(None);
-        };
-
-        Poll::Ready(Some(result.map_err(box_err)))
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
 impl<T> AbstractBody for T
 where
     T: http_body::Body<Data = Bytes>,
@@ -68,7 +68,7 @@ where
     fn poll_frame_inner(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Frame<Bytes>, BoxError>>> {
+    ) -> Poll<Option<Result<Frame<Bytes>, BoxedError>>> {
         let ready = ready!(self.poll_frame(cx));
 
         let Some(result) = ready else {
@@ -79,29 +79,12 @@ where
     }
 }
 
-pub(crate) struct BoxedTransport {
-    inner: Box<dyn AbstractTransport + Send + Sync>,
-}
-
 impl Clone for BoxedTransport {
     fn clone(&self) -> Self {
         Self {
             inner: clone_box(&*self.inner),
         }
     }
-}
-
-trait AbstractTransport: DynClone {
-    fn poll_ready(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), BoxError>>;
-
-    fn call(&mut self, req: http::Request<TonicBody>) -> AbstractFuture;
-}
-
-trait AbstractResponse {
-    fn boxed(self) -> http::Response<BoxedBody>;
 }
 
 impl<B> AbstractResponse for http::Response<B>
@@ -118,16 +101,13 @@ where
     T: Service<http::Request<TonicBody>> + Clone,
     <T as Service<http::Request<TonicBody>>>::Response: AbstractResponse,
     <T as Service<http::Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
-    <T as Service<http::Request<TonicBody>>>::Future: ConditionalSend + 'static,
+    <T as Service<http::Request<TonicBody>>>::Future: CondSend + 'static,
 {
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), BoxError>> {
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), BoxedError>> {
         Service::poll_ready(self, cx).map_err(box_err)
     }
 
-    fn call(&mut self, req: http::Request<TonicBody>) -> AbstractFuture {
+    fn call(&mut self, req: http::Request<TonicBody>) -> BoxedResponseFuture {
         Box::pin(Service::call(self, req).map(|response| match response {
             Ok(response) => Ok(response.boxed()),
             Err(e) => Err(box_err(e)),
@@ -135,18 +115,12 @@ where
     }
 }
 
-type BoxedResponse = http::Response<BoxedBody>;
-type AbstractFuture = BoxedFuture<'static, Result<BoxedResponse, BoxError>>;
-
 impl Service<http::Request<TonicBody>> for BoxedTransport {
     type Response = http::Response<BoxedBody>;
-    type Error = BoxError;
-    type Future = AbstractFuture;
+    type Error = BoxedError;
+    type Future = BoxedResponseFuture;
 
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
     }
 
@@ -157,14 +131,15 @@ impl Service<http::Request<TonicBody>> for BoxedTransport {
 
 pub(crate) fn boxed<T, B>(transport: T) -> BoxedTransport
 where
-    B: AbstractBody + Send + Unpin + 'static,
+    B: http_body::Body<Data = Bytes> + Send + Unpin + 'static,
+    <B as http_body::Body>::Error: StdError + Sync + Send,
     T: Service<http::Request<TonicBody>, Response = http::Response<B>>
         + Send
         + Sync
         + Clone
         + 'static,
     <T as Service<http::Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
-    <T as Service<http::Request<TonicBody>>>::Future: ConditionalSend + 'static,
+    <T as Service<http::Request<TonicBody>>>::Future: CondSend + 'static,
 {
     BoxedTransport {
         inner: Box::new(transport),
@@ -180,34 +155,33 @@ where
     }
 }
 
-fn box_err<E: StdError + Send + Sync + 'static>(e: E) -> BoxError {
+fn box_err<E: StdError + Send + Sync + 'static>(e: E) -> BoxedError {
     Box::new(e)
 }
 
-// conditional send taken from:
-// https://github.com/bevyengine/bevy/blob/ad444fa720297080de75b9be1437f3250ac7fc84/crates/bevy_tasks/src/lib.rs
-#[cfg(not(target_arch = "wasm32"))]
-mod conditional_send {
-    /// Use [`ConditionalSend`] to mark an optional Send trait bound. Useful as on certain platforms (eg. WASM),
-    /// futures aren't Send.
-    pub trait ConditionalSend: Send {}
-    impl<T: Send> ConditionalSend for T {}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // compile-only test for type compliance
+    #[cfg(not(target_arch = "wasm32"))]
+    #[allow(clippy::diverging_sub_expression)]
+    #[allow(dead_code)]
+    #[allow(unreachable_code)]
+    #[allow(unused_variables)]
+    fn can_box_tonic_channel() {
+        let endpoint: tonic::transport::Endpoint = unimplemented!();
+        let _boxed = boxed(endpoint.connect_lazy());
+    }
+
+    // compile-only test for type compliance
+    #[cfg(target_arch = "wasm32")]
+    #[allow(clippy::diverging_sub_expression)]
+    #[allow(dead_code)]
+    #[allow(unreachable_code)]
+    #[allow(unused_variables)]
+    fn can_box_grpc_web_client() {
+        let client: tonic_web_wasm_client::Client = unimplemented!();
+        let _boxed = boxed(client);
+    }
 }
-
-#[cfg(target_arch = "wasm32")]
-mod conditional_send {
-    /// Use [`ConditionalSend`] to mark an optional Send trait bound. Useful as on certain platforms (eg. WASM),
-    /// futures aren't Send.
-    pub trait ConditionalSend {}
-
-    impl<T> ConditionalSend for T {}
-}
-
-pub use conditional_send::*;
-
-pub trait ConditionalSendFuture: Future + ConditionalSend {}
-
-impl<T: Future + ConditionalSend> ConditionalSendFuture for T {}
-
-/// An owned and dynamically typed Future used when you can't statically type your result or need to add some indirection.
-pub type BoxedFuture<'a, T> = Pin<Box<dyn ConditionalSendFuture<Output = T> + 'a>>;

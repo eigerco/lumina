@@ -88,7 +88,7 @@ mod imp {
 
         let creds = load_account();
         let client = GrpcClientBuilder::with_url(CELESTIA_GRPC_URL)
-            .with_signer_keypair(creds.signing_key)
+            .signer_keypair(creds.signing_key)
             .build()
             .unwrap();
 
@@ -130,7 +130,7 @@ mod imp {
     pub async fn new_tx_client() -> ((), GrpcClient) {
         let creds = load_account();
         let client = GrpcClientBuilder::with_url(CELESTIA_GRPCWEB_PROXY_URL)
-            .with_signer_keypair(creds.signing_key)
+            .signer_keypair(creds.signing_key)
             .build();
 
         ((), client.unwrap())

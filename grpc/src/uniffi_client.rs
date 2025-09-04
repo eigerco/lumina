@@ -23,7 +23,7 @@ pub enum GrpcClientBuilderError {
 
     /// Tried to enable tls on pre-configured transport
     #[error("Cannot enable tls on manually configured transport")]
-    CannotEnableTlsOnManualTransport,
+    CannotEnableTlsOnCustomTransport,
 
     /// Invalid account public key
     #[error("invalid account public key")]
@@ -57,7 +57,7 @@ impl GrpcClientBuilder {
 
     /// Add public key and signer to the client being built
     #[uniffi::method(name = "withPubkeyAndSigner")]
-    pub fn with_pubkey_and_signer(
+    pub fn pubkey_and_signer(
         self: Arc<Self>,
         account_pubkey: Vec<u8>,
         signer: Arc<dyn UniffiSigner>,
@@ -77,7 +77,7 @@ impl GrpcClientBuilder {
     /// `tls-webpki-roots` and `tls-native-roots`.
     #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
     #[uniffi::method(name = "withDefaultTls")]
-    pub fn with_default_tls(self: Arc<Self>) -> Self {
+    pub fn default_tls(self: Arc<Self>) -> Self {
         GrpcClientBuilder {
             url: self.url.clone(),
             signer: self.signer.clone(),
@@ -95,14 +95,14 @@ impl GrpcClientBuilder {
 
         #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
         if self.tls {
-            builder = builder.with_default_tls()?;
+            builder = builder.default_tls()?;
         }
 
         if let Some(signer) = self.signer.clone() {
             let signer = UniffiSignerBox(signer.clone());
             let vk = self.account_pubkey.expect("public key present");
 
-            builder = builder.with_pubkey_and_signer(vk, signer);
+            builder = builder.pubkey_and_signer(vk, signer);
         }
 
         Ok(builder.build()?.into())
@@ -117,8 +117,8 @@ impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
                     msg: error.to_string(),
                 }
             }
-            crate::GrpcClientBuilderError::CannotEnableTlsOnManualTransport => {
-                GrpcClientBuilderError::CannotEnableTlsOnManualTransport
+            crate::GrpcClientBuilderError::CannotEnableTlsOnCustomTransport => {
+                GrpcClientBuilderError::CannotEnableTlsOnCustomTransport
             }
         }
     }

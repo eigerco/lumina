@@ -728,6 +728,7 @@ name = "celestia-grpc"
 version = "0.6.1"
 dependencies = [
  "async-trait",
+ "blockstore",
  "bytes",
  "celestia-grpc-macros",
  "celestia-proto",
@@ -747,7 +748,6 @@ dependencies = [
  "lumina-utils",
  "prost",
  "rand_core",
- "rustls-native-certs",
  "send_wrapper 0.6.0",
  "serde",
  "serde_json",

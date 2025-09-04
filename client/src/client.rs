@@ -266,9 +266,9 @@ impl ClientBuilder {
                     not(target_arch = "wasm32"),
                     any(feature = "tls-webpki-roots", feature = "tls-native-roots")
                 ))]
-                let builder = builder.with_default_tls()?;
+                let builder = builder.default_tls()?;
 
-                let client = builder.with_pubkey_and_signer(pubkey, signer).build()?;
+                let client = builder.pubkey_and_signer(pubkey, signer).build()?;
 
                 (Some(pubkey), Some(client))
             }

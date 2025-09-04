@@ -1,11 +1,13 @@
 use std::error::Error as StdError;
 
+use blockstore::cond_send::CondSend;
+use bytes::Bytes;
 use k256::ecdsa::VerifyingKey;
 use signature::Keypair;
 use tonic::body::Body as TonicBody;
 use tonic::codegen::Service;
 
-use crate::boxed::{boxed, AbstractBody, BoxedTransport, ConditionalSend};
+use crate::boxed::{boxed, BoxedTransport};
 use crate::client::SignerConfig;
 use crate::signer::DispatchedDocSigner;
 use crate::{DocSigner, GrpcClient, GrpcClientBuilderError};
@@ -40,8 +42,7 @@ impl GrpcClientBuilder {
     /// Create a gRPC client builder using provided prepared transport
     pub fn with_transport<B, T>(transport: T) -> Self
     where
-        //B: Body<Data = Bytes> + Send + Sync + Unpin + 'static,
-        B: http_body::Body + AbstractBody + Send + Unpin + 'static,
+        B: http_body::Body<Data = Bytes> + Send + Unpin + 'static,
         <B as http_body::Body>::Error: StdError + Send + Sync,
         T: Service<http::Request<TonicBody>, Response = http::Response<B>>
             + Send
@@ -49,7 +50,7 @@ impl GrpcClientBuilder {
             + Clone
             + 'static,
         <T as Service<http::Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
-        <T as Service<http::Request<TonicBody>>>::Future: ConditionalSend + 'static,
+        <T as Service<http::Request<TonicBody>>>::Future: CondSend + 'static,
     {
         Self {
             transport: TransportSetup::BoxedTransport(boxed(transport)),
@@ -61,9 +62,9 @@ impl GrpcClientBuilder {
     /// `tls-webpki-roots` and `tls-native-roots`.
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
-    pub fn with_default_tls(self) -> Result<Self, GrpcClientBuilderError> {
+    pub fn default_tls(self) -> Result<Self, GrpcClientBuilderError> {
         let TransportSetup::Configuration { url, .. } = self.transport else {
-            return Err(GrpcClientBuilderError::CannotEnableTlsOnManualTransport);
+            return Err(GrpcClientBuilderError::CannotEnableTlsOnCustomTransport);
         };
 
         Ok(Self {
@@ -73,11 +74,7 @@ impl GrpcClientBuilder {
     }
 
     /// Add signer and a public key
-    pub fn with_pubkey_and_signer<S>(
-        self,
-        account_pubkey: VerifyingKey,
-        signer: S,
-    ) -> GrpcClientBuilder
+    pub fn pubkey_and_signer<S>(self, account_pubkey: VerifyingKey, signer: S) -> GrpcClientBuilder
     where
         S: DocSigner + 'static,
     {
@@ -91,7 +88,7 @@ impl GrpcClientBuilder {
     }
 
     /// Add signer and associated public key
-    pub fn with_signer_keypair<S>(self, signer: S) -> GrpcClientBuilder
+    pub fn signer_keypair<S>(self, signer: S) -> GrpcClientBuilder
     where
         S: DocSigner + Keypair<VerifyingKey = VerifyingKey> + 'static,
     {

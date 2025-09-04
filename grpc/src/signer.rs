@@ -186,10 +186,7 @@ mod uniffi_types {
 
     #[async_trait]
     impl DocSigner for UniffiSignerBox {
-        async fn try_sign(
-            &self,
-            doc: SignDoc,
-        ) -> Result<Secp256k1Signature, K256Error> {
+        async fn try_sign(&self, doc: SignDoc) -> Result<Secp256k1Signature, K256Error> {
             match self.0.sign(doc).await {
                 Ok(s) => Secp256k1Signature::try_from(s).map_err(K256Error::from_source),
                 Err(e) => Err(K256Error::from_source(e)),
