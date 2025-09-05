@@ -1,9 +1,13 @@
-use std::fmt::{self, Debug};
+use std::error::Error as StdError;
+use std::fmt::Debug;
 use std::sync::Arc;
 
-use celestia_grpc::TxClient;
+use blockstore::cond_send::CondSend;
+use celestia_grpc::{GrpcClient, GrpcClientBuilder};
 use celestia_rpc::{Client as RpcClient, HeaderClient};
-use zeroize::Zeroizing;
+use http::Request;
+use tonic::body::Body as TonicBody;
+use tonic::codegen::{Bytes, Service};
 
 use crate::blob::BlobApi;
 use crate::blobstream::BlobstreamApi;
@@ -11,21 +15,14 @@ use crate::fraud::FraudApi;
 use crate::header::HeaderApi;
 use crate::share::ShareApi;
 use crate::state::StateApi;
-use crate::tx::{DocSigner, Keypair, SigningKey, VerifyingKey};
+use crate::tx::{DocSigner, Keypair, VerifyingKey};
 use crate::types::state::AccAddress;
 use crate::types::ExtendedHeader;
-use crate::utils::DispatchedDocSigner;
 use crate::{Error, Result};
-
-#[cfg(not(target_arch = "wasm32"))]
-type Transport = tonic::transport::Channel;
-
-#[cfg(target_arch = "wasm32")]
-type Transport = tonic_web_wasm_client::Client;
 
 pub(crate) struct Context {
     pub(crate) rpc: RpcClient,
-    grpc: Option<TxClient<Transport, DispatchedDocSigner>>,
+    grpc: Option<GrpcClient>,
     pubkey: Option<VerifyingKey>,
     chain_id: tendermint::chain::Id,
 }
@@ -88,29 +85,18 @@ pub struct Client {
 pub struct ClientBuilder {
     rpc_url: Option<String>,
     rpc_auth_token: Option<String>,
-    grpc_url: Option<String>,
-    signer: Option<SignerKind>,
+    grpc_builder: GrpcClientBuilder,
+    grpc_builder_flags: GrpcBuilderFlags,
 }
 
-enum SignerKind {
-    Signer((VerifyingKey, DispatchedDocSigner)),
-    PrivKeyBytes(Zeroizing<Vec<u8>>),
-    PrivKeyHex(Zeroizing<String>),
-}
-
-impl Debug for SignerKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            SignerKind::Signer(..) => "SignerKind::Signer(..)",
-            SignerKind::PrivKeyBytes(..) => "SignerKind::PrivKeyBytes(..)",
-            SignerKind::PrivKeyHex(..) => "SignerKind::PrivKeyHex(..)",
-        };
-        f.write_str(s)
-    }
+#[derive(Copy, Clone, Debug, Default)]
+struct GrpcBuilderFlags {
+    has_grpc_url: bool,
+    has_signer: bool,
 }
 
 impl Context {
-    pub(crate) fn grpc(&self) -> Result<&TxClient<Transport, DispatchedDocSigner>> {
+    pub(crate) fn grpc(&self) -> Result<&GrpcClient> {
         self.grpc.as_ref().ok_or(Error::ReadOnlyMode)
     }
 
@@ -193,31 +179,32 @@ impl ClientBuilder {
     where
         S: DocSigner + Sync + Send + 'static,
     {
-        let signer = DispatchedDocSigner::new(signer);
-        self.signer = Some(SignerKind::Signer((pubkey, signer)));
+        self.grpc_builder = self.grpc_builder.pubkey_and_signer(pubkey, signer);
+        self.grpc_builder_flags.has_signer = true;
         self
     }
 
     /// Set signer from a keypair.
-    pub fn keypair<S>(self, keypair: S) -> ClientBuilder
+    pub fn keypair<S>(mut self, keypair: S) -> ClientBuilder
     where
         S: DocSigner + Keypair<VerifyingKey = VerifyingKey> + Sync + Send + 'static,
     {
-        let pubkey = keypair.verifying_key();
-        self.signer(pubkey, keypair)
+        self.grpc_builder = self.grpc_builder.signer_keypair(keypair);
+        self.grpc_builder_flags.has_signer = true;
+        self
     }
 
     /// Set signer from a raw private key.
     pub fn private_key(mut self, bytes: &[u8]) -> ClientBuilder {
-        let bytes = Zeroizing::new(bytes.to_vec());
-        self.signer = Some(SignerKind::PrivKeyBytes(bytes));
+        self.grpc_builder = self.grpc_builder.private_key(bytes);
+        self.grpc_builder_flags.has_signer = true;
         self
     }
 
     /// Set signer from a hex formatted private key.
     pub fn private_key_hex(mut self, s: &str) -> ClientBuilder {
-        let s = Zeroizing::new(s.to_string());
-        self.signer = Some(SignerKind::PrivKeyHex(s));
+        self.grpc_builder = self.grpc_builder.private_key_hex(s);
+        self.grpc_builder_flags.has_signer = true;
         self
     }
 
@@ -239,12 +226,30 @@ impl ClientBuilder {
     ///
     /// In WASM the endpoint needs to support gRPC-Web.
     pub fn grpc_url(mut self, url: &str) -> ClientBuilder {
-        self.grpc_url = Some(url.to_owned());
+        self.grpc_builder = self.grpc_builder.url(url);
+        self.grpc_builder_flags.has_grpc_url = true;
+        self
+    }
+
+    /// Set manually configured gRPC transport
+    pub fn grpc_transport<B, T>(mut self, transport: T) -> Self
+    where
+        B: http_body::Body<Data = Bytes> + Send + Unpin + 'static,
+        <B as http_body::Body>::Error: StdError + Send + Sync,
+        T: Service<Request<TonicBody>, Response = http::Response<B>>
+            + Send
+            + Sync
+            + Clone
+            + 'static,
+        <T as Service<Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
+        <T as Service<Request<TonicBody>>>::Future: CondSend + 'static,
+    {
+        self.grpc_builder = self.grpc_builder.transport(transport);
         self
     }
 
     /// Build [`Client`].
-    pub async fn build(mut self) -> Result<Client> {
+    pub async fn build(self) -> Result<Client> {
         let rpc_url = self.rpc_url.as_ref().ok_or(Error::RpcEndpointNotSet)?;
         let rpc_auth_token = self.rpc_auth_token.as_deref();
 
@@ -253,30 +258,19 @@ impl ClientBuilder {
             return Err(Error::AuthTokenNotSupported);
         }
 
-        let signer = match self.signer.take() {
-            Some(SignerKind::Signer((pubkey, signer))) => Some((pubkey, signer)),
-            Some(SignerKind::PrivKeyBytes(bytes)) => Some(priv_key_signer(&bytes)?),
-            Some(SignerKind::PrivKeyHex(s)) => {
-                let bytes =
-                    Zeroizing::new(hex::decode(s.trim()).map_err(|_| Error::InvalidPrivateKey)?);
-                Some(priv_key_signer(&bytes)?)
+        let GrpcBuilderFlags {
+            has_signer,
+            has_grpc_url,
+        } = self.grpc_builder_flags;
+        let (pubkey, grpc) = match (has_signer, has_grpc_url) {
+            (true, true) => {
+                let client = self.grpc_builder.build()?;
+                let pubkey = client.get_account_pubkey().expect("signer to be set");
+                (Some(pubkey), Some(client))
             }
-            None => None,
-        };
-
-        let (pubkey, grpc) = match (&self.grpc_url, signer) {
-            (Some(url), Some((pubkey, signer))) => {
-                #[cfg(not(target_arch = "wasm32"))]
-                let tx_client = TxClient::with_url(url, pubkey, signer).await?;
-
-                #[cfg(target_arch = "wasm32")]
-                let tx_client = TxClient::with_grpcweb_url(url, pubkey, signer).await?;
-
-                (Some(pubkey), Some(tx_client))
-            }
-            (Some(_url), None) => return Err(Error::SignerNotSet),
-            (None, Some((_pubkey, _signer))) => return Err(Error::GrpcEndpointNotSet),
-            (None, None) => (None, None),
+            (false, false) => (None, None),
+            (false, true) => return Err(Error::SignerNotSet),
+            (true, false) => return Err(Error::GrpcEndpointNotSet),
         };
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -289,7 +283,7 @@ impl ClientBuilder {
         head.validate()?;
 
         if let Some(grpc) = &grpc {
-            if grpc.chain_id() != head.chain_id() {
+            if &grpc.chain_id().await? != head.chain_id() {
                 return Err(Error::ChainIdMissmatch);
             }
         }
@@ -311,11 +305,4 @@ impl ClientBuilder {
             state: StateApi::new(ctx.clone()),
         })
     }
-}
-
-fn priv_key_signer(bytes: &[u8]) -> Result<(VerifyingKey, DispatchedDocSigner)> {
-    let signing_key = SigningKey::from_slice(bytes).map_err(|_| Error::InvalidPrivateKey)?;
-    let pubkey = signing_key.verifying_key().to_owned();
-    let signer = DispatchedDocSigner::new(signing_key);
-    Ok((pubkey, signer))
 }
