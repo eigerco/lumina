@@ -27,10 +27,11 @@ pub enum GrpcClientBuilderError {
 
     /// Invalid account public key
     #[error("invalid account public key")]
-    InvalidAccountPublicKey {
-        /// error message
-        msg: String,
-    },
+    InvalidAccountPublicKey,
+
+    /// Invalid account private key
+    #[error("invalid account private key")]
+    InvalidAccountPrivateKey,
 }
 
 /// Builder for [`GrpcClient`]
@@ -63,7 +64,7 @@ impl GrpcClientBuilder {
         signer: Arc<dyn UniffiSigner>,
     ) -> Result<Self, GrpcClientBuilderError> {
         let vk = VerifyingKey::from_sec1_bytes(&account_pubkey)
-            .map_err(|e| GrpcClientBuilderError::InvalidAccountPublicKey { msg: e.to_string() })?;
+            .map_err(|_| GrpcClientBuilderError::InvalidAccountPublicKey)?;
 
         Ok(GrpcClientBuilder {
             url: self.url.clone(),
@@ -91,7 +92,7 @@ impl GrpcClientBuilder {
     /// Build the gRPC client.
     #[uniffi::method(name = "build")]
     pub async fn build(self: Arc<Self>) -> Result<GrpcClient, GrpcClientBuilderError> {
-        let mut builder = crate::GrpcClientBuilder::with_url(self.url.clone());
+        let mut builder = crate::GrpcClientBuilder::new().url(self.url.clone());
 
         #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
         if self.tls {
@@ -119,6 +120,13 @@ impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
             }
             crate::GrpcClientBuilderError::CannotEnableTlsOnCustomTransport => {
                 GrpcClientBuilderError::CannotEnableTlsOnCustomTransport
+            }
+            crate::GrpcClientBuilderError::InvalidPrivateKey => {
+                GrpcClientBuilderError::InvalidAccountPrivateKey
+            }
+            crate::GrpcClientBuilderError::TransportNotSet => {
+                // API above should not allow creating a builder without any transport
+                unimplemented!("transport not set for builder, should not happen")
             }
         }
     }

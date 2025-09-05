@@ -1,4 +1,3 @@
-use celestia_grpc::GrpcClientBuilder;
 use celestia_types::state::{AccAddress, Address};
 use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
 use tendermint::public_key::Secp256k1 as VerifyingKey;
@@ -70,7 +69,8 @@ mod imp {
     pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
 
     pub fn new_grpc_client() -> GrpcClient {
-        GrpcClientBuilder::with_url(CELESTIA_GRPC_URL)
+        GrpcClient::builder()
+            .url(CELESTIA_GRPC_URL)
             .build()
             .unwrap()
     }
@@ -87,7 +87,8 @@ mod imp {
         let lock = LOCK.get_or_init(|| Mutex::new(())).lock().await;
 
         let creds = load_account();
-        let client = GrpcClientBuilder::with_url(CELESTIA_GRPC_URL)
+        let client = GrpcClient::builder()
+            .url(CELESTIA_GRPC_URL)
             .signer_keypair(creds.signing_key)
             .build()
             .unwrap();
@@ -118,7 +119,8 @@ mod imp {
     pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
 
     pub fn new_grpc_client() -> GrpcClient {
-        GrpcClientBuilder::with_url(CELESTIA_GRPCWEB_PROXY_URL)
+        GrpcClient::builder()
+            .url(CELESTIA_GRPCWEB_PROXY_URL)
             .build()
             .unwrap()
     }
@@ -129,7 +131,8 @@ mod imp {
 
     pub async fn new_tx_client() -> ((), GrpcClient) {
         let creds = load_account();
-        let client = GrpcClientBuilder::with_url(CELESTIA_GRPCWEB_PROXY_URL)
+        let client = GrpcClient::builder()
+            .url(CELESTIA_GRPCWEB_PROXY_URL)
             .signer_keypair(creds.signing_key)
             .build();
 

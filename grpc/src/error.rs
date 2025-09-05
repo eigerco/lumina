@@ -101,9 +101,17 @@ pub enum GrpcClientBuilderError {
     #[cfg(not(target_arch = "wasm32"))]
     TonicTransportError(#[from] tonic::transport::Error),
 
+    /// Transport has not been set for builder
+    #[error("Transport not set")]
+    TransportNotSet,
+
     /// Attempted to enable tls when using pre-prepared transport
     #[error("Cannot enable tls on custom transport")]
     CannotEnableTlsOnCustomTransport,
+
+    /// Invalid private key.
+    #[error("Invalid private key")]
+    InvalidPrivateKey,
 }
 
 impl From<Status> for Error {

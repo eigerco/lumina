@@ -39,7 +39,7 @@ use crate::grpc::{
     BroadcastMode, ConfigResponse, GasEstimate, GasInfo, GetTxResponse, TxPriority, TxStatus,
     TxStatusResponse,
 };
-use crate::signer::{sign_tx, BoxedSigner};
+use crate::signer::{sign_tx, BoxedDocSigner};
 use crate::tx::TxInfo;
 use crate::{Error, Result, TxConfig};
 
@@ -53,7 +53,7 @@ struct AccountState {
 }
 
 pub(crate) struct SignerConfig {
-    pub(crate) signer: BoxedSigner,
+    pub(crate) signer: BoxedDocSigner,
     pub(crate) pubkey: VerifyingKey,
 }
 
@@ -77,8 +77,8 @@ impl GrpcClient {
     }
 
     /// Create a builder for [`GrpcClient`] connected to `url`
-    pub fn with_url(url: impl Into<String>) -> GrpcClientBuilder {
-        GrpcClientBuilder::with_url(url)
+    pub fn builder() -> GrpcClientBuilder {
+        GrpcClientBuilder::new()
     }
 
     // cosmos.auth
@@ -284,7 +284,7 @@ impl GrpcClient {
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{GrpcClientBuilder, TxConfig};
+    /// use celestia_grpc::{GrpcClient, TxConfig};
     /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
     /// use celestia_types::state::{Address, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
@@ -293,8 +293,9 @@ impl GrpcClient {
     /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
-    /// let tx_client = GrpcClientBuilder::with_url(grpc_url)
-    ///     .with_signer_keypair(signing_key)
+    /// let tx_client = GrpcClient::builder()
+    ///     .url(grpc_url)
+    ///     .signer_keypair(signing_key)
     ///     .build()
     ///     .unwrap();
     ///
@@ -330,7 +331,7 @@ impl GrpcClient {
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{GrpcClientBuilder, TxConfig};
+    /// use celestia_grpc::{GrpcClient, TxConfig};
     /// use celestia_types::state::{Address, Coin};
     /// use celestia_types::{AppVersion, Blob};
     /// use celestia_types::nmt::Namespace;
@@ -340,8 +341,9 @@ impl GrpcClient {
     /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
-    /// let tx_client = GrpcClientBuilder::with_url(grpc_url)
-    ///     .with_signer_keypair(signing_key)
+    /// let tx_client = GrpcClient::builder()
+    ///     .url(grpc_url)
+    ///     .signer_keypair(signing_key)
     ///     .build()
     ///     .unwrap();
     ///
@@ -590,6 +592,11 @@ impl GrpcClient {
     pub async fn chain_id(&self) -> Result<Id> {
         let (account, _) = self.load_account().await?;
         Ok(account.chain_id.clone())
+    }
+
+    /// Get client's account public key if the signer is set
+    pub fn get_account_pubkey(&self) -> Option<VerifyingKey> {
+        self.signer.as_ref().map(|config| config.pubkey)
     }
 }
 

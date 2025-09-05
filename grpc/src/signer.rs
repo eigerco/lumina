@@ -1,7 +1,9 @@
 //! Types related to signing transactions
+use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 
 use ::tendermint::chain::Id;
-use async_trait::async_trait;
 use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use k256::ecdsa::signature::Signer;
 use k256::ecdsa::VerifyingKey;
@@ -20,16 +22,20 @@ pub type DocSignature = k256::ecdsa::Signature;
 /// Signature error
 pub type SignatureError = k256::ecdsa::signature::Error;
 
-pub(crate) type BoxedSigner = Box<dyn DocSigner>;
+/// Helper struct used to pass type erased signer. To implement custom signer, see
+/// [`DocSigner`] trait.
+pub(crate) struct BoxedDocSigner(Box<dyn AbstractDocSigner>);
 
 /// Signer capable of producing ecdsa signature using secp256k1 curve.
-#[async_trait]
 pub trait DocSigner: Send + Sync {
     /// Try to sign the provided sign doc.
-    async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError>;
+    //async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError>;
+    fn try_sign(
+        &self,
+        doc: SignDoc,
+    ) -> impl Future<Output = Result<DocSignature, SignatureError>> + Send;
 }
 
-#[async_trait]
 impl<T> DocSigner for T
 where
     T: Signer<DocSignature> + Send + Sync + 'static,
@@ -40,10 +46,43 @@ where
     }
 }
 
-#[async_trait]
-impl DocSigner for BoxedSigner {
+impl BoxedDocSigner {
+    pub fn new<S>(signer: S) -> BoxedDocSigner
+    where
+        S: AbstractDocSigner,
+    {
+        BoxedDocSigner(Box::new(signer))
+    }
+}
+
+impl DocSigner for BoxedDocSigner {
     async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
-        (**self).try_sign(doc).await
+        self.0.try_sign(doc).await
+    }
+}
+
+pub(crate) trait AbstractDocSigner: Sync + Send + 'static {
+    fn try_sign<'a>(
+        &'a self,
+        doc: SignDoc,
+    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>>;
+}
+
+impl<T> AbstractDocSigner for T
+where
+    T: DocSigner + Sync + Send + 'static,
+{
+    fn try_sign<'a>(
+        &'a self,
+        doc: SignDoc,
+    ) -> Pin<Box<dyn Future<Output = Result<DocSignature, SignatureError>> + Send + 'a>> {
+        Box::pin(DocSigner::try_sign(self, doc))
+    }
+}
+
+impl fmt::Debug for BoxedDocSigner {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("BoxedDocSigner { .. }")
     }
 }
 
@@ -105,6 +144,7 @@ pub use uniffi_types::*;
 mod uniffi_types {
     use super::*;
 
+    use async_trait::async_trait;
     use k256::ecdsa::signature::Error as K256Error;
     use std::sync::Arc;
     use tendermint::signature::Secp256k1Signature;
@@ -148,7 +188,7 @@ mod uniffi_types {
     /// }
     /// ```
     #[uniffi::export(with_foreign)]
-    #[async_trait::async_trait]
+    #[async_trait]
     pub trait UniffiSigner: Sync + Send {
         /// sign provided `SignDoc` using secp256k1. Use helper proto_encode_sign_doc to
         /// get canonical protobuf byte encoding of the message.
@@ -165,7 +205,6 @@ mod uniffi_types {
         pub bytes: Vec<u8>,
     }
 
-    #[async_trait]
     impl DocSigner for UniffiSignerBox {
         async fn try_sign(&self, doc: SignDoc) -> Result<Secp256k1Signature, K256Error> {
             match self.0.sign(doc).await {
@@ -229,7 +268,6 @@ mod wbg {
         }
     }
 
-    #[async_trait]
     impl DocSigner for JsSigner {
         async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError> {
             let promise = {

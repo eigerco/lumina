@@ -1,45 +1,64 @@
 use std::error::Error as StdError;
+use std::fmt;
 
 use blockstore::cond_send::CondSend;
 use bytes::Bytes;
-use k256::ecdsa::VerifyingKey;
+use k256::ecdsa::{SigningKey, VerifyingKey};
 use signature::Keypair;
 use tonic::body::Body as TonicBody;
 use tonic::codegen::Service;
+use zeroize::Zeroizing;
 
 use crate::boxed::{boxed, BoxedTransport};
 use crate::client::SignerConfig;
+use crate::signer::BoxedDocSigner;
 use crate::{DocSigner, GrpcClient, GrpcClientBuilderError};
 
 use imp::build_transport;
 
+#[derive(Default)]
 enum TransportSetup {
-    Configuration { url: String, tls: bool },
+    #[default]
+    Unset,
+    Configuration {
+        url: String,
+        tls: bool,
+    },
     BoxedTransport(BoxedTransport),
 }
 
 /// Builder for [`GrpcClient`]
+#[derive(Default)]
 pub struct GrpcClientBuilder {
     transport: TransportSetup,
-    signer_bits: Option<SignerConfig>,
+    signer_bits: Option<SignerKind>,
+}
+
+enum SignerKind {
+    Signer((VerifyingKey, BoxedDocSigner)),
+    PrivKeyBytes(Zeroizing<Vec<u8>>),
+    PrivKeyHex(Zeroizing<String>),
 }
 
 impl GrpcClientBuilder {
+    /// Create a new, empty builder.
+    pub fn new() -> Self {
+        GrpcClientBuilder::default()
+    }
+
     /// Create a new client connected to the given `url` using [`Channel`] transport
     ///
     /// [`Channel`]: tonic::transport::Channel
-    pub fn with_url(url: impl Into<String>) -> Self {
-        GrpcClientBuilder {
-            transport: TransportSetup::Configuration {
-                url: url.into(),
-                tls: false,
-            },
-            signer_bits: None,
-        }
+    pub fn url(mut self, url: impl Into<String>) -> Self {
+        self.transport = TransportSetup::Configuration {
+            url: url.into(),
+            tls: false,
+        };
+        self
     }
 
     /// Create a gRPC client builder using provided prepared transport
-    pub fn with_transport<B, T>(transport: T) -> Self
+    pub fn transport<B, T>(mut self, transport: T) -> Self
     where
         B: http_body::Body<Data = Bytes> + Send + Unpin + 'static,
         <B as http_body::Body>::Error: StdError + Send + Sync,
@@ -51,39 +70,35 @@ impl GrpcClientBuilder {
         <T as Service<http::Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
         <T as Service<http::Request<TonicBody>>>::Future: CondSend + 'static,
     {
-        Self {
-            transport: TransportSetup::BoxedTransport(boxed(transport)),
-            signer_bits: None,
-        }
+        self.transport = TransportSetup::BoxedTransport(boxed(transport));
+        self
     }
 
     /// Enables loading the certificate roots which were enabled by feature flags
     /// `tls-webpki-roots` and `tls-native-roots`.
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
-    pub fn default_tls(self) -> Result<Self, GrpcClientBuilderError> {
+    pub fn default_tls(mut self) -> Result<Self, GrpcClientBuilderError> {
         let TransportSetup::Configuration { url, .. } = self.transport else {
             return Err(GrpcClientBuilderError::CannotEnableTlsOnCustomTransport);
         };
 
-        Ok(Self {
-            transport: TransportSetup::Configuration { url, tls: true },
-            ..self
-        })
+        self.transport = TransportSetup::Configuration { url, tls: true };
+        Ok(self)
     }
 
     /// Add signer and a public key
-    pub fn pubkey_and_signer<S>(self, account_pubkey: VerifyingKey, signer: S) -> GrpcClientBuilder
+    pub fn pubkey_and_signer<S>(
+        mut self,
+        account_pubkey: VerifyingKey,
+        signer: S,
+    ) -> GrpcClientBuilder
     where
         S: DocSigner + 'static,
     {
-        GrpcClientBuilder {
-            transport: self.transport,
-            signer_bits: Some(SignerConfig {
-                signer: Box::new(signer),
-                pubkey: account_pubkey,
-            }),
-        }
+        let signer = BoxedDocSigner::new(signer);
+        self.signer_bits = Some(SignerKind::Signer((account_pubkey, signer)));
+        self
     }
 
     /// Add signer and associated public key
@@ -92,13 +107,19 @@ impl GrpcClientBuilder {
         S: DocSigner + Keypair<VerifyingKey = VerifyingKey> + 'static,
     {
         let pubkey = signer.verifying_key();
-        GrpcClientBuilder {
-            transport: self.transport,
-            signer_bits: Some(SignerConfig {
-                signer: Box::new(signer),
-                pubkey,
-            }),
-        }
+        self.pubkey_and_signer(pubkey, signer)
+    }
+
+    /// Set signer from a raw private key.
+    pub fn private_key(mut self, bytes: &[u8]) -> GrpcClientBuilder {
+        self.signer_bits = Some(SignerKind::PrivKeyBytes(Zeroizing::new(bytes.to_vec())));
+        self
+    }
+
+    /// Set signer from a hex formatted private key.
+    pub fn private_key_hex(mut self, s: &str) -> GrpcClientBuilder {
+        self.signer_bits = Some(SignerKind::PrivKeyHex(Zeroizing::new(s.to_string())));
+        self
     }
 
     /// Build [`GrpcClient`]
@@ -106,9 +127,54 @@ impl GrpcClientBuilder {
         let transport = match self.transport {
             TransportSetup::Configuration { url, tls } => build_transport(url, tls)?,
             TransportSetup::BoxedTransport(transport) => transport,
+            TransportSetup::Unset => return Err(GrpcClientBuilderError::TransportNotSet),
         };
 
-        Ok(GrpcClient::new(transport, self.signer_bits))
+        let signer_config = self.signer_bits.map(TryInto::try_into).transpose()?;
+
+        Ok(GrpcClient::new(transport, signer_config))
+    }
+}
+
+impl TryFrom<SignerKind> for SignerConfig {
+    type Error = GrpcClientBuilderError;
+    fn try_from(value: SignerKind) -> Result<Self, Self::Error> {
+        match value {
+            SignerKind::Signer((pubkey, signer)) => Ok(SignerConfig { signer, pubkey }),
+            SignerKind::PrivKeyBytes(bytes) => priv_key_signer(&bytes),
+            SignerKind::PrivKeyHex(string) => {
+                let bytes = Zeroizing::new(
+                    hex::decode(string.trim())
+                        .map_err(|_| GrpcClientBuilderError::InvalidPrivateKey)?,
+                );
+                priv_key_signer(&bytes)
+            }
+        }
+    }
+}
+
+fn priv_key_signer(bytes: &[u8]) -> Result<SignerConfig, GrpcClientBuilderError> {
+    let signing_key =
+        SigningKey::from_slice(bytes).map_err(|_| GrpcClientBuilderError::InvalidPrivateKey)?;
+    let pubkey = signing_key.verifying_key().to_owned();
+    let signer = BoxedDocSigner::new(signing_key);
+    Ok(SignerConfig { signer, pubkey })
+}
+
+impl fmt::Debug for SignerKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            SignerKind::Signer(..) => "SignerKind::Signer(..)",
+            SignerKind::PrivKeyBytes(..) => "SignerKind::PrivKeyBytes(..)",
+            SignerKind::PrivKeyHex(..) => "SignerKind::PrivKeyHex(..)",
+        };
+        f.write_str(s)
+    }
+}
+
+impl fmt::Debug for GrpcClientBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("GrpcClientBuilder { .. }")
     }
 }
 

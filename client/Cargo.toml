@@ -28,7 +28,6 @@ k256 = "0.13.4"
 serde_json = "1.0.140"
 tendermint.workspace = true
 thiserror = "2.0.12"
-zeroize = "1.8.1"
 
 celestia-grpc = { workspace = true, default-features = false }
 celestia-proto.workspace  = true
@@ -36,6 +35,10 @@ celestia-rpc = { workspace = true, default-features = false }
 celestia-types.workspace = true
 tonic.workspace = true
 async-trait = "0.1.89"
+http-body = "1.0.1"
+bytes = "1.10.1"
+http = "1.3.1"
+blockstore.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tonic = { workspace = true, features = [ "transport" ] }
