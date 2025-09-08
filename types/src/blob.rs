@@ -95,7 +95,7 @@ impl Blob {
     ///     AppVersion::V5,
     /// )
     /// .expect("Failed to create a signed blob");
-    /// 
+    ///
     /// let actual_signed = serde_json::to_string_pretty(&blob_signed).unwrap();
     /// let expected_signed = indoc::indoc! {r#"{
     ///   "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
@@ -105,7 +105,7 @@ impl Blob {
     ///   "index": -1,
     ///   "signer": "j71qdnFJas04ncZ4/CazBpFlSWE="
     /// }"#};
-    /// 
+    ///
     /// assert_eq!(
     ///     serde_json::from_str::<serde_json::Value>(&actual_signed).unwrap(),
     ///     serde_json::from_str::<serde_json::Value>(expected_signed).unwrap()
