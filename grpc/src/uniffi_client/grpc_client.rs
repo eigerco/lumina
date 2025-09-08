@@ -227,10 +227,6 @@ impl GrpcClient {
     }
 
     /// Submit blobs to the celestia network.
-    ///
-    /// When no `TxConfig` is provided, client will automatically calculate needed
-    /// gas and update the `gasPrice`, if network agreed on a new minimal value.
-    /// To enforce specific values use a `TxConfig`.
     pub async fn submit_blobs(
         &self,
         blobs: Vec<Arc<Blob>>,
@@ -242,10 +238,6 @@ impl GrpcClient {
     }
 
     /// Submit message to the celestia network.
-    ///
-    /// When no `TxConfig` is provided, client will automatically calculate needed
-    /// gas and update the `gasPrice`, if network agreed on a new minimal value.
-    /// To enforce specific values use a `TxConfig`.
     pub async fn submit_message(
         &self,
         message: AnyMsg,

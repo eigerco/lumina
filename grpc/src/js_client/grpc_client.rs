@@ -15,7 +15,7 @@ use crate::js_client::GrpcClientBuilder;
 use crate::tx::{JsTxConfig, JsTxInfo};
 use crate::Result;
 
-/// Celestia GRPC client, for builder see [`GrpcClientBuilder`]
+/// Celestia gRPC client, for builder see [`GrpcClientBuilder`]
 #[wasm_bindgen]
 pub struct GrpcClient {
     client: crate::GrpcClient,
@@ -182,7 +182,7 @@ impl GrpcClient {
         self.client.tx_status(hash.parse()?).await
     }
 
-    /// estimate_gas_price takes a transaction priority and estimates the gas price based
+    /// Estimate gas price for given transaction priority based
     /// on the gas prices of the transactions in the last five blocks.
     ///
     /// If no transaction is found in the last five blocks, return the network
@@ -205,10 +205,6 @@ impl GrpcClient {
     }
 
     /// Submit blobs to the celestia network.
-    ///
-    /// When no `TxConfig` is provided, client will automatically calculate needed
-    /// gas and update the `gasPrice`, if network agreed on a new minimal value.
-    /// To enforce specific values use a `TxConfig`.
     ///
     /// # Example
     /// ```js
@@ -242,10 +238,6 @@ impl GrpcClient {
     }
 
     /// Submit message to the celestia network.
-    ///
-    /// When no `TxConfig` is provided, client will automatically calculate needed
-    /// gas and update the `gasPrice`, if network agreed on a new minimal value.
-    /// To enforce specific values use a `TxConfig`.
     ///
     /// # Example
     /// ```js
