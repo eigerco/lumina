@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.6.1...celestia-grpc-v0.7.0) - 2025-09-08
+
+### Added
+
+- *(types)* [**breaking**] Add support for app v6 ([#733](https://github.com/eigerco/lumina/pull/733))
+- *(grpc)* remove retries on insufficient fee and gas multiplier ([#731](https://github.com/eigerco/lumina/pull/731))
+- *(grpc)* [**breaking**] expose whole node config instead just gas price ([#732](https://github.com/eigerco/lumina/pull/732))
+- *(client,grpc)* make sure all returned futures are Send ([#729](https://github.com/eigerco/lumina/pull/729))
+
+### Other
+
+- *(client,grpc,types)* Make all the celestia-client types types Serialisable ([#734](https://github.com/eigerco/lumina/pull/734))
+
 ## [0.6.1](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.6.0...celestia-grpc-v0.6.1) - 2025-08-19
 
 ### Other

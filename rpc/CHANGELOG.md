@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.12.1...celestia-rpc-v0.13.0) - 2025-09-08
+
+### Added
+
+- *(types)* [**breaking**] Add support for app v6 ([#733](https://github.com/eigerco/lumina/pull/733))
+
+### Other
+
+- *(client,grpc,types)* Make all the celestia-client types types Serialisable ([#734](https://github.com/eigerco/lumina/pull/734))
+
 ## [0.12.1](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.12.0...celestia-rpc-v0.12.1) - 2025-08-19
 
 ### Other
