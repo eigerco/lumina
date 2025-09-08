@@ -28,7 +28,7 @@ pub mod appconsts {
 
     pub use global_consts::*;
 
-    // celestia-app/pkg/appconsts/v1/app_consts
+    // https://github.com/celestiaorg/celestia-app/blob/v1.28.0/pkg/appconsts/v1/app_consts.go
     /// Consts of App v1.
     pub mod v1 {
         /// App version.
@@ -39,7 +39,7 @@ pub mod appconsts {
         pub const SUBTREE_ROOT_THRESHOLD: u64 = 64;
     }
 
-    // celestia-app/pkg/appconsts/v2/app_consts
+    // https://github.com/celestiaorg/celestia-app/blob/v2.3.1/pkg/appconsts/v2/app_consts.go
     /// Consts of App v2.
     pub mod v2 {
         /// App version.
@@ -50,7 +50,7 @@ pub mod appconsts {
         pub const SUBTREE_ROOT_THRESHOLD: u64 = 64;
     }
 
-    // celestia-app/pkg/appconsts/v3/app_consts
+    // https://github.com/celestiaorg/celestia-app/blob/v3.10.6/pkg/appconsts/v3/app_consts.go
     /// Consts of App v3.
     pub mod v3 {
         /// App version.
@@ -65,7 +65,7 @@ pub mod appconsts {
         pub const GAS_PER_BLOB_BYTE: u64 = 8;
     }
 
-    // celestia-app/pkg/appconsts/v4/app_consts
+    // https://github.com/celestiaorg/celestia-app/blob/v4.1.0/pkg/appconsts/v4/app_consts.go
     /// Consts of App v4.
     pub mod v4 {
         /// App version.
@@ -80,7 +80,7 @@ pub mod appconsts {
         pub const GAS_PER_BLOB_BYTE: u64 = 8;
     }
 
-    // celestia-app/pkg/appconsts/app_consts.go
+    // https://github.com/celestiaorg/celestia-app/blob/v5.0.2/pkg/appconsts/app_consts.go
     /// Consts of App v5.
     pub mod v5 {
         /// App version.
@@ -95,7 +95,7 @@ pub mod appconsts {
         pub const GAS_PER_BLOB_BYTE: u64 = 8;
     }
 
-    // celestia-app/pkg/appconsts/app_consts.go
+    // https://github.com/celestiaorg/celestia-app/blob/v6.0.0-rc0/pkg/appconsts/app_consts.go
     /// Consts of App v6.
     pub mod v6 {
         /// App version.
