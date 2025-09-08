@@ -63,6 +63,8 @@ pub mod appconsts {
         pub const TX_SIZE_COST_PER_BYTE: u64 = 10;
         /// Cost of each byte in blob (in units of gas).
         pub const GAS_PER_BLOB_BYTE: u64 = 8;
+        /// Maximum size of the transaction (in bytes).
+        pub const MAX_TX_SIZE: u64 = 2_097_152; // 2MB
     }
 
     // https://github.com/celestiaorg/celestia-app/blob/v4.1.0/pkg/appconsts/v4/app_consts.go
@@ -78,6 +80,8 @@ pub mod appconsts {
         pub const TX_SIZE_COST_PER_BYTE: u64 = 10;
         /// Cost of each byte in blob (in units of gas).
         pub const GAS_PER_BLOB_BYTE: u64 = 8;
+        /// Maximum size of the transaction (in bytes).
+        pub const MAX_TX_SIZE: u64 = 2_097_152; // 2MB
     }
 
     // https://github.com/celestiaorg/celestia-app/blob/v5.0.2/pkg/appconsts/app_consts.go
@@ -93,6 +97,8 @@ pub mod appconsts {
         pub const TX_SIZE_COST_PER_BYTE: u64 = 10;
         /// Cost of each byte in blob (in units of gas).
         pub const GAS_PER_BLOB_BYTE: u64 = 8;
+        /// Maximum size of the transaction (in bytes).
+        pub const MAX_TX_SIZE: u64 = 2_097_152; // 2MB
     }
 
     // https://github.com/celestiaorg/celestia-app/blob/v6.0.0-rc0/pkg/appconsts/app_consts.go
@@ -108,6 +114,8 @@ pub mod appconsts {
         pub const TX_SIZE_COST_PER_BYTE: u64 = 10;
         /// Cost of each byte in blob (in units of gas).
         pub const GAS_PER_BLOB_BYTE: u64 = 8;
+        /// Maximum size of the transaction (in bytes).
+        pub const MAX_TX_SIZE: u64 = 8_388_608; // 8MB
     }
 
     // celestia-app/pkg/appconsts/versioned_consts.go
@@ -290,6 +298,21 @@ pub mod appconsts {
             AppVersion::V4 => v4::GAS_PER_BLOB_BYTE,
             AppVersion::V5 => v5::GAS_PER_BLOB_BYTE,
             AppVersion::V6 => v6::GAS_PER_BLOB_BYTE,
+        }
+    }
+
+    /// Maximum size of the transaction (in bytes).
+    pub const fn max_tx_size(app_version: AppVersion) -> u64 {
+        match app_version {
+            // In v1 and v2 the limit for transaction was the size of the ODS.
+            // See: https://github.com/celestiaorg/celestia-app/issues/3686
+            AppVersion::V1 | AppVersion::V2 => {
+                square_size_upper_bound(app_version) as u64 * SHARE_SIZE as u64
+            }
+            AppVersion::V3 => v3::MAX_TX_SIZE,
+            AppVersion::V4 => v4::MAX_TX_SIZE,
+            AppVersion::V5 => v5::MAX_TX_SIZE,
+            AppVersion::V6 => v6::MAX_TX_SIZE,
         }
     }
 
