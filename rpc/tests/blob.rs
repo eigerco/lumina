@@ -7,7 +7,7 @@ use std::time::Duration;
 use celestia_rpc::blob::BlobsAtHeight;
 use celestia_rpc::prelude::*;
 use celestia_rpc::{TxConfig, TxPriority};
-use celestia_types::consts::appconsts::AppVersion;
+use celestia_types::consts::appconsts::{self, AppVersion};
 use celestia_types::state::Address;
 use celestia_types::{Blob, Commitment};
 use jsonrpsee::core::client::Subscription;
@@ -206,7 +206,10 @@ async fn blob_submit_with_different_tx_config() {
 async fn blob_submit_too_large() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
-    let data = random_bytes(5 * 1024 * 1024);
+    // wrapping blob in a transaction has a small overhead, so if we try to submit
+    // blob of `MAX_TX_SIZE`, it should fail
+    let blob_len = appconsts::max_tx_size(AppVersion::latest());
+    let data = random_bytes(blob_len as usize);
     let blob = Blob::new(namespace, data, AppVersion::V2).unwrap();
 
     blob_submit(&client, &[blob]).await.unwrap_err();
