@@ -268,7 +268,7 @@ async fn get_samples() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data.clone(), None, AppVersion::V2).unwrap();
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
     let header = client.header_get_by_height(submitted_height).await.unwrap();
@@ -297,7 +297,7 @@ async fn get_samples_wrong_coords() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
     let data = random_bytes(1024);
-    let blob = Blob::new(namespace, data.clone(), AppVersion::V2).unwrap();
+    let blob = Blob::new(namespace, data.clone(), None, AppVersion::V2).unwrap();
 
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
     let header = client.header_get_by_height(submitted_height).await.unwrap();
