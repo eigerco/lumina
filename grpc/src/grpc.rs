@@ -26,7 +26,7 @@ use celestia_types::state::{
 };
 use celestia_types::ExtendedHeader;
 use http_body::Body;
-use tonic::body::BoxBody;
+use tonic::body::Body as TonicBody;
 use tonic::client::GrpcService;
 
 use crate::abci_proofs::ProofChain;
@@ -76,7 +76,7 @@ impl<T> GrpcClient<T> {
 
 impl<T> GrpcClient<T>
 where
-    T: GrpcService<BoxBody> + Clone,
+    T: GrpcService<TonicBody> + Clone,
     T::Error: Into<StdError>,
     T::ResponseBody: Body<Data = Bytes> + Send + 'static,
     <T::ResponseBody as Body>::Error: Into<StdError> + Send,
@@ -151,7 +151,7 @@ where
             &response.value,
         )?;
 
-        let amount = str::from_utf8(&response.value)
+        let amount = std::str::from_utf8(&response.value)
             .map_err(|_| Error::FailedToParseResponse)?
             .parse()
             .map_err(|_| Error::FailedToParseResponse)?;

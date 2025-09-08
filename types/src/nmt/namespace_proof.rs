@@ -212,7 +212,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_serialize_namespace_proof_with_bincode() {
+    fn test_serialize_namespace_proof_binary() {
         let nmt_proof = NmtNamespaceProof::PresenceProof {
             proof: NmtProof {
                 siblings: vec![],
@@ -221,8 +221,8 @@ mod tests {
             ignore_max_ns: false,
         };
         let proof = NamespaceProof::from(nmt_proof);
-        let serialized = bincode::serialize(&proof).unwrap();
-        let deserialized: NamespaceProof = bincode::deserialize(&serialized).unwrap();
+        let serialized = postcard::to_allocvec(&proof).unwrap();
+        let deserialized: NamespaceProof = postcard::from_bytes(&serialized).unwrap();
         assert_eq!(proof, deserialized);
     }
 }

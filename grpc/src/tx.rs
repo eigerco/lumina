@@ -27,7 +27,7 @@ use tendermint::PublicKey;
 use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
 use tokio::sync::{Mutex, MutexGuard};
-use tonic::body::BoxBody;
+use tonic::body::Body as TonicBody;
 use tonic::client::GrpcService;
 
 use crate::grpc::{BroadcastMode, GasEstimate, GrpcClient, StdError, TxPriority, TxStatus};
@@ -62,7 +62,7 @@ pub struct TxClient<T, S> {
 
 impl<T, S> TxClient<T, S>
 where
-    T: GrpcService<BoxBody> + Clone,
+    T: GrpcService<TonicBody> + Clone,
     T::Error: Into<StdError>,
     T::ResponseBody: Body<Data = Bytes> + Send + 'static,
     <T::ResponseBody as Body>::Error: Into<StdError> + Send,
@@ -106,7 +106,7 @@ where
     /// use celestia_types::state::{Address, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
-    /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
+    /// let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
     /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
@@ -152,7 +152,7 @@ where
     /// use celestia_types::nmt::Namespace;
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
-    /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
+    /// let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
     /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///

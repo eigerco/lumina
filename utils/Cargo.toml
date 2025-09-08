@@ -7,29 +7,31 @@ description = "Platform abstraction utilities used across lumina project"
 authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
+rust-version = "1.78"
 
 [dependencies]
-tokio = { optional = true, version = "1.38.0", features = ["macros", "sync"] }
-tokio-util = { optional = true, version = "0.7.11" }
+tokio = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = { optional = true, workspace = true }
-wasm-bindgen-futures = { optional = true, version = "0.4.43" }
-gloo-timers = { optional = true, version = "0.3.0", features = ["futures"] }
-futures = { optional = true, version = "0.3.30" }
-pin-project = { optional = true, version = "1.1.5" }
-send_wrapper = { optional = true, version = "0.6.0", features = ["futures"] }
-wasm-bindgen-test = { optional = true, workspace = true }
-web-time = { optional = true, version = "1.1.0" }
-js-sys = { optional = true, version = "0.3.77"}
+wasm-bindgen = { workspace = true, optional = true }
+wasm-bindgen-futures = { workspace = true, optional = true }
+gloo-timers = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+pin-project = { workspace = true, optional = true }
+send_wrapper = { workspace = true, optional = true }
+wasm-bindgen-test = { workspace = true, optional = true }
+web-time = { version = "1.1", optional = true }
+js-sys = { workspace = true, optional = true }
 
 [dev-dependencies]
-web-time = "1.1.0"
+tokio = { workspace = true, features = ["macros"] }
+web-time = "1.1"
 
 [features]
 default = []
-executor = ["token", "dep:tokio-util", "dep:tokio", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:send_wrapper"]
+executor = ["token", "dep:tokio-util", "dep:tokio", "tokio/rt", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:send_wrapper"]
 token = ["dep:tokio-util"]
-time = ["dep:gloo-timers", "dep:tokio", "dep:send_wrapper", "dep:futures", "dep:pin-project", "dep:web-time"]
-test-utils = ["dep:wasm-bindgen-test"]
+time = ["dep:gloo-timers", "dep:tokio", "tokio/time", "dep:send_wrapper", "dep:futures", "dep:pin-project", "dep:web-time"]
+test-utils = ["dep:tokio", "tokio/macros", "dep:wasm-bindgen-test"]
 make-object = ["dep:js-sys"]
