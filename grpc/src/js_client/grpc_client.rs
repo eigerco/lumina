@@ -55,12 +55,14 @@ impl GrpcClient {
             .collect())
     }
 
-    /// Get balance of coins with bond denom for the given address, together with a proof,
-    /// and verify the returned balance against the corresponding block's app hash.
+    /// Retrieves the verified Celestia coin balance for the address.
     ///
-    /// NOTE: the balance returned is the balance reported by the parent block of
-    /// the provided header. This is due to the fact that for block N, the block's
-    /// app hash is the result of applying the previous block's transaction list.
+    /// # Notes
+    ///
+    /// This returns the verified balance which is the one that was reported by
+    /// the previous network block. In other words, if you transfer some coins,
+    /// you need to wait 1 more block in order to see the new balance. If you want
+    /// something more immediate then use [`GrpcClient::get_balance`].
     #[wasm_bindgen(js_name = getVerifiedBalance)]
     pub async fn get_verified_balance(
         &self,
@@ -74,7 +76,7 @@ impl GrpcClient {
             .into())
     }
 
-    /// Get balance of coins with given denom
+    /// Retrieves the Celestia coin balance for the given address.
     #[wasm_bindgen(js_name = getBalance)]
     pub async fn get_balance(&self, address: &str, denom: &str) -> Result<JsCoin> {
         Ok(self

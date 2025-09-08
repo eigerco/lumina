@@ -97,14 +97,14 @@ impl GrpcClient {
 
     // cosmos.bank
 
-    /// Get balance of coins with [`BOND_DENOM`] for the given address, together with a proof,
-    /// and verify the returned balance against the corresponding block's [`AppHash`].
+    /// Retrieves the verified Celestia coin balance for the address.
     ///
-    /// NOTE: the balance returned is the balance reported by the parent block of
-    /// the provided header. This is due to the fact that for block N, the block's
-    /// [`AppHash`] is the result of applying the previous block's transaction list.
+    /// # Notes
     ///
-    /// [`AppHash`]: ::tendermint::hash::AppHash
+    /// This returns the verified balance which is the one that was reported by
+    /// the previous network block. In other words, if you transfer some coins,
+    /// you need to wait 1 more block in order to see the new balance. If you want
+    /// something more immediate then use [`GrpcClient::get_balance`].
     pub async fn get_verified_balance(
         &self,
         address: &Address,
@@ -154,7 +154,7 @@ impl GrpcClient {
         Ok(Coin::utia(amount))
     }
 
-    /// Get balance of coins with given denom
+    /// Retrieves the Celestia coin balance for the given address.
     #[grpc_method(BankQueryClient::balance)]
     async fn get_balance(&self, address: &Address, denom: impl Into<String>) -> Result<Coin>;
 

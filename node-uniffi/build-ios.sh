@@ -11,7 +11,6 @@ mkdir -p ./bindings
 mkdir -p ./ios
 mkdir -p ./bindings/Headers
 
-
 cargo build
 cargo run --bin uniffi-bindgen \
   generate \
