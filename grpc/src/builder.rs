@@ -191,7 +191,6 @@ mod imp {
     ) -> Result<BoxedTransport, tonic::transport::Error> {
         let mut tls_config = ClientTlsConfig::new();
 
-        #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
         if tls {
             tls_config = tls_config.with_enabled_roots();
         }
