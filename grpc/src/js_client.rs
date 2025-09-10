@@ -3,7 +3,7 @@ use k256::ecdsa::VerifyingKey;
 use wasm_bindgen::prelude::*;
 
 use crate::signer::{JsSigner, JsSignerFn};
-use crate::Result;
+use crate::GrpcClientBuilderError;
 
 mod grpc_client;
 
@@ -64,28 +64,32 @@ pub struct GrpcClientBuilder {
 
 #[wasm_bindgen]
 impl GrpcClientBuilder {
+    /// Set the `url` of the grpc-web server to connect to
+    #[wasm_bindgen(js_name = "withUrl")]
+    pub fn with_url(self, url: String) -> Self {
+        Self {
+            inner: self.inner.url(url),
+        }
+    }
+
     /// Add public key and signer to the client being built
     #[wasm_bindgen(js_name = withPubkeyAndSigner)]
     pub fn with_pubkey_and_signer(
         self,
         account_pubkey: Uint8Array,
         signer_fn: JsSignerFn,
-    ) -> Result<Self> {
+    ) -> Result<Self, GrpcClientBuilderError> {
         let signer = JsSigner::new(signer_fn);
-        let account_pubkey = VerifyingKey::try_from(account_pubkey.to_vec().as_slice())?;
+        let account_pubkey = VerifyingKey::try_from(account_pubkey.to_vec().as_slice())
+            .map_err(|_| GrpcClientBuilderError::InvalidPublicKey)?;
         Ok(Self {
             inner: self.inner.pubkey_and_signer(account_pubkey, signer),
         })
     }
 
     /// build gRPC client
-    #[wasm_bindgen(js_name = build)]
-    pub async fn build(self) -> Result<GrpcClient> {
-        Ok(self
-            .inner
-            .build()
-            .expect("client creation successful")
-            .into())
+    pub fn build(self) -> Result<GrpcClient, GrpcClientBuilderError> {
+        Ok(self.inner.build()?.into())
     }
 }
 

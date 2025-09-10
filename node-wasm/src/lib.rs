@@ -9,7 +9,8 @@ pub mod utils;
 mod worker;
 mod wrapper;
 
-pub use celestia_grpc::GrpcClient;
+// include celestia-grpc when building lumina-node npm package
+pub use celestia_grpc as grpc;
 
 #[cfg(test)]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);

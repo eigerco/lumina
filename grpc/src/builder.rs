@@ -46,7 +46,7 @@ impl GrpcClientBuilder {
         GrpcClientBuilder::default()
     }
 
-    /// Create a new client connected to the given `url` using [`Channel`] transport
+    /// Set the `url` to connect to using [`Channel`] transport
     ///
     /// [`Channel`]: tonic::transport::Channel
     pub fn url(mut self, url: impl Into<String>) -> Self {

@@ -94,7 +94,7 @@ pub enum Error {
 ///
 /// [`GrpcClient`]: crate::GrpcClient
 /// [`GrpcClientBuilder`]: crate::GrpcClientBuilder
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum GrpcClientBuilderError {
     /// Error from tonic transport
     #[error(transparent)]
@@ -112,6 +112,10 @@ pub enum GrpcClientBuilderError {
     /// Invalid private key.
     #[error("Invalid private key")]
     InvalidPrivateKey,
+
+    /// Invalid public key.
+    #[error("Invalid public key")]
+    InvalidPublicKey,
 }
 
 impl From<Status> for Error {
@@ -123,6 +127,13 @@ impl From<Status> for Error {
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 impl From<Error> for wasm_bindgen::JsValue {
     fn from(error: Error) -> wasm_bindgen::JsValue {
+        error.to_string().into()
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+impl From<GrpcClientBuilderError> for wasm_bindgen::JsValue {
+    fn from(error: GrpcClientBuilderError) -> wasm_bindgen::JsValue {
         error.to_string().into()
     }
 }
