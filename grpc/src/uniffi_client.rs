@@ -43,6 +43,9 @@ pub struct GrpcClientBuilder {
     tls: bool,
 }
 
+// note: we cannot use the GrpcClient::builder() returns GrpcClientBuilder
+// pattern as in rust or js, because uniffi does not support static methods
+// except for constructors: https://github.com/mozilla/uniffi-rs/issues/1074
 #[uniffi::export(async_runtime = "tokio")]
 impl GrpcClientBuilder {
     /// Create a new builder for the provided url
