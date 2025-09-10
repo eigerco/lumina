@@ -65,6 +65,9 @@ pub struct GrpcClientBuilder {
 #[wasm_bindgen]
 impl GrpcClientBuilder {
     /// Set the `url` of the grpc-web server to connect to
+    ///
+    /// Note that this method **consumes** builder and returns updated instance of it.
+    /// Make sure to re-assign it if you keep builder in a variable.
     #[wasm_bindgen(js_name = "withUrl")]
     pub fn with_url(self, url: String) -> Self {
         Self {
@@ -73,6 +76,9 @@ impl GrpcClientBuilder {
     }
 
     /// Add public key and signer to the client being built
+    ///
+    /// Note that this method **consumes** builder and returns updated instance of it.
+    /// Make sure to re-assign it if you keep builder in a variable.
     #[wasm_bindgen(js_name = withPubkeyAndSigner)]
     pub fn with_pubkey_and_signer(
         self,

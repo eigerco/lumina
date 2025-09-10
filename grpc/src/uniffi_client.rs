@@ -124,6 +124,9 @@ impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
             crate::GrpcClientBuilderError::InvalidPrivateKey => {
                 GrpcClientBuilderError::InvalidAccountPrivateKey
             }
+            crate::GrpcClientBuilderError::InvalidPublicKey => {
+                GrpcClientBuilderError::InvalidAccountPublicKey
+            }
             crate::GrpcClientBuilderError::TransportNotSet => {
                 // API above should not allow creating a builder without any transport
                 unimplemented!("transport not set for builder, should not happen")
