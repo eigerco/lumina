@@ -74,7 +74,6 @@ impl NamedLock {
 
 impl fmt::Debug for NamedLock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        //write!(f, "NamedLock { .. }", self.name)
         f.write_str("NamedLock { .. }")
     }
 }
