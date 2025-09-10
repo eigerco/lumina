@@ -16,9 +16,9 @@ use grpc_client::GrpcClient;
 /// # Keyless client example
 ///
 /// ```js
-/// const grpcClient = await GrpcClientBuilder
+/// const client = await GrpcClient
 ///   .withUrl("http://127.0.0.1:18080")
-///   .buildClient()
+///   .build()
 /// ```
 ///
 /// # Transaction client examples
@@ -36,7 +36,7 @@ use grpc_client::GrpcClient;
 ///   return sig.toCompactRawBytes();
 /// };
 ///
-/// const txClient = await GrpcClient
+/// const client = await GrpcClient
 ///   .withUrl("http://127.0.0.1:18080")
 ///   .withPubkeyAndSigner(pubKey, signer)
 ///   .build();
@@ -52,10 +52,10 @@ use grpc_client::GrpcClient;
 ///     .then(sig => Uint8Array.from(atob(sig.signature.signature), c => c.charCodeAt(0)))
 /// }
 ///
-/// const txClient = await GrpcClientBuilder
+/// const client = await GrpcClient
 ///   .withUrl("http://127.0.0.1:18080")
 ///   .withPubkeyAndSigner(keys.pubKey, signer)
-///   .buildTxClient()
+///   .build()
 /// ```
 #[wasm_bindgen]
 pub struct GrpcClientBuilder {
