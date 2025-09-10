@@ -110,8 +110,7 @@ impl KeyRegistry {
             }
         }
 
-        info!("Persisting new keypair to indexeddb");
-
+        debug!("Persisting new keypair to indexeddb");
         let keypair = Keypair::generate_ed25519();
         let guard = try_lock_key(&keypair)
             .await
