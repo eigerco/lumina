@@ -98,24 +98,6 @@ extern "C" {
     ) -> Promise;
 }
 
-mod js {
-    use wasm_bindgen::prelude::*;
-
-    #[wasm_bindgen]
-    extern "C" {
-        /// Js Promise
-        pub type Promise;
-
-        /// The Promise.withResolvers() static method returns an object containing a new
-        /// Promise object and two functions to resolve or reject it, corresponding to the
-        /// two parameters passed to the executor of the Promise() constructor.
-        ///
-        /// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/withResolvers
-        #[wasm_bindgen(static_method_of = Promise, js_name = "withResolvers")]
-        pub fn with_resolvers() -> JsValue;
-    }
-}
-
 fn get_lock_manager() -> Result<LockManager, JsError> {
     const NAVIGATOR_PROPERTY: &str = "navigator";
     const LOCK_MANAGER_PROPERTY: &str = "locks";
