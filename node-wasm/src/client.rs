@@ -6,6 +6,7 @@ use blockstore::EitherBlockstore;
 use celestia_types::nmt::Namespace;
 use celestia_types::{Blob, ExtendedHeader};
 use js_sys::Array;
+use libp2p::identity::Keypair;
 use libp2p::Multiaddr;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::network;
@@ -18,6 +19,8 @@ use web_sys::BroadcastChannel;
 
 use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::error::{Context, Result};
+use crate::key_registry::KeyRegistry;
+use crate::lock::NamedLock;
 use crate::ports::WorkerClient;
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, timeout, Network,
@@ -36,6 +39,11 @@ pub struct WasmNodeConfig {
     /// A list of bootstrap peers to connect to.
     #[wasm_bindgen(getter_with_clone)]
     pub bootnodes: Vec<String>,
+
+    /// Optionally start with a provided private key used as libp2p identity. Expects 32 bytes
+    /// containing ed25519 secret key.
+    #[wasm_bindgen(getter_with_clone)]
+    pub identity_key: Option<Vec<u8>>,
 
     /// Whether to store data in persistent memory or not.
     ///
@@ -363,20 +371,37 @@ impl WasmNodeConfig {
         WasmNodeConfig {
             network,
             bootnodes,
+            identity_key: None,
             use_persistent_memory: true,
             custom_pruning_window_secs: None,
         }
     }
 
-    pub(crate) async fn into_node_builder(self) -> Result<NodeBuilder<WasmBlockstore, WasmStore>> {
+    pub(crate) async fn into_node_builder(
+        self,
+    ) -> Result<(NamedLock, NodeBuilder<WasmBlockstore, WasmStore>)> {
         let network = network::Network::from(self.network);
         let network_id = network.id();
 
+        let (keypair, guard) = if let Some(key) = self.identity_key {
+            let keypair = Keypair::ed25519_from_bytes(key).context("could not decode key")?;
+            let guard = KeyRegistry::try_lock_key(&keypair).await?;
+
+            (keypair, guard)
+        } else {
+            let registry = KeyRegistry::new().await?;
+            registry.get_key().await?
+        };
+
         let mut builder = if self.use_persistent_memory {
-            let store = IndexedDbStore::new(network_id)
+            let peer_id = keypair.public().to_peer_id();
+            let store_name = format!("{network_id}-{peer_id}");
+            let blockstore_name = format!("{network_id}-{peer_id}-blockstore");
+
+            let store = IndexedDbStore::new(&store_name)
                 .await
                 .context("Failed to open the store")?;
-            let blockstore = IndexedDbBlockstore::new(&format!("{network_id}-blockstore"))
+            let blockstore = IndexedDbBlockstore::new(&blockstore_name)
                 .await
                 .context("Failed to open the blockstore")?;
 
@@ -401,6 +426,7 @@ impl WasmNodeConfig {
             .collect::<Result<Vec<Multiaddr>, _>>()?;
 
         builder = builder
+            .keypair(keypair)
             .network(network)
             .sync_batch_size(128)
             .bootnodes(bootnodes);
@@ -410,7 +436,7 @@ impl WasmNodeConfig {
             builder = builder.pruning_window(dur);
         }
 
-        Ok(builder)
+        Ok((guard, builder))
     }
 }
 
@@ -533,6 +559,7 @@ mod tests {
             .start(&WasmNodeConfig {
                 network: Network::Private,
                 bootnodes,
+                identity_key: None,
                 use_persistent_memory: false,
                 custom_pruning_window_secs: None,
             })
