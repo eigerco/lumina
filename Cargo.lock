@@ -3345,7 +3345,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-cli"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -3420,7 +3420,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-uniffi"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "async-trait",
  "blockstore",
@@ -3441,7 +3441,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-wasm"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "blockstore",
