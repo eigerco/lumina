@@ -59,18 +59,20 @@ pub fn load_account() -> TestAccount {
 mod imp {
     use std::{future::Future, sync::OnceLock};
 
-    use celestia_grpc::{GrpcClient, TxClient};
+    use celestia_grpc::GrpcClient;
     use celestia_rpc::Client;
     use tokio::sync::{Mutex, MutexGuard};
-    use tonic::transport::Channel;
 
     use super::*;
 
     pub const CELESTIA_GRPC_URL: &str = "http://localhost:19090";
     pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
 
-    pub fn new_grpc_client() -> GrpcClient<Channel> {
-        GrpcClient::with_url(CELESTIA_GRPC_URL).expect("creating client failed")
+    pub fn new_grpc_client() -> GrpcClient {
+        GrpcClient::builder()
+            .url(CELESTIA_GRPC_URL)
+            .build()
+            .unwrap()
     }
 
     pub async fn new_rpc_client() -> Client {
@@ -80,13 +82,15 @@ mod imp {
     // we have to sequence the tests which submits transactions.
     // multiple independent tx clients don't work well in parallel
     // as they break each other's account.sequence
-    pub async fn new_tx_client() -> (MutexGuard<'static, ()>, TxClient<Channel, SigningKey>) {
+    pub async fn new_tx_client() -> (MutexGuard<'static, ()>, GrpcClient) {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         let lock = LOCK.get_or_init(|| Mutex::new(())).lock().await;
 
         let creds = load_account();
-        let client = TxClient::with_url_and_keypair(CELESTIA_GRPC_URL, creds.signing_key)
-            .await
+        let client = GrpcClient::builder()
+            .url(CELESTIA_GRPC_URL)
+            .signer_keypair(creds.signing_key)
+            .build()
             .unwrap();
 
         (lock, client)
@@ -104,10 +108,9 @@ mod imp {
 mod imp {
     use std::future::Future;
 
-    use celestia_grpc::{GrpcClient, TxClient};
+    use celestia_grpc::GrpcClient;
     use celestia_rpc::Client as RpcClient;
     use tokio::sync::oneshot;
-    use tonic_web_wasm_client::Client;
     use wasm_bindgen_futures::spawn_local;
 
     use super::*;
@@ -115,25 +118,25 @@ mod imp {
     const CELESTIA_GRPCWEB_PROXY_URL: &str = "http://localhost:18080";
     pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
 
-    pub fn new_grpc_client() -> GrpcClient<Client> {
-        GrpcClient::with_grpcweb_url(CELESTIA_GRPCWEB_PROXY_URL)
+    pub fn new_grpc_client() -> GrpcClient {
+        GrpcClient::builder()
+            .url(CELESTIA_GRPCWEB_PROXY_URL)
+            .build()
+            .unwrap()
     }
 
     pub async fn new_rpc_client() -> RpcClient {
         RpcClient::new(CELESTIA_RPC_URL).await.unwrap()
     }
 
-    pub async fn new_tx_client() -> ((), TxClient<Client, SigningKey>) {
+    pub async fn new_tx_client() -> ((), GrpcClient) {
         let creds = load_account();
-        let client = TxClient::with_grpcweb_url(
-            CELESTIA_GRPCWEB_PROXY_URL,
-            creds.verifying_key,
-            creds.signing_key,
-        )
-        .await
-        .unwrap();
+        let client = GrpcClient::builder()
+            .url(CELESTIA_GRPCWEB_PROXY_URL)
+            .signer_keypair(creds.signing_key)
+            .build();
 
-        ((), client)
+        ((), client.unwrap())
     }
 
     pub fn spawn<F>(future: F) -> oneshot::Receiver<()>

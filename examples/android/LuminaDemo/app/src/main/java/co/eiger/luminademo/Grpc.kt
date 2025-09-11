@@ -28,7 +28,8 @@ import fr.acinq.secp256k1.Secp256k1
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import uniffi.celestia_grpc.TxClient
+import uniffi.celestia_grpc.GrpcClient
+import uniffi.celestia_grpc.GrpcClientBuilder
 import uniffi.celestia_grpc.TxInfo
 import uniffi.celestia_grpc.UniffiSignature
 import uniffi.celestia_grpc.UniffiSigner
@@ -57,7 +58,7 @@ fun GrpcUi(modifier: Modifier = Modifier) {
     val pkHex = rememberTextFieldState(initialText = TEST_CI_PK_HEX)
 
     val coroutineScope = rememberCoroutineScope()
-    var grpcClient by remember { mutableStateOf<TxClient?>(null) }
+    var grpcClient by remember { mutableStateOf<GrpcClient?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
     if (grpcClient == null) {
@@ -91,9 +92,9 @@ fun GrpcUi(modifier: Modifier = Modifier) {
 
                         val signer = StaticSigner(skBytes)
 
-                        grpcClient = TxClient.create(
-                            url = url, accountPubkey = pkBytes, signer
-                        )
+                        grpcClient = GrpcClientBuilder.withUrl(url)
+                            .withPubkeyAndSigner(accountPubkey = pkBytes, signer)
+                            .build();
                     } catch (e : Exception) {
                         error = "Error creating TxClient: ${e.message}"
                         Log.e("gRPC_TxClient", "Error creating TxClient: ${e.message}", e)
@@ -112,12 +113,12 @@ fun GrpcUi(modifier: Modifier = Modifier) {
             }
         }
     } else {
-        GrpcBlobSubmit(modifier, txClient = grpcClient!!, coroutineScope)
+        GrpcBlobSubmit(modifier, grpcClient = grpcClient!!, coroutineScope)
     }
 }
 
 @Composable
-fun GrpcBlobSubmit(modifier: Modifier = Modifier, txClient: TxClient, coroutineScope: CoroutineScope) {
+fun GrpcBlobSubmit(modifier: Modifier = Modifier, grpcClient: GrpcClient, coroutineScope: CoroutineScope) {
     val namespace = rememberTextFieldState(initialText = "/b/")
     val blobData = rememberTextFieldState(initialText = "hello world")
 
@@ -152,7 +153,7 @@ fun GrpcBlobSubmit(modifier: Modifier = Modifier, txClient: TxClient, coroutineS
                 val blob = Blob.create(ns, blobData, AppVersion.V3)
 
                 try {
-                    val submit = txClient.submitBlobs(blobs = listOf(blob), config = null)
+                    val submit = grpcClient.submitBlobs(blobs = listOf(blob), config = null)
                     result = success(submit)
                     Log.i("gRPC_TxClient", "Blob submitted successfully: $submit")
                 } catch (e: Exception) {
