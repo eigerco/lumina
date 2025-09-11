@@ -385,7 +385,7 @@ impl WasmNodeConfig {
 
         let (keypair, guard) = if let Some(key) = self.identity_key {
             let keypair = Keypair::ed25519_from_bytes(key).context("could not decode key")?;
-            let guard = KeyRegistry::lock_key(&keypair).await?;
+            let guard = KeyRegistry::try_lock_key(&keypair).await?;
 
             (keypair, guard)
         } else {
@@ -394,7 +394,7 @@ impl WasmNodeConfig {
         };
 
         let mut builder = if self.use_persistent_memory {
-            let peer_id = keypair.public().to_peer_id().to_base58();
+            let peer_id = keypair.public().to_peer_id();
             let store_name = format!("{network_id}-{peer_id}");
             let blockstore_name = format!("{network_id}-{peer_id}-blockstore");
 

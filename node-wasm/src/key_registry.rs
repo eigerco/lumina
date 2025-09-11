@@ -3,7 +3,7 @@ use js_sys::Uint8Array;
 use libp2p::identity::Keypair;
 use send_wrapper::SendWrapper;
 use serde_wasm_bindgen::to_value;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::lock::{Error as LockError, NamedLock};
@@ -15,6 +15,7 @@ const KEY_STORE_NAME: &str = "libp2p_identity";
 
 const MAX_KEYS: usize = 512;
 
+/// Used to coordinate key usage between all the tabs running on the same domain
 pub struct KeyRegistry {
     db: SendWrapper<Database>,
 }
@@ -39,6 +40,7 @@ pub enum KeyRegistryError {
 pub type Result<T, E = KeyRegistryError> = std::result::Result<T, E>;
 
 impl KeyRegistry {
+    /// Create a new [`KeyRegistry`].
     pub async fn new() -> Result<Self> {
         let factory = Factory::new()?;
 
@@ -98,6 +100,9 @@ impl KeyRegistry {
         Ok(None)
     }
 
+    /// Returns Keypair, locking it until returned guard is used. It will re-use
+    /// keys already generated and persisted in registry, or generate a new one
+    /// if none are available.
     pub async fn get_key(&self) -> Result<(Keypair, NamedLock)> {
         match self.get_first_unused_key().await {
             Ok(k) => {
@@ -114,7 +119,7 @@ impl KeyRegistry {
         let keypair = Keypair::generate_ed25519();
         let guard = try_lock_key(&keypair)
             .await
-            .expect("newly generated key to be unique");
+            .expect("randomly generated key should be unique");
 
         let tx = self
             .db
@@ -128,7 +133,8 @@ impl KeyRegistry {
         Ok((keypair, guard))
     }
 
-    pub async fn lock_key(keypair: &Keypair) -> Result<NamedLock> {
+    /// Try to lock the key that was generated and is persisted outside of key registry
+    pub async fn try_lock_key(keypair: &Keypair) -> Result<NamedLock> {
         try_lock_key(keypair).await
     }
 }

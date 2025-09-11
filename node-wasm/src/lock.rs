@@ -39,9 +39,17 @@ impl NamedLock {
         let unlock_token = Token::new();
         let unlock_token_guard = unlock_token.trigger_drop_guard();
         let (would_block_tx, would_block_rx) = oneshot::channel();
+        // Following callback will be called when:
+        // - ifAvailable = true => immediately upon lock request. In this case `lock` will be
+        //   null if the lock is currently being held.
+        // - otherwise => when the lock is granted
         let cb: Function = Closure::once_into_js(move |lock: JsValue| {
             future_to_promise(async move {
+                // falsy value here can happen if and only if we were called in non-blocking
+                // mode and the lock is currently held.
                 let _ = would_block_tx.send(lock.is_falsy());
+                // The lock (if we acquire it), will be held until this promise is resolved,
+                // effectively keeping it until `unlock_token` is triggered.
                 unlock_token.triggered().await;
                 Ok(JsValue::null())
             })
@@ -60,8 +68,7 @@ impl NamedLock {
 
         let would_block = would_block_rx.await.expect("valid singleshot channel");
 
-        // only case where callback above is called with a falsy value is when we're in
-        // non-blocking mode and the lock is already taken
+        // Returning here also resolves the promise
         if would_block {
             return Err(Error::WouldBlock);
         }
@@ -150,7 +157,7 @@ mod tests {
             NamedLock::try_lock(LOCK_NAME)
                 .await
                 .expect_err("should be locked now");
-            let _sync_lock = NamedLock::lock(LOCK_NAME).await;
+            let _sync_lock = NamedLock::lock(LOCK_NAME).await.unwrap();
             rx.await.unwrap();
         });
 
