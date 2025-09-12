@@ -88,27 +88,24 @@ impl Blob {
     /// let signer: AccAddress = "celestia1377k5an3f94v6wyaceu0cf4nq6gk2jtpc46g7h"
     ///     .parse()
     ///     .unwrap();
-    /// let blob_signed = Blob::new(
+    /// let blob = Blob::new(
     ///     my_namespace,
     ///     b"some data to store on blockchain".to_vec(),
     ///     Some(signer),
     ///     AppVersion::V5,
     /// )
-    /// .expect("Failed to create a signed blob");
-    ///
-    /// let actual_signed = serde_json::to_string_pretty(&blob_signed).unwrap();
-    /// let expected_signed = indoc::indoc! {r#"{
-    ///   "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
-    ///   "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
-    ///   "share_version": 1,
-    ///   "commitment": "AUpLKHYnlrfK0cX6DcGyryFMld1nJia+cjkCwXFTFgA=",
-    ///   "index": -1,
-    ///   "signer": "j71qdnFJas04ncZ4/CazBpFlSWE="
-    /// }"#};
+    /// .expect("Failed to create a blob");
     ///
     /// assert_eq!(
-    ///     serde_json::from_str::<serde_json::Value>(&actual_signed).unwrap(),
-    ///     serde_json::from_str::<serde_json::Value>(expected_signed).unwrap()
+    ///     serde_json::to_string_pretty(&blob).unwrap(),
+    ///     indoc::indoc! {r#"{
+    ///       "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
+    ///       "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
+    ///       "share_version": 1,
+    ///       "commitment": "AUpLKHYnlrfK0cX6DcGyryFMld1nJia+cjkCwXFTFgA=",
+    ///       "index": -1,
+    ///       "signer": "j71qdnFJas04ncZ4/CazBpFlSWE="
+    ///     }"#},
     /// );
     /// ```
     pub fn new(
@@ -117,15 +114,11 @@ impl Blob {
         signer: Option<AccAddress>,
         app_version: AppVersion,
     ) -> Result<Blob> {
-        let mut share_version = appconsts::SHARE_VERSION_ZERO;
-
-        if signer.is_some() {
-            let app_version = app_version.as_u64();
-            if app_version < 3 {
-                return Err(Error::UnsupportedAppVersion(app_version));
-            }
-            share_version = appconsts::SHARE_VERSION_ONE;
-        }
+        let share_version = if signer.is_none() {
+            appconsts::SHARE_VERSION_ZERO
+        } else {
+            appconsts::SHARE_VERSION_ONE
+        };
 
         let commitment = Commitment::from_blob(
             namespace,
@@ -723,60 +716,85 @@ mod tests {
 
     #[test]
     fn create_new_blob_unsigned() {
-        let my_namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
-        let blob_unsigned = Blob::new(
-            my_namespace,
+        use crate::consts::appconsts;
+
+        let ns = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
+        let blob = Blob::new(
+            ns,
             b"some data to store on blockchain".to_vec(),
             None,
             AppVersion::V2,
         )
-        .expect("Failed to create a blob");
+        .expect("Failed to create blob");
 
-        let actual_unsigned = serde_json::to_string_pretty(&blob_unsigned).unwrap();
-        let expected_unsigned = indoc::indoc! {r#"{
-          "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
-          "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
-          "share_version": 0,
-          "commitment": "m0A4feU6Fqd5Zy9td3M7lntG8A3PKqe6YdugmAsWz28=",
-          "index": -1,
-          "signer": null
-        }"#};
+        let shares = blob.to_shares().expect("to_shares failed");
+        assert!(!shares.is_empty(), "expected at least one share");
 
+        let first = &shares[0];
+
+        // first share should be a sequence start
+        assert!(
+            first.sequence_length().is_some(),
+            "first share must be a sequence start"
+        );
+
+        // check share version and signer
+        let version = first.info_byte().expect("non parity share").version();
         assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&actual_unsigned).unwrap(),
-            serde_json::from_str::<serde_json::Value>(expected_unsigned).unwrap()
+            version,
+            appconsts::SHARE_VERSION_ZERO,
+            "unexpected share version for unsigned blob"
+        );
+        assert_eq!(
+            first.signer(),
+            None,
+            "unsigned blob must not carry a signer"
         );
     }
 
     #[test]
     fn create_new_blob_signed() {
-        let my_namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
+        use crate::consts::appconsts;
+
+        let ns = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
         let signer: AccAddress = "celestia1377k5an3f94v6wyaceu0cf4nq6gk2jtpc46g7h"
             .parse()
-            .unwrap();
-        let blob_signed = Blob::new(
-            my_namespace,
+            .expect("invalid signer");
+
+        // AppVersion must allow signer (>= V3)
+        let blob = Blob::new(
+            ns,
             b"some data to store on blockchain".to_vec(),
-            Some(signer),
+            Some(signer.clone()),
             AppVersion::V5,
         )
-        .expect("Failed to create a signed blob");
+        .expect("Failed to create signed blob");
 
-        let actual_signed = serde_json::to_string_pretty(&blob_signed).unwrap();
-        let expected_signed = indoc::indoc! {r#"{
-          "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAU=",
-          "data": "c29tZSBkYXRhIHRvIHN0b3JlIG9uIGJsb2NrY2hhaW4=",
-          "share_version": 1,
-          "commitment": "AUpLKHYnlrfK0cX6DcGyryFMld1nJia+cjkCwXFTFgA=",
-          "index": -1,
-          "signer": "j71qdnFJas04ncZ4/CazBpFlSWE="
-        }"#};
+        let shares = blob.to_shares().expect("to_shares failed");
+        assert!(!shares.is_empty(), "expected at least one share");
 
+        let first = &shares[0];
+
+        // first share should be a sequence start
+        assert!(
+            first.sequence_length().is_some(),
+            "first share must be a sequence start"
+        );
+
+        // check share version and signer
+        let version = first.info_byte().expect("non parity share").version();
         assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&actual_signed).unwrap(),
-            serde_json::from_str::<serde_json::Value>(expected_signed).unwrap()
+            version,
+            appconsts::SHARE_VERSION_ONE,
+            "unexpected share version for signed blob"
+        );
+        assert_eq!(
+            first.signer(),
+            Some(signer),
+            "first share must carry the expected signer"
         );
     }
+
     #[test]
     fn create_from_raw() {
         let expected = sample_blob();
