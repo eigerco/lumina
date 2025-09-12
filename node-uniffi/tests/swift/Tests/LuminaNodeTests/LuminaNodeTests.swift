@@ -15,6 +15,17 @@ final class LuminaNodeTests: XCTestCase {
         let _ = try await node.start()
         try await node.waitConnectedTrusted()
 
+        var currentHeight:UInt64 = 0;
+        while (currentHeight < 2) {
+            let event = try await node.nextEvent();
+            switch event {
+            case .addedHeaderFromHeaderSub(let height):
+                currentHeight = height;
+            default:
+                break;
+            }
+        }
+
         let headStr = try await node.requestHeadHeader()
         let headData = headStr.data(using: .utf8)!;
         let head = try JSONSerialization.jsonObject(with: headData) as! [String: Any]
