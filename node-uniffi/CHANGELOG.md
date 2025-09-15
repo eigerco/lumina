@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.3.3...lumina-node-uniffi-v0.3.4) - 2025-09-15
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.3.3](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.3.2...lumina-node-uniffi-v0.3.3) - 2025-09-08
 
 ### Other

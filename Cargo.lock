@@ -698,7 +698,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-client"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "async-stream",
  "celestia-grpc",
@@ -726,7 +726,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -792,7 +792,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-rpc"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -817,7 +817,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "base64 0.22.1",
  "bech32",
@@ -3345,7 +3345,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-cli"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -3370,7 +3370,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node"
-version = "0.15.2"
+version = "0.16.0"
 dependencies = [
  "async-trait",
  "backoff",
@@ -3420,7 +3420,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-uniffi"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "async-trait",
  "blockstore",
@@ -3441,7 +3441,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-wasm"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "blockstore",
