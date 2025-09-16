@@ -1391,7 +1391,6 @@ checksum = "4a3daa8e81a3963a60642bcc1f90a670680bd4a77535faa384e9d1c79d620871"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
- "rand_core",
  "serde",
  "sha2 0.10.9",
  "subtle",
@@ -2891,9 +2890,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.10"
+version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "257b5621d159b32282eac446bed6670c39c7dc68a200a992d8f056afa0066f6d"
+checksum = "3104e13b51e4711ff5738caa1fb54467c8604c2e94d607e27745bcf709068774"
 dependencies = [
  "bs58",
  "ed25519-dalek",
@@ -2903,7 +2902,7 @@ dependencies = [
  "rand",
  "serde",
  "sha2 0.10.9",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
  "tracing",
  "zeroize",
 ]
@@ -3454,12 +3453,14 @@ dependencies = [
  "enum-as-inner",
  "futures",
  "gloo-timers 0.3.0",
+ "idb",
  "instant",
  "js-sys",
  "libp2p",
  "lumina-node",
  "lumina-utils",
  "rexie",
+ "send_wrapper 0.6.0",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
