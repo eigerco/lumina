@@ -97,11 +97,6 @@ impl GrpcClientBuilder {
     pub async fn build(self: Arc<Self>) -> Result<GrpcClient, GrpcClientBuilderError> {
         let mut builder = crate::GrpcClientBuilder::new().url(self.url.clone());
 
-        #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
-        if self.tls {
-            builder = builder.default_tls()?;
-        }
-
         if let Some(signer) = self.signer.clone() {
             let signer = UniffiSignerBox(signer.clone());
             let vk = self.account_pubkey.expect("public key present");

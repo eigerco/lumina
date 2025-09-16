@@ -20,14 +20,13 @@ use imp::build_transport;
 enum TransportSetup {
     #[default]
     Unset,
-    Configuration {
-        url: String,
-        tls: bool,
-    },
+    EndpointUrl(String),
     BoxedTransport(BoxedTransport),
 }
 
 /// Builder for [`GrpcClient`]
+///
+/// Note that TLS configuration is governed using `tls-*-roots` feature flags.
 #[derive(Default)]
 pub struct GrpcClientBuilder {
     transport: TransportSetup,
@@ -46,14 +45,11 @@ impl GrpcClientBuilder {
         GrpcClientBuilder::default()
     }
 
-    /// Set the `url` to connect to using [`Channel`] transport
+    /// Set the `url` to connect to using [`Channel`] transport.
     ///
     /// [`Channel`]: tonic::transport::Channel
     pub fn url(mut self, url: impl Into<String>) -> Self {
-        self.transport = TransportSetup::Configuration {
-            url: url.into(),
-            tls: false,
-        };
+        self.transport = TransportSetup::EndpointUrl(url.into());
         self
     }
 
@@ -72,19 +68,6 @@ impl GrpcClientBuilder {
     {
         self.transport = TransportSetup::BoxedTransport(boxed(transport));
         self
-    }
-
-    /// Enables loading the certificate roots which were enabled by feature flags
-    /// `tls-webpki-roots` and `tls-native-roots`.
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
-    pub fn default_tls(mut self) -> Result<Self, GrpcClientBuilderError> {
-        let TransportSetup::Configuration { url, .. } = self.transport else {
-            return Err(GrpcClientBuilderError::CannotEnableTlsOnCustomTransport);
-        };
-
-        self.transport = TransportSetup::Configuration { url, tls: true };
-        Ok(self)
     }
 
     /// Add signer and a public key
@@ -125,7 +108,7 @@ impl GrpcClientBuilder {
     /// Build [`GrpcClient`]
     pub fn build(self) -> Result<GrpcClient, GrpcClientBuilderError> {
         let transport = match self.transport {
-            TransportSetup::Configuration { url, tls } => build_transport(url, tls)?,
+            TransportSetup::EndpointUrl(url) => build_transport(url)?,
             TransportSetup::BoxedTransport(transport) => transport,
             TransportSetup::Unset => return Err(GrpcClientBuilderError::TransportNotSet),
         };
@@ -185,15 +168,8 @@ mod imp {
 
     use tonic::transport::{ClientTlsConfig, Endpoint};
 
-    pub(super) fn build_transport(
-        url: String,
-        tls: bool,
-    ) -> Result<BoxedTransport, tonic::transport::Error> {
-        let mut tls_config = ClientTlsConfig::new();
-
-        if tls {
-            tls_config = tls_config.with_enabled_roots();
-        }
+    pub(super) fn build_transport(url: String) -> Result<BoxedTransport, tonic::transport::Error> {
+        let tls_config = ClientTlsConfig::new().with_enabled_roots();
 
         let channel = Endpoint::from_shared(url)?
             .user_agent("celestia-grpc")?
@@ -211,10 +187,7 @@ mod imp {
 
     use tonic::transport::Endpoint;
 
-    pub(super) fn build_transport(
-        url: String,
-        _tls: bool,
-    ) -> Result<BoxedTransport, tonic::transport::Error> {
+    pub(super) fn build_transport(url: String) -> Result<BoxedTransport, tonic::transport::Error> {
         let channel = Endpoint::from_shared(url)?
             .user_agent("celestia-grpc")?
             .connect_lazy();
@@ -226,10 +199,7 @@ mod imp {
 #[cfg(target_arch = "wasm32")]
 mod imp {
     use super::*;
-    pub(super) fn build_transport(
-        url: String,
-        _tls: bool,
-    ) -> Result<BoxedTransport, GrpcClientBuilderError> {
+    pub(super) fn build_transport(url: String) -> Result<BoxedTransport, GrpcClientBuilderError> {
         Ok(boxed(tonic_web_wasm_client::Client::new(url)))
     }
 }
