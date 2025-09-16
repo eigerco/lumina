@@ -148,7 +148,7 @@ impl StateApi {
     /// ```
     pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
     where
-        M: IntoProtobufAny,
+        M: IntoProtobufAny + Send + 'static,
     {
         Ok(self.ctx.grpc()?.submit_message(message, cfg).await?)
     }

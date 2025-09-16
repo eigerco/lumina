@@ -6,10 +6,12 @@ use k256::ecdsa::{SigningKey, VerifyingKey};
 use signature::Keypair;
 use tonic::body::Body as TonicBody;
 use tonic::codegen::Service;
+use tonic::metadata::MetadataMap;
 use zeroize::Zeroizing;
 
 use crate::boxed::{boxed, BoxedTransport};
 use crate::client::SignerConfig;
+use crate::grpc::Context;
 use crate::signer::BoxedDocSigner;
 use crate::utils::CondSend;
 use crate::{DocSigner, GrpcClient, GrpcClientBuilderError};
@@ -31,6 +33,9 @@ enum TransportSetup {
 pub struct GrpcClientBuilder {
     transport: TransportSetup,
     signer_kind: Option<SignerKind>,
+    ascii_metadata: Vec<(String, String)>,
+    binary_metadata: Vec<(Vec<u8>, Vec<u8>)>,
+    metadata_map: Option<MetadataMap>,
 }
 
 enum SignerKind {
@@ -105,6 +110,23 @@ impl GrpcClientBuilder {
         self
     }
 
+    /// Appends ascii metadata to all requests made by the client.
+    pub fn metadata(mut self, key: &str, value: &str) -> GrpcClientBuilder {
+        self.ascii_metadata.push((key.into(), value.into()));
+        self
+    }
+
+    /// Appends binary metadata to all requests made by the client.
+    pub fn metadata_bin(mut self, key: &[u8], value: &[u8]) -> GrpcClientBuilder {
+        self.binary_metadata.push((key.into(), value.into()));
+        self
+    }
+
+    pub fn metadata_map(mut self, metadata: MetadataMap) -> GrpcClientBuilder {
+        self.metadata_map = Some(metadata);
+        self
+    }
+
     /// Build [`GrpcClient`]
     pub fn build(self) -> Result<GrpcClient, GrpcClientBuilderError> {
         let transport = match self.transport {
@@ -115,7 +137,18 @@ impl GrpcClientBuilder {
 
         let signer_config = self.signer_kind.map(TryInto::try_into).transpose()?;
 
-        Ok(GrpcClient::new(transport, signer_config))
+        let mut context = Context::default();
+        for (key, value) in self.ascii_metadata {
+            context.append_metadata(&key, &value)?;
+        }
+        for (key, value) in self.binary_metadata {
+            context.append_metadata_bin(&key, &value)?;
+        }
+        if let Some(metadata) = self.metadata_map {
+            context.append_metadata_map(&metadata);
+        }
+
+        Ok(GrpcClient::new(transport, signer_config, context))
     }
 }
 

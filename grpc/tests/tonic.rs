@@ -1,3 +1,4 @@
+use std::future::IntoFuture;
 use std::sync::Arc;
 
 use celestia_grpc::{Error, TxConfig};
@@ -76,6 +77,7 @@ async fn get_verified_balance() {
         jrpc_client.header_network_head().map(Result::unwrap),
         client
             .get_balance(&account.address, "utia")
+            .into_future()
             .map(Result::unwrap)
     );
 
@@ -226,18 +228,25 @@ async fn submit_message() {
         amount: vec![amount.clone().into()],
     };
 
-    tx_client
+    let tx_info = tx_client
         .submit_message(msg, TxConfig::default())
         .await
         .unwrap();
 
-    let coins = tx_client
-        .get_all_balances(&other_account.address)
+    let coin = tx_client
+        .get_balance(&other_account.address, "utia")
         .await
         .unwrap();
 
-    assert_eq!(coins.len(), 1);
-    assert_eq!(amount, coins[0]);
+    assert_eq!(coin.amount(), 12345);
+
+    let coin = tx_client
+        .get_balance(&other_account.address, "utia")
+        .block_height(tx_info.height.value() - 2)
+        .await
+        .unwrap();
+
+    assert_eq!(coin.amount(), 0);
 }
 
 #[async_test]
@@ -280,13 +289,21 @@ async fn tx_client_is_send_and_sync() {
     let (_lock, tx_client) = new_tx_client().await;
     is_send_and_sync(&tx_client);
 
-    is_send(&tx_client.submit_blobs(&[], TxConfig::default()));
-    is_send(&tx_client.submit_message(
-        MsgSend {
-            from_address: "".into(),
-            to_address: "".into(),
-            amount: vec![],
-        },
-        TxConfig::default(),
-    ));
+    is_send(
+        &tx_client
+            .submit_blobs(&[], TxConfig::default())
+            .into_future(),
+    );
+    is_send(
+        &tx_client
+            .submit_message(
+                MsgSend {
+                    from_address: "".into(),
+                    to_address: "".into(),
+                    amount: vec![],
+                },
+                TxConfig::default(),
+            )
+            .into_future(),
+    );
 }

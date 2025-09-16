@@ -106,6 +106,7 @@ impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
                 // API above should not allow creating a builder without any transport
                 unimplemented!("transport not set for builder, should not happen")
             }
+            _ => todo!(),
         }
     }
 }
