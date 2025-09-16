@@ -733,7 +733,6 @@ name = "celestia-grpc"
 version = "0.7.0"
 dependencies = [
  "async-trait",
- "blockstore",
  "bytes",
  "celestia-grpc-macros",
  "celestia-proto",

@@ -1,7 +1,6 @@
 use std::error::Error as StdError;
 use std::fmt;
 
-use blockstore::cond_send::CondSend;
 use bytes::Bytes;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use signature::Keypair;
@@ -12,6 +11,7 @@ use zeroize::Zeroizing;
 use crate::boxed::{boxed, BoxedTransport};
 use crate::client::SignerConfig;
 use crate::signer::BoxedDocSigner;
+use crate::utils::CondSend;
 use crate::{DocSigner, GrpcClient, GrpcClientBuilderError};
 
 use imp::build_transport;

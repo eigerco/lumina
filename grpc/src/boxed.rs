@@ -3,13 +3,14 @@ use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 use std::{error::Error as StdError, future::Future};
 
-use blockstore::cond_send::CondSend;
 use bytes::Bytes;
 use dyn_clone::{clone_box, DynClone};
 use futures::FutureExt;
 use http_body::Frame;
 use tonic::body::Body as TonicBody;
 use tonic::codegen::Service;
+
+use crate::utils::CondSend;
 
 dyn_clone::clone_trait_object!(AbstractTransport);
 
