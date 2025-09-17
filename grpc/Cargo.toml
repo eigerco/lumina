@@ -30,7 +30,7 @@ tendermint-proto.workspace = true
 tendermint.workspace = true
 lumina-utils = { workspace = true, features = ["time"] }
 
-async-trait = { version = "0.1.88", optional = true}
+async-trait = { version = "0.1.88", optional = true }
 bytes = "1.8"
 dyn-clone = "1.0.20"
 futures = "0.3.30"
