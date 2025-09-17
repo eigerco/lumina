@@ -87,7 +87,6 @@ class GrpcViewModel : ObservableObject {
             
             self.grpcClient = try await GrpcClientBuilder
                 .withUrl(url: url)
-                .withDefaultTls()
                 .withPubkeyAndSigner(accountPubkey: pk, signer: signer)
                 .build()
             self.isReady = true
