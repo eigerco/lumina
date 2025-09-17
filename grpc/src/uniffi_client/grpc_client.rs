@@ -221,12 +221,12 @@ impl GrpcClient {
         Ok(self.client.estimate_gas_price(priority).await?)
     }
 
-    /// estimate_gas_price_and_usage takes a transaction priority and a transaction bytes
-    /// and estimates the gas price and the gas used for that transaction.
+    /// Estimate gas price for transaction with given priority and estimate gas usage
+    /// for provided serialised transaction.
     ///
-    /// The gas price estimation is based on the gas prices of the transactions in the last five blocks.
-    /// If no transaction is found in the last five blocks, return the network
-    /// min gas price.
+    /// The gas price estimation is based on the gas prices of the transactions
+    /// in the last five blocks. If no transaction is found in the last five blocks,
+    /// it returns the network min gas price.
     ///
     /// The gas used is estimated using the state machine simulation.
     #[uniffi::method(name = "estimateGasPriceAndUsage")]

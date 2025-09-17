@@ -105,10 +105,6 @@ pub enum GrpcClientBuilderError {
     #[error("Transport not set")]
     TransportNotSet,
 
-    /// Attempted to enable tls when using pre-prepared transport
-    #[error("Cannot enable tls on custom transport")]
-    CannotEnableTlsOnCustomTransport,
-
     /// Invalid private key.
     #[error("Invalid private key")]
     InvalidPrivateKey,

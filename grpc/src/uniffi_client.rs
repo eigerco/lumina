@@ -21,10 +21,6 @@ pub enum GrpcClientBuilderError {
         msg: String,
     },
 
-    /// Tried to enable tls on pre-configured transport
-    #[error("Cannot enable tls on manually configured transport")]
-    CannotEnableTlsOnCustomTransport,
-
     /// Invalid account public key
     #[error("invalid account public key")]
     InvalidAccountPublicKey,
@@ -40,7 +36,6 @@ pub struct GrpcClientBuilder {
     url: String,
     signer: Option<Arc<dyn UniffiSigner>>,
     account_pubkey: Option<VerifyingKey>,
-    tls: bool,
 }
 
 // note: we cannot use the GrpcClient::builder() returns GrpcClientBuilder
@@ -55,7 +50,6 @@ impl GrpcClientBuilder {
             url,
             signer: None,
             account_pubkey: None,
-            tls: false,
         }
     }
 
@@ -73,21 +67,7 @@ impl GrpcClientBuilder {
             url: self.url.clone(),
             signer: Some(signer),
             account_pubkey: Some(vk),
-            tls: self.tls,
         })
-    }
-
-    /// Enables loading the certificate roots which were enabled by feature flags
-    /// `tls-webpki-roots` and `tls-native-roots`.
-    #[cfg(any(feature = "tls-native-roots", feature = "tls-webpki-roots"))]
-    #[uniffi::method(name = "withDefaultTls")]
-    pub fn default_tls(self: Arc<Self>) -> Self {
-        GrpcClientBuilder {
-            url: self.url.clone(),
-            signer: self.signer.clone(),
-            account_pubkey: self.account_pubkey,
-            tls: true,
-        }
     }
 
     // this function _must_ be async despite not awaiting, so that it executes in tokio runtime
@@ -115,9 +95,6 @@ impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
                 GrpcClientBuilderError::TonicTransportError {
                     msg: error.to_string(),
                 }
-            }
-            crate::GrpcClientBuilderError::CannotEnableTlsOnCustomTransport => {
-                GrpcClientBuilderError::CannotEnableTlsOnCustomTransport
             }
             crate::GrpcClientBuilderError::InvalidPrivateKey => {
                 GrpcClientBuilderError::InvalidAccountPrivateKey
