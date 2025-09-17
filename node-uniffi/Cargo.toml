@@ -33,4 +33,11 @@ tokio = { version = "1.38.0", features = ["macros", "sync"] }
 uniffi = { version = "0.29.2", features = ["bindgen", "tokio", "cli"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tonic = "0.12.3"
+tonic.workspace = true
+
+[features]
+# webpki is needed for TLS on android and iOS
+# https://github.com/hyperium/tonic/issues/2369
+default = ['tls-webpki-roots']
+tls-native-roots = ["celestia-grpc/tls-native-roots"]
+tls-webpki-roots = ["celestia-grpc/tls-webpki-roots"]

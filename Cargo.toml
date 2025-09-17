@@ -9,7 +9,7 @@ lumina-node-wasm = { version = "0.10.3", path = "node-wasm" }
 lumina-utils = { version = "0.3.0", path = "utils" }
 celestia-client = { version = "0.1.2", path = "client" }
 celestia-proto = { version = "0.9.1", path = "proto" }
-celestia-grpc = { version = "0.7.0", path = "grpc" }
+celestia-grpc = { version = "0.7.0", path = "grpc", default-features = false }
 celestia-rpc = { version = "0.13.0", path = "rpc", default-features = false }
 celestia-types = { version = "0.15.0", path = "types", default-features = false }
 tendermint = { version = "0.40.4", default-features = false }
@@ -17,9 +17,12 @@ tendermint-proto = "0.40.4"
 
 libp2p = "0.54.1"
 nmt-rs = "0.2.1"
-prost = "0.13.3"
-prost-build = "0.13.3"
-prost-types = "0.13.3"
+prost = "0.13.5"
+prost-build = "0.13.5"
+prost-types = "0.13.5"
+tonic = { version = "0.13.1", default-features = false }
+tonic-web-wasm-client = "0.7.1"
+tonic-build = "0.13.1"
 wasm-bindgen = "0.2.100"
 wasm-bindgen-test = "0.3.49"
 

@@ -1,7 +1,10 @@
 //! A build script generating rust types from protobuf definitions.
 
+#[cfg(not(feature = "tonic"))]
 use prost_types::FileDescriptorSet;
 use std::collections::HashSet;
+#[cfg(feature = "tonic")]
+use tonic_build::FileDescriptorSet;
 
 const DEFAULT: &str = r#"#[serde(default)]"#;
 const HEXSTRING: &str = r#"#[serde(with = "crate::serializers::bytes::hexstring")]"#;
@@ -265,13 +268,14 @@ fn prost_build(fds: FileDescriptorSet) {
 
 #[cfg(feature = "tonic")]
 fn tonic_build(fds: FileDescriptorSet) {
-    let mut prost_config = prost_build::Config::new();
+    let mut prost_config = tonic_build::Config::new();
     prost_config.enable_type_names();
 
     let mut tonic_config = tonic_build::configure()
         .include_file("mod.rs")
         .build_client(true)
         .build_server(false)
+        .build_transport(false)
         .use_arc_self(true)
         .compile_well_known_types(true)
         .skip_protoc_run()
