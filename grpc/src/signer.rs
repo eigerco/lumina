@@ -29,7 +29,6 @@ pub(crate) struct BoxedDocSigner(Box<dyn AbstractDocSigner>);
 /// Signer capable of producing ecdsa signature using secp256k1 curve.
 pub trait DocSigner: Send + Sync {
     /// Try to sign the provided sign doc.
-    //async fn try_sign(&self, doc: SignDoc) -> Result<DocSignature, SignatureError>;
     fn try_sign(
         &self,
         doc: SignDoc,

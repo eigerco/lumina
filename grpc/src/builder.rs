@@ -30,7 +30,7 @@ enum TransportSetup {
 #[derive(Default)]
 pub struct GrpcClientBuilder {
     transport: TransportSetup,
-    signer_bits: Option<SignerKind>,
+    signer_kind: Option<SignerKind>,
 }
 
 enum SignerKind {

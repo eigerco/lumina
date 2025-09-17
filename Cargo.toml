@@ -22,7 +22,7 @@ prost-build = "0.13.5"
 prost-types = "0.13.5"
 tonic = { version = "0.13.1", default-features = false }
 tonic-web-wasm-client = "0.7.1"
-tonic-build = { version = "0.13.1" }
+tonic-build = "0.13.1"
 wasm-bindgen = "0.2.100"
 wasm-bindgen-test = "0.3.49"
 
