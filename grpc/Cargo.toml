@@ -32,7 +32,7 @@ lumina-utils = { workspace = true, features = ["time"] }
 
 async-trait = { version = "0.1.88", optional = true }
 bytes = "1.8"
-dyn-clone = "1.0.20"
+dyn-clone = "1.0"
 futures = "0.3.30"
 hex = "0.4.3"
 http = "1.3.1"
