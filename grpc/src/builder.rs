@@ -80,7 +80,7 @@ impl GrpcClientBuilder {
         S: DocSigner + 'static,
     {
         let signer = BoxedDocSigner::new(signer);
-        self.signer_bits = Some(SignerKind::Signer((account_pubkey, signer)));
+        self.signer_kind = Some(SignerKind::Signer((account_pubkey, signer)));
         self
     }
 
@@ -95,13 +95,13 @@ impl GrpcClientBuilder {
 
     /// Set signer from a raw private key.
     pub fn private_key(mut self, bytes: &[u8]) -> GrpcClientBuilder {
-        self.signer_bits = Some(SignerKind::PrivKeyBytes(Zeroizing::new(bytes.to_vec())));
+        self.signer_kind = Some(SignerKind::PrivKeyBytes(Zeroizing::new(bytes.to_vec())));
         self
     }
 
     /// Set signer from a hex formatted private key.
     pub fn private_key_hex(mut self, s: &str) -> GrpcClientBuilder {
-        self.signer_bits = Some(SignerKind::PrivKeyHex(Zeroizing::new(s.to_string())));
+        self.signer_kind = Some(SignerKind::PrivKeyHex(Zeroizing::new(s.to_string())));
         self
     }
 
@@ -113,7 +113,7 @@ impl GrpcClientBuilder {
             TransportSetup::Unset => return Err(GrpcClientBuilderError::TransportNotSet),
         };
 
-        let signer_config = self.signer_bits.map(TryInto::try_into).transpose()?;
+        let signer_config = self.signer_kind.map(TryInto::try_into).transpose()?;
 
         Ok(GrpcClient::new(transport, signer_config))
     }
