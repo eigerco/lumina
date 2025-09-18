@@ -37,7 +37,7 @@ console_error_panic_hook = "0.1.7"
 enum-as-inner = "0.6"
 futures.workspace = true
 gloo-timers.workspace = true
-idb = "0.6"
+idb = "0.6.2"
 instant = "0.1"
 js-sys.workspace = true
 serde = { workspace = true, features = ["derive"] }

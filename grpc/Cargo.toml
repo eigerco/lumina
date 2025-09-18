@@ -33,8 +33,8 @@ bytes.workspace = true
 dyn-clone = "1"
 futures.workspace = true
 hex.workspace = true
-http = "1.3"
-http-body = "1"
+http.workspace = true
+http-body.workspace = true
 http-body-util = "0.1"
 ics23 = { version = "0.12", default-features = false, features = ["std"] }
 k256.workspace = true
