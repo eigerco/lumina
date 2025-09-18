@@ -37,12 +37,14 @@ console_error_panic_hook = "0.1.7"
 enum-as-inner = "0.6"
 futures.workspace = true
 gloo-timers.workspace = true
+idb = "0.6"
 instant = "0.1"
 js-sys.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 serde-wasm-bindgen.workspace = true
 serde_repr.workspace = true
+send_wrapper.workspace = true
 thiserror.workspace = true
 time = { workspace = true, features = ["wasm-bindgen"] }
 tokio = { workspace = true, features = ["sync"] }

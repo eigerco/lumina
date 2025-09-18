@@ -24,18 +24,21 @@ celestia-grpc.workspace = true
 celestia-proto.workspace  = true
 celestia-rpc = { workspace = true, default-features = false }
 celestia-types.workspace = true
+tonic.workspace = true
+blockstore.workspace = true
 
 async-stream = "0.3.5"
+bytes.workspace = true
 futures-util = "0.3"
 hex.workspace = true
+http.workspace = true
+http-body.workspace = true
 jsonrpsee-core.workspace = true
 jsonrpsee-types.workspace = true
 k256.workspace = true
 serde_json.workspace = true
 tendermint.workspace = true
 thiserror.workspace = true
-tonic.workspace = true
-zeroize = "1.8"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tonic = { workspace = true, features = ["transport"] }
@@ -46,7 +49,6 @@ celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom_02.workspace = true
 tonic-web-wasm-client.workspace = true
-wasm-bindgen-test.workspace = true
 
 [dev-dependencies]
 lumina-utils = { workspace = true, features = ["test-utils"] }
@@ -56,6 +58,14 @@ tokio = { workspace = true, features = ["sync"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[features]
+default = ['tls-native-roots']
+tls-native-roots = ["celestia-grpc/tls-native-roots"]
+tls-webpki-roots = ["celestia-grpc/tls-webpki-roots"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

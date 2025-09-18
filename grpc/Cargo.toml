@@ -30,27 +30,32 @@ lumina-utils = { workspace = true, features = ["time"] }
 
 async-trait = { workspace = true, optional = true }
 bytes.workspace = true
+dyn-clone = "1"
+futures.workspace = true
 hex.workspace = true
+http = "1.3"
 http-body = "1"
+http-body-util = "0.1"
 ics23 = { version = "0.12", default-features = false, features = ["std"] }
 k256.workspace = true
 prost.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, optional = true }
+signature = "2"
 tendermint.workspace = true
 tendermint-proto.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync"] }
-tonic = { workspace = true, features = ["codegen", "prost"] }
+tonic = { workspace = true, features = ["codegen"] }
+tracing.workspace = true
 uniffi = { workspace = true, optional = true, features = ["tokio"] }
+zeroize = "1.8"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["time"] }
 tonic = { workspace = true, features = ["transport"] }
-signature = "2"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-futures.workspace = true
 getrandom_02.workspace = true
 gloo-timers.workspace = true
 js-sys = { workspace = true, optional = true }
@@ -74,6 +79,8 @@ wasm-bindgen-futures.workspace = true
 wasm-bindgen-test.workspace = true
 
 [features]
-default = []
+default = ['tls-native-roots']
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
-uniffi = ["dep:uniffi", "dep:async-trait", "dep:serde_json", "celestia-types/uniffi"]
+uniffi = ["dep:async-trait", "dep:uniffi", "dep:serde_json", "celestia-types/uniffi"]
+tls-native-roots = ["lumina-utils/tonic-tls-native-roots-except-wasm32"]
+tls-webpki-roots = ["lumina-utils/tonic-tls-webpki-roots-except-wasm32"]

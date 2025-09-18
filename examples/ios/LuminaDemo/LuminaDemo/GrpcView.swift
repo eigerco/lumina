@@ -74,7 +74,7 @@ struct GrpcView : View {
 
 @MainActor
 class GrpcViewModel : ObservableObject {
-    private var txClient: TxClient?
+    private var grpcClient: GrpcClient?
     
     @Published var error: Error?
     @Published var isReady: Bool = false
@@ -85,8 +85,10 @@ class GrpcViewModel : ObservableObject {
             let pk = sk.publicKey.dataRepresentation
             let signer = StaticSigner(sk: sk)
             
-            self.txClient = try await TxClient.create(url: url, accountPubkey: pk, signer: signer)
-            
+            self.grpcClient = try await GrpcClientBuilder
+                .withUrl(url: url)
+                .withPubkeyAndSigner(accountPubkey: pk, signer: signer)
+                .build()
             self.isReady = true
         } catch {
             self.error = error
@@ -94,7 +96,7 @@ class GrpcViewModel : ObservableObject {
     }
     
     func submitBlob(namespace: String, blobData: String) async -> TxInfo? {
-        if (self.txClient == nil ) {
+        if (self.grpcClient == nil ) {
             self.error = GrpcError.grpcClientNotReady
             return nil
         }
@@ -104,7 +106,7 @@ class GrpcViewModel : ObservableObject {
             let ns = try Namespace(version: 0, id: namespace.data(using: .utf8)!)
             let blob = try Blob.create(namespace: ns, data: data, appVersion: AppVersion.v3)
             
-            let submit = try await txClient!.submitBlobs(blobs: [blob], config: nil)
+            let submit = try await grpcClient!.submitBlobs(blobs: [blob], config: nil)
             return submit
         } catch {
             self.error = error

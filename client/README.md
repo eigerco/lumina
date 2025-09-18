@@ -72,11 +72,11 @@ async fn main() -> Result<()> {
 
     // Create the blob
     let ns = Namespace::new_v0(b"mydata")?;
-    let blob = Blob::new_with_signer(
+    let blob = Blob::new(
         ns,
         b"some data to store".to_vec(),
-        client.address()?,
-        AppVersion::V3,
+        Some(client.address()?),
+        AppVersion::V5,
     )?;
 
     // This is the hash of the blob which is needed later on for retrieving

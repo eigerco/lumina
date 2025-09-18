@@ -10,9 +10,9 @@ use crate::abci_proofs::ProofError;
 /// [`celestia_grpc::Error`]: crate::Error
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-/// Representation of all the errors that can occur when interacting with [`celestia_grpc`].
+/// Representation of all the errors that can occur when interacting with [`GrpcClient`].
 ///
-/// [`celestia_grpc`]: crate
+/// [`GrpcClient`]: crate::GrpcClient
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Tonic error
@@ -79,6 +79,39 @@ pub enum Error {
     /// Signing error
     #[error(transparent)]
     SigningError(#[from] SignatureError),
+
+    /// No account
+    #[error("no account")]
+    NoAccount,
+
+    /// Client was not constructed with a signer
+    #[error("Client was not constructed with a signer")]
+    MissingSinger,
+}
+
+/// Representation of all the errors that can occur when building [`GrpcClient`] using
+/// [`GrpcClientBuilder`]
+///
+/// [`GrpcClient`]: crate::GrpcClient
+/// [`GrpcClientBuilder`]: crate::GrpcClientBuilder
+#[derive(Debug, thiserror::Error)]
+pub enum GrpcClientBuilderError {
+    /// Error from tonic transport
+    #[error(transparent)]
+    #[cfg(not(target_arch = "wasm32"))]
+    TonicTransportError(#[from] tonic::transport::Error),
+
+    /// Transport has not been set for builder
+    #[error("Transport not set")]
+    TransportNotSet,
+
+    /// Invalid private key.
+    #[error("Invalid private key")]
+    InvalidPrivateKey,
+
+    /// Invalid public key.
+    #[error("Invalid public key")]
+    InvalidPublicKey,
 }
 
 impl From<Status> for Error {
@@ -90,6 +123,13 @@ impl From<Status> for Error {
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 impl From<Error> for wasm_bindgen::JsValue {
     fn from(error: Error) -> wasm_bindgen::JsValue {
+        error.to_string().into()
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+impl From<GrpcClientBuilderError> for wasm_bindgen::JsValue {
+    fn from(error: GrpcClientBuilderError) -> wasm_bindgen::JsValue {
         error.to_string().into()
     }
 }
