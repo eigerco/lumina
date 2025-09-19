@@ -1232,7 +1232,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
-    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    // _not_ applicable to wasm32, as we expect different behaviour there, tested separately
     #[self::test]
     async fn libp2p_identity_persistance<S: Store>(
         #[case]
@@ -1249,7 +1249,7 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
-    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    // _not_ applicable to wasm32, as we expect different behaviour there, tested separately
     #[self::test]
     async fn libp2p_identity_override<S: Store>(
         #[case]
