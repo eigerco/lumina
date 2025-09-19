@@ -3395,14 +3395,12 @@ dependencies = [
  "futures",
  "getrandom",
  "gloo-timers 0.3.0",
- "idb",
  "js-sys",
  "keyring",
  "libp2p",
  "libp2p-websocket-websys 0.3.3",
  "lumina-node",
  "lumina-utils",
- "named-lock",
  "pin-project",
  "prost",
  "rand",
@@ -3714,19 +3712,6 @@ dependencies = [
  "pin-project",
  "smallvec",
  "unsigned-varint 0.7.2",
-]
-
-[[package]]
-name = "named-lock"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "988ce9f7411c058a1d6788e60897a949dcdf5aa66202d789da045a03b4e4f406"
-dependencies = [
- "libc",
- "once_cell",
- "parking_lot",
- "thiserror 1.0.69",
- "windows",
 ]
 
 [[package]]
