@@ -153,6 +153,7 @@ where
                         response,
                     },
                 peer,
+                ..
             } => {
                 self.client_handler
                     .on_response_received(peer, request_id, response);
@@ -163,6 +164,7 @@ where
                 peer,
                 request_id,
                 error,
+                ..
             } => {
                 self.client_handler.on_failure(peer, request_id, error);
             }
@@ -176,6 +178,7 @@ where
                         channel,
                     },
                 peer,
+                ..
             } => {
                 self.server_handler.on_request_received(
                     peer,
@@ -187,7 +190,9 @@ where
             }
 
             // Response to inbound request was sent
-            ReqRespEvent::ResponseSent { peer, request_id } => {
+            ReqRespEvent::ResponseSent {
+                peer, request_id, ..
+            } => {
                 self.server_handler.on_response_sent(peer, request_id);
             }
 
@@ -196,6 +201,7 @@ where
                 peer,
                 request_id,
                 error,
+                ..
             } => {
                 self.server_handler.on_failure(peer, request_id, error);
             }

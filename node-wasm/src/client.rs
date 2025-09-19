@@ -79,6 +79,7 @@ impl NodeClient {
     /// Create a new connection to a Lumina node running in [`NodeWorker`]. Provided `port` is
     /// expected to have `MessagePort`-like interface for sending and receiving messages.
     #[wasm_bindgen(constructor)]
+    #[allow(deprecated)] // TODO: https://github.com/eigerco/lumina/issues/754
     pub async fn new(port: JsValue) -> Result<NodeClient> {
         // Safari doesn't have the `navigator.storage()` api
         if !is_safari()? {

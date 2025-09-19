@@ -61,7 +61,7 @@ mod imp {
                 websocket::tls::Config::client()
             };
 
-            let mut wss_transport = websocket::WsConfig::new(dns::tokio::Transport::custom(
+            let mut wss_transport = websocket::Config::new(dns::tokio::Transport::custom(
                 tcp::tokio::Transport::new(tcp::Config::default()),
                 dns_config.clone(),
                 dns::ResolverOpts::default(),

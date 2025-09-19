@@ -538,9 +538,9 @@ mod tests {
         let d_from_json: RowNamespaceData = serde_json::from_value(row_j).unwrap();
         assert_eq!(d_from_json, row);
 
-        // And what about bincode?
-        let s_row = bincode::serialize(&row).unwrap();
-        let d_row: RowNamespaceData = bincode::deserialize(&s_row).unwrap();
+        // binary
+        let s_row = postcard::to_allocvec(&row).unwrap();
+        let d_row: RowNamespaceData = postcard::from_bytes(&s_row).unwrap();
         assert_eq!(row, d_row);
     }
 }
