@@ -15,9 +15,9 @@ members = [
 ]
 
 [workspace.dependencies]
-beetswap = "0.4.1"
-blockstore = "0.7.1"
-leopard-codec = "0.1.0"
+beetswap = "0.5"
+blockstore = "0.8"
+leopard-codec = "0.2"
 lumina-node = { version = "0.15.2", path = "node" }
 lumina-node-wasm = { version = "0.10.3", path = "node-wasm" }
 lumina-utils = { version = "0.3.0", path = "utils" }
@@ -87,8 +87,8 @@ web-sys = "0.3.70"
 
 [patch.crates-io]
 # Uncomment to apply local changes
-beetswap = { path = "../beetswap" }
-blockstore = { path = "../blockstore" }
+# beetswap = { path = "../beetswap" }
+# blockstore = { path = "../blockstore" }
 #nmt-rs = { path = "../nmt-rs" }
 #libp2p = { path = "../../rust-libp2p/libp2p" }
 #libp2p-core = { path = "../../rust-libp2p/core" }
