@@ -314,6 +314,8 @@ jobs:
 
     - name: Setup toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        target: wasm32-unknown-unknown
 
     - name: Install cargo-minimal-versions
       uses: taiki-e/install-action@v2
@@ -334,34 +336,50 @@ jobs:
       fail-fast: false
       matrix:
         crate:
-          - celestia-proto
-          - celestia-types
-          - celestia-rpc
-          - celestia-grpc
-          - celestia-grpc-macros
-          - celestia-client
-          - lumina-node
-          - lumina-node-uniffi
-          - lumina-node-wasm
-          - lumina-utils
-          - lumina-cli
+          - name: celestia-proto
+            dir: proto
+          - name: celestia-types
+            dir: types
+          - name: celestia-rpc
+            dir: rpc
+          - name: celestia-grpc
+            dir: grpc
+          - name: celestia-grpc-macros
+            dir: grpc/grpc-macros
+          - name: celestia-client
+            dir: client
+          - name: lumina-node
+            dir: node
+          - name: lumina-node-uniffi
+            dir: node-uniffi
+          - name: lumina-node-wasm
+            dir: node-wasm
+          - name: lumina-node
+            dir: node
+          - name: lumina-utils
+            dir: utils
+          - name: lumina-cli
+            dir: cli
 
     steps:
     - uses: actions/checkout@v4
 
     - name: Setup toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        target: wasm32-unknown-unknown
+        cache-key: ${{ matrix.crate.name }}
 
-    - name: Install cargo-minimal-versions
+    - name: Install cargo-msrv
       uses: taiki-e/install-action@v2
       with:
         tool: cargo-msrv
 
-    - name: Run minimal versions for native
-      run: cargo msrv verify -- cargo check -p ${{ matrix.crate }} --all-features
+    - name: Run msrv verify for native
+      run: cargo msrv verify --manifest-path ./${{ matrix.crate.dir }}/Cargo.toml --all-features
 
-    - name: Run minimal versions for wasm32
-      run: cargo msrv verify -- cargo check -p ${{ matrix.crate }} --all-features --target wasm32-unknown-unknown
+    - name: Run msrv verify for wasm32
+      run: cargo msrv verify --manifest-path ./${{ matrix.crate.dir }}/Cargo.toml --all-features --target wasm32-unknown-unknown
 
 
   required:
