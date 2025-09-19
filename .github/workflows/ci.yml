@@ -44,6 +44,8 @@ jobs:
         components: clippy
         target: wasm32-unknown-unknown
         cache-key: ${{ matrix.crate }}
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
 
     - name: Run clippy for native
       run: cargo clippy --all-targets --all-features -p ${{ matrix.crate }} -- -D warnings --no-deps
@@ -148,6 +150,8 @@ jobs:
         components: clippy
         target: wasm32-unknown-unknown
         cache-key: ${{ matrix.crate.name }}
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
 
     - name: Install wasm-pack
       uses: taiki-e/install-action@v2
@@ -174,6 +178,8 @@ jobs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         target: wasm32-unknown-unknown
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
 
     - name: Install wasm-pack
       uses: taiki-e/install-action@v2
@@ -270,6 +276,8 @@ jobs:
         components: clippy
         toolchain: nightly, stable
         target: wasm32-unknown-unknown
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
 
     - name: Missing docs for native
       run: cargo clippy --workspace --all-features -- -D missing-docs
@@ -314,6 +322,8 @@ jobs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         target: wasm32-unknown-unknown
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
 
     - name: Install cargo-minimal-versions
       uses: taiki-e/install-action@v2
@@ -367,6 +377,8 @@ jobs:
       with:
         target: wasm32-unknown-unknown
         cache-key: ${{ matrix.crate.name }}
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
 
     - name: Install cargo-msrv
       uses: taiki-e/install-action@v2
