@@ -10,7 +10,7 @@ use crate::blockstore::InMemoryBlockstore;
 use crate::events::EventSubscriber;
 use crate::network::Network;
 use crate::node::{Node, NodeConfig, Result};
-use crate::store::{InMemoryStore, Store};
+use crate::store::{InMemoryStore, Store, StoreError};
 #[cfg(target_arch = "wasm32")]
 use crate::utils::resolve_bootnode_addresses;
 
@@ -51,6 +51,16 @@ pub enum NodeBuilderError {
     /// Builder failed to resolve dnsaddr multiaddresses for bootnodes
     #[error("Could not resolve any of the bootnode addresses")]
     FailedResolvingBootnodes,
+
+    /// Error propagated from keyring
+    #[error(transparent)]
+    KeyringError(#[from] keyring::Error),
+
+    #[error(transparent)]
+    DecodingError(#[from] libp2p::identity::DecodingError),
+
+    #[error(transparent)]
+    StoreError(#[from] StoreError),
 }
 
 impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
@@ -266,11 +276,13 @@ where
 
         info!("Sampling window: {SAMPLING_WINDOW:?}, Pruning window: {pruning_window:?}",);
 
+        let p2p_local_keypair = self.store.init_identity(self.keypair).await?;
+
         Ok(NodeConfig {
             blockstore: self.blockstore,
             store: self.store,
             network_id: network.id().to_owned(),
-            p2p_local_keypair: self.keypair.unwrap_or_else(Keypair::generate_ed25519),
+            p2p_local_keypair,
             p2p_bootnodes: bootnodes,
             p2p_listen_on: self.listen,
             sync_batch_size: self.sync_batch_size.unwrap_or(512),

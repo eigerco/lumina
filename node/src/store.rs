@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use libp2p::identity::Keypair;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
@@ -155,6 +156,12 @@ pub trait Store: Send + Sync + Debug {
 
     /// Close store.
     async fn close(self) -> Result<()>;
+
+    /// Handle the libp2p identity initialisation for the store. If `requested_keypair` is
+    /// provided it takes precedence over key in the store and permanently overwrites it.
+    /// If there's no requested keypair, store will either use currently persisted one, or
+    /// generate and store a new one.
+    async fn init_identity(&self, requested_keypair: Option<Keypair>) -> Result<Keypair>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].
@@ -183,6 +190,10 @@ pub enum StoreError {
     /// Failed to open the store.
     #[error("Error opening store: {0}")]
     OpenFailed(String),
+
+    /// Attempting to set libp2p identity for a store that already has keypair generated
+    #[error("Attempting to set identity in store which has identity initialised already")]
+    IdentityAlreadySet,
 }
 
 /// Store insersion non-fatal errors.
@@ -216,8 +227,18 @@ impl StoreError {
             | StoreError::FatalDatabaseError(_)
             | StoreError::ExecutorError(_)
             | StoreError::OpenFailed(_) => true,
-            StoreError::NotFound | StoreError::InsertionFailed(_) => false,
+            StoreError::NotFound
+            | StoreError::InsertionFailed(_)
+            | StoreError::IdentityAlreadySet => false,
         }
+    }
+}
+
+impl From<libp2p::identity::DecodingError> for StoreError {
+    fn from(error: libp2p::identity::DecodingError) -> Self {
+        StoreError::StoredDataError(format!(
+            "Could not deserialize stored libp2p identity: {error}"
+        ))
     }
 }
 
@@ -1206,6 +1227,47 @@ mod tests {
 
         store.remove_height(97).await.unwrap();
         assert_store(&store, &headers, new_block_ranges([1..=63, 98..=128])).await;
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn libp2p_identity_persistance<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let generated_keypair = store.init_identity(None).await.unwrap();
+        let persisted_keypair = store.init_identity(None).await.unwrap();
+
+        assert_eq!(generated_keypair.public(), persisted_keypair.public());
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn libp2p_identity_override<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let initial_keypair = store.init_identity(None).await.unwrap();
+        let requested_keypair = Keypair::generate_ed25519();
+        let overriden_keypair = store
+            .init_identity(Some(requested_keypair.clone()))
+            .await
+            .unwrap();
+        let persisted_keypair = store.init_identity(None).await.unwrap();
+
+        assert_ne!(initial_keypair.public(), requested_keypair.public());
+        assert_eq!(requested_keypair.public(), overriden_keypair.public());
+        assert_eq!(requested_keypair.public(), persisted_keypair.public());
     }
 
     /// Fills an empty store

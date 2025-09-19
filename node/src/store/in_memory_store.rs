@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use libp2p::identity::Keypair;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
@@ -37,6 +38,8 @@ struct InMemoryStoreInner {
     sampled_ranges: BlockRanges,
     /// Source of truth about ranges that were pruned from db.
     pruned_ranges: BlockRanges,
+    /// Node network identity
+    libp2p_identity: Option<Keypair>,
 }
 
 impl InMemoryStoreInner {
@@ -48,6 +51,7 @@ impl InMemoryStoreInner {
             sampling_data: HashMap::new(),
             sampled_ranges: BlockRanges::default(),
             pruned_ranges: BlockRanges::default(),
+            libp2p_identity: None,
         }
     }
 }
@@ -130,7 +134,8 @@ impl InMemoryStore {
         self.inner.read().await.pruned_ranges.clone()
     }
 
-    /// Clone the store and all its contents. Async fn due to internal use of async mutex.
+    /// Clone the store and all its contents, except for libp2p identity, which is re-generated.
+    /// Async fn due to internal use of async mutex.
     pub async fn async_clone(&self) -> Self {
         InMemoryStore {
             inner: RwLock::new(self.inner.read().await.clone()),
@@ -141,6 +146,11 @@ impl InMemoryStore {
     async fn remove_height(&self, height: u64) -> Result<()> {
         let mut inner = self.inner.write().await;
         inner.remove_height(height)
+    }
+
+    async fn init_identity(&self, keypair: Option<Keypair>) -> Result<Keypair> {
+        let mut inner = self.inner.write().await;
+        inner.init_identity(keypair).await
     }
 }
 
@@ -340,6 +350,16 @@ impl InMemoryStoreInner {
 
         Ok(())
     }
+
+    async fn init_identity(&mut self, requested_keypair: Option<Keypair>) -> Result<Keypair> {
+        let keypair = match (requested_keypair, &mut self.libp2p_identity) {
+            (None, persisted @ None) => persisted.insert(Keypair::generate_ed25519()),
+            (None, Some(keypair)) => keypair,
+            (Some(keypair), persisted) => persisted.insert(keypair),
+        };
+
+        Ok(keypair.clone())
+    }
 }
 
 #[async_trait]
@@ -441,6 +461,10 @@ impl Store for InMemoryStore {
 
     async fn close(self) -> Result<()> {
         Ok(())
+    }
+
+    async fn init_identity(&self, keypair: Option<Keypair>) -> Result<Keypair> {
+        self.init_identity(keypair).await
     }
 }
 
