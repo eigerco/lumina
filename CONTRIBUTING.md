@@ -26,10 +26,10 @@ This will ensure that the version of a crate will be updated accordingly upon th
 
 ## Adding / upgrading dependencies
 
-We try not to enforce the latest versions of dependencies to give some freedom for the dependency resolver of dependant crates.
-When adding or upgrading dependencies, try to set the minimal required version of a crate, e.g. if current latest version of
-`serde-json` is `1.0.256`, you can try setting it to `1`. The CI job will then check what is the minimal required version and
-suggest e.g. `1.0.101`, which you then will have to update in the respective `toml` file.
+We don't enforce the latest dependency versions to give more flexibility in dependency resolution to the dependant crates.
+When adding or upgrading dependencies, try setting the minimal required version of a crate, e.g. if current latest version of
+`serde-json` is `1.0.256`, start with version `1`. The CI job will then check what is the minimal required version and
+suggest e.g. `1.0.101`, which you then can use in the respective `toml` file.
 
-If some dependency is used in multiple crates of a workspace, then try putting this dependency in `workspace.dependencies` section
+If a dependency is used in multiple crates of the workspace, set it in `workspace.dependencies` section
 instead of repeating it in multiple crates.
