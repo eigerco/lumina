@@ -3,11 +3,11 @@
 # Lumina
 
 <a href="https://github.com/eigerco/lumina/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/eigerco/lumina/actions/workflows/ci.yml/badge.svg?branch=main" alt="Build Status" /></a>
-<a href="https://lumina.rs"><img src="https://img.shields.io/website?url=https%3A%2F%2Flumina.rs&label=lumina.rs" alt="lumina.rs"></a>  
+<a href="https://lumina.rs"><img src="https://img.shields.io/website?url=https%3A%2F%2Flumina.rs&label=lumina.rs" alt="lumina.rs"></a>
 <a href="https://crates.io/crates/lumina-cli"><img src="https://img.shields.io/crates/v/lumina-cli?label=lumina-cli" alt="crates.io lumina-cli"></a>
 <a href="https://crates.io/crates/lumina-node"><img src="https://img.shields.io/crates/v/lumina-node?label=lumina-node" alt="crates.io lumina-node"></a>
 <a href="https://crates.io/crates/lumina-node-uniffi"><img src="https://img.shields.io/crates/v/lumina-node-uniffi?label=lumina-node-uniffi" alt="crates.io lumina-node-uniffi"></a>
-<a href="https://crates.io/crates/lumina-node-wasm"><img src="https://img.shields.io/crates/v/lumina-node-wasm?label=lumina-node-wasm" alt="crates.io lumina-node-wasm"></a>  
+<a href="https://crates.io/crates/lumina-node-wasm"><img src="https://img.shields.io/crates/v/lumina-node-wasm?label=lumina-node-wasm" alt="crates.io lumina-node-wasm"></a>
 <a href="https://crates.io/crates/celestia-types"><img src="https://img.shields.io/crates/v/celestia-types?label=celestia-types" alt="crates.io celestia-types"></a>
 <a href="https://crates.io/crates/celestia-proto"><img src="https://img.shields.io/crates/v/celestia-proto?label=celestia-proto" alt="crates.io celestia-proto"></a>
 <a href="https://crates.io/crates/celestia-rpc"><img src="https://img.shields.io/crates/v/celestia-rpc?label=celestia-rpc" alt="crates.io celestia-rpc"></a>
@@ -87,6 +87,12 @@ cd -
 # install lumina-cli
 cargo install --path cli --features browser-node
 ```
+
+> [!WARNING]
+> Since `getrandom v0.3` it is required to configure the randomness source via `RUSTFLAGS`.
+> If you depend on any of the crates and build for `wasm32-unknown-unknown`, it may be required to set
+> `'--cfg getrandom_backend="wasm_js"'` either through an environment variable or through `.cargo/config.toml`.
+> [See `getrandom` docs for more info](https://docs.rs/getrandom/0.3.3/getrandom/#webassembly-support).
 
 ## Running the node
 
