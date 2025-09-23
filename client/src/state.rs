@@ -369,8 +369,8 @@ mod tests {
     use lumina_utils::test_utils::async_test;
 
     use crate::test_utils::{
-        ensure_serializable_deserializable, new_client, new_read_only_client, node0_address,
-        validator_address,
+        ensure_serializable_deserializable, new_client, new_read_only_client, new_rpc_only_client,
+        node0_address, validator_address,
     };
     use crate::Error;
 
@@ -395,6 +395,16 @@ mod tests {
                 .unwrap(),
             123
         );
+
+        let client_ro = new_read_only_client().await;
+
+        let e = client_ro
+            .state()
+            .transfer(&random_acc, 123, TxConfig::default())
+            .await
+            .unwrap_err();
+
+        assert!(matches!(e, Error::ReadOnlyMode));
     }
 
     #[async_test]
@@ -527,13 +537,13 @@ mod tests {
         let balance = client_ro.state().balance_for_address(&addr).await.unwrap();
         assert!(balance > 0);
 
-        // Read only mode does not allow calling `balance_for_address_unverified`.
-        let e = client_ro
+        // Read only mode allows calling `balance_for_address_unverified`.
+        let balance = client_ro
             .state()
             .balance_for_address_unverified(&addr)
             .await
-            .unwrap_err();
-        assert!(matches!(e, Error::ReadOnlyMode));
+            .unwrap();
+        assert!(balance > 0);
 
         // Read only mode does not allow calling `balance`
         let e = client_ro.state().balance().await.unwrap_err();
@@ -542,6 +552,20 @@ mod tests {
         // Read only mode does not allow calling `balance_unverified`
         let e = client_ro.state().balance().await.unwrap_err();
         assert!(matches!(e, Error::ReadOnlyMode));
+
+        let client_rpc = new_rpc_only_client().await;
+
+        // RPC only mode allows calling `balance_for_address`
+        let balance = client_rpc.state().balance_for_address(&addr).await.unwrap();
+        assert!(balance > 0);
+
+        // RPC only mode does not allow calling `balance_for_address_unverified`.
+        let e = client_rpc
+            .state()
+            .balance_for_address_unverified(&addr)
+            .await
+            .unwrap_err();
+        assert!(matches!(e, Error::GrpcEndpointNotSet));
     }
 
     #[allow(dead_code)]

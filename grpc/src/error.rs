@@ -80,13 +80,9 @@ pub enum Error {
     #[error(transparent)]
     SigningError(#[from] SignatureError),
 
-    /// No account
-    #[error("no account")]
-    NoAccount,
-
-    /// Client was not constructed with a signer
-    #[error("Client was not constructed with a signer")]
-    MissingSinger,
+    /// Client was constructed with without a signer
+    #[error("Client was constructed with without a signer")]
+    MissingSigner,
 }
 
 /// Representation of all the errors that can occur when building [`GrpcClient`] using

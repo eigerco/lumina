@@ -1,5 +1,5 @@
 use std::error::Error as StdError;
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use std::sync::Arc;
 
 use blockstore::cond_send::CondSend;
@@ -85,19 +85,12 @@ pub struct Client {
 pub struct ClientBuilder {
     rpc_url: Option<String>,
     rpc_auth_token: Option<String>,
-    grpc_builder: GrpcClientBuilder,
-    grpc_builder_flags: GrpcBuilderFlags,
-}
-
-#[derive(Copy, Clone, Debug, Default)]
-struct GrpcBuilderFlags {
-    has_grpc_url: bool,
-    has_signer: bool,
+    grpc_builder: Option<GrpcClientBuilder>,
 }
 
 impl Context {
     pub(crate) fn grpc(&self) -> Result<&GrpcClient> {
-        self.grpc.as_ref().ok_or(Error::ReadOnlyMode)
+        self.grpc.as_ref().ok_or(Error::GrpcEndpointNotSet)
     }
 
     pub(crate) fn pubkey(&self) -> Result<&VerifyingKey> {
@@ -179,8 +172,8 @@ impl ClientBuilder {
     where
         S: DocSigner + Sync + Send + 'static,
     {
-        self.grpc_builder = self.grpc_builder.pubkey_and_signer(pubkey, signer);
-        self.grpc_builder_flags.has_signer = true;
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.pubkey_and_signer(pubkey, signer));
         self
     }
 
@@ -189,22 +182,22 @@ impl ClientBuilder {
     where
         S: DocSigner + Keypair<VerifyingKey = VerifyingKey> + Sync + Send + 'static,
     {
-        self.grpc_builder = self.grpc_builder.signer_keypair(keypair);
-        self.grpc_builder_flags.has_signer = true;
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.signer_keypair(keypair));
         self
     }
 
     /// Set signer from a raw private key.
     pub fn private_key(mut self, bytes: &[u8]) -> ClientBuilder {
-        self.grpc_builder = self.grpc_builder.private_key(bytes);
-        self.grpc_builder_flags.has_signer = true;
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.private_key(bytes));
         self
     }
 
     /// Set signer from a hex formatted private key.
     pub fn private_key_hex(mut self, s: &str) -> ClientBuilder {
-        self.grpc_builder = self.grpc_builder.private_key_hex(s);
-        self.grpc_builder_flags.has_signer = true;
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.private_key_hex(s));
         self
     }
 
@@ -226,8 +219,8 @@ impl ClientBuilder {
     ///
     /// In WASM the endpoint needs to support gRPC-Web.
     pub fn grpc_url(mut self, url: &str) -> ClientBuilder {
-        self.grpc_builder = self.grpc_builder.url(url);
-        self.grpc_builder_flags.has_grpc_url = true;
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.url(url));
         self
     }
 
@@ -244,7 +237,8 @@ impl ClientBuilder {
         <T as Service<Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
         <T as Service<Request<TonicBody>>>::Future: CondSend + 'static,
     {
-        self.grpc_builder = self.grpc_builder.transport(transport);
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.transport(transport));
         self
     }
 
@@ -258,19 +252,12 @@ impl ClientBuilder {
             return Err(Error::AuthTokenNotSupported);
         }
 
-        let GrpcBuilderFlags {
-            has_signer,
-            has_grpc_url,
-        } = self.grpc_builder_flags;
-        let (pubkey, grpc) = match (has_signer, has_grpc_url) {
-            (true, true) => {
-                let client = self.grpc_builder.build()?;
-                let pubkey = client.get_account_pubkey().expect("signer to be set");
-                (Some(pubkey), Some(client))
-            }
-            (false, false) => (None, None),
-            (false, true) => return Err(Error::SignerNotSet),
-            (true, false) => return Err(Error::GrpcEndpointNotSet),
+        let (grpc, pubkey) = if let Some(grpc_builder) = self.grpc_builder {
+            let client = grpc_builder.build()?;
+            let pubkey = client.get_account_pubkey();
+            (Some(client), pubkey)
+        } else {
+            (None, None)
         };
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -304,5 +291,31 @@ impl ClientBuilder {
             blobstream: BlobstreamApi::new(ctx.clone()),
             state: StateApi::new(ctx.clone()),
         })
+    }
+}
+
+impl Debug for Client {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Client { .. }") // TODO: should we print url/pubkey here?
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use lumina_utils::test_utils::async_test;
+
+    use crate::test_utils::{TEST_PRIV_KEY, TEST_RPC_URL};
+
+    #[async_test]
+    async fn builder() {
+        let e = Client::builder()
+            .rpc_url(TEST_RPC_URL)
+            .private_key_hex(TEST_PRIV_KEY)
+            .build()
+            .await
+            .unwrap_err();
+        assert!(matches!(e, Error::GrpcEndpointNotSet))
     }
 }
