@@ -27,7 +27,7 @@ impl StateApi {
     }
 
     /// Retrieves the Celestia coin balance for the signer. To query balance without
-    /// adding signer to the client, see [`balance_for_address`].
+    /// adding signer to the client, see [`StateApi::balance_for_address`].
     ///
     /// # Notes
     ///
@@ -41,7 +41,7 @@ impl StateApi {
     }
 
     /// Retrieves the Celestia coin balance for the signer.  To query balance without
-    /// adding signer to the client, see [`balance_for_address_unverified`].
+    /// adding signer to the client, see [`StateApi::balance_for_address_unverified`].
     pub async fn balance_unverified(&self) -> Result<u64> {
         let address = self.ctx.address()?;
         self.balance_for_address_unverified(&address).await

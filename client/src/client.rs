@@ -41,6 +41,7 @@ pub(crate) struct Context {
 /// # async fn docs() -> Result<()> {
 /// let client = Client::builder()
 ///     .rpc_url("ws://localhost:26658")
+///     .grpc_url("http://localhost:9090") // optional in read-only mode
 ///     .build()
 ///     .await?;
 ///
