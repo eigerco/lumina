@@ -94,7 +94,7 @@ impl Context {
     }
 
     pub(crate) fn pubkey(&self) -> Result<&VerifyingKey> {
-        self.pubkey.as_ref().ok_or(Error::ReadOnlyMode)
+        self.pubkey.as_ref().ok_or(Error::NoAssociatedAddress)
     }
 
     pub(crate) fn address(&self) -> Result<AccAddress> {

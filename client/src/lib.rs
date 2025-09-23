@@ -122,6 +122,10 @@ pub enum Error {
     #[error("RPC endpoint not set")]
     RpcEndpointNotSet,
 
+    /// Client does not have associated account address
+    #[error("Client has no associated account address")]
+    NoAssociatedAddress,
+
     /// gRPC endpoint is not set.
     #[error("Signer is set but gRPC endpoint is not")]
     GrpcEndpointNotSet,

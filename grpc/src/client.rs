@@ -64,7 +64,6 @@ pub struct GrpcClient {
     transport: BoxedTransport,
     account: Mutex<Option<Account>>,
     chain_state: Mutex<Option<ChainState>>,
-
     signer: Option<SignerConfig>,
 }
 
