@@ -128,7 +128,7 @@ impl Context {
 /// # use celestia_grpc::grpc::TxPriority;
 /// # use celestia_types::AccAddress;
 /// # async |client: GrpcClient, addr: &AccAddress| -> Result<()> {
-/// let price = client.get_verified_balance(addr)
+/// let balance = client.get_verified_balance(addr)
 ///     .metadata("x-token", "your secret token")?
 ///     .block_height(12345)
 ///     .await?;
