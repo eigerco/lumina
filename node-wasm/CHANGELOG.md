@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.10.3...lumina-node-wasm-v0.11.0) - 2025-09-24
+
+### Added
+
+- *(grpc)* [**breaking**] Merge TxClient and GrpcClient, add builder ([#712](https://github.com/eigerco/lumina/pull/712))
+- *(types)* [**breaking**] singular `Blob::new` constructor ([#719](https://github.com/eigerco/lumina/pull/719))
+- *(node-wasm)* Identity persistance in browser ([#723](https://github.com/eigerco/lumina/pull/723))
+
 ## [0.10.3](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.10.2...lumina-node-wasm-v0.10.3) - 2025-09-08
 
 ### Other

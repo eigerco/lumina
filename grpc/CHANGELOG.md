@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.7.0...celestia-grpc-v0.8.0) - 2025-09-24
+
+### Added
+
+- *(grpc,client)* Allow creating celestia-client with read-only grpc ([#755](https://github.com/eigerco/lumina/pull/755))
+- *(grpc)* [**breaking**] Merge TxClient and GrpcClient, add builder ([#712](https://github.com/eigerco/lumina/pull/712))
+- *(types)* [**breaking**] singular `Blob::new` constructor ([#719](https://github.com/eigerco/lumina/pull/719))
+
+### Other
+
+- *(grpc)* remove patch version of dyn-clone ([#749](https://github.com/eigerco/lumina/pull/749))
+
 ## [0.7.0](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.6.1...celestia-grpc-v0.7.0) - 2025-09-08
 
 ### Added

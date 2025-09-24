@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.15.0...celestia-types-v0.16.0) - 2025-09-24
+
+### Added
+
+- *(types)* [**breaking**] singular `Blob::new` constructor ([#719](https://github.com/eigerco/lumina/pull/719))
+
+### Other
+
+- Fix clippy::manual-is-multiple-of on new rust version ([#752](https://github.com/eigerco/lumina/pull/752))
+
 ## [0.15.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.14.1...celestia-types-v0.15.0) - 2025-09-08
 
 ### Added

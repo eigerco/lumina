@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/eigerco/lumina/compare/celestia-grpc-macros-v0.3.1...celestia-grpc-macros-v0.4.0) - 2025-09-24
+
+### Added
+
+- *(grpc)* [**breaking**] Merge TxClient and GrpcClient, add builder ([#712](https://github.com/eigerco/lumina/pull/712))
+
 ## [0.3.1](https://github.com/eigerco/lumina/compare/celestia-grpc-macros-v0.3.0...celestia-grpc-macros-v0.3.1) - 2025-09-08
 
 ### Added
