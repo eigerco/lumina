@@ -148,7 +148,7 @@ impl GrpcClient {
             &response.value,
         )?;
 
-        let amount = str::from_utf8(&response.value)
+        let amount = std::str::from_utf8(&response.value)
             .map_err(|_| Error::FailedToParseResponse)?
             .parse()
             .map_err(|_| Error::FailedToParseResponse)?;
@@ -291,7 +291,7 @@ impl GrpcClient {
     /// use celestia_types::state::{Address, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
-    /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
+    /// let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
     /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
@@ -339,7 +339,7 @@ impl GrpcClient {
     /// use celestia_types::nmt::Namespace;
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
-    /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
+    /// let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
     /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///

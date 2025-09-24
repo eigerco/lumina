@@ -930,10 +930,10 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_namespace_with_bincode() {
+    fn test_serialize_namespace_binary() {
         let ns = Namespace::new_v0(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).unwrap();
-        let serialized = bincode::serialize(&ns).unwrap();
-        let deserialized: Namespace = bincode::deserialize(&serialized).unwrap();
+        let serialized = postcard::to_allocvec(&ns).unwrap();
+        let deserialized: Namespace = postcard::from_bytes(&serialized).unwrap();
         assert_eq!(ns, deserialized);
     }
 }

@@ -118,8 +118,8 @@ pub enum Error {
 
     /// Share sequence length exceeded.
     #[error(
-        "Sequence len must fit into {} bytes, got value {0}",
-        appconsts::SEQUENCE_LEN_BYTES
+        "Sequence len must fit into {len} bytes, got value {0}",
+        len = appconsts::SEQUENCE_LEN_BYTES
     )]
     ShareSequenceLenExceeded(usize),
 
@@ -173,8 +173,8 @@ pub enum Error {
 
     /// Max share version exceeded.
     #[error(
-        "Share version has to be at most {}, got {0}",
-        appconsts::MAX_SHARE_VERSION
+        "Share version has to be at most {ver}, got {0}",
+        ver = appconsts::MAX_SHARE_VERSION
     )]
     MaxShareVersionExceeded(u8),
 
@@ -566,8 +566,8 @@ pub enum UniffiError {
 
     /// Share sequence length exceeded.
     #[error(
-        "Sequence len must fit into {} bytes, got value {0}",
-        appconsts::SEQUENCE_LEN_BYTES
+        "Sequence len must fit into {len} bytes, got value {0}",
+        len = appconsts::SEQUENCE_LEN_BYTES
     )]
     ShareSequenceLenExceeded(u64),
 
@@ -621,8 +621,8 @@ pub enum UniffiError {
 
     /// Max share version exceeded.
     #[error(
-        "Share version has to be at most {}, got {0}",
-        appconsts::MAX_SHARE_VERSION
+        "Share version has to be at most {ver}, got {0}",
+        ver = appconsts::MAX_SHARE_VERSION
     )]
     MaxShareVersionExceeded(u8),
 
