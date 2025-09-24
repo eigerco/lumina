@@ -1,6 +1,6 @@
 //! Compatibility layer for exporting gRPC functionality via uniffi
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use k256::ecdsa::VerifyingKey;
 use uniffi::Object;
@@ -8,6 +8,7 @@ use uniffi::Object;
 mod grpc_client;
 
 use crate::signer::{UniffiSigner, UniffiSignerBox};
+use crate::GrpcClientBuilder as RustBuilder;
 
 pub use grpc_client::GrpcClient;
 
@@ -28,14 +29,26 @@ pub enum GrpcClientBuilderError {
     /// Invalid account private key
     #[error("invalid account private key")]
     InvalidAccountPrivateKey,
+
+    /// Invalid metadata
+    #[error("invalid metadata")]
+    Metadata(String),
 }
 
 /// Builder for [`GrpcClient`]
 #[derive(Object)]
-pub struct GrpcClientBuilder {
-    url: String,
-    signer: Option<Arc<dyn UniffiSigner>>,
-    account_pubkey: Option<VerifyingKey>,
+pub struct GrpcClientBuilder(Mutex<Option<RustBuilder>>);
+
+impl GrpcClientBuilder {
+    /// Apply given transformation to the inner builder
+    fn map_builder<F>(&self, map: F)
+    where
+        F: FnOnce(RustBuilder) -> RustBuilder,
+    {
+        let mut builder_lock = self.0.lock().expect("lock poisoned");
+        let builder = builder_lock.take().expect("builder must be set");
+        *builder_lock = Some(map(builder));
+    }
 }
 
 // note: we cannot use the GrpcClient::builder() returns GrpcClientBuilder
@@ -46,11 +59,8 @@ impl GrpcClientBuilder {
     /// Create a new builder for the provided url
     #[uniffi::constructor(name = "withUrl")]
     pub fn with_url(url: String) -> Self {
-        GrpcClientBuilder {
-            url,
-            signer: None,
-            account_pubkey: None,
-        }
+        let builder = RustBuilder::new().url(url);
+        GrpcClientBuilder(Mutex::new(Some(builder)))
     }
 
     /// Add public key and signer to the client being built
@@ -59,15 +69,30 @@ impl GrpcClientBuilder {
         self: Arc<Self>,
         account_pubkey: Vec<u8>,
         signer: Arc<dyn UniffiSigner>,
-    ) -> Result<Self, GrpcClientBuilderError> {
+    ) -> Result<Arc<Self>, GrpcClientBuilderError> {
         let vk = VerifyingKey::from_sec1_bytes(&account_pubkey)
             .map_err(|_| GrpcClientBuilderError::InvalidAccountPublicKey)?;
+        let signer = UniffiSignerBox(signer);
 
-        Ok(GrpcClientBuilder {
-            url: self.url.clone(),
-            signer: Some(signer),
-            account_pubkey: Some(vk),
-        })
+        self.map_builder(move |builder| builder.pubkey_and_signer(vk, signer));
+
+        Ok(self)
+    }
+
+    /// Appends ascii metadata to all requests made by the client.
+    #[uniffi::method(name = "withMetadata")]
+    pub fn metadata(self: Arc<Self>, key: &str, value: &str) -> Arc<Self> {
+        self.map_builder(move |builder| builder.metadata(key, value));
+        self
+    }
+
+    /// Appends binary metadata to all requests made by the client.
+    ///
+    /// Keys for binary metadata must have `-bin` suffix.
+    #[uniffi::method(name = "withMetadataBin")]
+    pub fn metadata_bin(self: Arc<Self>, key: &str, value: &[u8]) -> Arc<Self> {
+        self.map_builder(move |builder| builder.metadata_bin(key, value));
+        self
     }
 
     // this function _must_ be async despite not awaiting, so that it executes in tokio runtime
@@ -75,14 +100,12 @@ impl GrpcClientBuilder {
     /// Build the gRPC client.
     #[uniffi::method(name = "build")]
     pub async fn build(self: Arc<Self>) -> Result<GrpcClient, GrpcClientBuilderError> {
-        let mut builder = crate::GrpcClientBuilder::new().url(self.url.clone());
-
-        if let Some(signer) = self.signer.clone() {
-            let signer = UniffiSignerBox(signer.clone());
-            let vk = self.account_pubkey.expect("public key present");
-
-            builder = builder.pubkey_and_signer(vk, signer);
-        }
+        let builder = self
+            .0
+            .lock()
+            .expect("lock poisoned")
+            .take()
+            .expect("builder must be set");
 
         Ok(builder.build()?.into())
     }
@@ -106,7 +129,9 @@ impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
                 // API above should not allow creating a builder without any transport
                 unimplemented!("transport not set for builder, should not happen")
             }
-            _ => todo!(),
+            crate::GrpcClientBuilderError::Metadata(err) => {
+                GrpcClientBuilderError::Metadata(err.to_string())
+            }
         }
     }
 }
