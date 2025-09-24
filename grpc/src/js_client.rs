@@ -98,7 +98,7 @@ impl GrpcClientBuilder {
     /// Note that this method **consumes** builder and returns updated instance of it.
     /// Make sure to re-assign it if you keep builder in a variable.
     #[wasm_bindgen(js_name = withMetadata)]
-    pub fn with_metadata(mut self, key: String, value: String) -> Self {
+    pub fn with_metadata(self, key: String, value: String) -> Self {
         Self {
             inner: self.inner.metadata(&key, &value),
         }
@@ -111,7 +111,7 @@ impl GrpcClientBuilder {
     /// Note that this method **consumes** builder and returns updated instance of it.
     /// Make sure to re-assign it if you keep builder in a variable.
     #[wasm_bindgen(js_name = withMetadataBin)]
-    pub fn with_metadata_bin(mut self, key: String, value: Uint8Array) -> Self {
+    pub fn with_metadata_bin(self, key: String, value: Uint8Array) -> Self {
         Self {
             inner: self.inner.metadata_bin(&key, &value.to_vec()),
         }
