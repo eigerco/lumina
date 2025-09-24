@@ -104,13 +104,12 @@ impl StateApi {
         let address = address.to_owned().into();
 
         AsyncGrpcCall::new(move |context| async move {
-            inner
+            Ok(inner
                 .grpc()?
                 .get_balance(&address, "utia")
                 .context(&context)
                 .await
-                .map(|res| res.amount())
-                .map_err(Into::into)
+                .map(|res| res.amount())?)
         })
     }
 
@@ -123,12 +122,11 @@ impl StateApi {
         let inner = self.inner.clone();
 
         AsyncGrpcCall::new(move |context| async move {
-            inner
+            Ok(inner
                 .grpc()?
                 .estimate_gas_price(priority)
                 .context(&context)
-                .await
-                .map_err(Into::into)
+                .await?)
         })
     }
 
@@ -148,12 +146,11 @@ impl StateApi {
         let inner = self.inner.clone();
 
         AsyncGrpcCall::new(move |context| async move {
-            inner
+            Ok(inner
                 .grpc()?
                 .estimate_gas_price_and_usage(priority, tx_bytes)
                 .context(&context)
-                .await
-                .map_err(Into::into)
+                .await?)
         })
     }
 
@@ -194,12 +191,11 @@ impl StateApi {
         let inner = self.inner.clone();
 
         AsyncGrpcCall::new(move |context| async move {
-            inner
+            Ok(inner
                 .grpc()?
                 .submit_message(message, cfg)
                 .context(&context)
-                .await
-                .map_err(Into::into)
+                .await?)
         })
     }
 
@@ -267,12 +263,11 @@ impl StateApi {
         let blobs = blobs.to_vec();
 
         AsyncGrpcCall::new(move |context| async move {
-            inner
+            Ok(inner
                 .grpc()?
                 .submit_blobs(&blobs, cfg)
                 .context(&context)
-                .await
-                .map_err(Into::into)
+                .await?)
         })
     }
 
@@ -384,12 +379,12 @@ impl StateApi {
         AsyncGrpcCall::new(move |context| async move {
             let delegator_address = this.inner.address()?;
 
-            this.inner
+            Ok(this
+                .inner
                 .grpc()?
                 .query_delegation(&delegator_address, &validator_address)
                 .context(&context)
-                .await
-                .map_err(Into::into)
+                .await?)
         })
     }
 
@@ -404,12 +399,12 @@ impl StateApi {
         AsyncGrpcCall::new(move |context| async move {
             let delegator_address = this.inner.address()?;
 
-            this.inner
+            Ok(this
+                .inner
                 .grpc()?
                 .query_unbonding(&delegator_address, &validator_address)
                 .context(&context)
-                .await
-                .map_err(Into::into)
+                .await?)
         })
     }
 
