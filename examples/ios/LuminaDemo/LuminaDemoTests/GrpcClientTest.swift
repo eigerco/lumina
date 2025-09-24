@@ -13,27 +13,26 @@ import Testing
 
 struct GrpcClientTest {
     
-    @Test func getMinGasPrice() async throws {
-        let client = try await GrpcClient.create(url: CI_GRPC_URL)
-        let price = try await client.getMinGasPrice()
-        assert(price > 0)
+    @Test func getNodeConfig() async throws {
+        let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
+        let _ = try await client.getNodeConfig()
     }
 
 
     @Test func authParams() async throws {
-        let client = try await GrpcClient.create(url: CI_GRPC_URL)
+        let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
         let _ = try await client.getAuthParams()
     }
     
     @Test func getAccount() async throws {
-        let client = try await GrpcClient.create(url: CI_GRPC_URL)
+        let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
         let account = try await client.getAccount(account: NODE_0_ADDR)
 
         // TODO: test
     }
     
     @Test func getBalance() async throws {
-        let client = try await GrpcClient.create(url: CI_GRPC_URL)
+        let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
         let balance = try await client.getBalance(address: NODE_0_ADDR, denom: "utia")
         assert(balance.amount > 0)
         
@@ -60,7 +59,7 @@ struct GrpcClientTest {
     }
     
     @Test func getBlock() async throws {
-        let client = try await GrpcClient.create(url: CI_GRPC_URL)
+        let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
         
         let latestBlock = try await client.getLatestBlock()
         let height = Int64(latestBlock.header.height.value)
@@ -70,7 +69,7 @@ struct GrpcClientTest {
     }
     
     @Test func getBlobParams() async throws {
-        let client = try await GrpcClient.create(url: CI_GRPC_URL)
+        let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
         
         let params = try await client.getBlobParams()
         assert(params.gasPerBlobByte > 0)
