@@ -18,7 +18,7 @@ pub struct TestAccount {
 
 impl TestAccount {
     pub fn random() -> Self {
-        let signing_key = SigningKey::random(&mut rand_core::OsRng);
+        let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
         let verifying_key = *signing_key.verifying_key();
 
         Self {

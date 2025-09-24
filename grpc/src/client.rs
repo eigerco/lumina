@@ -47,8 +47,8 @@ use crate::{Error, Result, TxConfig};
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
 const BLOB_TX_TYPE_ID: &str = "BLOB";
 
-struct AccountState {
-    account: Account,
+#[derive(Debug, Clone)]
+struct ChainState {
     app_version: AppVersion,
     chain_id: Id,
 }
@@ -68,7 +68,8 @@ pub struct GrpcClient {
 
 struct GrpcClientInner {
     transport: BoxedTransport,
-    account: Mutex<Option<AccountState>>,
+    account: Mutex<Option<Account>>,
+    chain_state: Mutex<Option<ChainState>>,
     signer: Option<SignerConfig>,
     context: Context,
 }
@@ -84,6 +85,7 @@ impl GrpcClient {
             inner: Arc::new(GrpcClientInner {
                 transport,
                 account: Mutex::new(None),
+                chain_state: Mutex::new(None),
                 signer,
                 context,
             }),
@@ -270,7 +272,7 @@ impl GrpcClient {
     /// use celestia_types::state::{Address, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
-    /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
+    /// let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
     /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
@@ -315,7 +317,7 @@ impl GrpcClient {
     /// use celestia_types::nmt::Namespace;
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
-    /// let signing_key = SigningKey::random(&mut rand_core::OsRng);
+    /// let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
     /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
@@ -352,8 +354,8 @@ impl GrpcClient {
         let this = self.clone();
 
         AsyncGrpcCall::new(move |context| async move {
-            let (account, _) = this.load_account(&context).await?;
-            Ok(account.app_version)
+            let ChainState { app_version, .. } = this.load_chain_state(&context).await?;
+            Ok(app_version)
         })
         .context(&self.inner.context)
     }
@@ -366,8 +368,8 @@ impl GrpcClient {
         let this = self.clone();
 
         AsyncGrpcCall::new(move |context| async move {
-            let (account, _) = this.load_account(&context).await?;
-            Ok(account.chain_id.clone())
+            let ChainState { chain_id, .. } = this.load_chain_state(&context).await?;
+            Ok(chain_id)
         })
         .context(&self.inner.context)
     }
@@ -422,7 +424,7 @@ impl GrpcClient {
             &response.value,
         )?;
 
-        let amount = str::from_utf8(&response.value)
+        let amount = std::str::from_utf8(&response.value)
             .map_err(|_| Error::FailedToParseResponse)?
             .parse()
             .map_err(|_| Error::FailedToParseResponse)?;
@@ -471,28 +473,38 @@ impl GrpcClient {
         self.confirm_tx(tx_hash, sequence, context).await
     }
 
-    async fn load_account(
-        &self,
-        context: &Context,
-    ) -> Result<(MappedMutexGuard<'_, AccountState>, &SignerConfig)> {
-        let signer = self.inner.signer.as_ref().ok_or(Error::NoAccount)?;
-        let mut account_guard = self.inner.account.lock().await;
+    async fn load_chain_state(&self, context: &Context) -> Result<ChainState> {
+        let mut chain_state_guard = self.inner.chain_state.lock().await;
 
-        if account_guard.is_none() {
-            let address = AccAddress::from(signer.pubkey);
-            let account = self.get_account(&address).context(context).await?;
-
+        if chain_state_guard.is_none() {
             let block = self.get_latest_block().context(context).await?;
             let app_version = block.header.version.app;
             let app_version = AppVersion::from_u64(app_version)
                 .ok_or(celestia_types::Error::UnsupportedAppVersion(app_version))?;
             let chain_id = block.header.chain_id;
 
-            *account_guard = Some(AccountState {
-                account,
+            *chain_state_guard = Some(ChainState {
                 app_version,
                 chain_id,
-            })
+            });
+        }
+        Ok((*chain_state_guard)
+            .clone()
+            .expect("state to be initialised"))
+    }
+
+    async fn load_account(
+        &self,
+        context: &Context,
+    ) -> Result<(MappedMutexGuard<'_, Account>, &SignerConfig)> {
+        let signer = self.inner.signer.as_ref().ok_or(Error::MissingSigner)?;
+        let mut account_guard = self.inner.account.lock().await;
+
+        if account_guard.is_none() {
+            let address = AccAddress::from(signer.pubkey);
+            let account = self.get_account(&address).context(context).await?;
+
+            *account_guard = Some(account);
         }
         let mapped_guard = MutexGuard::map(account_guard, |acc| {
             acc.as_mut().expect("account data present")
@@ -511,7 +523,7 @@ impl GrpcClient {
         account: &BaseAccount,
         context: &Context,
     ) -> Result<(u64, f64)> {
-        let signer = self.inner.signer.as_ref().ok_or(Error::NoAccount)?;
+        let signer = self.inner.signer.as_ref().ok_or(Error::MissingSigner)?;
 
         Ok(match (cfg.gas_limit, cfg.gas_price) {
             (Some(gas_limit), Some(gas_price)) => (gas_limit, gas_price),
@@ -549,11 +561,12 @@ impl GrpcClient {
         cfg: TxConfig,
         context: &Context,
     ) -> Result<(Hash, u64)> {
+        let ChainState { chain_id, .. } = self.load_chain_state(context).await?;
         // lock the account; tx signing and broadcast must be atomic
         // because node requires all transactions to be sequenced by account.sequence
         let (account, signer) = self.load_account(context).await?;
 
-        let pfb = MsgPayForBlobs::new(&blobs, account.account.address.clone())?;
+        let pfb = MsgPayForBlobs::new(&blobs, account.address.clone())?;
         let pfb = RawTxBody {
             messages: vec![RawMsgPayForBlobs::from(pfb).into_any()],
             memo: cfg.memo.clone().unwrap_or_default(),
@@ -561,20 +574,14 @@ impl GrpcClient {
         };
 
         let (gas_limit, gas_price) = self
-            .calculate_transaction_gas_params(
-                &pfb,
-                &cfg,
-                account.chain_id.clone(),
-                &account.account,
-                context,
-            )
+            .calculate_transaction_gas_params(&pfb, &cfg, chain_id.clone(), &account, context)
             .await?;
 
         let fee = (gas_limit as f64 * gas_price).ceil() as u64;
         let tx = sign_tx(
             pfb,
-            account.chain_id.clone(),
-            &account.account,
+            chain_id.clone(),
+            &account,
             &signer.pubkey,
             &signer.signer,
             gas_limit,
@@ -599,23 +606,21 @@ impl GrpcClient {
         cfg: TxConfig,
         context: &Context,
     ) -> Result<(Hash, u64)> {
+        let ChainState { chain_id, .. } = self.load_chain_state(context).await?;
+
+        // lock the account; tx signing and broadcast must be atomic
+        // because node requires all transactions to be sequenced by account.sequence
         let (account, signer) = self.load_account(context).await?;
 
         let (gas_limit, gas_price) = self
-            .calculate_transaction_gas_params(
-                &tx,
-                &cfg,
-                account.chain_id.clone(),
-                &account.account,
-                context,
-            )
+            .calculate_transaction_gas_params(&tx, &cfg, chain_id.clone(), &account, context)
             .await?;
 
         let fee = (gas_limit as f64 * gas_price).ceil();
         let tx = sign_tx(
             tx,
-            account.chain_id.clone(),
-            &account.account,
+            chain_id,
+            &account,
             &signer.pubkey,
             &signer.signer,
             gas_limit,
@@ -631,7 +636,7 @@ impl GrpcClient {
         &self,
         tx: Vec<u8>,
         cfg: TxConfig,
-        mut account: MappedMutexGuard<'_, AccountState>,
+        mut account: MappedMutexGuard<'_, Account>,
         context: &Context,
     ) -> Result<(Hash, u64)> {
         let resp = self
@@ -655,8 +660,8 @@ impl GrpcClient {
             return Err(Error::TxBroadcastFailed(resp.txhash, resp.code, message));
         }
 
-        let tx_sequence = account.account.sequence;
-        account.account.sequence += 1;
+        let tx_sequence = account.sequence;
+        account.sequence += 1;
 
         Ok((resp.txhash, tx_sequence))
     }
@@ -688,14 +693,14 @@ impl GrpcClient {
                 // due to incorrect sequence number.
                 TxStatus::Evicted => {
                     let mut acc = self.inner.account.lock().await;
-                    acc.as_mut().expect("account data present").account.sequence = sequence;
+                    acc.as_mut().expect("account data present").sequence = sequence;
                     return Err(Error::TxEvicted(hash));
                 }
                 // this case should never happen for node that accepted a broadcast
                 // however we handle it the same as evicted for extra safety
                 TxStatus::Unknown => {
                     let mut acc = self.inner.account.lock().await;
-                    acc.as_mut().expect("account data present").account.sequence = sequence;
+                    acc.as_mut().expect("account data present").sequence = sequence;
                     return Err(Error::TxNotFound(hash));
                 }
             }
@@ -716,15 +721,14 @@ mod tests {
 
     #[async_test]
     async fn extending_client_context() {
-        // TODO: test with simple grpc server?
-        // let client = GrpcClient::builder()
-        //     .url("http://foo")
-        //     .metadata("test", "test")
-        //     .build()
-        //     .unwrap();
-        // let call = client.app_version().metadata("test2", "test2").unwrap();
+        let client = GrpcClient::builder()
+            .url("http://foo")
+            .metadata("test", "test")
+            .build()
+            .unwrap();
+        let call = client.app_version().metadata("test2", "test2").unwrap();
 
-        // assert!(call.context.metadata.contains_key("test"));
-        // assert!(call.context.metadata.contains_key("test2"));
+        assert!(call.context.metadata.contains_key("test"));
+        assert!(call.context.metadata.contains_key("test2"));
     }
 }

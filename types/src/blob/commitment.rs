@@ -309,7 +309,7 @@ fn subtree_width(share_count: u64, subtree_root_threshold: u64) -> u64 {
     let mut s = share_count / subtree_root_threshold;
 
     // round up if the width is not an exact multiple of the threshold
-    if share_count % subtree_root_threshold != 0 {
+    if !share_count.is_multiple_of(subtree_root_threshold) {
         s += 1;
     }
 

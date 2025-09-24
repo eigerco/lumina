@@ -88,11 +88,11 @@ pub enum Error {
 
     /// Celestia gRPC error.
     #[error("gRPC error: {0}")]
-    Grpc(#[from] celestia_grpc::Error),
+    Grpc(celestia_grpc::Error),
 
     /// gRPC client builder error.
     #[error("gRPC client builder error: {0}")]
-    GrpcBuilder(#[from] GrpcClientBuilderError),
+    GrpcBuilder(GrpcClientBuilderError),
 
     /// Celestia types error.
     #[error("Celestia types error: {0}")]
@@ -122,9 +122,9 @@ pub enum Error {
     #[error("RPC endpoint not set")]
     RpcEndpointNotSet,
 
-    /// Signer is not set.
-    #[error("gRPC endpoint is set but singer is not")]
-    SignerNotSet,
+    /// Client does not have associated account address
+    #[error("Client has no associated account address")]
+    NoAssociatedAddress,
 
     /// gRPC endpoint is not set.
     #[error("Signer is set but gRPC endpoint is not")]
@@ -143,6 +143,25 @@ impl From<serde_json::Error> for Error {
     }
 }
 
+impl From<GrpcClientBuilderError> for Error {
+    fn from(value: GrpcClientBuilderError) -> Self {
+        match value {
+            GrpcClientBuilderError::TransportNotSet => Error::GrpcEndpointNotSet,
+            GrpcClientBuilderError::InvalidPrivateKey => Error::InvalidPrivateKey,
+            e => Error::GrpcBuilder(e),
+        }
+    }
+}
+
+impl From<celestia_grpc::Error> for Error {
+    fn from(value: celestia_grpc::Error) -> Self {
+        match value {
+            celestia_grpc::Error::MissingSigner => Error::ReadOnlyMode,
+            e => Error::Grpc(e),
+        }
+    }
+}
+
 impl Error {
     /// Helper that returns the logical error of a gRPC call.
     pub fn as_grpc_status(&self) -> Option<&tonic::Status> {
@@ -152,7 +171,7 @@ impl Error {
         }
     }
 
-    /// Helper that returns the logical error of an RPC call.
+    /// Helper that returns the logical error of a RPC call.
     pub fn as_rpc_call_error(&self) -> Option<&jsonrpsee_types::error::ErrorObjectOwned> {
         match self {
             Error::Rpc(celestia_rpc::Error::JsonRpc(jsonrpsee_core::ClientError::Call(e))) => {

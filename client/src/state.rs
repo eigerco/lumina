@@ -14,6 +14,7 @@ use crate::types::state::{
 };
 use crate::types::Blob;
 use crate::utils::height_i64;
+use crate::Error;
 
 pub type AsyncGrpcCall<Response> = celestia_grpc::grpc::AsyncGrpcCall<Response, crate::Error>;
 
@@ -27,7 +28,8 @@ impl StateApi {
         StateApi { inner }
     }
 
-    /// Retrieves the Celestia coin balance for the signer.
+    /// Retrieves the Celestia coin balance for the signer. To query balance without
+    /// adding signer to the client, see [`StateApi::balance_for_address`].
     ///
     /// # Notes
     ///
@@ -44,7 +46,8 @@ impl StateApi {
         })
     }
 
-    /// Retrieves the Celestia coin balance for the signer.
+    /// Retrieves the Celestia coin balance for the signer. To query balance without
+    /// adding signer to the client, see [`StateApi::balance_for_address_unverified`].
     pub fn balance_unverified(&self) -> AsyncGrpcCall<u64> {
         let this = StateApi {
             inner: self.inner.clone(),
@@ -212,7 +215,8 @@ impl StateApi {
         let to_address = to_address.to_string();
 
         AsyncGrpcCall::new(move |context| async move {
-            let from_address = this.inner.address()?;
+            // remap error to one more appropriate in this context
+            let from_address = this.inner.address().map_err(|_| Error::ReadOnlyMode)?;
 
             let msg = MsgSend {
                 from_address: from_address.to_string(),
@@ -468,8 +472,8 @@ mod tests {
     use lumina_utils::test_utils::async_test;
 
     use crate::test_utils::{
-        ensure_serializable_deserializable, new_client, new_read_only_client, node0_address,
-        validator_address,
+        ensure_serializable_deserializable, new_client, new_read_only_client, new_rpc_only_client,
+        node0_address, validator_address,
     };
     use crate::Error;
 
@@ -477,7 +481,7 @@ mod tests {
     async fn transfer() {
         let client = new_client().await;
 
-        let random_key = SigningKey::random(&mut rand::thread_rng());
+        let random_key = SigningKey::random(&mut rand::rngs::OsRng);
         let random_acc = random_key.verifying_key().into();
 
         client
@@ -494,6 +498,15 @@ mod tests {
                 .unwrap(),
             123
         );
+
+        let client_ro = new_read_only_client().await;
+        let e = client_ro
+            .state()
+            .transfer(&random_acc, 123, TxConfig::default())
+            .await
+            .unwrap_err();
+
+        assert!(matches!(e, Error::ReadOnlyMode));
     }
 
     #[async_test]
@@ -626,21 +639,35 @@ mod tests {
         let balance = client_ro.state().balance_for_address(&addr).await.unwrap();
         assert!(balance > 0);
 
-        // Read only mode does not allow calling `balance_for_address_unverified`.
-        let e = client_ro
+        // Read only mode allows calling `balance_for_address_unverified`.
+        let balance = client_ro
+            .state()
+            .balance_for_address_unverified(&addr)
+            .await
+            .unwrap();
+        assert!(balance > 0);
+
+        // Read only mode does not allow calling `balance`
+        let e = client_ro.state().balance().await.unwrap_err();
+        assert!(matches!(e, Error::NoAssociatedAddress));
+
+        // Read only mode does not allow calling `balance_unverified`
+        let e = client_ro.state().balance().await.unwrap_err();
+        assert!(matches!(e, Error::NoAssociatedAddress));
+
+        let client_rpc = new_rpc_only_client().await;
+
+        // RPC only mode allows calling `balance_for_address`
+        let balance = client_rpc.state().balance_for_address(&addr).await.unwrap();
+        assert!(balance > 0);
+
+        // RPC only mode does not allow calling `balance_for_address_unverified`.
+        let e = client_rpc
             .state()
             .balance_for_address_unverified(&addr)
             .await
             .unwrap_err();
-        assert!(matches!(e, Error::ReadOnlyMode));
-
-        // Read only mode does not allow calling `balance`
-        let e = client_ro.state().balance().await.unwrap_err();
-        assert!(matches!(e, Error::ReadOnlyMode));
-
-        // Read only mode does not allow calling `balance_unverified`
-        let e = client_ro.state().balance().await.unwrap_err();
-        assert!(matches!(e, Error::ReadOnlyMode));
+        assert!(matches!(e, Error::GrpcEndpointNotSet));
     }
 
     #[allow(dead_code)]

@@ -80,13 +80,9 @@ pub enum Error {
     #[error(transparent)]
     SigningError(#[from] SignatureError),
 
-    /// No account
-    #[error("no account")]
-    NoAccount,
-
-    /// Client was not constructed with a signer
-    #[error("Client was not constructed with a signer")]
-    MissingSinger,
+    /// Client was constructed with without a signer
+    #[error("Client was constructed with without a signer")]
+    MissingSigner,
 
     #[error(transparent)]
     Metadata(#[from] MetadataError),
