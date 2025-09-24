@@ -297,7 +297,7 @@ impl ClientBuilder {
 
 impl Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Client { .. }") // TODO: should we print url/pubkey here?
+        f.write_str("Client { .. }")
     }
 }
 
