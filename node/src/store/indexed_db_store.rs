@@ -7,6 +7,7 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
 use futures::Future;
+use libp2p::identity::Keypair;
 use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, Transaction, TransactionMode};
 use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
@@ -310,6 +311,14 @@ impl IndexedDbStore {
         )
         .await
     }
+
+    async fn init_identity(&self, requested_keypair: Option<Keypair>) -> Result<Keypair> {
+        // IndexedDbStore cannot be responsible for managing the libp2p identity keys
+        // as we need to create separate indexeddb instance for each identity. As such
+        // we're expecting that the key management has already been done in the wasm glue
+        // code and the key is present here.
+        Ok(requested_keypair.expect("keypair should already be selected here"))
+    }
 }
 
 trait TransactionOperationFn<'a, Arg>:
@@ -441,6 +450,11 @@ impl Store for IndexedDbStore {
     async fn close(self) -> Result<()> {
         self.db.take().close();
         Ok(())
+    }
+
+    async fn init_identity(&self, requested_keypair: Option<Keypair>) -> Result<Keypair> {
+        let fut = SendWrapper::new(self.init_identity(requested_keypair));
+        fut.await
     }
 }
 
