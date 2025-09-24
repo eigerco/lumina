@@ -16,6 +16,7 @@ use crate::types::Blob;
 use crate::utils::height_i64;
 use crate::Error;
 
+/// An async grpc call with [`crate::Error`]
 pub type AsyncGrpcCall<Response> = celestia_grpc::grpc::AsyncGrpcCall<Response, crate::Error>;
 
 /// State API for quering and submiting TXs to a consensus node.
