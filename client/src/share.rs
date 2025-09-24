@@ -45,7 +45,11 @@ impl ShareApi {
         C: Into<SampleCoordinates>,
     {
         let header = self.inner.get_header_validated(height).await?;
-        Ok(self.inner.rpc.share_get_samples(&header, coordinates).await?)
+        Ok(self
+            .inner
+            .rpc
+            .share_get_samples(&header, coordinates)
+            .await?)
     }
 
     /// Retrieves the complete [`ExtendedDataSquare`] for the specified height.
