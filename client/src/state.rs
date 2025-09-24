@@ -14,7 +14,7 @@ use crate::types::state::{
 };
 use crate::types::Blob;
 use crate::utils::height_i64;
-use crate::Result;
+use crate::{Error, Result};
 
 /// State API for quering and submiting TXs to a consensus node.
 pub struct StateApi {
@@ -26,7 +26,8 @@ impl StateApi {
         StateApi { ctx }
     }
 
-    /// Retrieves the Celestia coin balance for the signer.
+    /// Retrieves the Celestia coin balance for the signer. To query balance without
+    /// adding signer to the client, see [`StateApi::balance_for_address`].
     ///
     /// # Notes
     ///
@@ -39,7 +40,8 @@ impl StateApi {
         self.balance_for_address(&address).await
     }
 
-    /// Retrieves the Celestia coin balance for the signer.
+    /// Retrieves the Celestia coin balance for the signer.  To query balance without
+    /// adding signer to the client, see [`StateApi::balance_for_address_unverified`].
     pub async fn balance_unverified(&self) -> Result<u64> {
         let address = self.ctx.address()?;
         self.balance_for_address_unverified(&address).await
@@ -160,7 +162,8 @@ impl StateApi {
         amount: u64,
         cfg: TxConfig,
     ) -> Result<TxInfo> {
-        let from_address = self.ctx.address()?;
+        // remap error to one more appropriate in this context
+        let from_address = self.ctx.address().map_err(|_| Error::ReadOnlyMode)?;
 
         let msg = MsgSend {
             from_address: from_address.to_string(),
@@ -369,8 +372,8 @@ mod tests {
     use lumina_utils::test_utils::async_test;
 
     use crate::test_utils::{
-        ensure_serializable_deserializable, new_client, new_read_only_client, node0_address,
-        validator_address,
+        ensure_serializable_deserializable, new_client, new_read_only_client, new_rpc_only_client,
+        node0_address, validator_address,
     };
     use crate::Error;
 
@@ -395,6 +398,15 @@ mod tests {
                 .unwrap(),
             123
         );
+
+        let client_ro = new_read_only_client().await;
+        let e = client_ro
+            .state()
+            .transfer(&random_acc, 123, TxConfig::default())
+            .await
+            .unwrap_err();
+
+        assert!(matches!(e, Error::ReadOnlyMode));
     }
 
     #[async_test]
@@ -527,21 +539,35 @@ mod tests {
         let balance = client_ro.state().balance_for_address(&addr).await.unwrap();
         assert!(balance > 0);
 
-        // Read only mode does not allow calling `balance_for_address_unverified`.
-        let e = client_ro
+        // Read only mode allows calling `balance_for_address_unverified`.
+        let balance = client_ro
+            .state()
+            .balance_for_address_unverified(&addr)
+            .await
+            .unwrap();
+        assert!(balance > 0);
+
+        // Read only mode does not allow calling `balance`
+        let e = client_ro.state().balance().await.unwrap_err();
+        assert!(matches!(e, Error::NoAssociatedAddress));
+
+        // Read only mode does not allow calling `balance_unverified`
+        let e = client_ro.state().balance().await.unwrap_err();
+        assert!(matches!(e, Error::NoAssociatedAddress));
+
+        let client_rpc = new_rpc_only_client().await;
+
+        // RPC only mode allows calling `balance_for_address`
+        let balance = client_rpc.state().balance_for_address(&addr).await.unwrap();
+        assert!(balance > 0);
+
+        // RPC only mode does not allow calling `balance_for_address_unverified`.
+        let e = client_rpc
             .state()
             .balance_for_address_unverified(&addr)
             .await
             .unwrap_err();
-        assert!(matches!(e, Error::ReadOnlyMode));
-
-        // Read only mode does not allow calling `balance`
-        let e = client_ro.state().balance().await.unwrap_err();
-        assert!(matches!(e, Error::ReadOnlyMode));
-
-        // Read only mode does not allow calling `balance_unverified`
-        let e = client_ro.state().balance().await.unwrap_err();
-        assert!(matches!(e, Error::ReadOnlyMode));
+        assert!(matches!(e, Error::GrpcEndpointNotSet));
     }
 
     #[allow(dead_code)]

@@ -7,11 +7,11 @@ use crate::tx::{SigningKey, TxConfig};
 use crate::types::state::{AccAddress, ValAddress};
 use crate::Client;
 
-const TEST_PRIV_KEY: &str = include_str!("../../ci/credentials/node-0.plaintext-key");
-const TEST_RPC_URL: &str = "ws://localhost:26658";
+pub(crate) const TEST_PRIV_KEY: &str = include_str!("../../ci/credentials/node-0.plaintext-key");
+pub(crate) const TEST_RPC_URL: &str = "ws://localhost:26658";
 
 #[cfg(not(target_arch = "wasm32"))]
-const TEST_GRPC_URL: &str = "http://localhost:19090";
+pub(crate) const TEST_GRPC_URL: &str = "http://localhost:19090";
 
 /// gRPC-Web url
 #[cfg(target_arch = "wasm32")]
@@ -35,9 +35,18 @@ async fn node0_client() -> (MutexGuard<'static, ()>, Client) {
     (lock, client)
 }
 
+pub(crate) async fn new_rpc_only_client() -> Client {
+    Client::builder()
+        .rpc_url(TEST_RPC_URL)
+        .build()
+        .await
+        .unwrap()
+}
+
 pub(crate) async fn new_read_only_client() -> Client {
     Client::builder()
         .rpc_url(TEST_RPC_URL)
+        .grpc_url(TEST_GRPC_URL)
         .build()
         .await
         .unwrap()
