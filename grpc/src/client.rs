@@ -132,6 +132,7 @@ impl GrpcClient {
             this.get_verified_balance_impl(&address, &header, &context)
                 .await
         })
+        .context(&self.inner.context)
     }
 
     /// Retrieves the Celestia coin balance for the given address.
@@ -300,6 +301,7 @@ impl GrpcClient {
         AsyncGrpcCall::new(move |context| async move {
             this.submit_message_impl(message, cfg, &context).await
         })
+        .context(&self.inner.context)
     }
 
     /// Submit given blobs to celestia network.
@@ -339,6 +341,7 @@ impl GrpcClient {
         AsyncGrpcCall::new(move |context| async move {
             this.submit_blobs_impl(&blobs, cfg, &context).await
         })
+        .context(&self.inner.context)
     }
 
     /// Get client's app version
@@ -352,6 +355,7 @@ impl GrpcClient {
             let (account, _) = this.load_account(&context).await?;
             Ok(account.app_version)
         })
+        .context(&self.inner.context)
     }
 
     /// Get client's chain id
@@ -365,6 +369,7 @@ impl GrpcClient {
             let (account, _) = this.load_account(&context).await?;
             Ok(account.chain_id.clone())
         })
+        .context(&self.inner.context)
     }
 
     /// Get client's account public key if the signer is set

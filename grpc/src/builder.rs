@@ -34,7 +34,7 @@ pub struct GrpcClientBuilder {
     transport: TransportSetup,
     signer_kind: Option<SignerKind>,
     ascii_metadata: Vec<(String, String)>,
-    binary_metadata: Vec<(Vec<u8>, Vec<u8>)>,
+    binary_metadata: Vec<(String, Vec<u8>)>,
     metadata_map: Option<MetadataMap>,
 }
 
@@ -117,7 +117,9 @@ impl GrpcClientBuilder {
     }
 
     /// Appends binary metadata to all requests made by the client.
-    pub fn metadata_bin(mut self, key: &[u8], value: &[u8]) -> GrpcClientBuilder {
+    ///
+    /// Keys for binary metadata must have `-bin` suffix.
+    pub fn metadata_bin(mut self, key: &str, value: &[u8]) -> GrpcClientBuilder {
         self.binary_metadata.push((key.into(), value.into()));
         self
     }

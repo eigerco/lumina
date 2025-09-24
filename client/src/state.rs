@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use celestia_rpc::{HeaderClient, StateClient};
 
-use crate::client::Context;
+use crate::client::ClientInner;
 use crate::proto::cosmos::bank::v1beta1::MsgSend;
 use crate::proto::cosmos::staking::v1beta1::{
     MsgBeginRedelegate, MsgCancelUnbondingDelegation, MsgDelegate, MsgUndelegate,
@@ -14,16 +14,17 @@ use crate::types::state::{
 };
 use crate::types::Blob;
 use crate::utils::height_i64;
-use crate::Result;
+
+pub type AsyncGrpcCall<Response> = celestia_grpc::grpc::AsyncGrpcCall<Response, crate::Error>;
 
 /// State API for quering and submiting TXs to a consensus node.
 pub struct StateApi {
-    ctx: Arc<Context>,
+    inner: Arc<ClientInner>,
 }
 
 impl StateApi {
-    pub(crate) fn new(ctx: Arc<Context>) -> StateApi {
-        StateApi { ctx }
+    pub(crate) fn new(inner: Arc<ClientInner>) -> StateApi {
+        StateApi { inner }
     }
 
     /// Retrieves the Celestia coin balance for the signer.
@@ -34,15 +35,27 @@ impl StateApi {
     /// the previous network block. In other words, if you transfer some coins,
     /// you need to wait 1 more block in order to see the new balance. If you want
     /// something more immediate then use [`StateApi::balance_unverified`].
-    pub async fn balance(&self) -> Result<u64> {
-        let address = self.ctx.address()?;
-        self.balance_for_address(&address).await
+    pub fn balance(&self) -> AsyncGrpcCall<u64> {
+        let this = StateApi::new(self.inner.clone());
+
+        AsyncGrpcCall::new(move |context| async move {
+            let address = this.inner.address()?;
+            this.balance_for_address(&address).context(&context).await
+        })
     }
 
     /// Retrieves the Celestia coin balance for the signer.
-    pub async fn balance_unverified(&self) -> Result<u64> {
-        let address = self.ctx.address()?;
-        self.balance_for_address_unverified(&address).await
+    pub fn balance_unverified(&self) -> AsyncGrpcCall<u64> {
+        let this = StateApi {
+            inner: self.inner.clone(),
+        };
+
+        AsyncGrpcCall::new(move |context| async move {
+            let address = this.inner.address()?;
+            this.balance_for_address_unverified(&address)
+                .context(&context)
+                .await
+        })
     }
 
     /// Retrieves the Celestia coin balance for the given address.
@@ -56,35 +69,47 @@ impl StateApi {
     ///
     /// This is the only method of [`StateApi`] that fallbacks to RPC endpoint
     /// when gRPC endpoint wasn't set.
-    pub async fn balance_for_address(&self, address: &AccAddress) -> Result<u64> {
+    pub fn balance_for_address(&self, address: &AccAddress) -> AsyncGrpcCall<u64> {
+        let inner = self.inner.clone();
         let address = Address::AccAddress(address.to_owned());
 
-        let grpc = match self.ctx.grpc() {
-            Ok(grpc) => grpc,
-            Err(_) => {
-                return Ok(self
-                    .ctx
-                    .rpc
-                    .state_balance_for_address(&address)
-                    .await?
-                    .amount());
-            }
-        };
+        AsyncGrpcCall::new(move |context| async move {
+            let grpc = match inner.grpc() {
+                Ok(grpc) => grpc,
+                Err(_) => {
+                    return Ok(inner
+                        .rpc
+                        .state_balance_for_address(&address)
+                        .await?
+                        .amount());
+                }
+            };
 
-        let head = self.ctx.rpc.header_network_head().await?;
-        head.validate()?;
+            let head = inner.rpc.header_network_head().await?;
+            head.validate()?;
 
-        Ok(grpc.get_verified_balance(&address, &head).await?.amount())
+            Ok(grpc
+                .get_verified_balance(&address, &head)
+                .context(&context)
+                .await?
+                .amount())
+        })
     }
 
     /// Retrieves the Celestia coin balance for the given address.
-    pub async fn balance_for_address_unverified(&self, address: &AccAddress) -> Result<u64> {
-        Ok(self
-            .ctx
-            .grpc()?
-            .get_balance(&address.to_owned().into(), "utia")
-            .await?
-            .amount())
+    pub fn balance_for_address_unverified(&self, address: &AccAddress) -> AsyncGrpcCall<u64> {
+        let inner = self.inner.clone();
+        let address = address.to_owned().into();
+
+        AsyncGrpcCall::new(move |context| async move {
+            inner
+                .grpc()?
+                .get_balance(&address, "utia")
+                .context(&context)
+                .await
+                .map(|res| res.amount())
+                .map_err(Into::into)
+        })
     }
 
     /// Estimate gas price for given transaction priority based
@@ -92,8 +117,17 @@ impl StateApi {
     ///
     /// If no transaction is found in the last five blocks, it returns the
     /// network min gas price.
-    pub async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
-        Ok(self.ctx.grpc()?.estimate_gas_price(priority).await?)
+    pub fn estimate_gas_price(&self, priority: TxPriority) -> AsyncGrpcCall<f64> {
+        let inner = self.inner.clone();
+
+        AsyncGrpcCall::new(move |context| async move {
+            inner
+                .grpc()?
+                .estimate_gas_price(priority)
+                .context(&context)
+                .await
+                .map_err(Into::into)
+        })
     }
 
     /// Estimate gas price for transaction with given priority and estimate gas usage
@@ -104,16 +138,21 @@ impl StateApi {
     /// it returns the network min gas price.
     ///
     /// The gas used is estimated using the state machine simulation.
-    pub async fn estimate_gas_price_and_usage(
+    pub fn estimate_gas_price_and_usage(
         &self,
         priority: TxPriority,
         tx_bytes: Vec<u8>,
-    ) -> Result<GasEstimate> {
-        Ok(self
-            .ctx
-            .grpc()?
-            .estimate_gas_price_and_usage(priority, tx_bytes)
-            .await?)
+    ) -> AsyncGrpcCall<GasEstimate> {
+        let inner = self.inner.clone();
+
+        AsyncGrpcCall::new(move |context| async move {
+            inner
+                .grpc()?
+                .estimate_gas_price_and_usage(priority, tx_bytes)
+                .context(&context)
+                .await
+                .map_err(Into::into)
+        })
     }
 
     /// Submit given message to celestia network.
@@ -146,29 +185,43 @@ impl StateApi {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn submit_message<M>(&self, message: M, cfg: TxConfig) -> Result<TxInfo>
+    pub fn submit_message<M>(&self, message: M, cfg: TxConfig) -> AsyncGrpcCall<TxInfo>
     where
         M: IntoProtobufAny + Send + 'static,
     {
-        Ok(self.ctx.grpc()?.submit_message(message, cfg).await?)
+        let inner = self.inner.clone();
+
+        AsyncGrpcCall::new(move |context| async move {
+            inner
+                .grpc()?
+                .submit_message(message, cfg)
+                .context(&context)
+                .await
+                .map_err(Into::into)
+        })
     }
 
     /// Sends the given amount of coins from signer's wallet to the given account address.
-    pub async fn transfer(
+    pub fn transfer(
         &self,
         to_address: &AccAddress,
         amount: u64,
         cfg: TxConfig,
-    ) -> Result<TxInfo> {
-        let from_address = self.ctx.address()?;
+    ) -> AsyncGrpcCall<TxInfo> {
+        let this = StateApi::new(self.inner.clone());
+        let to_address = to_address.to_string();
 
-        let msg = MsgSend {
-            from_address: from_address.to_string(),
-            to_address: to_address.to_string(),
-            amount: vec![Coin::utia(amount).into()],
-        };
+        AsyncGrpcCall::new(move |context| async move {
+            let from_address = this.inner.address()?;
 
-        self.submit_message(msg, cfg).await
+            let msg = MsgSend {
+                from_address: from_address.to_string(),
+                to_address,
+                amount: vec![Coin::utia(amount).into()],
+            };
+
+            this.submit_message(msg, cfg).context(&context).await
+        })
     }
 
     /// Builds, signs and submits a PayForBlob transaction.
@@ -206,157 +259,203 @@ impl StateApi {
     /// ```
     ///
     /// [`BlobApi::submit`]: crate::api::BlobApi::submit
-    pub async fn submit_pay_for_blob(&self, blobs: &[Blob], cfg: TxConfig) -> Result<TxInfo> {
-        Ok(self.ctx.grpc()?.submit_blobs(blobs, cfg).await?)
+    pub fn submit_pay_for_blob(&self, blobs: &[Blob], cfg: TxConfig) -> AsyncGrpcCall<TxInfo> {
+        let inner = self.inner.clone();
+        let blobs = blobs.to_vec();
+
+        AsyncGrpcCall::new(move |context| async move {
+            inner
+                .grpc()?
+                .submit_blobs(&blobs, cfg)
+                .context(&context)
+                .await
+                .map_err(Into::into)
+        })
     }
 
     /// Cancels signer's pending undelegation from a validator.
-    pub async fn cancel_unbonding_delegation(
+    pub fn cancel_unbonding_delegation(
         &self,
         validator_address: &ValAddress,
         amount: u64,
         creation_height: u64,
         cfg: TxConfig,
-    ) -> Result<TxInfo> {
-        let delegator_address = self.ctx.address()?;
+    ) -> AsyncGrpcCall<TxInfo> {
+        let this = StateApi::new(self.inner.clone());
+        let validator_address = validator_address.to_string();
 
-        let msg = MsgCancelUnbondingDelegation {
-            delegator_address: delegator_address.to_string(),
-            validator_address: validator_address.to_string(),
-            amount: Some(Coin::utia(amount).into()),
-            creation_height: height_i64(creation_height)?,
-        };
+        AsyncGrpcCall::new(move |context| async move {
+            let delegator_address = this.inner.address()?;
 
-        self.submit_message(msg, cfg).await
+            let msg = MsgCancelUnbondingDelegation {
+                delegator_address: delegator_address.to_string(),
+                validator_address,
+                amount: Some(Coin::utia(amount).into()),
+                creation_height: height_i64(creation_height)?,
+            };
+
+            this.submit_message(msg, cfg).context(&context).await
+        })
     }
 
     /// Sends signer's delegated tokens to a new validator for redelegation.
-    pub async fn begin_redelegate(
+    pub fn begin_redelegate(
         &self,
         src_validator_address: &ValAddress,
         dest_validator_address: &ValAddress,
         amount: u64,
         cfg: TxConfig,
-    ) -> Result<TxInfo> {
-        let delegator_address = self.ctx.address()?;
+    ) -> AsyncGrpcCall<TxInfo> {
+        let this = StateApi::new(self.inner.clone());
+        let validator_src_address = src_validator_address.to_string();
+        let validator_dst_address = dest_validator_address.to_string();
 
-        let msg = MsgBeginRedelegate {
-            delegator_address: delegator_address.to_string(),
-            validator_src_address: src_validator_address.to_string(),
-            validator_dst_address: dest_validator_address.to_string(),
-            amount: Some(Coin::utia(amount).into()),
-        };
+        AsyncGrpcCall::new(move |context| async move {
+            let delegator_address = this.inner.address()?;
 
-        self.submit_message(msg, cfg).await
+            let msg = MsgBeginRedelegate {
+                delegator_address: delegator_address.to_string(),
+                validator_src_address,
+                validator_dst_address,
+                amount: Some(Coin::utia(amount).into()),
+            };
+
+            this.submit_message(msg, cfg).context(&context).await
+        })
     }
 
     /// Undelegates signer's delegated tokens, unbonding them from the current validator.
-    pub async fn undelegate(
+    pub fn undelegate(
         &self,
         validator_address: &ValAddress,
         amount: u64,
         cfg: TxConfig,
-    ) -> Result<TxInfo> {
-        let delegator_address = self.ctx.address()?;
+    ) -> AsyncGrpcCall<TxInfo> {
+        let this = StateApi::new(self.inner.clone());
+        let validator_address = validator_address.to_string();
 
-        let msg = MsgUndelegate {
-            delegator_address: delegator_address.to_string(),
-            validator_address: validator_address.to_string(),
-            amount: Some(Coin::utia(amount).into()),
-        };
+        AsyncGrpcCall::new(move |context| async move {
+            let delegator_address = this.inner.address()?;
 
-        self.submit_message(msg, cfg).await
+            let msg = MsgUndelegate {
+                delegator_address: delegator_address.to_string(),
+                validator_address,
+                amount: Some(Coin::utia(amount).into()),
+            };
+
+            this.submit_message(msg, cfg).context(&context).await
+        })
     }
 
     /// Sends signer's liquid tokens to a validator for delegation.
-    pub async fn delegate(
+    pub fn delegate(
         &self,
         validator_address: &ValAddress,
         amount: u64,
         cfg: TxConfig,
-    ) -> Result<TxInfo> {
-        let delegator_address = self.ctx.address()?;
+    ) -> AsyncGrpcCall<TxInfo> {
+        let this = StateApi::new(self.inner.clone());
+        let validator_address = validator_address.to_string();
 
-        let msg = MsgDelegate {
-            delegator_address: delegator_address.to_string(),
-            validator_address: validator_address.to_string(),
-            amount: Some(Coin::utia(amount).into()),
-        };
+        AsyncGrpcCall::new(move |context| async move {
+            let delegator_address = this.inner.address()?;
 
-        self.submit_message(msg, cfg).await
+            let msg = MsgDelegate {
+                delegator_address: delegator_address.to_string(),
+                validator_address,
+                amount: Some(Coin::utia(amount).into()),
+            };
+
+            this.submit_message(msg, cfg).context(&context).await
+        })
     }
 
     /// Retrieves the delegation information between signer and a validator.
-    pub async fn query_delegation(
+    pub fn query_delegation(
         &self,
         validator_address: &ValAddress,
-    ) -> Result<QueryDelegationResponse> {
-        let delegator_address = self.ctx.address()?;
+    ) -> AsyncGrpcCall<QueryDelegationResponse> {
+        let this = StateApi::new(self.inner.clone());
+        let validator_address = validator_address.clone();
 
-        let resp = self
-            .ctx
-            .grpc()?
-            .query_delegation(&delegator_address, validator_address)
-            .await?;
+        AsyncGrpcCall::new(move |context| async move {
+            let delegator_address = this.inner.address()?;
 
-        Ok(resp)
+            this.inner
+                .grpc()?
+                .query_delegation(&delegator_address, &validator_address)
+                .context(&context)
+                .await
+                .map_err(Into::into)
+        })
     }
 
     /// Retrieves the unbonding status between signer and a validator.
-    pub async fn query_unbonding(
+    pub fn query_unbonding(
         &self,
         validator_address: &ValAddress,
-    ) -> Result<QueryUnbondingDelegationResponse> {
-        let delegator_address = self.ctx.address()?;
+    ) -> AsyncGrpcCall<QueryUnbondingDelegationResponse> {
+        let this = StateApi::new(self.inner.clone());
+        let validator_address = validator_address.clone();
 
-        let resp = self
-            .ctx
-            .grpc()?
-            .query_unbonding(&delegator_address, validator_address)
-            .await?;
+        AsyncGrpcCall::new(move |context| async move {
+            let delegator_address = this.inner.address()?;
 
-        Ok(resp)
+            this.inner
+                .grpc()?
+                .query_unbonding(&delegator_address, &validator_address)
+                .context(&context)
+                .await
+                .map_err(Into::into)
+        })
     }
 
     /// Retrieves the status of the redelegations between signer and a validator.
-    pub async fn query_redelegations(
+    pub fn query_redelegations(
         &self,
         src_validator_address: &ValAddress,
         dest_validator_address: &ValAddress,
-    ) -> Result<QueryRedelegationsResponse> {
-        let delegator_address = self.ctx.address()?;
+    ) -> AsyncGrpcCall<QueryRedelegationsResponse> {
+        let this = StateApi::new(self.inner.clone());
+        let src_validator_address = src_validator_address.clone();
+        let dest_validator_address = dest_validator_address.clone();
 
-        let mut full_resp = QueryRedelegationsResponse {
-            responses: Vec::new(),
-            pagination: None,
-        };
+        AsyncGrpcCall::new(move |context| async move {
+            let delegator_address = this.inner.address()?;
 
-        let mut next_key = Vec::new();
+            let mut full_resp = QueryRedelegationsResponse {
+                responses: Vec::new(),
+                pagination: None,
+            };
 
-        loop {
-            let mut resp = self
-                .ctx
-                .grpc()?
-                .query_redelegations(
-                    &delegator_address,
-                    src_validator_address,
-                    dest_validator_address,
-                    Some(PageRequest {
-                        key: next_key,
-                        ..Default::default()
-                    }),
-                )
-                .await?;
+            let mut next_key = Vec::new();
 
-            full_resp.responses.append(&mut resp.responses);
+            loop {
+                let mut resp = this
+                    .inner
+                    .grpc()?
+                    .query_redelegations(
+                        &delegator_address,
+                        &src_validator_address,
+                        &dest_validator_address,
+                        Some(PageRequest {
+                            key: next_key,
+                            ..Default::default()
+                        }),
+                    )
+                    .context(&context)
+                    .await?;
 
-            match resp.pagination {
-                Some(pagination) => next_key = pagination.next_key,
-                None => break,
+                full_resp.responses.append(&mut resp.responses);
+
+                match resp.pagination {
+                    Some(pagination) => next_key = pagination.next_key,
+                    None => break,
+                }
             }
-        }
 
-        Ok(full_resp)
+            Ok(full_resp)
+        })
     }
 }
 

@@ -1,6 +1,7 @@
 //! Types and client for the celestia grpc
 
 use std::future::{Future, IntoFuture};
+use std::{any, fmt};
 
 #[cfg(feature = "uniffi")]
 use celestia_types::Hash;
@@ -41,34 +42,50 @@ pub use crate::grpc::cosmos_tx::JsBroadcastMode;
 #[cfg(feature = "uniffi")]
 uniffi::use_remote_type!(celestia_types::Hash);
 
-type RequestFuture<Response> = BoxFuture<'static, Result<Response>>;
-type CallFn<Response> = Box<dyn FnOnce(Context) -> RequestFuture<Response>>;
+type RequestFuture<Response, Error> = BoxFuture<'static, Result<Response, Error>>;
+type CallFn<Response, Error> = Box<dyn FnOnce(Context) -> RequestFuture<Response, Error>>;
 
 /// Context passed to each grpc request
+#[doc(hidden)]
 #[derive(Debug, Default, Clone)]
-pub(crate) struct Context {
+pub struct Context {
     pub metadata: MetadataMap,
 }
 
 impl Context {
     pub(crate) fn append_metadata(&mut self, key: &str, val: &str) -> Result<(), MetadataError> {
         let key: MetadataKey<Ascii> = key.parse().map_err(|_| MetadataError::Key(key.into()))?;
-        self.metadata.append(
-            key,
-            val.parse().map_err(|_| MetadataError::Value(val.into()))?,
-        );
+        let value = val.parse().map_err(|_| MetadataError::Value(val.into()))?;
+
+        if !self
+            .metadata
+            .get_all(&key)
+            .into_iter()
+            .any(|val| val == value)
+        {
+            self.metadata.append(key, value);
+        }
 
         Ok(())
     }
 
     pub(crate) fn append_metadata_bin(
         &mut self,
-        key: &[u8],
+        key: &str,
         val: &[u8],
     ) -> Result<(), MetadataError> {
-        let key = MetadataKey::from_bytes(key).map_err(|_| MetadataError::KeyBin(key.into()))?;
-        self.metadata
-            .append_bin(key, MetadataValue::from_bytes(val));
+        let key = MetadataKey::from_bytes(key.as_bytes())
+            .map_err(|_| MetadataError::KeyBin(key.into()))?;
+        let value = MetadataValue::from_bytes(val);
+
+        if !self
+            .metadata
+            .get_all_bin(&key)
+            .into_iter()
+            .any(|val| val == value)
+        {
+            self.metadata.append_bin(key, value);
+        }
 
         Ok(())
     }
@@ -108,17 +125,18 @@ impl Context {
 /// # Ok(())
 /// # };
 /// ```
-pub struct AsyncGrpcCall<Response> {
-    call: CallFn<Response>,
+pub struct AsyncGrpcCall<Response, Error = crate::Error> {
+    call: CallFn<Response, Error>,
     pub(crate) context: Context,
 }
 
-impl<Response> AsyncGrpcCall<Response> {
+impl<Response, Error> AsyncGrpcCall<Response, Error> {
     /// Create a new grpc call out of the given function.
-    pub(crate) fn new<F, Fut>(call_fn: F) -> Self
+    #[doc(hidden)]
+    pub fn new<F, Fut>(call_fn: F) -> Self
     where
         F: FnOnce(Context) -> Fut + 'static,
-        Fut: Future<Output = Result<Response>> + Send + 'static,
+        Fut: Future<Output = Result<Response, Error>> + Send + 'static,
     {
         Self {
             call: Box::new(|context| call_fn(context).boxed()),
@@ -127,7 +145,8 @@ impl<Response> AsyncGrpcCall<Response> {
     }
 
     /// Extend the current context of the grpc call with provided context
-    pub(crate) fn context(mut self, context: &Context) -> Self {
+    #[doc(hidden)]
+    pub fn context(mut self, context: &Context) -> Self {
         self.context.extend(context);
         self
     }
@@ -139,7 +158,9 @@ impl<Response> AsyncGrpcCall<Response> {
     }
 
     /// Append a binary metadata to the grpc request.
-    pub fn metadata_bin(mut self, key: &[u8], val: &[u8]) -> Result<Self, MetadataError> {
+    ///
+    /// Keys for binary metadata must have `-bin` suffix.
+    pub fn metadata_bin(mut self, key: &str, val: &[u8]) -> Result<Self, MetadataError> {
         self.context.append_metadata_bin(key, val)?;
         Ok(self)
     }
@@ -159,12 +180,20 @@ impl<Response> AsyncGrpcCall<Response> {
     }
 }
 
-impl<Response> IntoFuture for AsyncGrpcCall<Response> {
-    type Output = Result<Response>;
-    type IntoFuture = RequestFuture<Response>;
+impl<Response, Error> IntoFuture for AsyncGrpcCall<Response, Error> {
+    type Output = Result<Response, Error>;
+    type IntoFuture = RequestFuture<Response, Error>;
 
     fn into_future(self) -> Self::IntoFuture {
         (self.call)(self.context)
+    }
+}
+
+impl<Response> fmt::Debug for AsyncGrpcCall<Response> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct(&format!("AsyncGrpcCall<{}>", any::type_name::<Response>()))
+            .field("context", &self.context)
+            .finish()
     }
 }
 
@@ -187,3 +216,39 @@ macro_rules! make_empty_params {
 }
 
 pub(crate) use make_empty_params;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn context_appending_metadata() {
+        let mut context = Context::default();
+
+        // ascii
+        context.append_metadata("foo", "bar").unwrap();
+        context.append_metadata("foo", "bar").unwrap();
+
+        assert_eq!(context.metadata.get_all("foo").into_iter().count(), 1);
+
+        context.append_metadata("foo", "bar2").unwrap();
+
+        assert_eq!(context.metadata.get_all("foo").into_iter().count(), 2);
+
+        // binary
+        context.append_metadata_bin("foo-bin", b"bar").unwrap();
+        context.append_metadata_bin("foo-bin", b"bar").unwrap();
+
+        assert_eq!(
+            context.metadata.get_all_bin("foo-bin").into_iter().count(),
+            1
+        );
+
+        context.append_metadata_bin("foo-bin", b"bar2").unwrap();
+
+        assert_eq!(
+            context.metadata.get_all_bin("foo-bin").into_iter().count(),
+            2
+        );
+    }
+}

@@ -6,7 +6,7 @@ use celestia_rpc::BlobClient;
 use futures_util::{Stream, StreamExt};
 
 use crate::api::blob::BlobsAtHeight;
-use crate::client::Context;
+use crate::client::ClientInner;
 use crate::tx::{TxConfig, TxInfo};
 use crate::types::nmt::{Namespace, NamespaceProof};
 use crate::types::{Blob, Commitment};
@@ -14,12 +14,12 @@ use crate::Result;
 
 /// Blob API for quering bridge nodes.
 pub struct BlobApi {
-    ctx: Arc<Context>,
+    inner: Arc<ClientInner>,
 }
 
 impl BlobApi {
-    pub(crate) fn new(ctx: Arc<Context>) -> BlobApi {
-        BlobApi { ctx }
+    pub(crate) fn new(inner: Arc<ClientInner>) -> BlobApi {
+        BlobApi { inner }
     }
 
     /// Submit given blobs to celestia network.
@@ -54,7 +54,7 @@ impl BlobApi {
     ///
     /// [`StateApi::submit_pay_for_blob`]: crate::api::StateApi::submit_pay_for_blob
     pub async fn submit(&self, blobs: &[Blob], cfg: TxConfig) -> Result<TxInfo> {
-        Ok(self.ctx.grpc()?.submit_blobs(blobs, cfg).await?)
+        Ok(self.inner.grpc()?.submit_blobs(blobs, cfg).await?)
     }
 
     /// Retrieves the blob by commitment under the given namespace and height.
@@ -64,8 +64,16 @@ impl BlobApi {
         namespace: Namespace,
         commitment: Commitment,
     ) -> Result<Blob> {
-        let blob = self.ctx.rpc.blob_get(height, namespace, commitment).await?;
-        let app_version = self.ctx.get_header_validated(height).await?.app_version()?;
+        let blob = self
+            .inner
+            .rpc
+            .blob_get(height, namespace, commitment)
+            .await?;
+        let app_version = self
+            .inner
+            .get_header_validated(height)
+            .await?
+            .app_version()?;
 
         blob.validate_with_commitment(&commitment, app_version)?;
 
@@ -78,11 +86,15 @@ impl BlobApi {
         height: u64,
         namespaces: &[Namespace],
     ) -> Result<Option<Vec<Blob>>> {
-        let Some(blobs) = self.ctx.rpc.blob_get_all(height, namespaces).await? else {
+        let Some(blobs) = self.inner.rpc.blob_get_all(height, namespaces).await? else {
             return Ok(None);
         };
 
-        let app_version = self.ctx.get_header_validated(height).await?.app_version()?;
+        let app_version = self
+            .inner
+            .get_header_validated(height)
+            .await?
+            .app_version()?;
 
         for blob in &blobs {
             blob.validate(app_version)?;
@@ -99,7 +111,7 @@ impl BlobApi {
         commitment: Commitment,
     ) -> Result<Vec<NamespaceProof>> {
         Ok(self
-            .ctx
+            .inner
             .rpc
             .blob_get_proof(height, namespace, commitment)
             .await?)
@@ -114,7 +126,7 @@ impl BlobApi {
         commitment: Commitment,
     ) -> Result<bool> {
         Ok(self
-            .ctx
+            .inner
             .rpc
             .blob_included(height, namespace, proof, commitment)
             .await?)
@@ -148,10 +160,10 @@ impl BlobApi {
         &self,
         namespace: Namespace,
     ) -> Pin<Box<dyn Stream<Item = Result<BlobsAtHeight>> + Send + 'static>> {
-        let ctx = self.ctx.clone();
+        let inner = self.inner.clone();
 
         try_stream! {
-            let mut subscription = ctx.rpc.blob_subscribe(namespace).await?;
+            let mut subscription = inner.rpc.blob_subscribe(namespace).await?;
 
             while let Some(item) = subscription.next().await {
                 let blobs = item?;
