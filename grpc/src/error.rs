@@ -84,6 +84,7 @@ pub enum Error {
     #[error("Client was constructed with without a signer")]
     MissingSigner,
 
+    /// Error related to the metadata
     #[error(transparent)]
     Metadata(#[from] MetadataError),
 }
@@ -112,22 +113,23 @@ pub enum GrpcClientBuilderError {
     #[error("Invalid public key")]
     InvalidPublicKey,
 
+    /// Error related to the metadata
     #[error(transparent)]
     Metadata(#[from] MetadataError),
 }
 
 #[derive(thiserror::Error, Debug)]
 pub enum MetadataError {
-    // is it okay to print it if it can store key or sth?
+    /// Invalid metadata key
     #[error("Invalid metadata key ({0})")]
     Key(String),
 
-    // is it okay to print it if it can store key or sth?
+    /// Invalid binary metadata key
     #[error("Invalid binary metadata key ({0:?})")]
     KeyBin(Vec<u8>),
 
-    // is it okay to print it if it can store key or sth?
-    #[error("Invalid metadata value ({0:?})")]
+    /// Invalid metadata value for given key
+    #[error("Invalid metadata value (key: {0:?})")]
     Value(String),
 }
 
