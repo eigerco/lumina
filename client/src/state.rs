@@ -50,9 +50,7 @@ impl StateApi {
     /// Retrieves the Celestia coin balance for the signer. To query balance without
     /// adding signer to the client, see [`StateApi::balance_for_address_unverified`].
     pub fn balance_unverified(&self) -> AsyncGrpcCall<u64> {
-        let this = StateApi {
-            inner: self.inner.clone(),
-        };
+        let this = StateApi::new(self.inner.clone());
 
         AsyncGrpcCall::new(move |context| async move {
             let address = this.inner.address()?;
