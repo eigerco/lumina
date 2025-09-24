@@ -93,6 +93,30 @@ impl GrpcClientBuilder {
         })
     }
 
+    /// Appends ascii metadata to all requests made by the client.
+    ///
+    /// Note that this method **consumes** builder and returns updated instance of it.
+    /// Make sure to re-assign it if you keep builder in a variable.
+    #[wasm_bindgen(js_name = withMetadata)]
+    pub fn with_metadata(mut self, key: String, value: String) -> Self {
+        Self {
+            inner: self.inner.metadata(&key, &value),
+        }
+    }
+
+    /// Appends binary metadata to all requests made by the client.
+    ///
+    /// Keys for binary metadata must have `-bin` suffix.
+    ///
+    /// Note that this method **consumes** builder and returns updated instance of it.
+    /// Make sure to re-assign it if you keep builder in a variable.
+    #[wasm_bindgen(js_name = withMetadataBin)]
+    pub fn with_metadata_bin(mut self, key: String, value: Uint8Array) -> Self {
+        Self {
+            inner: self.inner.metadata_bin(&key, &value.to_vec()),
+        }
+    }
+
     /// build gRPC client
     pub fn build(self) -> Result<GrpcClient, GrpcClientBuilderError> {
         Ok(self.inner.build()?.into())
