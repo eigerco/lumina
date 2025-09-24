@@ -59,8 +59,8 @@ pub struct Context {
 impl Context {
     /// Appends an ascii metadata entry to the map. Ignores duplicate values.
     pub(crate) fn append_metadata(&mut self, key: &str, val: &str) -> Result<(), MetadataError> {
-        let key: MetadataKey<Ascii> = key.parse().map_err(|_| MetadataError::Key(key.into()))?;
         let value = val.parse().map_err(|_| MetadataError::Value(key.into()))?;
+        let key: MetadataKey<Ascii> = key.parse().map_err(|_| MetadataError::Key(key.into()))?;
 
         if !self
             .metadata
