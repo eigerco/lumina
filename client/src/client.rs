@@ -260,6 +260,7 @@ impl ClientBuilder {
         self
     }
 
+    /// Sets the initial metadata map that will be attached to all requestes made by the client.
     pub fn grpc_metadata_map(mut self, metadata: MetadataMap) -> Self {
         let grpc_builder = self.grpc_builder.unwrap_or_default();
         self.grpc_builder = Some(grpc_builder.metadata_map(metadata));

@@ -142,6 +142,29 @@ async fn get_blob_params() {
 }
 
 #[async_test]
+async fn query_state_at_block_height_with_metadata() {
+    let (_lock, tx_client) = new_tx_client().await;
+
+    let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
+    let blobs = vec![Blob::new(namespace, "bleb".into(), None, AppVersion::V3).unwrap()];
+
+    let tx = tx_client
+        .submit_blobs(&blobs, TxConfig::default())
+        .await
+        .unwrap();
+
+    let addr = tx_client.get_account_address().unwrap().into();
+    let new_balance = tx_client.get_balance(&addr, "utia").await.unwrap();
+    let old_balance = tx_client
+        .get_balance(&addr, "utia")
+        .block_height(tx.height.value() - 1)
+        .await
+        .unwrap();
+
+    assert!(new_balance.amount() < old_balance.amount());
+}
+
+#[async_test]
 async fn submit_and_get_tx() {
     let (_lock, tx_client) = new_tx_client().await;
 
@@ -228,25 +251,18 @@ async fn submit_message() {
         amount: vec![amount.clone().into()],
     };
 
-    let tx_info = tx_client
+    tx_client
         .submit_message(msg, TxConfig::default())
         .await
         .unwrap();
 
-    let coin = tx_client
-        .get_balance(&other_account.address, "utia")
+    let coins = tx_client
+        .get_all_balances(&other_account.address)
         .await
         .unwrap();
 
-    assert_eq!(coin.amount(), 12345);
-
-    let coin = tx_client
-        .get_balance(&other_account.address, "utia")
-        .block_height(tx_info.height.value() - 2)
-        .await
-        .unwrap();
-
-    assert_eq!(coin.amount(), 0);
+    assert_eq!(coins.len(), 1);
+    assert_eq!(amount, coins[0]);
 }
 
 #[async_test]

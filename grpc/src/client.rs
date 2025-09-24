@@ -378,6 +378,11 @@ impl GrpcClient {
     pub fn get_account_pubkey(&self) -> Option<VerifyingKey> {
         self.inner.signer.as_ref().map(|config| config.pubkey)
     }
+
+    /// Get client's account address if the signer is set
+    pub fn get_account_address(&self) -> Option<AccAddress> {
+        self.get_account_pubkey().map(Into::into)
+    }
 }
 
 impl GrpcClient {
@@ -723,12 +728,12 @@ mod tests {
     async fn extending_client_context() {
         let client = GrpcClient::builder()
             .url("http://foo")
-            .metadata("test", "test")
+            .metadata("x-token", "secret-token")
             .build()
             .unwrap();
-        let call = client.app_version().metadata("test2", "test2").unwrap();
+        let call = client.app_version().block_height(1234);
 
-        assert!(call.context.metadata.contains_key("test"));
-        assert!(call.context.metadata.contains_key("test2"));
+        assert!(call.context.metadata.contains_key("x-token"));
+        assert!(call.context.metadata.contains_key("x-cosmos-block-height"));
     }
 }

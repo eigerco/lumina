@@ -124,6 +124,7 @@ impl GrpcClientBuilder {
         self
     }
 
+    /// Sets the initial metadata map that will be attached to all requestes made by the client.
     pub fn metadata_map(mut self, metadata: MetadataMap) -> GrpcClientBuilder {
         self.metadata_map = Some(metadata);
         self

@@ -46,13 +46,18 @@ type RequestFuture<Response, Error> = BoxFuture<'static, Result<Response, Error>
 type CallFn<Response, Error> = Box<dyn FnOnce(Context) -> RequestFuture<Response, Error>>;
 
 /// Context passed to each grpc request
+///
+/// This type is exposed only for internal use in `celestia-client`.
+/// It is not considered a public API and thus have no SemVer guarantees.
 #[doc(hidden)]
 #[derive(Debug, Default, Clone)]
 pub struct Context {
+    /// Metadata attached to each grpc request.
     pub metadata: MetadataMap,
 }
 
 impl Context {
+    /// Appends an ascii metadata entry to the map. Ignores duplicate values.
     pub(crate) fn append_metadata(&mut self, key: &str, val: &str) -> Result<(), MetadataError> {
         let key: MetadataKey<Ascii> = key.parse().map_err(|_| MetadataError::Key(key.into()))?;
         let value = val.parse().map_err(|_| MetadataError::Value(val.into()))?;
@@ -69,6 +74,9 @@ impl Context {
         Ok(())
     }
 
+    /// Appends a binary metadata entry to the map. Ignores duplicate values.
+    ///
+    /// For binary methadata, key must end with `-bin`.
     pub(crate) fn append_metadata_bin(
         &mut self,
         key: &str,
@@ -90,6 +98,7 @@ impl Context {
         Ok(())
     }
 
+    /// Appends whole metadata map to the current metadata map.
     pub(crate) fn append_metadata_map(&mut self, metadata: &MetadataMap) {
         for key_and_value in metadata.iter() {
             match key_and_value {
@@ -103,6 +112,7 @@ impl Context {
         }
     }
 
+    /// Merges the other context into self.
     pub(crate) fn extend(&mut self, other: &Context) {
         self.append_metadata_map(&other.metadata);
     }
@@ -132,6 +142,9 @@ pub struct AsyncGrpcCall<Response, Error = crate::Error> {
 
 impl<Response, Error> AsyncGrpcCall<Response, Error> {
     /// Create a new grpc call out of the given function.
+    ///
+    /// This method is exposed only for internal use in `celestia-client`.
+    /// It is not considered a public API and thus have no SemVer guarantees.
     #[doc(hidden)]
     pub fn new<F, Fut>(call_fn: F) -> Self
     where
@@ -145,6 +158,9 @@ impl<Response, Error> AsyncGrpcCall<Response, Error> {
     }
 
     /// Extend the current context of the grpc call with provided context
+    ///
+    /// This method is exposed only for internal use in `celestia-client`.
+    /// It is not considered a public API and thus have no SemVer guarantees.
     #[doc(hidden)]
     pub fn context(mut self, context: &Context) -> Self {
         self.context.extend(context);
