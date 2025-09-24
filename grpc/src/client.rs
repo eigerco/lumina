@@ -347,9 +347,6 @@ impl GrpcClient {
     }
 
     /// Get client's app version
-    ///
-    /// Note that this function _may_ try to load the account information from the network and as
-    /// such requires signed to be set up.
     pub fn app_version(&self) -> AsyncGrpcCall<AppVersion> {
         let this = self.clone();
 
@@ -361,9 +358,6 @@ impl GrpcClient {
     }
 
     /// Get client's chain id
-    ///
-    /// Note that this function _may_ try to load the account information from the network and as
-    /// such requires signed to be set up.
     pub fn chain_id(&self) -> AsyncGrpcCall<Id> {
         let this = self.clone();
 
@@ -392,7 +386,7 @@ impl GrpcClient {
         header: &ExtendedHeader,
         context: &Context,
     ) -> Result<Coin> {
-        // construct the key for querying account's balance from bank state
+        // construct the key for querying account balance from bank state
         let mut prefixed_account_key = Vec::with_capacity(1 + 1 + appconsts::SIGNER_SIZE + 4);
         prefixed_account_key.push(0x02); // balances prefix
         prefixed_account_key.push(address.as_bytes().len() as u8); // address length
