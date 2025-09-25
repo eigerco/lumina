@@ -1,3 +1,4 @@
+use std::future::IntoFuture;
 use std::sync::Arc;
 
 use celestia_grpc::{Error, TxConfig};
@@ -76,6 +77,7 @@ async fn get_verified_balance() {
         jrpc_client.header_network_head().map(Result::unwrap),
         client
             .get_balance(&account.address, "utia")
+            .into_future()
             .map(Result::unwrap)
     );
 
@@ -137,6 +139,29 @@ async fn get_blob_params() {
     let params = client.get_blob_params().await.unwrap();
     assert!(params.gas_per_blob_byte > 0);
     assert!(params.gov_max_square_size > 0);
+}
+
+#[async_test]
+async fn query_state_at_block_height_with_metadata() {
+    let (_lock, tx_client) = new_tx_client().await;
+
+    let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
+    let blobs = vec![Blob::new(namespace, "bleb".into(), None, AppVersion::V3).unwrap()];
+
+    let tx = tx_client
+        .submit_blobs(&blobs, TxConfig::default())
+        .await
+        .unwrap();
+
+    let addr = tx_client.get_account_address().unwrap().into();
+    let new_balance = tx_client.get_balance(&addr, "utia").await.unwrap();
+    let old_balance = tx_client
+        .get_balance(&addr, "utia")
+        .block_height(tx.height.value() - 1)
+        .await
+        .unwrap();
+
+    assert!(new_balance.amount() < old_balance.amount());
 }
 
 #[async_test]
@@ -280,13 +305,21 @@ async fn tx_client_is_send_and_sync() {
     let (_lock, tx_client) = new_tx_client().await;
     is_send_and_sync(&tx_client);
 
-    is_send(&tx_client.submit_blobs(&[], TxConfig::default()));
-    is_send(&tx_client.submit_message(
-        MsgSend {
-            from_address: "".into(),
-            to_address: "".into(),
-            amount: vec![],
-        },
-        TxConfig::default(),
-    ));
+    is_send(
+        &tx_client
+            .submit_blobs(&[], TxConfig::default())
+            .into_future(),
+    );
+    is_send(
+        &tx_client
+            .submit_message(
+                MsgSend {
+                    from_address: "".into(),
+                    to_address: "".into(),
+                    amount: vec![],
+                },
+                TxConfig::default(),
+            )
+            .into_future(),
+    );
 }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use celestia_rpc::ShareClient;
 
 use crate::api::share::{GetRangeResponse, GetRowResponse, SampleCoordinates};
-use crate::client::Context;
+use crate::client::ClientInner;
 use crate::types::nmt::Namespace;
 use crate::types::row_namespace_data::NamespaceData;
 use crate::types::sample::Sample;
@@ -12,12 +12,12 @@ use crate::Result;
 
 /// Share API for quering bridge nodes.
 pub struct ShareApi {
-    ctx: Arc<Context>,
+    inner: Arc<ClientInner>,
 }
 
 impl ShareApi {
-    pub(crate) fn new(ctx: Arc<Context>) -> ShareApi {
-        ShareApi { ctx }
+    pub(crate) fn new(inner: Arc<ClientInner>) -> ShareApi {
+        ShareApi { inner }
     }
 
     /// Performs a subjective validation to check if the shares committed to the
@@ -25,14 +25,14 @@ impl ShareApi {
     ///
     /// Returns `Ok(())` if shares are available.
     pub async fn shares_available(&self, height: u64) -> Result<()> {
-        Ok(self.ctx.rpc.share_shares_available(height).await?)
+        Ok(self.inner.rpc.share_shares_available(height).await?)
     }
 
     /// Retrieves a specific share from the [`ExtendedDataSquare`] at the given
     /// height  using its row and column coordinates.
     pub async fn get(&self, height: u64, row: u64, column: u64) -> Result<Share> {
-        let header = self.ctx.get_header_validated(height).await?;
-        Ok(self.ctx.rpc.share_get_share(&header, row, column).await?)
+        let header = self.inner.get_header_validated(height).await?;
+        Ok(self.inner.rpc.share_get_share(&header, row, column).await?)
     }
 
     /// Retrieves multiple shares from the [`ExtendedDataSquare`] at the given
@@ -44,21 +44,25 @@ impl ShareApi {
         I: IntoIterator<Item = C>,
         C: Into<SampleCoordinates>,
     {
-        let header = self.ctx.get_header_validated(height).await?;
-        Ok(self.ctx.rpc.share_get_samples(&header, coordinates).await?)
+        let header = self.inner.get_header_validated(height).await?;
+        Ok(self
+            .inner
+            .rpc
+            .share_get_samples(&header, coordinates)
+            .await?)
     }
 
     /// Retrieves the complete [`ExtendedDataSquare`] for the specified height.
     pub async fn get_eds(&self, height: u64) -> Result<ExtendedDataSquare> {
-        let header = self.ctx.get_header_validated(height).await?;
-        Ok(self.ctx.rpc.share_get_eds(&header).await?)
+        let header = self.inner.get_header_validated(height).await?;
+        Ok(self.inner.rpc.share_get_eds(&header).await?)
     }
 
     /// Retrieves all shares from a specific row of the [`ExtendedDataSquare`]
     /// at the given height.
     pub async fn get_row(&self, height: u64, row: u64) -> Result<GetRowResponse> {
-        let header = self.ctx.get_header_validated(height).await?;
-        Ok(self.ctx.rpc.share_get_row(&header, row).await?)
+        let header = self.inner.get_header_validated(height).await?;
+        Ok(self.inner.rpc.share_get_row(&header, row).await?)
     }
 
     /// Retrieves all shares that belong to the specified namespace within the
@@ -71,10 +75,10 @@ impl ShareApi {
         height: u64,
         namespace: Namespace,
     ) -> Result<NamespaceData> {
-        let header = self.ctx.get_header_validated(height).await?;
+        let header = self.inner.get_header_validated(height).await?;
 
         Ok(self
-            .ctx
+            .inner
             .rpc
             .share_get_namespace_data(&header, namespace)
             .await?)
@@ -84,8 +88,8 @@ impl ShareApi {
     ///
     /// The start and end index ignores parity shares and corresponds to ODS.
     pub async fn get_range(&self, height: u64, start: u64, end: u64) -> Result<GetRangeResponse> {
-        let header = self.ctx.get_header_validated(height).await?;
-        Ok(self.ctx.rpc.share_get_range(&header, start, end).await?)
+        let header = self.inner.get_header_validated(height).await?;
+        Ok(self.inner.rpc.share_get_range(&header, start, end).await?)
     }
 }
 

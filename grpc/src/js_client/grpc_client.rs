@@ -1,6 +1,8 @@
+use send_wrapper::SendWrapper;
+use tendermint_proto::google::protobuf::Any;
 use wasm_bindgen::prelude::*;
 
-use celestia_types::any::JsAny;
+use celestia_types::any::{IntoProtobufAny, JsAny};
 use celestia_types::blob::BlobParams;
 use celestia_types::block::Block;
 use celestia_types::consts::appconsts::JsAppVersion;
@@ -265,7 +267,10 @@ impl GrpcClient {
         tx_config: Option<JsTxConfig>,
     ) -> Result<JsTxInfo> {
         let tx_config = tx_config.map(Into::into).unwrap_or_default();
-        let tx = self.client.submit_message(message, tx_config).await?;
+        let tx = self
+            .client
+            .submit_message(SendJsAny::from(message), tx_config)
+            .await?;
         Ok(tx.into())
     }
 }
@@ -273,5 +278,19 @@ impl GrpcClient {
 impl From<crate::GrpcClient> for GrpcClient {
     fn from(client: crate::GrpcClient) -> Self {
         GrpcClient { client }
+    }
+}
+
+struct SendJsAny(SendWrapper<JsAny>);
+
+impl From<JsAny> for SendJsAny {
+    fn from(value: JsAny) -> Self {
+        SendJsAny(SendWrapper::new(value))
+    }
+}
+
+impl IntoProtobufAny for SendJsAny {
+    fn into_any(self) -> Any {
+        self.0.take().into_any()
     }
 }

@@ -2,19 +2,19 @@ use std::sync::Arc;
 
 use celestia_rpc::blobstream::BlobstreamClient;
 
-use crate::client::Context;
+use crate::client::ClientInner;
 use crate::types::hash::Hash;
 use crate::types::MerkleProof;
 use crate::Result;
 
 /// Blobstream API for quering bridge nodes.
 pub struct BlobstreamApi {
-    ctx: Arc<Context>,
+    inner: Arc<ClientInner>,
 }
 
 impl BlobstreamApi {
-    pub(crate) fn new(ctx: Arc<Context>) -> BlobstreamApi {
-        BlobstreamApi { ctx }
+    pub(crate) fn new(inner: Arc<ClientInner>) -> BlobstreamApi {
+        BlobstreamApi { inner }
     }
 
     /// Collects the data roots over a provided ordered range of blocks, and then
@@ -23,7 +23,7 @@ impl BlobstreamApi {
     /// The range is end exclusive.
     pub async fn get_data_root_tuple_root(&self, start: u64, end: u64) -> Result<Hash> {
         Ok(self
-            .ctx
+            .inner
             .rpc
             .blobstream_get_data_root_tuple_root(start, end)
             .await?)
@@ -40,7 +40,7 @@ impl BlobstreamApi {
         end: u64,
     ) -> Result<MerkleProof> {
         Ok(self
-            .ctx
+            .inner
             .rpc
             .blobstream_get_data_root_tuple_inclusion_proof(height, start, end)
             .await?)

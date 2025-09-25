@@ -8,6 +8,7 @@ use celestia_rpc::{Client as RpcClient, HeaderClient};
 use http::Request;
 use tonic::body::Body as TonicBody;
 use tonic::codegen::{Bytes, Service};
+use tonic::metadata::MetadataMap;
 
 use crate::blob::BlobApi;
 use crate::blobstream::BlobstreamApi;
@@ -19,13 +20,6 @@ use crate::tx::{DocSigner, Keypair, VerifyingKey};
 use crate::types::state::AccAddress;
 use crate::types::ExtendedHeader;
 use crate::{Error, Result};
-
-pub(crate) struct Context {
-    pub(crate) rpc: RpcClient,
-    grpc: Option<GrpcClient>,
-    pubkey: Option<VerifyingKey>,
-    chain_id: tendermint::chain::Id,
-}
 
 /// A high-level client for interacting with a Celestia node.
 ///
@@ -72,13 +66,20 @@ pub(crate) struct Context {
 /// [`celestia-rpc`]: celestia_rpc
 /// [`celestia-grpc`]: celestia_grpc
 pub struct Client {
-    ctx: Arc<Context>,
+    inner: Arc<ClientInner>,
     state: StateApi,
     blob: BlobApi,
     header: HeaderApi,
     share: ShareApi,
     fraud: FraudApi,
     blobstream: BlobstreamApi,
+}
+
+pub(crate) struct ClientInner {
+    pub(crate) rpc: RpcClient,
+    grpc: Option<GrpcClient>,
+    pubkey: Option<VerifyingKey>,
+    chain_id: tendermint::chain::Id,
 }
 
 /// A builder for [`Client`].
@@ -89,7 +90,7 @@ pub struct ClientBuilder {
     grpc_builder: Option<GrpcClientBuilder>,
 }
 
-impl Context {
+impl ClientInner {
     pub(crate) fn grpc(&self) -> Result<&GrpcClient> {
         self.grpc.as_ref().ok_or(Error::GrpcEndpointNotSet)
     }
@@ -118,17 +119,17 @@ impl Client {
 
     /// Returns chain id of the network.
     pub fn chain_id(&self) -> &tendermint::chain::Id {
-        &self.ctx.chain_id
+        &self.inner.chain_id
     }
 
     /// Returns the public key of the signer.
     pub fn pubkey(&self) -> Result<VerifyingKey> {
-        self.ctx.pubkey().cloned()
+        self.inner.pubkey().cloned()
     }
 
     /// Returns the address of signer.
     pub fn address(&self) -> Result<AccAddress> {
-        self.ctx.address()
+        self.inner.address()
     }
 
     /// Returns state API accessor.
@@ -243,6 +244,29 @@ impl ClientBuilder {
         self
     }
 
+    /// Appends ascii metadata to all requests made by the client.
+    pub fn grpc_metadata(mut self, key: &str, value: &str) -> Self {
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.metadata(key, value));
+        self
+    }
+
+    /// Appends binary metadata to all requests made by the client.
+    ///
+    /// Keys for binary metadata must have `-bin` suffix.
+    pub fn grpc_metadata_bin(mut self, key: &str, value: &[u8]) -> Self {
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.metadata_bin(key, value));
+        self
+    }
+
+    /// Sets the initial metadata map that will be attached to all requestes made by the client.
+    pub fn grpc_metadata_map(mut self, metadata: MetadataMap) -> Self {
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.metadata_map(metadata));
+        self
+    }
+
     /// Build [`Client`].
     pub async fn build(self) -> Result<Client> {
         let rpc_url = self.rpc_url.as_ref().ok_or(Error::RpcEndpointNotSet)?;
@@ -276,7 +300,7 @@ impl ClientBuilder {
             }
         }
 
-        let ctx = Arc::new(Context {
+        let inner = Arc::new(ClientInner {
             rpc,
             grpc,
             pubkey,
@@ -284,13 +308,13 @@ impl ClientBuilder {
         });
 
         Ok(Client {
-            ctx: ctx.clone(),
-            blob: BlobApi::new(ctx.clone()),
-            header: HeaderApi::new(ctx.clone()),
-            share: ShareApi::new(ctx.clone()),
-            fraud: FraudApi::new(ctx.clone()),
-            blobstream: BlobstreamApi::new(ctx.clone()),
-            state: StateApi::new(ctx.clone()),
+            inner: inner.clone(),
+            blob: BlobApi::new(inner.clone()),
+            header: HeaderApi::new(inner.clone()),
+            share: ShareApi::new(inner.clone()),
+            fraud: FraudApi::new(inner.clone()),
+            blobstream: BlobstreamApi::new(inner.clone()),
+            state: StateApi::new(inner.clone()),
         })
     }
 }

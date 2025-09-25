@@ -42,6 +42,12 @@ pub mod api {
         #[doc(inline)]
         pub use celestia_rpc::fraud::{Proof, ProofType};
     }
+
+    /// State API related types.
+    pub mod state {
+        #[doc(inline)]
+        pub use crate::state::AsyncGrpcCall;
+    }
 }
 
 /// TX related types.

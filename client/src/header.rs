@@ -5,38 +5,38 @@ use async_stream::try_stream;
 use celestia_rpc::HeaderClient;
 use futures_util::{Stream, StreamExt};
 
-use crate::client::Context;
+use crate::client::ClientInner;
 use crate::types::hash::Hash;
 use crate::types::{ExtendedHeader, SyncState};
 use crate::Result;
 
 /// Header API for quering bridge nodes.
 pub struct HeaderApi {
-    ctx: Arc<Context>,
+    inner: Arc<ClientInner>,
 }
 
 impl HeaderApi {
-    pub(crate) fn new(ctx: Arc<Context>) -> HeaderApi {
-        HeaderApi { ctx }
+    pub(crate) fn new(inner: Arc<ClientInner>) -> HeaderApi {
+        HeaderApi { inner }
     }
 
     /// Returns the latest header synchronized by the node.
     pub async fn head(&self) -> Result<ExtendedHeader> {
-        let header = self.ctx.rpc.header_local_head().await?;
+        let header = self.inner.rpc.header_local_head().await?;
         header.validate()?;
         Ok(header)
     }
 
     /// Returns the latest header announced in the network.
     pub async fn network_head(&self) -> Result<ExtendedHeader> {
-        let header = self.ctx.rpc.header_network_head().await?;
+        let header = self.inner.rpc.header_network_head().await?;
         header.validate()?;
         Ok(header)
     }
 
     /// Returns the header of the given hash from the node's header store.
     pub async fn get_by_hash(&self, hash: Hash) -> Result<ExtendedHeader> {
-        let header = self.ctx.rpc.header_get_by_hash(hash).await?;
+        let header = self.inner.rpc.header_get_by_hash(hash).await?;
         header.validate()?;
         Ok(header)
     }
@@ -44,7 +44,7 @@ impl HeaderApi {
     /// Returns the header at the given height, if it is
     /// currently available.
     pub async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
-        let header = self.ctx.rpc.header_get_by_height(height).await?;
+        let header = self.inner.rpc.header_get_by_height(height).await?;
         header.validate()?;
         Ok(header)
     }
@@ -60,7 +60,7 @@ impl HeaderApi {
     ) -> Result<Vec<ExtendedHeader>> {
         from.validate()?;
 
-        let headers = self.ctx.rpc.header_get_range_by_height(from, to).await?;
+        let headers = self.inner.rpc.header_get_range_by_height(from, to).await?;
 
         for header in &headers {
             header.validate()?;
@@ -73,19 +73,19 @@ impl HeaderApi {
 
     /// Blocks until the header at the given height has been synced by the node.
     pub async fn wait_for_height(&self, height: u64) -> Result<ExtendedHeader> {
-        let header = self.ctx.rpc.header_wait_for_height(height).await?;
+        let header = self.inner.rpc.header_wait_for_height(height).await?;
         header.validate()?;
         Ok(header)
     }
 
     /// Returns the current state of the node's Syncer.
     pub async fn sync_state(&self) -> Result<SyncState> {
-        Ok(self.ctx.rpc.header_sync_state().await?)
+        Ok(self.inner.rpc.header_sync_state().await?)
     }
 
     /// Blocks until the node's Syncer is synced to network head.
     pub async fn sync_wait(&self) -> Result<()> {
-        Ok(self.ctx.rpc.header_sync_wait().await?)
+        Ok(self.inner.rpc.header_sync_wait().await?)
     }
 
     /// Subscribe to recent headers from the network.
@@ -115,11 +115,11 @@ impl HeaderApi {
     pub async fn subscribe(
         &self,
     ) -> Pin<Box<dyn Stream<Item = Result<ExtendedHeader>> + Send + 'static>> {
-        let ctx = self.ctx.clone();
+        let inner = self.inner.clone();
 
         try_stream! {
             let mut prev_header: Option<ExtendedHeader> = None;
-            let mut subscription = ctx.rpc.header_subscribe().await?;
+            let mut subscription = inner.rpc.header_subscribe().await?;
 
             while let Some(item) = subscription.next().await {
                 let header = item?;
