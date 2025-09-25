@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.3.3...lumina-node-uniffi-v0.4.0) - 2025-09-25
+
+### Added
+
+- [**breaking**] unify and upgrade dependencies, add explicit msrv ([#742](https://github.com/eigerco/lumina/pull/742))
+- *(grpc)* [**breaking**] Merge TxClient and GrpcClient, add builder ([#712](https://github.com/eigerco/lumina/pull/712))
+
 ## [0.3.3](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.3.2...lumina-node-uniffi-v0.3.3) - 2025-09-08
 
 ### Other
