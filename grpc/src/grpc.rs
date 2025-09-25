@@ -6,7 +6,7 @@ use std::{any, fmt};
 #[cfg(feature = "uniffi")]
 use celestia_types::Hash;
 use futures::future::{BoxFuture, FutureExt};
-use tonic::metadata::{Ascii, KeyAndValueRef, MetadataKey, MetadataMap, MetadataValue};
+use tonic::metadata::{Ascii, Binary, KeyAndValueRef, MetadataKey, MetadataMap, MetadataValue};
 
 use crate::error::MetadataError;
 use crate::Result;
@@ -62,14 +62,7 @@ impl Context {
         let value = val.parse().map_err(|_| MetadataError::Value(key.into()))?;
         let key: MetadataKey<Ascii> = key.parse().map_err(|_| MetadataError::Key(key.into()))?;
 
-        if !self
-            .metadata
-            .get_all(&key)
-            .into_iter()
-            .any(|val| val == value)
-        {
-            self.metadata.append(key, value);
-        }
+        self.maybe_append_ascii(key, value);
 
         Ok(())
     }
@@ -86,14 +79,7 @@ impl Context {
             .map_err(|_| MetadataError::KeyBin(key.into()))?;
         let value = MetadataValue::from_bytes(val);
 
-        if !self
-            .metadata
-            .get_all_bin(&key)
-            .into_iter()
-            .any(|val| val == value)
-        {
-            self.metadata.append_bin(key, value);
-        }
+        self.maybe_append_bin(key, value);
 
         Ok(())
     }
@@ -103,10 +89,10 @@ impl Context {
         for key_and_value in metadata.iter() {
             match key_and_value {
                 KeyAndValueRef::Ascii(key, val) => {
-                    self.metadata.append(key, val.clone());
+                    self.maybe_append_ascii(key.clone(), val.clone());
                 }
                 KeyAndValueRef::Binary(key, val) => {
-                    self.metadata.append_bin(key, val.clone());
+                    self.maybe_append_bin(key.clone(), val.clone());
                 }
             }
         }
@@ -115,6 +101,28 @@ impl Context {
     /// Merges the other context into self.
     pub(crate) fn extend(&mut self, other: &Context) {
         self.append_metadata_map(&other.metadata);
+    }
+
+    fn maybe_append_ascii(&mut self, key: MetadataKey<Ascii>, value: MetadataValue<Ascii>) {
+        if !self
+            .metadata
+            .get_all(&key)
+            .into_iter()
+            .any(|val| val == value)
+        {
+            self.metadata.append(key, value);
+        }
+    }
+
+    fn maybe_append_bin(&mut self, key: MetadataKey<Binary>, value: MetadataValue<Binary>) {
+        if !self
+            .metadata
+            .get_all_bin(&key)
+            .into_iter()
+            .any(|val| val == value)
+        {
+            self.metadata.append_bin(key, value);
+        }
     }
 }
 
@@ -182,9 +190,9 @@ impl<Response, Error> AsyncGrpcCall<Response, Error> {
     }
 
     /// Append a metadata map to the grpc request.
-    pub fn metadata_map(self, metadata: MetadataMap) -> Self {
-        let context = Context { metadata };
-        self.context(&context)
+    pub fn metadata_map(mut self, metadata: MetadataMap) -> Self {
+        self.context.append_metadata_map(&metadata);
+        self
     }
 
     /// Performs the state queries at the specified height, unless node pruned it already.
