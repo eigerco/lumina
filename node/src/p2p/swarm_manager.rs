@@ -140,8 +140,8 @@ where
             addrs.shrink_to_fit();
 
             // Bootnodes are always trusted and protected
-            peer_tracker.set_trusted(*peer_id, true);
-            peer_tracker.protect(*peer_id, BOOTNODE_PROTECT_TAG);
+            peer_tracker.set_trusted(peer_id, true);
+            peer_tracker.protect(peer_id, BOOTNODE_PROTECT_TAG);
         }
 
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
@@ -173,14 +173,14 @@ where
         }
     }
 
-    fn connect(&mut self, peer_id: PeerId, addresses: impl Into<Option<Vec<Multiaddr>>>) {
+    fn connect(&mut self, peer_id: &PeerId, addresses: impl Into<Option<Vec<Multiaddr>>>) {
         if self.peer_tracker.is_connected(peer_id) {
             return;
         }
 
         let addresses = addresses.into().unwrap_or_default();
 
-        let dial_opts = DialOpts::peer_id(peer_id)
+        let dial_opts = DialOpts::peer_id(*peer_id)
             // Tell Swarm not to dial if peer is already connected or there
             // is an ongoing dialing.
             .condition(PeerCondition::DisconnectedAndNotDialing);
@@ -198,7 +198,7 @@ where
         }
     }
 
-    fn protect(&mut self, peer_id: PeerId, tag: u32) {
+    fn protect(&mut self, peer_id: &PeerId, tag: u32) {
         if self.peer_tracker.protect(peer_id, tag) {
             // Change keep alive of ongoing connections
             for conn_id in self.peer_tracker.connections(peer_id) {
@@ -210,7 +210,7 @@ where
         }
     }
 
-    fn unprotect(&mut self, peer_id: PeerId, tag: u32) {
+    fn unprotect(&mut self, peer_id: &PeerId, tag: u32) {
         if self.peer_tracker.unprotect(peer_id, tag) {
             // Change keep alive of ongoing connections
             for conn_id in self.peer_tracker.connections(peer_id) {
@@ -222,16 +222,16 @@ where
         }
     }
 
-    fn find_node_and_connect(&mut self, peer_id: PeerId) {
+    fn find_node_and_connect(&mut self, peer_id: &PeerId) {
         let kad_entry_exists = self
             .swarm
             .behaviour_mut()
             .kademlia
-            .kbucket(peer_id)
+            .kbucket(*peer_id)
             .map(|bucket| {
                 bucket
                     .iter()
-                    .any(|entry| *entry.node.key.preimage() == peer_id)
+                    .any(|entry| entry.node.key.preimage() == peer_id)
             })
             .unwrap_or(false);
 
@@ -261,7 +261,7 @@ where
             self.swarm
                 .behaviour_mut()
                 .kademlia
-                .get_closest_peers(peer_id);
+                .get_closest_peers(*peer_id);
         }
     }
 
@@ -271,7 +271,7 @@ where
             .bootnodes
             .iter()
             .filter_map(|(peer_id, addrs)| {
-                if self.peer_tracker.is_connected(*peer_id) {
+                if self.peer_tracker.is_connected(peer_id) {
                     None
                 } else {
                     Some((peer_id.to_owned(), addrs.to_owned()))
@@ -295,7 +295,7 @@ where
                     .add_address(&peer_id, addr.to_owned());
             }
 
-            self.connect(peer_id, addrs);
+            self.connect(&peer_id, addrs);
         }
     }
 
@@ -364,8 +364,8 @@ where
             .collect()
     }
 
-    pub(crate) fn set_peer_trust(&mut self, peer_id: PeerId, is_trusted: bool) {
-        if *self.swarm.local_peer_id() != peer_id {
+    pub(crate) fn set_peer_trust(&mut self, peer_id: &PeerId, is_trusted: bool) {
+        if self.swarm.local_peer_id() != peer_id {
             self.peer_tracker.set_trusted(peer_id, is_trusted);
         }
     }
@@ -447,9 +447,9 @@ where
         let mut canditates = self
             .peer_tracker
             .peers()
-            .filter_map(|(peer_id, peer)| {
+            .filter_map(|peer| {
                 if condition(peer) && peer.is_connected() && !peer.is_protected_for(tag) {
-                    Some((peer_id, peer.best_ping()?))
+                    Some((peer.id(), peer.best_ping()?))
                 } else {
                     None
                 }
@@ -468,7 +468,7 @@ where
 
         // Protect them
         for peer_id in to_be_protected {
-            self.protect(peer_id, tag);
+            self.protect(&peer_id, tag);
         }
     }
 
@@ -489,14 +489,14 @@ where
                 connection_id,
                 ..
             } => {
-                self.on_peer_connected(peer_id, connection_id);
+                self.on_peer_connected(&peer_id, connection_id);
             }
             SwarmEvent::ConnectionClosed {
                 peer_id,
                 connection_id,
                 ..
             } => {
-                self.on_peer_disconnected(peer_id, connection_id);
+                self.on_peer_disconnected(&peer_id, connection_id);
             }
             _ => {}
         }
@@ -505,7 +505,7 @@ where
     }
 
     #[instrument(skip_all, fields(peer_id = %peer_id))]
-    pub(crate) fn peer_maybe_discovered(&mut self, peer_id: PeerId) {
+    pub(crate) fn peer_maybe_discovered(&mut self, peer_id: &PeerId) {
         if !self.peer_tracker.add_peer_id(peer_id) {
             return;
         }
@@ -514,7 +514,7 @@ where
     }
 
     #[instrument(skip_all, fields(peer_id = %peer_id))]
-    fn on_peer_connected(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
+    fn on_peer_connected(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {
         debug!("Peer connected");
         self.peer_tracker.add_connection(peer_id, connection_id);
 
@@ -528,7 +528,7 @@ where
     }
 
     #[instrument(skip_all, fields(peer_id = %peer_id))]
-    fn on_peer_disconnected(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
+    fn on_peer_disconnected(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {
         self.peer_tracker.remove_connection(peer_id, connection_id);
 
         if !self.peer_tracker.is_connected(peer_id) {
@@ -543,7 +543,7 @@ where
         match ev {
             identify::Event::Received { peer_id, info, .. } => {
                 self.peer_tracker
-                    .on_agent_version(peer_id, &info.agent_version);
+                    .on_agent_version(&peer_id, &info.agent_version);
 
                 // Inform Kademlia about the listening addresses
                 // TODO: Remove this when rust-libp2p#5103 is implemented
@@ -569,7 +569,7 @@ where
                     })),
                 ..
             } => {
-                for p in providers {
+                for p in &providers {
                     if key == *FULL_NODE_TOPIC {
                         if self.peer_tracker.protected_len(FULL_PROTECT_TAG)
                             < MAX_PROTECTED_FULL_NODES
@@ -644,7 +644,7 @@ where
                     ..
                 } => {
                     // This will generate the PeerDisconnected events.
-                    self.on_peer_disconnected(peer_id, connection_id);
+                    self.on_peer_disconnected(&peer_id, connection_id);
                 }
                 _ => {}
             }

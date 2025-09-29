@@ -163,9 +163,9 @@ where
         // For now HEAD is requested from trusted peers only!
         let peers = peer_tracker
             .peers()
-            .filter_map(|(peer_id, peer)| {
+            .filter_map(|peer| {
                 if peer.is_connected() && peer.is_trusted() {
-                    Some(peer_id)
+                    Some(peer.id())
                 } else {
                     None
                 }
@@ -1396,9 +1396,9 @@ mod tests {
         let mut peers = PeerTracker::new(event_channel.publisher());
 
         for i in 0..amount {
-            let peer = PeerId::random();
-            peers.set_trusted(peer, true);
-            peers.add_connection(peer, ConnectionId::new_unchecked(i));
+            let peer_id = PeerId::random();
+            peers.set_trusted(&peer_id, true);
+            peers.add_connection(&peer_id, ConnectionId::new_unchecked(i));
         }
 
         peers

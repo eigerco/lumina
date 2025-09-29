@@ -854,9 +854,9 @@ where
                     .context()
                     .peer_tracker
                     .peers()
-                    .filter_map(|(peer_id, peer)| {
+                    .filter_map(|peer| {
                         if peer.is_connected() {
-                            Some(peer_id.to_owned())
+                            Some(*peer.id())
                         } else {
                             None
                         }
@@ -871,7 +871,7 @@ where
                 peer_id,
                 is_trusted,
             } => {
-                self.swarm.set_peer_trust(peer_id, is_trusted);
+                self.swarm.set_peer_trust(&peer_id, is_trusted);
             }
             P2pCmd::GetShwapCid { cid, respond_to } => {
                 self.on_get_shwap_cid(cid, respond_to);
@@ -926,7 +926,7 @@ where
 
                 if !matches!(acceptance, gossipsub::MessageAcceptance::Reject) {
                     // We may have discovered a new peer
-                    self.swarm.peer_maybe_discovered(peer);
+                    self.swarm.peer_maybe_discovered(&peer);
                 }
 
                 let _ = self

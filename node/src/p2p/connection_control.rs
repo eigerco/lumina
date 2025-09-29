@@ -35,9 +35,9 @@ impl Behaviour {
         self.stopping = value;
     }
 
-    pub(crate) fn set_keep_alive(&mut self, peer_id: PeerId, conn_id: ConnectionId, value: bool) {
+    pub(crate) fn set_keep_alive(&mut self, peer_id: &PeerId, conn_id: ConnectionId, value: bool) {
         self.events.push_back(ToSwarm::NotifyHandler {
-            peer_id,
+            peer_id: *peer_id,
             handler: NotifyHandler::One(conn_id),
             event: FromBehaviour::SetKeepAlive(value),
         });
