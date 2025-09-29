@@ -1,5 +1,3 @@
-#![cfg(not(target_arch = "wasm32"))]
-
 use std::cmp::Ordering;
 use std::slice;
 use std::time::Duration;
@@ -11,13 +9,14 @@ use celestia_types::consts::appconsts::{self, AppVersion};
 use celestia_types::state::Address;
 use celestia_types::{Blob, Commitment};
 use jsonrpsee::core::client::Subscription;
+use lumina_utils::test_utils::async_test;
 
 pub mod utils;
 
 use crate::utils::client::{AuthLevel, blob_submit, blob_submit_with_config, new_test_client};
 use crate::utils::{random_bytes, random_bytes_array, random_ns};
 
-#[tokio::test]
+#[async_test]
 async fn blob_submit_and_get() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -55,7 +54,7 @@ async fn blob_submit_and_get() {
         .unwrap();
 }
 
-#[tokio::test]
+#[async_test]
 async fn blob_submit_and_get_with_signer() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
     let Address::AccAddress(address) = client.state_account_address().await.unwrap() else {
@@ -76,7 +75,7 @@ async fn blob_submit_and_get_with_signer() {
     assert_blob_equal_to_sent(&received_blob, &blob);
 }
 
-#[tokio::test]
+#[async_test]
 async fn blob_submit_and_get_all() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespaces = &[random_ns(), random_ns()];
@@ -111,7 +110,7 @@ async fn blob_submit_and_get_all() {
     }
 }
 
-#[tokio::test]
+#[async_test]
 async fn blob_submit_and_get_large() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -122,7 +121,7 @@ async fn blob_submit_and_get_large() {
 
     // It takes a while for a node to process large blob
     // so we need to wait a bit
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    lumina_utils::time::sleep(Duration::from_millis(1000)).await;
 
     let received_blob = client
         .blob_get(submitted_height, namespace, blob.commitment)
@@ -142,7 +141,7 @@ async fn blob_submit_and_get_large() {
     //       because without it we can't know how many shares there are in each row
 }
 
-#[tokio::test]
+#[async_test]
 async fn blob_subscribe() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -182,7 +181,7 @@ async fn blob_subscribe() {
     assert_blob_equal_to_sent(&received[1], &blob3);
 }
 
-#[tokio::test]
+#[async_test]
 async fn blob_submit_with_different_tx_config() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
 
@@ -202,7 +201,7 @@ async fn blob_submit_with_different_tx_config() {
     }
 }
 
-#[tokio::test]
+#[async_test]
 async fn blob_submit_too_large() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -215,7 +214,7 @@ async fn blob_submit_too_large() {
     blob_submit(&client, &[blob]).await.unwrap_err();
 }
 
-#[tokio::test]
+#[async_test]
 async fn blob_get_get_proof_wrong_ns() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -235,7 +234,7 @@ async fn blob_get_get_proof_wrong_ns() {
         .unwrap_err();
 }
 
-#[tokio::test]
+#[async_test]
 async fn blob_get_get_proof_wrong_commitment() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -256,7 +255,7 @@ async fn blob_get_get_proof_wrong_commitment() {
         .unwrap_err();
 }
 
-#[tokio::test]
+#[async_test]
 async fn blob_get_all_with_no_blobs() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
 

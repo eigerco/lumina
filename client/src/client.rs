@@ -285,12 +285,7 @@ impl ClientBuilder {
             (None, None)
         };
 
-        #[cfg(not(target_arch = "wasm32"))]
         let rpc = RpcClient::new(rpc_url, rpc_auth_token).await?;
-
-        #[cfg(target_arch = "wasm32")]
-        let rpc = RpcClient::new(rpc_url).await?;
-
         let head = rpc.header_network_head().await?;
         head.validate()?;
 

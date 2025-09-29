@@ -29,7 +29,7 @@ blockstore.workspace = true
 
 async-stream = "0.3.5"
 bytes.workspace = true
-futures-util = "0.3"
+futures-util.workspace = true
 hex.workspace = true
 http.workspace = true
 http-body.workspace = true

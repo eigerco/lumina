@@ -34,10 +34,24 @@ tracing.workspace = true
 http.workspace = true
 jsonrpsee = { workspace = true, features = ["http-client", "ws-client"] }
 
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+futures-util.workspace = true
+# todo, all features are default, maybe we don't care
+gloo-net = { version = "0.6", features = ["http", "json"] }
+send_wrapper.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
 anyhow.workspace = true
-dotenvy.workspace = true
 futures.workspace = true
+lumina-utils = { workspace = true, features = ["test-utils", "time"] }
+nmt-rs.workspace = true
+rand.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+tracing.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+dotenvy.workspace = true
 libp2p = { workspace = true, features = [
   "tokio",
   "macros",
@@ -45,10 +59,7 @@ libp2p = { workspace = true, features = [
   "noise",
   "yamux",
 ] }
-nmt-rs.workspace = true
-rand.workspace = true
 tokio = { workspace = true, features = ["rt", "macros"] }
-tracing.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 getrandom_02.workspace = true

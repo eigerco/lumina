@@ -450,12 +450,12 @@ mod tests {
     use crate::worker::NodeWorker;
 
     // uses bridge-0, which has skip-auth enabled
-    const WS_URL: &str = "ws://127.0.0.1:26658";
+    const RPC_URL: &str = "http://127.0.0.1:26658";
 
     #[wasm_bindgen_test]
     async fn request_network_head_header() {
         remove_database().await.expect("failed to clear db");
-        let rpc_client = Client::new(WS_URL).await.unwrap();
+        let rpc_client = Client::new(RPC_URL, None).await.unwrap();
         let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
 
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
@@ -478,7 +478,7 @@ mod tests {
     async fn discover_network_peers() {
         crate::utils::setup_logging();
         remove_database().await.expect("failed to clear db");
-        let rpc_client = Client::new(WS_URL).await.unwrap();
+        let rpc_client = Client::new(RPC_URL, None).await.unwrap();
         let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
 
         // wait for other nodes to connect to bridge
@@ -506,7 +506,7 @@ mod tests {
     #[wasm_bindgen_test]
     async fn get_blob() {
         remove_database().await.expect("failed to clear db");
-        let rpc_client = Client::new(WS_URL).await.unwrap();
+        let rpc_client = Client::new(RPC_URL, None).await.unwrap();
         let namespace = Namespace::new_v0(&[0xCD, 0xDC, 0xCD, 0xDC, 0xCD, 0xDC]).unwrap();
         let data = b"Hello, World";
         let blobs = vec![Blob::new(namespace, data.to_vec(), None, AppVersion::V3).unwrap()];

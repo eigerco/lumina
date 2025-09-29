@@ -163,19 +163,28 @@ mod native {
 mod wasm {
     use std::fmt;
     use std::result::Result;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
-    use jsonrpsee::core::ClientError;
+    use gloo_net::http::{Request as JsRequest, Response as JsResponse};
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
+    use jsonrpsee::core::middleware::Batch;
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
-    use jsonrpsee::wasm_client::{Client as WasmClient, WasmClientBuilder};
+    use jsonrpsee::core::{ClientError, JsonRawValue};
+    use jsonrpsee::types::{
+        Id, InvalidRequestId, Notification, Request, Response, ResponseSuccess,
+    };
+    use send_wrapper::SendWrapper;
+    use serde::Serialize;
     use serde::de::DeserializeOwned;
 
     use crate::Error;
 
     /// Json RPC client.
     pub struct Client {
-        client: WasmClient,
+        id: AtomicU64,
+        url: String,
+        auth_token: Option<String>,
     }
 
     impl Client {
@@ -190,14 +199,51 @@ mod wasm {
         /// authentication (--rpc.skip-auth) to use wasm.
         ///
         /// For a secure connection you have to hide it behind a proxy.
-        pub async fn new(conn_str: &str) -> Result<Self, Error> {
+        pub async fn new(conn_str: &str, auth_token: Option<&str>) -> Result<Self, Error> {
             let protocol = conn_str.split_once(':').map(|(proto, _)| proto);
-            let client = match protocol {
-                Some("ws") | Some("wss") => WasmClientBuilder::default().build(conn_str).await?,
+            match protocol {
+                Some("http") | Some("https") => (),
                 _ => return Err(Error::ProtocolNotSupported(conn_str.into())),
             };
 
-            Ok(Client { client })
+            Ok(Client {
+                id: AtomicU64::new(0),
+                url: conn_str.into(),
+                auth_token: auth_token.map(ToOwned::to_owned),
+            })
+        }
+    }
+
+    impl Client {
+        async fn send<T: Serialize>(&self, request: T) -> Result<JsResponse, ClientError> {
+            let fut = {
+                let mut req = JsRequest::post(&self.url);
+
+                if let Some(token) = self.auth_token.as_ref() {
+                    req = req.header("Authorization", &format!("Bearer {token}"));
+                }
+
+                req.json(&request).map_err(parse_error)?.send()
+            };
+
+            SendWrapper::new(fut)
+                .await
+                .map_err(|e| ClientError::Transport(e.into()))
+        }
+
+        async fn send_and_read_body<T: Serialize>(
+            &self,
+            request: T,
+        ) -> Result<Vec<u8>, ClientError> {
+            let response = SendWrapper::new(self.send(request).await?);
+
+            if !response.ok() {
+                return Err(ClientError::Transport(todo!("error with status")));
+            }
+
+            SendWrapper::new(response.binary())
+                .await
+                .map_err(|err| ClientError::Transport(err.into()))
         }
     }
 
@@ -210,7 +256,12 @@ mod wasm {
         where
             Params: ToRpcParams + Send,
         {
-            self.client.notification(method, params).await
+            let params = params.to_rpc_params()?;
+            let notification = Notification::new(method.into(), params);
+
+            self.send(notification).await?;
+
+            Ok(())
         }
 
         async fn request<R, Params>(&self, method: &str, params: Params) -> Result<R, ClientError>
@@ -218,7 +269,21 @@ mod wasm {
             R: DeserializeOwned,
             Params: ToRpcParams + Send,
         {
-            self.client.request(method, params).await
+            let id = Id::Number(self.id.fetch_add(1, Ordering::Relaxed));
+            let params = params.to_rpc_params()?;
+            let request = Request::borrowed(method, params.as_deref(), id.clone());
+
+            let body = self.send_and_read_body(request).await?;
+            let response: Response<&JsonRawValue> = serde_json::from_slice(&body)?;
+
+            let success = ResponseSuccess::try_from(response)?;
+
+            if success.id == id {
+                let result = serde_json::from_str(success.result.get())?;
+                Ok(result)
+            } else {
+                Err(InvalidRequestId::NotPendingRequest(success.id.to_string()).into())
+            }
         }
 
         async fn batch_request<'a, R>(
@@ -228,37 +293,103 @@ mod wasm {
         where
             R: DeserializeOwned + fmt::Debug + 'a,
         {
-            self.client.batch_request(batch).await
+            // this will throw an error if batch is empty
+            let batch = batch.build()?;
+
+            let mut first_id = None;
+            let mut last_id = 0;
+
+            let mut batch_request = Batch::with_capacity(batch.len());
+            for (method, params) in batch.into_iter() {
+                let id = self.id.fetch_add(1, Ordering::Relaxed);
+                if first_id.is_none() {
+                    first_id = Some(id);
+                }
+                last_id = id;
+
+                let id = Id::Number(id);
+                let request = Request::owned(method.into(), params, id);
+                batch_request.push(request);
+            }
+
+            let first_id = first_id.expect("must be set");
+
+            let body = self.send_and_read_body(batch_request).await?;
+
+            let mut resps: Vec<Response<&JsonRawValue>> = serde_json::from_slice(&body)?;
+            resps.sort_by(|lhs, rhs| {
+                // put those with unexpected ids first, we'll error out on them
+                // at the beginning of the next loop
+                let lhs_id = lhs.id.try_parse_inner_as_number().unwrap_or(0);
+                let rhs_id = rhs.id.try_parse_inner_as_number().unwrap_or(0);
+                lhs_id.cmp(&rhs_id)
+            });
+
+            let mut successful = 0;
+            let mut failed = 0;
+
+            let mut batch_resp = Vec::with_capacity((last_id - first_id) as usize + 1);
+            for resp in resps.into_iter() {
+                let id = resp.id.try_parse_inner_as_number()?;
+                if id < first_id || id > last_id {
+                    return Err(InvalidRequestId::NotPendingRequest(id.to_string()).into());
+                }
+
+                let res = match ResponseSuccess::try_from(resp) {
+                    Ok(success) => {
+                        successful += 1;
+                        Ok(serde_json::from_str(success.result.get())?)
+                    }
+                    Err(error) => {
+                        failed += 1;
+                        Err(error)
+                    }
+                };
+
+                batch_resp.push(res);
+            }
+
+            Ok(BatchResponse::new(successful, batch_resp, failed))
         }
     }
 
     impl SubscriptionClientT for Client {
         async fn subscribe<'a, N, Params>(
             &self,
-            subscribe_method: &'a str,
-            params: Params,
-            unsubscribe_method: &'a str,
+            _subscribe_method: &'a str,
+            _params: Params,
+            _unsubscribe_method: &'a str,
         ) -> Result<Subscription<N>, ClientError>
         where
             Params: ToRpcParams + Send,
             N: DeserializeOwned,
         {
-            self.client
-                .subscribe(subscribe_method, params, unsubscribe_method)
-                .await
+            Err(ClientError::HttpNotImplemented)
         }
 
-        async fn subscribe_to_method<N>(&self, method: &str) -> Result<Subscription<N>, ClientError>
+        async fn subscribe_to_method<N>(
+            &self,
+            _method: &str,
+        ) -> Result<Subscription<N>, ClientError>
         where
             N: DeserializeOwned,
         {
-            self.client.subscribe_to_method(method).await
+            Err(ClientError::HttpNotImplemented)
         }
     }
 
     impl fmt::Debug for Client {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.write_str("Client { .. }")
+        }
+    }
+
+    /// Used to translate gloo errors originating from serde into client errors.
+    /// Can panic if used in a place that has other gloo error types possible.
+    fn parse_error(err: gloo_net::Error) -> ClientError {
+        match err {
+            gloo_net::Error::SerdeError(e) => ClientError::ParseError(e),
+            _ => unreachable!("this can only fail on a call to serde_json"),
         }
     }
 }

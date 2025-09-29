@@ -109,6 +109,8 @@ main() {
   echo "Configuration finished. Running a $NODE_TYPE node..."
   celestia "$NODE_TYPE" start \
     --rpc.skip-auth="$SKIP_AUTH" \
+    --rpc.cors-enabled=true \
+    --rpc.cors-allowed-origins "*" \
     --rpc.addr 0.0.0.0 \
     --core.ip validator \
     --keyring.keyname "$NODE_NAME" \

@@ -1,11 +1,12 @@
-#![cfg(not(target_arch = "wasm32"))]
-
 use celestia_types::nmt::{NS_ID_V0_SIZE, Namespace};
 use rand::{Rng, RngCore};
 
 pub mod client;
-#[cfg(feature = "p2p")]
+#[cfg(all(feature = "p2p", not(target_arch = "wasm32")))]
 pub mod tiny_node;
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 fn ns_to_u128(ns: Namespace) -> u128 {
     let mut bytes = [0u8; 16];
