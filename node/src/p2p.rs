@@ -30,21 +30,11 @@ use celestia_types::sample::{Sample, SampleId};
 use celestia_types::{Blob, ExtendedHeader, FraudProof};
 use cid::Cid;
 use futures::stream::FuturesOrdered;
-use futures::{StreamExt, TryStreamExt};
-use libp2p::core::transport::ListenerId;
+use futures::TryStreamExt;
 use libp2p::{
-    autonat,
-    core::{ConnectedPoint, Endpoint},
     gossipsub::{self, TopicHash},
-    identify,
     identity::Keypair,
-    kad,
-    multiaddr::Protocol,
-    ping,
-    swarm::{
-        dial_opts::{DialOpts, PeerCondition},
-        ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent,
-    },
+    swarm::{NetworkBehaviour, NetworkInfo},
     Multiaddr, PeerId,
 };
 use lumina_utils::executor::{spawn, JoinHandle};
@@ -62,13 +52,14 @@ mod header_ex;
 pub(crate) mod header_session;
 pub(crate) mod shwap;
 mod swarm;
+mod swarm_manager;
 
 use crate::block_ranges::BlockRange;
-use crate::events::{EventPublisher, NodeEvent};
+use crate::events::EventPublisher;
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
 use crate::p2p::shwap::{convert_cid, get_block_container, ShwapMultihasher};
-use crate::p2p::swarm::new_swarm;
+use crate::p2p::swarm_manager::SwarmManager;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::{Store, StoreError};
@@ -78,11 +69,6 @@ use crate::utils::{
 };
 
 pub use crate::p2p::header_ex::HeaderExError;
-
-// Minimal number of peers that we want to maintain connection to.
-// If we have fewer peers than that, we will try to reconnect / discover
-// more aggresively.
-const MIN_CONNECTED_PEERS: u64 = 4;
 
 // Maximum size of a [`Multihash`].
 pub(crate) const MAX_MH_SIZE: usize = 64;
@@ -291,7 +277,7 @@ impl P2p {
 
         let local_peer_id = PeerId::from(args.local_keypair.public());
 
-        let peer_tracker = Arc::new(PeerTracker::new(args.event_pub.clone()));
+        let peer_tracker = PeerTracker::new(args.event_pub.clone());
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
 
         let cancellation_token = CancellationToken::new();
@@ -697,21 +683,15 @@ impl Drop for P2p {
     }
 }
 
-/// Our network behaviour.
 #[derive(NetworkBehaviour)]
 struct Behaviour<B, S>
 where
     B: Blockstore + 'static,
     S: Store + 'static,
 {
-    connection_control: connection_control::Behaviour,
-    autonat: autonat::Behaviour,
     bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
-    ping: ping::Behaviour,
-    identify: identify::Behaviour,
     header_ex: HeaderExBehaviour<S>,
     gossipsub: gossipsub::Behaviour,
-    kademlia: kad::Behaviour<kad::store::MemoryStore>,
 }
 
 struct Worker<B, S>
@@ -720,18 +700,14 @@ where
     S: Store + 'static,
 {
     cancellation_token: CancellationToken,
-    swarm: Swarm<Behaviour<B, S>>,
-    listeners: SmallVec<[ListenerId; 1]>,
+    swarm: SwarmManager<Behaviour<B, S>>,
     header_sub_topic_hash: TopicHash,
     bad_encoding_fraud_sub_topic: TopicHash,
     cmd_rx: mpsc::Receiver<P2pCmd>,
-    peer_tracker: Arc<PeerTracker>,
     header_sub_state: Option<HeaderSubState>,
     bitswap_queries: HashMap<beetswap::QueryId, OneshotResultSender<Vec<u8>, P2pError>>,
     network_compromised_token: Token,
     store: Arc<S>,
-    event_pub: EventPublisher,
-    bootnodes: HashMap<PeerId, Vec<Multiaddr>>,
 }
 
 struct HeaderSubState {
@@ -748,26 +724,13 @@ where
         args: P2pArgs<B, S>,
         cancellation_token: CancellationToken,
         cmd_rx: mpsc::Receiver<P2pCmd>,
-        peer_tracker: Arc<PeerTracker>,
+        peer_tracker: PeerTracker,
     ) -> Result<Self, P2pError> {
-        let local_peer_id = PeerId::from(args.local_keypair.public());
-
-        let connection_control = connection_control::Behaviour::new();
-        let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
-        let ping = ping::Behaviour::new(ping::Config::default());
-
-        let agent_version = format!("lumina/{}/{}", args.network_id, env!("CARGO_PKG_VERSION"));
-        let identify = identify::Behaviour::new(
-            identify::Config::new(String::new(), args.local_keypair.public())
-                .with_agent_version(agent_version),
-        );
-
         let header_sub_topic = gossipsub_ident_topic(&args.network_id, "/header-sub/v0.0.1");
         let bad_encoding_fraud_sub_topic =
             fraudsub_ident_topic(BadEncodingFraudProof::TYPE, &args.network_id);
         let gossipsub = init_gossipsub(&args, [&header_sub_topic, &bad_encoding_fraud_sub_topic])?;
 
-        let kademlia = init_kademlia(&args)?;
         let bitswap = init_bitswap(
             args.blockstore.clone(),
             args.store.clone(),
@@ -776,98 +739,61 @@ where
 
         let header_ex = HeaderExBehaviour::new(HeaderExConfig {
             network_id: &args.network_id,
-            peer_tracker: peer_tracker.clone(),
             header_store: args.store.clone(),
         });
 
         let behaviour = Behaviour {
-            connection_control,
-            autonat,
             bitswap,
-            ping,
-            identify,
             gossipsub,
             header_ex,
-            kademlia,
         };
 
-        let mut swarm = new_swarm(args.local_keypair, behaviour).await?;
-        let mut listeners = SmallVec::new();
-
-        for addr in args.listen_on {
-            match swarm.listen_on(addr.clone()) {
-                Ok(id) => listeners.push(id),
-                Err(e) => error!("Failed to listen on {addr}: {e}"),
-            }
-        }
-
-        let mut bootnodes = HashMap::<_, Vec<_>>::new();
-
-        for addr in args.bootnodes {
-            let peer_id = addr.peer_id().expect("multiaddr already validated");
-            bootnodes.entry(peer_id).or_default().push(addr);
-        }
-
-        for (peer_id, addrs) in bootnodes.iter_mut() {
-            addrs.sort();
-            addrs.dedup();
-            addrs.shrink_to_fit();
-
-            // Bootstrap peers are always trusted
-            peer_tracker.set_trusted(*peer_id, true);
-        }
+        let swarm = SwarmManager::new(
+            &args.network_id,
+            &args.local_keypair,
+            &args.bootnodes,
+            &args.listen_on,
+            peer_tracker,
+            args.event_pub,
+            behaviour,
+        )
+        .await?;
 
         Ok(Worker {
             cancellation_token,
-            cmd_rx,
             swarm,
-            listeners,
+            cmd_rx,
             bad_encoding_fraud_sub_topic: bad_encoding_fraud_sub_topic.hash(),
             header_sub_topic_hash: header_sub_topic.hash(),
-            peer_tracker,
             header_sub_state: None,
             bitswap_queries: HashMap::new(),
             network_compromised_token: Token::new(),
             store: args.store,
-            event_pub: args.event_pub,
-            bootnodes,
         })
     }
 
     async fn run(&mut self) {
         let mut report_interval = Interval::new(Duration::from_secs(60)).await;
-        let mut kademlia_interval = Interval::new(Duration::from_secs(30)).await;
-        let mut peer_tracker_info_watcher = self.peer_tracker.info_watcher();
-
-        // Initiate discovery
-        self.bootstrap();
 
         loop {
             select! {
                 _ = self.cancellation_token.cancelled() => break,
-                _ = peer_tracker_info_watcher.changed() => {
-                    if peer_tracker_info_watcher.borrow().num_connected_peers == 0 {
-                        warn!("All peers disconnected");
-                        self.bootstrap();
-                    }
-                }
                 _ = report_interval.tick() => {
                     self.report();
-                }
-                _ = kademlia_interval.tick() => {
-                    if self.peer_tracker.info().num_connected_peers < MIN_CONNECTED_PEERS
-                    {
-                        self.bootstrap();
-                    }
                 }
                 _ = poll_closed(&mut self.bitswap_queries) => {
                     self.prune_canceled_bitswap_queries();
                 }
-                ev = self.swarm.select_next_some() => {
-                    if let Err(e) = self.on_swarm_event(ev).await {
-                        warn!("Failure while handling swarm event: {e}");
+                res = self.swarm.poll() => {
+                    match res {
+                        Ok(ev) => {
+                            if let Err(e) = self.on_behaviour_event(ev).await {
+                                warn!("Failure while handling behaviour event: {e}");
+                            }
+                        }
+                        Err(e) => warn!("Failure while polling SwarmManager: {e}"),
                     }
-                },
+                }
                 Some(cmd) = self.cmd_rx.recv() => {
                     if let Err(e) = self.on_cmd(cmd).await {
                         warn!("Failure while handling command. (error: {e})");
@@ -876,31 +802,8 @@ where
             }
         }
 
-        self.on_stop().await;
-    }
-
-    fn bootstrap(&mut self) {
-        self.event_pub.send(NodeEvent::ConnectingToBootnodes);
-
-        for (peer_id, addrs) in &self.bootnodes {
-            let dial_opts = DialOpts::peer_id(*peer_id)
-                .addresses(addrs.clone())
-                // Tell Swarm not to dial if peer is already connected or there
-                // is an ongoing dialing.
-                .condition(PeerCondition::DisconnectedAndNotDialing)
-                .build();
-
-            if let Err(e) = self.swarm.dial(dial_opts) {
-                if !matches!(e, DialError::DialPeerConditionFalse(_)) {
-                    warn!("Failed to dial on {addrs:?}: {e}");
-                }
-            }
-        }
-
-        // trigger kademlia bootstrap
-        if self.swarm.behaviour_mut().kademlia.bootstrap().is_err() {
-            warn!("Can't run kademlia bootstrap, no known peers");
-        }
+        self.swarm.context().behaviour.header_ex.stop();
+        self.swarm.stop().await;
     }
 
     fn prune_canceled_bitswap_queries(&mut self) {
@@ -914,82 +817,15 @@ where
 
         for query_id in cancelled {
             self.bitswap_queries.remove(&query_id);
-            self.swarm.behaviour_mut().bitswap.cancel(query_id);
+            self.swarm.context().behaviour.bitswap.cancel(query_id);
         }
     }
 
-    async fn on_stop(&mut self) {
-        self.swarm
-            .behaviour_mut()
-            .connection_control
-            .set_stopping(true);
-        self.swarm.behaviour_mut().header_ex.stop();
-
-        for listener in self.listeners.drain(..) {
-            self.swarm.remove_listener(listener);
-        }
-
-        for (_, ids) in self.peer_tracker.connections() {
-            for id in ids {
-                self.swarm.close_connection(id);
-            }
-        }
-
-        // Waiting until all established connections closed.
-        while self
-            .swarm
-            .network_info()
-            .connection_counters()
-            .num_established()
-            > 0
-        {
-            match self.swarm.select_next_some().await {
-                // We may receive this if connection was established just before we trigger stop.
-                SwarmEvent::ConnectionEstablished { connection_id, .. } => {
-                    // We immediately close the connection in this case.
-                    self.swarm.close_connection(connection_id);
-                }
-                SwarmEvent::ConnectionClosed {
-                    peer_id,
-                    connection_id,
-                    ..
-                } => {
-                    // This will generate the PeerDisconnected events.
-                    self.on_peer_disconnected(peer_id, connection_id);
-                }
-                _ => {}
-            }
-        }
-    }
-
-    async fn on_swarm_event(&mut self, ev: SwarmEvent<BehaviourEvent<B, S>>) -> Result<()> {
+    async fn on_behaviour_event(&mut self, ev: BehaviourEvent<B, S>) -> Result<()> {
         match ev {
-            SwarmEvent::Behaviour(ev) => match ev {
-                BehaviourEvent::Identify(ev) => self.on_identify_event(ev).await?,
-                BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await,
-                BehaviourEvent::Kademlia(ev) => self.on_kademlia_event(ev).await?,
-                BehaviourEvent::Bitswap(ev) => self.on_bitswap_event(ev).await,
-                BehaviourEvent::Ping(ev) => self.on_ping_event(ev).await,
-                BehaviourEvent::Autonat(_)
-                | BehaviourEvent::ConnectionControl(_)
-                | BehaviourEvent::HeaderEx(_) => {}
-            },
-            SwarmEvent::ConnectionEstablished {
-                peer_id,
-                connection_id,
-                endpoint,
-                ..
-            } => {
-                self.on_peer_connected(peer_id, connection_id, endpoint);
-            }
-            SwarmEvent::ConnectionClosed {
-                peer_id,
-                connection_id,
-                ..
-            } => {
-                self.on_peer_disconnected(peer_id, connection_id);
-            }
-            _ => {}
+            BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await,
+            BehaviourEvent::Bitswap(ev) => self.on_bitswap_event(ev).await,
+            BehaviourEvent::HeaderEx(_) => {}
         }
 
         Ok(())
@@ -1004,29 +840,29 @@ where
                 request,
                 respond_to,
             } => {
-                self.swarm
-                    .behaviour_mut()
+                let ctx = self.swarm.context();
+                ctx.behaviour
                     .header_ex
-                    .send_request(request, respond_to);
+                    .send_request(request, respond_to, ctx.peer_tracker);
             }
             P2pCmd::Listeners { respond_to } => {
-                let local_peer_id = self.swarm.local_peer_id().to_owned();
-                let listeners = self
-                    .swarm
-                    .listeners()
-                    .cloned()
-                    .map(|mut ma| {
-                        if !ma.protocol_stack().any(|protocol| protocol == "p2p") {
-                            ma.push(Protocol::P2p(local_peer_id))
-                        }
-                        ma
-                    })
-                    .collect();
-
-                respond_to.maybe_send(listeners);
+                respond_to.maybe_send(self.swarm.listeners());
             }
             P2pCmd::ConnectedPeers { respond_to } => {
-                respond_to.maybe_send(self.peer_tracker.connected_peers());
+                let peers = self
+                    .swarm
+                    .context()
+                    .peer_tracker
+                    .peers()
+                    .filter_map(|(peer_id, peer)| {
+                        if peer.is_connected() {
+                            Some(peer_id.to_owned())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                respond_to.maybe_send(peers);
             }
             P2pCmd::InitHeaderSub { head, channel } => {
                 self.on_init_header_sub(*head, channel);
@@ -1035,9 +871,7 @@ where
                 peer_id,
                 is_trusted,
             } => {
-                if *self.swarm.local_peer_id() != peer_id {
-                    self.peer_tracker.set_trusted(peer_id, is_trusted);
-                }
+                self.swarm.set_peer_trust(peer_id, is_trusted);
             }
             P2pCmd::GetShwapCid { cid, respond_to } => {
                 self.on_get_shwap_cid(cid, respond_to);
@@ -1059,31 +893,12 @@ where
 
     #[instrument(skip_all)]
     fn report(&mut self) {
-        let tracker_info = self.peer_tracker.info();
+        let tracker_info = self.swarm.context().peer_tracker.info();
 
         info!(
             "peers: {}, trusted peers: {}",
             tracker_info.num_connected_peers, tracker_info.num_connected_trusted_peers,
         );
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    async fn on_identify_event(&mut self, ev: identify::Event) -> Result<()> {
-        match ev {
-            identify::Event::Received { peer_id, info, .. } => {
-                // Inform Kademlia about the listening addresses
-                // TODO: Remove this when rust-libp2p#5103 is implemented
-                for addr in info.listen_addrs {
-                    self.swarm
-                        .behaviour_mut()
-                        .kademlia
-                        .add_address(&peer_id, addr);
-                }
-            }
-            _ => trace!("Unhandled identify event"),
-        }
-
-        Ok(())
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -1111,12 +926,13 @@ where
 
                 if !matches!(acceptance, gossipsub::MessageAcceptance::Reject) {
                     // We may have discovered a new peer
-                    self.peer_maybe_discovered(peer);
+                    self.swarm.peer_maybe_discovered(peer);
                 }
 
                 let _ = self
                     .swarm
-                    .behaviour_mut()
+                    .context()
+                    .behaviour
                     .gossipsub
                     .report_message_validation_result(&message_id, &peer, acceptance);
             }
@@ -1124,24 +940,10 @@ where
         }
     }
 
-    #[instrument(level = "trace", skip(self))]
-    async fn on_kademlia_event(&mut self, ev: kad::Event) -> Result<()> {
-        match ev {
-            kad::Event::RoutingUpdated {
-                peer, addresses, ..
-            } => {
-                self.peer_tracker.add_addresses(peer, addresses.iter());
-            }
-            _ => trace!("Unhandled Kademlia event"),
-        }
-
-        Ok(())
-    }
-
     #[instrument(level = "trace", skip_all)]
     fn on_get_shwap_cid(&mut self, cid: Cid, respond_to: OneshotResultSender<Vec<u8>, P2pError>) {
         trace!("Requesting CID {cid} from bitswap");
-        let query_id = self.swarm.behaviour_mut().bitswap.get(&cid);
+        let query_id = self.swarm.context().behaviour.bitswap.get(&cid);
         self.bitswap_queries.insert(query_id, respond_to);
     }
 
@@ -1159,69 +961,6 @@ where
                     respond_to.maybe_send_err(error);
                 }
             }
-        }
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    async fn on_ping_event(&mut self, ev: ping::Event) {
-        match ev.result {
-            Ok(dur) => debug!(
-                "Ping success: peer: {}, connection_id: {}, time: {:?}",
-                ev.peer, ev.connection, dur
-            ),
-            Err(e) => {
-                debug!(
-                    "Ping failure: peer: {}, connection_id: {}, error: {}",
-                    &ev.peer, &ev.connection, e
-                );
-                self.swarm.close_connection(ev.connection);
-            }
-        }
-    }
-
-    #[instrument(skip_all, fields(peer_id = %peer_id))]
-    fn peer_maybe_discovered(&mut self, peer_id: PeerId) {
-        if !self.peer_tracker.set_maybe_discovered(peer_id) {
-            return;
-        }
-
-        debug!("Peer discovered");
-    }
-
-    #[instrument(skip_all, fields(peer_id = %peer_id))]
-    fn on_peer_connected(
-        &mut self,
-        peer_id: PeerId,
-        connection_id: ConnectionId,
-        endpoint: ConnectedPoint,
-    ) {
-        debug!("Peer connected");
-
-        // Inform PeerTracker about the dialed address.
-        //
-        // We do this because Kademlia send commands to Swarm
-        // for dialing a peer and we may not have that address
-        // in PeerTracker.
-        let dialed_addr = match endpoint {
-            ConnectedPoint::Dialer {
-                address,
-                role_override: Endpoint::Dialer,
-                ..
-            } => Some(address),
-            _ => None,
-        };
-
-        self.peer_tracker
-            .set_connected(peer_id, connection_id, dialed_addr);
-    }
-
-    #[instrument(skip_all, fields(peer_id = %peer_id))]
-    fn on_peer_disconnected(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
-        if self
-            .peer_tracker
-            .set_maybe_disconnected(peer_id, connection_id)
-        {
-            debug!("Peer disconnected");
         }
     }
 
@@ -1271,7 +1010,12 @@ where
     ) -> gossipsub::MessageAcceptance {
         let Ok(befp) = BadEncodingFraudProof::decode(data) else {
             trace!("Malformed bad encoding fraud proof from {peer}");
-            self.swarm.behaviour_mut().gossipsub.blacklist_peer(peer);
+            // TODO
+            self.swarm
+                .context()
+                .behaviour
+                .gossipsub
+                .blacklist_peer(peer);
             return gossipsub::MessageAcceptance::Reject;
         };
 
@@ -1301,7 +1045,11 @@ where
 
         if let Err(e) = befp.validate(&header) {
             trace!("Received invalid bad encoding fraud proof from {peer}: {e}");
-            self.swarm.behaviour_mut().gossipsub.blacklist_peer(peer);
+            self.swarm
+                .context()
+                .behaviour
+                .gossipsub
+                .blacklist_peer(peer);
             return gossipsub::MessageAcceptance::Reject;
         }
 
@@ -1376,32 +1124,6 @@ where
     }
 
     Ok(gossipsub)
-}
-
-fn init_kademlia<B, S>(args: &P2pArgs<B, S>) -> Result<kad::Behaviour<kad::store::MemoryStore>>
-where
-    B: Blockstore,
-    S: Store,
-{
-    let local_peer_id = PeerId::from(args.local_keypair.public());
-    let store = kad::store::MemoryStore::new(local_peer_id);
-
-    let protocol_id = celestia_protocol_id(&args.network_id, "/kad/1.0.0");
-    let config = kad::Config::new(protocol_id);
-
-    let mut kademlia = kad::Behaviour::with_config(local_peer_id, store, config);
-
-    for addr in &args.bootnodes {
-        if let Some(peer_id) = addr.peer_id() {
-            kademlia.add_address(&peer_id, addr.to_owned());
-        }
-    }
-
-    if !args.listen_on.is_empty() {
-        kademlia.set_mode(Some(kad::Mode::Server));
-    }
-
-    Ok(kademlia)
 }
 
 fn init_bitswap<B, S>(

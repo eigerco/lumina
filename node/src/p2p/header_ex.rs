@@ -62,7 +62,6 @@ where
 
 pub(crate) struct HeaderExConfig<'a, S> {
     pub network_id: &'a str,
-    pub peer_tracker: Arc<PeerTracker>,
     pub header_store: Arc<S>,
 }
 
@@ -109,7 +108,7 @@ where
                 )],
                 request_response::Config::default(),
             ),
-            client_handler: HeaderExClientHandler::new(config.peer_tracker),
+            client_handler: HeaderExClientHandler::new(),
             server_handler: HeaderExServerHandler::new(config.header_store),
         }
     }
@@ -119,9 +118,10 @@ where
         &mut self,
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+        peer_tracker: &PeerTracker,
     ) {
         self.client_handler
-            .on_send_request(&mut self.req_resp, request, respond_to);
+            .on_send_request(&mut self.req_resp, request, respond_to, peer_tracker);
     }
 
     pub(crate) fn stop(&mut self) {

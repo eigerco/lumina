@@ -1,143 +1,214 @@
 //! Primitives related to tracking the state of peers in the network.
 
-use std::borrow::Borrow;
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 
-use dashmap::mapref::entry::Entry;
-use dashmap::mapref::one::RefMut;
-use dashmap::DashMap;
-use libp2p::{swarm::ConnectionId, Multiaddr, PeerId};
+use libp2p::ping;
+use libp2p::{swarm::ConnectionId, PeerId};
+use lumina_utils::time::Instant;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use tokio::sync::watch;
+use tracing::info;
 
 use crate::events::{EventPublisher, NodeEvent};
 
+/// How ofter garbage collector should be called.
+pub(crate) const GC_INTERVAL: Duration = Duration::from_secs(30);
+/// How much time a `Peer` needs to be disconnected to get expired.
+const EXPIRED_AFTER: Duration = Duration::from_secs(120);
+
 /// Keeps track various information about peers.
 #[derive(Debug)]
-pub struct PeerTracker {
-    peers: DashMap<PeerId, PeerInfo>,
+pub(crate) struct PeerTracker {
+    peers: HashMap<PeerId, Peer>,
+    connection_to_peer: HashMap<ConnectionId, PeerId>,
+    protect_counter: HashMap<u32, usize>,
     info_tx: watch::Sender<PeerTrackerInfo>,
     event_pub: EventPublisher,
 }
 
 /// Statistics of the connected peers
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct PeerTrackerInfo {
     /// Number of the connected peers.
     pub num_connected_peers: u64,
     /// Number of the connected trusted peers.
     pub num_connected_trusted_peers: u64,
+    pub num_connected_full_nodes: u64,
+    pub num_connected_archival_nodes: u64,
 }
 
 #[derive(Debug)]
-struct PeerInfo {
-    state: PeerState,
-    addrs: SmallVec<[Multiaddr; 4]>,
-    connections: SmallVec<[ConnectionId; 1]>,
+pub(crate) struct Peer {
+    connections: HashMap<ConnectionId, ConnectionInfo>,
+    protected: HashSet<u32>,
     trusted: bool,
+    archival: bool,
+    node_kind: NodeKind,
+    disconnected_at: Option<Instant>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PeerState {
-    Discovered,
-    AddressesFound,
-    Connected,
+#[derive(Debug, Default)]
+struct ConnectionInfo {
+    ping: Option<Duration>,
 }
 
-impl PeerInfo {
-    fn is_connected(&self) -> bool {
-        matches!(self.state, PeerState::Connected)
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum NodeKind {
+    #[default]
+    Unknown,
+    Bridge,
+    Full,
+    Light,
+}
+
+impl NodeKind {
+    fn from_agent_version(s: &str) -> NodeKind {
+        let mut s = s.split('/');
+
+        match s.next() {
+            Some("lumina") => NodeKind::Light,
+            Some("celestia-node") => match s.nth(1) {
+                Some("bridge") => NodeKind::Bridge,
+                Some("full") => NodeKind::Full,
+                Some("light") => NodeKind::Light,
+                _ => NodeKind::Unknown,
+            },
+            _ => NodeKind::Unknown,
+        }
+    }
+
+    pub(crate) fn is_full(&self) -> bool {
+        matches!(self, NodeKind::Full | NodeKind::Bridge)
+    }
+}
+
+impl Peer {
+    pub(crate) fn is_connected(&self) -> bool {
+        !self.connections.is_empty()
+    }
+
+    pub(crate) fn is_trusted(&self) -> bool {
+        self.trusted
+    }
+
+    pub(crate) fn is_protected(&self) -> bool {
+        !self.protected.is_empty()
+    }
+
+    pub(crate) fn is_protected_for(&self, tag: u32) -> bool {
+        self.protected.contains(&tag)
+    }
+
+    pub(crate) fn is_archival(&self) -> bool {
+        self.archival
+    }
+
+    pub(crate) fn is_full(&self) -> bool {
+        self.node_kind.is_full()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn node_kind(&self) -> NodeKind {
+        self.node_kind
+    }
+
+    pub(crate) fn best_ping(&self) -> Option<Duration> {
+        self.connections
+            .iter()
+            .flat_map(|(_, conn_info)| conn_info.ping)
+            .min()
+    }
+}
+
+impl Default for Peer {
+    fn default() -> Self {
+        Peer {
+            connections: HashMap::new(),
+            protected: HashSet::new(),
+            trusted: false,
+            archival: false,
+            node_kind: NodeKind::Unknown,
+            // We start as disconnected
+            disconnected_at: Some(Instant::now()),
+        }
     }
 }
 
 impl PeerTracker {
     /// Constructs an empty PeerTracker.
-    pub fn new(event_pub: EventPublisher) -> Self {
+    pub(crate) fn new(event_pub: EventPublisher) -> Self {
         PeerTracker {
-            peers: DashMap::new(),
+            peers: HashMap::new(),
+            connection_to_peer: HashMap::new(),
+            protect_counter: HashMap::new(),
             info_tx: watch::channel(PeerTrackerInfo::default()).0,
             event_pub,
         }
     }
 
     /// Returns the current [`PeerTrackerInfo`].
-    pub fn info(&self) -> PeerTrackerInfo {
+    pub(crate) fn info(&self) -> PeerTrackerInfo {
         self.info_tx.borrow().to_owned()
     }
 
     /// Returns a watcher for any [`PeerTrackerInfo`] changes.
-    pub fn info_watcher(&self) -> watch::Receiver<PeerTrackerInfo> {
+    pub(crate) fn info_watcher(&self) -> watch::Receiver<PeerTrackerInfo> {
         self.info_tx.subscribe()
     }
 
-    /// Sets peer as discovered if this is it's first appearance.
+    pub(crate) fn peer(&self, peer_id: PeerId) -> Option<&Peer> {
+        self.peers.get(&peer_id)
+    }
+
+    pub(crate) fn peers(&self) -> impl Iterator<Item = (&PeerId, &Peer)> {
+        self.peers.iter()
+    }
+
+    pub(crate) fn is_connected(&self, peer_id: PeerId) -> bool {
+        self.peer(peer_id).is_some_and(|p| p.is_connected())
+    }
+
+    pub(crate) fn is_protected(&self, peer_id: PeerId) -> bool {
+        self.peer(peer_id).is_some_and(|p| p.is_protected())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn is_protected_for(&self, peer_id: PeerId, tag: u32) -> bool {
+        self.peer(peer_id).is_some_and(|p| p.is_protected_for(tag))
+    }
+
+    /// Adds a peer ID.
     ///
     /// Returns `true` if peer was not known from before.
-    pub fn set_maybe_discovered(&self, peer: PeerId) -> bool {
-        match self.peers.entry(peer) {
+    pub(crate) fn add_peer_id(&mut self, peer_id: PeerId) -> bool {
+        match self.peers.entry(peer_id.to_owned()) {
             Entry::Vacant(entry) => {
-                entry.insert(PeerInfo {
-                    state: PeerState::Discovered,
-                    addrs: SmallVec::new(),
-                    connections: SmallVec::new(),
-                    trusted: false,
-                });
+                entry.insert(Peer::default());
                 true
             }
             Entry::Occupied(_) => false,
         }
     }
 
-    /// Get the `PeerInfo` of the peer.
-    ///
-    /// If peer is not found it is added as `PeerState::Discovered`.
-    fn get(&self, peer: PeerId) -> RefMut<'_, PeerId, PeerInfo> {
-        self.peers.entry(peer).or_insert_with(|| PeerInfo {
-            state: PeerState::Discovered,
-            addrs: SmallVec::new(),
-            connections: SmallVec::new(),
-            trusted: false,
-        })
-    }
-
-    /// Add an address for a peer.
-    pub fn add_addresses<I, A>(&self, peer: PeerId, addrs: I)
-    where
-        I: IntoIterator<Item = A>,
-        A: Borrow<Multiaddr>,
-    {
-        let mut state = self.get(peer);
-
-        for addr in addrs {
-            let addr = addr.borrow();
-
-            if !state.addrs.contains(addr) {
-                state.addrs.push(addr.to_owned());
-            }
-        }
-
-        // Upgrade state
-        if state.state == PeerState::Discovered && !state.addrs.is_empty() {
-            state.state = PeerState::AddressesFound;
-        }
-    }
-
     /// Sets peer as trusted.
-    pub fn set_trusted(&self, peer: PeerId, is_trusted: bool) {
-        let mut peer_info = self.get(peer);
+    pub(crate) fn set_trusted(&mut self, peer_id: PeerId, is_trusted: bool) {
+        let peer = self.peers.entry(peer_id.to_owned()).or_default();
 
-        if peer_info.trusted == is_trusted {
+        if peer.trusted == is_trusted {
             // Nothing to be done
             return;
         }
 
-        peer_info.trusted = is_trusted;
+        peer.trusted = is_trusted;
 
         // If peer was already connected, then `num_connected_trusted_peers`
         // needs to be adjusted based on the new information.
-        if peer_info.is_connected() {
+        if peer.is_connected() {
             self.info_tx.send_modify(|tracker_info| {
                 if is_trusted {
                     tracker_info.num_connected_trusted_peers += 1;
@@ -148,140 +219,184 @@ impl PeerTracker {
         }
     }
 
-    /// Sets peer as connected.
-    pub fn set_connected(
-        &self,
-        peer: PeerId,
-        connection_id: ConnectionId,
-        address: impl Into<Option<Multiaddr>>,
-    ) {
-        let mut peer_info = self.get(peer);
+    /// Add protect flag to the peer.
+    ///
+    /// Tag allows different reasons of protection without interfering with one another.
+    ///
+    /// Returns `true` if peer changes from unprotected state to protected.
+    pub(crate) fn protect(&mut self, peer_id: PeerId, tag: u32) -> bool {
+        let peer = self.peers.entry(peer_id).or_default();
+        let was_protected = peer.is_protected();
 
-        if let Some(address) = address.into() {
-            if !peer_info.addrs.contains(&address) {
-                peer_info.addrs.push(address);
-            }
+        if peer.protected.insert(tag) {
+            *self.protect_counter.entry(tag).or_default() += 1;
+            info!("Protect peer {peer_id} with {tag} tag");
         }
 
-        peer_info.connections.push(connection_id);
+        !was_protected
+    }
+
+    /// Add protect flag to the peer.
+    ///
+    /// Tag allows different reasons of protection without interfering with one another.
+    ///
+    /// Returns `true` if peer changes from protected state to unprotected.
+    pub(crate) fn unprotect(&mut self, peer_id: PeerId, tag: u32) -> bool {
+        let Some(peer) = self.peers.get_mut(&peer_id) else {
+            return false;
+        };
+
+        let was_protected = peer.is_protected();
+
+        if peer.protected.remove(&tag) {
+            *self
+                .protect_counter
+                .get_mut(&tag)
+                .expect("protected flag was set but not counted") -= 1;
+
+            info!("Unprotect peer {peer_id} with {tag} tag");
+        }
+
+        // Return true is `protected` state changed
+        was_protected && !peer.is_protected()
+    }
+
+    pub(crate) fn protected_len(&self, tag: u32) -> usize {
+        self.protect_counter.get(&tag).copied().unwrap_or(0)
+    }
+
+    /// Add an active connection of a peer.
+    pub(crate) fn add_connection(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
+        let peer = self.peers.entry(peer_id.to_owned()).or_default();
+        let prev_connected = peer.is_connected();
+
+        peer.connections
+            .insert(connection_id, ConnectionInfo::default());
+        self.connection_to_peer.insert(connection_id, peer_id);
 
         // If peer was not already connected from before
-        if !peer_info.is_connected() {
-            peer_info.state = PeerState::Connected;
-
-            increment_connected_peers(&self.info_tx, peer_info.trusted);
+        if !prev_connected {
+            increment_connected_peers(&self.info_tx, peer.trusted);
+            peer.disconnected_at.take();
 
             self.event_pub.send(NodeEvent::PeerConnected {
-                id: peer,
-                trusted: peer_info.trusted,
+                id: peer_id.to_owned(),
+                trusted: peer.trusted,
             });
         }
     }
 
-    /// Sets peer as disconnected if `connection_id` was the last connection.
-    ///
-    /// Returns `true` if was set to disconnected.
-    pub fn set_maybe_disconnected(&self, peer: PeerId, connection_id: ConnectionId) -> bool {
-        let mut peer_info = self.get(peer);
+    /// Remove a connection from a peer.
+    pub(crate) fn remove_connection(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
+        let Some(peer) = self.peers.get_mut(&peer_id) else {
+            return;
+        };
 
-        peer_info.connections.retain(|id| *id != connection_id);
+        peer.connections.retain(|id, _| *id != connection_id);
+        self.connection_to_peer.remove(&connection_id);
 
-        // If this is the last connection from the peer
-        if peer_info.connections.is_empty() {
-            if peer_info.addrs.is_empty() {
-                peer_info.state = PeerState::Discovered;
-            } else {
-                peer_info.state = PeerState::AddressesFound;
-            }
-
-            decrement_connected_peers(&self.info_tx, peer_info.trusted);
+        // If this is the last connection from the peer.
+        if !peer.is_connected() {
+            decrement_connected_peers(&self.info_tx, peer);
+            peer.node_kind = NodeKind::Unknown;
+            peer.archival = false;
+            peer.disconnected_at = Some(Instant::now());
 
             self.event_pub.send(NodeEvent::PeerDisconnected {
-                id: peer,
-                trusted: peer_info.trusted,
+                id: peer_id.to_owned(),
+                trusted: peer.trusted,
             });
-
-            true
-        } else {
-            false
         }
     }
 
-    /// Returns true if peer is connected.
-    #[allow(dead_code)]
-    pub fn is_connected(&self, peer: PeerId) -> bool {
-        self.get(peer).is_connected()
+    pub(crate) fn on_agent_version(&mut self, peer_id: PeerId, agent_version: &str) {
+        let peer = self.peers.entry(peer_id.to_owned()).or_default();
+        let new_node_kind = NodeKind::from_agent_version(agent_version);
+
+        let was_full = peer.node_kind.is_full();
+        let is_full = new_node_kind.is_full();
+        peer.node_kind = new_node_kind;
+
+        self.info_tx
+            .send_if_modified(|tracker_info| match (was_full, is_full) {
+                (true, false) => {
+                    tracker_info.num_connected_full_nodes -= 1;
+                    true
+                }
+                (false, true) => {
+                    tracker_info.num_connected_full_nodes += 1;
+                    true
+                }
+                _ => false,
+            });
     }
 
-    /// Returns the addresses of the peer.
-    #[allow(dead_code)]
-    pub fn addresses(&self, peer: PeerId) -> SmallVec<[Multiaddr; 4]> {
-        self.get(peer).addrs.clone()
+    pub(crate) fn on_ping_event(&mut self, ev: &ping::Event) {
+        if let Some(peer) = self.peers.get_mut(&ev.peer) {
+            if let Some(conn_info) = peer.connections.get_mut(&ev.connection) {
+                conn_info.ping = ev.result.as_ref().ok().copied();
+            }
+        }
     }
 
-    /// Removes a peer.
-    #[allow(dead_code)]
-    pub fn remove(&self, peer: PeerId) {
-        self.peers.remove(&peer);
+    pub(crate) fn mark_as_archival(&mut self, peer_id: PeerId) {
+        let peer = self.peers.entry(peer_id.to_owned()).or_default();
+
+        if !peer.archival {
+            peer.archival = true;
+
+            self.info_tx.send_modify(|tracker_info| {
+                tracker_info.num_connected_archival_nodes += 1;
+            });
+        }
     }
 
-    /// Returns connected peers.
-    pub fn connected_peers(&self) -> Vec<PeerId> {
-        self.peers
+    pub(crate) fn connections(&self, peer_id: PeerId) -> impl Iterator<Item = ConnectionId> + '_ {
+        self.peer(peer_id)
+            .map(|peer| peer.connections.keys().copied())
+            .into_iter()
+            .flatten()
+    }
+
+    /// Returns all connections.
+    pub(crate) fn all_connections(&self) -> impl Iterator<Item = (ConnectionId, PeerId)> + '_ {
+        self.connection_to_peer
             .iter()
-            .filter(|pair| pair.value().is_connected())
-            .map(|pair| pair.key().to_owned())
-            .collect()
-    }
-
-    pub fn connections(&self) -> Vec<(PeerId, SmallVec<[ConnectionId; 1]>)> {
-        self.peers
-            .iter()
-            .filter(|pair| pair.value().is_connected())
-            .map(|pair| (pair.key().to_owned(), pair.value().connections.clone()))
-            .collect()
+            .map(|(&connection_id, &peer_id)| (connection_id, peer_id))
     }
 
     /// Returns one of the best peers.
-    pub fn best_peer(&self) -> Option<PeerId> {
+    pub(crate) fn best_peer(&self) -> Option<PeerId> {
         const MAX_PEER_SAMPLE: usize = 128;
 
         // TODO: Implement peer score and return the best.
         let mut peers = self
             .peers
             .iter()
-            .filter(|pair| pair.value().is_connected())
+            .filter(|(_, peer)| peer.is_connected())
             .take(MAX_PEER_SAMPLE)
-            .map(|pair| pair.key().to_owned())
+            .map(|(peer_id, _)| peer_id)
             .collect::<SmallVec<[_; MAX_PEER_SAMPLE]>>();
 
         peers.shuffle(&mut rand::thread_rng());
 
-        peers.first().copied()
+        peers.first().copied().copied()
     }
 
-    /// Returns up to N amount of best peers.
-    #[allow(dead_code)]
-    pub fn best_n_peers(&self, limit: usize) -> Vec<PeerId> {
-        // TODO: Implement peer score and return the best N peers.
-        self.peers
-            .iter()
-            .filter(|pair| pair.value().is_connected())
-            .take(limit)
-            .map(|pair| pair.key().to_owned())
-            // collect instead of returning an iter to not block the dashmap
-            .collect()
-    }
-
-    /// Returns up to N amount of trusted peers.
-    pub fn trusted_n_peers(&self, limit: usize) -> Vec<PeerId> {
-        self.peers
-            .iter()
-            .filter(|pair| pair.value().is_connected() && pair.value().trusted)
-            .take(limit)
-            .map(|pair| pair.key().to_owned())
-            // collect instead of returning an iter to not block the dashmap
-            .collect()
+    // TODO: write test
+    pub(crate) fn gc(&mut self) {
+        self.peers.retain(|_, peer| {
+            // We keep the:
+            //
+            // * Connected peers
+            // * Protected peers
+            // * Recently disconnected peers
+            peer.is_connected()
+                || peer.is_protected()
+                || peer
+                    .disconnected_at
+                    .is_none_or(|tm| tm.elapsed() <= EXPIRED_AFTER)
+        });
     }
 }
 
@@ -295,12 +410,20 @@ fn increment_connected_peers(info_tx: &watch::Sender<PeerTrackerInfo>, trusted: 
     });
 }
 
-fn decrement_connected_peers(info_tx: &watch::Sender<PeerTrackerInfo>, trusted: bool) {
+fn decrement_connected_peers(info_tx: &watch::Sender<PeerTrackerInfo>, peer: &Peer) {
     info_tx.send_modify(|tracker_info| {
         tracker_info.num_connected_peers -= 1;
 
-        if trusted {
+        if peer.trusted {
             tracker_info.num_connected_trusted_peers -= 1;
+        }
+
+        if peer.archival {
+            tracker_info.num_connected_archival_nodes -= 1;
+        }
+
+        if peer.node_kind.is_full() {
+            tracker_info.num_connected_full_nodes -= 1;
         }
     });
 }
@@ -314,7 +437,7 @@ mod tests {
     #[test]
     fn trust_before_connect() {
         let event_channel = EventChannel::new();
-        let tracker = PeerTracker::new(event_channel.publisher());
+        let mut tracker = PeerTracker::new(event_channel.publisher());
         let mut watcher = tracker.info_watcher();
         let peer = PeerId::random();
 
@@ -323,7 +446,8 @@ mod tests {
         tracker.set_trusted(peer, true);
         assert!(!watcher.has_changed().unwrap());
 
-        tracker.set_connected(peer, ConnectionId::new_unchecked(1), None);
+        tracker.add_connection(peer, ConnectionId::new_unchecked(1));
+        assert!(tracker.is_connected(peer));
         assert!(watcher.has_changed().unwrap());
         let info = watcher.borrow_and_update().to_owned();
         assert_eq!(info.num_connected_peers, 1);
@@ -333,13 +457,14 @@ mod tests {
     #[test]
     fn trust_after_connect() {
         let event_channel = EventChannel::new();
-        let tracker = PeerTracker::new(event_channel.publisher());
+        let mut tracker = PeerTracker::new(event_channel.publisher());
         let mut watcher = tracker.info_watcher();
         let peer = PeerId::random();
 
         assert!(!watcher.has_changed().unwrap());
 
-        tracker.set_connected(peer, ConnectionId::new_unchecked(1), None);
+        tracker.add_connection(peer, ConnectionId::new_unchecked(1));
+        assert!(tracker.is_connected(peer));
         assert!(watcher.has_changed().unwrap());
         let info = watcher.borrow_and_update().to_owned();
         assert_eq!(info.num_connected_peers, 1);
@@ -355,7 +480,7 @@ mod tests {
     #[test]
     fn untrust_after_connect() {
         let event_channel = EventChannel::new();
-        let tracker = PeerTracker::new(event_channel.publisher());
+        let mut tracker = PeerTracker::new(event_channel.publisher());
         let mut watcher = tracker.info_watcher();
         let peer = PeerId::random();
 
@@ -364,7 +489,8 @@ mod tests {
         tracker.set_trusted(peer, true);
         assert!(!watcher.has_changed().unwrap());
 
-        tracker.set_connected(peer, ConnectionId::new_unchecked(1), None);
+        tracker.add_connection(peer, ConnectionId::new_unchecked(1));
+        assert!(tracker.is_connected(peer));
         assert!(watcher.has_changed().unwrap());
         let info = watcher.borrow_and_update().to_owned();
         assert_eq!(info.num_connected_peers, 1);
@@ -375,5 +501,159 @@ mod tests {
         let info = watcher.borrow_and_update().to_owned();
         assert_eq!(info.num_connected_peers, 1);
         assert_eq!(info.num_connected_trusted_peers, 0);
+    }
+
+    #[test]
+    fn tracker_info() {
+        let event_channel = EventChannel::new();
+        let mut tracker = PeerTracker::new(event_channel.publisher());
+        let mut watcher = tracker.info_watcher();
+        let peer = PeerId::random();
+
+        tracker.add_connection(peer, ConnectionId::new_unchecked(1));
+        assert!(tracker.is_connected(peer));
+        assert!(watcher.has_changed().unwrap());
+        let info = watcher.borrow_and_update().to_owned();
+        assert_eq!(
+            info,
+            PeerTrackerInfo {
+                num_connected_peers: 1,
+                num_connected_trusted_peers: 0,
+                num_connected_full_nodes: 0,
+                num_connected_archival_nodes: 0,
+            }
+        );
+
+        tracker.mark_as_archival(peer);
+        assert!(watcher.has_changed().unwrap());
+        let info = watcher.borrow_and_update().to_owned();
+        assert_eq!(
+            info,
+            PeerTrackerInfo {
+                num_connected_peers: 1,
+                num_connected_trusted_peers: 0,
+                num_connected_full_nodes: 0,
+                num_connected_archival_nodes: 1,
+            }
+        );
+
+        tracker.mark_as_archival(peer);
+        assert!(!watcher.has_changed().unwrap());
+
+        tracker.on_agent_version(peer, "celestia-node/celestia/full/v0.24.1/fb95d45");
+        assert!(watcher.has_changed().unwrap());
+        let info = watcher.borrow_and_update().to_owned();
+        assert_eq!(
+            info,
+            PeerTrackerInfo {
+                num_connected_peers: 1,
+                num_connected_trusted_peers: 0,
+                num_connected_full_nodes: 1,
+                num_connected_archival_nodes: 1,
+            }
+        );
+
+        tracker.on_agent_version(peer, "celestia-node/celestia/full/v0.24.1/fb95d45");
+        assert!(!watcher.has_changed().unwrap());
+
+        // Peer gets disconnected
+        tracker.remove_connection(peer, ConnectionId::new_unchecked(1));
+        assert!(watcher.has_changed().unwrap());
+        let info = watcher.borrow_and_update().to_owned();
+        assert_eq!(
+            info,
+            PeerTrackerInfo {
+                num_connected_peers: 0,
+                num_connected_trusted_peers: 0,
+                num_connected_full_nodes: 0,
+                num_connected_archival_nodes: 0,
+            }
+        );
+
+        // Peer gets reconnected
+        tracker.add_connection(peer, ConnectionId::new_unchecked(2));
+        assert!(tracker.is_connected(peer));
+        assert!(watcher.has_changed().unwrap());
+        let info = watcher.borrow_and_update().to_owned();
+        assert_eq!(
+            info,
+            PeerTrackerInfo {
+                num_connected_peers: 1,
+                num_connected_trusted_peers: 0,
+                num_connected_full_nodes: 0,
+                num_connected_archival_nodes: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn protect() {
+        let peer_id = PeerId::random();
+        let event_channel = EventChannel::new();
+        let mut tracker = PeerTracker::new(event_channel.publisher());
+
+        // Unknown peers are always unprotected, so state doesn't change
+        assert!(!tracker.is_protected(peer_id));
+        assert!(!tracker.unprotect(peer_id, 0));
+        assert_eq!(tracker.protected_len(0), 0);
+
+        // Now state changed from unprotected to protected
+        assert!(!tracker.is_protected_for(peer_id, 0));
+        assert!(tracker.protect(peer_id, 0));
+        assert!(tracker.is_protected(peer_id));
+        assert!(tracker.is_protected_for(peer_id, 0));
+        assert_eq!(tracker.protected_len(0), 1);
+        // Adding more tags doesn't change the state
+        assert!(!tracker.is_protected_for(peer_id, 1));
+        assert!(!tracker.protect(peer_id, 1));
+        assert!(tracker.is_protected(peer_id));
+        assert!(tracker.is_protected_for(peer_id, 1));
+        assert_eq!(tracker.protected_len(1), 1);
+
+        // Adding an existing tag to a peer doesn't change the counter
+        assert!(!tracker.protect(peer_id, 0));
+        assert_eq!(tracker.protected_len(0), 1);
+        // Adding a tag to a peer must increase the counter
+        assert!(tracker.protect(PeerId::random(), 0));
+        assert_eq!(tracker.protected_len(0), 2);
+
+        // Removing only some of the tags doesn't change the state
+        assert!(!tracker.unprotect(peer_id, 0));
+        assert!(!tracker.is_protected_for(peer_id, 0));
+        assert!(tracker.is_protected(peer_id));
+        assert_eq!(tracker.protected_len(0), 1);
+        // Removing all tags, changes the state from protected to unprotected
+        assert!(tracker.unprotect(peer_id, 1));
+        assert!(!tracker.is_protected_for(peer_id, 1));
+        assert!(!tracker.is_protected(peer_id));
+        assert_eq!(tracker.protected_len(1), 0);
+    }
+
+    #[test]
+    fn node_kind() {
+        assert_eq!(
+            NodeKind::from_agent_version("lumina/celestia/0.14.0"),
+            NodeKind::Light
+        );
+
+        assert_eq!(
+            NodeKind::from_agent_version("celestia-node/celestia/bridge/v0.24.1/fb95d45"),
+            NodeKind::Bridge
+        );
+
+        assert_eq!(
+            NodeKind::from_agent_version("celestia-node/celestia/full/v0.24.1/fb95d45"),
+            NodeKind::Full
+        );
+
+        assert_eq!(
+            NodeKind::from_agent_version("celestia-node/celestia/light/v0.24.1/fb95d45"),
+            NodeKind::Light
+        );
+
+        assert_eq!(
+            NodeKind::from_agent_version("probelab-node/celestia/ant/v0.1.0"),
+            NodeKind::Unknown
+        );
     }
 }

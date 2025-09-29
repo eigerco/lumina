@@ -107,9 +107,8 @@ mod imp {
             behaviour,
             local_peer_id,
             swarm::Config::with_tokio_executor()
-                // TODO: Refactor code to avoid being idle. This can be done by preloading a
-                // handler. This is how they fixed Kademlia:
-                // https://github.com/libp2p/rust-libp2p/pull/4675/files
+                // This closes any connection that is idle for 15 seconds and not protected
+                // by `p2p::Worker::protect` (check p2p.rs for more info).
                 .with_idle_connection_timeout(Duration::from_secs(15)),
         ))
     }
@@ -188,9 +187,8 @@ mod imp {
             .with_behaviour(|_| behaviour)
             .expect("Moving behaviour doesn't fail")
             .with_swarm_config(|config| {
-                // TODO: Refactor code to avoid being idle. This can be done by preloading a
-                // handler. This is how they fixed Kademlia:
-                // https://github.com/libp2p/rust-libp2p/pull/4675/files
+                // This closes any connection that is idle for 15 seconds and not protected
+                // by `p2p::Worker::protect` (check p2p.rs for more info).
                 config.with_idle_connection_timeout(Duration::from_secs(15))
             })
             .build())

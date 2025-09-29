@@ -1,10 +1,13 @@
+use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
+use libp2p::swarm::NotifyHandler;
 use libp2p::{
-    core::{transport::PortUse, Endpoint},
+    core::{transport::PortUse, upgrade::DeniedUpgrade, Endpoint},
     swarm::{
-        dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
-        THandlerInEvent, THandlerOutEvent, ToSwarm,
+        handler::ConnectionEvent, ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent,
+        ConnectionId, FromSwarm, NetworkBehaviour, SubstreamProtocol, THandler, THandlerInEvent,
+        THandlerOutEvent, ToSwarm,
     },
     Multiaddr, PeerId,
 };
@@ -13,6 +16,7 @@ use void::Void;
 // TODO: Wrap ConnectionLimits in it and exclude limits from trusted peers
 pub(crate) struct Behaviour {
     stopping: bool,
+    events: VecDeque<ToSwarm<Void, FromBehaviour>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -21,16 +25,27 @@ struct Stopping;
 
 impl Behaviour {
     pub(crate) fn new() -> Behaviour {
-        Behaviour { stopping: false }
+        Behaviour {
+            stopping: false,
+            events: VecDeque::new(),
+        }
     }
 
     pub(crate) fn set_stopping(&mut self, value: bool) {
         self.stopping = value;
     }
+
+    pub(crate) fn set_keep_alive(&mut self, peer_id: PeerId, conn_id: ConnectionId, value: bool) {
+        self.events.push_back(ToSwarm::NotifyHandler {
+            peer_id,
+            handler: NotifyHandler::One(conn_id),
+            event: FromBehaviour::SetKeepAlive(value),
+        });
+    }
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = dummy::ConnectionHandler;
+    type ConnectionHandler = ConnHandler;
     type ToSwarm = Void;
 
     fn handle_pending_inbound_connection(
@@ -57,7 +72,7 @@ impl NetworkBehaviour for Behaviour {
             return Err(ConnectionDenied::new(Stopping));
         }
 
-        Ok(dummy::ConnectionHandler)
+        Ok(ConnHandler { keep_alive: false })
     }
 
     fn handle_pending_outbound_connection(
@@ -86,7 +101,7 @@ impl NetworkBehaviour for Behaviour {
             return Err(ConnectionDenied::new(Stopping));
         }
 
-        Ok(dummy::ConnectionHandler)
+        Ok(ConnHandler { keep_alive: false })
     }
 
     fn on_connection_handler_event(
@@ -103,6 +118,57 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+        if let Some(event) = self.events.pop_front() {
+            return Poll::Ready(event);
+        }
+
+        Poll::Pending
+    }
+}
+
+pub(crate) struct ConnHandler {
+    keep_alive: bool,
+}
+
+#[derive(Debug)]
+pub(crate) enum FromBehaviour {
+    SetKeepAlive(bool),
+}
+
+impl ConnectionHandler for ConnHandler {
+    type ToBehaviour = Void;
+    type FromBehaviour = FromBehaviour;
+    type InboundProtocol = DeniedUpgrade;
+    type OutboundProtocol = DeniedUpgrade;
+    type InboundOpenInfo = ();
+    type OutboundOpenInfo = ();
+
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        SubstreamProtocol::new(DeniedUpgrade, ())
+    }
+
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
+        match event {
+            FromBehaviour::SetKeepAlive(value) => {
+                self.keep_alive = value;
+            }
+        }
+    }
+
+    fn on_connection_event(
+        &mut self,
+        _event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol, (), ()>,
+    ) {
+    }
+
+    fn connection_keep_alive(&self) -> bool {
+        self.keep_alive
+    }
+
+    fn poll(
+        &mut self,
+        _cx: &mut Context<'_>,
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         Poll::Pending
     }
 }
