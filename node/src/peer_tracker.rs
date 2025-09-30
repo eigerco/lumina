@@ -37,7 +37,9 @@ pub struct PeerTrackerInfo {
     pub num_connected_peers: u64,
     /// Number of the connected trusted peers.
     pub num_connected_trusted_peers: u64,
+    /// Number of the connected full nodes.
     pub num_connected_full_nodes: u64,
+    /// Number of the connected archival nodes.
     pub num_connected_archival_nodes: u64,
 }
 
