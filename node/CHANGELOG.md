@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.15.2...lumina-node-v0.16.0) - 2025-09-25
+
+### Added
+
+- [**breaking**] unify and upgrade dependencies, add explicit msrv ([#742](https://github.com/eigerco/lumina/pull/742))
+- *(types)* [**breaking**] singular `Blob::new` constructor ([#719](https://github.com/eigerco/lumina/pull/719))
+
 ## [0.15.2](https://github.com/eigerco/lumina/compare/lumina-node-v0.15.1...lumina-node-v0.15.2) - 2025-09-08
 
 ### Other

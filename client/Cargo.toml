@@ -1,6 +1,6 @@
 [package]
 name = "celestia-client"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Celestia client combining RPC and gRPC functionality."
@@ -8,6 +8,7 @@ authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
 readme = "README.md"
+rust-version = "1.87"
 # crates.io is limited to 5 keywords and 5 categories
 keywords = ["blockchain", "celestia", "lumina"]
 # Must be one of <https://crates.io/category_slugs>
@@ -19,46 +20,47 @@ categories = [
 ]
 
 [dependencies]
-async-stream = "0.3.6"
-futures-util = "0.3.31"
-hex = "0.4.3"
-jsonrpsee-core = "0.25.1"
-jsonrpsee-types = "0.25.1"
-k256 = "0.13.4"
-serde_json = "1.0.140"
-tendermint.workspace = true
-thiserror = "2.0.12"
-
-celestia-grpc = { workspace = true, default-features = false }
+celestia-grpc.workspace = true
 celestia-proto.workspace  = true
 celestia-rpc = { workspace = true, default-features = false }
 celestia-types.workspace = true
 tonic.workspace = true
-async-trait = "0.1.89"
-http-body = "1.0.1"
-bytes = "1.10.1"
-http = "1.3.1"
 blockstore.workspace = true
 
+async-stream = "0.3.5"
+bytes.workspace = true
+futures-util = "0.3"
+hex.workspace = true
+http.workspace = true
+http-body.workspace = true
+jsonrpsee-core.workspace = true
+jsonrpsee-types.workspace = true
+k256.workspace = true
+serde_json.workspace = true
+tendermint.workspace = true
+thiserror.workspace = true
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tonic = { workspace = true, features = [ "transport" ] }
+tonic = { workspace = true, features = ["transport"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 celestia-grpc = { workspace = true, features = ["wasm-bindgen"] }
 celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
+getrandom_02.workspace = true
 tonic-web-wasm-client.workspace = true
-getrandom = { version = "0.2.15", features = ["js"] }
-wasm-bindgen-test.workspace = true
 
 [dev-dependencies]
 lumina-utils = { workspace = true, features = ["test-utils"] }
-rand = "0.8.5"
-serde = "1.0.215"
-tokio = { version = "1.38.0", features = ["sync"] }
+rand.workspace = true
+serde.workspace = true
+tokio = { workspace = true, features = ["sync"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-tokio = { version = "1.38.0", features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
 
 [features]
 default = ['tls-native-roots']

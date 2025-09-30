@@ -1,6 +1,6 @@
 [package]
 name = "celestia-rpc"
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "A collection of traits for interacting with Celestia data availability nodes RPC"
@@ -8,6 +8,7 @@ authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
 readme = "README.md"
+rust-version = "1.87"
 # crates.io is limited to 5 keywords and 5 categories
 keywords = ["blockchain", "celestia", "lumina"]
 # Must be one of <https://crates.io/category_slugs>
@@ -22,22 +23,21 @@ categories = [
 celestia-proto.workspace = true
 celestia-types.workspace = true
 
-async-trait = "0.1.80"
-jsonrpsee = { version = "0.25.1", features = ["client-core", "macros"] }
-serde = { version = "1.0.203", features = ["derive"] }
-serde_repr = "0.1.19"
-thiserror = "1.0.61"
-tracing = "0.1.40"
-base64 = "0.22.1"
+base64.workspace = true
+jsonrpsee = { workspace = true, features = ["client-core", "macros"] }
+serde = { workspace = true, features = ["derive"] }
+serde_repr.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-http = "1.1.0"
-jsonrpsee = { version = "0.25.1", features = ["http-client", "ws-client"] }
+http.workspace = true
+jsonrpsee = { workspace = true, features = ["http-client", "ws-client"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-anyhow = "1.0.86"
-dotenvy = "0.15.7"
-futures = "0.3.31"
+anyhow.workspace = true
+dotenvy.workspace = true
+futures.workspace = true
 libp2p = { workspace = true, features = [
   "tokio",
   "macros",
@@ -46,12 +46,12 @@ libp2p = { workspace = true, features = [
   "yamux",
 ] }
 nmt-rs.workspace = true
-rand = "0.8.5"
-tokio = { version = "1.38.0", features = ["rt", "macros"] }
-tracing = "0.1.40"
+rand.workspace = true
+tokio = { workspace = true, features = ["rt", "macros"] }
+tracing.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-getrandom = { version = "0.2.15", features = ["js"] }
+getrandom_02.workspace = true
 wasm-bindgen-test.workspace = true
 
 [features]

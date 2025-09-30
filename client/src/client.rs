@@ -1,5 +1,5 @@
 use std::error::Error as StdError;
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use std::sync::Arc;
 
 use blockstore::cond_send::CondSend;
@@ -8,6 +8,7 @@ use celestia_rpc::{Client as RpcClient, HeaderClient};
 use http::Request;
 use tonic::body::Body as TonicBody;
 use tonic::codegen::{Bytes, Service};
+use tonic::metadata::MetadataMap;
 
 use crate::blob::BlobApi;
 use crate::blobstream::BlobstreamApi;
@@ -20,17 +21,10 @@ use crate::types::state::AccAddress;
 use crate::types::ExtendedHeader;
 use crate::{Error, Result};
 
-pub(crate) struct Context {
-    pub(crate) rpc: RpcClient,
-    grpc: Option<GrpcClient>,
-    pubkey: Option<VerifyingKey>,
-    chain_id: tendermint::chain::Id,
-}
-
 /// A high-level client for interacting with a Celestia node.
 ///
 /// There are two modes: read-only mode and submit mode. Read-only mode requires
-/// RPC endpoint, while submit mode requires RPC and gRPC endpoints plus a signer.
+/// RPC and optionally gRPC endpoint, while submit mode requires both, plus a signer.
 ///
 /// # Examples
 ///
@@ -41,6 +35,7 @@ pub(crate) struct Context {
 /// # async fn docs() -> Result<()> {
 /// let client = Client::builder()
 ///     .rpc_url("ws://localhost:26658")
+///     .grpc_url("http://localhost:9090") // optional in read-only mode
 ///     .build()
 ///     .await?;
 ///
@@ -71,7 +66,7 @@ pub(crate) struct Context {
 /// [`celestia-rpc`]: celestia_rpc
 /// [`celestia-grpc`]: celestia_grpc
 pub struct Client {
-    ctx: Arc<Context>,
+    inner: Arc<ClientInner>,
     state: StateApi,
     blob: BlobApi,
     header: HeaderApi,
@@ -80,28 +75,28 @@ pub struct Client {
     blobstream: BlobstreamApi,
 }
 
+pub(crate) struct ClientInner {
+    pub(crate) rpc: RpcClient,
+    grpc: Option<GrpcClient>,
+    pubkey: Option<VerifyingKey>,
+    chain_id: tendermint::chain::Id,
+}
+
 /// A builder for [`Client`].
 #[derive(Debug, Default)]
 pub struct ClientBuilder {
     rpc_url: Option<String>,
     rpc_auth_token: Option<String>,
-    grpc_builder: GrpcClientBuilder,
-    grpc_builder_flags: GrpcBuilderFlags,
+    grpc_builder: Option<GrpcClientBuilder>,
 }
 
-#[derive(Copy, Clone, Debug, Default)]
-struct GrpcBuilderFlags {
-    has_grpc_url: bool,
-    has_signer: bool,
-}
-
-impl Context {
+impl ClientInner {
     pub(crate) fn grpc(&self) -> Result<&GrpcClient> {
-        self.grpc.as_ref().ok_or(Error::ReadOnlyMode)
+        self.grpc.as_ref().ok_or(Error::GrpcEndpointNotSet)
     }
 
     pub(crate) fn pubkey(&self) -> Result<&VerifyingKey> {
-        self.pubkey.as_ref().ok_or(Error::ReadOnlyMode)
+        self.pubkey.as_ref().ok_or(Error::NoAssociatedAddress)
     }
 
     pub(crate) fn address(&self) -> Result<AccAddress> {
@@ -124,17 +119,17 @@ impl Client {
 
     /// Returns chain id of the network.
     pub fn chain_id(&self) -> &tendermint::chain::Id {
-        &self.ctx.chain_id
+        &self.inner.chain_id
     }
 
     /// Returns the public key of the signer.
     pub fn pubkey(&self) -> Result<VerifyingKey> {
-        self.ctx.pubkey().cloned()
+        self.inner.pubkey().cloned()
     }
 
     /// Returns the address of signer.
     pub fn address(&self) -> Result<AccAddress> {
-        self.ctx.address()
+        self.inner.address()
     }
 
     /// Returns state API accessor.
@@ -179,8 +174,8 @@ impl ClientBuilder {
     where
         S: DocSigner + Sync + Send + 'static,
     {
-        self.grpc_builder = self.grpc_builder.pubkey_and_signer(pubkey, signer);
-        self.grpc_builder_flags.has_signer = true;
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.pubkey_and_signer(pubkey, signer));
         self
     }
 
@@ -189,22 +184,22 @@ impl ClientBuilder {
     where
         S: DocSigner + Keypair<VerifyingKey = VerifyingKey> + Sync + Send + 'static,
     {
-        self.grpc_builder = self.grpc_builder.signer_keypair(keypair);
-        self.grpc_builder_flags.has_signer = true;
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.signer_keypair(keypair));
         self
     }
 
     /// Set signer from a raw private key.
     pub fn private_key(mut self, bytes: &[u8]) -> ClientBuilder {
-        self.grpc_builder = self.grpc_builder.private_key(bytes);
-        self.grpc_builder_flags.has_signer = true;
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.private_key(bytes));
         self
     }
 
     /// Set signer from a hex formatted private key.
     pub fn private_key_hex(mut self, s: &str) -> ClientBuilder {
-        self.grpc_builder = self.grpc_builder.private_key_hex(s);
-        self.grpc_builder_flags.has_signer = true;
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.private_key_hex(s));
         self
     }
 
@@ -226,8 +221,8 @@ impl ClientBuilder {
     ///
     /// In WASM the endpoint needs to support gRPC-Web.
     pub fn grpc_url(mut self, url: &str) -> ClientBuilder {
-        self.grpc_builder = self.grpc_builder.url(url);
-        self.grpc_builder_flags.has_grpc_url = true;
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.url(url));
         self
     }
 
@@ -244,7 +239,31 @@ impl ClientBuilder {
         <T as Service<Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
         <T as Service<Request<TonicBody>>>::Future: CondSend + 'static,
     {
-        self.grpc_builder = self.grpc_builder.transport(transport);
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.transport(transport));
+        self
+    }
+
+    /// Appends ascii metadata to all requests made by the client.
+    pub fn grpc_metadata(mut self, key: &str, value: &str) -> Self {
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.metadata(key, value));
+        self
+    }
+
+    /// Appends binary metadata to all requests made by the client.
+    ///
+    /// Keys for binary metadata must have `-bin` suffix.
+    pub fn grpc_metadata_bin(mut self, key: &str, value: &[u8]) -> Self {
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.metadata_bin(key, value));
+        self
+    }
+
+    /// Sets the initial metadata map that will be attached to all requestes made by the client.
+    pub fn grpc_metadata_map(mut self, metadata: MetadataMap) -> Self {
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.metadata_map(metadata));
         self
     }
 
@@ -258,19 +277,12 @@ impl ClientBuilder {
             return Err(Error::AuthTokenNotSupported);
         }
 
-        let GrpcBuilderFlags {
-            has_signer,
-            has_grpc_url,
-        } = self.grpc_builder_flags;
-        let (pubkey, grpc) = match (has_signer, has_grpc_url) {
-            (true, true) => {
-                let client = self.grpc_builder.build()?;
-                let pubkey = client.get_account_pubkey().expect("signer to be set");
-                (Some(pubkey), Some(client))
-            }
-            (false, false) => (None, None),
-            (false, true) => return Err(Error::SignerNotSet),
-            (true, false) => return Err(Error::GrpcEndpointNotSet),
+        let (grpc, pubkey) = if let Some(grpc_builder) = self.grpc_builder {
+            let client = grpc_builder.build()?;
+            let pubkey = client.get_account_pubkey();
+            (Some(client), pubkey)
+        } else {
+            (None, None)
         };
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -288,7 +300,7 @@ impl ClientBuilder {
             }
         }
 
-        let ctx = Arc::new(Context {
+        let inner = Arc::new(ClientInner {
             rpc,
             grpc,
             pubkey,
@@ -296,13 +308,39 @@ impl ClientBuilder {
         });
 
         Ok(Client {
-            ctx: ctx.clone(),
-            blob: BlobApi::new(ctx.clone()),
-            header: HeaderApi::new(ctx.clone()),
-            share: ShareApi::new(ctx.clone()),
-            fraud: FraudApi::new(ctx.clone()),
-            blobstream: BlobstreamApi::new(ctx.clone()),
-            state: StateApi::new(ctx.clone()),
+            inner: inner.clone(),
+            blob: BlobApi::new(inner.clone()),
+            header: HeaderApi::new(inner.clone()),
+            share: ShareApi::new(inner.clone()),
+            fraud: FraudApi::new(inner.clone()),
+            blobstream: BlobstreamApi::new(inner.clone()),
+            state: StateApi::new(inner.clone()),
         })
+    }
+}
+
+impl Debug for Client {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Client { .. }")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use lumina_utils::test_utils::async_test;
+
+    use crate::test_utils::{TEST_PRIV_KEY, TEST_RPC_URL};
+
+    #[async_test]
+    async fn builder() {
+        let e = Client::builder()
+            .rpc_url(TEST_RPC_URL)
+            .private_key_hex(TEST_PRIV_KEY)
+            .build()
+            .await
+            .unwrap_err();
+        assert!(matches!(e, Error::GrpcEndpointNotSet))
     }
 }

@@ -6,22 +6,22 @@ use celestia_rpc::FraudClient;
 use futures_util::{Stream, StreamExt};
 
 use crate::api::fraud::{Proof, ProofType};
-use crate::client::Context;
+use crate::client::ClientInner;
 use crate::Result;
 
 /// Fraud API for quering bridge nodes.
 pub struct FraudApi {
-    ctx: Arc<Context>,
+    inner: Arc<ClientInner>,
 }
 
 impl FraudApi {
-    pub(crate) fn new(ctx: Arc<Context>) -> FraudApi {
-        FraudApi { ctx }
+    pub(crate) fn new(inner: Arc<ClientInner>) -> FraudApi {
+        FraudApi { inner }
     }
 
     /// Fetches fraud proofs from node by their type.
     pub async fn get(&self, proof_type: ProofType) -> Result<Vec<Proof>> {
-        Ok(self.ctx.rpc.fraud_get(proof_type).await?)
+        Ok(self.inner.rpc.fraud_get(proof_type).await?)
     }
 
     /// Subscribe to fraud proof by its type.
@@ -29,10 +29,10 @@ impl FraudApi {
         &self,
         proof_type: ProofType,
     ) -> Pin<Box<dyn Stream<Item = Result<Proof>> + Send + 'static>> {
-        let ctx = self.ctx.clone();
+        let inner = self.inner.clone();
 
         try_stream! {
-            let mut subscription = ctx.rpc.fraud_subscribe(proof_type).await?;
+            let mut subscription = inner.rpc.fraud_subscribe(proof_type).await?;
 
             while let Some(item) = subscription.next().await {
                 let proof = item?;

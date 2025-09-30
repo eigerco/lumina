@@ -1,27 +1,28 @@
 [package]
 name = "lumina-utils"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Platform abstraction utilities used across lumina project"
 authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
+rust-version = "1.78"
 
 [dependencies]
-tokio = { optional = true, version = "1.38.0", features = ["macros", "sync"] }
-tokio-util = { optional = true, version = "0.7.11" }
+tokio = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = { optional = true, workspace = true }
-wasm-bindgen-futures = { optional = true, version = "0.4.43" }
-gloo-timers = { optional = true, version = "0.3.0", features = ["futures"] }
-futures = { optional = true, version = "0.3.30" }
-pin-project = { optional = true, version = "1.1.5" }
-send_wrapper = { optional = true, version = "0.6.0", features = ["futures"] }
-wasm-bindgen-test = { optional = true, workspace = true }
-web-time = { optional = true, version = "1.1.0" }
-js-sys = { optional = true, version = "0.3.77"}
+futures = { workspace = true, optional = true }
+gloo-timers = { workspace = true, optional = true }
+js-sys = { workspace = true, optional = true }
+pin-project = { workspace = true, optional = true }
+send_wrapper = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+wasm-bindgen-futures = { workspace = true, optional = true }
+wasm-bindgen-test = { workspace = true, optional = true }
+web-time = { version = "1.1", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # === This is a workaround! ===
@@ -30,19 +31,23 @@ js-sys = { optional = true, version = "0.3.77"}
 tonic = { workspace = true, default-features = false, optional = true }
 
 [dev-dependencies]
-web-time = "1.1.0"
+tokio = { workspace = true, features = ["macros"] }
+web-time = "1.1"
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
 
 [features]
 default = []
-executor = ["token", "dep:tokio-util", "dep:tokio", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:send_wrapper"]
+executor = ["token", "dep:tokio-util", "dep:tokio", "tokio/rt", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:send_wrapper"]
 token = ["dep:tokio-util"]
-time = ["dep:gloo-timers", "dep:tokio", "dep:send_wrapper", "dep:futures", "dep:pin-project", "dep:web-time"]
-test-utils = ["dep:wasm-bindgen-test"]
+time = ["dep:gloo-timers", "dep:tokio", "tokio/time", "dep:send_wrapper", "dep:futures", "dep:pin-project", "dep:web-time"]
+test-utils = ["dep:tokio", "tokio/macros", "dep:wasm-bindgen-test"]
 make-object = ["dep:js-sys"]
 
 # Workaround is required, because we want to pass through `tls-*-roots` feature flags
 # to tonic, to allow tls root configuration, but setting any of these flags breaks the
-# wasm32 build (tonic pulls incompatible deps). It works by passing the flags though 
+# wasm32 build (tonic pulls incompatible deps). It works by passing the flags though
 # this crate, which has tonic as dependency only for non-wasm32 targets. This effectively
 # emulates missing `[target.'cfg(not(target = "wasm32"))'.features]` functionality.
 tonic-tls-native-roots-except-wasm32 = ["dep:tonic", "tonic/tls-native-roots"]

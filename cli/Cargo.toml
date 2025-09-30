@@ -1,13 +1,14 @@
 [package]
 name = "lumina-cli"
-version = "0.9.3"
+version = "0.10.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Celestia data availability node implementation in Rust"
 authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
-# readme = "README.md" -- It's using the project's root readme as for now, should it have a separate one?
+readme = "README.md"
+rust-version = "1.87"
 # crates.io is limited to 5 keywords and 5 categories
 keywords = ["blockchain", "celestia", "lumina", "node"]
 # Must be one of <https://crates.io/category_slugs>
@@ -27,23 +28,23 @@ path = "src/main.rs"
 blockstore.workspace = true
 celestia-rpc = { workspace = true, features = ["p2p"] }
 celestia-types.workspace = true
-libp2p.workspace = true
 lumina-node.workspace = true
 
-anyhow = "1.0.86"
-axum = "0.7.5"
-clap = { version = "4.5.7", features = ["derive"] }
-directories = "5.0.1"
-dotenvy = "0.15.7"
-mime_guess = "2.0.4"
-parse_duration = "2.1.1"
-redb = "2.5.0"
-rust-embed = { version = "8.4.0", features = ["interpolate-folder-path"] }
-serde = "1.0.203"
-tokio = { version = "1.38.0", features = ["macros", "rt-multi-thread"] }
-tracing = "0.1.40"
-tracing-appender = "0.2.3"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+anyhow.workspace = true
+axum = "0.8"
+clap = { version = "4.5", features = ["derive"] }
+directories = "6"
+dotenvy.workspace = true
+libp2p.workspace = true
+mime_guess = "2"
+parse_duration = "2"
+redb.workspace = true
+rust-embed = { version = "8", features = ["interpolate-folder-path"] }
+serde.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tracing.workspace = true
+tracing-appender = "0.2"
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [features]
 browser-node = []

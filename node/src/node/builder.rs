@@ -52,10 +52,6 @@ pub enum NodeBuilderError {
     #[error("Could not resolve any of the bootnode addresses")]
     FailedResolvingBootnodes,
 
-    /// Error propagated from keyring
-    #[error(transparent)]
-    KeyringError(#[from] keyring::Error),
-
     /// Error decoding libp2p identity from the store
     #[error(transparent)]
     DecodingError(#[from] libp2p::identity::DecodingError),

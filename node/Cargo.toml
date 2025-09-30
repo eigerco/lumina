@@ -1,6 +1,6 @@
 [package]
 name = "lumina-node"
-version = "0.15.2"
+version = "0.16.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Celestia data availability node implementation in Rust"
@@ -8,6 +8,7 @@ authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
 readme = "README.md"
+rust-version = "1.87"
 # crates.io is limited to 5 keywords and 5 categories
 keywords = ["blockchain", "celestia", "lumina", "node"]
 # Must be one of <https://crates.io/category_slugs>
@@ -22,8 +23,11 @@ categories = [
 crate-type = ["lib", "staticlib", "cdylib"]
 
 [dependencies]
+beetswap.workspace = true
 celestia-proto.workspace = true
 celestia-types.workspace = true
+lumina-utils = { workspace = true, features = ["executor", "token", "time"] }
+
 libp2p = { workspace = true, features = [
   "autonat",
   "ping",
@@ -33,35 +37,32 @@ libp2p = { workspace = true, features = [
   "request-response",
   "kad",
 ] }
-lumina-utils = { workspace = true, features = ["executor", "token", "time"] }
 prost.workspace = true
 tendermint-proto.workspace = true
 tendermint.workspace = true
 
-async-trait = "0.1.80"
-beetswap = "0.4.0"
-cid = { version = "0.11.1", features = ["serde-codec"] }
-dashmap = "5.5.3"
-futures = "0.3.30"
-rand = "0.8.5"
-serde = { version = "1.0.203", features = ["derive"] }
+async-trait.workspace = true
+cid = { workspace = true, features = ["serde-codec"] }
+dashmap = "6"
+futures.workspace = true
+rand.workspace = true
+serde = { workspace = true, features = ["derive"] }
 smallvec = { version = "1.13.2", features = [
   "union",
   "const_generics",
   "serde",
 ] }
-thiserror = "1.0.61"
-tokio = { version = "1.38.0", features = ["macros", "sync"] }
-tokio-util = "0.7.11"
-tracing = "0.1.40"
-void = "1.0.2"
-uniffi = { version = "0.29.2", optional = true }
-keyring = "3.6.3"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "sync"] }
+tokio-util.workspace = true
+tracing.workspace = true
+void = "1"
+uniffi = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 backoff = { version = "0.4.0", features = ["tokio"] }
 blockstore = { workspace = true, features = ["redb"] }
-tokio = { version = "1.38.0", features = ["fs", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = ["fs", "rt-multi-thread", "time"] }
 libp2p = { workspace = true, features = [
   "noise",
   "dns",
@@ -71,18 +72,18 @@ libp2p = { workspace = true, features = [
   "websocket",
   "quic",
 ] }
-redb = "2.5.0"
-rustls-pemfile = "2.1.2"
-rustls-pki-types = "1.7.0"
+redb.workspace = true
+rustls-pemfile = "2"
+rustls-pki-types = "1.11"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-backoff = { version = "0.4.0", features = ["wasm-bindgen"] }
-beetswap = { version = "0.4.0", features = ["wasm-bindgen"] }
+backoff = { version = "0.4", features = ["wasm-bindgen"] }
+beetswap = { workspace = true, features = ["wasm-bindgen"] }
 blockstore = { workspace = true, features = ["indexeddb"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
-getrandom = { version = "0.2.15", features = ["js"] }
-gloo-timers = { version = "0.3.0", features = ["futures"] }
-js-sys = "0.3.69"
+getrandom_03.workspace = true
+gloo-timers.workspace = true
+js-sys.workspace = true
 libp2p = { workspace = true, features = [
   "noise",
   "wasm-bindgen",
@@ -90,36 +91,37 @@ libp2p = { workspace = true, features = [
   "webtransport-websys",
   "yamux",
 ] }
-pin-project = "1.1.5"
-rexie = "0.6.2"
-send_wrapper = { version = "0.6.0", features = ["futures"] }
-serde-wasm-bindgen = "0.6.5"
-serde_json = "1.0.140"
+libp2p-websocket-websys.workspace = true
+pin-project.workspace = true
+rexie.workspace = true
+send_wrapper.workspace = true
+serde_json.workspace = true
+serde-wasm-bindgen.workspace = true
 wasm-bindgen.workspace = true
-wasm-bindgen-futures = "0.4.43"
-web-sys = { version = "0.3.77", features = [
+wasm-bindgen-futures.workspace = true
+web-sys = { workspace = true, features = [
   "Request",
   "RequestInit",
   "RequestMode",
   "Response",
-  "Headers",
+  "Headers"
 ] }
-libp2p-websocket-websys = "0.3.3"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test.workspace = true
 
 [dev-dependencies]
-lumina-utils = { workspace = true, features = ["test-utils"] }
-bytes = "1.6.0"
 celestia-rpc = { workspace = true, features = ["p2p"] }
 celestia-types = { workspace = true, features = ["test-utils"] }
 # required to have path based dependency here to allow `cargo publish` to work
 # https://github.com/rust-lang/cargo/pull/7333
 lumina-node = { path = ".", features = ["test-utils"] }
-rstest = "0.21.0"
-serde_json = "1.0.117"
-tempfile = "3.10.1"
+lumina-utils = { workspace = true, features = ["test-utils"] }
+
+bytes.workspace = true
+rstest = "0.26"
+serde_json.workspace = true
+tempfile = "3"
 
 [features]
 test-utils = ["celestia-types/test-utils"]

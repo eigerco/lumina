@@ -32,6 +32,7 @@ jobs:
           - lumina-node
           - lumina-node-uniffi
           - lumina-node-wasm
+          - lumina-utils
           - lumina-cli
 
     steps:
@@ -41,15 +42,16 @@ jobs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         components: clippy
-        rustflags: -D warnings
         target: wasm32-unknown-unknown
         cache-key: ${{ matrix.crate }}
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
 
     - name: Run clippy for native
-      run: cargo clippy --all-targets --all-features -p ${{ matrix.crate }} -- --no-deps
+      run: cargo clippy --all-targets --all-features -p ${{ matrix.crate }} -- -D warnings --no-deps
 
     - name: Run clippy for wasm32
-      run: cargo clippy --all-targets --all-features --target=wasm32-unknown-unknown -p ${{ matrix.crate }} -- --no-deps
+      run: cargo clippy --all-targets --all-features --target=wasm32-unknown-unknown -p ${{ matrix.crate }} -- -D warnings --no-deps
 
 
   test:
@@ -68,6 +70,7 @@ jobs:
           - lumina-node
           - lumina-node-uniffi
           - lumina-node-wasm
+          - lumina-utils
           - lumina-cli
 
     steps:
@@ -135,6 +138,8 @@ jobs:
             # We're running node-wasm tests in release mode to get around a failing debug assertion
             # https://github.com/libp2p/rust-libp2p/issues/5618
             wasm-pack-test-flags: --release
+          - name: lumina-utils
+            dir: utils
 
     steps:
     - uses: actions/checkout@v4
@@ -143,9 +148,10 @@ jobs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         components: clippy
-        rustflags: -D warnings
         target: wasm32-unknown-unknown
         cache-key: ${{ matrix.crate.name }}
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
 
     - name: Install wasm-pack
       uses: taiki-e/install-action@v2
@@ -172,6 +178,8 @@ jobs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         target: wasm32-unknown-unknown
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
 
     - name: Install wasm-pack
       uses: taiki-e/install-action@v2
@@ -268,6 +276,8 @@ jobs:
         components: clippy
         toolchain: nightly, stable
         target: wasm32-unknown-unknown
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
 
     - name: Missing docs for native
       run: cargo clippy --workspace --all-features -- -D missing-docs
@@ -294,12 +304,92 @@ jobs:
         toolchain: nightly
 
     - name: Install cargo-udeps
-      uses: taiki-e/cache-cargo-install-action@v2
+      uses: taiki-e/install-action@v2
       with:
-        tool: cargo-udeps@0.1
+        tool: cargo-udeps
 
     - name: Check for unused dependencies
       run: cargo udeps --all-targets --all-features
+
+
+  minimal-versions:
+    runs-on: ubuntu-latest
+    name: minimal versions of dependencies
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        target: wasm32-unknown-unknown
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
+
+    - name: Install cargo-minimal-versions
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-hack,cargo-minimal-versions
+
+    - name: Check minimal versions
+      run: cargo minimal-versions check --direct --all-features
+
+    - name: Check minimal versions on wasm
+      run: cargo minimal-versions check --direct --all-features --target wasm32-unknown-unknown
+
+
+  msrv:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        crate:
+          - name: celestia-proto
+            dir: proto
+          - name: celestia-types
+            dir: types
+          - name: celestia-rpc
+            dir: rpc
+          - name: celestia-grpc
+            dir: grpc
+          - name: celestia-grpc-macros
+            dir: grpc/grpc-macros
+          - name: celestia-client
+            dir: client
+          - name: lumina-node
+            dir: node
+          - name: lumina-node-uniffi
+            dir: node-uniffi
+          - name: lumina-node-wasm
+            dir: node-wasm
+          - name: lumina-node
+            dir: node
+          - name: lumina-utils
+            dir: utils
+          - name: lumina-cli
+            dir: cli
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        target: wasm32-unknown-unknown
+        cache-key: ${{ matrix.crate.name }}
+        # this disables default behavior of `setup-rust-toolchain` to put `-D warnings` which overwrites `.cargo/config.toml`
+        rustflags: ""
+
+    - name: Install cargo-msrv
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-msrv
+
+    - name: Run msrv verify for native
+      run: cargo msrv verify --manifest-path ./${{ matrix.crate.dir }}/Cargo.toml --all-features
+
+    - name: Run msrv verify for wasm32
+      run: cargo msrv verify --manifest-path ./${{ matrix.crate.dir }}/Cargo.toml --all-features --target wasm32-unknown-unknown
 
 
   required:
@@ -317,6 +407,8 @@ jobs:
     - fmt
     - docs
     - unused-deps
+    - minimal-versions
+    - msrv
 
     steps:
     - name: On failure

@@ -80,13 +80,13 @@ pub enum Error {
     #[error(transparent)]
     SigningError(#[from] SignatureError),
 
-    /// No account
-    #[error("no account")]
-    NoAccount,
+    /// Client was constructed with without a signer
+    #[error("Client was constructed with without a signer")]
+    MissingSigner,
 
-    /// Client was not constructed with a signer
-    #[error("Client was not constructed with a signer")]
-    MissingSinger,
+    /// Error related to the metadata
+    #[error(transparent)]
+    Metadata(#[from] MetadataError),
 }
 
 /// Representation of all the errors that can occur when building [`GrpcClient`] using
@@ -112,6 +112,25 @@ pub enum GrpcClientBuilderError {
     /// Invalid public key.
     #[error("Invalid public key")]
     InvalidPublicKey,
+
+    /// Error related to the metadata
+    #[error(transparent)]
+    Metadata(#[from] MetadataError),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum MetadataError {
+    /// Invalid metadata key
+    #[error("Invalid metadata key ({0})")]
+    Key(String),
+
+    /// Invalid binary metadata key
+    #[error("Invalid binary metadata key ({0:?})")]
+    KeyBin(Vec<u8>),
+
+    /// Invalid metadata value for given key
+    #[error("Invalid metadata value (key: {0:?})")]
+    Value(String),
 }
 
 impl From<Status> for Error {

@@ -53,24 +53,33 @@ impl GrpcMethod {
 
         let method = quote! {
             pub #signature {
-                // 256 mb, future proof as celesita blocks grow
-                const MAX_MSG_SIZE: usize = 256 * 1024 * 1024;
-
-                let mut client = #grpc_client_struct :: new(
-                    self.transport.clone()
-                )
-                .max_decoding_message_size(MAX_MSG_SIZE)
-                .max_encoding_message_size(MAX_MSG_SIZE);
-
+                let transport = self.inner.transport.clone();
                 let param = crate::grpc::IntoGrpcParam::into_parameter(( #( #params ),* ));
-                let request = ::tonic::Request::new(param);
 
-                let fut = client. #grpc_method_name (request);
+                crate::grpc::AsyncGrpcCall::new(move |context: crate::grpc::Context| async move {
+                    // 256 mb, future proof as celesita blocks grow
+                    const MAX_MSG_SIZE: usize = 256 * 1024 * 1024;
 
-                #[cfg(target_arch = "wasm32")]
-                let fut = ::send_wrapper::SendWrapper::new(fut);
+                    let mut client = #grpc_client_struct :: new(transport)
+                        .max_decoding_message_size(MAX_MSG_SIZE)
+                        .max_encoding_message_size(MAX_MSG_SIZE);
 
-                crate::grpc::FromGrpcResponse::try_from_response(fut.await?.into_inner())
+                    let request = ::tonic::Request::from_parts(
+                        context.metadata,
+                        ::tonic::Extensions::new(),
+                        param,
+                    );
+
+                    let fut = client. #grpc_method_name (request);
+
+                    #[cfg(target_arch = "wasm32")]
+                    let fut = ::send_wrapper::SendWrapper::new(fut);
+
+                    crate::grpc::FromGrpcResponse::try_from_response(
+                        fut.await?.into_inner()
+                    )
+                })
+                .context(&self.inner.context)
             }
         };
 

@@ -657,11 +657,11 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_row_proof_with_bincode() {
+    fn test_serialize_row_proof_binary() {
         let dah = random_dah(16);
         let proof = dah.row_proof(0..=1).unwrap();
-        let serialized = bincode::serialize(&proof).unwrap();
-        let deserialized: RowProof = bincode::deserialize(&serialized).unwrap();
+        let serialized = postcard::to_allocvec(&proof).unwrap();
+        let deserialized: RowProof = postcard::from_bytes(&serialized).unwrap();
         assert_eq!(proof, deserialized);
     }
 
