@@ -11,7 +11,7 @@ use libp2p::Multiaddr;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::network;
 use lumina_node::node::{NodeBuilder, DEFAULT_PRUNING_WINDOW_IN_MEMORY};
-use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
+use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata, Store};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 use wasm_bindgen::prelude::*;
@@ -401,6 +401,8 @@ impl WasmNodeConfig {
             let store = IndexedDbStore::new(&store_name)
                 .await
                 .context("Failed to open the store")?;
+            store.set_identity(keypair.clone()).await?;
+
             let blockstore = IndexedDbBlockstore::new(&blockstore_name)
                 .await
                 .context("Failed to open the blockstore")?;
@@ -409,6 +411,9 @@ impl WasmNodeConfig {
                 .store(EitherStore::Right(store))
                 .blockstore(EitherBlockstore::Right(blockstore))
         } else {
+            let store = InMemoryStore::new();
+            store.set_identity(keypair.clone()).await?;
+
             NodeBuilder::new()
                 .store(EitherStore::Left(InMemoryStore::new()))
                 .blockstore(EitherBlockstore::Left(InMemoryBlockstore::new()))

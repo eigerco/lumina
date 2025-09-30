@@ -278,7 +278,10 @@ where
 
         info!("Sampling window: {SAMPLING_WINDOW:?}, Pruning window: {pruning_window:?}",);
 
-        let p2p_local_keypair = self.store.init_identity(self.keypair).await?;
+        if let Some(identity) = self.keypair {
+            self.store.set_identity(identity).await?;
+        }
+        let p2p_local_keypair = self.store.get_identity().await?;
 
         Ok(NodeConfig {
             blockstore: self.blockstore,

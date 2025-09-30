@@ -239,8 +239,12 @@ where
         call!(self, remove_height(height))
     }
 
-    async fn init_identity(&self, keypair: Option<Keypair>) -> Result<Keypair> {
-        call!(self, init_identity(keypair))
+    async fn set_identity(&self, keypair: Keypair) -> Result<()> {
+        call!(self, set_identity(keypair))
+    }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        call!(self, get_identity())
     }
 
     async fn close(self) -> Result<()> {

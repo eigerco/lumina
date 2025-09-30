@@ -148,9 +148,14 @@ impl InMemoryStore {
         inner.remove_height(height)
     }
 
-    async fn init_identity(&self, keypair: Option<Keypair>) -> Result<Keypair> {
+    async fn set_identity(&self, keypair: Keypair) -> Result<()> {
         let mut inner = self.inner.write().await;
-        inner.init_identity(keypair).await
+        inner.set_identity(keypair).await
+    }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        let mut inner = self.inner.write().await;
+        inner.get_identity().await
     }
 }
 
@@ -351,14 +356,16 @@ impl InMemoryStoreInner {
         Ok(())
     }
 
-    async fn init_identity(&mut self, requested_keypair: Option<Keypair>) -> Result<Keypair> {
-        let keypair = match (requested_keypair, &mut self.libp2p_identity) {
-            (None, persisted @ None) => persisted.insert(Keypair::generate_ed25519()),
-            (None, Some(keypair)) => keypair,
-            (Some(keypair), persisted) => persisted.insert(keypair),
-        };
+    async fn get_identity(&mut self) -> Result<Keypair> {
+        Ok(self
+            .libp2p_identity
+            .get_or_insert_with(Keypair::generate_ed25519)
+            .clone())
+    }
 
-        Ok(keypair.clone())
+    async fn set_identity(&mut self, keypair: Keypair) -> Result<()> {
+        let _ = self.libp2p_identity.insert(keypair);
+        Ok(())
     }
 }
 
@@ -463,8 +470,12 @@ impl Store for InMemoryStore {
         Ok(())
     }
 
-    async fn init_identity(&self, keypair: Option<Keypair>) -> Result<Keypair> {
-        self.init_identity(keypair).await
+    async fn set_identity(&self, keypair: Keypair) -> Result<()> {
+        self.set_identity(keypair).await
+    }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        self.get_identity().await
     }
 }
 

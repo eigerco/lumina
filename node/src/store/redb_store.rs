@@ -490,12 +490,12 @@ impl RedbStore {
         .await
     }
 
-    async fn init_identity(&self, requested_keypair: Option<Keypair>) -> Result<Keypair> {
+    async fn get_identity(&self) -> Result<Keypair> {
         self.write_tx(move |tx| {
             let mut identity_table = tx.open_table(LIBP2P_IDENTITY_TABLE)?;
 
             if identity_table.is_empty()? {
-                let keypair = requested_keypair.unwrap_or_else(Keypair::generate_ed25519);
+                let keypair = Keypair::generate_ed25519();
 
                 let peer_id = keypair.public().to_peer_id();
                 let keypair_bytes = keypair.to_protobuf_encoding()?;
@@ -504,24 +504,37 @@ impl RedbStore {
                 return Ok(keypair);
             }
 
-            if let Some(keypair) = requested_keypair {
-                let _ = identity_table
-                    .pop_first()?
-                    .expect("identity_table should be non empty");
-
-                let peer_id = keypair.public().to_peer_id();
-                let keypair_bytes = keypair.to_protobuf_encoding()?;
-                debug!("Overriding existing identity, new: {peer_id}");
-                identity_table.insert(&*peer_id.to_base58(), &*keypair_bytes)?;
-
-                return Ok(keypair);
-            }
-
             let (_peer_id, key_bytes) = identity_table
                 .first()?
                 .expect("identity_table should be non empty");
 
             Ok(Keypair::from_protobuf_encoding(key_bytes.value())?)
+        })
+        .await
+    }
+
+    async fn set_identity(&self, keypair: Keypair) -> Result<()> {
+        self.write_tx(move |tx| {
+            let mut identity_table = tx.open_table(LIBP2P_IDENTITY_TABLE)?;
+
+            if identity_table.is_empty()? {
+                let peer_id = keypair.public().to_peer_id();
+                let keypair_bytes = keypair.to_protobuf_encoding()?;
+                debug!("Initialised new identity: {peer_id}");
+                identity_table.insert(&*peer_id.to_base58(), &*keypair_bytes)?;
+                return Ok(());
+            }
+
+            let _ = identity_table
+                .pop_first()?
+                .expect("identity_table should be non empty");
+
+            let peer_id = keypair.public().to_peer_id();
+            let keypair_bytes = keypair.to_protobuf_encoding()?;
+            debug!("Overriding existing identity, new: {peer_id}");
+            identity_table.insert(&*peer_id.to_base58(), &*keypair_bytes)?;
+
+            Ok(())
         })
         .await
     }
@@ -624,8 +637,12 @@ impl Store for RedbStore {
         self.remove_height(height).await
     }
 
-    async fn init_identity(&self, requested_keypair: Option<Keypair>) -> Result<Keypair> {
-        self.init_identity(requested_keypair).await
+    async fn set_identity(&self, keypair: Keypair) -> Result<()> {
+        self.set_identity(keypair).await
+    }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        self.get_identity().await
     }
 
     async fn close(mut self) -> Result<()> {

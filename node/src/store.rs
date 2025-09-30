@@ -154,14 +154,14 @@ pub trait Store: Send + Sync + Debug {
     /// Remove header with given height from the store.
     async fn remove_height(&self, height: u64) -> Result<()>;
 
+    /// Set libp2p identity keypair for the store
+    async fn set_identity(&self, requested_keypair: Keypair) -> Result<()>;
+
+    /// Retrieve libp2p identity keypair from the store
+    async fn get_identity(&self) -> Result<Keypair>;
+
     /// Close store.
     async fn close(self) -> Result<()>;
-
-    /// Handle the libp2p identity initialisation for the store. If `requested_keypair` is
-    /// provided it takes precedence over key in the store and permanently overwrites it.
-    /// If there's no requested keypair, store will either use currently persisted one, or
-    /// generate and store a new one.
-    async fn init_identity(&self, requested_keypair: Option<Keypair>) -> Result<Keypair>;
 }
 
 /// Representation of all the errors that can occur when interacting with the [`Store`].
@@ -1240,8 +1240,8 @@ mod tests {
         s: S,
     ) {
         let store = s;
-        let generated_keypair = store.init_identity(None).await.unwrap();
-        let persisted_keypair = store.init_identity(None).await.unwrap();
+        let generated_keypair = store.get_identity().await.unwrap();
+        let persisted_keypair = store.get_identity().await.unwrap();
 
         assert_eq!(generated_keypair.public(), persisted_keypair.public());
     }
@@ -1257,17 +1257,15 @@ mod tests {
         s: S,
     ) {
         let store = s;
-        let initial_keypair = store.init_identity(None).await.unwrap();
+        let initial_keypair = store.get_identity().await.unwrap();
         let requested_keypair = Keypair::generate_ed25519();
-        let overriden_keypair = store
-            .init_identity(Some(requested_keypair.clone()))
-            .await
-            .unwrap();
-        let persisted_keypair = store.init_identity(None).await.unwrap();
+        let persisted_overridden_keypair = store.get_identity().await.unwrap();
 
         assert_ne!(initial_keypair.public(), requested_keypair.public());
-        assert_eq!(requested_keypair.public(), overriden_keypair.public());
-        assert_eq!(requested_keypair.public(), persisted_keypair.public());
+        assert_eq!(
+            requested_keypair.public(),
+            persisted_overridden_keypair.public()
+        );
     }
 
     /// Fills an empty store

@@ -56,6 +56,8 @@ pub struct IndexedDbStore {
     head: SendWrapper<RefCell<Option<ExtendedHeader>>>,
     db: SendWrapper<Rexie>,
     header_added_notifier: Notify,
+    /// Node network identity
+    libp2p_identity: SendWrapper<RefCell<Option<Keypair>>>,
 }
 
 impl IndexedDbStore {
@@ -120,6 +122,7 @@ impl IndexedDbStore {
             head: SendWrapper::new(RefCell::new(db_head)),
             db: SendWrapper::new(rexie),
             header_added_notifier: Notify::new(),
+            libp2p_identity: SendWrapper::new(RefCell::new(None)),
         })
     }
 
@@ -312,12 +315,17 @@ impl IndexedDbStore {
         .await
     }
 
-    async fn init_identity(&self, requested_keypair: Option<Keypair>) -> Result<Keypair> {
-        // IndexedDbStore cannot be responsible for managing the libp2p identity keys
-        // as we need to create separate indexeddb instance for each identity. As such
-        // we're expecting that the key management has already been done in the wasm glue
-        // code and the key is present here.
-        Ok(requested_keypair.expect("keypair should already be selected here"))
+    async fn get_identity(&self) -> Result<Keypair> {
+        Ok(self
+            .libp2p_identity
+            .borrow_mut()
+            .get_or_insert_with(Keypair::generate_ed25519)
+            .clone())
+    }
+
+    async fn set_identity(&self, keypair: Keypair) -> Result<()> {
+        let _ = self.libp2p_identity.borrow_mut().insert(keypair);
+        Ok(())
     }
 }
 
@@ -447,14 +455,19 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
+    async fn set_identity(&self, requested_keypair: Keypair) -> Result<()> {
+        let fut = SendWrapper::new(self.set_identity(requested_keypair));
+        fut.await
+    }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        let fut = SendWrapper::new(self.get_identity());
+        fut.await
+    }
+
     async fn close(self) -> Result<()> {
         self.db.take().close();
         Ok(())
-    }
-
-    async fn init_identity(&self, requested_keypair: Option<Keypair>) -> Result<Keypair> {
-        let fut = SendWrapper::new(self.init_identity(requested_keypair));
-        fut.await
     }
 }
 
