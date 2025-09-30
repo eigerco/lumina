@@ -1259,6 +1259,7 @@ mod tests {
         let store = s;
         let initial_keypair = store.get_identity().await.unwrap();
         let requested_keypair = Keypair::generate_ed25519();
+        store.set_identity(requested_keypair.clone()).await.unwrap();
         let persisted_overridden_keypair = store.get_identity().await.unwrap();
 
         assert_ne!(initial_keypair.public(), requested_keypair.public());

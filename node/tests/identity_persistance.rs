@@ -8,7 +8,7 @@ use tempfile::TempDir;
 async fn persists_identity() {
     let db_dir = TempDir::with_prefix("lumina.persistance.test")
         .unwrap()
-        .into_path()
+        .keep()
         .join("db");
 
     let store = RedbStore::open(&db_dir).await.unwrap();
@@ -38,7 +38,7 @@ async fn persists_identity() {
 async fn initialise_identity() {
     let db_dir = TempDir::with_prefix("lumina.persistance.test")
         .unwrap()
-        .into_path()
+        .keep()
         .join("db");
 
     let keypair = Keypair::generate_ed25519();
@@ -73,7 +73,7 @@ async fn initialise_identity() {
 async fn override_identity() {
     let db_dir = TempDir::with_prefix("lumina.persistance.test")
         .unwrap()
-        .into_path()
+        .keep()
         .join("db");
 
     let store = RedbStore::open(&db_dir).await.unwrap();
