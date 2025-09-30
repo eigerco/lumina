@@ -54,7 +54,7 @@ pub enum NodeBuilderError {
 
     /// Error decoding libp2p identity from the store
     #[error(transparent)]
-    DecodingError(#[from] libp2p::identity::DecodingError),
+    IdentityDecodingError(#[from] libp2p::identity::DecodingError),
 
     /// Error propagated from the store
     #[error(transparent)]
