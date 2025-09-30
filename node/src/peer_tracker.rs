@@ -24,7 +24,6 @@ const EXPIRED_AFTER: Duration = Duration::from_secs(120);
 #[derive(Debug)]
 pub(crate) struct PeerTracker {
     peers: HashMap<PeerId, Peer>,
-    connection_to_peer: HashMap<ConnectionId, PeerId>,
     protect_counter: HashMap<u32, usize>,
     info_tx: watch::Sender<PeerTrackerInfo>,
     event_pub: EventPublisher,
@@ -148,7 +147,6 @@ impl PeerTracker {
     pub(crate) fn new(event_pub: EventPublisher) -> Self {
         PeerTracker {
             peers: HashMap::new(),
-            connection_to_peer: HashMap::new(),
             protect_counter: HashMap::new(),
             info_tx: watch::channel(PeerTrackerInfo::default()).0,
             event_pub,
@@ -285,7 +283,6 @@ impl PeerTracker {
 
         peer.connections
             .insert(connection_id, ConnectionInfo::default());
-        self.connection_to_peer.insert(connection_id, *peer_id);
 
         // If peer was not already connected from before
         if !prev_connected {
@@ -306,7 +303,6 @@ impl PeerTracker {
         };
 
         peer.connections.retain(|id, _| *id != connection_id);
-        self.connection_to_peer.remove(&connection_id);
 
         // If this is the last connection from the peer.
         if !peer.is_connected() {
@@ -378,10 +374,15 @@ impl PeerTracker {
     }
 
     /// Returns all connections.
-    pub(crate) fn all_connections(&self) -> impl Iterator<Item = (ConnectionId, PeerId)> + '_ {
-        self.connection_to_peer
-            .iter()
-            .map(|(&connection_id, &peer_id)| (connection_id, peer_id))
+    pub(crate) fn all_connections(&self) -> impl Iterator<Item = (&PeerId, ConnectionId)> + '_ {
+        self.peers()
+            .filter(|peer| peer.is_connected())
+            .flat_map(|peer| {
+                peer.connections
+                    .keys()
+                    .copied()
+                    .map(|conn| (peer.id(), conn))
+            })
     }
 
     /// Returns one of the best peers.
@@ -402,10 +403,9 @@ impl PeerTracker {
         peers.first().copied().copied()
     }
 
-    // TODO: write test
     pub(crate) fn gc(&mut self) {
         self.peers.retain(|_, peer| {
-            // We keep the:
+            // We keep:
             //
             // * Connected peers
             // * Protected peers

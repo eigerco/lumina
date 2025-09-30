@@ -620,7 +620,7 @@ where
             self.swarm.remove_listener(listener);
         }
 
-        for (connection_id, _) in self.peer_tracker.all_connections() {
+        for (_, connection_id) in self.peer_tracker.all_connections() {
             self.swarm.close_connection(connection_id);
         }
 
