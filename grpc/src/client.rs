@@ -273,7 +273,7 @@ impl GrpcClient {
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
     /// let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
-    /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
+    /// let address = Address::from_account_verifying_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = GrpcClient::builder()
@@ -318,7 +318,7 @@ impl GrpcClient {
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
     ///
     /// let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
-    /// let address = Address::from_account_veryfing_key(*signing_key.verifying_key());
+    /// let address = Address::from_account_verifying_key(*signing_key.verifying_key());
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = GrpcClient::builder()
