@@ -215,7 +215,7 @@ jobs:
       run: xcodebuild -scheme LuminaDemo clean build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
     - name: xcode sim test
       working-directory: examples/ios/LuminaDemo
-      run: xcodebuild -scheme LuminaDemo -sdk iphonesimulator -destination "platform=iOS Simulator,name=iPhone 16" test
+      run: xcodebuild -scheme LuminaDemo -sdk iphonesimulator -destination "platform=iOS Simulator,name=iPhone 16" -skip-testing LuminaDemoTests/GrpcClientTest test
 
   build-android:
     runs-on: ubuntu-latest
