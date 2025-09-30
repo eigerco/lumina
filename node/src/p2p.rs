@@ -45,7 +45,7 @@ use tendermint_proto::Protobuf;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
 mod connection_control;
 mod header_ex;
