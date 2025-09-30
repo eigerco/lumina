@@ -20,7 +20,6 @@ use libp2p::{
 };
 use lumina_utils::time::Interval;
 use multihash_codetable::{Code, MultihashDigest};
-use smallvec::SmallVec;
 use tokio::select;
 use tokio::sync::watch;
 use tracing::{debug, error, instrument, trace, warn};
@@ -66,7 +65,7 @@ where
     peer_tracker_info_watcher: watch::Receiver<PeerTrackerInfo>,
     event_pub: EventPublisher,
     bootnodes: HashMap<PeerId, Vec<Multiaddr>>,
-    listeners: SmallVec<[ListenerId; 1]>,
+    listeners: Vec<ListenerId>,
     kademlia_interval: Interval,
     gc_interval: Interval,
 }
@@ -115,7 +114,7 @@ where
         };
 
         let mut swarm = new_swarm(keypair.to_owned(), behaviour).await?;
-        let mut listeners = SmallVec::new();
+        let mut listeners = Vec::new();
 
         for addr in listen_on {
             match swarm.listen_on(addr.clone()) {
@@ -166,6 +165,27 @@ where
         Ok(manager)
     }
 
+    pub(crate) async fn poll(&mut self) -> Result<B::ToSwarm> {
+        loop {
+            select! {
+                _ = self.peer_tracker_info_watcher.changed() => {
+                    self.peers_health_check().await;
+                }
+                _ = self.kademlia_interval.tick() => {
+                    self.peers_health_check().await;
+                }
+                _ = self.gc_interval.tick() => {
+                    self.peer_tracker.gc();
+                }
+                ev = self.swarm.select_next_some() => {
+                    if let Some(ev) = self.on_swarm_event(ev).await {
+                        return Ok(ev);
+                    }
+                }
+            }
+        }
+    }
+
     pub(crate) fn context<'a>(&'a mut self) -> SwarmContext<'a, B> {
         SwarmContext {
             behaviour: &mut self.swarm.behaviour_mut().behaviour,
@@ -198,31 +218,9 @@ where
         }
     }
 
-    fn protect(&mut self, peer_id: &PeerId, tag: u32) {
-        if self.peer_tracker.protect(peer_id, tag) {
-            // Change keep alive of ongoing connections
-            for conn_id in self.peer_tracker.connections(peer_id) {
-                self.swarm
-                    .behaviour_mut()
-                    .connection_control
-                    .set_keep_alive(peer_id, conn_id, true);
-            }
-        }
-    }
-
-    fn unprotect(&mut self, peer_id: &PeerId, tag: u32) {
-        if self.peer_tracker.unprotect(peer_id, tag) {
-            // Change keep alive of ongoing connections
-            for conn_id in self.peer_tracker.connections(peer_id) {
-                self.swarm
-                    .behaviour_mut()
-                    .connection_control
-                    .set_keep_alive(peer_id, conn_id, false);
-            }
-        }
-    }
-
+    /// Tries to find the node via Kademlia and connect to it
     fn find_node_and_connect(&mut self, peer_id: &PeerId) {
+        // Check if Kademlia already knows peer_id and their addresses
         let kad_entry_exists = self
             .swarm
             .behaviour_mut()
@@ -235,15 +233,19 @@ where
             })
             .unwrap_or(false);
 
-        // Swarm will ask kademlia for the addresses of the peer_id,
-        // but this is successful only when a kademlia entry exists.
         if kad_entry_exists {
+            // When `connect` is called without a specified address, then
+            // swarm asks Kademlia about it.
             self.connect(peer_id, None);
             return;
         }
 
-        // When kademlia entry does not exist then we need to initiate
-        // a `get_closest_peers` query in order to find the addresses.
+        // When Kademlia doesn't know about peer_id, then we need to
+        // initiate a `get_closest_peers` query in order to find it and
+        // their addresses.
+        //
+        // We also avoid calling `get_closest_peers` for the same peer
+        // multiple times.
         let peer_id_bytes = peer_id.to_bytes();
         let kad_query_exists = self
             .swarm
@@ -256,8 +258,8 @@ where
             });
 
         if !kad_query_exists {
-            // When kademlia finds the addresses via get_closest_peers, it will
-            // also automatically dial them.
+            // When kademlia finds the addresses via `get_closest_peers`, it will
+            // automatically connect to them.
             self.swarm
                 .behaviour_mut()
                 .kademlia
@@ -302,6 +304,7 @@ where
     fn bootstrap(&mut self) {
         self.connect_to_bootnodes();
 
+        // Check if there is bootstrap in progress
         let bootstrap_query_exists = self
             .swarm
             .behaviour_mut()
@@ -317,15 +320,14 @@ where
     }
 
     fn start_get_providers_kad_query(&mut self, topic: &RecordKey) {
+        // Avoid having multiple `GetProviders` queries for the same `topic`.
         let kad_query_exists = self.swarm.behaviour_mut().kademlia.iter_queries().any(
             |query| matches!(query.info(), QueryInfo::GetProviders { key, .. } if key == topic),
         );
 
         if !kad_query_exists {
-            // `get_providers` reports the providers in multiple steps.
-            // If kademlia has some known providers in its store, then it reports
-            // them in the first step. Kademlia also starts `get_closest_peers`
-            // internally and reports new finds with `QueryResult::GetProviders`.
+            // `get_providers` reports already known providers of the
+            // `topic` and tries to discover new ones.
             self.swarm
                 .behaviour_mut()
                 .kademlia
@@ -370,23 +372,26 @@ where
         }
     }
 
-    pub(crate) async fn poll(&mut self) -> Result<B::ToSwarm> {
-        loop {
-            select! {
-                _ = self.peer_tracker_info_watcher.changed() => {
-                    self.peers_health_check().await;
-                }
-                _ = self.kademlia_interval.tick() => {
-                    self.peers_health_check().await;
-                }
-                _ = self.gc_interval.tick() => {
-                    self.peer_tracker.gc();
-                }
-                ev = self.swarm.select_next_some() => {
-                    if let Some(ev) = self.on_swarm_event(ev).await {
-                        return Ok(ev);
-                    }
-                }
+    fn protect(&mut self, peer_id: &PeerId, tag: u32) {
+        if self.peer_tracker.protect(peer_id, tag) {
+            // Change keep alive of ongoing connections to `true`
+            for conn_id in self.peer_tracker.connections(peer_id) {
+                self.swarm
+                    .behaviour_mut()
+                    .connection_control
+                    .set_keep_alive(peer_id, conn_id, true);
+            }
+        }
+    }
+
+    fn unprotect(&mut self, peer_id: &PeerId, tag: u32) {
+        if self.peer_tracker.unprotect(peer_id, tag) {
+            // Change keep alive of ongoing connections to `false`
+            for conn_id in self.peer_tracker.connections(peer_id) {
+                self.swarm
+                    .behaviour_mut()
+                    .connection_control
+                    .set_keep_alive(peer_id, conn_id, false);
             }
         }
     }
@@ -401,9 +406,11 @@ where
             self.bootstrap();
         }
 
-        // If the already protected full nodes are less than the max, we try to
-        // protect more from the connected ones.
+        // Based on the spec, when a protected node gets disconnected, the we unprotect
+        // it (check `on_peer_disconnected`), and a another node must be choosen to be
+        // protected.
         if protected_full_nodes < MAX_PROTECTED_FULL_NODES {
+            // Protect the best full nodes to fill up the gap.
             self.protect_best_peers(
                 MAX_PROTECTED_FULL_NODES - protected_full_nodes,
                 FULL_PROTECT_TAG,
@@ -416,9 +423,8 @@ where
             }
         }
 
-        // If the already protected archival nodes are less than the max, we try to
-        // protect more from the connected ones.
         if protected_archival_nodes < MAX_PROTECTED_ARCHIVAL_NODES {
+            // Protect the best archival nodes to fill up the gap.
             self.protect_best_peers(
                 MAX_PROTECTED_ARCHIVAL_NODES - protected_archival_nodes,
                 ARCHIVAL_PROTECT_TAG,
@@ -546,7 +552,7 @@ where
                     .on_agent_version(&peer_id, &info.agent_version);
 
                 // Inform Kademlia about the listening addresses
-                // TODO: Remove this when rust-libp2p#5103 is implemented
+                // TODO: Remove this when rust-libp2p#5313 is implemented
                 for addr in info.listen_addrs {
                     self.swarm
                         .behaviour_mut()
@@ -624,7 +630,7 @@ where
             self.swarm.close_connection(connection_id);
         }
 
-        // Waiting until all established connections closed.
+        // Waiting until all established connections are closed.
         while self
             .swarm
             .network_info()

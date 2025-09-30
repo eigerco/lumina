@@ -1010,7 +1010,6 @@ where
     ) -> gossipsub::MessageAcceptance {
         let Ok(befp) = BadEncodingFraudProof::decode(data) else {
             trace!("Malformed bad encoding fraud proof from {peer}");
-            // TODO
             self.swarm
                 .context()
                 .behaviour
