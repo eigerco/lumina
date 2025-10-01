@@ -54,6 +54,8 @@ pub enum TxStatus {
     Pending,
     /// The transaction was evicted from the mempool.
     Evicted,
+    /// The transaction was rejected
+    Rejected,
     /// The transaction was committed into the block.
     Committed,
 }
@@ -64,6 +66,7 @@ impl fmt::Display for TxStatus {
             TxStatus::Unknown => "UNKNOWN",
             TxStatus::Pending => "PENDING",
             TxStatus::Evicted => "EVICTED",
+            TxStatus::Rejected => "REJECTED",
             TxStatus::Committed => "COMMITTED",
         };
         write!(f, "{s}")
@@ -78,6 +81,7 @@ impl FromStr for TxStatus {
             "UNKNOWN" => Ok(TxStatus::Unknown),
             "PENDING" => Ok(TxStatus::Pending),
             "EVICTED" => Ok(TxStatus::Evicted),
+            "REJECTED" => Ok(TxStatus::Rejected),
             "COMMITTED" => Ok(TxStatus::Committed),
             _ => Err(Error::FailedToParseResponse),
         }

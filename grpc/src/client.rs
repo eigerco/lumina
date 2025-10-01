@@ -26,7 +26,7 @@ use celestia_types::hash::Hash;
 use celestia_types::state::auth::{Account, AuthParams, BaseAccount};
 use celestia_types::state::{
     AbciQueryResponse, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
-    QueryUnbondingDelegationResponse, RawTxBody, ValAddress,
+    QueryUnbondingDelegationResponse, RawTx, RawTxBody, ValAddress,
 };
 use celestia_types::state::{
     AccAddress, Address, AddressTrait, Coin, ErrorCode, TxResponse, BOND_DENOM,
@@ -446,9 +446,33 @@ impl GrpcClient {
             ..RawTxBody::default()
         };
 
-        let (tx_hash, sequence) = self.sign_and_broadcast_tx(tx_body, cfg, context).await?;
+        // lock the account; tx signing and broadcast must be atomic
+        // because node requires all transactions to be sequenced by account.sequence
+        let (account, signer) = self.load_account(context).await?;
 
-        self.confirm_tx(tx_hash, sequence, context).await
+        let tx = self
+            .sign_and_broadcast_tx(tx_body, &cfg, &account, signer, context)
+            .await?;
+        let tx_bytes = tx.encode_to_vec();
+
+        let original_sequence = account.sequence;
+        let mut account_lock = Some(account);
+
+        loop {
+            let tx_hash = self
+                .broadcast_tx_with_account(tx_bytes.clone(), &cfg, context)
+                .await?;
+
+            if let Some(mut account) = account_lock.take() {
+                account.sequence += 1; // increment, but only on first iter
+            };
+
+            match self.confirm_tx(tx_hash, original_sequence, context).await {
+                Ok(status) => return Ok(status),
+                Err(Error::TxEvicted(_)) => continue,
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     async fn submit_blobs_impl(
@@ -465,11 +489,33 @@ impl GrpcClient {
             blob.validate(app_version)?;
         }
 
-        let (tx_hash, sequence) = self
-            .sign_and_broadcast_blobs(blobs.to_vec(), cfg, context)
-            .await?;
+        // lock the account; tx signing and broadcast must be atomic
+        // because node requires all transactions to be sequenced by account.sequence
+        let (account, signer) = self.load_account(context).await?;
 
-        self.confirm_tx(tx_hash, sequence, context).await
+        let blob_tx = self
+            .sign_and_broadcast_blobs(blobs.to_vec(), &cfg, &account, signer, context)
+            .await?;
+        let tx_bytes = blob_tx.encode_to_vec();
+
+        let original_sequence = account.sequence;
+        let mut account_lock = Some(account);
+
+        loop {
+            let tx_hash = self
+                .broadcast_tx_with_account(tx_bytes.clone(), &cfg, context)
+                .await?;
+
+            if let Some(mut account) = account_lock.take() {
+                account.sequence += 1; // increment, but only on first iter
+            };
+
+            match self.confirm_tx(tx_hash, original_sequence, context).await {
+                Ok(status) => return Ok(status),
+                //Err(Error::TxEvicted(_)) => continue,
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     async fn load_chain_state(&self, context: &Context) -> Result<ChainState> {
@@ -557,13 +603,12 @@ impl GrpcClient {
     async fn sign_and_broadcast_blobs(
         &self,
         blobs: Vec<Blob>,
-        cfg: TxConfig,
+        cfg: &TxConfig,
+        account: &BaseAccount,
+        signer: &SignerConfig,
         context: &Context,
-    ) -> Result<(Hash, u64)> {
+    ) -> Result<RawBlobTx> {
         let ChainState { chain_id, .. } = self.load_chain_state(context).await?;
-        // lock the account; tx signing and broadcast must be atomic
-        // because node requires all transactions to be sequenced by account.sequence
-        let (account, signer) = self.load_account(context).await?;
 
         let pfb = MsgPayForBlobs::new(&blobs, account.address.clone())?;
         let pfb = RawTxBody {
@@ -573,14 +618,14 @@ impl GrpcClient {
         };
 
         let (gas_limit, gas_price) = self
-            .calculate_transaction_gas_params(&pfb, &cfg, chain_id.clone(), &account, context)
+            .calculate_transaction_gas_params(&pfb, cfg, chain_id.clone(), account, context)
             .await?;
 
         let fee = (gas_limit as f64 * gas_price).ceil() as u64;
         let tx = sign_tx(
             pfb,
             chain_id.clone(),
-            &account,
+            account,
             &signer.pubkey,
             &signer.signer,
             gas_limit,
@@ -595,31 +640,28 @@ impl GrpcClient {
             type_id: BLOB_TX_TYPE_ID.to_string(),
         };
 
-        self.broadcast_tx_with_account(blob_tx.encode_to_vec(), cfg, account, context)
-            .await
+        Ok(blob_tx)
     }
 
     async fn sign_and_broadcast_tx(
         &self,
         tx: RawTxBody,
-        cfg: TxConfig,
+        cfg: &TxConfig,
+        account: &BaseAccount,
+        signer: &SignerConfig,
         context: &Context,
-    ) -> Result<(Hash, u64)> {
+    ) -> Result<RawTx> {
         let ChainState { chain_id, .. } = self.load_chain_state(context).await?;
 
-        // lock the account; tx signing and broadcast must be atomic
-        // because node requires all transactions to be sequenced by account.sequence
-        let (account, signer) = self.load_account(context).await?;
-
         let (gas_limit, gas_price) = self
-            .calculate_transaction_gas_params(&tx, &cfg, chain_id.clone(), &account, context)
+            .calculate_transaction_gas_params(&tx, cfg, chain_id.clone(), account, context)
             .await?;
 
         let fee = (gas_limit as f64 * gas_price).ceil();
         let tx = sign_tx(
             tx,
             chain_id,
-            &account,
+            account,
             &signer.pubkey,
             &signer.signer,
             gas_limit,
@@ -627,17 +669,16 @@ impl GrpcClient {
         )
         .await?;
 
-        self.broadcast_tx_with_account(tx.encode_to_vec(), cfg, account, context)
-            .await
+        Ok(tx)
     }
 
     async fn broadcast_tx_with_account(
         &self,
         tx: Vec<u8>,
-        cfg: TxConfig,
-        mut account: MappedMutexGuard<'_, Account>,
+        cfg: &TxConfig,
+        //mut account: MappedMutexGuard<'_, Account>,
         context: &Context,
-    ) -> Result<(Hash, u64)> {
+    ) -> Result<Hash> {
         let resp = self
             .broadcast_tx(tx, BroadcastMode::Sync)
             .context(context)
@@ -659,10 +700,7 @@ impl GrpcClient {
             return Err(Error::TxBroadcastFailed(resp.txhash, resp.code, message));
         }
 
-        let tx_sequence = account.sequence;
-        account.sequence += 1;
-
-        Ok((resp.txhash, tx_sequence))
+        Ok(resp.txhash)
     }
 
     async fn confirm_tx(&self, hash: Hash, sequence: u64, context: &Context) -> Result<TxInfo> {
@@ -685,6 +723,14 @@ impl GrpcClient {
                             tx_status.error,
                         ));
                     }
+                }
+                TxStatus::Rejected => {
+                    // TODO: we could latch on WrongSequence error here to mark account as stale
+                    return Err(Error::TxRejected(
+                        hash,
+                        tx_status.execution_code,
+                        tx_status.error,
+                    ));
                 }
                 // node will treat this transaction like if it never happened, so
                 // we need to revert the account's sequence to the one of evicted tx.

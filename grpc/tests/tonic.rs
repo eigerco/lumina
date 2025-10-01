@@ -1,14 +1,18 @@
 use std::future::IntoFuture;
 use std::sync::Arc;
 
-use celestia_grpc::{Error, TxConfig};
+use celestia_grpc::grpc::TxPriority;
+use celestia_grpc::{Error, TxConfig, TxInfo};
 use celestia_proto::cosmos::bank::v1beta1::MsgSend;
 use celestia_rpc::HeaderClient;
+use celestia_types::consts::appconsts::{self, SHARE_SIZE};
 use celestia_types::nmt::Namespace;
 use celestia_types::state::{Coin, ErrorCode};
 use celestia_types::{AppVersion, Blob};
 use futures::FutureExt;
+use k256::ecdsa::SigningKey;
 use lumina_utils::test_utils::async_test;
+use tokio::task::JoinSet;
 use utils::{load_account, new_rpc_client, TestAccount};
 
 pub mod utils;
@@ -210,6 +214,69 @@ async fn submit_blobs_parallel() {
     for fut in futs {
         fut.await.unwrap();
     }
+}
+
+#[async_test]
+async fn resubmit_evicted() {
+    let (_lock, tx_client) = new_tx_client().await;
+    let tx_client = Arc::new(tx_client);
+
+    async fn submit(tx_client: Arc<celestia_grpc::GrpcClient>, priority: TxPriority) -> TxInfo {
+        let ns = Namespace::new_v0(&[1, 1, 1]).unwrap();
+        let payload = vec![0; appconsts::v5::MAX_TX_SIZE as usize];
+        let blobs = vec![Blob::new(ns, payload, None, AppVersion::V5).unwrap()];
+        let cfg = TxConfig {
+            priority,
+            ..Default::default()
+        };
+        tx_client.submit_blobs(&blobs, cfg).await.unwrap()
+    }
+
+    let mut futs = JoinSet::new();
+    for i in 0..13 {
+        let tx_client = tx_client.clone();
+        futs.spawn(async move {
+            let priority = if i < 5 {
+                TxPriority::Low
+            } else {
+                TxPriority::High
+            };
+            (i, submit(tx_client, priority).await)
+        });
+    }
+
+    let results = futs.join_all().await;
+    println!("{results:#?}");
+    assert_eq!(1, 2);
+    /*
+    let (high_prio_submit, low_prio_submit) = tokio::join!(
+        async {
+            let tx_client = tx_client.clone();
+            let ns = Namespace::new_v0(&[1, 1, 1]).unwrap();
+            let payload = vec![0; appconsts::v5::MAX_TX_SIZE as usize - 1];
+            let blobs = vec![Blob::new(ns, payload, None, AppVersion::V5).unwrap()];
+            let cfg = TxConfig {
+                priority: TxPriority::Low,
+                ..Default::default()
+            };
+            tx_client.submit_blobs(&blobs, cfg).await.unwrap()
+        },
+        async {
+            let tx_client = tx_client.clone();
+            let ns = Namespace::new_v0(&[1, 1, 1]).unwrap();
+            let payload = vec![0; appconsts::v5::MAX_TX_SIZE as usize];
+            let blobs = vec![Blob::new(ns, payload, None, AppVersion::V5).unwrap()];
+            let cfg = TxConfig {
+                priority: TxPriority::High,
+                ..Default::default()
+            };
+            tx_client.submit_blobs(&blobs, cfg).await.unwrap()
+        }
+    );
+    */
+
+    //println!("{}, {}", low_prio_submit.height, high_prio_submit.height);
+    //assert!(low_prio_submit.height > high_prio_submit.height);
 }
 
 #[async_test]
