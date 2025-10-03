@@ -56,6 +56,9 @@ pub enum Error {
     #[error("Transaction {0} execution failed; code: {1}, error: {2}")]
     TxExecutionFailed(Hash, ErrorCode, String),
 
+    #[error("Transaction {0} was rejected; code: {1}, error: {2}")]
+    TxRejected(Hash, ErrorCode, String),
+
     /// Transaction was evicted from the mempool
     #[error("Transaction {0} was evicted from the mempool")]
     TxEvicted(Hash),
@@ -87,6 +90,17 @@ pub enum Error {
     /// Error related to the metadata
     #[error(transparent)]
     Metadata(#[from] MetadataError),
+}
+
+impl Error {
+    pub(crate) fn is_wrong_sequnce(&self) -> bool {
+        let tonic_message = matches!(self, Error::TonicError(status)
+            if status.message().contains("incorrect account sequence: account sequence mismatch"));
+        let broadcast_failed = matches!(self, Error::TxBroadcastFailed(_, code, _)
+            if code == &ErrorCode::InvalidSequence || code == &ErrorCode::WrongSequence);
+
+        tonic_message || broadcast_failed
+    }
 }
 
 /// Representation of all the errors that can occur when building [`GrpcClient`] using
