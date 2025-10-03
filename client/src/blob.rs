@@ -7,6 +7,7 @@ use futures_util::{Stream, StreamExt};
 
 use crate::api::blob::BlobsAtHeight;
 use crate::client::ClientInner;
+use crate::state::AsyncGrpcCall;
 use crate::tx::{TxConfig, TxInfo};
 use crate::types::nmt::{Namespace, NamespaceProof};
 use crate::types::{Blob, Commitment};
@@ -53,8 +54,17 @@ impl BlobApi {
     /// ```
     ///
     /// [`StateApi::submit_pay_for_blob`]: crate::api::StateApi::submit_pay_for_blob
-    pub async fn submit(&self, blobs: &[Blob], cfg: TxConfig) -> Result<TxInfo> {
-        Ok(self.inner.grpc()?.submit_blobs(blobs, cfg).await?)
+    pub fn submit(&self, blobs: &[Blob], cfg: TxConfig) -> AsyncGrpcCall<TxInfo> {
+        let inner = self.inner.clone();
+        let blobs = blobs.to_vec();
+
+        AsyncGrpcCall::new(move |context| async move {
+            Ok(inner
+                .grpc()?
+                .submit_blobs(&blobs, cfg)
+                .context(&context)
+                .await?)
+        })
     }
 
     /// Retrieves the blob by commitment under the given namespace and height.
