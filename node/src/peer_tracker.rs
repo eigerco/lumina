@@ -208,24 +208,8 @@ impl PeerTracker {
             .entry(*peer_id)
             .or_insert_with(|| Peer::new(*peer_id));
 
-        if peer.trusted == is_trusted {
-            // Nothing to be done
-            return;
-        }
-
         peer.trusted = is_trusted;
-
-        // If peer was already connected, then `num_connected_trusted_peers`
-        // needs to be adjusted based on the new information.
-        if peer.is_connected() {
-            self.info_tx.send_modify(|tracker_info| {
-                if is_trusted {
-                    tracker_info.num_connected_trusted_peers += 1;
-                } else {
-                    tracker_info.num_connected_trusted_peers -= 1;
-                }
-            });
-        }
+        self.recount_peer_tracker_info();
     }
 
     /// Add protect flag to the peer.
@@ -290,12 +274,13 @@ impl PeerTracker {
 
         // If peer was not already connected from before
         if !prev_connected {
-            increment_connected_peers(&self.info_tx, peer);
+            let trusted = peer.trusted;
             peer.disconnected_at.take();
+            self.recount_peer_tracker_info();
 
             self.event_pub.send(NodeEvent::PeerConnected {
                 id: *peer_id,
-                trusted: peer.trusted,
+                trusted,
             });
         }
     }
@@ -310,45 +295,26 @@ impl PeerTracker {
 
         // If this is the last connection from the peer.
         if !peer.is_connected() {
-            decrement_connected_peers(&self.info_tx, peer);
+            let trusted = peer.trusted;
             peer.node_kind = NodeKind::Unknown;
             peer.archival = false;
             peer.disconnected_at = Some(Instant::now());
+            self.recount_peer_tracker_info();
 
             self.event_pub.send(NodeEvent::PeerDisconnected {
                 id: peer_id.to_owned(),
-                trusted: peer.trusted,
+                trusted,
             });
         }
     }
 
     pub(crate) fn on_agent_version(&mut self, peer_id: &PeerId, agent_version: &str) {
-        let Some(peer) = self.peers.get_mut(peer_id) else {
-            return;
-        };
-
-        if !peer.is_connected() {
-            return;
+        if let Some(peer) = self.peers.get_mut(peer_id) {
+            if peer.is_connected() {
+                peer.node_kind = NodeKind::from_agent_version(agent_version);
+                self.recount_peer_tracker_info();
+            }
         }
-
-        let new_node_kind = NodeKind::from_agent_version(agent_version);
-
-        let was_full = peer.node_kind.is_full();
-        let is_full = new_node_kind.is_full();
-        peer.node_kind = new_node_kind;
-
-        self.info_tx
-            .send_if_modified(|tracker_info| match (was_full, is_full) {
-                (true, false) => {
-                    tracker_info.num_connected_full_nodes -= 1;
-                    true
-                }
-                (false, true) => {
-                    tracker_info.num_connected_full_nodes += 1;
-                    true
-                }
-                _ => false,
-            });
     }
 
     pub(crate) fn on_ping_event(&mut self, ev: &ping::Event) {
@@ -365,15 +331,8 @@ impl PeerTracker {
             .entry(*peer_id)
             .or_insert_with(|| Peer::new(*peer_id));
 
-        if !peer.archival {
-            peer.archival = true;
-
-            if peer.is_connected() {
-                self.info_tx.send_modify(|tracker_info| {
-                    tracker_info.num_connected_archival_nodes += 1;
-                });
-            }
-        }
+        peer.archival = true;
+        self.recount_peer_tracker_info();
     }
 
     pub(crate) fn connections(&self, peer_id: &PeerId) -> impl Iterator<Item = ConnectionId> + '_ {
@@ -413,6 +372,37 @@ impl PeerTracker {
         peers.first().copied().copied()
     }
 
+    fn recount_peer_tracker_info(&self) {
+        self.info_tx.send_if_modified(|info| {
+            let mut new_info = PeerTrackerInfo::default();
+
+            for peer in self.peers.values() {
+                if peer.is_connected() {
+                    new_info.num_connected_peers += 1;
+
+                    if peer.is_trusted() {
+                        new_info.num_connected_trusted_peers += 1;
+                    }
+
+                    if peer.is_full() {
+                        new_info.num_connected_full_nodes += 1;
+                    }
+
+                    if peer.is_archival() {
+                        new_info.num_connected_archival_nodes += 1;
+                    }
+                }
+            }
+
+            if *info != new_info {
+                *info = new_info;
+                true
+            } else {
+                false
+            }
+        });
+    }
+
     pub(crate) fn gc(&mut self) {
         self.peers.retain(|_, peer| {
             // We keep:
@@ -427,42 +417,6 @@ impl PeerTracker {
                     .is_none_or(|tm| tm.elapsed() <= EXPIRED_AFTER)
         });
     }
-}
-
-fn increment_connected_peers(info_tx: &watch::Sender<PeerTrackerInfo>, peer: &Peer) {
-    info_tx.send_modify(|tracker_info| {
-        tracker_info.num_connected_peers += 1;
-
-        if peer.trusted {
-            tracker_info.num_connected_trusted_peers += 1;
-        }
-
-        if peer.archival {
-            tracker_info.num_connected_archival_nodes += 1;
-        }
-
-        if peer.node_kind.is_full() {
-            tracker_info.num_connected_full_nodes += 1;
-        }
-    });
-}
-
-fn decrement_connected_peers(info_tx: &watch::Sender<PeerTrackerInfo>, peer: &Peer) {
-    info_tx.send_modify(|tracker_info| {
-        tracker_info.num_connected_peers -= 1;
-
-        if peer.trusted {
-            tracker_info.num_connected_trusted_peers -= 1;
-        }
-
-        if peer.archival {
-            tracker_info.num_connected_archival_nodes -= 1;
-        }
-
-        if peer.node_kind.is_full() {
-            tracker_info.num_connected_full_nodes -= 1;
-        }
-    });
 }
 
 #[cfg(test)]
