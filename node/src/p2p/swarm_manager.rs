@@ -34,6 +34,8 @@ const BOOTNODE_PROTECT_TAG: u32 = 0;
 const FULL_PROTECT_TAG: u32 = 1;
 const ARCHIVAL_PROTECT_TAG: u32 = 2;
 
+const PEERS_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(60);
+
 #[derive(NetworkBehaviour)]
 struct SwarmBehaviour<B>
 where
@@ -59,7 +61,7 @@ where
     event_pub: EventPublisher,
     bootnodes: HashMap<PeerId, Vec<Multiaddr>>,
     listeners: Vec<ListenerId>,
-    kademlia_interval: Interval,
+    peers_health_check_interval: Interval,
     gc_interval: Interval,
 }
 
@@ -137,7 +139,7 @@ where
         }
 
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
-        let kademlia_interval = Interval::new(Duration::from_secs(30)).await;
+        let peers_health_check_interval = Interval::new(PEERS_HEALTH_CHECK_INTERVAL).await;
         let gc_interval = Interval::new(GC_INTERVAL).await;
 
         let mut manager = SwarmManager {
@@ -147,7 +149,7 @@ where
             event_pub,
             bootnodes: bootnodes_map,
             listeners,
-            kademlia_interval,
+            peers_health_check_interval,
             gc_interval,
         };
 
@@ -164,7 +166,7 @@ where
                 _ = self.peer_tracker_info_watcher.changed() => {
                     self.peers_health_check().await;
                 }
-                _ = self.kademlia_interval.tick() => {
+                _ = self.peers_health_check_interval.tick() => {
                     self.peers_health_check().await;
                 }
                 _ = self.gc_interval.tick() => {
