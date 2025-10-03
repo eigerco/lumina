@@ -310,7 +310,7 @@ where
             .behaviour_mut()
             .kademlia
             .iter_queries()
-            .any(|query| matches!(dbg!(query.info()), QueryInfo::Bootstrap { .. }));
+            .any(|query| matches!(query.info(), QueryInfo::Bootstrap { .. }));
 
         if !bootstrap_query_exists {
             if let Err(e) = self.swarm.behaviour_mut().kademlia.bootstrap() {
