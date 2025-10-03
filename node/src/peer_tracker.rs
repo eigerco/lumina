@@ -183,6 +183,7 @@ impl PeerTracker {
         self.peer(peer_id).is_some_and(|p| p.is_protected())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn is_protected_for(&self, peer_id: &PeerId, tag: u32) -> bool {
         self.peer(peer_id).is_some_and(|p| p.is_protected_for(tag))
     }
