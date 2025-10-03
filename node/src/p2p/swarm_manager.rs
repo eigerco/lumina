@@ -407,7 +407,7 @@ where
         }
 
         // Based on the spec, when a protected node gets disconnected, the we unprotect
-        // it (check `on_peer_disconnected`), and a another node must be choosen to be
+        // it (check `on_peer_disconnected`), and another node must be choosen to be
         // protected.
         if protected_full_nodes < MAX_PROTECTED_FULL_NODES {
             // Protect the best full nodes to fill up the gap.
