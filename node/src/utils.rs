@@ -11,12 +11,16 @@ mod counter;
 #[cfg(target_arch = "wasm32")]
 mod dns;
 mod fused_reusable_future;
+#[cfg(target_arch = "wasm32")]
+mod lock;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use counter::Counter;
 #[cfg(target_arch = "wasm32")]
 pub(crate) use dns::resolve_bootnode_addresses;
 pub(crate) use fused_reusable_future::FusedReusableFuture;
+#[cfg(target_arch = "wasm32")]
+pub(crate) use lock::{Error as NamedLockError, NamedLock};
 
 pub(crate) fn protocol_id(network: &str, protocol: &str) -> StreamProtocol {
     let network = network.trim_matches('/');

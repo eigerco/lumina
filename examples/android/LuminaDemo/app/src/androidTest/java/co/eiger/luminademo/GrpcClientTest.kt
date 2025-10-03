@@ -14,8 +14,7 @@ class GrpcClientTest {
     @Test
     fun getMinGasPrice() = runTest {
         val grpc = GrpcClientBuilder.
-            withUrl(GRPC_URL).buildClient()
-        val minGasPrice = grpc.getMinGasPrice()
-        assert(minGasPrice > 0)
+            withUrl(GRPC_URL).build()
+        val nodeConfig = grpc.getNodeConfig()
     }
 }

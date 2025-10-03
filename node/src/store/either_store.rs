@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use libp2p::identity::Keypair;
 
 use crate::store::{BlockRanges, Result, SamplingMetadata, Store, VerifiedExtendedHeaders};
 
@@ -236,6 +237,10 @@ where
 
     async fn remove_height(&self, height: u64) -> Result<()> {
         call!(self, remove_height(height))
+    }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        call!(self, get_identity())
     }
 
     async fn close(self) -> Result<()> {

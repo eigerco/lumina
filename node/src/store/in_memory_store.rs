@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use libp2p::identity::Keypair;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
@@ -21,6 +22,8 @@ pub struct InMemoryStore {
     inner: RwLock<InMemoryStoreInner>,
     /// Notify when a new header is added
     header_added_notifier: Notify,
+    /// Node network identity
+    libp2p_identity: Keypair,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +61,7 @@ impl InMemoryStore {
         InMemoryStore {
             inner: RwLock::new(InMemoryStoreInner::new()),
             header_added_notifier: Notify::new(),
+            libp2p_identity: Keypair::generate_ed25519(),
         }
     }
 
@@ -130,17 +134,23 @@ impl InMemoryStore {
         self.inner.read().await.pruned_ranges.clone()
     }
 
-    /// Clone the store and all its contents. Async fn due to internal use of async mutex.
+    /// Clone the store and all its contents, except for libp2p identity, which is re-generated.
+    /// Async fn due to internal use of async mutex.
     pub async fn async_clone(&self) -> Self {
         InMemoryStore {
             inner: RwLock::new(self.inner.read().await.clone()),
             header_added_notifier: Notify::new(),
+            libp2p_identity: Keypair::generate_ed25519(),
         }
     }
 
     async fn remove_height(&self, height: u64) -> Result<()> {
         let mut inner = self.inner.write().await;
         inner.remove_height(height)
+    }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        Ok(self.libp2p_identity.clone())
     }
 }
 
@@ -442,7 +452,40 @@ impl Store for InMemoryStore {
     async fn close(self) -> Result<()> {
         Ok(())
     }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        self.get_identity().await
+    }
 }
+
+/*
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[async_trait]
+impl IdentityStore for InMemoryStore {
+    async fn with_random_persistent_exclusive_p2p_identity(
+        store_name_prefix: &str,
+    ) -> Result<(Self, KeyGuard)> {
+        let (keypair, guard) = KeyRegistry::new().await?.get_key().await?;
+
+        let store = InMemoryStore::new();
+        store.set_identity(keypair).await?;
+
+        Ok((store, guard))
+    }
+
+    async fn try_with_exclusive_p2p_identity(
+        store_name_prefix: &str,
+        keypair: Keypair,
+    ) -> Result<(Self, KeyGuard)> {
+        let guard = KeyRegistry::try_lock_key(&keypair).await?;
+        let store = InMemoryStore::new();
+
+        store.set_identity(keypair).await?;
+
+        Ok((store, guard))
+    }
+}
+*/
 
 impl Default for InMemoryStore {
     fn default() -> Self {
