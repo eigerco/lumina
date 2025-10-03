@@ -8,16 +8,14 @@ use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::core::transport::PortUse;
-use libp2p::{
-    core::Endpoint,
-    request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport},
-    swarm::{
-        handler::ConnectionEvent, ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent,
-        ConnectionId, FromSwarm, NetworkBehaviour, SubstreamProtocol, THandlerInEvent,
-        THandlerOutEvent, ToSwarm,
-    },
-    Multiaddr, PeerId, StreamProtocol,
+use libp2p::core::Endpoint;
+use libp2p::request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport};
+use libp2p::swarm::handler::ConnectionEvent;
+use libp2p::swarm::{
+    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
+    NetworkBehaviour, SubstreamProtocol, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
+use libp2p::{Multiaddr, PeerId, StreamProtocol};
 use lumina_utils::time::{timeout, Instant};
 use prost::Message;
 use tracing::{debug, instrument, warn};

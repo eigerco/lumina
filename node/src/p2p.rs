@@ -31,12 +31,10 @@ use celestia_types::{Blob, ExtendedHeader, FraudProof};
 use cid::Cid;
 use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
-use libp2p::{
-    gossipsub::{self, TopicHash},
-    identity::Keypair,
-    swarm::{NetworkBehaviour, NetworkInfo},
-    Multiaddr, PeerId,
-};
+use libp2p::gossipsub::TopicHash;
+use libp2p::identity::Keypair;
+use libp2p::swarm::{NetworkBehaviour, NetworkInfo};
+use libp2p::{gossipsub, Multiaddr, PeerId};
 use lumina_utils::executor::{spawn, JoinHandle};
 use lumina_utils::time::{self, Interval};
 use lumina_utils::token::Token;

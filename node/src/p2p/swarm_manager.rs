@@ -4,20 +4,13 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use futures::StreamExt;
-use libp2p::{
-    autonat,
-    core::transport::ListenerId,
-    identify,
-    identity::Keypair,
-    kad::{self, QueryInfo, RecordKey},
-    multiaddr::Protocol,
-    ping,
-    swarm::{
-        dial_opts::{DialOpts, PeerCondition},
-        ConnectionId, DialError, NetworkBehaviour, NetworkInfo, SwarmEvent,
-    },
-    Multiaddr, PeerId, Swarm,
-};
+use libp2p::core::transport::ListenerId;
+use libp2p::identity::Keypair;
+use libp2p::kad::{QueryInfo, RecordKey};
+use libp2p::multiaddr::{Multiaddr, Protocol};
+use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
+use libp2p::swarm::{ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent};
+use libp2p::{autonat, identify, kad, ping, PeerId};
 use lumina_utils::time::Interval;
 use multihash_codetable::{Code, MultihashDigest};
 use tokio::select;
