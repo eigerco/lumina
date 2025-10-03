@@ -7,6 +7,7 @@ use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
 use futures::Future;
+use js_sys::Uint8Array;
 use libp2p::identity::Keypair;
 use rexie::{Direction, Index, KeyRange, ObjectStore, Rexie, Transaction, TransactionMode};
 use send_wrapper::SendWrapper;
@@ -15,12 +16,13 @@ use serde_wasm_bindgen::{from_value, to_value};
 use smallvec::smallvec;
 use tendermint_proto::Protobuf;
 use tokio::sync::Notify;
-use tracing::warn;
-use wasm_bindgen::JsValue;
+use tracing::{debug, warn};
+use wasm_bindgen::{JsCast, JsValue};
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{Result, SamplingMetadata, Store, StoreError, StoreInsertionError};
+use crate::utils::{NamedLock, NamedLockError};
 
 /// indexeddb version, needs to be incremented on every schema schange
 const DB_VERSION: u32 = 5;
@@ -30,6 +32,7 @@ const HEADER_STORE_NAME: &str = "headers";
 const SAMPLING_STORE_NAME: &str = "sampling";
 const RANGES_STORE_NAME: &str = "ranges";
 const SCHEMA_STORE_NAME: &str = "schema";
+const IDENTITY_STORE_NAME: &str = "identity";
 
 // Additional indexes set on HEADER_STORE, for querying by height and hash
 const HASH_INDEX_NAME: &str = "hash";
@@ -39,6 +42,7 @@ const HEADER_RANGES_KEY: &str = "header_ranges";
 const SAMPLED_RANGES_KEY: &str = "sampled_ranges";
 const PRUNED_RANGES_KEY: &str = "pruned_ranges";
 const VERSION_KEY: &str = "version";
+const LIBP2P_IDENTITY_KEY: &str = "libp2p_identity";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ExtendedHeaderEntry {
@@ -56,14 +60,20 @@ pub struct IndexedDbStore {
     head: SendWrapper<RefCell<Option<ExtendedHeader>>>,
     db: SendWrapper<Rexie>,
     header_added_notifier: Notify,
-    /// Node network identity
-    libp2p_identity: SendWrapper<RefCell<Option<Keypair>>>,
+    //  locks the db instance using Web Locks API until `IndexedDbStore` instance is dropped
+    _db_lock: NamedLock,
 }
 
 impl IndexedDbStore {
     /// Create or open a persistent store.
+    ///
+    /// IndexedDB is shared between all tabs from the same origin, but we enforce
+    /// that each store is opened exclusively. Subsequent open requests with the same name,
+    /// presumably coming from multiple tabs running Lumina, will each create extra stores
+    /// with `extra_tab_N` suffix.
     pub async fn new(name: &str) -> Result<IndexedDbStore> {
-        let rexie = Rexie::builder(name)
+        let (db_lock, real_name) = lock_db_name(name).await?;
+        let rexie = Rexie::builder(&real_name)
             .version(DB_VERSION)
             .add_object_store(
                 ObjectStore::new(HEADER_STORE_NAME)
@@ -75,6 +85,7 @@ impl IndexedDbStore {
             )
             .add_object_store(ObjectStore::new(RANGES_STORE_NAME))
             .add_object_store(ObjectStore::new(SAMPLING_STORE_NAME))
+            .add_object_store(ObjectStore::new(IDENTITY_STORE_NAME))
             .add_object_store(ObjectStore::new(SCHEMA_STORE_NAME))
             .build()
             .await
@@ -105,6 +116,8 @@ impl IndexedDbStore {
             }
         }
 
+        init_identity(&rexie).await?;
+
         // Force us to write migrations!
         debug_assert_eq!(
             detect_schema_version(&rexie).await?,
@@ -122,7 +135,7 @@ impl IndexedDbStore {
             head: SendWrapper::new(RefCell::new(db_head)),
             db: SendWrapper::new(rexie),
             header_added_notifier: Notify::new(),
-            libp2p_identity: SendWrapper::new(RefCell::new(None)),
+            _db_lock: db_lock,
         })
     }
 
@@ -316,16 +329,18 @@ impl IndexedDbStore {
     }
 
     async fn get_identity(&self) -> Result<Keypair> {
-        Ok(self
-            .libp2p_identity
-            .borrow_mut()
-            .get_or_insert_with(Keypair::generate_ed25519)
-            .clone())
-    }
+        let tx = self
+            .db
+            .transaction(&[IDENTITY_STORE_NAME], TransactionMode::ReadOnly)?;
+        let store = tx.store(IDENTITY_STORE_NAME)?;
 
-    async fn set_identity(&self, keypair: Keypair) -> Result<()> {
-        let _ = self.libp2p_identity.borrow_mut().insert(keypair);
-        Ok(())
+        let key = to_value(LIBP2P_IDENTITY_KEY)?;
+        let value = store
+            .get(key.clone())
+            .await?
+            .expect("identity should be initialised here");
+        let keypair = decode_keypair(value)?;
+        Ok(keypair)
     }
 }
 
@@ -455,11 +470,6 @@ impl Store for IndexedDbStore {
         fut.await
     }
 
-    async fn set_identity(&self, requested_keypair: Keypair) -> Result<()> {
-        let fut = SendWrapper::new(self.set_identity(requested_keypair));
-        fut.await
-    }
-
     async fn get_identity(&self) -> Result<Keypair> {
         let fut = SendWrapper::new(self.get_identity());
         fut.await
@@ -470,6 +480,41 @@ impl Store for IndexedDbStore {
         Ok(())
     }
 }
+
+/*
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[async_trait]
+impl IdentityStore for IndexedDbStore {
+    async fn with_random_persistent_exclusive_p2p_identity(
+        store_name_prefix: &str,
+    ) -> Result<(Self, KeyGuard)> {
+        let (keypair, guard) = KeyRegistry::new().await?.get_key().await?;
+
+        let peer_id = keypair.public().to_peer_id();
+        let store_name = format!("{store_name_prefix}-{peer_id}");
+
+        let store = IndexedDbStore::new(&store_name).await?;
+        store.set_identity(keypair).await?;
+
+        Ok((store, guard))
+    }
+
+    async fn try_with_exclusive_p2p_identity(
+        store_name_prefix: &str,
+        keypair: Keypair,
+    ) -> Result<(Self, KeyGuard)> {
+        let guard = KeyRegistry::try_lock_key(&keypair).await?;
+
+        let peer_id = keypair.public().to_peer_id();
+        let store_name = format!("{store_name_prefix}-{peer_id}");
+
+        let store = IndexedDbStore::new(&store_name).await?;
+        store.set_identity(keypair).await?;
+
+        Ok((store, guard))
+    }
+}
+*/
 
 impl From<rexie::Error> for StoreError {
     fn from(error: rexie::Error) -> StoreError {
@@ -604,6 +649,53 @@ async fn detect_schema_version(db: &Rexie) -> Result<Option<u32>> {
 
     // Otherwise we assume we have a new db.
     Ok(None)
+}
+
+async fn lock_db_name(name: &str) -> Result<(NamedLock, String)> {
+    let mut try_name = name.to_string();
+    let mut i = 0;
+    loop {
+        match NamedLock::try_lock(&try_name).await {
+            Ok(lock) => return Ok((lock, try_name)),
+            Err(NamedLockError::WouldBlock) => (),
+            Err(e) => return Err(e.into()),
+        }
+        try_name = format!("{name}-extra_tab_{i}");
+        i += 1;
+    }
+}
+
+async fn init_identity(db: &Rexie) -> Result<()> {
+    let tx = db.transaction(&[IDENTITY_STORE_NAME], TransactionMode::ReadWrite)?;
+    let identity_store = tx.store(IDENTITY_STORE_NAME)?;
+
+    let key = to_value(LIBP2P_IDENTITY_KEY)?;
+    if identity_store.get(key.clone()).await?.is_some() {
+        return Ok(());
+    }
+
+    let keypair = Keypair::generate_ed25519();
+    let peer_id = keypair.public().to_peer_id();
+    debug!("Initialised new identity: {peer_id}");
+
+    let value = encode_keypair(&keypair);
+    identity_store.put(&value, Some(&key)).await?;
+
+    Ok(())
+}
+
+fn encode_keypair(keypair: &Keypair) -> JsValue {
+    let bytes = keypair.to_protobuf_encoding().expect("valid key encoding");
+    let array = Uint8Array::from(bytes.as_ref());
+    array.into()
+}
+
+fn decode_keypair(value: JsValue) -> Result<Keypair> {
+    let array = value
+        .dyn_into::<Uint8Array>()
+        .map_err(|_| StoreError::StoredDataError("invalid key data type".to_string()))?;
+    Keypair::from_protobuf_encoding(&array.to_vec())
+        .map_err(|e| StoreError::StoredDataError(e.to_string()))
 }
 
 async fn store_is_empty(store: &rexie::Store) -> Result<bool> {

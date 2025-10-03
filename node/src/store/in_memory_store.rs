@@ -22,6 +22,8 @@ pub struct InMemoryStore {
     inner: RwLock<InMemoryStoreInner>,
     /// Notify when a new header is added
     header_added_notifier: Notify,
+    /// Node network identity
+    libp2p_identity: Keypair,
 }
 
 #[derive(Debug, Clone)]
@@ -38,8 +40,6 @@ struct InMemoryStoreInner {
     sampled_ranges: BlockRanges,
     /// Source of truth about ranges that were pruned from db.
     pruned_ranges: BlockRanges,
-    /// Node network identity
-    libp2p_identity: Option<Keypair>,
 }
 
 impl InMemoryStoreInner {
@@ -51,7 +51,6 @@ impl InMemoryStoreInner {
             sampling_data: HashMap::new(),
             sampled_ranges: BlockRanges::default(),
             pruned_ranges: BlockRanges::default(),
-            libp2p_identity: None,
         }
     }
 }
@@ -62,6 +61,7 @@ impl InMemoryStore {
         InMemoryStore {
             inner: RwLock::new(InMemoryStoreInner::new()),
             header_added_notifier: Notify::new(),
+            libp2p_identity: Keypair::generate_ed25519(),
         }
     }
 
@@ -140,6 +140,7 @@ impl InMemoryStore {
         InMemoryStore {
             inner: RwLock::new(self.inner.read().await.clone()),
             header_added_notifier: Notify::new(),
+            libp2p_identity: Keypair::generate_ed25519(),
         }
     }
 
@@ -148,14 +149,8 @@ impl InMemoryStore {
         inner.remove_height(height)
     }
 
-    async fn set_identity(&self, keypair: Keypair) -> Result<()> {
-        let mut inner = self.inner.write().await;
-        inner.set_identity(keypair).await
-    }
-
     async fn get_identity(&self) -> Result<Keypair> {
-        let mut inner = self.inner.write().await;
-        inner.get_identity().await
+        Ok(self.libp2p_identity.clone())
     }
 }
 
@@ -355,18 +350,6 @@ impl InMemoryStoreInner {
 
         Ok(())
     }
-
-    async fn get_identity(&mut self) -> Result<Keypair> {
-        Ok(self
-            .libp2p_identity
-            .get_or_insert_with(Keypair::generate_ed25519)
-            .clone())
-    }
-
-    async fn set_identity(&mut self, keypair: Keypair) -> Result<()> {
-        let _ = self.libp2p_identity.insert(keypair);
-        Ok(())
-    }
 }
 
 #[async_trait]
@@ -470,14 +453,39 @@ impl Store for InMemoryStore {
         Ok(())
     }
 
-    async fn set_identity(&self, keypair: Keypair) -> Result<()> {
-        self.set_identity(keypair).await
-    }
-
     async fn get_identity(&self) -> Result<Keypair> {
         self.get_identity().await
     }
 }
+
+/*
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+#[async_trait]
+impl IdentityStore for InMemoryStore {
+    async fn with_random_persistent_exclusive_p2p_identity(
+        store_name_prefix: &str,
+    ) -> Result<(Self, KeyGuard)> {
+        let (keypair, guard) = KeyRegistry::new().await?.get_key().await?;
+
+        let store = InMemoryStore::new();
+        store.set_identity(keypair).await?;
+
+        Ok((store, guard))
+    }
+
+    async fn try_with_exclusive_p2p_identity(
+        store_name_prefix: &str,
+        keypair: Keypair,
+    ) -> Result<(Self, KeyGuard)> {
+        let guard = KeyRegistry::try_lock_key(&keypair).await?;
+        let store = InMemoryStore::new();
+
+        store.set_identity(keypair).await?;
+
+        Ok((store, guard))
+    }
+}
+*/
 
 impl Default for InMemoryStore {
     fn default() -> Self {

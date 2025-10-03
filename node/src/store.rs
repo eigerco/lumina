@@ -5,6 +5,8 @@ use std::fmt::{Debug, Display};
 use std::io::Cursor;
 use std::ops::{Bound, RangeBounds, RangeInclusive};
 
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use crate::utils::NamedLockError;
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
@@ -154,9 +156,6 @@ pub trait Store: Send + Sync + Debug {
     /// Remove header with given height from the store.
     async fn remove_height(&self, height: u64) -> Result<()>;
 
-    /// Set libp2p identity keypair for the store
-    async fn set_identity(&self, requested_keypair: Keypair) -> Result<()>;
-
     /// Retrieve libp2p identity keypair from the store
     async fn get_identity(&self) -> Result<Keypair>;
 
@@ -191,9 +190,9 @@ pub enum StoreError {
     #[error("Error opening store: {0}")]
     OpenFailed(String),
 
-    /// Attempting to set libp2p identity for a store that already has keypair generated
-    #[error("Attempting to set identity in store which has identity initialised already")]
-    IdentityAlreadySet,
+    /// Error locking database instance
+    #[error("Error locking database instance: {0}")]
+    NamedLock(String),
 }
 
 /// Store insersion non-fatal errors.
@@ -226,10 +225,9 @@ impl StoreError {
             StoreError::StoredDataError(_)
             | StoreError::FatalDatabaseError(_)
             | StoreError::ExecutorError(_)
+            | StoreError::NamedLock(_)
             | StoreError::OpenFailed(_) => true,
-            StoreError::NotFound
-            | StoreError::InsertionFailed(_)
-            | StoreError::IdentityAlreadySet => false,
+            StoreError::NotFound | StoreError::InsertionFailed(_) => false,
         }
     }
 }
@@ -246,6 +244,13 @@ impl From<libp2p::identity::DecodingError> for StoreError {
 impl From<tokio::task::JoinError> for StoreError {
     fn from(error: tokio::task::JoinError) -> StoreError {
         StoreError::ExecutorError(error.to_string())
+    }
+}
+
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+impl From<NamedLockError> for StoreError {
+    fn from(value: NamedLockError) -> Self {
+        StoreError::NamedLock(value.to_string())
     }
 }
 
@@ -1232,9 +1237,9 @@ mod tests {
     #[rstest]
     #[case::in_memory(new_in_memory_store())]
     #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
-    // _not_ applicable to wasm32, as we expect different behaviour there, tested separately
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
     #[self::test]
-    async fn libp2p_identity_persistance<S: Store>(
+    async fn libp2p_identity_seeding<S: Store>(
         #[case]
         #[future(awt)]
         s: S,
@@ -1244,29 +1249,6 @@ mod tests {
         let persisted_keypair = store.get_identity().await.unwrap();
 
         assert_eq!(generated_keypair.public(), persisted_keypair.public());
-    }
-
-    #[rstest]
-    #[case::in_memory(new_in_memory_store())]
-    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
-    // _not_ applicable to wasm32, as we expect different behaviour there, tested separately
-    #[self::test]
-    async fn libp2p_identity_override<S: Store>(
-        #[case]
-        #[future(awt)]
-        s: S,
-    ) {
-        let store = s;
-        let initial_keypair = store.get_identity().await.unwrap();
-        let requested_keypair = Keypair::generate_ed25519();
-        store.set_identity(requested_keypair.clone()).await.unwrap();
-        let persisted_overridden_keypair = store.get_identity().await.unwrap();
-
-        assert_ne!(initial_keypair.public(), requested_keypair.public());
-        assert_eq!(
-            requested_keypair.public(),
-            persisted_overridden_keypair.public()
-        );
     }
 
     /// Fills an empty store

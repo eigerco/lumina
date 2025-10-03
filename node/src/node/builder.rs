@@ -169,7 +169,19 @@ where
 
     /// Set the keypair to be used as [`Node`]s identity.
     ///
-    /// **Default:** Random generated with [`Keypair::generate_ed25519`].
+    /// This enforces given libp2p identity to be used by the node.
+    ///
+    /// By default, random identity is created by the store and persisted.
+    /// Running more than one node with the same identiity is undefined behaviour,
+    /// because all nodes with the same `peer_id` will be treated as a singular
+    /// instance. Network can randomly choose a connection used to send a message
+    /// to the node, so with multiple instances, each message from the network could
+    /// be received by a random node with the same keypair. This can potentially
+    /// lead to broken state and rejecting valid messages. Please make sure that
+    /// when you use it, only one node has this keypair.
+    ///
+    /// Special care needs to be taken in wasm, as there if your app has hardcoded key,
+    /// user opening multiple tabs with it may lead to undefined behaviour.
     pub fn keypair(self, keypair: Keypair) -> Self {
         NodeBuilder {
             keypair: Some(keypair),
@@ -272,12 +284,13 @@ where
             DEFAULT_PRUNING_WINDOW
         };
 
-        info!("Sampling window: {SAMPLING_WINDOW:?}, Pruning window: {pruning_window:?}",);
+        info!("Sampling window: {SAMPLING_WINDOW:?}, Pruning window: {pruning_window:?}");
 
-        if let Some(identity) = self.keypair {
-            self.store.set_identity(identity).await?;
-        }
-        let p2p_local_keypair = self.store.get_identity().await?;
+        let p2p_local_keypair = if let Some(keypair) = self.keypair {
+            keypair
+        } else {
+            self.store.get_identity().await?
+        };
 
         Ok(NodeConfig {
             blockstore: self.blockstore,
