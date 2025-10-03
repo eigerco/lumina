@@ -92,6 +92,17 @@ pub enum Error {
     Metadata(#[from] MetadataError),
 }
 
+impl Error {
+    pub(crate) fn is_wrong_sequnce(&self) -> bool {
+        let tonic_message = matches!(self, Error::TonicError(status)
+            if status.message().contains("incorrect account sequence: account sequence mismatch"));
+        let broadcast_failed = matches!(self, Error::TxBroadcastFailed(_, code, _)
+            if code == &ErrorCode::InvalidSequence || code == &ErrorCode::WrongSequence);
+
+        tonic_message || broadcast_failed
+    }
+}
+
 /// Representation of all the errors that can occur when building [`GrpcClient`] using
 /// [`GrpcClientBuilder`]
 ///

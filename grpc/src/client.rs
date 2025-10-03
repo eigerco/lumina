@@ -6,7 +6,7 @@ use celestia_types::any::IntoProtobufAny;
 use k256::ecdsa::VerifyingKey;
 use lumina_utils::time::Interval;
 use prost::Message;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 
 use celestia_grpc_macros::grpc_method;
@@ -23,10 +23,10 @@ use celestia_types::blob::{BlobParams, MsgPayForBlobs, RawBlobTx, RawMsgPayForBl
 use celestia_types::block::Block;
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
-use celestia_types::state::auth::{Account, AuthParams, BaseAccount};
+use celestia_types::state::auth::{Account, AuthParams};
 use celestia_types::state::{
     AbciQueryResponse, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
-    QueryUnbondingDelegationResponse, RawTx, RawTxBody, ValAddress,
+    QueryUnbondingDelegationResponse, RawTxBody, ValAddress,
 };
 use celestia_types::state::{
     AccAddress, Address, AddressTrait, Coin, ErrorCode, TxResponse, BOND_DENOM,
@@ -47,6 +47,8 @@ use crate::{Error, Result, TxConfig};
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
 const BLOB_TX_TYPE_ID: &str = "BLOB";
 
+type AccountGuard<'a> = MappedMutexGuard<'a, Account>;
+
 #[derive(Debug, Clone)]
 struct ChainState {
     app_version: AppVersion,
@@ -56,6 +58,19 @@ struct ChainState {
 pub(crate) struct SignerConfig {
     pub(crate) signer: BoxedDocSigner,
     pub(crate) pubkey: VerifyingKey,
+}
+
+/// A transaction that was broadcasted
+#[derive(Debug)]
+struct BroadcastedTx {
+    /// Broadcasted bytes
+    tx: Vec<u8>,
+
+    /// Transaction hash
+    hash: Hash,
+
+    /// Transaction sequence
+    sequence: u64,
 }
 
 /// gRPC client for the Celestia network
@@ -446,33 +461,11 @@ impl GrpcClient {
             ..RawTxBody::default()
         };
 
-        // lock the account; tx signing and broadcast must be atomic
-        // because node requires all transactions to be sequenced by account.sequence
-        let (account, signer) = self.load_account(context).await?;
-
         let tx = self
-            .sign_and_broadcast_tx(tx_body, &cfg, &account, signer, context)
+            .sign_and_broadcast_tx(tx_body, cfg.clone(), context)
             .await?;
-        let tx_bytes = tx.encode_to_vec();
 
-        let original_sequence = account.sequence;
-        let mut account_lock = Some(account);
-
-        loop {
-            let tx_hash = self
-                .broadcast_tx_with_account(tx_bytes.clone(), &cfg, context)
-                .await?;
-
-            if let Some(mut account) = account_lock.take() {
-                account.sequence += 1; // increment, but only on first iter
-            };
-
-            match self.confirm_tx(tx_hash, original_sequence, context).await {
-                Ok(status) => return Ok(status),
-                Err(Error::TxEvicted(_)) => continue,
-                Err(e) => return Err(e),
-            }
-        }
+        self.confirm_tx(tx, cfg, context).await
     }
 
     async fn submit_blobs_impl(
@@ -489,33 +482,11 @@ impl GrpcClient {
             blob.validate(app_version)?;
         }
 
-        // lock the account; tx signing and broadcast must be atomic
-        // because node requires all transactions to be sequenced by account.sequence
-        let (account, signer) = self.load_account(context).await?;
-
-        let blob_tx = self
-            .sign_and_broadcast_blobs(blobs.to_vec(), &cfg, &account, signer, context)
+        let tx = self
+            .sign_and_broadcast_blobs(blobs.to_vec(), cfg.clone(), context)
             .await?;
-        let tx_bytes = blob_tx.encode_to_vec();
 
-        let original_sequence = account.sequence;
-        let mut account_lock = Some(account);
-
-        loop {
-            let tx_hash = self
-                .broadcast_tx_with_account(tx_bytes.clone(), &cfg, context)
-                .await?;
-
-            if let Some(mut account) = account_lock.take() {
-                account.sequence += 1; // increment, but only on first iter
-            };
-
-            match self.confirm_tx(tx_hash, original_sequence, context).await {
-                Ok(status) => return Ok(status),
-                //Err(Error::TxEvicted(_)) => continue,
-                Err(e) => return Err(e),
-            }
-        }
+        self.confirm_tx(tx, cfg, context).await
     }
 
     async fn load_chain_state(&self, context: &Context) -> Result<ChainState> {
@@ -538,23 +509,24 @@ impl GrpcClient {
             .expect("state to be initialised"))
     }
 
-    async fn load_account(
-        &self,
-        context: &Context,
-    ) -> Result<(MappedMutexGuard<'_, Account>, &SignerConfig)> {
+    async fn fetch_account(&self, context: &Context) -> Result<Account> {
         let signer = self.inner.signer.as_ref().ok_or(Error::MissingSigner)?;
+        let address = AccAddress::from(signer.pubkey);
+        self.get_account(&address).context(context).await
+    }
+
+    async fn load_account(&self, context: &Context) -> Result<(AccountGuard<'_>, &SignerConfig)> {
         let mut account_guard = self.inner.account.lock().await;
 
         if account_guard.is_none() {
-            let address = AccAddress::from(signer.pubkey);
-            let account = self.get_account(&address).context(context).await?;
-
+            let account = self.fetch_account(context).await?;
             *account_guard = Some(account);
         }
         let mapped_guard = MutexGuard::map(account_guard, |acc| {
             acc.as_mut().expect("account data present")
         });
 
+        let signer = self.inner.signer.as_ref().ok_or(Error::MissingSigner)?;
         Ok((mapped_guard, signer))
     }
 
@@ -565,50 +537,61 @@ impl GrpcClient {
         tx_body: &RawTxBody,
         cfg: &TxConfig,
         chain_id: Id,
-        account: &BaseAccount,
+        account: &mut AccountGuard<'_>,
         context: &Context,
     ) -> Result<(u64, f64)> {
         let signer = self.inner.signer.as_ref().ok_or(Error::MissingSigner)?;
 
-        Ok(match (cfg.gas_limit, cfg.gas_price) {
-            (Some(gas_limit), Some(gas_price)) => (gas_limit, gas_price),
-            (Some(gas_limit), None) => {
-                let gas_price = self
-                    .estimate_gas_price(cfg.priority)
+        if let Some(gas_limit) = cfg.gas_limit {
+            let gas_price = if let Some(gas_price) = cfg.gas_price {
+                gas_price
+            } else {
+                self.estimate_gas_price(cfg.priority)
                     .context(context)
-                    .await?;
-                (gas_limit, gas_price)
-            }
-            (None, maybe_gas_price) => {
-                let tx = sign_tx(
-                    tx_body.clone(),
-                    chain_id,
-                    account,
-                    &signer.pubkey,
-                    &signer.signer,
-                    0,
-                    1,
-                )
-                .await?;
+                    .await?
+            };
 
-                let GasEstimate { price, usage } = self
-                    .estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
-                    .context(context)
-                    .await?;
-                (usage, maybe_gas_price.unwrap_or(price))
+            return Ok((gas_limit, gas_price));
+        }
+
+        let GasEstimate { price, usage } = loop {
+            let tx = sign_tx(
+                tx_body.clone(),
+                chain_id.clone(),
+                account,
+                &signer.pubkey,
+                &signer.signer,
+                0,
+                1,
+            )
+            .await?;
+
+            match self
+                .estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
+                .context(context)
+                .await
+            {
+                Err(e) if e.is_wrong_sequnce() => {
+                    println!("updating sequence calculate_transaction_gas_params: {e}");
+                    **account = self.fetch_account(context).await?;
+                }
+                res => break res?,
             }
-        })
+        };
+
+        Ok((usage, cfg.gas_price.unwrap_or(price)))
     }
 
     async fn sign_and_broadcast_blobs(
         &self,
         blobs: Vec<Blob>,
-        cfg: &TxConfig,
-        account: &BaseAccount,
-        signer: &SignerConfig,
+        cfg: TxConfig,
         context: &Context,
-    ) -> Result<RawBlobTx> {
+    ) -> Result<BroadcastedTx> {
         let ChainState { chain_id, .. } = self.load_chain_state(context).await?;
+        // lock the account; tx signing and broadcast must be atomic
+        // because node requires all transactions to be sequenced by account.sequence
+        let (mut account, signer) = self.load_account(context).await?;
 
         let pfb = MsgPayForBlobs::new(&blobs, account.address.clone())?;
         let pfb = RawTxBody {
@@ -616,69 +599,117 @@ impl GrpcClient {
             memo: cfg.memo.clone().unwrap_or_default(),
             ..RawTxBody::default()
         };
+        let blobs: Vec<_> = blobs.into_iter().map(Into::into).collect();
 
         let (gas_limit, gas_price) = self
-            .calculate_transaction_gas_params(&pfb, cfg, chain_id.clone(), account, context)
+            .calculate_transaction_gas_params(&pfb, &cfg, chain_id.clone(), &mut account, context)
+            .await?;
+        let fee = (gas_limit as f64 * gas_price).ceil() as u64;
+
+        // in case parallel submission failed because of the sequence mismatch,
+        // we update the account, resign and broadcast transaction
+        loop {
+            let tx = sign_tx(
+                pfb.clone(),
+                chain_id.clone(),
+                &account,
+                &signer.pubkey,
+                &signer.signer,
+                gas_limit,
+                fee,
+            )
             .await?;
 
-        let fee = (gas_limit as f64 * gas_price).ceil() as u64;
-        let tx = sign_tx(
-            pfb,
-            chain_id.clone(),
-            account,
-            &signer.pubkey,
-            &signer.signer,
-            gas_limit,
-            fee,
-        )
-        .await?;
+            let blob_tx = RawBlobTx {
+                tx: tx.encode_to_vec(),
+                blobs: blobs.clone(),
+                type_id: BLOB_TX_TYPE_ID.to_string(),
+            }
+            .encode_to_vec();
 
-        let blobs = blobs.into_iter().map(Into::into).collect();
-        let blob_tx = RawBlobTx {
-            tx: tx.encode_to_vec(),
-            blobs,
-            type_id: BLOB_TX_TYPE_ID.to_string(),
-        };
-
-        Ok(blob_tx)
+            match self
+                .broadcast_tx_with_account(blob_tx, &cfg, &mut account, context)
+                .await
+            {
+                Err(e) if e.is_wrong_sequnce() => {
+                    println!("updating sequence sign_and_broadcast_blobs: {e}");
+                    *account = self.fetch_account(context).await?;
+                }
+                res => break res,
+            }
+        }
     }
 
     async fn sign_and_broadcast_tx(
         &self,
         tx: RawTxBody,
-        cfg: &TxConfig,
-        account: &BaseAccount,
-        signer: &SignerConfig,
+        cfg: TxConfig,
         context: &Context,
-    ) -> Result<RawTx> {
+    ) -> Result<BroadcastedTx> {
         let ChainState { chain_id, .. } = self.load_chain_state(context).await?;
 
+        // lock the account; tx signing and broadcast must be atomic
+        // because node requires all transactions to be sequenced by account.sequence
+        let (mut account, signer) = self.load_account(context).await?;
+
         let (gas_limit, gas_price) = self
-            .calculate_transaction_gas_params(&tx, cfg, chain_id.clone(), account, context)
+            .calculate_transaction_gas_params(&tx, &cfg, chain_id.clone(), &mut account, context)
             .await?;
 
         let fee = (gas_limit as f64 * gas_price).ceil();
-        let tx = sign_tx(
-            tx,
-            chain_id,
-            account,
-            &signer.pubkey,
-            &signer.signer,
-            gas_limit,
-            fee as u64,
-        )
-        .await?;
 
-        Ok(tx)
+        // in case parallel submission failed because of the sequence mismatch,
+        // we update the account, resign and broadcast transaction
+        loop {
+            let tx = sign_tx(
+                tx.clone(),
+                chain_id.clone(),
+                &account,
+                &signer.pubkey,
+                &signer.signer,
+                gas_limit,
+                fee as u64,
+            )
+            .await?;
+
+            match self
+                .broadcast_tx_with_account(tx.encode_to_vec(), &cfg, &mut account, context)
+                .await
+            {
+                Err(e) if e.is_wrong_sequnce() => {
+                    println!("updating sequence sign_and_broadcast_tx: {e}");
+                    *account = self.fetch_account(context).await?;
+                }
+                res => break res,
+            }
+        }
     }
 
     async fn broadcast_tx_with_account(
         &self,
         tx: Vec<u8>,
         cfg: &TxConfig,
-        //mut account: MappedMutexGuard<'_, Account>,
+        account: &mut AccountGuard<'_>,
         context: &Context,
-    ) -> Result<Hash> {
+    ) -> Result<BroadcastedTx> {
+        let resp = self.broadcast_tx_with_cfg(tx.clone(), cfg, context).await?;
+
+        let sequence = account.sequence;
+        account.sequence += 1;
+
+        Ok(BroadcastedTx {
+            tx,
+            hash: resp.txhash,
+            sequence,
+        })
+    }
+
+    async fn broadcast_tx_with_cfg(
+        &self,
+        tx: Vec<u8>,
+        cfg: &TxConfig,
+        context: &Context,
+    ) -> Result<TxResponse> {
         let resp = self
             .broadcast_tx(tx, BroadcastMode::Sync)
             .context(context)
@@ -697,14 +728,22 @@ impl GrpcClient {
                 resp.raw_log
             };
 
-            return Err(Error::TxBroadcastFailed(resp.txhash, resp.code, message));
+            Err(Error::TxBroadcastFailed(resp.txhash, resp.code, message))
+        } else {
+            Ok(resp)
         }
-
-        Ok(resp.txhash)
     }
 
-    async fn confirm_tx(&self, hash: Hash, sequence: u64, context: &Context) -> Result<TxInfo> {
+    async fn confirm_tx(
+        &self,
+        tx: BroadcastedTx,
+        cfg: TxConfig,
+        context: &Context,
+    ) -> Result<TxInfo> {
+        let BroadcastedTx { tx, hash, sequence } = tx;
+        let mut tx = Some(tx);
         let mut interval = Interval::new(Duration::from_millis(500)).await;
+        let mut resubmitted_at: Option<Instant> = None;
 
         loop {
             let tx_status = self.tx_status(hash).context(context).await?;
@@ -724,28 +763,41 @@ impl GrpcClient {
                         ));
                     }
                 }
+                TxStatus::Evicted => {
+                    println!("tx evicted");
+
+                    if let Some(resubmitted_at) = resubmitted_at.as_ref() {
+                        println!("evicted poll");
+                        if resubmitted_at.elapsed() > Duration::from_secs(60) {
+                            println!("evicted dupa");
+                            return Err(Error::TxEvicted(hash));
+                        }
+                    } else {
+                        let tx = tx.take().expect("This should never execute twice");
+                        match dbg!(self.broadcast_tx_with_cfg(tx, &cfg, context).await) {
+                            Err(Error::TxBroadcastFailed(..)) => {
+                                resubmitted_at = Some(Instant::now());
+                            }
+                            Err(e) => return Err(e),
+                            _ => (),
+                        }
+                    }
+                }
+                // we need to revert the account's sequence to the one of rejected tx.
                 TxStatus::Rejected => {
-                    // TODO: we could latch on WrongSequence error here to mark account as stale
+                    let (mut acc, _) = self.load_account(context).await?;
+                    acc.sequence = sequence;
                     return Err(Error::TxRejected(
                         hash,
                         tx_status.execution_code,
                         tx_status.error,
                     ));
                 }
-                // node will treat this transaction like if it never happened, so
-                // we need to revert the account's sequence to the one of evicted tx.
-                // all transactions that were already submitted after this one will fail
-                // due to incorrect sequence number.
-                TxStatus::Evicted => {
-                    let mut acc = self.inner.account.lock().await;
-                    acc.as_mut().expect("account data present").sequence = sequence;
-                    return Err(Error::TxEvicted(hash));
-                }
                 // this case should never happen for node that accepted a broadcast
                 // however we handle it the same as evicted for extra safety
                 TxStatus::Unknown => {
-                    let mut acc = self.inner.account.lock().await;
-                    acc.as_mut().expect("account data present").sequence = sequence;
+                    let (mut acc, _) = self.load_account(context).await?;
+                    acc.sequence = sequence;
                     return Err(Error::TxNotFound(hash));
                 }
             }
@@ -761,8 +813,27 @@ impl fmt::Debug for GrpcClient {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::future::IntoFuture;
+    use std::sync::Arc;
+
+    use celestia_proto::cosmos::bank::v1beta1::MsgSend;
+    use celestia_rpc::HeaderClient;
+    use celestia_types::consts::appconsts;
+    use celestia_types::nmt::Namespace;
+    use celestia_types::state::{Coin, ErrorCode};
+    use celestia_types::{AppVersion, Blob};
+    use futures::FutureExt;
+    // use k256::ecdsa::SigningKey;
     use lumina_utils::test_utils::async_test;
+    use rand::{Rng, RngCore};
+    use tokio::task::JoinSet;
+
+    use super::GrpcClient;
+    use crate::grpc::TxPriority;
+    use crate::test_utils::{
+        load_account, new_grpc_client, new_rpc_client, new_tx_client, spawn, TestAccount,
+    };
+    use crate::{Error, TxConfig, TxInfo};
 
     #[async_test]
     async fn extending_client_context() {
@@ -775,5 +846,398 @@ mod tests {
 
         assert!(call.context.metadata.contains_key("x-token"));
         assert!(call.context.metadata.contains_key("x-cosmos-block-height"));
+    }
+
+    #[async_test]
+    async fn get_auth_params() {
+        let client = new_grpc_client();
+        let params = client.get_auth_params().await.unwrap();
+        assert!(params.max_memo_characters > 0);
+        assert!(params.tx_sig_limit > 0);
+        assert!(params.tx_size_cost_per_byte > 0);
+        assert!(params.sig_verify_cost_ed25519 > 0);
+        assert!(params.sig_verify_cost_secp256k1 > 0);
+    }
+
+    #[async_test]
+    async fn get_account() {
+        let client = new_grpc_client();
+
+        let accounts = client.get_accounts().await.unwrap();
+
+        let first_account = accounts.first().expect("account to exist");
+        let account = client.get_account(&first_account.address).await.unwrap();
+
+        assert_eq!(&account, first_account);
+    }
+
+    #[async_test]
+    async fn get_balance() {
+        let account = load_account();
+        let client = new_grpc_client();
+
+        let coin = client.get_balance(&account.address, "utia").await.unwrap();
+        assert_eq!("utia", coin.denom());
+        assert!(coin.amount() > 0);
+
+        let all_coins = client.get_all_balances(&account.address).await.unwrap();
+        assert!(!all_coins.is_empty());
+        assert!(all_coins.iter().map(|c| c.amount()).sum::<u64>() > 0);
+
+        let spendable_coins = client
+            .get_spendable_balances(&account.address)
+            .await
+            .unwrap();
+        assert!(!spendable_coins.is_empty());
+        assert!(spendable_coins.iter().map(|c| c.amount()).sum::<u64>() > 0);
+
+        let total_supply = client.get_total_supply().await.unwrap();
+        assert!(!total_supply.is_empty());
+        assert!(total_supply.iter().map(|c| c.amount()).sum::<u64>() > 0);
+    }
+
+    #[async_test]
+    async fn get_verified_balance() {
+        let client = new_grpc_client();
+        let account = load_account();
+
+        let jrpc_client = new_rpc_client().await;
+
+        let (head, expected_balance) = tokio::join!(
+            jrpc_client.header_network_head().map(Result::unwrap),
+            client
+                .get_balance(&account.address, "utia")
+                .into_future()
+                .map(Result::unwrap)
+        );
+
+        // trustless balance queries represent state at header.height - 1, so
+        // we need to wait for a new head to compare it with the expected balance
+        let head = jrpc_client
+            .header_wait_for_height(head.height().value() + 1)
+            .await
+            .unwrap();
+
+        let verified_balance = client
+            .get_verified_balance(&account.address, &head)
+            .await
+            .unwrap();
+
+        assert_eq!(expected_balance, verified_balance);
+    }
+
+    #[async_test]
+    async fn get_verified_balance_not_funded_account() {
+        let client = new_grpc_client();
+        let account = TestAccount::random();
+
+        let jrpc_client = new_rpc_client().await;
+        let head = jrpc_client.header_network_head().await.unwrap();
+
+        let verified_balance = client
+            .get_verified_balance(&account.address, &head)
+            .await
+            .unwrap();
+
+        assert_eq!(Coin::utia(0), verified_balance);
+    }
+
+    #[async_test]
+    async fn get_node_config() {
+        let client = new_grpc_client();
+        let config = client.get_node_config().await.unwrap();
+
+        // we don't set any explicit value for it in the config
+        // so it should be empty since v6
+        assert!(config.minimum_gas_price.is_none());
+    }
+
+    #[async_test]
+    async fn get_block() {
+        let client = new_grpc_client();
+
+        let latest_block = client.get_latest_block().await.unwrap();
+        let height = latest_block.header.height.value() as i64;
+
+        let block = client.get_block_by_height(height).await.unwrap();
+        assert_eq!(block.header, latest_block.header);
+    }
+
+    #[async_test]
+    async fn get_blob_params() {
+        let client = new_grpc_client();
+        let params = client.get_blob_params().await.unwrap();
+        assert!(params.gas_per_blob_byte > 0);
+        assert!(params.gov_max_square_size > 0);
+    }
+
+    #[async_test]
+    async fn query_state_at_block_height_with_metadata() {
+        let (_lock, tx_client) = new_tx_client().await;
+
+        let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
+        let blobs = vec![Blob::new(namespace, "bleb".into(), None, AppVersion::V3).unwrap()];
+
+        let tx = tx_client
+            .submit_blobs(&blobs, TxConfig::default())
+            .await
+            .unwrap();
+
+        let addr = tx_client.get_account_address().unwrap().into();
+        let new_balance = tx_client.get_balance(&addr, "utia").await.unwrap();
+        let old_balance = tx_client
+            .get_balance(&addr, "utia")
+            .block_height(tx.height.value() - 1)
+            .await
+            .unwrap();
+
+        assert!(new_balance.amount() < old_balance.amount());
+    }
+
+    #[async_test]
+    async fn submit_and_get_tx() {
+        let (_lock, tx_client) = new_tx_client().await;
+
+        let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
+        let blobs = vec![Blob::new(namespace, "bleb".into(), None, AppVersion::V3).unwrap()];
+
+        let tx = tx_client
+            .submit_blobs(&blobs, TxConfig::default().with_memo("foo"))
+            .await
+            .unwrap();
+        let tx2 = tx_client.get_tx(tx.hash).await.unwrap();
+
+        assert_eq!(tx.hash, tx2.tx_response.txhash);
+        assert_eq!(tx2.tx.body.memo, "foo");
+    }
+
+    #[async_test]
+    async fn parallel_submission() {
+        let (_lock, tx_client) = new_tx_client().await;
+        let tx_client = Arc::new(tx_client);
+
+        let futs = (0..100)
+            .map(|n| {
+                let tx_client = tx_client.clone();
+                spawn(async move {
+                    let response = if rand::random() {
+                        let namespace = Namespace::new_v0(&[1, 2, n]).unwrap();
+                        let blob =
+                            Blob::new(namespace, random_bytes(10, 10000), None, AppVersion::V3)
+                                .unwrap();
+
+                        tx_client
+                            .submit_blobs(&[blob], TxConfig::default())
+                            .await
+                            .unwrap()
+                    } else {
+                        let address = tx_client.get_account_address().unwrap();
+                        let other_account = TestAccount::random();
+
+                        let msg = MsgSend {
+                            from_address: address.to_string(),
+                            to_address: other_account.address.to_string(),
+                            amount: vec![Coin::utia(123).into()],
+                        };
+
+                        tx_client
+                            .submit_message(msg, TxConfig::default())
+                            .await
+                            .unwrap()
+                    };
+
+                    assert!(response.height.value() > 3)
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for fut in futs {
+            fut.await.unwrap();
+        }
+    }
+
+    #[async_test]
+    async fn resubmit_evicted() {
+        let (_lock, tx_client) = new_tx_client().await;
+        let tx_client = Arc::new(tx_client);
+
+        async fn submit(tx_client: Arc<GrpcClient>, priority: TxPriority) -> TxInfo {
+            let ns = Namespace::new_v0(&[1, 1, 1]).unwrap();
+            let payload = vec![0; appconsts::v5::MAX_TX_SIZE as usize];
+            let blobs = vec![Blob::new(ns, payload, None, AppVersion::V5).unwrap()];
+            let cfg = TxConfig {
+                priority,
+                ..Default::default()
+            };
+            tx_client.submit_blobs(&blobs, cfg).await.unwrap()
+        }
+
+        let mut futs = JoinSet::new();
+        for i in 0..13 {
+            let tx_client = tx_client.clone();
+            futs.spawn(async move {
+                let priority = if i < 5 {
+                    TxPriority::Low
+                } else {
+                    TxPriority::High
+                };
+                (i, submit(tx_client, priority).await)
+            });
+        }
+
+        let results = futs.join_all().await;
+        println!("{results:#?}");
+        assert_eq!(1, 2);
+        /*
+        let (high_prio_submit, low_prio_submit) = tokio::join!(
+            async {
+                let tx_client = tx_client.clone();
+                let ns = Namespace::new_v0(&[1, 1, 1]).unwrap();
+                let payload = vec![0; appconsts::v5::MAX_TX_SIZE as usize - 1];
+                let blobs = vec![Blob::new(ns, payload, None, AppVersion::V5).unwrap()];
+                let cfg = TxConfig {
+                    priority: TxPriority::Low,
+                    ..Default::default()
+                };
+                tx_client.submit_blobs(&blobs, cfg).await.unwrap()
+            },
+            async {
+                let tx_client = tx_client.clone();
+                let ns = Namespace::new_v0(&[1, 1, 1]).unwrap();
+                let payload = vec![0; appconsts::v5::MAX_TX_SIZE as usize];
+                let blobs = vec![Blob::new(ns, payload, None, AppVersion::V5).unwrap()];
+                let cfg = TxConfig {
+                    priority: TxPriority::High,
+                    ..Default::default()
+                };
+                tx_client.submit_blobs(&blobs, cfg).await.unwrap()
+            }
+        );
+        */
+
+        //println!("{}, {}", low_prio_submit.height, high_prio_submit.height);
+        //assert!(low_prio_submit.height > high_prio_submit.height);
+    }
+
+    #[async_test]
+    async fn submit_blobs_insufficient_gas_price_and_limit() {
+        let (_lock, tx_client) = new_tx_client().await;
+
+        let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
+        let blobs = vec![Blob::new(namespace, "bleb".into(), None, AppVersion::V3).unwrap()];
+
+        let err = tx_client
+            .submit_blobs(&blobs, TxConfig::default().with_gas_limit(10000))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            Error::TxBroadcastFailed(_, ErrorCode::OutOfGas, _)
+        ));
+
+        let err = tx_client
+            .submit_blobs(&blobs, TxConfig::default().with_gas_price(0.0005))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _)
+        ));
+    }
+
+    #[async_test]
+    async fn submit_message() {
+        let account = load_account();
+        let other_account = TestAccount::random();
+        let amount = Coin::utia(12345);
+        let (_lock, tx_client) = new_tx_client().await;
+
+        let msg = MsgSend {
+            from_address: account.address.to_string(),
+            to_address: other_account.address.to_string(),
+            amount: vec![amount.clone().into()],
+        };
+
+        tx_client
+            .submit_message(msg, TxConfig::default())
+            .await
+            .unwrap();
+
+        let coins = tx_client
+            .get_all_balances(&other_account.address)
+            .await
+            .unwrap();
+
+        assert_eq!(coins.len(), 1);
+        assert_eq!(amount, coins[0]);
+    }
+
+    #[async_test]
+    async fn submit_message_insufficient_gas_price_and_limit() {
+        let account = load_account();
+        let other_account = TestAccount::random();
+        let amount = Coin::utia(12345);
+        let (_lock, tx_client) = new_tx_client().await;
+
+        let msg = MsgSend {
+            from_address: account.address.to_string(),
+            to_address: other_account.address.to_string(),
+            amount: vec![amount.clone().into()],
+        };
+
+        let err = tx_client
+            .submit_message(msg.clone(), TxConfig::default().with_gas_limit(10000))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            Error::TxBroadcastFailed(_, ErrorCode::OutOfGas, _)
+        ));
+
+        let err = tx_client
+            .submit_message(msg, TxConfig::default().with_gas_price(0.0005))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            Error::TxBroadcastFailed(_, ErrorCode::InsufficientFee, _)
+        ));
+    }
+
+    #[async_test]
+    async fn tx_client_is_send_and_sync() {
+        fn is_send_and_sync<T: Send + Sync>(_: &T) {}
+        fn is_send<T: Send>(_: &T) {}
+
+        let (_lock, tx_client) = new_tx_client().await;
+        is_send_and_sync(&tx_client);
+
+        is_send(
+            &tx_client
+                .submit_blobs(&[], TxConfig::default())
+                .into_future(),
+        );
+        is_send(
+            &tx_client
+                .submit_message(
+                    MsgSend {
+                        from_address: "".into(),
+                        to_address: "".into(),
+                        amount: vec![],
+                    },
+                    TxConfig::default(),
+                )
+                .into_future(),
+        );
+    }
+
+    fn random_bytes(min: usize, max: usize) -> Vec<u8> {
+        let rng = &mut rand::thread_rng();
+        let len = rng.gen_range(min..max);
+
+        let mut bytes = vec![0u8; len];
+        rng.fill_bytes(&mut bytes);
+
+        bytes
     }
 }
