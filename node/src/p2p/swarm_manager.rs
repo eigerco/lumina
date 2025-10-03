@@ -34,7 +34,7 @@ const BOOTNODE_PROTECT_TAG: u32 = 0;
 const FULL_PROTECT_TAG: u32 = 1;
 const ARCHIVAL_PROTECT_TAG: u32 = 2;
 
-const PEERS_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(60);
+const PEER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 
 #[derive(NetworkBehaviour)]
 struct SwarmBehaviour<B>
@@ -61,7 +61,7 @@ where
     event_pub: EventPublisher,
     bootnodes: HashMap<PeerId, Vec<Multiaddr>>,
     listeners: Vec<ListenerId>,
-    peers_health_check_interval: Interval,
+    peer_health_check_interval: Interval,
     gc_interval: Interval,
 }
 
@@ -139,7 +139,7 @@ where
         }
 
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
-        let peers_health_check_interval = Interval::new(PEERS_HEALTH_CHECK_INTERVAL).await;
+        let peer_health_check_interval = Interval::new(PEER_HEALTH_CHECK_INTERVAL).await;
         let gc_interval = Interval::new(GC_INTERVAL).await;
 
         let mut manager = SwarmManager {
@@ -149,7 +149,7 @@ where
             event_pub,
             bootnodes: bootnodes_map,
             listeners,
-            peers_health_check_interval,
+            peer_health_check_interval,
             gc_interval,
         };
 
@@ -164,10 +164,10 @@ where
         loop {
             select! {
                 _ = self.peer_tracker_info_watcher.changed() => {
-                    self.peers_health_check().await;
+                    self.peer_health_check().await;
                 }
-                _ = self.peers_health_check_interval.tick() => {
-                    self.peers_health_check().await;
+                _ = self.peer_health_check_interval.tick() => {
+                    self.peer_health_check().await;
                 }
                 _ = self.gc_interval.tick() => {
                     self.peer_tracker.gc();
@@ -391,7 +391,7 @@ where
         }
     }
 
-    async fn peers_health_check(&mut self) {
+    async fn peer_health_check(&mut self) {
         let info = self.peer_tracker.info();
         let protected_full_nodes = self.peer_tracker.protected_len(FULL_PROTECT_TAG);
         let protected_archival_nodes = self.peer_tracker.protected_len(ARCHIVAL_PROTECT_TAG);
