@@ -38,10 +38,10 @@ pub struct PeerTrackerInfo {
     /// Number of the connected trusted peers.
     pub num_connected_trusted_peers: u64,
     /// Number of the connected full nodes.
-    // This is used by `SwarmManager` in order to trigger `peers_health_check`.
+    // This is used by `SwarmManager` in order to trigger `peer_health_check`.
     pub num_connected_full_nodes: u64,
     /// Number of the connected archival nodes.
-    // This is used by `SwarmManager` in order to trigger `peers_health_check`.
+    // This is used by `SwarmManager` in order to trigger `peer_health_check`.
     pub num_connected_archival_nodes: u64,
 }
 
