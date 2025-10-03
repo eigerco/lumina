@@ -268,7 +268,7 @@ impl PeerTracker {
             info!("Unprotect peer {peer_id} with {tag} tag");
         }
 
-        // Return true is `protected` state changed
+        // Return true if `protected` state changed
         was_protected && !peer.is_protected()
     }
 
