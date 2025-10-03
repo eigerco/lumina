@@ -18,15 +18,15 @@ members = [
 beetswap = "0.5"
 blockstore = "0.8"
 leopard-codec = "0.2"
-lumina-node = { version = "0.16.0", path = "node" }
-lumina-node-wasm = { version = "0.11.0", path = "node-wasm" }
+lumina-node = { version = "0.16.1", path = "node" }
+lumina-node-wasm = { version = "0.11.1", path = "node-wasm" }
 lumina-utils = { version = "0.4.0", path = "utils" }
-celestia-client = { version = "0.2.0", path = "client" }
+celestia-client = { version = "0.3.0", path = "client" }
 celestia-proto = { version = "0.10.0", path = "proto" }
-celestia-grpc = { version = "0.8.0", path = "grpc", default-features = false }
+celestia-grpc = { version = "0.9.0", path = "grpc", default-features = false }
 celestia-grpc-macros = { version = "0.4.0", path = "grpc/grpc-macros" }
-celestia-rpc = { version = "0.14.0", path = "rpc", default-features = false }
-celestia-types = { version = "0.16.0", path = "types", default-features = false }
+celestia-rpc = { version = "0.14.1", path = "rpc", default-features = false }
+celestia-types = { version = "0.17.0", path = "types", default-features = false }
 
 anyhow = "1.0.40"
 async-trait = "0.1.80"
