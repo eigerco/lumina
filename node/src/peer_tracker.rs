@@ -322,10 +322,14 @@ impl PeerTracker {
     }
 
     pub(crate) fn on_agent_version(&mut self, peer_id: &PeerId, agent_version: &str) {
-        let peer = self
-            .peers
-            .entry(*peer_id)
-            .or_insert_with(|| Peer::new(*peer_id));
+        let Some(peer) = self.peers.get_mut(peer_id) else {
+            return;
+        };
+
+        if !peer.is_connected() {
+            return;
+        }
+
         let new_node_kind = NodeKind::from_agent_version(agent_version);
 
         let was_full = peer.node_kind.is_full();
@@ -363,9 +367,11 @@ impl PeerTracker {
         if !peer.archival {
             peer.archival = true;
 
-            self.info_tx.send_modify(|tracker_info| {
-                tracker_info.num_connected_archival_nodes += 1;
-            });
+            if peer.is_connected() {
+                self.info_tx.send_modify(|tracker_info| {
+                    tracker_info.num_connected_archival_nodes += 1;
+                });
+            }
         }
     }
 
@@ -428,6 +434,14 @@ fn increment_connected_peers(info_tx: &watch::Sender<PeerTrackerInfo>, peer: &Pe
 
         if peer.trusted {
             tracker_info.num_connected_trusted_peers += 1;
+        }
+
+        if peer.archival {
+            tracker_info.num_connected_archival_nodes += 1;
+        }
+
+        if peer.node_kind.is_full() {
+            tracker_info.num_connected_full_nodes += 1;
         }
     });
 }
@@ -531,6 +545,7 @@ mod tests {
         let mut tracker = PeerTracker::new(event_channel.publisher());
         let mut watcher = tracker.info_watcher();
         let peer_id = PeerId::random();
+        let peer2_id = PeerId::random();
 
         tracker.add_connection(&peer_id, ConnectionId::new_unchecked(1));
         assert!(tracker.is_connected(&peer_id));
@@ -547,6 +562,7 @@ mod tests {
         );
 
         tracker.mark_as_archival(&peer_id);
+        tracker.mark_as_archival(&peer2_id);
         assert!(watcher.has_changed().unwrap());
         let info = watcher.borrow_and_update().to_owned();
         assert_eq!(
@@ -578,23 +594,23 @@ mod tests {
         tracker.on_agent_version(&peer_id, "celestia-node/celestia/full/v0.24.1/fb95d45");
         assert!(!watcher.has_changed().unwrap());
 
-        // Peer gets disconnected
-        tracker.remove_connection(&peer_id, ConnectionId::new_unchecked(1));
+        // peer2_id connected, check that previous `mark_as_archival` is
+        // propagated in `PeerTrackerInfo`.
+        tracker.add_connection(&peer2_id, ConnectionId::new_unchecked(2));
         assert!(watcher.has_changed().unwrap());
         let info = watcher.borrow_and_update().to_owned();
         assert_eq!(
             info,
             PeerTrackerInfo {
-                num_connected_peers: 0,
+                num_connected_peers: 2,
                 num_connected_trusted_peers: 0,
-                num_connected_full_nodes: 0,
-                num_connected_archival_nodes: 0,
+                num_connected_full_nodes: 1,
+                num_connected_archival_nodes: 2,
             }
         );
 
-        // Peer gets reconnected
-        tracker.add_connection(&peer_id, ConnectionId::new_unchecked(2));
-        assert!(tracker.is_connected(&peer_id));
+        // Peer gets disconnected
+        tracker.remove_connection(&peer_id, ConnectionId::new_unchecked(1));
         assert!(watcher.has_changed().unwrap());
         let info = watcher.borrow_and_update().to_owned();
         assert_eq!(
@@ -603,7 +619,22 @@ mod tests {
                 num_connected_peers: 1,
                 num_connected_trusted_peers: 0,
                 num_connected_full_nodes: 0,
-                num_connected_archival_nodes: 0,
+                num_connected_archival_nodes: 1,
+            }
+        );
+
+        // Peer gets reconnected
+        tracker.add_connection(&peer_id, ConnectionId::new_unchecked(3));
+        assert!(tracker.is_connected(&peer_id));
+        assert!(watcher.has_changed().unwrap());
+        let info = watcher.borrow_and_update().to_owned();
+        assert_eq!(
+            info,
+            PeerTrackerInfo {
+                num_connected_peers: 2,
+                num_connected_trusted_peers: 0,
+                num_connected_full_nodes: 0,
+                num_connected_archival_nodes: 1,
             }
         );
     }
