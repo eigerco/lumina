@@ -247,7 +247,7 @@ impl PeerTracker {
         !was_protected
     }
 
-    /// Add protect flag to the peer.
+    /// Remove protect flag from the peer.
     ///
     /// Tag allows different reasons of protection without interfering with one another.
     ///
