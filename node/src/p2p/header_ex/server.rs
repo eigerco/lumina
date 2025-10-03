@@ -7,10 +7,8 @@ use celestia_types::hash::Hash;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
-use libp2p::{
-    request_response::{InboundFailure, InboundRequestId, ResponseChannel},
-    PeerId,
-};
+use libp2p::request_response::{InboundFailure, InboundRequestId, ResponseChannel};
+use libp2p::PeerId;
 use tracing::{instrument, trace};
 
 use crate::p2p::header_ex::utils::{ExtendedHeaderExt, HeaderRequestExt, HeaderResponseExt};

@@ -8,16 +8,14 @@ use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::core::transport::PortUse;
-use libp2p::{
-    core::Endpoint,
-    request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport},
-    swarm::{
-        handler::ConnectionEvent, ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent,
-        ConnectionId, FromSwarm, NetworkBehaviour, SubstreamProtocol, THandlerInEvent,
-        THandlerOutEvent, ToSwarm,
-    },
-    Multiaddr, PeerId, StreamProtocol,
+use libp2p::core::Endpoint;
+use libp2p::request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport};
+use libp2p::swarm::handler::ConnectionEvent;
+use libp2p::swarm::{
+    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
+    NetworkBehaviour, SubstreamProtocol, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
+use libp2p::{Multiaddr, PeerId, StreamProtocol};
 use lumina_utils::time::{timeout, Instant};
 use prost::Message;
 use tracing::{debug, instrument, warn};
@@ -62,7 +60,6 @@ where
 
 pub(crate) struct HeaderExConfig<'a, S> {
     pub network_id: &'a str,
-    pub peer_tracker: Arc<PeerTracker>,
     pub header_store: Arc<S>,
 }
 
@@ -109,7 +106,7 @@ where
                 )],
                 request_response::Config::default(),
             ),
-            client_handler: HeaderExClientHandler::new(config.peer_tracker),
+            client_handler: HeaderExClientHandler::new(),
             server_handler: HeaderExServerHandler::new(config.header_store),
         }
     }
@@ -119,9 +116,10 @@ where
         &mut self,
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+        peer_tracker: &PeerTracker,
     ) {
         self.client_handler
-            .on_send_request(&mut self.req_resp, request, respond_to);
+            .on_send_request(&mut self.req_resp, request, respond_to, peer_tracker);
     }
 
     pub(crate) fn stop(&mut self) {
