@@ -1,4 +1,6 @@
 // TODO: upstream to `named_lock`
+// TODO: lock unlocking doesn't actually happen until rust yields to js.
+// This can cause it to be held longer than expected, or require calling `yield_now` manually.
 
 use std::fmt;
 

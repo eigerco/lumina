@@ -458,35 +458,6 @@ impl Store for InMemoryStore {
     }
 }
 
-/*
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-#[async_trait]
-impl IdentityStore for InMemoryStore {
-    async fn with_random_persistent_exclusive_p2p_identity(
-        store_name_prefix: &str,
-    ) -> Result<(Self, KeyGuard)> {
-        let (keypair, guard) = KeyRegistry::new().await?.get_key().await?;
-
-        let store = InMemoryStore::new();
-        store.set_identity(keypair).await?;
-
-        Ok((store, guard))
-    }
-
-    async fn try_with_exclusive_p2p_identity(
-        store_name_prefix: &str,
-        keypair: Keypair,
-    ) -> Result<(Self, KeyGuard)> {
-        let guard = KeyRegistry::try_lock_key(&keypair).await?;
-        let store = InMemoryStore::new();
-
-        store.set_identity(keypair).await?;
-
-        Ok((store, guard))
-    }
-}
-*/
-
 impl Default for InMemoryStore {
     fn default() -> Self {
         Self::new()

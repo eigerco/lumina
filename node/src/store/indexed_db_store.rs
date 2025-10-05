@@ -481,41 +481,6 @@ impl Store for IndexedDbStore {
     }
 }
 
-/*
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-#[async_trait]
-impl IdentityStore for IndexedDbStore {
-    async fn with_random_persistent_exclusive_p2p_identity(
-        store_name_prefix: &str,
-    ) -> Result<(Self, KeyGuard)> {
-        let (keypair, guard) = KeyRegistry::new().await?.get_key().await?;
-
-        let peer_id = keypair.public().to_peer_id();
-        let store_name = format!("{store_name_prefix}-{peer_id}");
-
-        let store = IndexedDbStore::new(&store_name).await?;
-        store.set_identity(keypair).await?;
-
-        Ok((store, guard))
-    }
-
-    async fn try_with_exclusive_p2p_identity(
-        store_name_prefix: &str,
-        keypair: Keypair,
-    ) -> Result<(Self, KeyGuard)> {
-        let guard = KeyRegistry::try_lock_key(&keypair).await?;
-
-        let peer_id = keypair.public().to_peer_id();
-        let store_name = format!("{store_name_prefix}-{peer_id}");
-
-        let store = IndexedDbStore::new(&store_name).await?;
-        store.set_identity(keypair).await?;
-
-        Ok((store, guard))
-    }
-}
-*/
-
 impl From<rexie::Error> for StoreError {
     fn from(error: rexie::Error) -> StoreError {
         StoreError::FatalDatabaseError(error.to_string())
@@ -652,6 +617,12 @@ async fn detect_schema_version(db: &Rexie) -> Result<Option<u32>> {
 }
 
 async fn lock_db_name(name: &str) -> Result<(NamedLock, String)> {
+    // Once lock is released in rust, unlocking doesn't actually happen until the
+    // executor yields back to js. This can be an issue, if the store is closed
+    // and then immediately re-opened (weird but valid, we do it in tests) - original
+    // lock still holds and subsequent reopen actually opens the extra_tab store.
+    lumina_utils::executor::yield_now().await;
+
     let mut try_name = name.to_string();
     let mut i = 0;
     loop {

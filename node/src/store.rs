@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display};
 use std::io::Cursor;
 use std::ops::{Bound, RangeBounds, RangeInclusive};
 
-#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[cfg(target_arch = "wasm32")]
 use crate::utils::NamedLockError;
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
@@ -247,7 +247,7 @@ impl From<tokio::task::JoinError> for StoreError {
     }
 }
 
-#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+#[cfg(target_arch = "wasm32")]
 impl From<NamedLockError> for StoreError {
     fn from(value: NamedLockError) -> Self {
         StoreError::NamedLock(value.to_string())

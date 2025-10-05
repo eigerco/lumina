@@ -3373,7 +3373,6 @@ dependencies = [
  "enum-as-inner",
  "futures",
  "gloo-timers 0.3.0",
- "idb",
  "instant",
  "js-sys",
  "libp2p",
