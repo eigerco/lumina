@@ -313,7 +313,7 @@ where
     }
 
     fn start_get_providers_kad_query(&mut self, topic: &RecordKey) {
-        // Avoid having multiple `GetProviders` queries for the same `topic`.
+        // Avoid running multiple `GetProviders` queries for the same `topic`.
         let kad_query_exists = self.swarm.behaviour_mut().kademlia.iter_queries().any(
             |query| matches!(query.info(), QueryInfo::GetProviders { key, .. } if key == topic),
         );
