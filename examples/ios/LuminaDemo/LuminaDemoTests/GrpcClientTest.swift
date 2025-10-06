@@ -12,7 +12,6 @@ import Testing
 @testable import LuminaDemo
 
 struct GrpcClientTest {
-    
     @Test func getNodeConfig() async throws {
         let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
         let _ = try await client.getNodeConfig()
@@ -23,33 +22,40 @@ struct GrpcClientTest {
         let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
         let _ = try await client.getAuthParams()
     }
-    
+
     @Test func getAccount() async throws {
         let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
         let account = try await client.getAccount(account: NODE_0_ADDR)
 
-        // TODO: test
+        switch account {
+        case .base(let baseAccount):
+            let addressStr = try AddressObject.create(address: baseAccount.address).asString()
+
+            assert(addressStr == NODE_0_ADDR)
+        default :
+            Issue.record("failed")
+        }
     }
-    
+
     @Test func getBalance() async throws {
         let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
         let balance = try await client.getBalance(address: NODE_0_ADDR, denom: "utia")
         assert(balance.amount > 0)
-        
+
         let allBalances = try await client.getAllBalances(address: NODE_0_ADDR)
         assert(allBalances.isEmpty == false)
         for balance in allBalances {
             assert(balance.amount > 0)
             assert(balance.denom != "")
         }
-        
+
         let allSpendable = try await client.getSpendableBalances(address: NODE_0_ADDR)
         assert(allSpendable.isEmpty == false)
         for spendable in allSpendable {
             assert(spendable.amount > 0)
             assert(spendable.denom != "")
         }
-        
+
         let totalSupply = try await client.getTotalSupply()
         assert(totalSupply.isEmpty == false)
         for supply in totalSupply {
@@ -57,20 +63,20 @@ struct GrpcClientTest {
             assert(supply.denom != "")
         }
     }
-    
+
     @Test func getBlock() async throws {
         let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
-        
+
         let latestBlock = try await client.getLatestBlock()
         let height = Int64(latestBlock.header.height.value)
         let block = try await client.getBlockByHeight(height: height)
-        
+
         assert(latestBlock.header.dataHash == block.header.dataHash)
     }
-    
+
     @Test func getBlobParams() async throws {
         let client = try await GrpcClientBuilder.withUrl(url: CI_GRPC_URL).build()
-        
+
         let params = try await client.getBlobParams()
         assert(params.gasPerBlobByte > 0)
         assert(params.govMaxSquareSize > 0)

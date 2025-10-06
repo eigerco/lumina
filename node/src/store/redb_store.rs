@@ -35,7 +35,7 @@ const SCHEMA_VERSION_TABLE: TableDefinition<'static, (), u64> =
     TableDefinition::new("STORE.SCHEMA_VERSION");
 const RANGES_TABLE: TableDefinition<'static, &str, Vec<(u64, u64)>> =
     TableDefinition::new("STORE.RANGES");
-const LIBP2P_IDENTITY_TABLE: TableDefinition<'static, &str, &[u8]> =
+const LIBP2P_IDENTITY_TABLE: TableDefinition<'static, (), &[u8]> =
     TableDefinition::new("LIBP2P.IDENTITY");
 
 const SAMPLED_RANGES_KEY: &str = "KEY.SAMPLED_RANGES";
@@ -132,7 +132,7 @@ impl RedbStore {
                     let peer_id = keypair.public().to_peer_id();
                     let keypair_bytes = keypair.to_protobuf_encoding()?;
                     debug!("Initialised new identity: {peer_id}");
-                    identity_table.insert(&*peer_id.to_base58(), &*keypair_bytes)?;
+                    identity_table.insert((), &*keypair_bytes)?;
                 }
 
                 Ok(())
@@ -936,6 +936,21 @@ pub mod tests {
 
         assert_eq!(store0.head_height().await.unwrap(), 15);
         assert_eq!(store1.head_height().await.unwrap(), 16);
+    }
+
+    #[tokio::test]
+    async fn test_identity_persistance() {
+        let db_dir = TempDir::with_prefix("lumina.store.test").unwrap();
+        let db = db_dir.path().join("db");
+
+        let original_store = create_store(Some(&db)).await;
+        let original_identity = original_store.get_identity().await.unwrap().public();
+        drop(original_store);
+
+        let reopened_store = create_store(Some(&db)).await;
+        let reopened_identity = reopened_store.get_identity().await.unwrap().public();
+
+        assert_eq!(original_identity, reopened_identity);
     }
 
     #[tokio::test]

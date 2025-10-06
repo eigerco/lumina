@@ -60,17 +60,19 @@ pub struct IndexedDbStore {
     head: SendWrapper<RefCell<Option<ExtendedHeader>>>,
     db: SendWrapper<Rexie>,
     header_added_notifier: Notify,
-    //  locks the db instance using Web Locks API until `IndexedDbStore` instance is dropped
+    // locks the db instance using Web Locks API until `IndexedDbStore` instance is dropped
     _db_lock: NamedLock,
 }
 
 impl IndexedDbStore {
     /// Create or open a persistent store.
     ///
+    /// <div class="warning">
     /// IndexedDB is shared between all tabs from the same origin, but we enforce
     /// that each store is opened exclusively. Subsequent open requests with the same name,
     /// presumably coming from multiple tabs running Lumina, will each create extra stores
     /// with `-extra-tab-N` suffix.
+    /// </div>
     pub async fn new(name: &str) -> Result<IndexedDbStore> {
         let (db_lock, real_name) = lock_db_name(name).await?;
         let rexie = Rexie::builder(&real_name)
@@ -1022,7 +1024,7 @@ pub mod tests {
     }
 
     #[wasm_bindgen_test]
-    async fn test_persistence() {
+    async fn test_header_persistence() {
         let store_name = new_indexed_db_store_name().await;
 
         let (original_store, mut gen) = gen_filled_store(0, &store_name).await;
@@ -1096,6 +1098,22 @@ pub mod tests {
             same_name_store.get_head_height(),
             Err(StoreError::NotFound)
         ));
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_identity_persistence() {
+        let store_name = new_indexed_db_store_name().await;
+
+        let (original_store, _gen) = gen_filled_store(0, &store_name).await;
+        let original_identity = original_store.get_identity().await.unwrap().public();
+        drop(original_store);
+
+        let reopened_store = IndexedDbStore::new(&store_name)
+            .await
+            .expect("failed to reopen store");
+        let reopened_identity = reopened_store.get_identity().await.unwrap().public();
+
+        assert_eq!(original_identity, reopened_identity);
     }
 
     mod migration_from_v1 {

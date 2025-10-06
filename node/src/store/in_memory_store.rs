@@ -463,3 +463,21 @@ impl Default for InMemoryStore {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lumina_utils::test_utils::async_test as test;
+
+    #[test]
+    async fn identity_regen_on_clone() {
+        let store = InMemoryStore::new();
+        let id0 = store.get_identity().await.unwrap().public();
+        let store_clone = store.async_clone().await;
+        let id1 = store.get_identity().await.unwrap().public();
+        let clone_id = store_clone.get_identity().await.unwrap().public();
+
+        assert_eq!(id0, id1);
+        assert_ne!(id0, clone_id)
+    }
+}
