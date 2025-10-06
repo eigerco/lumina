@@ -674,7 +674,7 @@ fn init_kademlia(
 /// Converts a topic to `RecordKey`.
 ///
 /// This is the equivalent of `nsToCid` that is used in [`RoutingDiscovery.FindPeers`][1]
-/// of go-libp2p which later on is unwraped to the internal hash in [`IpfsDHT.FindProvidersAsync`][2].
+/// of go-libp2p which later on is unwraped to internal hash in [`IpfsDHT.FindProvidersAsync`][2].
 ///
 /// [1]: https://github.com/libp2p/go-libp2p/blob/f6c14a215b2012f3839f1b7157dfec70a772143a/p2p/discovery/routing/routing.go#L75
 /// [2]: https://github.com/libp2p/go-libp2p-kad-dht/blob/944883ea5a55102c8950478645d89183901859b4/routing.go#L504
