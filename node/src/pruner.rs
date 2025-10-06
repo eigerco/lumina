@@ -359,7 +359,7 @@ where
         // <-----Prunable area----->|<-----------Pruning window--------->
         // <-----------Non sampling area----------->|<--Sampling window->
         //
-        // This case is straight forward: we just remove whatever is after
+        // This case is straightforward: we just remove whatever is after
         // the pruning window, or in other words, anything that is inside
         // the prunable area.
         //
