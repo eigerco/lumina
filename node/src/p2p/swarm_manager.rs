@@ -235,12 +235,10 @@ where
             return;
         }
 
-        // When Kademlia doesn't know about peer_id, then we need to
-        // initiate a `get_closest_peers` query in order to find it and
-        // their addresses.
-        //
-        // We also avoid calling `get_closest_peers` for the same peer
-        // multiple times.
+        // When Kademlia doesn't know peer_id, we need to find it and
+        // its addresses using `get_closest_peers` query.
+
+        // First, make sure there isn't already a query in progress for this peer.
         let peer_id_bytes = peer_id.to_bytes();
         let kad_query_exists = self
             .swarm
