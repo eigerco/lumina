@@ -34,6 +34,5 @@ struct IdentityRetentionTests {
         let _ = try await node1.stop();
         
         assert(peerId0 == peerId1)
-        
     }
 }
