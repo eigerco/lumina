@@ -15,7 +15,7 @@ use tracing::info;
 
 use crate::events::{EventPublisher, NodeEvent};
 
-/// How ofter garbage collector should be called.
+/// How often garbage collector should be called.
 pub(crate) const GC_INTERVAL: Duration = Duration::from_secs(30);
 /// How much time a `Peer` needs to be disconnected to expire.
 const EXPIRED_AFTER: Duration = Duration::from_secs(120);
