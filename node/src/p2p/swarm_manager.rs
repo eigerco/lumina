@@ -444,7 +444,7 @@ where
         // * Satisfy `condition`
         // * Are connected
         // * Not already protected for `tag`
-        // * Have measured ping latency
+        // * Have known ping latency
         let mut canditates = self
             .peer_tracker
             .peers()
