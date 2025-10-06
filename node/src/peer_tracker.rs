@@ -285,7 +285,7 @@ impl PeerTracker {
         }
     }
 
-    /// Remove a connection from a peer.
+    /// Remove a connection from the peer.
     pub(crate) fn remove_connection(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {
         let Some(peer) = self.peers.get_mut(peer_id) else {
             return;
