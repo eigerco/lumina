@@ -617,21 +617,15 @@ async fn detect_schema_version(db: &Rexie) -> Result<Option<u32>> {
 }
 
 async fn lock_db_name(name: &str) -> Result<(NamedLock, String)> {
-    // Once lock is released in rust, unlocking doesn't actually happen until the
-    // executor yields back to js. This can be an issue, if the store is closed
-    // and then immediately re-opened (weird but valid, we do it in tests) - original
-    // lock still holds and subsequent reopen actually opens the extra_tab store.
-    lumina_utils::executor::yield_now().await;
-
     let mut try_name = name.to_string();
-    let mut i = 0;
+    let mut i = 1;
     loop {
         match NamedLock::try_lock(&try_name).await {
             Ok(lock) => return Ok((lock, try_name)),
             Err(NamedLockError::WouldBlock) => (),
             Err(e) => return Err(e.into()),
         }
-        try_name = format!("{name}-extra_tab_{i}");
+        try_name = format!("{name}-extra-tab-{i}");
         i += 1;
     }
 }
