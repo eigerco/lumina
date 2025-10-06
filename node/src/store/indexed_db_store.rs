@@ -70,7 +70,7 @@ impl IndexedDbStore {
     /// IndexedDB is shared between all tabs from the same origin, but we enforce
     /// that each store is opened exclusively. Subsequent open requests with the same name,
     /// presumably coming from multiple tabs running Lumina, will each create extra stores
-    /// with `extra_tab_N` suffix.
+    /// with `-extra-tab-N` suffix.
     pub async fn new(name: &str) -> Result<IndexedDbStore> {
         let (db_lock, real_name) = lock_db_name(name).await?;
         let rexie = Rexie::builder(&real_name)
