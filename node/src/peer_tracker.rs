@@ -234,7 +234,7 @@ impl PeerTracker {
 
     /// Remove protect flag from the peer.
     ///
-    /// Tag allows different reasons of protection without interfering with one another.
+    /// Tag allows having different reasons for protection without interfering with one another.
     ///
     /// Returns `true` if peer changes from protected state to unprotected.
     pub(crate) fn unprotect(&mut self, peer_id: &PeerId, tag: u32) -> bool {
