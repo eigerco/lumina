@@ -125,6 +125,7 @@ impl RedbStore {
                 let _ranges_table = tx.open_table(RANGES_TABLE)?;
                 let _sampling_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
                 let mut identity_table = tx.open_table(LIBP2P_IDENTITY_TABLE)?;
+
                 if identity_table.is_empty()? {
                     let keypair = Keypair::generate_ed25519();
 
