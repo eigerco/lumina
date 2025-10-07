@@ -503,7 +503,7 @@ impl RedbStore {
         self.read_tx(move |tx| {
             let identity_table = tx.open_table(LIBP2P_IDENTITY_TABLE)?;
 
-            let (_peer_id, key_bytes) = identity_table
+            let (_, key_bytes) = identity_table
                 .first()?
                 .expect("identity_table should be non empty");
 
