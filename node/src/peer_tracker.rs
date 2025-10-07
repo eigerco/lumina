@@ -121,7 +121,7 @@ impl Peer {
         !self.protected.is_empty()
     }
 
-    pub(crate) fn is_protected_for(&self, tag: u32) -> bool {
+    pub(crate) fn is_protected_with_tag(&self, tag: u32) -> bool {
         self.protected.contains(&tag)
     }
 
@@ -184,8 +184,9 @@ impl PeerTracker {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn is_protected_for(&self, peer_id: &PeerId, tag: u32) -> bool {
-        self.peer(peer_id).is_some_and(|p| p.is_protected_for(tag))
+    pub(crate) fn is_protected_with_tag(&self, peer_id: &PeerId, tag: u32) -> bool {
+        self.peer(peer_id)
+            .is_some_and(|p| p.is_protected_with_tag(tag))
     }
 
     /// Adds a peer ID.
@@ -606,16 +607,16 @@ mod tests {
         assert_eq!(tracker.protected_len(0), 0);
 
         // Now state changed from unprotected to protected
-        assert!(!tracker.is_protected_for(&peer_id, 0));
+        assert!(!tracker.is_protected_with_tag(&peer_id, 0));
         assert!(tracker.protect(&peer_id, 0));
         assert!(tracker.is_protected(&peer_id));
-        assert!(tracker.is_protected_for(&peer_id, 0));
+        assert!(tracker.is_protected_with_tag(&peer_id, 0));
         assert_eq!(tracker.protected_len(0), 1);
         // Adding more tags doesn't change the state
-        assert!(!tracker.is_protected_for(&peer_id, 1));
+        assert!(!tracker.is_protected_with_tag(&peer_id, 1));
         assert!(!tracker.protect(&peer_id, 1));
         assert!(tracker.is_protected(&peer_id));
-        assert!(tracker.is_protected_for(&peer_id, 1));
+        assert!(tracker.is_protected_with_tag(&peer_id, 1));
         assert_eq!(tracker.protected_len(1), 1);
 
         // Adding an existing tag to a peer doesn't change the counter
@@ -627,12 +628,12 @@ mod tests {
 
         // Removing only some of the tags doesn't change the state
         assert!(!tracker.unprotect(&peer_id, 0));
-        assert!(!tracker.is_protected_for(&peer_id, 0));
+        assert!(!tracker.is_protected_with_tag(&peer_id, 0));
         assert!(tracker.is_protected(&peer_id));
         assert_eq!(tracker.protected_len(0), 1);
         // Removing all tags, changes the state from protected to unprotected
         assert!(tracker.unprotect(&peer_id, 1));
-        assert!(!tracker.is_protected_for(&peer_id, 1));
+        assert!(!tracker.is_protected_with_tag(&peer_id, 1));
         assert!(!tracker.is_protected(&peer_id));
         assert_eq!(tracker.protected_len(1), 0);
     }

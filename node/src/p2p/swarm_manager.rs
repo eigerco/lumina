@@ -447,7 +447,7 @@ where
             .peer_tracker
             .peers()
             .filter_map(|peer| {
-                if condition(peer) && peer.is_connected() && !peer.is_protected_for(tag) {
+                if condition(peer) && peer.is_connected() && !peer.is_protected_with_tag(tag) {
                     Some((peer.id(), peer.best_ping()?))
                 } else {
                     None
