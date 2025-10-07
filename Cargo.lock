@@ -3310,6 +3310,7 @@ dependencies = [
  "libp2p-websocket-websys",
  "lumina-node",
  "lumina-utils",
+ "multihash-codetable",
  "pin-project",
  "prost",
  "rand 0.8.5",

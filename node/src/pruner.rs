@@ -359,8 +359,9 @@ where
         // <-----Prunable area----->|<-----------Pruning window--------->
         // <-----------Non sampling area----------->|<--Sampling window->
         //
-        // This case is straight forward: we just remove whatever is after
-        // the pruning window, or in other words, inside the prunable area.
+        // This case is straightforward: we just remove whatever is after
+        // the pruning window, or in other words, anything that is inside
+        // the prunable area.
         //
         //
         // Case 2 - Pruning window is smaller than sampling window
