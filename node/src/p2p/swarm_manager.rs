@@ -503,18 +503,16 @@ where
         None
     }
 
-    #[instrument(skip_all, fields(peer_id = %peer_id))]
     pub(crate) fn peer_maybe_discovered(&mut self, peer_id: &PeerId) {
         if !self.peer_tracker.add_peer_id(peer_id) {
             return;
         }
 
-        debug!("Peer discovered");
+        debug!("Peer discovered: {peer_id}");
     }
 
-    #[instrument(skip_all, fields(peer_id = %peer_id))]
     fn on_peer_connected(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {
-        debug!("Peer connected");
+        debug!("Peer connected: {peer_id}");
         self.peer_tracker.add_connection(peer_id, connection_id);
 
         if self.peer_tracker.is_protected(peer_id) {
@@ -526,12 +524,11 @@ where
         }
     }
 
-    #[instrument(skip_all, fields(peer_id = %peer_id))]
     fn on_peer_disconnected(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {
         self.peer_tracker.remove_connection(peer_id, connection_id);
 
         if !self.peer_tracker.is_connected(peer_id) {
-            debug!("Peer disconnected");
+            debug!("Peer disconnected: {peer_id}");
             self.unprotect(peer_id, FULL_PROTECT_TAG);
             self.unprotect(peer_id, ARCHIVAL_PROTECT_TAG);
         }
