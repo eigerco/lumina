@@ -56,7 +56,6 @@ impl std::ops::DerefMut for Account {
 /// Any custom account type should extend this type for additional functionality
 /// (e.g. vesting).
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BaseAccount {
     /// Bech32 `AccountId` of this account.
     pub address: AccAddress,
@@ -172,12 +171,14 @@ impl Protobuf<RawModuleAccount> for ModuleAccount {}
 
 #[cfg(feature = "uniffi")]
 mod uniffi_types {
-    use super::PublicKey as TendermintPublicKey;
+    use std::str::FromStr;
+
+    use super::{BaseAccount as RustBaseAccount, PublicKey as TendermintPublicKey};
 
     use tendermint::public_key::{Ed25519, Secp256k1};
-    use uniffi::Enum;
+    use uniffi::{Enum, Record};
 
-    use crate::error::UniffiConversionError;
+    use crate::{error::UniffiConversionError, state::Address};
 
     #[derive(Enum)]
     pub enum PublicKey {
@@ -221,6 +222,53 @@ mod uniffi_types {
         try_lift: |value| Ok(value.try_into()?),
         lower: |value| value.into()
     });
+
+    #[derive(Record)]
+    pub struct BaseAccount {
+        /// Bech32 `AccountId` of this account.
+        pub address: String,
+        /// Optional `PublicKey` associated with this account.
+        pub pub_key: Option<PublicKey>,
+        /// `account_number` is the account number of the account in state
+        pub account_number: u64,
+        /// Sequence of the account, which describes the number of committed transactions signed by a
+        /// given address.
+        pub sequence: u64,
+    }
+
+    impl TryFrom<BaseAccount> for RustBaseAccount {
+        type Error = UniffiConversionError;
+
+        fn try_from(value: BaseAccount) -> Result<Self, Self::Error> {
+            let address = Address::from_str(&value.address)
+                .map_err(|e| UniffiConversionError::InvalidAddress { msg: e.to_string() })?;
+            let Address::AccAddress(account_address) = address else {
+                return Err(UniffiConversionError::InvalidAddress {
+                    msg: "Invalid address type, expected account address".to_string(),
+                });
+            };
+
+            Ok(RustBaseAccount {
+                address: account_address,
+                pub_key: value.pub_key.map(TryInto::try_into).transpose()?,
+                account_number: value.account_number,
+                sequence: value.sequence,
+            })
+        }
+    }
+
+    impl From<RustBaseAccount> for BaseAccount {
+        fn from(value: RustBaseAccount) -> Self {
+            BaseAccount {
+                address: value.address.to_string(),
+                pub_key: value.pub_key.map(Into::into),
+                account_number: value.account_number,
+                sequence: value.sequence,
+            }
+        }
+    }
+
+    uniffi::custom_type!(RustBaseAccount, BaseAccount);
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]

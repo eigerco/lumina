@@ -29,11 +29,9 @@ struct GrpcClientTest {
 
         switch account {
         case .base(let baseAccount):
-            let addressStr = try AddressObject.create(address: baseAccount.address).asString()
-
-            assert(addressStr == NODE_0_ADDR)
+            assert(baseAccount.address == NODE_0_ADDR)
         default :
-            Issue.record("failed")
+            Issue.record("wrong account type")
         }
     }
 
