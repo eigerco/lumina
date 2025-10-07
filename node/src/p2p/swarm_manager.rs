@@ -24,8 +24,8 @@ use crate::p2p::Result;
 use crate::peer_tracker::{Peer, PeerTracker, PeerTrackerInfo, GC_INTERVAL};
 use crate::utils::{celestia_protocol_id, MultiaddrExt};
 
-const MAX_PROTECTED_FULL_NODES: usize = 5;
-const MAX_PROTECTED_ARCHIVAL_NODES: usize = 5;
+const FULL_NODES_PROTECT_LIMIT: usize = 5;
+const ARCHIVAL_NODES_PROTECT_LIMIT: usize = 5;
 
 static FULL_NODE_TOPIC: LazyLock<RecordKey> = LazyLock::new(|| dht_topic("/full/v0.1.0"));
 static ARCHIVAL_NODE_TOPIC: LazyLock<RecordKey> = LazyLock::new(|| dht_topic("/archival/v0.1.0"));
@@ -402,30 +402,30 @@ where
         // Based on the spec, when a protected node gets disconnected, the we unprotect
         // it (check `on_peer_disconnected`), and another node must be choosen to be
         // protected.
-        if protected_full_nodes < MAX_PROTECTED_FULL_NODES {
+        if protected_full_nodes < FULL_NODES_PROTECT_LIMIT {
             // Protect the best full nodes to fill up the gap.
             self.protect_best_peers(
-                MAX_PROTECTED_FULL_NODES - protected_full_nodes,
+                FULL_NODES_PROTECT_LIMIT - protected_full_nodes,
                 FULL_PROTECT_TAG,
                 Peer::is_full,
             );
 
-            // If we still have less than max, we initiate full node discovery.
-            if self.peer_tracker.protected_len(FULL_PROTECT_TAG) < MAX_PROTECTED_FULL_NODES {
+            // If we still have less than limit, we initiate full node discovery.
+            if self.peer_tracker.protected_len(FULL_PROTECT_TAG) < FULL_NODES_PROTECT_LIMIT {
                 self.start_full_node_kad_query();
             }
         }
 
-        if protected_archival_nodes < MAX_PROTECTED_ARCHIVAL_NODES {
+        if protected_archival_nodes < ARCHIVAL_NODES_PROTECT_LIMIT {
             // Protect the best archival nodes to fill up the gap.
             self.protect_best_peers(
-                MAX_PROTECTED_ARCHIVAL_NODES - protected_archival_nodes,
+                ARCHIVAL_NODES_PROTECT_LIMIT - protected_archival_nodes,
                 ARCHIVAL_PROTECT_TAG,
                 Peer::is_archival,
             );
 
-            // If we still have less than max, we initiate archival node discovery.
-            if self.peer_tracker.protected_len(ARCHIVAL_PROTECT_TAG) < MAX_PROTECTED_ARCHIVAL_NODES
+            // If we still have less than limit, we initiate archival node discovery.
+            if self.peer_tracker.protected_len(ARCHIVAL_PROTECT_TAG) < ARCHIVAL_NODES_PROTECT_LIMIT
             {
                 self.start_archival_node_kad_query();
             }
@@ -571,7 +571,7 @@ where
                 for p in &providers {
                     if key == *FULL_NODE_TOPIC {
                         if self.peer_tracker.protected_len(FULL_PROTECT_TAG)
-                            < MAX_PROTECTED_FULL_NODES
+                            < FULL_NODES_PROTECT_LIMIT
                         {
                             self.find_node_and_connect(p);
                         }
@@ -579,7 +579,7 @@ where
                         self.peer_tracker.mark_as_archival(p);
 
                         if self.peer_tracker.protected_len(ARCHIVAL_PROTECT_TAG)
-                            < MAX_PROTECTED_ARCHIVAL_NODES
+                            < ARCHIVAL_NODES_PROTECT_LIMIT
                         {
                             self.find_node_and_connect(p);
                         }
