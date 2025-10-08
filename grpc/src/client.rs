@@ -572,7 +572,6 @@ impl GrpcClient {
                 .await
             {
                 Err(e) if e.is_wrong_sequnce() => {
-                    println!("updating sequence calculate_transaction_gas_params: {e}");
                     **account = self.fetch_account(context).await?;
                 }
                 res => break res?,
@@ -632,7 +631,6 @@ impl GrpcClient {
                 .await
             {
                 Err(e) if e.is_wrong_sequnce() => {
-                    println!("updating sequence sign_and_broadcast_blobs: {e}");
                     *account = self.fetch_account(context).await?;
                 }
                 res => break res,
@@ -677,7 +675,6 @@ impl GrpcClient {
                 .await
             {
                 Err(e) if e.is_wrong_sequnce() => {
-                    println!("updating sequence sign_and_broadcast_tx: {e}");
                     *account = self.fetch_account(context).await?;
                 }
                 res => break res,
@@ -764,12 +761,8 @@ impl GrpcClient {
                     }
                 }
                 TxStatus::Evicted => {
-                    println!("tx evicted");
-
                     if let Some(resubmitted_at) = resubmitted_at.as_ref() {
-                        println!("evicted poll");
                         if resubmitted_at.elapsed() > Duration::from_secs(60) {
-                            println!("evicted dupa");
                             return Err(Error::TxEvicted(hash));
                         }
                     } else {
@@ -818,22 +811,19 @@ mod tests {
 
     use celestia_proto::cosmos::bank::v1beta1::MsgSend;
     use celestia_rpc::HeaderClient;
-    use celestia_types::consts::appconsts;
     use celestia_types::nmt::Namespace;
     use celestia_types::state::{Coin, ErrorCode};
     use celestia_types::{AppVersion, Blob};
     use futures::FutureExt;
-    // use k256::ecdsa::SigningKey;
     use lumina_utils::test_utils::async_test;
     use rand::{Rng, RngCore};
-    use tokio::task::JoinSet;
 
     use super::GrpcClient;
-    use crate::grpc::TxPriority;
+    use crate::grpc::Context;
     use crate::test_utils::{
         load_account, new_grpc_client, new_rpc_client, new_tx_client, spawn, TestAccount,
     };
-    use crate::{Error, TxConfig, TxInfo};
+    use crate::{Error, TxConfig};
 
     #[async_test]
     async fn extending_client_context() {
@@ -975,11 +965,8 @@ mod tests {
     async fn query_state_at_block_height_with_metadata() {
         let (_lock, tx_client) = new_tx_client().await;
 
-        let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
-        let blobs = vec![Blob::new(namespace, "bleb".into(), None, AppVersion::V3).unwrap()];
-
         let tx = tx_client
-            .submit_blobs(&blobs, TxConfig::default())
+            .submit_blobs(&[random_blob(10, 1000)], TxConfig::default())
             .await
             .unwrap();
 
@@ -998,11 +985,11 @@ mod tests {
     async fn submit_and_get_tx() {
         let (_lock, tx_client) = new_tx_client().await;
 
-        let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
-        let blobs = vec![Blob::new(namespace, "bleb".into(), None, AppVersion::V3).unwrap()];
-
         let tx = tx_client
-            .submit_blobs(&blobs, TxConfig::default().with_memo("foo"))
+            .submit_blobs(
+                &[random_blob(10, 1000)],
+                TxConfig::default().with_memo("foo"),
+            )
             .await
             .unwrap();
         let tx2 = tx_client.get_tx(tx.hash).await.unwrap();
@@ -1017,36 +1004,26 @@ mod tests {
         let tx_client = Arc::new(tx_client);
 
         let futs = (0..100)
-            .map(|n| {
+            .map(|_| {
                 let tx_client = tx_client.clone();
                 spawn(async move {
                     let response = if rand::random() {
-                        let namespace = Namespace::new_v0(&[1, 2, n]).unwrap();
-                        let blob =
-                            Blob::new(namespace, random_bytes(10, 10000), None, AppVersion::V3)
-                                .unwrap();
-
                         tx_client
-                            .submit_blobs(&[blob], TxConfig::default())
+                            .submit_blobs(&[random_blob(10, 10000)], TxConfig::default())
                             .await
-                            .unwrap()
                     } else {
-                        let address = tx_client.get_account_address().unwrap();
-                        let other_account = TestAccount::random();
-
-                        let msg = MsgSend {
-                            from_address: address.to_string(),
-                            to_address: other_account.address.to_string(),
-                            amount: vec![Coin::utia(123).into()],
-                        };
-
                         tx_client
-                            .submit_message(msg, TxConfig::default())
+                            .submit_message(random_transfer(&tx_client), TxConfig::default())
                             .await
-                            .unwrap()
                     };
 
-                    assert!(response.height.value() > 3)
+                    match response {
+                        Ok(_) => (),
+                        // some wrong sequence errors are still expected until we implement
+                        // multi-account submission
+                        Err(Error::TxRejected(_, ErrorCode::WrongSequence, _)) => {}
+                        err => panic!("{err:?}"),
+                    }
                 })
             })
             .collect::<Vec<_>>();
@@ -1057,74 +1034,51 @@ mod tests {
     }
 
     #[async_test]
-    async fn resubmit_evicted() {
+    async fn updating_sequence_and_resigning() {
         let (_lock, tx_client) = new_tx_client().await;
-        let tx_client = Arc::new(tx_client);
 
-        async fn submit(tx_client: Arc<GrpcClient>, priority: TxPriority) -> TxInfo {
-            let ns = Namespace::new_v0(&[1, 1, 1]).unwrap();
-            let payload = vec![0; appconsts::v5::MAX_TX_SIZE as usize];
-            let blobs = vec![Blob::new(ns, payload, None, AppVersion::V5).unwrap()];
-            let cfg = TxConfig {
-                priority,
-                ..Default::default()
-            };
-            tx_client.submit_blobs(&blobs, cfg).await.unwrap()
-        }
+        // submit blob without providing gas limit, this will fail on gas estimation
+        // with a dummy tx with invalid sequence
+        invalidate_sequence(&tx_client).await;
+        tx_client
+            .submit_blobs(&[random_blob(10, 1000)], TxConfig::default())
+            .await
+            .unwrap();
 
-        let mut futs = JoinSet::new();
-        for i in 0..13 {
-            let tx_client = tx_client.clone();
-            futs.spawn(async move {
-                let priority = if i < 5 {
-                    TxPriority::Low
-                } else {
-                    TxPriority::High
-                };
-                (i, submit(tx_client, priority).await)
-            });
-        }
+        // submit blob with provided gas limit, this will fail on broadcasting the tx
+        invalidate_sequence(&tx_client).await;
+        tx_client
+            .submit_blobs(
+                &[random_blob(10, 1000)],
+                TxConfig::default().with_gas_limit(100000),
+            )
+            .await
+            .unwrap();
 
-        let results = futs.join_all().await;
-        println!("{results:#?}");
-        assert_eq!(1, 2);
-        /*
-        let (high_prio_submit, low_prio_submit) = tokio::join!(
-            async {
-                let tx_client = tx_client.clone();
-                let ns = Namespace::new_v0(&[1, 1, 1]).unwrap();
-                let payload = vec![0; appconsts::v5::MAX_TX_SIZE as usize - 1];
-                let blobs = vec![Blob::new(ns, payload, None, AppVersion::V5).unwrap()];
-                let cfg = TxConfig {
-                    priority: TxPriority::Low,
-                    ..Default::default()
-                };
-                tx_client.submit_blobs(&blobs, cfg).await.unwrap()
-            },
-            async {
-                let tx_client = tx_client.clone();
-                let ns = Namespace::new_v0(&[1, 1, 1]).unwrap();
-                let payload = vec![0; appconsts::v5::MAX_TX_SIZE as usize];
-                let blobs = vec![Blob::new(ns, payload, None, AppVersion::V5).unwrap()];
-                let cfg = TxConfig {
-                    priority: TxPriority::High,
-                    ..Default::default()
-                };
-                tx_client.submit_blobs(&blobs, cfg).await.unwrap()
-            }
-        );
-        */
+        // submit message without providing gas limit, this will fail on gas estimation
+        // with a dummy tx with invalid sequence
+        invalidate_sequence(&tx_client).await;
+        tx_client
+            .submit_message(random_transfer(&tx_client), TxConfig::default())
+            .await
+            .unwrap();
 
-        //println!("{}, {}", low_prio_submit.height, high_prio_submit.height);
-        //assert!(low_prio_submit.height > high_prio_submit.height);
+        // submit message with provided gas limit, this will fail on broadcasting the tx
+        invalidate_sequence(&tx_client).await;
+        tx_client
+            .submit_message(
+                random_transfer(&tx_client),
+                TxConfig::default().with_gas_limit(100000),
+            )
+            .await
+            .unwrap();
     }
 
     #[async_test]
     async fn submit_blobs_insufficient_gas_price_and_limit() {
         let (_lock, tx_client) = new_tx_client().await;
 
-        let namespace = Namespace::new_v0(&[1, 2, 3]).unwrap();
-        let blobs = vec![Blob::new(namespace, "bleb".into(), None, AppVersion::V3).unwrap()];
+        let blobs = vec![random_blob(10, 1000)];
 
         let err = tx_client
             .submit_blobs(&blobs, TxConfig::default().with_gas_limit(10000))
@@ -1239,5 +1193,37 @@ mod tests {
         rng.fill_bytes(&mut bytes);
 
         bytes
+    }
+
+    fn random_blob(min: usize, max: usize) -> Blob {
+        let namespace = Namespace::new_v0(&random_bytes(10, 11)).unwrap();
+        Blob::new(
+            namespace,
+            random_bytes(min, max),
+            None,
+            AppVersion::latest(),
+        )
+        .unwrap()
+    }
+
+    fn random_transfer(client: &GrpcClient) -> MsgSend {
+        let address = client.get_account_address().unwrap();
+        let other_account = TestAccount::random();
+        let amount = rand::thread_rng().gen_range(10..1000);
+
+        MsgSend {
+            from_address: address.to_string(),
+            to_address: other_account.address.to_string(),
+            amount: vec![Coin::utia(amount).into()],
+        }
+    }
+
+    async fn invalidate_sequence(client: &GrpcClient) {
+        client
+            .load_account(&Context::default())
+            .await
+            .unwrap()
+            .0
+            .sequence += rand::thread_rng().gen_range(2..200);
     }
 }

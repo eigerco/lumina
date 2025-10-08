@@ -56,6 +56,7 @@ pub enum Error {
     #[error("Transaction {0} execution failed; code: {1}, error: {2}")]
     TxExecutionFailed(Hash, ErrorCode, String),
 
+    /// Transaction was rejected
     #[error("Transaction {0} was rejected; code: {1}, error: {2}")]
     TxRejected(Hash, ErrorCode, String),
 
