@@ -84,6 +84,7 @@ blockstore = { workspace = true, features = ["indexeddb"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom_03.workspace = true
 gloo-timers.workspace = true
+idb = "0.6.2"
 js-sys.workspace = true
 libp2p = { workspace = true, features = [
   "noise",
@@ -105,7 +106,7 @@ web-sys = { workspace = true, features = [
   "RequestInit",
   "RequestMode",
   "Response",
-  "Headers"
+  "Headers",
 ] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

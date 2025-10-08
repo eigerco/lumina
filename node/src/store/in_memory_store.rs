@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use libp2p::identity::Keypair;
 use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
@@ -21,6 +22,8 @@ pub struct InMemoryStore {
     inner: RwLock<InMemoryStoreInner>,
     /// Notify when a new header is added
     header_added_notifier: Notify,
+    /// Node network identity
+    libp2p_identity: Keypair,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +61,7 @@ impl InMemoryStore {
         InMemoryStore {
             inner: RwLock::new(InMemoryStoreInner::new()),
             header_added_notifier: Notify::new(),
+            libp2p_identity: Keypair::generate_ed25519(),
         }
     }
 
@@ -130,17 +134,23 @@ impl InMemoryStore {
         self.inner.read().await.pruned_ranges.clone()
     }
 
-    /// Clone the store and all its contents. Async fn due to internal use of async mutex.
+    /// Clone the store and all its contents, except for libp2p identity, which is re-generated.
+    /// Async fn due to internal use of async mutex.
     pub async fn async_clone(&self) -> Self {
         InMemoryStore {
             inner: RwLock::new(self.inner.read().await.clone()),
             header_added_notifier: Notify::new(),
+            libp2p_identity: Keypair::generate_ed25519(),
         }
     }
 
     async fn remove_height(&self, height: u64) -> Result<()> {
         let mut inner = self.inner.write().await;
         inner.remove_height(height)
+    }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        Ok(self.libp2p_identity.clone())
     }
 }
 
@@ -442,10 +452,32 @@ impl Store for InMemoryStore {
     async fn close(self) -> Result<()> {
         Ok(())
     }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        self.get_identity().await
+    }
 }
 
 impl Default for InMemoryStore {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lumina_utils::test_utils::async_test as test;
+
+    #[test]
+    async fn identity_regen_on_clone() {
+        let store = InMemoryStore::new();
+        let id0 = store.get_identity().await.unwrap().public();
+        let store_clone = store.async_clone().await;
+        let id1 = store.get_identity().await.unwrap().public();
+        let clone_id = store_clone.get_identity().await.unwrap().public();
+
+        assert_eq!(id0, id1);
+        assert_ne!(id0, clone_id)
     }
 }

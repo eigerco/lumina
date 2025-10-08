@@ -19,8 +19,6 @@ use web_sys::BroadcastChannel;
 
 use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::error::{Context, Result};
-use crate::key_registry::KeyRegistry;
-use crate::lock::NamedLock;
 use crate::ports::WorkerClient;
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, timeout, Network,
@@ -378,30 +376,18 @@ impl WasmNodeConfig {
         }
     }
 
-    pub(crate) async fn into_node_builder(
-        self,
-    ) -> Result<(NamedLock, NodeBuilder<WasmBlockstore, WasmStore>)> {
+    pub(crate) async fn into_node_builder(self) -> Result<NodeBuilder<WasmBlockstore, WasmStore>> {
         let network = network::Network::from(self.network);
         let network_id = network.id();
 
-        let (keypair, guard) = if let Some(key) = self.identity_key {
-            let keypair = Keypair::ed25519_from_bytes(key).context("could not decode key")?;
-            let guard = KeyRegistry::try_lock_key(&keypair).await?;
-
-            (keypair, guard)
-        } else {
-            let registry = KeyRegistry::new().await?;
-            registry.get_key().await?
-        };
-
         let mut builder = if self.use_persistent_memory {
-            let peer_id = keypair.public().to_peer_id();
-            let store_name = format!("{network_id}-{peer_id}");
-            let blockstore_name = format!("{network_id}-{peer_id}-blockstore");
+            let store_name = format!("lumina-{network_id}");
+            let blockstore_name = format!("lumina-{network_id}-blockstore");
 
             let store = IndexedDbStore::new(&store_name)
                 .await
                 .context("Failed to open the store")?;
+
             let blockstore = IndexedDbBlockstore::new(&blockstore_name)
                 .await
                 .context("Failed to open the blockstore")?;
@@ -417,6 +403,11 @@ impl WasmNodeConfig {
                 .pruning_window(DEFAULT_PRUNING_WINDOW_IN_MEMORY)
         };
 
+        if let Some(key_bytes) = self.identity_key {
+            let keypair = Keypair::ed25519_from_bytes(key_bytes).context("could not decode key")?;
+            builder = builder.keypair(keypair);
+        }
+
         let bootnodes = self
             .bootnodes
             .into_iter()
@@ -427,7 +418,6 @@ impl WasmNodeConfig {
             .collect::<Result<Vec<Multiaddr>, _>>()?;
 
         builder = builder
-            .keypair(keypair)
             .network(network)
             .sync_batch_size(128)
             .bootnodes(bootnodes);
@@ -437,7 +427,7 @@ impl WasmNodeConfig {
             builder = builder.pruning_window(dur);
         }
 
-        Ok((guard, builder))
+        Ok(builder)
     }
 }
 
