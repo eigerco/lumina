@@ -5,6 +5,8 @@ use tonic::Status;
 
 use crate::abci_proofs::ProofError;
 
+const SEQUENCE_ERROR_PAT: &str = "account sequence mismatch, expected ";
+
 /// Alias for a `Result` with the error type [`celestia_grpc::Error`].
 ///
 /// [`celestia_grpc::Error`]: crate::Error
@@ -91,17 +93,56 @@ pub enum Error {
     /// Error related to the metadata
     #[error(transparent)]
     Metadata(#[from] MetadataError),
+
+    /// Couldn't parse expected sequence from error message
+    #[error("Couldn't parse expected sequence from: '{0}'")]
+    SequenceParsingFailed(String),
 }
 
 impl Error {
     pub(crate) fn is_wrong_sequnce(&self) -> bool {
-        let tonic_message = matches!(self, Error::TonicError(status)
-            if status.message().contains("incorrect account sequence: account sequence mismatch"));
-        let broadcast_failed = matches!(self, Error::TxBroadcastFailed(_, code, _)
-            if code == &ErrorCode::InvalidSequence || code == &ErrorCode::WrongSequence);
-
-        tonic_message || broadcast_failed
+        match self {
+            Error::TonicError(status) if status.message().contains(SEQUENCE_ERROR_PAT) => true,
+            Error::TxBroadcastFailed(_, code, _)
+                if code == &ErrorCode::InvalidSequence || code == &ErrorCode::WrongSequence =>
+            {
+                true
+            }
+            _ => false,
+        }
     }
+
+    pub(crate) fn get_expected_sequence(&self) -> Option<Result<u64>> {
+        let msg = match self {
+            Error::TonicError(status) if status.message().contains(SEQUENCE_ERROR_PAT) => {
+                status.message()
+            }
+            Error::TxBroadcastFailed(_, code, message)
+                if code == &ErrorCode::InvalidSequence || code == &ErrorCode::WrongSequence =>
+            {
+                message.as_str()
+            }
+            _ => return None,
+        };
+
+        Some(extract_sequence(msg))
+    }
+}
+
+fn extract_sequence(msg: &str) -> Result<u64> {
+    // get the `{expected_sequence}, {rest of the message}` part
+    let (_, msg_with_sequence) = msg
+        .split_once(SEQUENCE_ERROR_PAT)
+        .ok_or_else(|| Error::SequenceParsingFailed(msg.into()))?;
+
+    // drop the comma and rest of the message
+    let (sequence, _) = msg_with_sequence
+        .split_once(',')
+        .ok_or_else(|| Error::SequenceParsingFailed(msg.into()))?;
+
+    sequence
+        .parse()
+        .map_err(|_| Error::SequenceParsingFailed(msg.into()))
 }
 
 /// Representation of all the errors that can occur when building [`GrpcClient`] using

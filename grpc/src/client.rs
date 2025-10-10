@@ -6,7 +6,7 @@ use celestia_types::any::IntoProtobufAny;
 use k256::ecdsa::VerifyingKey;
 use lumina_utils::time::Interval;
 use prost::Message;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 
 use celestia_grpc_macros::grpc_method;
@@ -509,24 +509,19 @@ impl GrpcClient {
             .expect("state to be initialised"))
     }
 
-    async fn fetch_account(&self, context: &Context) -> Result<Account> {
-        let signer = self.inner.signer.as_ref().ok_or(Error::MissingSigner)?;
-        let address = AccAddress::from(signer.pubkey);
-        self.get_account(&address).context(context).await
-    }
-
     async fn load_account(&self, context: &Context) -> Result<(AccountGuard<'_>, &SignerConfig)> {
+        let signer = self.inner.signer.as_ref().ok_or(Error::MissingSigner)?;
         let mut account_guard = self.inner.account.lock().await;
 
         if account_guard.is_none() {
-            let account = self.fetch_account(context).await?;
+            let address = AccAddress::from(signer.pubkey);
+            let account = self.get_account(&address).context(context).await?;
             *account_guard = Some(account);
         }
         let mapped_guard = MutexGuard::map(account_guard, |acc| {
             acc.as_mut().expect("account data present")
         });
 
-        let signer = self.inner.signer.as_ref().ok_or(Error::MissingSigner)?;
         Ok((mapped_guard, signer))
     }
 
@@ -571,8 +566,10 @@ impl GrpcClient {
                 .context(context)
                 .await
             {
-                Err(e) if e.is_wrong_sequnce() => {
-                    **account = self.fetch_account(context).await?;
+                Err(err) if err.is_wrong_sequnce() => {
+                    account.sequence = err
+                        .get_expected_sequence()
+                        .expect("must be wrong sequence")?;
                 }
                 res => break res?,
             }
@@ -630,8 +627,10 @@ impl GrpcClient {
                 .broadcast_tx_with_account(blob_tx, &cfg, &mut account, context)
                 .await
             {
-                Err(e) if e.is_wrong_sequnce() => {
-                    *account = self.fetch_account(context).await?;
+                Err(err) if err.is_wrong_sequnce() => {
+                    account.sequence = err
+                        .get_expected_sequence()
+                        .expect("must be wrong sequence")?;
                 }
                 res => break res,
             }
@@ -674,8 +673,10 @@ impl GrpcClient {
                 .broadcast_tx_with_account(tx.encode_to_vec(), &cfg, &mut account, context)
                 .await
             {
-                Err(e) if e.is_wrong_sequnce() => {
-                    *account = self.fetch_account(context).await?;
+                Err(err) if err.is_wrong_sequnce() => {
+                    account.sequence = err
+                        .get_expected_sequence()
+                        .expect("must be wrong sequence")?;
                 }
                 res => break res,
             }
@@ -738,9 +739,7 @@ impl GrpcClient {
         context: &Context,
     ) -> Result<TxInfo> {
         let BroadcastedTx { tx, hash, sequence } = tx;
-        let mut tx = Some(tx);
         let mut interval = Interval::new(Duration::from_millis(500)).await;
-        let mut resubmitted_at: Option<Instant> = None;
 
         loop {
             let tx_status = self.tx_status(hash).context(context).await?;
@@ -760,20 +759,31 @@ impl GrpcClient {
                         ));
                     }
                 }
+                // evicted transaction should be retransmitted without ever trying to re-sign it,
+                // to prevent double spending, because some nodes may have it in a mempool and some not.
+                // if we would re-sign it and both old and new one are confirmed, it'd double spend.
+                // https://github.com/celestiaorg/celestia-app/pull/5783#discussion_r2360546232
                 TxStatus::Evicted => {
-                    if let Some(resubmitted_at) = resubmitted_at.as_ref() {
-                        if resubmitted_at.elapsed() > Duration::from_secs(60) {
-                            return Err(Error::TxEvicted(hash));
-                        }
-                    } else {
-                        let tx = tx.take().expect("This should never execute twice");
-                        match dbg!(self.broadcast_tx_with_cfg(tx, &cfg, context).await) {
-                            Err(Error::TxBroadcastFailed(..)) => {
-                                resubmitted_at = Some(Instant::now());
-                            }
-                            Err(e) => return Err(e),
-                            _ => (),
-                        }
+                    if self
+                        .broadcast_tx_with_cfg(tx.clone(), &cfg, context)
+                        .await
+                        .is_err()
+                    {
+                        // Go version of TxClient starts one minute timeout before it returns an eviction
+                        // error, to not make the user re-submitting failed transaction right away.
+                        //
+                        // The reason for it is that Go client supports multi-endpoints, sending tx
+                        // to multiple consensus nodes at once, each node having its own mempool.
+                        // One of them could evict the tx from a mempool, but the tx may still be
+                        // proposed and confirmed by other nodes which didn't evict it.
+                        //
+                        // If client would return eviction error there right away, the user could
+                        // see the error, eagerly resubmit transaction, and have both old and new
+                        // one succeeding, resulting in double spending.
+                        //
+                        // Since we don't support multi-endpoints in our client yet, we can just return
+                        // an error right away, as no other consensus node will try to include it.
+                        return Err(Error::TxEvicted(hash));
                     }
                 }
                 // we need to revert the account's sequence to the one of rejected tx.
@@ -807,6 +817,7 @@ impl fmt::Debug for GrpcClient {
 #[cfg(test)]
 mod tests {
     use std::future::IntoFuture;
+    use std::ops::RangeInclusive;
     use std::sync::Arc;
 
     use celestia_proto::cosmos::bank::v1beta1::MsgSend;
@@ -966,7 +977,7 @@ mod tests {
         let (_lock, tx_client) = new_tx_client().await;
 
         let tx = tx_client
-            .submit_blobs(&[random_blob(10, 1000)], TxConfig::default())
+            .submit_blobs(&[random_blob(10..=1000)], TxConfig::default())
             .await
             .unwrap();
 
@@ -987,7 +998,7 @@ mod tests {
 
         let tx = tx_client
             .submit_blobs(
-                &[random_blob(10, 1000)],
+                &[random_blob(10..=1000)],
                 TxConfig::default().with_memo("foo"),
             )
             .await
@@ -1009,7 +1020,7 @@ mod tests {
                 spawn(async move {
                     let response = if rand::random() {
                         tx_client
-                            .submit_blobs(&[random_blob(10, 10000)], TxConfig::default())
+                            .submit_blobs(&[random_blob(10..=10000)], TxConfig::default())
                             .await
                     } else {
                         tx_client
@@ -1041,7 +1052,7 @@ mod tests {
         // with a dummy tx with invalid sequence
         invalidate_sequence(&tx_client).await;
         tx_client
-            .submit_blobs(&[random_blob(10, 1000)], TxConfig::default())
+            .submit_blobs(&[random_blob(10..=1000)], TxConfig::default())
             .await
             .unwrap();
 
@@ -1049,7 +1060,7 @@ mod tests {
         invalidate_sequence(&tx_client).await;
         tx_client
             .submit_blobs(
-                &[random_blob(10, 1000)],
+                &[random_blob(10..=1000)],
                 TxConfig::default().with_gas_limit(100000),
             )
             .await
@@ -1074,11 +1085,86 @@ mod tests {
             .unwrap();
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn retransmit_evicted() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        use tokio::task::JoinSet;
+
+        use crate::grpc::TxStatus;
+
+        const EVICTION_TESTING_VAL_URL: &str = "http://localhost:29090";
+
+        let account = load_account();
+        let client = GrpcClient::builder()
+            .url(EVICTION_TESTING_VAL_URL)
+            .signer_keypair(account.signing_key)
+            .build()
+            .unwrap();
+
+        let txs = (0..10)
+            .map(|_| {
+                let client = client.clone();
+                async move {
+                    let blobs = (0..2).map(|_| random_blob(500000..=500000)).collect();
+                    client
+                        .sign_and_broadcast_blobs(blobs, TxConfig::default(), &Context::default())
+                        .await
+                        .unwrap()
+                }
+            })
+            .collect::<JoinSet<_>>()
+            .join_all()
+            .await;
+
+        let at_least_one_successfully_retransmitted = Arc::new(AtomicBool::new(false));
+
+        txs.into_iter()
+            .map(|tx| {
+                let client = client.clone();
+                let at_least_one_successfully_retransmitted =
+                    at_least_one_successfully_retransmitted.clone();
+                async move {
+                    // eviction happens if tx is in a mempool for an amount of blocks
+                    // higher than the mempool.ttl-num-blocks, so we need to wait a bit
+                    // to see correct status.
+                    let mut status = TxStatus::Pending;
+                    while status == TxStatus::Pending {
+                        status = client.tx_status(tx.hash).await.unwrap().status;
+                    }
+
+                    let was_evicted = status == TxStatus::Evicted;
+
+                    match client
+                        .confirm_tx(tx, TxConfig::default(), &Context::default())
+                        .await
+                    {
+                        // some of the retransmitted tx's will still fail because
+                        // of sequence mismatch
+                        Err(Error::TxEvicted(_)) => (),
+                        res => {
+                            res.unwrap();
+                            if was_evicted {
+                                at_least_one_successfully_retransmitted
+                                    .store(true, Ordering::Relaxed);
+                            }
+                        }
+                    }
+                }
+            })
+            .collect::<JoinSet<_>>()
+            .join_all()
+            .await;
+
+        assert!(at_least_one_successfully_retransmitted.load(Ordering::Relaxed));
+    }
+
     #[async_test]
     async fn submit_blobs_insufficient_gas_price_and_limit() {
         let (_lock, tx_client) = new_tx_client().await;
 
-        let blobs = vec![random_blob(10, 1000)];
+        let blobs = vec![random_blob(10..=1000)];
 
         let err = tx_client
             .submit_blobs(&blobs, TxConfig::default().with_gas_limit(10000))
@@ -1185,25 +1271,19 @@ mod tests {
         );
     }
 
-    fn random_bytes(min: usize, max: usize) -> Vec<u8> {
+    fn random_blob(size: RangeInclusive<usize>) -> Blob {
         let rng = &mut rand::thread_rng();
-        let len = rng.gen_range(min..max);
 
-        let mut bytes = vec![0u8; len];
-        rng.fill_bytes(&mut bytes);
+        let mut ns_bytes = vec![0u8; 10];
+        rng.fill_bytes(&mut ns_bytes);
+        let namespace = Namespace::new_v0(&ns_bytes).unwrap();
 
-        bytes
-    }
+        let len = rng.gen_range(size);
+        let mut blob = vec![0; len];
+        rng.fill_bytes(&mut blob);
+        blob.resize(len, 1);
 
-    fn random_blob(min: usize, max: usize) -> Blob {
-        let namespace = Namespace::new_v0(&random_bytes(10, 11)).unwrap();
-        Blob::new(
-            namespace,
-            random_bytes(min, max),
-            None,
-            AppVersion::latest(),
-        )
-        .unwrap()
+        Blob::new(namespace, blob, None, AppVersion::latest()).unwrap()
     }
 
     fn random_transfer(client: &GrpcClient) -> MsgSend {

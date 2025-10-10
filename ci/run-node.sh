@@ -17,7 +17,7 @@ NODE_KEY_FILE="$CREDENTIALS_DIR/$NODE_NAME.key"
 NODE_JWT_FILE="$CREDENTIALS_DIR/$NODE_NAME.jwt"
 # directory where validator will write the genesis hash
 GENESIS_DIR="/genesis"
-GENESIS_HASH_FILE="$GENESIS_DIR/genesis_hash"
+GENESIS_HASH_FILE="$GENESIS_DIR/genesis_hash-validator-0"
 
 # Wait for the validator to set up and provision us via shared dir
 wait_for_provision() {

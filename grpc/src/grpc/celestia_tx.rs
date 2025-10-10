@@ -44,7 +44,7 @@ pub struct TxStatusResponse {
 }
 
 /// Represents state of the transaction in the mempool
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[cfg_attr(all(target_arch = "wasm32", feature = "wasm-bindgen"), wasm_bindgen)]
 pub enum TxStatus {
