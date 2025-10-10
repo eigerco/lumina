@@ -1088,8 +1088,6 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn retransmit_evicted() {
-        use std::sync::atomic::{AtomicBool, Ordering};
-
         use tokio::task::JoinSet;
 
         use crate::grpc::TxStatus;
@@ -1118,13 +1116,10 @@ mod tests {
             .join_all()
             .await;
 
-        let at_least_one_successfully_retransmitted = Arc::new(AtomicBool::new(false));
-
-        txs.into_iter()
+        let successfully_retransmitted = txs
+            .into_iter()
             .map(|tx| {
                 let client = client.clone();
-                let at_least_one_successfully_retransmitted =
-                    at_least_one_successfully_retransmitted.clone();
                 async move {
                     // eviction happens if tx is in a mempool for an amount of blocks
                     // higher than the mempool.ttl-num-blocks, so we need to wait a bit
@@ -1142,13 +1137,10 @@ mod tests {
                     {
                         // some of the retransmitted tx's will still fail because
                         // of sequence mismatch
-                        Err(Error::TxEvicted(_)) => (),
+                        Err(Error::TxEvicted(_)) => false,
                         res => {
                             res.unwrap();
-                            if was_evicted {
-                                at_least_one_successfully_retransmitted
-                                    .store(true, Ordering::Relaxed);
-                            }
+                            was_evicted
                         }
                     }
                 }
@@ -1157,7 +1149,9 @@ mod tests {
             .join_all()
             .await;
 
-        assert!(at_least_one_successfully_retransmitted.load(Ordering::Relaxed));
+        assert!(successfully_retransmitted
+            .into_iter()
+            .any(std::convert::identity));
     }
 
     #[async_test]
