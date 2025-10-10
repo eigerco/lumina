@@ -15,6 +15,12 @@ services:
     volumes:
       - credentials:/credentials
       - genesis:/genesis
+    healthcheck:
+      # waits until accounts are starting to be provisioned
+      test: celestia-appd query block --type height 3
+      interval: 1s
+      timeout: 60s
+      retries: 60
 
   grpcwebproxy:
     image: grpcwebproxy
@@ -92,6 +98,34 @@ services:
   #   volumes:
   #     - credentials:/credentials
   #     - genesis:/genesis
+
+  # This validator is started as a separate network, only to be able to test
+  # transactions eviction cases. Thus it has low TTL and block size.
+  validator-eviction-testing:
+    image: validator
+    platform: "linux/amd64"
+    # we want the first validator to create keys for the main devnet accounts
+    # before this one is even started. That way we don't race over keys creation,
+    # and all keys are still funded on this network
+    depends_on:
+      validator:
+        condition: service_healthy
+    build:
+      context: .
+      dockerfile: Dockerfile.validator
+    environment:
+      - NODE_NAME=validator-eviction-testing
+      # amount of DA nodes to provision (default: 3)
+      - NODE_COUNT=3
+      # values from the eviction testing in celestia-app
+      # https://github.com/celestiaorg/celestia-app/blob/v6.1.0-rc0/pkg/user/tx_client_test.go#L338
+      - BLOCK_SIZE=1048576
+      - MEMPOOL_TX_TTL=1
+    ports:
+      - 29090:9090
+    volumes:
+      - credentials:/credentials
+      - genesis:/genesis
 
 volumes:
   # local volume where node's credentials can persist
