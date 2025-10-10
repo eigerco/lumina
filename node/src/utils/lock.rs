@@ -1,4 +1,6 @@
 // TODO: upstream to `named_lock`
+// TODO: lock unlocking doesn't actually happen until rust yields to js.
+// This can cause it to be held longer than expected, or require calling `yield_now` manually.
 
 use std::fmt;
 
@@ -34,6 +36,10 @@ impl NamedLock {
     }
 
     async fn lock_impl(name: &str, block: bool) -> Result<NamedLock, Error> {
+        // Once lock is released in rust, unlocking doesn't actually happen until the
+        // executor yields back to js. To make sure any previous unlock gets acknowledged,
+        // we always yield here before trying to acquire a lock.
+        lumina_utils::executor::yield_now().await;
         let lock_manager = get_lock_manager().map_err(Error::LockManagerUnavailable)?;
 
         let unlock_token = Token::new();
@@ -141,9 +147,6 @@ mod tests {
                 .expect_err("locked lock");
         }
 
-        // XXX: a bit nasty, but we need to yield back to js for unlock to register
-        lumina_utils::executor::yield_now().await;
-
         let _guard = NamedLock::try_lock(LOCK_NAME).await.expect("valid lock");
     }
 
@@ -164,13 +167,11 @@ mod tests {
         sleep(Duration::from_millis(100)).await;
         drop(lock);
 
-        lumina_utils::executor::yield_now().await;
         NamedLock::try_lock(LOCK_NAME)
             .await
             .expect_err("should be locked");
 
         tx.send(()).unwrap();
-        lumina_utils::executor::yield_now().await;
         NamedLock::try_lock(LOCK_NAME).await.expect("unlocked");
     }
 }

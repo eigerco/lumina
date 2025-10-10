@@ -45,6 +45,7 @@ async-trait.workspace = true
 cid = { workspace = true, features = ["serde-codec"] }
 dashmap = "6"
 futures.workspace = true
+multihash-codetable = { version = "0.1.2", features = ["sha2"] }
 rand.workspace = true
 serde = { workspace = true, features = ["derive"] }
 smallvec = { version = "1.13.2", features = [
@@ -83,6 +84,7 @@ blockstore = { workspace = true, features = ["indexeddb"] }
 celestia-types = { workspace = true, features = ["wasm-bindgen"] }
 getrandom_03.workspace = true
 gloo-timers.workspace = true
+idb = "0.6.2"
 js-sys.workspace = true
 libp2p = { workspace = true, features = [
   "noise",
@@ -104,7 +106,7 @@ web-sys = { workspace = true, features = [
   "RequestInit",
   "RequestMode",
   "Response",
-  "Headers"
+  "Headers",
 ] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

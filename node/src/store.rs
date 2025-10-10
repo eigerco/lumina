@@ -5,10 +5,13 @@ use std::fmt::{Debug, Display};
 use std::io::Cursor;
 use std::ops::{Bound, RangeBounds, RangeInclusive};
 
+#[cfg(target_arch = "wasm32")]
+use crate::utils::NamedLockError;
 use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use libp2p::identity::Keypair;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
@@ -153,6 +156,9 @@ pub trait Store: Send + Sync + Debug {
     /// Remove header with given height from the store.
     async fn remove_height(&self, height: u64) -> Result<()>;
 
+    /// Retrieve libp2p identity keypair from the store
+    async fn get_identity(&self) -> Result<Keypair>;
+
     /// Close store.
     async fn close(self) -> Result<()>;
 }
@@ -183,6 +189,10 @@ pub enum StoreError {
     /// Failed to open the store.
     #[error("Error opening store: {0}")]
     OpenFailed(String),
+
+    /// Error locking database instance
+    #[error("Error locking database instance: {0}")]
+    NamedLock(String),
 }
 
 /// Store insersion non-fatal errors.
@@ -215,9 +225,18 @@ impl StoreError {
             StoreError::StoredDataError(_)
             | StoreError::FatalDatabaseError(_)
             | StoreError::ExecutorError(_)
+            | StoreError::NamedLock(_)
             | StoreError::OpenFailed(_) => true,
             StoreError::NotFound | StoreError::InsertionFailed(_) => false,
         }
+    }
+}
+
+impl From<libp2p::identity::DecodingError> for StoreError {
+    fn from(error: libp2p::identity::DecodingError) -> Self {
+        StoreError::StoredDataError(format!(
+            "Could not deserialize stored libp2p identity: {error}"
+        ))
     }
 }
 
@@ -225,6 +244,13 @@ impl StoreError {
 impl From<tokio::task::JoinError> for StoreError {
     fn from(error: tokio::task::JoinError) -> StoreError {
         StoreError::ExecutorError(error.to_string())
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl From<NamedLockError> for StoreError {
+    fn from(value: NamedLockError) -> Self {
+        StoreError::NamedLock(value.to_string())
     }
 }
 
@@ -1206,6 +1232,23 @@ mod tests {
 
         store.remove_height(97).await.unwrap();
         assert_store(&store, &headers, new_block_ranges([1..=63, 98..=128])).await;
+    }
+
+    #[rstest]
+    #[case::in_memory(new_in_memory_store())]
+    #[cfg_attr(not(target_arch = "wasm32"), case::redb(new_redb_store()))]
+    #[cfg_attr(target_arch = "wasm32", case::indexed_db(new_indexed_db_store()))]
+    #[self::test]
+    async fn libp2p_identity_seeding<S: Store>(
+        #[case]
+        #[future(awt)]
+        s: S,
+    ) {
+        let store = s;
+        let generated_keypair = store.get_identity().await.unwrap();
+        let persisted_keypair = store.get_identity().await.unwrap();
+
+        assert_eq!(generated_keypair.public(), persisted_keypair.public());
     }
 
     /// Fills an empty store

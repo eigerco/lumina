@@ -10,7 +10,7 @@ use crate::blockstore::InMemoryBlockstore;
 use crate::events::EventSubscriber;
 use crate::network::Network;
 use crate::node::{Node, NodeConfig, Result};
-use crate::store::{InMemoryStore, Store};
+use crate::store::{InMemoryStore, Store, StoreError};
 #[cfg(target_arch = "wasm32")]
 use crate::utils::resolve_bootnode_addresses;
 
@@ -51,6 +51,14 @@ pub enum NodeBuilderError {
     /// Builder failed to resolve dnsaddr multiaddresses for bootnodes
     #[error("Could not resolve any of the bootnode addresses")]
     FailedResolvingBootnodes,
+
+    /// Error decoding libp2p identity from the store
+    #[error(transparent)]
+    IdentityDecodingError(#[from] libp2p::identity::DecodingError),
+
+    /// Error propagated from the store
+    #[error(transparent)]
+    StoreError(#[from] StoreError),
 }
 
 impl NodeBuilder<InMemoryBlockstore, InMemoryStore> {
@@ -161,7 +169,19 @@ where
 
     /// Set the keypair to be used as [`Node`]s identity.
     ///
-    /// **Default:** Random generated with [`Keypair::generate_ed25519`].
+    /// This enforces given libp2p identity to be used by the node.
+    ///
+    /// By default, random identity is created by the store and persisted.
+    /// Running more than one node with the same identiity is undefined behaviour,
+    /// because all nodes with the same `peer_id` will be treated as a singular
+    /// instance. Network can randomly choose a connection used to send a message
+    /// to the node, so with multiple instances, each message from the network could
+    /// be received by a random node with the same keypair. This can potentially
+    /// lead to broken state and rejecting valid messages. Please make sure that
+    /// when you use it, only one node has this keypair.
+    ///
+    /// Special care needs to be taken in wasm, as there if your app has hardcoded key,
+    /// user opening multiple tabs with it may lead to undefined behaviour.
     pub fn keypair(self, keypair: Keypair) -> Self {
         NodeBuilder {
             keypair: Some(keypair),
@@ -264,13 +284,19 @@ where
             DEFAULT_PRUNING_WINDOW
         };
 
-        info!("Sampling window: {SAMPLING_WINDOW:?}, Pruning window: {pruning_window:?}",);
+        info!("Sampling window: {SAMPLING_WINDOW:?}, Pruning window: {pruning_window:?}");
+
+        let p2p_local_keypair = if let Some(keypair) = self.keypair {
+            keypair
+        } else {
+            self.store.get_identity().await?
+        };
 
         Ok(NodeConfig {
             blockstore: self.blockstore,
             store: self.store,
             network_id: network.id().to_owned(),
-            p2p_local_keypair: self.keypair.unwrap_or_else(Keypair::generate_ed25519),
+            p2p_local_keypair,
             p2p_bootnodes: bootnodes,
             p2p_listen_on: self.listen,
             sync_batch_size: self.sync_batch_size.unwrap_or(512),

@@ -8,15 +8,15 @@ use async_trait::async_trait;
 use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
 use cid::Cid;
+use libp2p::identity::Keypair;
 use redb::{
-    CommitError, Database, ReadTransaction, ReadableTable, StorageError, Table, TableDefinition,
-    TableError, TransactionError, WriteTransaction,
+    CommitError, Database, ReadTransaction, ReadableTable, ReadableTableMetadata, StorageError,
+    Table, TableDefinition, TableError, TransactionError, WriteTransaction,
 };
 use tendermint_proto::Protobuf;
 use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
-use tracing::warn;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use crate::block_ranges::BlockRanges;
 use crate::store::utils::VerifiedExtendedHeaders;
@@ -35,6 +35,8 @@ const SCHEMA_VERSION_TABLE: TableDefinition<'static, (), u64> =
     TableDefinition::new("STORE.SCHEMA_VERSION");
 const RANGES_TABLE: TableDefinition<'static, &str, Vec<(u64, u64)>> =
     TableDefinition::new("STORE.RANGES");
+const LIBP2P_IDENTITY_TABLE: TableDefinition<'static, (), &[u8]> =
+    TableDefinition::new("LIBP2P.IDENTITY");
 
 const SAMPLED_RANGES_KEY: &str = "KEY.SAMPLED_RANGES";
 const HEADER_RANGES_KEY: &str = "KEY.HEADER_RANGES";
@@ -122,6 +124,16 @@ impl RedbStore {
                 let _headers_table = tx.open_table(HEADERS_TABLE)?;
                 let _ranges_table = tx.open_table(RANGES_TABLE)?;
                 let _sampling_table = tx.open_table(SAMPLING_METADATA_TABLE)?;
+                let mut identity_table = tx.open_table(LIBP2P_IDENTITY_TABLE)?;
+
+                if identity_table.is_empty()? {
+                    let keypair = Keypair::generate_ed25519();
+
+                    let peer_id = keypair.public().to_peer_id();
+                    let keypair_bytes = keypair.to_protobuf_encoding()?;
+                    debug!("Initialised new identity: {peer_id}");
+                    identity_table.insert((), &*keypair_bytes)?;
+                }
 
                 Ok(())
             })
@@ -486,6 +498,19 @@ impl RedbStore {
         })
         .await
     }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        self.read_tx(move |tx| {
+            let identity_table = tx.open_table(LIBP2P_IDENTITY_TABLE)?;
+
+            let (_, key_bytes) = identity_table
+                .first()?
+                .expect("identity_table should be non empty");
+
+            Ok(Keypair::from_protobuf_encoding(key_bytes.value())?)
+        })
+        .await
+    }
 }
 
 #[async_trait]
@@ -583,6 +608,10 @@ impl Store for RedbStore {
 
     async fn remove_height(&self, height: u64) -> Result<()> {
         self.remove_height(height).await
+    }
+
+    async fn get_identity(&self) -> Result<Keypair> {
+        self.get_identity().await
     }
 
     async fn close(mut self) -> Result<()> {
@@ -907,6 +936,21 @@ pub mod tests {
 
         assert_eq!(store0.head_height().await.unwrap(), 15);
         assert_eq!(store1.head_height().await.unwrap(), 16);
+    }
+
+    #[tokio::test]
+    async fn test_identity_persistance() {
+        let db_dir = TempDir::with_prefix("lumina.store.test").unwrap();
+        let db = db_dir.path().join("db");
+
+        let original_store = create_store(Some(&db)).await;
+        let original_identity = original_store.get_identity().await.unwrap().public();
+        drop(original_store);
+
+        let reopened_store = create_store(Some(&db)).await;
+        let reopened_identity = reopened_store.get_identity().await.unwrap().public();
+
+        assert_eq!(original_identity, reopened_identity);
     }
 
     #[tokio::test]
