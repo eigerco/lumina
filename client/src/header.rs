@@ -4,6 +4,9 @@ use std::sync::Arc;
 use async_stream::try_stream;
 use celestia_rpc::{Error as CelestiaRpcError, HeaderClient};
 use futures_util::{Stream, StreamExt};
+use jsonrpsee_core::ClientError;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::client::ClientInner;
 use crate::types::hash::Hash;
@@ -149,14 +152,93 @@ impl HeaderApi {
     pub async fn subscribe(
         &self,
     ) -> Pin<Box<dyn Stream<Item = Result<ExtendedHeader>> + Send + 'static>> {
-        let inner = self.inner.clone();
+        let (tx, rx) = mpsc::channel(128);
+        let rpc_manager = self.inner.rpc_manager.clone();
 
-        try_stream! {
+        // Spawn a separate task to manage the subscription's lifecycle.
+        // This isolates the connection and allows it to transparently reconnect in the background without disrupting the consumer of the stream.
+        tokio::spawn(async move {
+            'reconnect: loop {
+                // Create a new, dedicated client for each connection attempt.
+                let client = {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    let client_result = celestia_rpc::Client::new(
+                        &rpc_manager.rpc_url,
+                        rpc_manager.rpc_auth_token.as_deref(),
+                    )
+                    .await;
+                    #[cfg(target_arch = "wasm32")]
+                    let client_result = celestia_rpc::Client::new(&rpc_manager.rpc_url).await;
+
+                    match client_result {
+                        Ok(c) => c,
+                        Err(e) => {
+                            log::error!(
+                                "Failed to create subscription client: {e}. Retrying in 5s..."
+                            );
+                            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                            continue 'reconnect;
+                        }
+                    }
+                };
+
+                let mut subscription = match client.header_subscribe().await {
+                    Ok(sub) => {
+                        log::info!("Successfully subscribed to header stream.");
+                        sub
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to subscribe to header stream: {e}. Retrying...");
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        continue 'reconnect;
+                    }
+                };
+
+                loop {
+                    if let celestia_rpc::Client::Ws(ws) = &client {
+                        if !ws.is_connected() {
+                            log::warn!("Subscription client disconnected. Reconnecting...");
+                            continue 'reconnect;
+                        }
+                    }
+
+                    match subscription.next().await {
+                        Some(Ok(header)) => {
+                            // If 'send' fails, the receiver has been dropped, so we can gracefully terminate the background task.
+                            if tx.send(Ok(header)).await.is_err() {
+                                log::info!("Subscription receiver dropped, ending task.");
+                                return;
+                            }
+                        }
+                        Some(Err(e)) => {
+                            log::warn!("Error on header subscription stream: {e}. Re-subscribing.");
+                            let err =
+                                Error::from(CelestiaRpcError::from(ClientError::ParseError(e)));
+                            if tx.send(Err(err)).await.is_err() {
+                                return; // Receiver dropped.
+                            }
+                            continue 'reconnect;
+                        }
+                        None => {
+                            // A 'None' from the stream means the server closed the connection.
+                            log::warn!(
+                                "Header subscription stream closed by server. Re-subscribing."
+                            );
+                            continue 'reconnect;
+                        }
+                    }
+                }
+            }
+        });
+
+        // The stream returned to the user is fed by the background task. It also applies adjacent header verification.
+        let receiver_stream = ReceiverStream::new(rx);
+
+        let validated_stream = try_stream! {
             let mut prev_header: Option<ExtendedHeader> = None;
-            let mut subscription = inner.rpc.header_subscribe().await?;
 
-            while let Some(item) = subscription.next().await {
-                let header = item?;
+            for await item_result in receiver_stream {
+                let header = item_result?;
                 header.validate()?;
 
                 if let Some(ref prev_header) = prev_header {
@@ -166,8 +248,9 @@ impl HeaderApi {
                 prev_header = Some(header.clone());
                 yield header;
             }
-        }
-        .boxed()
+        };
+
+        validated_stream.boxed()
     }
 }
 
