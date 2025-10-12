@@ -195,6 +195,7 @@ impl HeaderApi {
                 };
 
                 loop {
+                    #[cfg(not(target_arch = "wasm32"))]
                     if let celestia_rpc::Client::Ws(ws) = &client {
                         if !ws.is_connected() {
                             log::warn!("Subscription client disconnected. Reconnecting...");

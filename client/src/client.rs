@@ -127,6 +127,7 @@ impl ClientInner {
 
     /// Creates a `ClientInner` for tests, bypassing the `ClientBuilder`.
     #[cfg(test)]
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn new_for_test(
         rpc_manager: Arc<RpcConnectionManager>,
         chain_id: tendermint::chain::Id,

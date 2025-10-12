@@ -80,14 +80,17 @@ impl FraudApi {
                 };
 
                 loop {
-                    let is_connected = match &client {
-                        celestia_rpc::Client::Ws(ws) => ws.is_connected(),
-                        celestia_rpc::Client::Http(_) => true,
-                    };
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let is_connected = match &client {
+                            celestia_rpc::Client::Ws(ws) => ws.is_connected(),
+                            celestia_rpc::Client::Http(_) => true,
+                        };
 
-                    if !is_connected {
-                        log::warn!("Fraud subscription client disconnected. Reconnecting...");
-                        continue 'reconnect;
+                        if !is_connected {
+                            log::warn!("Fraud subscription client disconnected. Reconnecting...");
+                            continue 'reconnect;
+                        }
                     }
 
                     match subscription.next().await {

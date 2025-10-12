@@ -63,6 +63,7 @@ impl RpcConnectionManager {
                 }
             }
 
+            #[cfg(not(target_arch = "wasm32"))]
             let is_connected = {
                 let guard = self.client_lock.read().await;
                 guard.as_ref().is_some_and(|client| match client {
@@ -70,6 +71,9 @@ impl RpcConnectionManager {
                     RpcClient::Http(_) => true, // HTTP clients are stateless.
                 })
             };
+
+            #[cfg(target_arch = "wasm32")]
+            let is_connected = { self.client_lock.read().await.is_some() };
 
             if !is_connected {
                 log::warn!("WebSocket connection lost. Attempting to reconnect...");
@@ -115,13 +119,13 @@ impl RpcConnectionManager {
     }
 
     // Connects to the RPC endpoint with an exponential backoff retry strategy.
-    async fn try_connect_with_retry(url: &str, token: Option<&str>) -> Result<RpcClient> {
+    async fn try_connect_with_retry(url: &str, _token: Option<&str>) -> Result<RpcClient> {
         let retry_strategy = ExponentialBackoff::from_millis(100).map(jitter).take(5);
 
         let action = || async {
             log::debug!("Attempting to connect to RPC endpoint: {}", url);
             #[cfg(not(target_arch = "wasm32"))]
-            let client = RpcClient::new(url, token).await.map_err(|e| {
+            let client = RpcClient::new(url, _token).await.map_err(|e| {
                 log::warn!("Connection attempt failed: {}", e);
                 e
             })?;
