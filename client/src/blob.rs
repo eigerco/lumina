@@ -1,9 +1,11 @@
 use std::pin::Pin;
 use std::sync::Arc;
 
-use async_stream::try_stream;
 use celestia_rpc::{BlobClient, Error as CelestiaRpcError};
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
+use jsonrpsee_core::ClientError;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::api::blob::BlobsAtHeight;
 use crate::client::ClientInner;
@@ -152,6 +154,9 @@ impl BlobApi {
     /// Subscribe to blobs from the given namespace, returning
     /// them as they are being published.
     ///
+    /// This method is resilient to network interruptions and will automatically
+    /// attempt to reconnect and re-subscribe if the connection is lost.
+    ///
     /// # Example
     ///
     /// ```no_run
@@ -177,18 +182,91 @@ impl BlobApi {
         &self,
         namespace: Namespace,
     ) -> Pin<Box<dyn Stream<Item = Result<BlobsAtHeight>> + Send + 'static>> {
-        let inner = self.inner.clone();
+        let (tx, rx) = mpsc::channel(128);
+        let rpc_manager = self.inner.rpc_manager.clone();
 
-        try_stream! {
-            let mut subscription = inner.rpc.blob_subscribe(namespace).await?;
+        // Spawn a separate task to manage the subscription's lifecycle. This isolates
+        // the connection and allows it to transparently reconnect in the background.
+        tokio::spawn(async move {
+            'reconnect: loop {
+                let client = {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    let client_result = celestia_rpc::Client::new(
+                        &rpc_manager.rpc_url,
+                        rpc_manager.rpc_auth_token.as_deref(),
+                    )
+                    .await;
+                    #[cfg(target_arch = "wasm32")]
+                    let client_result = celestia_rpc::Client::new(&rpc_manager.rpc_url).await;
 
-            while let Some(item) = subscription.next().await {
-                let blobs = item?;
-                // TODO: Should we validate blobs?
-                yield blobs;
+                    match client_result {
+                        Ok(c) => c,
+                        Err(e) => {
+                            log::error!(
+                                "Failed to create blob subscription client: {e}. Retrying..."
+                            );
+                            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                            continue 'reconnect;
+                        }
+                    }
+                };
+
+                let mut subscription = match client.blob_subscribe(namespace).await {
+                    Ok(sub) => {
+                        log::info!(
+                            "Successfully subscribed to blob stream for namespace {namespace:?}."
+                        );
+                        sub
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to subscribe to blob stream: {e}. Retrying...");
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        continue 'reconnect;
+                    }
+                };
+
+                loop {
+                    let is_connected = match &client {
+                        celestia_rpc::Client::Ws(ws) => ws.is_connected(),
+                        celestia_rpc::Client::Http(_) => true,
+                    };
+
+                    if !is_connected {
+                        log::warn!("Blob subscription client disconnected. Reconnecting...");
+                        continue 'reconnect;
+                    }
+
+                    match subscription.next().await {
+                        Some(Ok(blobs)) => {
+                            // If `send` fails, the stream's receiver has been dropped,
+                            // so we can gracefully terminate this task.
+                            if tx.send(Ok(blobs)).await.is_err() {
+                                log::info!("Blob subscription receiver dropped, ending task.");
+                                return;
+                            }
+                        }
+                        Some(Err(e)) => {
+                            let err =
+                                Error::from(CelestiaRpcError::from(ClientError::ParseError(e)));
+                            if tx.send(Err(err)).await.is_err() {
+                                return;
+                            }
+
+                            continue 'reconnect;
+                        }
+                        None => {
+                            log::warn!(
+                                "Blob subscription stream closed by server. Re-subscribing."
+                            );
+                            continue 'reconnect;
+                        }
+                    }
+                }
             }
-        }
-        .boxed()
+        });
+
+        let receiver_stream = ReceiverStream::new(rx);
+        Box::pin(receiver_stream)
     }
 }
 
@@ -197,6 +275,7 @@ mod tests {
     use super::*;
     use crate::test_utils::{ensure_serializable_deserializable, new_client};
     use celestia_types::AppVersion;
+    use futures_util::StreamExt;
     use lumina_utils::test_utils::async_test;
 
     #[async_test]
