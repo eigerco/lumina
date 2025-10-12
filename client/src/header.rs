@@ -255,37 +255,95 @@ impl HeaderApi {
 }
 
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
-
+    use crate::client::ClientInner;
+    use crate::connection_manager::RpcConnectionManager;
     use crate::test_utils::ensure_serializable_deserializable;
+    use futures_util::StreamExt;
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio::time::timeout;
 
-    #[allow(dead_code)]
-    #[allow(unused_variables)]
-    #[allow(unreachable_code)]
-    #[allow(clippy::diverging_sub_expression)]
-    async fn enforce_serde_bounds() {
-        // intentionally no-run, compile only test
-        let api = HeaderApi::new(unimplemented!());
+    const TEST_WS_URL: &str = "ws://localhost:26658";
 
-        let _: () = api.sync_wait().await.unwrap();
+    /// Creates a `HeaderApi` instance connected to a live dev node for integration tests.
+    async fn setup_test_api() -> HeaderApi {
+        let rpc_manager = RpcConnectionManager::new(TEST_WS_URL, None)
+            .await
+            .expect("Failed to create RpcConnectionManager. Is a local dev node running?");
 
-        ensure_serializable_deserializable(api.head().await.unwrap());
+        let chain_id = "private".parse().unwrap();
+        let client_inner = Arc::new(ClientInner::new_for_test(rpc_manager, chain_id));
+        HeaderApi::new(client_inner)
+    }
 
-        ensure_serializable_deserializable(api.network_head().await.unwrap());
+    /// A smoke test for one-shot RPC calls.
+    #[tokio::test]
+    #[ignore = "requires a running Celestia dev node"]
+    async fn get_network_head_from_node() {
+        let api = setup_test_api().await;
 
-        let hash = ensure_serializable_deserializable(unimplemented!());
-        ensure_serializable_deserializable(api.get_by_hash(hash).await.unwrap());
+        let head = api
+            .network_head()
+            .await
+            .expect("Failed to get network head from a running node.");
 
-        ensure_serializable_deserializable(api.get_by_height(0).await.unwrap());
+        assert!(head.height().value() > 0, "Node should have a height > 0");
+    }
 
-        let header = ensure_serializable_deserializable(unimplemented!());
-        ensure_serializable_deserializable(api.get_range_by_height(&header, 0).await.unwrap());
+    /// Verifies that the subscription stream can receive a new header.
+    #[tokio::test]
+    #[ignore = "requires a running Celestia dev node"]
+    async fn subscribe_to_headers_from_node() {
+        let api = setup_test_api().await;
+        let mut sub_stream = api.subscribe().await;
 
-        ensure_serializable_deserializable(api.wait_for_height(0).await.unwrap());
+        // A 10-second timeout is ample for a local dev node to produce a block.
+        match timeout(Duration::from_secs(10), sub_stream.next()).await {
+            Ok(Some(Ok(header))) => {
+                assert!(header.height().value() > 0);
+            }
+            Ok(Some(Err(e))) => panic!("Subscription stream returned an error: {:?}", e),
+            Ok(None) => panic!("Subscription stream closed unexpectedly."),
+            Err(_) => panic!("Timed out waiting for a new header from the subscription stream."),
+        }
+    }
 
-        ensure_serializable_deserializable(api.sync_state().await.unwrap());
+    /// A compile-only test to ensure API return types remain serializable.
+    #[test]
+    #[ignore = "compile-only test for serde bounds"]
+    fn compile_only_serde_bounds_check() {
+        #[allow(
+            dead_code,
+            unused_variables,
+            unreachable_code,
+            clippy::diverging_sub_expression
+        )]
+        async fn enforce_serde_bounds() {
+            let api = HeaderApi::new(unimplemented!());
 
-        ensure_serializable_deserializable(api.subscribe().await.next().await.unwrap().unwrap());
+            let _: () = api.sync_wait().await.unwrap();
+
+            ensure_serializable_deserializable(api.head().await.unwrap());
+
+            ensure_serializable_deserializable(api.network_head().await.unwrap());
+
+            let hash = ensure_serializable_deserializable(unimplemented!());
+            ensure_serializable_deserializable(api.get_by_hash(hash).await.unwrap());
+
+            ensure_serializable_deserializable(api.get_by_height(0).await.unwrap());
+
+            let header = ensure_serializable_deserializable(unimplemented!());
+            ensure_serializable_deserializable(api.get_range_by_height(&header, 0).await.unwrap());
+
+            ensure_serializable_deserializable(api.wait_for_height(0).await.unwrap());
+
+            ensure_serializable_deserializable(api.sync_state().await.unwrap());
+            ensure_serializable_deserializable(
+                api.subscribe().await.next().await.unwrap().unwrap(),
+            );
+        }
     }
 }

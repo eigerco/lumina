@@ -65,7 +65,7 @@ impl RpcConnectionManager {
 
             let is_connected = {
                 let guard = self.client_lock.read().await;
-                guard.as_ref().map_or(false, |client| match client {
+                guard.as_ref().is_some_and(|client| match client {
                     RpcClient::Ws(ws_client) => ws_client.is_connected(),
                     RpcClient::Http(_) => true, // HTTP clients are stateless.
                 })
