@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use blockstore::cond_send::CondSend;
 use celestia_grpc::{GrpcClient, GrpcClientBuilder};
-use celestia_rpc::{Client as RpcClient, HeaderClient};
+use celestia_rpc::HeaderClient;
 use http::Request;
 use tonic::body::Body as TonicBody;
 use tonic::codegen::{Bytes, Service};
@@ -12,6 +12,7 @@ use tonic::metadata::MetadataMap;
 
 use crate::blob::BlobApi;
 use crate::blobstream::BlobstreamApi;
+use crate::connection_manager::{RpcConnectionManager, ShutdownHandle};
 use crate::fraud::FraudApi;
 use crate::header::HeaderApi;
 use crate::share::ShareApi;
@@ -73,10 +74,13 @@ pub struct Client {
     share: ShareApi,
     fraud: FraudApi,
     blobstream: BlobstreamApi,
+    /// A handle that, when dropped, signals the `RpcConnectionManager` task to shut down.
+    /// This leverages RAII for graceful, automatic cleanup.
+    _shutdown_guard: Arc<ShutdownHandle>,
 }
 
 pub(crate) struct ClientInner {
-    pub(crate) rpc: RpcClient,
+    pub(crate) rpc_manager: Arc<RpcConnectionManager>,
     grpc: Option<GrpcClient>,
     pubkey: Option<VerifyingKey>,
     chain_id: tendermint::chain::Id,
@@ -105,9 +109,34 @@ impl ClientInner {
     }
 
     pub(crate) async fn get_header_validated(&self, height: u64) -> Result<ExtendedHeader> {
-        let header = self.rpc.header_get_by_height(height).await?;
+        let header_result = loop {
+            let guard = self.rpc_manager.client_lock.read().await;
+
+            if let Some(client) = guard.as_ref() {
+                break client.header_get_by_height(height).await;
+            }
+
+            drop(guard);
+            self.rpc_manager.notify_new_client.notified().await;
+        };
+
+        let header = header_result.map_err(Error::from)?;
         header.validate()?;
         Ok(header)
+    }
+
+    /// Creates a `ClientInner` for tests, bypassing the `ClientBuilder`.
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        rpc_manager: Arc<RpcConnectionManager>,
+        chain_id: tendermint::chain::Id,
+    ) -> Self {
+        Self {
+            rpc_manager,
+            grpc: None,
+            pubkey: None,
+            chain_id,
+        }
     }
 }
 
@@ -285,13 +314,22 @@ impl ClientBuilder {
             (None, None)
         };
 
-        #[cfg(not(target_arch = "wasm32"))]
-        let rpc = RpcClient::new(rpc_url, rpc_auth_token).await?;
+        let rpc_manager = RpcConnectionManager::new(rpc_url, rpc_auth_token).await?;
 
-        #[cfg(target_arch = "wasm32")]
-        let rpc = RpcClient::new(rpc_url).await?;
+        let shutdown_handle = rpc_manager.shutdown_handle();
 
-        let head = rpc.header_network_head().await?;
+        let head_result = loop {
+            let guard = rpc_manager.client_lock.read().await;
+
+            if let Some(client) = guard.as_ref() {
+                break client.header_network_head().await;
+            }
+
+            drop(guard);
+            rpc_manager.notify_new_client.notified().await;
+        };
+
+        let head = head_result.map_err(Error::from)?;
         head.validate()?;
 
         if let Some(grpc) = &grpc {
@@ -301,7 +339,7 @@ impl ClientBuilder {
         }
 
         let inner = Arc::new(ClientInner {
-            rpc,
+            rpc_manager,
             grpc,
             pubkey,
             chain_id: head.chain_id().to_owned(),
@@ -315,6 +353,7 @@ impl ClientBuilder {
             fraud: FraudApi::new(inner.clone()),
             blobstream: BlobstreamApi::new(inner.clone()),
             state: StateApi::new(inner.clone()),
+            _shutdown_guard: Arc::new(shutdown_handle),
         })
     }
 }
@@ -328,8 +367,8 @@ impl Debug for Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use lumina_utils::test_utils::async_test;
+    use std::time::Duration;
 
     use crate::test_utils::{TEST_PRIV_KEY, TEST_RPC_URL};
 
@@ -342,5 +381,18 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(e, Error::GrpcEndpointNotSet))
+    }
+
+    #[tokio::test]
+    async fn client_drop_shuts_down_manager() {
+        let client = Client::builder()
+            .rpc_url(TEST_RPC_URL)
+            .build()
+            .await
+            .expect("Failed to build client");
+
+        drop(client);
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }

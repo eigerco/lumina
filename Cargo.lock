@@ -727,6 +727,7 @@ dependencies = [
  "jsonrpsee-core",
  "jsonrpsee-types",
  "k256",
+ "log",
  "lumina-utils",
  "rand 0.8.5",
  "serde",
@@ -734,6 +735,8 @@ dependencies = [
  "tendermint",
  "thiserror 2.0.16",
  "tokio",
+ "tokio-retry",
+ "tokio-stream",
  "tonic",
  "tonic-web-wasm-client",
  "wasm-bindgen-test",
@@ -5471,6 +5474,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "tokio-retry"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f57eb36ecbe0fc510036adff84824dd3c24bb781e21bfa67b69d556aa85214f"
+dependencies = [
+ "pin-project",
+ "rand 0.8.5",
+ "tokio",
 ]
 
 [[package]]

@@ -6,6 +6,7 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 mod blob;
 mod blobstream;
 mod client;
+mod connection_manager;
 mod fraud;
 mod header;
 mod share;
