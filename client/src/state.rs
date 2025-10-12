@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use celestia_rpc::{HeaderClient, StateClient};
+use celestia_rpc::{Error as CelestiaRpcError, HeaderClient, StateClient};
 
 use crate::client::ClientInner;
 use crate::proto::cosmos::bank::v1beta1::MsgSend;
@@ -15,6 +15,8 @@ use crate::types::state::{
 use crate::types::Blob;
 use crate::utils::height_i64;
 use crate::Error;
+
+use crate::exec_rpc;
 
 /// An async grpc call with [`crate::Error`]
 pub type AsyncGrpcCall<Response> = celestia_grpc::grpc::AsyncGrpcCall<Response, crate::Error>;
@@ -72,29 +74,33 @@ impl StateApi {
     /// This is the only method of [`StateApi`] that fallbacks to RPC endpoint
     /// when gRPC endpoint wasn't set.
     pub fn balance_for_address(&self, address: &AccAddress) -> AsyncGrpcCall<u64> {
-        let inner = self.inner.clone();
-        let address = Address::AccAddress(address.to_owned());
+        let self_clone = StateApi::new(self.inner.clone());
+        let address_clone = Address::AccAddress(address.to_owned());
 
         AsyncGrpcCall::new(move |context| async move {
-            let grpc = match inner.grpc() {
-                Ok(grpc) => grpc,
-                Err(_) => {
-                    return Ok(inner
-                        .rpc
-                        .state_balance_for_address(&address)
-                        .await?
-                        .amount());
-                }
-            };
+            if let Ok(grpc) = self_clone.inner.grpc() {
+                let head = exec_rpc!(self_clone, |rpc| async {
+                    rpc.header_network_head()
+                        .await
+                        .map_err(CelestiaRpcError::from)
+                })?;
+                head.validate()?;
 
-            let head = inner.rpc.header_network_head().await?;
-            head.validate()?;
+                return Ok(grpc
+                    .get_verified_balance(&address_clone, &head)
+                    .context(&context)
+                    .await?
+                    .amount());
+            }
 
-            Ok(grpc
-                .get_verified_balance(&address, &head)
-                .context(&context)
-                .await?
-                .amount())
+            // Fallback to RPC, This ensures the client is resilient even when no gRPC endpoint is configured.
+            let balance = exec_rpc!(self_clone, |rpc| async {
+                rpc.state_balance_for_address(&address_clone)
+                    .await
+                    .map_err(CelestiaRpcError::from)
+            })?;
+
+            Ok(balance.amount())
         })
     }
 

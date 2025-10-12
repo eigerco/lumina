@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use celestia_rpc::ShareClient;
+use celestia_rpc::{Error as CelestiaRpcError, ShareClient};
 
 use crate::api::share::{GetRangeResponse, GetRowResponse, SampleCoordinates};
 use crate::client::ClientInner;
@@ -8,7 +8,9 @@ use crate::types::nmt::Namespace;
 use crate::types::row_namespace_data::NamespaceData;
 use crate::types::sample::Sample;
 use crate::types::{ExtendedDataSquare, Share};
-use crate::Result;
+use crate::{Error, Result};
+
+use crate::exec_rpc;
 
 /// Share API for quering bridge nodes.
 pub struct ShareApi {
@@ -25,14 +27,22 @@ impl ShareApi {
     ///
     /// Returns `Ok(())` if shares are available.
     pub async fn shares_available(&self, height: u64) -> Result<()> {
-        Ok(self.inner.rpc.share_shares_available(height).await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.share_shares_available(height)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 
     /// Retrieves a specific share from the [`ExtendedDataSquare`] at the given
     /// height  using its row and column coordinates.
     pub async fn get(&self, height: u64, row: u64, column: u64) -> Result<Share> {
         let header = self.inner.get_header_validated(height).await?;
-        Ok(self.inner.rpc.share_get_share(&header, row, column).await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.share_get_share(&header, row, column)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 
     /// Retrieves multiple shares from the [`ExtendedDataSquare`] at the given
@@ -41,28 +51,37 @@ impl ShareApi {
     /// `coordinates` is a list of `(row, column)`.
     pub async fn get_samples<I, C>(&self, height: u64, coordinates: I) -> Result<Vec<Sample>>
     where
-        I: IntoIterator<Item = C>,
+        // `Clone` is required to retry the RPC call in case of network failure.
+        I: IntoIterator<Item = C> + Clone,
         C: Into<SampleCoordinates>,
     {
         let header = self.inner.get_header_validated(height).await?;
-        Ok(self
-            .inner
-            .rpc
-            .share_get_samples(&header, coordinates)
-            .await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.share_get_samples(&header, coordinates.clone())
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 
     /// Retrieves the complete [`ExtendedDataSquare`] for the specified height.
     pub async fn get_eds(&self, height: u64) -> Result<ExtendedDataSquare> {
         let header = self.inner.get_header_validated(height).await?;
-        Ok(self.inner.rpc.share_get_eds(&header).await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.share_get_eds(&header)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 
     /// Retrieves all shares from a specific row of the [`ExtendedDataSquare`]
     /// at the given height.
     pub async fn get_row(&self, height: u64, row: u64) -> Result<GetRowResponse> {
         let header = self.inner.get_header_validated(height).await?;
-        Ok(self.inner.rpc.share_get_row(&header, row).await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.share_get_row(&header, row)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 
     /// Retrieves all shares that belong to the specified namespace within the
@@ -77,11 +96,11 @@ impl ShareApi {
     ) -> Result<NamespaceData> {
         let header = self.inner.get_header_validated(height).await?;
 
-        Ok(self
-            .inner
-            .rpc
-            .share_get_namespace_data(&header, namespace)
-            .await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.share_get_namespace_data(&header, namespace)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 
     /// Retrieves a list of shares and their corresponding proof.
@@ -89,7 +108,11 @@ impl ShareApi {
     /// The start and end index ignores parity shares and corresponds to ODS.
     pub async fn get_range(&self, height: u64, start: u64, end: u64) -> Result<GetRangeResponse> {
         let header = self.inner.get_header_validated(height).await?;
-        Ok(self.inner.rpc.share_get_range(&header, start, end).await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.share_get_range(&header, start, end)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 }
 

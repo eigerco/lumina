@@ -2,7 +2,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use async_stream::try_stream;
-use celestia_rpc::BlobClient;
+use celestia_rpc::{BlobClient, Error as CelestiaRpcError};
 use futures_util::{Stream, StreamExt};
 
 use crate::api::blob::BlobsAtHeight;
@@ -11,7 +11,9 @@ use crate::state::AsyncGrpcCall;
 use crate::tx::{TxConfig, TxInfo};
 use crate::types::nmt::{Namespace, NamespaceProof};
 use crate::types::{Blob, Commitment};
-use crate::Result;
+use crate::{Error, Result};
+
+use crate::exec_rpc;
 
 /// Blob API for quering bridge nodes.
 pub struct BlobApi {
@@ -74,11 +76,11 @@ impl BlobApi {
         namespace: Namespace,
         commitment: Commitment,
     ) -> Result<Blob> {
-        let blob = self
-            .inner
-            .rpc
-            .blob_get(height, namespace, commitment)
-            .await?;
+        let blob = exec_rpc!(self, |rpc| async {
+            rpc.blob_get(height, namespace, commitment)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })?;
         let app_version = self
             .inner
             .get_header_validated(height)
@@ -96,7 +98,12 @@ impl BlobApi {
         height: u64,
         namespaces: &[Namespace],
     ) -> Result<Option<Vec<Blob>>> {
-        let Some(blobs) = self.inner.rpc.blob_get_all(height, namespaces).await? else {
+        let Some(blobs) = exec_rpc!(self, |rpc| async {
+            rpc.blob_get_all(height, namespaces)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })?
+        else {
             return Ok(None);
         };
 
@@ -120,11 +127,11 @@ impl BlobApi {
         namespace: Namespace,
         commitment: Commitment,
     ) -> Result<Vec<NamespaceProof>> {
-        Ok(self
-            .inner
-            .rpc
-            .blob_get_proof(height, namespace, commitment)
-            .await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.blob_get_proof(height, namespace, commitment)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 
     /// Checks whether a blob's given commitment is included in the namespace at the given height.
@@ -135,11 +142,11 @@ impl BlobApi {
         proof: &NamespaceProof,
         commitment: Commitment,
     ) -> Result<bool> {
-        Ok(self
-            .inner
-            .rpc
-            .blob_included(height, namespace, proof, commitment)
-            .await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.blob_included(height, namespace, proof, commitment)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 
     /// Subscribe to blobs from the given namespace, returning

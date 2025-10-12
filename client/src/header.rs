@@ -2,13 +2,15 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use async_stream::try_stream;
-use celestia_rpc::HeaderClient;
+use celestia_rpc::{Error as CelestiaRpcError, HeaderClient};
 use futures_util::{Stream, StreamExt};
 
 use crate::client::ClientInner;
 use crate::types::hash::Hash;
 use crate::types::{ExtendedHeader, SyncState};
-use crate::Result;
+use crate::{Error, Result};
+
+use crate::exec_rpc;
 
 /// Header API for quering bridge nodes.
 pub struct HeaderApi {
@@ -22,21 +24,33 @@ impl HeaderApi {
 
     /// Returns the latest header synchronized by the node.
     pub async fn head(&self) -> Result<ExtendedHeader> {
-        let header = self.inner.rpc.header_local_head().await?;
+        let header = exec_rpc!(self, |rpc| async {
+            rpc.header_local_head()
+                .await
+                .map_err(CelestiaRpcError::from)
+        })?;
         header.validate()?;
         Ok(header)
     }
 
     /// Returns the latest header announced in the network.
     pub async fn network_head(&self) -> Result<ExtendedHeader> {
-        let header = self.inner.rpc.header_network_head().await?;
+        let header = exec_rpc!(self, |rpc| async {
+            rpc.header_network_head()
+                .await
+                .map_err(CelestiaRpcError::from)
+        })?;
         header.validate()?;
         Ok(header)
     }
 
     /// Returns the header of the given hash from the node's header store.
     pub async fn get_by_hash(&self, hash: Hash) -> Result<ExtendedHeader> {
-        let header = self.inner.rpc.header_get_by_hash(hash).await?;
+        let header = exec_rpc!(self, |rpc| async {
+            rpc.header_get_by_hash(hash)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })?;
         header.validate()?;
         Ok(header)
     }
@@ -44,7 +58,11 @@ impl HeaderApi {
     /// Returns the header at the given height, if it is
     /// currently available.
     pub async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
-        let header = self.inner.rpc.header_get_by_height(height).await?;
+        let header = exec_rpc!(self, |rpc| async {
+            rpc.header_get_by_height(height)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })?;
         header.validate()?;
         Ok(header)
     }
@@ -60,7 +78,11 @@ impl HeaderApi {
     ) -> Result<Vec<ExtendedHeader>> {
         from.validate()?;
 
-        let headers = self.inner.rpc.header_get_range_by_height(from, to).await?;
+        let headers = exec_rpc!(self, |rpc| async {
+            rpc.header_get_range_by_height(from, to)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })?;
 
         for header in &headers {
             header.validate()?;
@@ -73,19 +95,31 @@ impl HeaderApi {
 
     /// Blocks until the header at the given height has been synced by the node.
     pub async fn wait_for_height(&self, height: u64) -> Result<ExtendedHeader> {
-        let header = self.inner.rpc.header_wait_for_height(height).await?;
+        let header = exec_rpc!(self, |rpc| async {
+            rpc.header_wait_for_height(height)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })?;
         header.validate()?;
         Ok(header)
     }
 
     /// Returns the current state of the node's Syncer.
     pub async fn sync_state(&self) -> Result<SyncState> {
-        Ok(self.inner.rpc.header_sync_state().await?)
+        let state = exec_rpc!(self, |rpc| async {
+            rpc.header_sync_state()
+                .await
+                .map_err(CelestiaRpcError::from)
+        })?;
+        Ok(state)
     }
 
     /// Blocks until the node's Syncer is synced to network head.
     pub async fn sync_wait(&self) -> Result<()> {
-        Ok(self.inner.rpc.header_sync_wait().await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.header_sync_wait().await.map_err(CelestiaRpcError::from)
+        })?;
+        Ok(())
     }
 
     /// Subscribe to recent headers from the network.

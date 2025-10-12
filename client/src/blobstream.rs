@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
-use celestia_rpc::blobstream::BlobstreamClient;
+use celestia_rpc::{blobstream::BlobstreamClient, Error as CelestiaRpcError};
 
 use crate::client::ClientInner;
 use crate::types::hash::Hash;
 use crate::types::MerkleProof;
-use crate::Result;
+use crate::{Error, Result};
 
-/// Blobstream API for quering bridge nodes.
+use crate::exec_rpc;
+
+/// Blobstream API for querying bridge nodes.
 pub struct BlobstreamApi {
     inner: Arc<ClientInner>,
 }
@@ -22,11 +24,11 @@ impl BlobstreamApi {
     ///
     /// The range is end exclusive.
     pub async fn get_data_root_tuple_root(&self, start: u64, end: u64) -> Result<Hash> {
-        Ok(self
-            .inner
-            .rpc
-            .blobstream_get_data_root_tuple_root(start, end)
-            .await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.blobstream_get_data_root_tuple_root(start, end)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 
     /// Creates an inclusion proof, for the data root tuple of block height `height`,
@@ -39,11 +41,11 @@ impl BlobstreamApi {
         start: u64,
         end: u64,
     ) -> Result<MerkleProof> {
-        Ok(self
-            .inner
-            .rpc
-            .blobstream_get_data_root_tuple_inclusion_proof(height, start, end)
-            .await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.blobstream_get_data_root_tuple_inclusion_proof(height, start, end)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 }
 

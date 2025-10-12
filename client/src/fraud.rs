@@ -2,12 +2,14 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use async_stream::try_stream;
-use celestia_rpc::FraudClient;
+use celestia_rpc::{Error as CelestiaRpcError, FraudClient};
 use futures_util::{Stream, StreamExt};
 
 use crate::api::fraud::{Proof, ProofType};
 use crate::client::ClientInner;
-use crate::Result;
+use crate::{Error, Result};
+
+use crate::exec_rpc;
 
 /// Fraud API for quering bridge nodes.
 pub struct FraudApi {
@@ -21,7 +23,11 @@ impl FraudApi {
 
     /// Fetches fraud proofs from node by their type.
     pub async fn get(&self, proof_type: ProofType) -> Result<Vec<Proof>> {
-        Ok(self.inner.rpc.fraud_get(proof_type).await?)
+        exec_rpc!(self, |rpc| async {
+            rpc.fraud_get(proof_type)
+                .await
+                .map_err(CelestiaRpcError::from)
+        })
     }
 
     /// Subscribe to fraud proof by its type.
