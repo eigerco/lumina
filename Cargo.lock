@@ -3330,6 +3330,7 @@ dependencies = [
  "tendermint-proto",
  "thiserror 2.0.16",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tracing",
  "uniffi",
@@ -3349,6 +3350,7 @@ dependencies = [
  "celestia-grpc",
  "celestia-proto",
  "celestia-types",
+ "futures",
  "k256",
  "libp2p",
  "lumina-node",
@@ -3357,6 +3359,7 @@ dependencies = [
  "tendermint",
  "thiserror 2.0.16",
  "tokio",
+ "tokio-stream",
  "tonic",
  "uniffi",
 ]

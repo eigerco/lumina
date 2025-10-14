@@ -4,9 +4,10 @@ use std::future::Future;
 
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Math;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_wasm_bindgen::Serializer;
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::time::UtcTime;
@@ -18,9 +19,11 @@ use web_sys::{
     SharedWorker, SharedWorkerGlobalScope, Worker,
 };
 
+use celestia_types::{Blob, ExtendedHeader};
 use lumina_node::network;
 
 use crate::error::{Error, Result};
+use crate::ports::{MessagePortLike, Port};
 
 /// Supported Celestia networks.
 #[wasm_bindgen]
@@ -49,6 +52,70 @@ pub fn setup_logging() {
         .with_filter(LevelFilter::INFO); // TODO: allow customizing the log level
 
     tracing_subscriber::registry().with(fmt_layer).init();
+}
+
+#[wasm_bindgen(getter_with_clone)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubscriptionError {
+    pub height: u64,
+    pub error: String,
+}
+
+#[wasm_bindgen]
+pub struct HeaderStream {
+    channel: mpsc::UnboundedReceiver<Result<ExtendedHeader, SubscriptionError>>,
+    _port: Port,
+}
+
+#[wasm_bindgen]
+impl HeaderStream {
+    pub(crate) fn new(
+        channel: mpsc::UnboundedReceiver<Result<ExtendedHeader, SubscriptionError>>,
+        port: Port,
+    ) -> Self {
+        HeaderStream {
+            channel,
+            _port: port,
+        }
+    }
+
+    pub async fn next(&mut self) -> Result<Option<ExtendedHeader>, SubscriptionError> {
+        self.channel.recv().await.transpose()
+    }
+}
+
+#[wasm_bindgen(getter_with_clone)]
+pub struct BlobAtHeight {
+    pub height: u64,
+    pub blob: Blob,
+}
+
+#[wasm_bindgen]
+pub struct BlobStream {
+    channel: mpsc::UnboundedReceiver<Result<(u64, Blob), SubscriptionError>>,
+    _port: Port,
+}
+
+#[wasm_bindgen]
+impl BlobStream {
+    pub(crate) fn new(
+        channel: mpsc::UnboundedReceiver<Result<(u64, Blob), SubscriptionError>>,
+        port: Port,
+    ) -> Self {
+        BlobStream {
+            channel,
+            _port: port,
+        }
+    }
+
+    pub async fn next(&mut self) -> Result<Option<BlobAtHeight>, SubscriptionError> {
+        Ok(self
+            .channel
+            .recv()
+            .await
+            .transpose()?
+            .map(|(height, blob)| BlobAtHeight { height, blob }))
+    }
 }
 
 impl From<Network> for network::Network {
@@ -107,15 +174,16 @@ impl WorkerSelf for ServiceWorker {
 }
 
 pub(crate) trait MessageEventExt {
-    fn get_port(&self) -> Option<JsValue>;
+    fn get_port(&self) -> Option<MessagePortLike>;
 }
+
 impl MessageEventExt for MessageEvent {
-    fn get_port(&self) -> Option<JsValue> {
+    fn get_port(&self) -> Option<MessagePortLike> {
         let ports = self.ports();
         if ports.is_array() {
             let port = ports.get(0);
             if !port.is_undefined() {
-                return Some(port);
+                return Some(port.into());
             }
         }
         None

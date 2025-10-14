@@ -1,6 +1,12 @@
 use wasm_bindgen::prelude::*;
 
-use crate::commands::{NodeCommand, WorkerResponse};
+use serde::de::DeserializeOwned;
+use serde_wasm_bindgen::from_value;
+use tokio::sync::mpsc;
+use web_sys::{MessageChannel, MessageEvent};
+
+use crate::commands::CheckableResponseExt;
+use crate::commands::{Command, ManagementCommand, NodeCommand, NodeSubscription, WorkerResponse};
 use crate::error::{Context, Error, Result};
 use crate::ports::client::Client;
 use crate::ports::server::Server;
@@ -9,10 +15,12 @@ mod client;
 mod common;
 mod server;
 
-pub(crate) type WorkerServer = Server<NodeCommand, WorkerResponse>;
+pub(crate) use common::{MessagePortLike, PayloadWithContext, Port};
+
+pub(crate) type WorkerServer = Server; //<NodeCommand, WorkerResponse>;
 
 pub struct WorkerClient {
-    client: Client<NodeCommand, WorkerResponse>,
+    client: Client<Command, WorkerResponse>,
 }
 
 impl WorkerClient {
@@ -22,14 +30,15 @@ impl WorkerClient {
         })
     }
 
-    pub(crate) async fn add_connection_to_worker(&self, port: JsValue) -> Result<()> {
-        let response = self.client.send(NodeCommand::InternalPing, Some(port))?;
+    pub(crate) async fn add_connection_to_worker(&self, port: MessagePortLike) -> Result<()> {
+        let command = Command::Meta(ManagementCommand::ConnectPort);
+        let response = self.client.send(command, Some(port))?;
 
         let worker_response = response
             .await
             .context("Response oneshot dropped, should not happen")?;
 
-        if !worker_response.is_internal_pong() {
+        if !worker_response.is_port_connected() {
             Err(Error::new(&format!(
                 "invalid response, expected InternalPing got {worker_response:?}"
             )))
@@ -38,11 +47,59 @@ impl WorkerClient {
         }
     }
 
-    pub(crate) async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse> {
+    pub(crate) async fn mgmt_command(&self, command: ManagementCommand) -> Result<WorkerResponse> {
+        let command = Command::Meta(command);
         let response = self.client.send(command, None)?;
         response
             .await
             .context("Response oneshot dropped, should not happen")
+    }
+
+    pub(crate) async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse> {
+        let command = Command::Node(command);
+        let response = self.client.send(command, None)?;
+        response
+            .await
+            .context("Response oneshot dropped, should not happen")
+    }
+
+    pub(crate) async fn subscribe<T: DeserializeOwned + 'static>(
+        &self,
+        subscription: NodeSubscription,
+    ) -> Result<(mpsc::UnboundedReceiver<T>, Port)> {
+        let (server_port, client_port, subscription_stream) = self.prepare_subscription_port()?;
+        let command = Command::Subscribe(subscription);
+
+        let response = self.client.send(command, Some(server_port))?;
+        response
+            .await
+            .context("Response oneshot dropped, should not happen")?
+            .into_subscribed()
+            .check_variant()??;
+        Ok((subscription_stream, client_port))
+    }
+
+    fn prepare_subscription_port<T: DeserializeOwned + 'static>(
+        &self,
+    ) -> Result<(MessagePortLike, Port, mpsc::UnboundedReceiver<T>)> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let channel = MessageChannel::new()?;
+
+        let server_port = JsValue::from(channel.port1()).into();
+
+        let client_port = Port::new(
+            channel.port2().into(),
+            move |ev: MessageEvent| -> Result<()> {
+                web_sys::console::info_1(&ev);
+                let item: T = from_value(ev.data()).context("could not deserialize message")?;
+                tx.send(item)
+                    .context("forwarding subscription item failed")?;
+                // TODO cleanup when channel is closed
+                Ok(())
+            },
+        )?;
+
+        Ok((server_port, client_port, rx))
     }
 }
 

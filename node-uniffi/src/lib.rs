@@ -7,7 +7,11 @@
 mod error;
 mod types;
 
+use std::str::FromStr;
+use std::sync::Arc;
+
 use blockstore::EitherBlockstore;
+use celestia_types::nmt::Namespace;
 use celestia_types::ExtendedHeader;
 use error::{LuminaError, Result};
 use lumina_node::blockstore::{InMemoryBlockstore, RedbBlockstore};
@@ -15,11 +19,12 @@ use lumina_node::events::EventSubscriber;
 use lumina_node::node::PeerTrackerInfo;
 use lumina_node::store::{EitherStore, InMemoryStore, RedbStore};
 use lumina_node::Node;
-use std::str::FromStr;
 use tendermint::hash::Hash;
 use tokio::sync::{Mutex, RwLock};
 use types::{NetworkInfo, NodeConfig, NodeEvent, PeerId, SyncingInfo};
 use uniffi::Object;
+
+use crate::types::{BlobStream, HeaderStream};
 
 uniffi::setup_scaffolding!();
 
@@ -286,5 +291,19 @@ impl LuminaNode {
             }
             None => Err(LuminaError::NodeNotRunning),
         }
+    }
+
+    pub async fn header_subscribe(&self) -> Result<HeaderStream> {
+        let node = self.node.read().await;
+        let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
+        let stream = node.header_subscribe().await?;
+        Ok(HeaderStream::new(stream))
+    }
+
+    pub async fn namespace_subscribe(&self, namespace: Arc<Namespace>) -> Result<BlobStream> {
+        let node = self.node.read().await;
+        let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
+        let stream = node.namespace_subscribe(*namespace.as_ref()).await?;
+        Ok(BlobStream::new(stream))
     }
 }

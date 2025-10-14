@@ -10,32 +10,29 @@ use web_sys::MessageEvent;
 use crate::error::{Context, Error, Result};
 use crate::utils::{to_json_value, MessageEventExt};
 
-pub(crate) type Transferable = Option<JsValue>;
-
 /// Counter-style message id for matching responses with requests
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 // Do _not_ use sizes larger than u32 here, as it doesn't play well
 // with json serialisation that's happening for browser extension Port.
 pub(crate) struct MessageId(u32);
 
-/// Message being exchanged between MultiplexSender/MultiplexResponder. Carries id for
-/// identification and payload
+/// Message being exchanged over the message port. Carries an id for identification plus payload
 #[derive(Serialize, Deserialize)]
-pub(crate) struct MultiplexMessage<T: Serialize> {
+struct MultiplexMessage<T: Serialize> {
     /// Id of the message being sent. Id should not be re-used
     pub id: MessageId,
     /// Actual content of the message
     pub payload: Option<T>,
 }
 
-impl MessageId {
-    /// i++
-    pub(crate) fn post_increment(&mut self) -> MessageId {
-        let ret = *self;
-        let (next, _carry) = self.0.overflowing_add(1);
-        self.0 = next;
-        ret
-    }
+/// Message payload together with port being transferred, if applicable.
+pub(crate) struct PayloadWithContext<T> {
+    /// Id of the message being sent. Id should not be re-used
+    pub id: MessageId,
+    /// Actual content of the message
+    pub payload: Option<T>,
+    /// Port being transferred
+    pub port: Option<MessagePortLike>,
 }
 
 // Instead of supporting communication with just `MessagePort`, allow using any object which
@@ -86,38 +83,59 @@ impl Port {
         Ok(Port { port, onmessage })
     }
 
-    pub fn new_with_channels<T>(
+    // TODO: doc
+    pub fn new_with_channels<T: Serialize>(
         object: JsValue,
-        data_channel: mpsc::UnboundedSender<T>,
-        port_channel: Option<mpsc::UnboundedSender<JsValue>>,
+        forwarding_channel: mpsc::UnboundedSender<PayloadWithContext<T>>,
+        //port_channel: Option<mpsc::UnboundedSender<JsValue>>,
     ) -> Result<Port>
     where
         T: DeserializeOwned + 'static,
     {
+        tracing::info!("new port creation");
         Port::new(object, move |ev: MessageEvent| -> Result<()> {
+            let port = ev.get_port();
+            /*
             if let Some(port) = ev.get_port() {
                 if let Some(port_channel) = &port_channel {
                     port_channel
                         .send(port)
                         .context("port forwarding channel closed, shouldn't happen: {e}")?;
                 }
-            }
-            let message: T = from_value(ev.data()).context("could not deserialize message")?;
-            data_channel
-                .send(message)
+            }*/
+            //let payload: MultiplexMessage<T> =
+            let MultiplexMessage { id, payload } =
+                from_value(ev.data()).context("could not deserialize message")?;
+            forwarding_channel
+                .send(PayloadWithContext { id, payload, port })
                 .context("forwarding failed, no receiver waiting")?;
             Ok(())
         })
     }
 
-    /// Send a serialisable message over the port. No checking is performed whether receiver is
-    /// able to correctly interpret the message
-    pub fn send<T: Serialize>(&self, msg: &T) -> Result<()> {
-        let msg = to_json_value(msg).context("error converting to JsValue")?;
+    pub fn send_raw<T: Serialize>(&self, msg: &T) -> Result<()> {
+        let value = to_json_value(&msg).context("error converting to JsValue")?;
         self.port
-            .post_message(&msg)
+            .post_message(&value)
             .context("could not send message")?;
         Ok(())
+    }
+
+    /// Send a serialisable message over the port. No checking is performed whether receiver is
+    /// able to correctly interpret the message
+    pub fn send<T: Serialize>(&self, id: MessageId, payload: T) -> Result<()> {
+        let msg = MultiplexMessage {
+            id,
+            payload: Some(payload),
+        };
+        self.send_raw(&msg)
+        /*
+                let value = to_json_value(&msg).context("error converting to JsValue")?;
+                self.port
+                    .post_message(&value)
+                    .context("could not send message")?;
+                Ok(())
+        */
     }
 
     /// Send a serialisable message over the port together with a object to transfer.
@@ -125,12 +143,17 @@ impl Port {
     /// whether port can actually perform object transfer.
     pub fn send_with_transferable<T: Serialize>(
         &self,
-        msg: &T,
+        id: MessageId,
+        payload: T,
         transferable: JsValue,
     ) -> Result<()> {
-        let msg = to_json_value(msg).context("error converting to JsValue")?;
+        let msg = MultiplexMessage {
+            id,
+            payload: Some(payload),
+        };
+        let value = to_json_value(&msg).context("error converting to JsValue")?;
         self.port
-            .post_message_with_transferable(&msg, &Array::of1(&transferable))
+            .post_message_with_transferable(&value, &Array::of1(&transferable))
             .context("could not send message")?;
         Ok(())
     }
@@ -142,6 +165,16 @@ impl Drop for Port {
     }
 }
 
+impl MessageId {
+    /// i++
+    pub(crate) fn post_increment(&mut self) -> MessageId {
+        let ret = *self;
+        let (next, _carry) = self.0.overflowing_add(1);
+        self.0 = next;
+        ret
+    }
+}
+
 // helper to hide slight differences in message passing between runtime.Port used by browser
 // extensions and everything else
 pub(crate) fn register_onmessage_callback<F>(
@@ -149,7 +182,7 @@ pub(crate) fn register_onmessage_callback<F>(
     callback: &Closure<F>,
 ) -> Result<MessagePortLike, Error>
 where
-    F: Fn(MessageEvent) + ?Sized, //wut?
+    F: Fn(MessageEvent) + ?Sized,
 {
     if Reflect::has(&object, &JsValue::from("onMessage"))
         .context("failed to reflect onMessage property")?

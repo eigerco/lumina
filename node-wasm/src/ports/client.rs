@@ -12,13 +12,15 @@ use tracing::{error, warn};
 use wasm_bindgen::prelude::*;
 
 use crate::error::{Context, Error, Result};
-use crate::ports::common::{MessageId, MultiplexMessage, Port, Transferable};
+use crate::ports::common::{MessageId, PayloadWithContext, Port};
+use crate::ports::MessagePortLike;
 use lumina_utils::executor::{spawn, JoinHandle};
 
 /// Client responsible for sending `Request`s and receiving `Response`s to them over a port like
 /// object.
 pub struct Client<Request, Response> {
-    request_tx: mpsc::UnboundedSender<(Request, Transferable, oneshot::Sender<Response>)>,
+    request_tx:
+        mpsc::UnboundedSender<(Request, Option<MessagePortLike>, oneshot::Sender<Response>)>,
     _worker_join_handle: JoinHandle,
     _worker_drop_guard: DropGuard,
 }
@@ -52,7 +54,7 @@ where
     pub fn send(
         &self,
         request: Request,
-        transferable: Option<JsValue>,
+        transferable: Option<MessagePortLike>,
     ) -> Result<impl Future<Output = Option<Response>>> {
         let (tx, rx) = oneshot::channel();
         self.request_tx
@@ -66,11 +68,12 @@ struct Worker<Request, Response: Serialize> {
     /// Port over which communication takes place
     port: Port,
     /// Queued responses from the onmessage callback
-    incoming_responses: mpsc::UnboundedReceiver<MultiplexMessage<Response>>,
+    incoming_responses: mpsc::UnboundedReceiver<PayloadWithContext<Response>>,
     /// Map of message ids waiting for response to oneshot channels to send the response over
     pending_responses_map: HashMap<MessageId, oneshot::Sender<Response>>,
     /// Queued requests to be sent
-    outgoing_requests: mpsc::UnboundedReceiver<(Request, Transferable, oneshot::Sender<Response>)>,
+    outgoing_requests:
+        mpsc::UnboundedReceiver<(Request, Option<MessagePortLike>, oneshot::Sender<Response>)>,
     /// MessageId to be used for the next request
     next_message_index: MessageId,
     /// Cancellation token to stop the worker
@@ -84,12 +87,16 @@ where
 {
     fn new(
         port: JsValue,
-        request_tx: mpsc::UnboundedReceiver<(Request, Transferable, oneshot::Sender<Response>)>,
+        request_tx: mpsc::UnboundedReceiver<(
+            Request,
+            Option<MessagePortLike>,
+            oneshot::Sender<Response>,
+        )>,
         cancellation_token: CancellationToken,
     ) -> Result<Worker<Request, Response>> {
         let (incoming_responses_tx, incoming_responses) = mpsc::unbounded_channel();
 
-        let port = Port::new_with_channels(port, incoming_responses_tx, None)?;
+        let port = Port::new_with_channels(port, incoming_responses_tx)?;
 
         Ok(Worker {
             port,
@@ -108,14 +115,15 @@ where
                     return Ok(())
                 }
                 msg = self.incoming_responses.recv() => {
-                    let MultiplexMessage { id, payload } = msg
+                    // we don't expect server sending us ports, ignore
+                    let PayloadWithContext { id, payload, .. } = msg
                         .ok_or(Error::new("Incoming message channel closed, should not happen"))?;
                     self.handle_incoming_response(id, payload);
                 }
                 request = self.outgoing_requests.recv() => {
-                    let (msg, transferable, response_tx) = request
+                    let (msg, port, response_tx) = request
                         .ok_or(Error::new("Outgoing requests channel closed, should not happen"))?;
-                    self.handle_outgoing_request(msg, transferable, response_tx)?;
+                    self.handle_outgoing_request(msg, port, response_tx)?;
                 }
             }
         }
@@ -137,16 +145,18 @@ where
     fn handle_outgoing_request(
         &mut self,
         request: Request,
-        transferable: Transferable,
+        port: Option<MessagePortLike>,
         response_tx: oneshot::Sender<Response>,
     ) -> Result<()> {
         let mid = self.next_message_index.post_increment();
-        let message = MultiplexMessage {
-            id: mid,
-            payload: Some(request),
-        };
+        /*
+                let message = MultiplexMessage {
+                    id: mid,
+                    payload: Some(request),
+                };
+        */
 
-        if let Err(e) = self.send_message(message, transferable) {
+        if let Err(e) = self.send_message(mid, request, port) {
             error!("Failed to send request: {e}");
             drop(response_tx);
             return Ok(());
@@ -165,16 +175,17 @@ where
 
     fn send_message(
         &mut self,
-        message: MultiplexMessage<Request>,
-        transferable: Transferable,
+        id: MessageId,
+        payload: Request,
+        port: Option<MessagePortLike>,
     ) -> Result<()> {
-        if let Some(transferable) = transferable {
+        if let Some(port) = port {
             self.port
-                .send_with_transferable(&message, transferable)
+                .send_with_transferable(id, &payload, port.into())
                 .context("failed to send outgoing request with transferable")?;
         } else {
             self.port
-                .send(&message)
+                .send(id, &payload)
                 .context("failed to send outgoing request without transferable")?;
         }
         Ok(())

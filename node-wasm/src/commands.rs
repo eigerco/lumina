@@ -18,14 +18,32 @@ use crate::error::Error;
 use crate::error::Result;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) enum NodeCommand {
+pub(crate) enum Command {
+    Node(NodeCommand),
+    Meta(ManagementCommand),
+    Subscribe(NodeSubscription),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) enum ManagementCommand {
     InternalPing,
+    GetEventsChannelName,
+    ConnectPort,
     IsRunning,
     StartNode(WasmNodeConfig),
     StopNode,
-    GetEventsChannelName,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) enum NodeSubscription {
+    Headers,
+    Blobs(Namespace),
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) enum NodeCommand {
     GetLocalPeerId,
     GetSyncerInfo,
     GetPeerTrackerInfo,
@@ -70,6 +88,7 @@ pub(crate) enum SingleHeaderQuery {
 #[derive(Serialize, Deserialize, Debug, EnumAsInner)]
 pub(crate) enum WorkerResponse {
     InternalPong,
+    PortConnected,
     NodeNotRunning,
     IsRunning(bool),
     NodeStarted(Result<()>),
@@ -88,6 +107,7 @@ pub(crate) enum WorkerResponse {
     LastSeenNetworkHead(Result<Option<ExtendedHeader>, Error>),
     SamplingMetadata(Result<Option<SamplingMetadata>>),
     Blobs(Result<Vec<Blob>>),
+    Subscribed(Result<()>),
 }
 
 pub(crate) trait CheckableResponseExt {
