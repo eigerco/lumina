@@ -10,7 +10,7 @@ use tonic::metadata::MetadataMap;
 use zeroize::Zeroizing;
 
 use crate::boxed::{boxed, BoxedTransport};
-use crate::client::SignerConfig;
+use crate::client::AccountState;
 use crate::grpc::Context;
 use crate::signer::BoxedDocSigner;
 use crate::utils::CondSend;
@@ -155,11 +155,12 @@ impl GrpcClientBuilder {
     }
 }
 
-impl TryFrom<SignerKind> for SignerConfig {
+impl TryFrom<SignerKind> for AccountState {
     type Error = GrpcClientBuilderError;
+
     fn try_from(value: SignerKind) -> Result<Self, Self::Error> {
         match value {
-            SignerKind::Signer((pubkey, signer)) => Ok(SignerConfig { signer, pubkey }),
+            SignerKind::Signer((pubkey, signer)) => Ok(AccountState::new(pubkey, signer)),
             SignerKind::PrivKeyBytes(bytes) => priv_key_signer(&bytes),
             SignerKind::PrivKeyHex(string) => {
                 let bytes = Zeroizing::new(
@@ -172,12 +173,12 @@ impl TryFrom<SignerKind> for SignerConfig {
     }
 }
 
-fn priv_key_signer(bytes: &[u8]) -> Result<SignerConfig, GrpcClientBuilderError> {
+fn priv_key_signer(bytes: &[u8]) -> Result<AccountState, GrpcClientBuilderError> {
     let signing_key =
         SigningKey::from_slice(bytes).map_err(|_| GrpcClientBuilderError::InvalidPrivateKey)?;
     let pubkey = signing_key.verifying_key().to_owned();
     let signer = BoxedDocSigner::new(signing_key);
-    Ok(SignerConfig { signer, pubkey })
+    Ok(AccountState::new(pubkey, signer))
 }
 
 impl fmt::Debug for SignerKind {

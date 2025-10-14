@@ -49,6 +49,15 @@ impl std::ops::DerefMut for Account {
     }
 }
 
+impl From<Account> for BaseAccount {
+    fn from(value: Account) -> Self {
+        match value {
+            Account::Base(acc) => acc,
+            Account::Module(acc) => acc.base_account,
+        }
+    }
+}
+
 /// [`BaseAccount`] defines a base account type.
 ///
 /// It contains all the necessary fields for basic account functionality.

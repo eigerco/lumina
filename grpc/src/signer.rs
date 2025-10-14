@@ -3,11 +3,11 @@ use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 
-use ::tendermint::chain::Id;
 use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 use k256::ecdsa::signature::Signer;
 use k256::ecdsa::VerifyingKey;
 use prost::{Message, Name};
+use tendermint::chain::Id;
 use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
 
@@ -110,7 +110,7 @@ pub async fn sign_tx(
     };
 
     let mut fee = Fee::new(fee, gas_limit);
-    fee.payer = Some(base_account.address.clone().into());
+    fee.payer = Some(base_account.address.into());
 
     let auth_info = AuthInfo {
         signer_infos: vec![SignerInfo {
@@ -174,11 +174,11 @@ mod uniffi_types {
     /// // uses 21-DOT-DEV/swift-secp256k1
     /// final class StaticSigner : UniffiSigner {
     ///     let sk : P256K.Signing.PrivateKey
-    ///     
+    ///
     ///     init(sk: P256K.Signing.PrivateKey) {
     ///         self.sk = sk
     ///     }
-    ///     
+    ///
     ///     func sign(doc: SignDoc) async throws -> UniffiSignature {
     ///         let messageData = protoEncodeSignDoc(signDoc: doc);
     ///         let signature = try! sk.signature(for: messageData)

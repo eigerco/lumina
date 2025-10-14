@@ -7,7 +7,7 @@ use k256::ecdsa::VerifyingKey;
 use lumina_utils::time::Interval;
 use prost::Message;
 use std::time::Duration;
-use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
+use tokio::sync::{Mutex, MutexGuard, OnceCell};
 
 use celestia_grpc_macros::grpc_method;
 use celestia_proto::celestia::blob::v1::query_client::QueryClient as BlobQueryClient;
@@ -23,7 +23,7 @@ use celestia_types::blob::{BlobParams, MsgPayForBlobs, RawBlobTx, RawMsgPayForBl
 use celestia_types::block::Block;
 use celestia_types::consts::appconsts;
 use celestia_types::hash::Hash;
-use celestia_types::state::auth::{Account, AuthParams};
+use celestia_types::state::auth::{Account, AuthParams, BaseAccount};
 use celestia_types::state::{
     AbciQueryResponse, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
     QueryUnbondingDelegationResponse, RawTxBody, ValAddress,
@@ -47,17 +47,34 @@ use crate::{Error, Result, TxConfig};
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
 const BLOB_TX_TYPE_ID: &str = "BLOB";
 
-type AccountGuard<'a> = MappedMutexGuard<'a, Account>;
-
 #[derive(Debug, Clone)]
 struct ChainState {
     app_version: AppVersion,
     chain_id: Id,
 }
 
-pub(crate) struct SignerConfig {
-    pub(crate) signer: BoxedDocSigner,
-    pub(crate) pubkey: VerifyingKey,
+#[derive(Debug)]
+pub(crate) struct AccountState {
+    base: OnceCell<Mutex<BaseAccount>>,
+    pubkey: VerifyingKey,
+    signer: BoxedDocSigner,
+}
+
+#[derive(Debug)]
+struct AccountGuard<'a> {
+    base: MutexGuard<'a, BaseAccount>,
+    pubkey: &'a VerifyingKey,
+    signer: &'a BoxedDocSigner,
+}
+
+impl AccountState {
+    pub fn new(pubkey: VerifyingKey, signer: BoxedDocSigner) -> Self {
+        Self {
+            base: OnceCell::new(),
+            pubkey,
+            signer,
+        }
+    }
 }
 
 /// A transaction that was broadcasted
@@ -81,9 +98,8 @@ pub struct GrpcClient {
 
 struct GrpcClientInner {
     transport: BoxedTransport,
-    account: Mutex<Option<Account>>,
-    chain_state: Mutex<Option<ChainState>>,
-    signer: Option<SignerConfig>,
+    account: Option<AccountState>,
+    chain_state: OnceCell<ChainState>,
     context: Context,
 }
 
@@ -91,15 +107,14 @@ impl GrpcClient {
     /// Create a new client wrapping given transport
     pub(crate) fn new(
         transport: BoxedTransport,
-        signer: Option<SignerConfig>,
+        account: Option<AccountState>,
         context: Context,
     ) -> Self {
         Self {
             inner: Arc::new(GrpcClientInner {
                 transport,
-                account: Mutex::new(None),
-                chain_state: Mutex::new(None),
-                signer,
+                account,
+                chain_state: OnceCell::new(),
                 context,
             }),
         }
@@ -140,7 +155,7 @@ impl GrpcClient {
         header: &ExtendedHeader,
     ) -> AsyncGrpcCall<Coin> {
         let this = self.clone();
-        let address = address.clone();
+        let address = *address;
         let header = header.clone();
 
         AsyncGrpcCall::new(move |context| async move {
@@ -365,7 +380,7 @@ impl GrpcClient {
 
         AsyncGrpcCall::new(move |context| async move {
             let ChainState { app_version, .. } = this.load_chain_state(&context).await?;
-            Ok(app_version)
+            Ok(*app_version)
         })
         .context(&self.inner.context)
     }
@@ -376,14 +391,14 @@ impl GrpcClient {
 
         AsyncGrpcCall::new(move |context| async move {
             let ChainState { chain_id, .. } = this.load_chain_state(&context).await?;
-            Ok(chain_id)
+            Ok(chain_id.clone())
         })
         .context(&self.inner.context)
     }
 
     /// Get client's account public key if the signer is set
     pub fn get_account_pubkey(&self) -> Option<VerifyingKey> {
-        self.inner.signer.as_ref().map(|config| config.pubkey)
+        self.account().map(|account| account.pubkey).ok()
     }
 
     /// Get client's account address if the signer is set
@@ -487,40 +502,47 @@ impl GrpcClient {
         self.confirm_tx(tx, cfg, context).await
     }
 
-    async fn load_chain_state(&self, context: &Context) -> Result<ChainState> {
-        let mut chain_state_guard = self.inner.chain_state.lock().await;
+    async fn load_chain_state(&self, context: &Context) -> Result<&ChainState> {
+        self.inner
+            .chain_state
+            .get_or_try_init(|| async {
+                let block = self.get_latest_block().context(context).await?;
+                let app_version = block.header.version.app;
+                let app_version = AppVersion::from_u64(app_version)
+                    .ok_or(celestia_types::Error::UnsupportedAppVersion(app_version))?;
+                let chain_id = block.header.chain_id;
 
-        if chain_state_guard.is_none() {
-            let block = self.get_latest_block().context(context).await?;
-            let app_version = block.header.version.app;
-            let app_version = AppVersion::from_u64(app_version)
-                .ok_or(celestia_types::Error::UnsupportedAppVersion(app_version))?;
-            let chain_id = block.header.chain_id;
-
-            *chain_state_guard = Some(ChainState {
-                app_version,
-                chain_id,
-            });
-        }
-        Ok((*chain_state_guard)
-            .clone()
-            .expect("state to be initialised"))
+                Ok::<_, Error>(ChainState {
+                    app_version,
+                    chain_id,
+                })
+            })
+            .await
     }
 
-    async fn load_account(&self, context: &Context) -> Result<(AccountGuard<'_>, &SignerConfig)> {
-        let signer = self.inner.signer.as_ref().ok_or(Error::MissingSigner)?;
-        let mut account_guard = self.inner.account.lock().await;
+    fn account(&self) -> Result<&AccountState> {
+        self.inner.account.as_ref().ok_or(Error::MissingSigner)
+    }
 
-        if account_guard.is_none() {
-            let address = AccAddress::from(signer.pubkey);
-            let account = self.get_account(&address).context(context).await?;
-            *account_guard = Some(account);
-        }
-        let mapped_guard = MutexGuard::map(account_guard, |acc| {
-            acc.as_mut().expect("account data present")
-        });
+    async fn lock_account(&self, context: &Context) -> Result<AccountGuard<'_>> {
+        let account = self.account()?;
 
-        Ok((mapped_guard, signer))
+        let base = account
+            .base
+            .get_or_try_init(|| async {
+                let address = AccAddress::from(account.pubkey);
+                let account = self.get_account(&address).context(context).await?;
+                Ok::<_, Error>(Mutex::new(account.into()))
+            })
+            .await?
+            .lock()
+            .await;
+
+        Ok(AccountGuard {
+            base,
+            pubkey: &account.pubkey,
+            signer: &account.signer,
+        })
     }
 
     /// compute gas limit and gas price according to provided TxConfig for serialised
@@ -533,8 +555,6 @@ impl GrpcClient {
         account: &mut AccountGuard<'_>,
         context: &Context,
     ) -> Result<(u64, f64)> {
-        let signer = self.inner.signer.as_ref().ok_or(Error::MissingSigner)?;
-
         if let Some(gas_limit) = cfg.gas_limit {
             let gas_price = if let Some(gas_price) = cfg.gas_price {
                 gas_price
@@ -551,9 +571,9 @@ impl GrpcClient {
             let tx = sign_tx(
                 tx_body.clone(),
                 chain_id.clone(),
-                account,
-                &signer.pubkey,
-                &signer.signer,
+                &account.base,
+                account.pubkey,
+                account.signer,
                 0,
                 1,
             )
@@ -565,7 +585,7 @@ impl GrpcClient {
                 .await
             {
                 Err(err) if err.is_wrong_sequnce() => {
-                    account.sequence = err
+                    account.base.sequence = err
                         .get_expected_sequence()
                         .expect("must be wrong sequence")?;
                 }
@@ -585,9 +605,9 @@ impl GrpcClient {
         let ChainState { chain_id, .. } = self.load_chain_state(context).await?;
         // lock the account; tx signing and broadcast must be atomic
         // because node requires all transactions to be sequenced by account.sequence
-        let (mut account, signer) = self.load_account(context).await?;
+        let mut account = self.lock_account(context).await?;
 
-        let pfb = MsgPayForBlobs::new(&blobs, account.address.clone())?;
+        let pfb = MsgPayForBlobs::new(&blobs, account.base.address)?;
         let pfb = RawTxBody {
             messages: vec![RawMsgPayForBlobs::from(pfb).into_any()],
             memo: cfg.memo.clone().unwrap_or_default(),
@@ -606,9 +626,9 @@ impl GrpcClient {
             let tx = sign_tx(
                 pfb.clone(),
                 chain_id.clone(),
-                &account,
-                &signer.pubkey,
-                &signer.signer,
+                &account.base,
+                account.pubkey,
+                account.signer,
                 gas_limit,
                 fee,
             )
@@ -626,7 +646,7 @@ impl GrpcClient {
                 .await
             {
                 Err(err) if err.is_wrong_sequnce() => {
-                    account.sequence = err
+                    account.base.sequence = err
                         .get_expected_sequence()
                         .expect("must be wrong sequence")?;
                 }
@@ -645,7 +665,7 @@ impl GrpcClient {
 
         // lock the account; tx signing and broadcast must be atomic
         // because node requires all transactions to be sequenced by account.sequence
-        let (mut account, signer) = self.load_account(context).await?;
+        let mut account = self.lock_account(context).await?;
 
         let (gas_limit, gas_price) = self
             .calculate_transaction_gas_params(&tx, &cfg, chain_id.clone(), &mut account, context)
@@ -659,9 +679,9 @@ impl GrpcClient {
             let tx = sign_tx(
                 tx.clone(),
                 chain_id.clone(),
-                &account,
-                &signer.pubkey,
-                &signer.signer,
+                &account.base,
+                account.pubkey,
+                account.signer,
                 gas_limit,
                 fee as u64,
             )
@@ -672,7 +692,7 @@ impl GrpcClient {
                 .await
             {
                 Err(err) if err.is_wrong_sequnce() => {
-                    account.sequence = err
+                    account.base.sequence = err
                         .get_expected_sequence()
                         .expect("must be wrong sequence")?;
                 }
@@ -690,8 +710,8 @@ impl GrpcClient {
     ) -> Result<BroadcastedTx> {
         let resp = self.broadcast_tx_with_cfg(tx.clone(), cfg, context).await?;
 
-        let sequence = account.sequence;
-        account.sequence += 1;
+        let sequence = account.base.sequence;
+        account.base.sequence += 1;
 
         Ok(BroadcastedTx {
             tx,
@@ -786,8 +806,8 @@ impl GrpcClient {
                 }
                 // we need to revert the account sequence to that of the rejected tx.
                 TxStatus::Rejected => {
-                    let (mut acc, _) = self.load_account(context).await?;
-                    acc.sequence = sequence;
+                    let mut acc = self.lock_account(context).await?;
+                    acc.base.sequence = sequence;
                     return Err(Error::TxRejected(
                         hash,
                         tx_status.execution_code,
@@ -797,8 +817,8 @@ impl GrpcClient {
                 // this case should never happen for node that accepted a broadcast
                 // however we handle it the same as evicted for extra safety
                 TxStatus::Unknown => {
-                    let (mut acc, _) = self.load_account(context).await?;
-                    acc.sequence = sequence;
+                    let mut acc = self.lock_account(context).await?;
+                    acc.base.sequence = sequence;
                     return Err(Error::TxNotFound(hash));
                 }
             }
@@ -1292,10 +1312,10 @@ mod tests {
 
     async fn invalidate_sequence(client: &GrpcClient) {
         client
-            .load_account(&Context::default())
+            .lock_account(&Context::default())
             .await
             .unwrap()
-            .0
+            .base
             .sequence += rand::thread_rng().gen_range(2..200);
     }
 }
