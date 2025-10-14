@@ -46,6 +46,8 @@ use crate::{Error, Result, TxConfig};
 
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
 const BLOB_TX_TYPE_ID: &str = "BLOB";
+/// Message returned on errors related to sequence
+const SEQUENCE_ERROR_PAT: &str = "account sequence mismatch, expected ";
 
 #[derive(Debug, Clone)]
 struct ChainState {
@@ -579,18 +581,17 @@ impl GrpcClient {
             )
             .await?;
 
-            match self
+            let res = self
                 .estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
                 .context(context)
-                .await
-            {
-                Err(err) if err.is_wrong_sequnce() => {
-                    account.base.sequence = err
-                        .get_expected_sequence()
-                        .expect("must be wrong sequence")?;
-                }
-                res => break res?,
+                .await;
+
+            if let Some(new_sequence) = res.as_ref().err().and_then(extract_sequence_on_mismatch) {
+                account.base.sequence = new_sequence?;
+                continue;
             }
+
+            break res?;
         };
 
         Ok((usage, cfg.gas_price.unwrap_or(price)))
@@ -641,17 +642,16 @@ impl GrpcClient {
             }
             .encode_to_vec();
 
-            match self
+            let res = self
                 .broadcast_tx_with_account(blob_tx, &cfg, &mut account, context)
-                .await
-            {
-                Err(err) if err.is_wrong_sequnce() => {
-                    account.base.sequence = err
-                        .get_expected_sequence()
-                        .expect("must be wrong sequence")?;
-                }
-                res => break res,
+                .await;
+
+            if let Some(new_sequence) = res.as_ref().err().and_then(extract_sequence_on_mismatch) {
+                account.base.sequence = new_sequence?;
+                continue;
             }
+
+            break res;
         }
     }
 
@@ -687,17 +687,16 @@ impl GrpcClient {
             )
             .await?;
 
-            match self
+            let res = self
                 .broadcast_tx_with_account(tx.encode_to_vec(), &cfg, &mut account, context)
-                .await
-            {
-                Err(err) if err.is_wrong_sequnce() => {
-                    account.base.sequence = err
-                        .get_expected_sequence()
-                        .expect("must be wrong sequence")?;
-                }
-                res => break res,
+                .await;
+
+            if let Some(new_sequence) = res.as_ref().err().and_then(extract_sequence_on_mismatch) {
+                account.base.sequence = new_sequence?;
+                continue;
             }
+
+            break res;
         }
     }
 
@@ -830,6 +829,40 @@ impl fmt::Debug for GrpcClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("GrpcClient { .. }")
     }
+}
+
+/// Returns Some if error is related to the wrong sequence.
+/// Inner result is the outcome of the parsing operation.
+fn extract_sequence_on_mismatch(err: &Error) -> Option<Result<u64>> {
+    let msg = match err {
+        Error::TonicError(status) if status.message().contains(SEQUENCE_ERROR_PAT) => {
+            status.message()
+        }
+        Error::TxBroadcastFailed(_, code, message)
+            if code == &ErrorCode::InvalidSequence || code == &ErrorCode::WrongSequence =>
+        {
+            message.as_str()
+        }
+        _ => return None,
+    };
+
+    Some(extract_sequence(msg))
+}
+
+fn extract_sequence(msg: &str) -> Result<u64> {
+    // get the `{expected_sequence}, {rest of the message}` part
+    let (_, msg_with_sequence) = msg
+        .split_once(SEQUENCE_ERROR_PAT)
+        .ok_or_else(|| Error::SequenceParsingFailed(msg.into()))?;
+
+    // drop the comma and rest of the message
+    let (sequence, _) = msg_with_sequence
+        .split_once(',')
+        .ok_or_else(|| Error::SequenceParsingFailed(msg.into()))?;
+
+    sequence
+        .parse()
+        .map_err(|_| Error::SequenceParsingFailed(msg.into()))
 }
 
 #[cfg(test)]
