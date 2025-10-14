@@ -94,7 +94,7 @@ pub enum Error {
     #[error(transparent)]
     Metadata(#[from] MetadataError),
 
-    /// Couldn't parse expected sequence from error message
+    /// Couldn't parse expected sequence from the error message
     #[error("Couldn't parse expected sequence from: '{0}'")]
     SequenceParsingFailed(String),
 }

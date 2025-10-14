@@ -65,10 +65,8 @@ pub(crate) struct SignerConfig {
 struct BroadcastedTx {
     /// Broadcasted bytes
     tx: Vec<u8>,
-
     /// Transaction hash
     hash: Hash,
-
     /// Transaction sequence
     sequence: u64,
 }
@@ -759,9 +757,9 @@ impl GrpcClient {
                         ));
                     }
                 }
-                // evicted transaction should be retransmitted without ever trying to re-sign it,
+                // Evicted transaction should be retransmitted without ever trying to re-sign it
                 // to prevent double spending, because some nodes may have it in a mempool and some not.
-                // if we would re-sign it and both old and new one are confirmed, it'd double spend.
+                // If we would re-sign it and both old and new one are confirmed, it'd double spend.
                 // https://github.com/celestiaorg/celestia-app/pull/5783#discussion_r2360546232
                 TxStatus::Evicted => {
                     if self
@@ -769,24 +767,24 @@ impl GrpcClient {
                         .await
                         .is_err()
                     {
-                        // Go version of TxClient starts one minute timeout before it returns an eviction
-                        // error, to not make the user re-submitting failed transaction right away.
+                        // Go version of TxClient starts a one minute timeout before it returns an eviction
+                        // error, to avoid user re-submitting the failed transaction right away.
                         //
-                        // The reason for it is that Go client supports multi-endpoints, sending tx
+                        // The reason for it is that Go client supports multi-endpoint, sending tx
                         // to multiple consensus nodes at once, each node having its own mempool.
-                        // One of them could evict the tx from a mempool, but the tx may still be
+                        // One of them could evict the tx from the mempool, but the tx may still be
                         // proposed and confirmed by other nodes which didn't evict it.
                         //
-                        // If client would return eviction error there right away, the user could
-                        // see the error, eagerly resubmit transaction, and have both old and new
-                        // one succeeding, resulting in double spending.
+                        // In that case, if client would return eviction error right away, the user could
+                        // see the error, eagerly resubmit the transaction, and have both old and new
+                        // one succeed, resulting in double spending.
                         //
-                        // Since we don't support multi-endpoints in our client yet, we can just return
-                        // an error right away, as no other consensus node will try to include it.
+                        // Since we don't support multi-endpoint in our client yet, we can just return
+                        // an error right away, as no other consensus node will try to include the transaction.
                         return Err(Error::TxEvicted(hash));
                     }
                 }
-                // we need to revert the account's sequence to the one of rejected tx.
+                // we need to revert the account sequence to that of the rejected tx.
                 TxStatus::Rejected => {
                     let (mut acc, _) = self.load_account(context).await?;
                     acc.sequence = sequence;
