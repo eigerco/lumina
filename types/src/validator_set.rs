@@ -75,7 +75,7 @@ impl ValidatorSetExt for Set {
         {
             let signature = match commit_sig {
                 CommitSig::BlockIdFlagCommit {
-                    signature: Some(ref sig),
+                    signature: Some(sig),
                     ..
                 } => sig,
                 CommitSig::BlockIdFlagCommit { .. } => {
@@ -114,7 +114,7 @@ impl ValidatorSetExt for Set {
             let (val_id, signature) = match commit_sig {
                 CommitSig::BlockIdFlagCommit {
                     validator_address,
-                    signature: Some(ref sig),
+                    signature: Some(sig),
                     ..
                 } => (validator_address, sig),
                 CommitSig::BlockIdFlagCommit { .. } => {

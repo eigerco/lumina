@@ -25,13 +25,13 @@ use crate::{
 /// Generate a store pre-filled with headers.
 pub async fn gen_filled_store(amount: u64) -> (InMemoryStore, ExtendedHeaderGenerator) {
     let s = InMemoryStore::new();
-    let mut gen = ExtendedHeaderGenerator::new();
+    let mut generator = ExtendedHeaderGenerator::new();
 
-    s.insert(gen.next_many_verified(amount))
+    s.insert(generator.next_many_verified(amount))
         .await
         .expect("inserting test data failed");
 
-    (s, gen)
+    (s, generator)
 }
 
 #[cfg(all(test, target_arch = "wasm32"))]

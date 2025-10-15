@@ -122,8 +122,8 @@ mod tests {
         let eds = generate_dummy_eds(4, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
 
-        let mut gen = ExtendedHeaderGenerator::new();
-        let header = gen.next_with_dah(dah.clone());
+        let mut generator = ExtendedHeaderGenerator::new();
+        let header = generator.next_with_dah(dah.clone());
 
         let sample = Sample::new(0, 0, AxisType::Row, &eds).unwrap();
         let mut sample_bytes = BytesMut::new();

@@ -608,12 +608,12 @@ mod test {
         let store = InMemoryStore::new();
         let mut cache = Cache::default();
         let pruning_window = Duration::from_secs(60);
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         let first_header_time = (now - Duration::from_secs(120)).unwrap();
-        gen.set_time(first_header_time, Duration::from_secs(1));
+        generator.set_time(first_header_time, Duration::from_secs(1));
 
-        store.insert(gen.next_many(120)).await.unwrap();
+        store.insert(generator.next_many(120)).await.unwrap();
 
         let stored_headers = store.get_stored_header_ranges().await.unwrap();
         let pruning_cutoff = now.saturating_sub(pruning_window);
@@ -632,12 +632,12 @@ mod test {
         let store = InMemoryStore::new();
         let mut cache = Cache::default();
         let pruning_window = Duration::from_secs(60);
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         let first_header_time = (now - Duration::from_secs(120)).unwrap();
-        gen.set_time(first_header_time, Duration::from_secs(1));
+        generator.set_time(first_header_time, Duration::from_secs(1));
 
-        let headers = gen.next_many(120);
+        let headers = generator.next_many(120);
 
         store.insert(&headers[0..10]).await.unwrap();
         store.insert(&headers[20..30]).await.unwrap();
@@ -671,12 +671,12 @@ mod test {
         let store = InMemoryStore::new();
         let mut cache = Cache::default();
         let pruning_window = Duration::from_secs(121);
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         let first_header_time = (now - Duration::from_secs(120)).unwrap();
-        gen.set_time(first_header_time, Duration::from_secs(1));
+        generator.set_time(first_header_time, Duration::from_secs(1));
 
-        let headers = gen.next_many(120);
+        let headers = generator.next_many(120);
         store.insert(headers).await.unwrap();
 
         let stored_headers = store.get_stored_header_ranges().await.unwrap();
@@ -733,12 +733,12 @@ mod test {
         let store = InMemoryStore::new();
         let mut cache = Cache::default();
         let pruning_window = Duration::from_secs(60);
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         let first_header_time = (now - Duration::from_secs(120)).unwrap();
-        gen.set_time(first_header_time, Duration::from_secs(1));
+        generator.set_time(first_header_time, Duration::from_secs(1));
 
-        let headers = gen.next_many(120);
+        let headers = generator.next_many(120);
         store.insert(&headers[110..120]).await.unwrap();
 
         let stored_headers = store.get_stored_header_ranges().await.unwrap();
@@ -777,12 +777,12 @@ mod test {
         let store = InMemoryStore::new();
         let mut cache = Cache::default();
         let pruning_window = Duration::from_secs(60);
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         let first_header_time = (now - Duration::from_secs(120)).unwrap();
-        gen.set_time(first_header_time, Duration::from_secs(1));
+        generator.set_time(first_header_time, Duration::from_secs(1));
 
-        let headers = gen.next_many(120);
+        let headers = generator.next_many(120);
         store.insert(&headers[30..40]).await.unwrap();
 
         let stored_headers = store.get_stored_header_ranges().await.unwrap();
@@ -863,12 +863,12 @@ mod test {
         let store = InMemoryStore::new();
         let mut cache = Cache::default();
         let pruning_window = Duration::from_secs(60);
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         let first_header_time = (now - Duration::from_secs(120)).unwrap();
-        gen.set_time(first_header_time, Duration::from_secs(1));
+        generator.set_time(first_header_time, Duration::from_secs(1));
 
-        let headers = gen.next_many(120);
+        let headers = generator.next_many(120);
         store.insert(&headers[30..40]).await.unwrap();
         store.insert(&headers[110..120]).await.unwrap();
 
@@ -1013,7 +1013,7 @@ mod test {
     async fn prune_large_tail_with_cids() {
         let events = EventChannel::new();
         let store = Arc::new(InMemoryStore::new());
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         let blockstore = Arc::new(InMemoryBlockstore::new());
         let mut event_subscriber = events.subscribe();
@@ -1022,7 +1022,7 @@ mod test {
         let first_header_time = (Time::now()
             - (DEFAULT_PRUNING_WINDOW + Duration::from_secs(30 * 24 * 60 * 60)))
         .unwrap();
-        gen.set_time(first_header_time, Duration::from_secs(1));
+        generator.set_time(first_header_time, Duration::from_secs(1));
 
         let blocks_with_sampling = (1..=500)
             .chain(601..=1000)
@@ -1033,9 +1033,15 @@ mod test {
             })
             .collect::<Vec<_>>();
 
-        store.insert(gen.next_many_verified(500)).await.unwrap();
-        gen.skip(100);
-        store.insert(gen.next_many_verified(400)).await.unwrap();
+        store
+            .insert(generator.next_many_verified(500))
+            .await
+            .unwrap();
+        generator.skip(100);
+        store
+            .insert(generator.next_many_verified(400))
+            .await
+            .unwrap();
 
         for (height, block, cid, sampled) in &blocks_with_sampling {
             blockstore.put_keyed(cid, block.data()).await.unwrap();
@@ -1129,24 +1135,33 @@ mod test {
 
         let events = EventChannel::new();
         let store = Arc::new(InMemoryStore::new());
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
         let blockstore = Arc::new(InMemoryBlockstore::new());
         let mut event_subscriber = events.subscribe();
         let (daser, mut daser_handle) = Daser::mocked();
 
         let first_header_time = (Time::now() - Duration::from_millis(5000)).unwrap();
-        gen.set_time(first_header_time, block_time);
+        generator.set_time(first_header_time, block_time);
 
         // Tail
-        store.insert(gen.next_many_verified(10)).await.unwrap();
+        store
+            .insert(generator.next_many_verified(10))
+            .await
+            .unwrap();
         // Gap
-        gen.skip(2480);
+        generator.skip(2480);
         // 10 headers within 1.5sec of pruning window edge
-        store.insert(gen.next_many_verified(10)).await.unwrap();
+        store
+            .insert(generator.next_many_verified(10))
+            .await
+            .unwrap();
         // Gap
-        gen.skip(2490);
+        generator.skip(2490);
         // 10 headers at the current time
-        store.insert(gen.next_many_verified(10)).await.unwrap();
+        store
+            .insert(generator.next_many_verified(10))
+            .await
+            .unwrap();
 
         assert_eq!(
             store.get_stored_header_ranges().await.unwrap(),
@@ -1259,7 +1274,7 @@ mod test {
         let pruning_window = Duration::from_secs(60);
         let sampling_window = Duration::from_secs(120);
 
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
         let store = Arc::new(InMemoryStore::new());
         let blockstore = Arc::new(InMemoryBlockstore::new());
 
@@ -1277,27 +1292,42 @@ mod test {
         //
         // NOTE 2: Since `Time::now` in Pruner is changing, the edges may vary.
         let first_header_time = (Time::now() - Duration::from_secs(260)).unwrap();
-        gen.set_time(first_header_time, Duration::from_secs(1));
+        generator.set_time(first_header_time, Duration::from_secs(1));
 
         // 1 - 120
-        store.insert(gen.next_many_verified(120)).await.unwrap();
+        store
+            .insert(generator.next_many_verified(120))
+            .await
+            .unwrap();
         // 121 - 145
-        gen.skip(25);
+        generator.skip(25);
         // 146 - 155
-        store.insert(gen.next_many_verified(10)).await.unwrap();
+        store
+            .insert(generator.next_many_verified(10))
+            .await
+            .unwrap();
         // 156 - 165
-        gen.skip(10);
+        generator.skip(10);
         // 166 - 175
-        store.insert(gen.next_many_verified(10)).await.unwrap();
+        store
+            .insert(generator.next_many_verified(10))
+            .await
+            .unwrap();
         // 176 - 185
-        gen.skip(10);
+        generator.skip(10);
         // 186 - 199
-        store.insert(gen.next_many_verified(14)).await.unwrap();
+        store
+            .insert(generator.next_many_verified(14))
+            .await
+            .unwrap();
         // 200 - 201, We skip these because they are the edge of pruning window.
         // Pruner is using `Time::now` and we want to make the tests more predictable.
-        gen.skip(2);
+        generator.skip(2);
         // 202 - 260
-        store.insert(gen.next_many_verified(59)).await.unwrap();
+        store
+            .insert(generator.next_many_verified(59))
+            .await
+            .unwrap();
 
         // Create gaps by pruning. We do this to test that Pruner takes them
         // into account when it calculates the edges of synced block ranges.

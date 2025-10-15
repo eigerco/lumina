@@ -75,9 +75,8 @@ impl GrpcMethod {
                     #[cfg(target_arch = "wasm32")]
                     let fut = ::send_wrapper::SendWrapper::new(fut);
 
-                    crate::grpc::FromGrpcResponse::try_from_response(
-                        fut.await?.into_inner()
-                    )
+                    let resp = fut.await?.into_inner();
+                    crate::grpc::FromGrpcResponse::try_from_response(resp)
                 })
                 .context(&self.inner.context)
             }

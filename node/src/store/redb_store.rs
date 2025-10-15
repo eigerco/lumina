@@ -865,8 +865,8 @@ pub mod tests {
         let db_dir = TempDir::with_prefix("lumina.store.test").unwrap();
         let db = db_dir.path().join("db");
 
-        let (original_store, mut gen) = gen_filled_store(0, Some(&db)).await;
-        let mut original_headers = gen.next_many(20);
+        let (original_store, mut generator) = gen_filled_store(0, Some(&db)).await;
+        let mut original_headers = generator.next_many(20);
 
         original_store
             .insert(original_headers.clone())
@@ -888,7 +888,7 @@ pub mod tests {
             assert_eq!(original_header, &stored_header);
         }
 
-        let mut new_headers = gen.next_many(10);
+        let mut new_headers = generator.next_many(10);
         reopened_store
             .insert(new_headers.clone())
             .await
@@ -913,17 +913,23 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_separate_stores() {
-        let (store0, mut gen0) = gen_filled_store(0, None).await;
+        let (store0, mut generator0) = gen_filled_store(0, None).await;
         let store1 = create_store(None).await;
 
-        let headers = gen0.next_many(10);
+        let headers = generator0.next_many(10);
         store0.insert(headers.clone()).await.unwrap();
         store1.insert(headers).await.unwrap();
 
-        let mut gen1 = gen0.fork();
+        let mut generator1 = generator0.fork();
 
-        store0.insert(gen0.next_many_verified(5)).await.unwrap();
-        store1.insert(gen1.next_many_verified(6)).await.unwrap();
+        store0
+            .insert(generator0.next_many_verified(5))
+            .await
+            .unwrap();
+        store1
+            .insert(generator1.next_many_verified(6))
+            .await
+            .unwrap();
 
         assert_eq!(
             store0.get_by_height(10).await.unwrap(),
@@ -1018,11 +1024,11 @@ pub mod tests {
         path: Option<&Path>,
     ) -> (RedbStore, ExtendedHeaderGenerator) {
         let s = create_store(path).await;
-        let mut gen = ExtendedHeaderGenerator::new();
-        let headers = gen.next_many(amount);
+        let mut generator = ExtendedHeaderGenerator::new();
+        let headers = generator.next_many(amount);
 
         s.insert(headers).await.expect("inserting test data failed");
 
-        (s, gen)
+        (s, generator)
     }
 }

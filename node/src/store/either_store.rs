@@ -112,12 +112,12 @@ where
     fn clone_from(&mut self, source: &Self) {
         match source {
             EitherStore::Left(source_store) => match self {
-                EitherStore::Left(ref mut self_store) => self_store.clone_from(source_store),
+                EitherStore::Left(self_store) => self_store.clone_from(source_store),
                 EitherStore::Right(_) => *self = EitherStore::Left(source_store.clone()),
             },
             EitherStore::Right(source_store) => match self {
                 EitherStore::Left(_) => *self = EitherStore::Right(source_store.clone()),
-                EitherStore::Right(ref mut self_store) => self_store.clone_from(source_store),
+                EitherStore::Right(self_store) => self_store.clone_from(source_store),
             },
         };
     }
@@ -130,8 +130,8 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            EitherStore::Left(ref store) => Debug::fmt(store, f),
-            EitherStore::Right(ref store) => Debug::fmt(store, f),
+            EitherStore::Left(store) => Debug::fmt(store, f),
+            EitherStore::Right(store) => Debug::fmt(store, f),
         }
     }
 }
@@ -143,8 +143,8 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            EitherStore::Left(ref store) => Display::fmt(store, f),
-            EitherStore::Right(ref store) => Display::fmt(store, f),
+            EitherStore::Left(store) => Display::fmt(store, f),
+            EitherStore::Right(store) => Display::fmt(store, f),
         }
     }
 }

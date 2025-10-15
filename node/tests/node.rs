@@ -161,15 +161,18 @@ async fn peer_discovery() {
 
 #[tokio::test]
 async fn stops_services_when_network_is_compromised() {
-    let mut gen = ExtendedHeaderGenerator::new();
+    let mut generator = ExtendedHeaderGenerator::new();
     let store = InMemoryStore::new();
 
     // add some initial headers
-    store.insert(gen.next_many_verified(64)).await.unwrap();
+    store
+        .insert(generator.next_many_verified(64))
+        .await
+        .unwrap();
 
     // create a corrupted block and insert it
     let mut eds = generate_dummy_eds(8, AppVersion::V2);
-    let (header, befp) = corrupt_eds(&mut gen, &mut eds);
+    let (header, befp) = corrupt_eds(&mut generator, &mut eds);
 
     store.insert(header).await.unwrap();
 

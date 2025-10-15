@@ -336,7 +336,10 @@ impl PeerTracker {
         self.recount_peer_tracker_info();
     }
 
-    pub(crate) fn connections(&self, peer_id: &PeerId) -> impl Iterator<Item = ConnectionId> + '_ {
+    pub(crate) fn connections(
+        &self,
+        peer_id: &PeerId,
+    ) -> impl Iterator<Item = ConnectionId> + use<'_> {
         self.peer(peer_id)
             .map(|peer| peer.connections.keys().copied())
             .into_iter()
@@ -344,7 +347,7 @@ impl PeerTracker {
     }
 
     /// Returns all connections.
-    pub(crate) fn all_connections(&self) -> impl Iterator<Item = (&PeerId, ConnectionId)> + '_ {
+    pub(crate) fn all_connections(&self) -> impl Iterator<Item = (&PeerId, ConnectionId)> {
         self.peers()
             .filter(|peer| peer.is_connected())
             .flat_map(|peer| {

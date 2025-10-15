@@ -92,7 +92,7 @@ impl Network {
             Network::Mainnet => "celestia",
             Network::Arabica => "arabica-11",
             Network::Mocha => "mocha-4",
-            Network::Custom(ref s) => &s.id,
+            Network::Custom(s) => &s.id,
         }
     }
 
@@ -148,7 +148,7 @@ impl fmt::Display for Network {
             Network::Mainnet => "Mainnet",
             Network::Arabica => "Arabica",
             Network::Mocha => "Mocha",
-            Network::Custom(ref s) => s,
+            Network::Custom(s) => s,
         };
 
         f.write_str(s)

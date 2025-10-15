@@ -998,10 +998,10 @@ pub mod tests {
             .await
             .expect("creating test store failed");
 
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
         let expected_height = 1_000;
 
-        s.insert(gen.next_many_verified(expected_height))
+        s.insert(generator.next_many_verified(expected_height))
             .await
             .expect("inserting test data failed");
 
@@ -1027,8 +1027,8 @@ pub mod tests {
     async fn test_header_persistence() {
         let store_name = new_indexed_db_store_name().await;
 
-        let (original_store, mut gen) = gen_filled_store(0, &store_name).await;
-        let original_headers = gen.next_many_verified(20);
+        let (original_store, mut generator) = gen_filled_store(0, &store_name).await;
+        let original_headers = generator.next_many_verified(20);
 
         original_store
             .insert(original_headers.clone())
@@ -1052,7 +1052,7 @@ pub mod tests {
             assert_eq!(original_header, &stored_header);
         }
 
-        let new_headers = gen.next_many_verified(10);
+        let new_headers = generator.next_many_verified(10);
         reopened_store
             .insert(new_headers.clone())
             .await
@@ -1162,8 +1162,8 @@ pub mod tests {
         #[wasm_bindgen_test]
         async fn migration_test() {
             let store_name = new_indexed_db_store_name().await;
-            let mut gen = ExtendedHeaderGenerator::new();
-            let headers = gen.next_many(20);
+            let mut generator = ExtendedHeaderGenerator::new();
+            let headers = generator.next_many(20);
 
             init_store(&store_name, headers.clone()).await;
 
@@ -1263,12 +1263,12 @@ pub mod tests {
         let s = IndexedDbStore::new(name)
             .await
             .expect("creating test store failed");
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        s.insert(gen.next_many_verified(amount))
+        s.insert(generator.next_many_verified(amount))
             .await
             .expect("inserting test data failed");
 
-        (s, gen)
+        (s, generator)
     }
 }

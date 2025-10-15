@@ -56,21 +56,21 @@ impl ExtendedHeaderGenerator {
     /// ```
     pub fn new_from_height(height: u64) -> ExtendedHeaderGenerator {
         let prev_height = height.saturating_sub(1);
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        gen.current_header = if prev_height == 0 {
+        generator.current_header = if prev_height == 0 {
             None
         } else {
             Some(generate_new(
                 prev_height,
-                &gen.chain_id,
+                &generator.chain_id,
                 Time::now(),
-                &gen.key,
+                &generator.key,
                 None,
             ))
         };
 
-        gen
+        generator
     }
 
     /// Generates the next header.
@@ -661,15 +661,15 @@ mod tests {
 
     #[test]
     fn generate_blocks() {
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        let genesis = gen.next();
+        let genesis = generator.next();
         assert_eq!(genesis.height().value(), 1);
 
-        let height2 = gen.next();
+        let height2 = generator.next();
         assert_eq!(height2.height().value(), 2);
 
-        let another_height2 = gen.next_of(&genesis);
+        let another_height2 = generator.next_of(&genesis);
         assert_eq!(another_height2.height().value(), 2);
 
         genesis.verify(&height2).unwrap();
@@ -680,12 +680,12 @@ mod tests {
 
     #[test]
     fn generate_and_verify_range() {
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        let genesis = gen.next();
+        let genesis = generator.next();
         assert_eq!(genesis.height().value(), 1);
 
-        let headers = gen.next_many(256);
+        let headers = generator.next_many(256);
         assert_eq!(headers.last().unwrap().height().value(), 257);
 
         genesis.verify_adjacent_range(&headers).unwrap();
@@ -700,11 +700,11 @@ mod tests {
 
     #[test]
     fn generate_and_skip() {
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        let genesis = gen.next();
-        gen.skip(3);
-        let header5 = gen.next();
+        let genesis = generator.next();
+        generator.skip(3);
+        let header5 = generator.next();
 
         assert_eq!(genesis.height().value(), 1);
         assert_eq!(header5.height().value(), 5);
@@ -713,31 +713,31 @@ mod tests {
 
     #[test]
     fn new_and_skip() {
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        gen.skip(3);
-        let header4 = gen.next();
-        let header5 = gen.next();
+        generator.skip(3);
+        let header4 = generator.next();
+        let header5 = generator.next();
 
         assert_eq!(header4.height().value(), 4);
         assert_eq!(header5.height().value(), 5);
         header4.verify(&header5).unwrap();
 
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        gen.skip(1);
-        let header2 = gen.next();
-        let header3 = gen.next();
+        generator.skip(1);
+        let header2 = generator.next();
+        let header3 = generator.next();
 
         assert_eq!(header2.height().value(), 2);
         assert_eq!(header3.height().value(), 3);
         header2.verify(&header3).unwrap();
 
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        gen.skip(0);
-        let genesis = gen.next();
-        let header2 = gen.next();
+        generator.skip(0);
+        let genesis = generator.next();
+        let header2 = generator.next();
 
         assert_eq!(genesis.height().value(), 1);
         assert_eq!(header2.height().value(), 2);
@@ -746,27 +746,27 @@ mod tests {
 
     #[test]
     fn new_from_height() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
-        let header5 = gen.next();
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
+        let header5 = generator.next();
         assert_eq!(header5.height().value(), 5);
 
-        let mut gen = ExtendedHeaderGenerator::new_from_height(1);
-        let header1 = gen.next();
+        let mut generator = ExtendedHeaderGenerator::new_from_height(1);
+        let header1 = generator.next();
         assert_eq!(header1.height().value(), 1);
 
-        let mut gen = ExtendedHeaderGenerator::new_from_height(0);
-        let header1 = gen.next();
+        let mut generator = ExtendedHeaderGenerator::new_from_height(0);
+        let header1 = generator.next();
         assert_eq!(header1.height().value(), 1);
     }
 
     #[test]
     fn generate_next_of() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
 
-        let header5 = gen.next();
-        let header6 = gen.next();
-        let _header7 = gen.next();
-        let another_header6 = gen.next_of(&header5);
+        let header5 = generator.next();
+        let header6 = generator.next();
+        let _header7 = generator.next();
+        let another_header6 = generator.next_of(&header5);
 
         header5.verify(&header6).unwrap();
         header5.verify(&another_header6).unwrap();
@@ -778,12 +778,12 @@ mod tests {
 
     #[test]
     fn generate_next_many_of() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
 
-        let header5 = gen.next();
-        let header6 = gen.next();
-        let _header7 = gen.next();
-        let another_header_6_to_10 = gen.next_many_of(&header5, 5);
+        let header5 = generator.next();
+        let header6 = generator.next();
+        let _header7 = generator.next();
+        let another_header_6_to_10 = generator.next_many_of(&header5, 5);
 
         header5.verify(&header6).unwrap();
         header5
@@ -798,13 +798,13 @@ mod tests {
 
     #[test]
     fn gen_next_after_next_many_of() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
 
-        let header5 = gen.next();
-        let another_header_6_to_10 = gen.next_many_of(&header5, 5);
+        let header5 = generator.next();
+        let another_header_6_to_10 = generator.next_many_of(&header5, 5);
         // `next_of` and `next_many_of` does not change the state of the
         // generator, so `next` must return height 6 header.
-        let header6 = gen.next();
+        let header6 = generator.next();
 
         header5.verify(&header6).unwrap();
         header5
@@ -819,12 +819,12 @@ mod tests {
 
     #[test]
     fn generate_another_of() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
 
-        let header5 = gen.next();
-        let header6 = gen.next();
+        let header5 = generator.next();
+        let header6 = generator.next();
 
-        let another_header6 = gen.another_of(&header6);
+        let another_header6 = generator.another_of(&header6);
 
         header5.verify(&header6).unwrap();
         header5.verify(&another_header6).unwrap();
@@ -832,11 +832,11 @@ mod tests {
 
     #[test]
     fn invalidate_header() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
 
-        let header5 = gen.next();
-        let mut header6 = gen.next();
-        let mut header7 = gen.next();
+        let header5 = generator.next();
+        let mut header6 = generator.next();
+        let mut header7 = generator.next();
 
         invalidate(&mut header6);
 
@@ -854,11 +854,11 @@ mod tests {
 
     #[test]
     fn unverify_header() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
 
-        let header5 = gen.next();
-        let mut header6 = gen.next();
-        let mut header7 = gen.next();
+        let header5 = generator.next();
+        let mut header6 = generator.next();
+        let mut header7 = generator.next();
 
         unverify(&mut header6);
 
@@ -876,10 +876,10 @@ mod tests {
 
     #[test]
     fn invalidate_and_unverify_header() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
 
-        let header5 = gen.next();
-        let mut header6 = gen.next();
+        let header5 = generator.next();
+        let mut header6 = generator.next();
 
         invalidate(&mut header6);
         unverify(&mut header6);
@@ -887,10 +887,10 @@ mod tests {
         header6.validate().unwrap_err();
         header5.verify(&header6).unwrap_err();
 
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
 
-        let header5 = gen.next();
-        let mut header6 = gen.next();
+        let header5 = generator.next();
+        let mut header6 = generator.next();
 
         // check different order too
         unverify(&mut header6);

@@ -154,8 +154,8 @@ mod tests {
 
     async fn test_batching(to_fetch: u64, batches: usize, batch_size: u64) {
         let (_p2p, mut p2p_mock) = P2p::mocked();
-        let mut gen = ExtendedHeaderGenerator::new();
-        let headers = gen.next_many(to_fetch);
+        let mut generator = ExtendedHeaderGenerator::new();
+        let headers = generator.next_many(to_fetch);
 
         let mut session = HeaderSession::new(1..=to_fetch, p2p_mock.cmd_tx.clone());
         assert_eq!(session.batch_size, batch_size);
@@ -236,8 +236,8 @@ mod tests {
     #[async_test]
     async fn retry_on_missing_range() {
         let (_p2p, mut p2p_mock) = P2p::mocked();
-        let mut gen = ExtendedHeaderGenerator::new();
-        let headers = gen.next_many(8);
+        let mut generator = ExtendedHeaderGenerator::new();
+        let headers = generator.next_many(8);
 
         let mut session = HeaderSession::new(1..=8, p2p_mock.cmd_tx.clone());
         let (result_tx, result_rx) = oneshot::channel();
@@ -265,8 +265,8 @@ mod tests {
     #[async_test]
     async fn not_found_is_not_fatal() {
         let (_p2p, mut p2p_mock) = P2p::mocked();
-        let mut gen = ExtendedHeaderGenerator::new();
-        let headers = gen.next_many(8);
+        let mut generator = ExtendedHeaderGenerator::new();
+        let headers = generator.next_many(8);
 
         let mut session = HeaderSession::new(1..=8, p2p_mock.cmd_tx.clone());
         let (result_tx, result_rx) = oneshot::channel();

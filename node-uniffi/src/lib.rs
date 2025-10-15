@@ -70,11 +70,12 @@ impl LuminaNode {
     /// Stops the running node and closes all network connections.
     pub async fn stop(&self) -> Result<()> {
         let mut node = self.node.write().await;
-        if let Some(node) = node.take() {
-            node.stop().await;
-            Ok(())
-        } else {
-            Err(LuminaError::NodeNotRunning)
+        match node.take() {
+            Some(node) => {
+                node.stop().await;
+                Ok(())
+            }
+            _ => Err(LuminaError::NodeNotRunning),
         }
     }
 

@@ -504,9 +504,9 @@ mod tests {
         #[future(awt)]
         s: S,
     ) {
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        let header = gen.next();
+        let header = generator.next();
 
         s.insert(header.clone()).await.unwrap();
         assert_eq!(s.head_height().await.unwrap(), 1);
@@ -551,9 +551,9 @@ mod tests {
         s: S,
     ) {
         let mut s = s;
-        let mut gen = fill_store(&mut s, 100).await;
+        let mut generator = fill_store(&mut s, 100).await;
 
-        let header101 = gen.next();
+        let header101 = generator.next();
         s.insert(header101.clone()).await.unwrap();
 
         let error = match s.insert(header101).await {
@@ -578,11 +578,11 @@ mod tests {
         s: S,
     ) {
         let mut s = s;
-        let gen = fill_store(&mut s, 100).await;
+        let generator = fill_store(&mut s, 100).await;
 
         // Height 30 with different hash
         let header29 = s.get_by_height(29).await.unwrap();
-        let header30 = gen.next_of(&header29);
+        let header30 = generator.next_of(&header29);
 
         let error = match s.insert(header30).await {
             Err(StoreError::InsertionFailed(StoreInsertionError::ContraintsNotMet(e))) => e,
@@ -626,9 +626,9 @@ mod tests {
         s: S,
     ) {
         let mut s = s;
-        let mut gen = fill_store(&mut s, 10).await;
+        let mut generator = fill_store(&mut s, 10).await;
 
-        s.insert(gen.next_many_verified(4)).await.unwrap();
+        s.insert(generator.next_many_verified(4)).await.unwrap();
         s.get_by_height(14).await.unwrap();
     }
 
@@ -643,12 +643,12 @@ mod tests {
         s: S,
     ) {
         let mut s = s;
-        let mut gen = fill_store(&mut s, 10).await;
+        let mut generator = fill_store(&mut s, 10).await;
 
         // height 11
-        let skipped = gen.next();
+        let skipped = generator.next();
         // height 12
-        let upcoming_head = gen.next();
+        let upcoming_head = generator.next();
 
         s.insert(upcoming_head).await.unwrap();
         s.insert(skipped).await.unwrap();
@@ -665,14 +665,14 @@ mod tests {
         s: S,
     ) {
         let mut s = s;
-        let mut gen = fill_store(&mut s, 10).await;
+        let mut generator = fill_store(&mut s, 10).await;
 
-        let mut gen_prime = gen.fork();
+        let mut gen_prime = generator.fork();
         // height 11
-        let _skipped = gen.next();
+        let _skipped = generator.next();
         let another_chain = gen_prime.next();
         // height 12
-        let upcoming_head = gen.next();
+        let upcoming_head = generator.next();
 
         s.insert(upcoming_head).await.unwrap();
         assert!(matches!(
@@ -693,12 +693,12 @@ mod tests {
         #[future(awt)]
         s: S,
     ) {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(5);
-        let header5 = gen.next();
-        gen.next_many(4);
-        let header10 = gen.next();
-        gen.next_many(4);
-        let header15 = gen.next();
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
+        let header5 = generator.next();
+        generator.next_many(4);
+        let header10 = generator.next();
+        generator.next_many(4);
+        let header15 = generator.next();
 
         s.insert(header5).await.unwrap();
         s.insert(header15).await.unwrap();
@@ -980,18 +980,18 @@ mod tests {
         s: S,
     ) {
         let store = s;
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        gen.skip(19);
+        generator.skip(19);
 
-        let prepend0 = gen.next();
-        let prepend1 = gen.next_many_verified(5);
-        store.insert(gen.next_many_verified(4)).await.unwrap();
-        store.insert(gen.next_many_verified(5)).await.unwrap();
+        let prepend0 = generator.next();
+        let prepend1 = generator.next_many_verified(5);
+        store.insert(generator.next_many_verified(4)).await.unwrap();
+        store.insert(generator.next_many_verified(5)).await.unwrap();
         store.insert(prepend1).await.unwrap();
         store.insert(prepend0).await.unwrap();
-        store.insert(gen.next_many_verified(5)).await.unwrap();
-        store.insert(gen.next()).await.unwrap();
+        store.insert(generator.next_many_verified(5)).await.unwrap();
+        store.insert(generator.next()).await.unwrap();
 
         let final_ranges = store.get_stored_header_ranges().await.unwrap();
         assert_eq!(final_ranges.as_ref(), &[20..=40]);
@@ -1010,24 +1010,24 @@ mod tests {
         s: S,
     ) {
         let store = s;
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        gen.skip(9);
+        generator.skip(9);
 
-        let skip0 = gen.next_many_verified(5);
-        store.insert(gen.next_many_verified(2)).await.unwrap();
-        store.insert(gen.next_many_verified(3)).await.unwrap();
+        let skip0 = generator.next_many_verified(5);
+        store.insert(generator.next_many_verified(2)).await.unwrap();
+        store.insert(generator.next_many_verified(3)).await.unwrap();
 
-        let skip1 = gen.next();
-        store.insert(gen.next()).await.unwrap();
+        let skip1 = generator.next();
+        store.insert(generator.next()).await.unwrap();
 
-        let skip2 = gen.next_many_verified(5);
+        let skip2 = generator.next_many_verified(5);
 
-        store.insert(gen.next()).await.unwrap();
+        store.insert(generator.next()).await.unwrap();
 
-        let skip3 = gen.next_many_verified(5);
-        let skip4 = gen.next_many_verified(5);
-        let skip5 = gen.next_many_verified(5);
+        let skip3 = generator.next_many_verified(5);
+        let skip4 = generator.next_many_verified(5);
+        let skip5 = generator.next_many_verified(5);
 
         store.insert(skip5).await.unwrap();
         store.insert(skip4).await.unwrap();
@@ -1051,12 +1051,12 @@ mod tests {
         s: S,
     ) {
         let store = s;
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        store.insert(gen.next_many_verified(5)).await.unwrap();
-        let mut fork = gen.fork();
-        let _gap = gen.next();
-        store.insert(gen.next_many_verified(4)).await.unwrap();
+        store.insert(generator.next_many_verified(5)).await.unwrap();
+        let mut fork = generator.fork();
+        let _gap = generator.next();
+        store.insert(generator.next_many_verified(4)).await.unwrap();
 
         store.insert(fork.next()).await.unwrap_err();
     }
@@ -1255,14 +1255,14 @@ mod tests {
     async fn fill_store<S: Store>(store: &mut S, amount: u64) -> ExtendedHeaderGenerator {
         assert!(!store.has_at(1).await, "Store is not empty");
 
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         store
-            .insert(gen.next_many_verified(amount))
+            .insert(generator.next_many_verified(amount))
             .await
             .expect("inserting test data failed");
 
-        gen
+        generator
     }
 
     async fn new_in_memory_store() -> InMemoryStore {
