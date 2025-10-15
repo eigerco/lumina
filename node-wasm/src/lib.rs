@@ -5,6 +5,7 @@ pub mod client;
 mod commands;
 pub mod error;
 mod ports;
+pub mod subscriptions;
 pub mod utils;
 mod worker;
 mod wrapper;

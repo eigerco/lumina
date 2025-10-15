@@ -7,7 +7,7 @@ use celestia_types::Blob;
 use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::to_value;
+use serde_wasm_bindgen::{from_value, to_value};
 use thiserror::Error;
 use tokio::select;
 use tokio::sync::mpsc;
@@ -373,34 +373,45 @@ impl NodeWorkerInstance {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum SubscriptionFeedback {
+    /// receiver has read the previous item and is ready for more
+    Ready,
+    /// receiver closed the channel
+    Close,
+}
+
 fn register_forwarding_tasks_and_callbacks<T: Serialize + 'static>(
     port: MessagePortLike,
     mut stream: ReceiverStream<Result<T, SubscriptionError>>,
 ) -> Result<()> {
-    let (close_tx, mut close_rx) = mpsc::channel(1);
-    let port = Port::new(port.into(), move |_: MessageEvent| -> Result<()> {
-        info!("closing subscription");
-        // any message from the client side signals channel close
-        if let Err(_) = close_tx.try_send(()) {
-            warn!("Error triggering subscription forwarding task close, should not happen");
+    let (signal_tx, mut signal_rx) = mpsc::channel(1);
+    let port = Port::new(port.into(), move |ev: MessageEvent| -> Result<()> {
+        let signal: SubscriptionFeedback =
+            from_value(ev.data()).context("could not deserialize subscription signal")?;
+        if signal_tx.try_send(signal).is_err() {
+            error!("Error forwarding subscription signal, should not happen");
         }
+
         Ok(())
     })?;
 
     spawn(async move {
         info!("Starting subscription");
         loop {
-            select! {
-                _ = close_rx.recv() => {
+            match signal_rx.recv().await {
+                Some(SubscriptionFeedback::Ready) => (),
+                Some(SubscriptionFeedback::Close) => break,
+                None => {
+                    warn!("unexpected subscription signal channel close, should not happen");
                     break;
                 }
-                item = stream.next() => {
-                    info!("Forwarding subscription item");
-                    let item : Result<Option<T>> = item.transpose().map_err(Error::from);
-                    if let Err(e) = port.send_raw(&item) {
-                        error!("Error sending subscription item: {e}");
-                    }
-                }
+            }
+            let item = stream.next().await;
+            info!("Forwarding subscription item");
+            let item: Result<Option<T>> = item.transpose().map_err(Error::from);
+            if let Err(e) = port.send_raw(&item) {
+                error!("Error sending subscription item: {e}");
             }
         }
         info!("Ending subscription");

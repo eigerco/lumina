@@ -94,7 +94,6 @@ impl WorkerClient {
                 let item: T = from_value(ev.data()).context("could not deserialize message")?;
                 tx.send(item)
                     .context("forwarding subscription item failed")?;
-                // TODO cleanup when channel is closed
                 Ok(())
             },
         )?;

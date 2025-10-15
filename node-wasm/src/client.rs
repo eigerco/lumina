@@ -22,9 +22,9 @@ use crate::commands::{
 };
 use crate::error::{Context, Result};
 use crate::ports::WorkerClient;
+use crate::subscriptions::{BlobStream, HeaderStream};
 use crate::utils::{
-    is_safari, js_value_from_display, request_storage_persistence, timeout, BlobStream,
-    HeaderStream, Network,
+    is_safari, js_value_from_display, request_storage_persistence, timeout, Network,
 };
 use crate::worker::{WasmBlockstore, WasmStore};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
