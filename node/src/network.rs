@@ -97,7 +97,7 @@ impl Network {
     }
 
     /// Get official Celestia and Lumina bootnodes for the given network.
-    pub fn canonical_bootnodes(&self) -> impl Iterator<Item = Multiaddr> {
+    pub fn canonical_bootnodes(&self) -> impl Iterator<Item = Multiaddr> + use<> {
         let peers: &[_] = match self {
             Network::Mainnet => &[
                 "/dnsaddr/da-bootstrapper-1.celestia-bootstrap.net/p2p/12D3KooWSqZaLcn5Guypo2mrHr297YPJnV8KMEMXNjs3qAS8msw8",
