@@ -51,8 +51,8 @@ impl ExtendedHeaderGenerator {
     /// ```
     /// use celestia_types::test_utils::ExtendedHeaderGenerator;
     ///
-    /// let mut gen = ExtendedHeaderGenerator::new_from_height(5);
-    /// let header5 = gen.next();
+    /// let mut generator = ExtendedHeaderGenerator::new_from_height(5);
+    /// let header5 = generator.next();
     /// ```
     pub fn new_from_height(height: u64) -> ExtendedHeaderGenerator {
         let prev_height = height.saturating_sub(1);
@@ -78,8 +78,8 @@ impl ExtendedHeaderGenerator {
     /// ```
     /// use celestia_types::test_utils::ExtendedHeaderGenerator;
     ///
-    /// let mut gen = ExtendedHeaderGenerator::new();
-    /// let header1 = gen.next();
+    /// let mut generator = ExtendedHeaderGenerator::new();
+    /// let header1 = generator.next();
     /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> ExtendedHeader {
@@ -101,8 +101,8 @@ impl ExtendedHeaderGenerator {
     /// #    unimplemented!();
     /// # }
     ///
-    /// let mut gen = ExtendedHeaderGenerator::new();
-    /// let header1 = gen.next_with_dah(generate_dah());
+    /// let mut generator = ExtendedHeaderGenerator::new();
+    /// let header1 = generator.next_with_dah(generate_dah());
     /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next_with_dah(&mut self, dah: DataAvailabilityHeader) -> ExtendedHeader {
@@ -134,10 +134,10 @@ impl ExtendedHeaderGenerator {
     /// ```
     /// use celestia_types::test_utils::ExtendedHeaderGenerator;
     ///
-    /// let mut gen = ExtendedHeaderGenerator::new();
-    /// let header1 = gen.next();
-    /// let header2 = gen.next();
-    /// let another_header2 = gen.next_of(&header1);
+    /// let mut generator = ExtendedHeaderGenerator::new();
+    /// let header1 = generator.next();
+    /// let header2 = generator.next();
+    /// let another_header2 = generator.next_of(&header1);
     /// ```
     ///
     /// # Note
@@ -161,10 +161,10 @@ impl ExtendedHeaderGenerator {
     /// #    unimplemented!();
     /// # }
     ///
-    /// let mut gen = ExtendedHeaderGenerator::new();
-    /// let header1 = gen.next();
-    /// let header2 = gen.next();
-    /// let another_header2 = gen.next_of_with_dah(&header1, generate_dah());
+    /// let mut generator = ExtendedHeaderGenerator::new();
+    /// let header1 = generator.next();
+    /// let header2 = generator.next();
+    /// let another_header2 = generator.next_of_with_dah(&header1, generate_dah());
     /// ```
     ///
     /// # Note
@@ -190,10 +190,10 @@ impl ExtendedHeaderGenerator {
     /// ```
     /// use celestia_types::test_utils::ExtendedHeaderGenerator;
     ///
-    /// let mut gen = ExtendedHeaderGenerator::new();
-    /// let header1 = gen.next();
-    /// let headers_2_to_12 = gen.next_many(10);
-    /// let another_headers_2_to_12 = gen.next_many_of(&header1, 10);
+    /// let mut generator = ExtendedHeaderGenerator::new();
+    /// let header1 = generator.next();
+    /// let headers_2_to_12 = generator.next_many(10);
+    /// let another_headers_2_to_12 = generator.next_many_of(&header1, 10);
     /// ```
     ///
     /// # Note
@@ -216,10 +216,10 @@ impl ExtendedHeaderGenerator {
     /// ```
     /// use celestia_types::test_utils::ExtendedHeaderGenerator;
     ///
-    /// let mut gen = ExtendedHeaderGenerator::new();
-    /// let header1 = gen.next();
-    /// let header2 = gen.next();
-    /// let another_header2 = gen.another_of(&header2);
+    /// let mut generator = ExtendedHeaderGenerator::new();
+    /// let header1 = generator.next();
+    /// let header2 = generator.next();
+    /// let another_header2 = generator.another_of(&header2);
     /// ```
     ///
     /// # Note
