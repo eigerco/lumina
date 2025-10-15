@@ -7,7 +7,7 @@ NODE_TYPE="${NODE_TYPE:-bridge}"
 SKIP_AUTH="${SKIP_AUTH:-false}"
 NODE_NAME="node-$NODE_ID"
 # a private local network
-P2P_NETWORK="private"
+P2P_NETWORK="${P2P_NETWORK:-"private"}"
 # a node configuration directory
 CONFIG_DIR="$HOME/.celestia-$NODE_TYPE-$P2P_NETWORK"
 # directory and the files shared with the validator node
@@ -17,7 +17,7 @@ NODE_KEY_FILE="$CREDENTIALS_DIR/$NODE_NAME.key"
 NODE_JWT_FILE="$CREDENTIALS_DIR/$NODE_NAME.jwt"
 # directory where validator will write the genesis hash
 GENESIS_DIR="/genesis"
-GENESIS_HASH_FILE="$GENESIS_DIR/genesis_hash-validator-0"
+GENESIS_HASH_FILE="$GENESIS_DIR/genesis-hash-$P2P_NETWORK"
 
 # Wait for the validator to set up and provision us via shared dir
 wait_for_provision() {

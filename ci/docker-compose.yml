@@ -114,7 +114,7 @@ services:
       context: .
       dockerfile: Dockerfile.validator
     environment:
-      - NODE_NAME=validator-eviction-testing
+      - P2P_NETWORK=private-eviction-testing
       # amount of DA nodes to provision (default: 3)
       - NODE_COUNT=3
       # values from the eviction testing in celestia-app

@@ -6,11 +6,11 @@ set -euxo pipefail
 # or 1 if not provided
 NODE_COUNT="${NODE_COUNT:-1}"
 # a private local network
-P2P_NETWORK="private"
+P2P_NETWORK="${P2P_NETWORK:-"private"}"
 # a validator node configuration directory
 CONFIG_DIR="$CELESTIA_HOME/.celestia-app"
 # the names of the keys
-NODE_NAME="${NODE_NAME:-"validator-0"}"
+NODE_NAME="validator-0"
 # amounts of the coins for the keys
 NODE_COINS="200000000000000utia"
 VALIDATOR_COINS="1000000000000000utia"
@@ -18,7 +18,7 @@ VALIDATOR_COINS="1000000000000000utia"
 CREDENTIALS_DIR="/credentials"
 # directory where validator will write the genesis hash
 GENESIS_DIR="/genesis"
-GENESIS_HASH_FILE="$GENESIS_DIR/genesis_hash-$NODE_NAME"
+GENESIS_HASH_FILE="$GENESIS_DIR/genesis-hash-$P2P_NETWORK"
 
 # Get the address of the node of given name
 node_address() {
