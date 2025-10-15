@@ -1,13 +1,13 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use crate::utils::{random_bytes, random_ns};
-use celestia_rpc::prelude::*;
 use celestia_rpc::TxConfig;
+use celestia_rpc::prelude::*;
 use celestia_types::{AppVersion, Blob};
 
 pub mod utils;
 
-use crate::utils::client::{new_test_client, AuthLevel};
+use crate::utils::client::{AuthLevel, new_test_client};
 
 #[tokio::test]
 async fn account_address() {

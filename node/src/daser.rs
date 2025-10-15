@@ -8,7 +8,7 @@ use std::time::Duration;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
-use lumina_utils::executor::{spawn, JoinHandle};
+use lumina_utils::executor::{JoinHandle, spawn};
 use lumina_utils::time::{Instant, Interval};
 use rand::Rng;
 use tendermint::Time;
@@ -633,8 +633,8 @@ mod tests {
     use super::*;
     use crate::events::{EventChannel, EventSubscriber};
     use crate::node::SAMPLING_WINDOW;
-    use crate::p2p::shwap::convert_cid;
     use crate::p2p::P2pCmd;
+    use crate::p2p::shwap::convert_cid;
     use crate::store::InMemoryStore;
     use crate::test_utils::{ExtendedHeaderGeneratorExt, MockP2pHandle};
     use crate::utils::OneshotResultSender;
@@ -642,7 +642,7 @@ mod tests {
     use celestia_proto::bitswap::Block;
     use celestia_types::consts::appconsts::AppVersion;
     use celestia_types::sample::{Sample, SampleId};
-    use celestia_types::test_utils::{generate_dummy_eds, ExtendedHeaderGenerator};
+    use celestia_types::test_utils::{ExtendedHeaderGenerator, generate_dummy_eds};
     use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
     use cid::Cid;
     use lumina_utils::test_utils::async_test;

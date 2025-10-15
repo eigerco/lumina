@@ -5,10 +5,10 @@ use async_stream::try_stream;
 use celestia_rpc::HeaderClient;
 use futures_util::{Stream, StreamExt};
 
+use crate::Result;
 use crate::client::ClientInner;
 use crate::types::hash::Hash;
 use crate::types::{ExtendedHeader, SyncState};
-use crate::Result;
 
 /// Header API for quering bridge nodes.
 pub struct HeaderApi {

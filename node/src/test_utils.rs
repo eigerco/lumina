@@ -2,15 +2,16 @@
 
 use std::time::Duration;
 
-use celestia_proto::p2p::pb::{header_request::Data, HeaderRequest};
+use celestia_proto::p2p::pb::{HeaderRequest, header_request::Data};
+use celestia_types::ExtendedHeader;
 use celestia_types::hash::Hash;
 use celestia_types::test_utils::ExtendedHeaderGenerator;
-use celestia_types::ExtendedHeader;
 use cid::Cid;
 use lumina_utils::time::timeout;
 use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::{
+    NodeBuilder,
     block_ranges::{BlockRange, BlockRanges},
     blockstore::InMemoryBlockstore,
     daser::DaserCmd,
@@ -19,7 +20,6 @@ use crate::{
     peer_tracker::PeerTrackerInfo,
     store::{InMemoryStore, VerifiedExtendedHeaders},
     utils::OneshotResultSender,
-    NodeBuilder,
 };
 
 /// Generate a store pre-filled with headers.

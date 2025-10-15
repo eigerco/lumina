@@ -8,8 +8,8 @@ use std::ops::{Bound, RangeBounds, RangeInclusive};
 #[cfg(target_arch = "wasm32")]
 use crate::utils::NamedLockError;
 use async_trait::async_trait;
-use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use celestia_types::hash::Hash;
 use cid::Cid;
 use libp2p::identity::Keypair;
 use prost::Message;
@@ -342,8 +342,8 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
 mod tests {
     use super::*;
     use crate::test_utils::ExtendedHeaderGeneratorExt;
-    use celestia_types::test_utils::ExtendedHeaderGenerator;
     use celestia_types::Height;
+    use celestia_types::test_utils::ExtendedHeaderGenerator;
     use rstest::rstest;
     // rstest only supports attributes which last segment is `test`
     // https://docs.rs/rstest/0.18.2/rstest/attr.rstest.html#inject-test-attribute

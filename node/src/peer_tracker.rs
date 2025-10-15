@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use libp2p::ping;
-use libp2p::{swarm::ConnectionId, PeerId};
+use libp2p::{PeerId, swarm::ConnectionId};
 use lumina_utils::time::Instant;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};

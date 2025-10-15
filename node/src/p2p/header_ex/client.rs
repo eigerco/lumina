@@ -2,23 +2,23 @@ use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 
 use celestia_proto::p2p::pb::header_request::Data;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
-use futures::future::{join_all, BoxFuture, FutureExt};
+use futures::future::{BoxFuture, FutureExt, join_all};
 use futures::stream::{FuturesUnordered, StreamExt};
-use libp2p::request_response::{OutboundFailure, OutboundRequestId};
 use libp2p::PeerId;
+use libp2p::request_response::{OutboundFailure, OutboundRequestId};
 use lumina_utils::executor::yield_now;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, instrument, trace};
 
+use crate::p2p::P2pError;
 use crate::p2p::header_ex::utils::{HeaderRequestExt, HeaderResponseExt};
 use crate::p2p::header_ex::{HeaderExError, ReqRespBehaviour};
-use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
 use crate::utils::{OneshotResultSender, OneshotResultSenderExt};
 
@@ -387,7 +387,7 @@ mod tests {
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::consts::HASH_SIZE;
     use celestia_types::hash::Hash;
-    use celestia_types::test_utils::{invalidate, unverify, ExtendedHeaderGenerator};
+    use celestia_types::test_utils::{ExtendedHeaderGenerator, invalidate, unverify};
     use libp2p::swarm::ConnectionId;
     use lumina_utils::test_utils::async_test;
     use lumina_utils::time::sleep;

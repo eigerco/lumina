@@ -1,8 +1,8 @@
 use celestia_proto::p2p::pb::HeaderRequest;
 use celestia_types::ExtendedHeader;
+use futures::FutureExt;
 use futures::future::BoxFuture;
 use futures::stream::{FuturesUnordered, StreamExt};
-use futures::FutureExt;
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 
@@ -69,7 +69,9 @@ impl HeaderSession {
                         let amount = requested_amount - headers_len;
                         self.send_request(height, amount).await;
 
-                        debug!("requested {requested_amount}, got {headers_len}: retrying {height} +{amount}");
+                        debug!(
+                            "requested {requested_amount}, got {headers_len}: retrying {height} +{amount}"
+                        );
                     } else {
                         // Schedule next request
                         self.send_next_request().await;

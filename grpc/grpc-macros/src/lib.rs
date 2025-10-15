@@ -4,10 +4,10 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{quote, TokenStreamExt};
+use quote::{TokenStreamExt, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::{parse_macro_input, Attribute, FnArg, Ident, Signature, Token};
+use syn::{Attribute, FnArg, Ident, Signature, Token, parse_macro_input};
 
 #[derive(Debug)]
 struct GrpcMethod {

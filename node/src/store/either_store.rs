@@ -2,8 +2,8 @@ use std::fmt::{self, Debug, Display};
 use std::ops::RangeBounds;
 
 use async_trait::async_trait;
-use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use celestia_types::hash::Hash;
 use cid::Cid;
 use libp2p::identity::Keypair;
 

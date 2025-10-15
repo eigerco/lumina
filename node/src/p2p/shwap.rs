@@ -3,16 +3,16 @@ use std::sync::Arc;
 use beetswap::multihasher::{Multihasher, MultihasherError};
 use blockstore::block::CidError;
 use celestia_proto::bitswap::Block;
-use celestia_types::row::{Row, RowId, ROW_ID_MULTIHASH_CODE};
+use celestia_types::row::{ROW_ID_MULTIHASH_CODE, Row, RowId};
 use celestia_types::row_namespace_data::{
-    RowNamespaceData, RowNamespaceDataId, ROW_NAMESPACE_DATA_ID_MULTIHASH_CODE,
+    ROW_NAMESPACE_DATA_ID_MULTIHASH_CODE, RowNamespaceData, RowNamespaceDataId,
 };
-use celestia_types::sample::{Sample, SampleId, SAMPLE_ID_MULTIHASH_CODE};
+use celestia_types::sample::{SAMPLE_ID_MULTIHASH_CODE, Sample, SampleId};
 use cid::{Cid, CidGeneric};
 use libp2p::multihash::Multihash;
 use prost::Message;
 
-use crate::p2p::{P2pError, Result, MAX_MH_SIZE};
+use crate::p2p::{MAX_MH_SIZE, P2pError, Result};
 use crate::store::Store;
 
 /// Multihasher for Shwap types.
@@ -111,7 +111,7 @@ mod tests {
     use crate::store::InMemoryStore;
     use bytes::BytesMut;
     use celestia_types::consts::appconsts::AppVersion;
-    use celestia_types::test_utils::{generate_dummy_eds, ExtendedHeaderGenerator};
+    use celestia_types::test_utils::{ExtendedHeaderGenerator, generate_dummy_eds};
     use celestia_types::{AxisType, DataAvailabilityHeader};
     use lumina_utils::test_utils::async_test;
 

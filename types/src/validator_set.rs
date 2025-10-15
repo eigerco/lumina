@@ -8,7 +8,7 @@ use tendermint::{account, block, chain};
 use crate::block::CommitExt;
 use crate::trust_level::TrustLevelRatio;
 use crate::{
-    bail_validation, bail_verification, Result, ValidateBasic, ValidationError, VerificationError,
+    Result, ValidateBasic, ValidationError, VerificationError, bail_validation, bail_verification,
 };
 
 impl ValidateBasic for Set {

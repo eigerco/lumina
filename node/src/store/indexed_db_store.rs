@@ -3,8 +3,8 @@ use std::fmt::Display;
 use std::pin::pin;
 
 use async_trait::async_trait;
-use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use celestia_types::hash::Hash;
 use cid::Cid;
 use futures::Future;
 use js_sys::Uint8Array;
@@ -1246,11 +1246,13 @@ pub mod tests {
                 .transaction(&[RANGES_STORE_NAME], TransactionMode::ReadOnly)
                 .unwrap();
             let store = tx.store(RANGES_STORE_NAME).unwrap();
-            assert!(store
-                .get(JsValue::from_str(v4::SAMPLED_RANGES_KEY))
-                .await
-                .unwrap()
-                .is_none());
+            assert!(
+                store
+                    .get(JsValue::from_str(v4::SAMPLED_RANGES_KEY))
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
         }
     }
 

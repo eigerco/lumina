@@ -7,8 +7,8 @@ use uniffi::Object;
 
 mod grpc_client;
 
-use crate::signer::{UniffiSigner, UniffiSignerBox};
 use crate::GrpcClientBuilder as RustBuilder;
+use crate::signer::{UniffiSigner, UniffiSignerBox};
 
 pub use grpc_client::GrpcClient;
 

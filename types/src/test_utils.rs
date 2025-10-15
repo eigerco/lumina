@@ -4,9 +4,9 @@ use std::time::Duration;
 use ed25519_consensus::SigningKey;
 use rand::RngCore;
 use tendermint::block::header::{Header, Version};
-use tendermint::block::{parts, Commit, CommitSig};
+use tendermint::block::{Commit, CommitSig, parts};
 use tendermint::public_key::PublicKey;
-use tendermint::{chain, Signature, Time};
+use tendermint::{Signature, Time, chain};
 
 use crate::block::{CommitExt, GENESIS_HEIGHT};
 pub use crate::byzantine::test_utils::corrupt_eds;
@@ -16,7 +16,7 @@ use crate::consts::appconsts::{
 };
 use crate::consts::version;
 use crate::hash::{Hash, HashExt};
-use crate::nmt::{Namespace, NS_SIZE};
+use crate::nmt::{NS_SIZE, Namespace};
 use crate::{
     Blob, DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, Share, ValidatorSet,
 };

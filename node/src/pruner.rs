@@ -1,12 +1,12 @@
 //! Component responsible for removing blocks that aren't needed anymore.
 
-use std::collections::{hash_map, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map};
 use std::sync::Arc;
 use std::time::Duration;
 
 use blockstore::Blockstore;
-use lumina_utils::executor::{spawn, JoinHandle};
-use lumina_utils::time::{sleep, Instant};
+use lumina_utils::executor::{JoinHandle, spawn};
+use lumina_utils::time::{Instant, sleep};
 use tendermint::Time;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
@@ -587,15 +587,15 @@ where
 mod test {
     use blockstore::block::{Block, CidError};
     use celestia_types::test_utils::ExtendedHeaderGenerator;
-    use cid::multihash::Multihash;
     use cid::CidGeneric;
+    use cid::multihash::Multihash;
 
     use super::*;
     use crate::blockstore::InMemoryBlockstore;
     use crate::events::{EventChannel, EventSubscriber, TryRecvError};
     use crate::node::{DEFAULT_PRUNING_WINDOW, SAMPLING_WINDOW};
     use crate::store::InMemoryStore;
-    use crate::test_utils::{gen_filled_store, new_block_ranges, ExtendedHeaderGeneratorExt};
+    use crate::test_utils::{ExtendedHeaderGeneratorExt, gen_filled_store, new_block_ranges};
     use lumina_utils::test_utils::async_test;
     use lumina_utils::time::timeout;
 

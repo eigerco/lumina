@@ -5,11 +5,11 @@ use std::pin::pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use backoff::backoff::Backoff;
 use backoff::ExponentialBackoffBuilder;
+use backoff::backoff::Backoff;
 use celestia_types::ExtendedHeader;
-use lumina_utils::executor::{spawn, JoinHandle};
-use lumina_utils::time::{sleep, Instant, Interval};
+use lumina_utils::executor::{JoinHandle, spawn};
+use lumina_utils::time::{Instant, Interval, sleep};
 use serde::{Deserialize, Serialize};
 use tendermint::Time;
 use tokio::select;
@@ -390,7 +390,9 @@ where
             .map(|range| format!("{}", range.display()))
             .unwrap_or_else(|| "None".to_string());
 
-        info!("syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}");
+        info!(
+            "syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}"
+        );
         Ok(())
     }
 
@@ -741,10 +743,10 @@ mod tests {
     use super::*;
     use crate::block_ranges::{BlockRange, BlockRangeExt};
     use crate::events::EventChannel;
-    use crate::node::{HeaderExError, DEFAULT_PRUNING_WINDOW, SAMPLING_WINDOW};
+    use crate::node::{DEFAULT_PRUNING_WINDOW, HeaderExError, SAMPLING_WINDOW};
     use crate::p2p::header_session;
     use crate::store::InMemoryStore;
-    use crate::test_utils::{gen_filled_store, MockP2pHandle};
+    use crate::test_utils::{MockP2pHandle, gen_filled_store};
     use crate::utils::OneshotResultSenderExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use libp2p::request_response::OutboundFailure;

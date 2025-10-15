@@ -8,7 +8,7 @@ use crate::consts::appconsts;
 use crate::eds::AxisType;
 use crate::fraud_proof::FraudProof;
 use crate::hash::Hash;
-use crate::nmt::{Namespace, NamespaceProof, Nmt, NmtExt, NS_SIZE};
+use crate::nmt::{NS_SIZE, Namespace, NamespaceProof, Nmt, NmtExt};
 use crate::{Error, ExtendedHeader, Result};
 
 /// A proof that the block producer incorrectly encoded [`ExtendedDataSquare`].
@@ -296,12 +296,12 @@ impl From<BadEncodingFraudProof> for RawBadEncodingFraudProof {
 #[cfg(any(test, feature = "test-utils"))]
 pub(crate) mod test_utils {
     use nmt_rs::NamespaceProof;
-    use rand::seq::index;
     use rand::Rng;
+    use rand::seq::index;
 
     use crate::consts::appconsts::{FIRST_SPARSE_SHARE_CONTENT_SIZE, SHARE_SIZE};
     use crate::eds::is_ods_square;
-    use crate::test_utils::{random_bytes, ExtendedHeaderGenerator};
+    use crate::test_utils::{ExtendedHeaderGenerator, random_bytes};
     use crate::{DataAvailabilityHeader, ExtendedDataSquare};
 
     use super::*;
@@ -413,9 +413,9 @@ pub(crate) mod test_utils {
 mod tests {
     use self::test_utils::befp_from_header_and_eds;
     use super::*;
-    use crate::consts::appconsts::AppVersion;
-    use crate::test_utils::{corrupt_eds, generate_dummy_eds, ExtendedHeaderGenerator};
     use crate::DataAvailabilityHeader;
+    use crate::consts::appconsts::AppVersion;
+    use crate::test_utils::{ExtendedHeaderGenerator, corrupt_eds, generate_dummy_eds};
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;

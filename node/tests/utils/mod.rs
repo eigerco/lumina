@@ -4,15 +4,15 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use blockstore::Blockstore;
-use celestia_rpc::{prelude::*, Client, TxConfig};
+use celestia_rpc::{Client, TxConfig, prelude::*};
 use celestia_types::Blob;
-use libp2p::{multiaddr::Protocol, Multiaddr, PeerId};
+use libp2p::{Multiaddr, PeerId, multiaddr::Protocol};
+use lumina_node::NodeBuilder;
 use lumina_node::blockstore::InMemoryBlockstore;
 use lumina_node::events::EventSubscriber;
 use lumina_node::node::Node;
 use lumina_node::store::{InMemoryStore, Store};
 use lumina_node::test_utils::test_node_builder;
-use lumina_node::NodeBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 

@@ -4,13 +4,13 @@
 use celestia_types::p2p;
 use futures::StreamExt;
 use libp2p::{
-    noise,
-    swarm::{dummy, NetworkBehaviour, SwarmEvent},
-    tcp, yamux, SwarmBuilder,
+    SwarmBuilder, noise,
+    swarm::{NetworkBehaviour, SwarmEvent, dummy},
+    tcp, yamux,
 };
 use tokio::{
     sync::mpsc,
-    time::{sleep, Duration},
+    time::{Duration, sleep},
 };
 use tracing::{debug, warn};
 
@@ -58,7 +58,9 @@ pub async fn start_tiny_node() -> anyhow::Result<p2p::AddrInfo> {
                     debug!("{address:?}");
 
                     if addr_tx.send(address).await.is_err() {
-                        warn!("received new addr after set startup time, unittests might not have all the node addresses");
+                        warn!(
+                            "received new addr after set startup time, unittests might not have all the node addresses"
+                        );
                     }
                 }
                 Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {

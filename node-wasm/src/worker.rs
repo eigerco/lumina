@@ -2,8 +2,8 @@ use std::fmt::Debug;
 use std::time::Duration;
 
 use blockstore::EitherBlockstore;
-use celestia_types::nmt::Namespace;
 use celestia_types::Blob;
+use celestia_types::nmt::Namespace;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
