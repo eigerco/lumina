@@ -84,26 +84,17 @@ impl Port {
     }
 
     // TODO: doc
-    pub fn new_with_channels<T: Serialize>(
+    pub fn new_with_channels<T>(
         object: JsValue,
         forwarding_channel: mpsc::UnboundedSender<PayloadWithContext<T>>,
         //port_channel: Option<mpsc::UnboundedSender<JsValue>>,
     ) -> Result<Port>
     where
-        T: DeserializeOwned + 'static,
+        T: Serialize + DeserializeOwned + 'static,
     {
         tracing::info!("new port creation");
         Port::new(object, move |ev: MessageEvent| -> Result<()> {
             let port = ev.get_port();
-            /*
-            if let Some(port) = ev.get_port() {
-                if let Some(port_channel) = &port_channel {
-                    port_channel
-                        .send(port)
-                        .context("port forwarding channel closed, shouldn't happen: {e}")?;
-                }
-            }*/
-            //let payload: MultiplexMessage<T> =
             let MultiplexMessage { id, payload } =
                 from_value(ev.data()).context("could not deserialize message")?;
             forwarding_channel

@@ -1,3 +1,5 @@
+use std::array::from_ref;
+
 use celestia_types::{nmt::Namespace, Blob};
 use futures::stream::StreamExt;
 
@@ -46,7 +48,7 @@ async fn blob_subscription() {
     let (_, bs0) = blob_stream.next().await.unwrap().unwrap();
     assert!(bs0.is_empty());
 
-    let submitted_at = blob_submit(&client, &[blob.clone()]).await;
+    let submitted_at = blob_submit(&client, from_ref(&blob)).await;
 
     loop {
         let (h, bs) = blob_stream.next().await.unwrap().unwrap();

@@ -65,6 +65,9 @@ impl Server {
                             if let Err(e) = self.spawn_connection_worker(port) {
                                 error!("Failed to add new client connection: {e}");
                             }
+                            if response_sender.send(WorkerResponse::PortConnected).is_err() {
+                                warn!("PortConnected response channel closed unexpectedly");
+                            }
                         }
                         _ => return Ok((request, response_sender)),
                     }
@@ -255,7 +258,7 @@ fn spawn_connection_worker(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ports::client::Client;
+    use crate::{commands::NodeCommand, ports::client::Client};
 
     use tokio::sync::mpsc;
     use wasm_bindgen_test::wasm_bindgen_test;
@@ -264,77 +267,99 @@ mod tests {
     #[wasm_bindgen_test]
     async fn smoke_test() {
         let channel = MessageChannel::new().unwrap();
-        let client = Client::<i32, i32>::start(channel.port1().into()).unwrap();
+        let worker_port: JsValue = channel.port2().into();
+        let client = Client::<Request, Response>::start(channel.port1().into()).unwrap();
 
         let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-        let (port_tx, _) = mpsc::unbounded_channel();
-        let _worker_guard =
-            spawn_connection_worker::<i32, i32>(channel.port2().into(), request_tx, port_tx)
-                .unwrap()
-                .drop_guard();
+        let _worker_guard = spawn_connection_worker(worker_port.into(), request_tx)
+            .unwrap()
+            .drop_guard();
 
-        let response = client.send(42, None).unwrap();
+        let response = client
+            .send(Command::Meta(ManagementCommand::InternalPing), None)
+            .unwrap();
 
         let (request, responder) = request_rx.recv().await.expect("failed to recv");
-        assert_eq!(request, 42);
-        responder.send(43).unwrap();
+        assert!(matches!(
+            request.payload.unwrap(),
+            Command::Meta(ManagementCommand::InternalPing)
+        ));
+        responder.send(WorkerResponse::InternalPong).unwrap();
 
-        assert_eq!(response.await.unwrap(), 43);
+        assert!(matches!(
+            response.await.unwrap(),
+            WorkerResponse::InternalPong
+        ));
     }
 
     #[wasm_bindgen_test]
     async fn response_channel_dropped() {
         let channel = MessageChannel::new().unwrap();
-        let client = Client::<i32, i32>::start(channel.port1().into()).unwrap();
+        let worker_port: JsValue = channel.port2().into();
+        let client = Client::<Request, Response>::start(channel.port1().into()).unwrap();
 
         let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-        let (port_tx, _) = mpsc::unbounded_channel();
-        let _worker_guard =
-            spawn_connection_worker::<i32, i32>(channel.port2().into(), request_tx, port_tx)
-                .unwrap()
-                .drop_guard();
+        let _worker_guard = spawn_connection_worker(worker_port.into(), request_tx)
+            .unwrap()
+            .drop_guard();
 
-        let response = client.send(42, None).unwrap();
+        let response = client
+            .send(Command::Meta(ManagementCommand::InternalPing), None)
+            .unwrap();
 
         let (request, responder) = request_rx.recv().await.expect("failed to recv");
-        assert_eq!(request, 42);
+        assert!(matches!(
+            request.payload.unwrap(),
+            Command::Meta(ManagementCommand::InternalPing)
+        ));
         drop(responder);
 
-        assert_eq!(response.await, None);
+        assert!(response.await.is_none());
     }
 
     #[wasm_bindgen_test]
     async fn multiple_channels() {
         let channel = MessageChannel::new().unwrap();
-        let client = Client::<i32, String>::start(channel.port1().into()).unwrap();
+        let worker_port: JsValue = channel.port2().into();
+        let client = Client::<Request, Response>::start(channel.port1().into()).unwrap();
 
         let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-        let (port_tx, _) = mpsc::unbounded_channel();
-        let _worker_guard =
-            spawn_connection_worker::<i32, String>(channel.port2().into(), request_tx, port_tx)
-                .unwrap()
-                .drop_guard();
+        let _worker_guard = spawn_connection_worker(worker_port.into(), request_tx)
+            .unwrap()
+            .drop_guard();
 
-        let mut responses = [
-            Some(client.send(0, None).unwrap()),
-            Some(client.send(1, None).unwrap()),
-            Some(client.send(2, None).unwrap()),
-            Some(client.send(3, None).unwrap()),
-            Some(client.send(4, None).unwrap()),
-            Some(client.send(5, None).unwrap()),
-        ];
+        let mut responses = vec![];
+        for i in 0..=5 {
+            responses.push(Some(
+                client
+                    .send(
+                        Command::Node(NodeCommand::GetSamplingMetadata { height: i }),
+                        None,
+                    )
+                    .unwrap(),
+            ))
+        }
 
         for i in 0..=5 {
             let (request, responder) = request_rx.recv().await.unwrap();
-            assert_eq!(i, request);
-            responder.send(format!("R:{request}")).unwrap();
+            let Command::Node(NodeCommand::GetSamplingMetadata { height }) =
+                request.payload.unwrap()
+            else {
+                panic!("invalid command");
+            };
+            assert_eq!(i, height);
+            responder
+                .send(WorkerResponse::EventsChannelName(format!("R:{height}")))
+                .unwrap();
         }
 
         for i in (0..=5).rev() {
-            assert_eq!(
-                responses[i].take().unwrap().await.unwrap(),
-                format!("R:{i}")
-            );
+            let WorkerResponse::EventsChannelName(response) =
+                responses[i].take().unwrap().await.unwrap()
+            else {
+                panic!("invalid response");
+            };
+            assert_eq!(response, format!("R:{i}"));
         }
     }
 }

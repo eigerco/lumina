@@ -90,7 +90,7 @@ impl WorkerClient {
         let client_port = Port::new(
             channel.port2().into(),
             move |ev: MessageEvent| -> Result<()> {
-                web_sys::console::info_1(&ev);
+                web_sys::console::log_1(&ev.data());
                 let item: T = from_value(ev.data()).context("could not deserialize message")?;
                 tx.send(item)
                     .context("forwarding subscription item failed")?;
@@ -112,6 +112,9 @@ mod tests {
 
     use lumina_utils::time::sleep;
 
+    type Request = Command;
+    type Response = WorkerResponse;
+
     #[wasm_bindgen_test]
     async fn worker_client_server() {
         let channel0 = MessageChannel::new().unwrap();
@@ -120,15 +123,24 @@ mod tests {
 
         spawn_local(async move {
             let (request, responder) = server.recv().await.unwrap();
-            assert!(matches!(request, NodeCommand::IsRunning));
+            assert!(matches!(
+                request.payload.unwrap(),
+                Command::Meta(ManagementCommand::IsRunning)
+            ));
             responder.send(WorkerResponse::IsRunning(false)).unwrap();
 
             let (request, responder) = server.recv().await.unwrap();
-            assert!(matches!(request, NodeCommand::InternalPing));
+            assert!(matches!(
+                request.payload.unwrap(),
+                Command::Meta(ManagementCommand::InternalPing)
+            ));
             responder.send(WorkerResponse::InternalPong).unwrap();
 
             let (request, responder) = server.recv().await.unwrap();
-            assert!(matches!(request, NodeCommand::IsRunning));
+            assert!(matches!(
+                request.payload.unwrap(),
+                Command::Meta(ManagementCommand::IsRunning)
+            ));
             responder.send(WorkerResponse::IsRunning(true)).unwrap();
 
             // otherwise server is dropped too soon and last message does not make it
@@ -138,35 +150,50 @@ mod tests {
         port_channel.send(channel0.port1().into()).unwrap();
         let client0 = WorkerClient::new(channel0.port2().into()).unwrap();
 
-        let response = client0.exec(NodeCommand::IsRunning).await.unwrap();
+        let response = client0
+            .mgmt_command(ManagementCommand::IsRunning)
+            .await
+            .unwrap();
         assert!(matches!(response, WorkerResponse::IsRunning(false)));
 
         let channel1 = MessageChannel::new().unwrap();
+        let worker_port: JsValue = channel1.port1().into();
         client0
-            .add_connection_to_worker(channel1.port1().into())
+            .add_connection_to_worker(worker_port.into())
             .await
             .unwrap();
         let client1 = WorkerClient::new(channel1.port2().into()).unwrap();
 
-        let response = client1.exec(NodeCommand::IsRunning).await.unwrap();
+        let response = client1
+            .mgmt_command(ManagementCommand::IsRunning)
+            .await
+            .unwrap();
         assert!(matches!(response, WorkerResponse::IsRunning(true)));
     }
 
     #[wasm_bindgen_test]
     async fn client_server() {
         let channel = MessageChannel::new().unwrap();
-        let mut server = Server::<i32, i32>::new();
+        let mut server = Server::new();
         let port_channel = server.get_port_channel();
         port_channel.send(channel.port2().into()).unwrap();
 
-        let client = Client::<i32, i32>::start(channel.port1().into()).unwrap();
+        let client = Client::<Request, Response>::start(channel.port1().into()).unwrap();
 
-        let response = client.send(1, None).unwrap();
+        let response = client
+            .send(Command::Meta(ManagementCommand::InternalPing), None)
+            .unwrap();
 
         let (request, responder) = server.recv().await.unwrap();
-        assert_eq!(request, 1);
-        responder.send(2).unwrap();
+        assert!(matches!(
+            request.payload.unwrap(),
+            Command::Meta(ManagementCommand::InternalPing)
+        ));
+        responder.send(WorkerResponse::InternalPong).unwrap();
 
-        assert_eq!(response.await.unwrap(), 2);
+        assert!(matches!(
+            response.await.unwrap(),
+            WorkerResponse::InternalPong
+        ));
     }
 }

@@ -5,7 +5,7 @@ use std::time::Duration;
 use blockstore::EitherBlockstore;
 use celestia_types::nmt::Namespace;
 use celestia_types::{Blob, ExtendedHeader};
-use js_sys::Array;
+use js_sys::{Array, AsyncIterator};
 use libp2p::identity::Keypair;
 use libp2p::Multiaddr;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
@@ -22,7 +22,7 @@ use crate::commands::{
 };
 use crate::error::{Context, Result};
 use crate::ports::WorkerClient;
-use crate::subscriptions::{BlobStream, HeaderStream};
+use crate::subscriptions::{into_async_iterator, SubscriptionError};
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, timeout, Network,
 };
@@ -361,19 +361,27 @@ impl NodeClient {
     }
 
     #[wasm_bindgen(js_name = headerSubscribe)]
-    pub async fn header_subscribe(&self) -> Result<HeaderStream> {
+    pub async fn header_subscribe(&self) -> Result<AsyncIterator> {
         let command = NodeSubscription::Headers;
-        let (response_channel, port) = self.worker.subscribe(command).await?;
+        let (response_channel, port) = self
+            .worker
+            .subscribe::<Result<ExtendedHeader, SubscriptionError>>(command)
+            .await?;
 
-        Ok(HeaderStream::new(response_channel, port))
+        //HeaderStream::new(response_channel, port);
+
+        Ok(into_async_iterator(response_channel, port))
     }
 
     #[wasm_bindgen(js_name = blobSubscribe)]
-    pub async fn namespace_subscribe(&self, namespace: Namespace) -> Result<BlobStream> {
+    pub async fn namespace_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
         let command = NodeSubscription::Blobs(namespace);
-        let (response_channel, port) = self.worker.subscribe(command).await?;
+        let (response_channel, port) = self
+            .worker
+            .subscribe::<Result<(u64, Blob), SubscriptionError>>(command)
+            .await?;
 
-        Ok(BlobStream::new(response_channel, port))
+        Ok(into_async_iterator(response_channel, port))
     }
 }
 
