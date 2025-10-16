@@ -56,6 +56,10 @@ pub enum Error {
     #[error("Transaction {0} execution failed; code: {1}, error: {2}")]
     TxExecutionFailed(Hash, ErrorCode, String),
 
+    /// Transaction was rejected
+    #[error("Transaction {0} was rejected; code: {1}, error: {2}")]
+    TxRejected(Hash, ErrorCode, String),
+
     /// Transaction was evicted from the mempool
     #[error("Transaction {0} was evicted from the mempool")]
     TxEvicted(Hash),
@@ -87,6 +91,10 @@ pub enum Error {
     /// Error related to the metadata
     #[error(transparent)]
     Metadata(#[from] MetadataError),
+
+    /// Couldn't parse expected sequence from the error message
+    #[error("Couldn't parse expected sequence from: '{0}'")]
+    SequenceParsingFailed(String),
 }
 
 /// Representation of all the errors that can occur when building [`GrpcClient`] using

@@ -58,7 +58,7 @@ pub enum AddressKind {
 
 /// A Celestia address. Either account, consensus or validator.
 #[enum_dispatch]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 pub enum Address {
     /// Account address.
@@ -87,7 +87,7 @@ impl Address {
 }
 
 /// Address of an account.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 #[cfg_attr(
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
@@ -99,7 +99,7 @@ pub struct AccAddress {
 }
 
 /// Address of a validator.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 #[cfg_attr(
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
@@ -111,7 +111,7 @@ pub struct ValAddress {
 }
 
 /// Address of a consensus node.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "Raw", into = "Raw")]
 #[cfg_attr(
     all(feature = "wasm-bindgen", target_arch = "wasm32"),

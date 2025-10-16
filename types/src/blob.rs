@@ -513,7 +513,7 @@ impl Blob {
     /// Must be present in `share_version 1` and absent otherwise.
     #[uniffi::method(name = "signer")]
     pub fn get_signer(&self) -> Option<AccAddress> {
-        self.signer.clone()
+        self.signer
     }
 }
 
@@ -765,7 +765,7 @@ mod tests {
         let blob = Blob::new(
             ns,
             b"some data to store on blockchain".to_vec(),
-            Some(signer.clone()),
+            Some(signer),
             AppVersion::V5,
         )
         .expect("Failed to create signed blob");
