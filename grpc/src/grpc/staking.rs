@@ -9,8 +9,8 @@ use celestia_types::state::{
     QueryUnbondingDelegationResponse, ValAddress,
 };
 
-use crate::grpc::{FromGrpcResponse, IntoGrpcParam};
 use crate::Result;
+use crate::grpc::{FromGrpcResponse, IntoGrpcParam};
 
 impl IntoGrpcParam<QueryDelegationRequest> for (&AccAddress, &ValAddress) {
     fn into_parameter(self) -> QueryDelegationRequest {

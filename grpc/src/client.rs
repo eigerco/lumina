@@ -29,7 +29,7 @@ use celestia_types::state::{
     QueryUnbondingDelegationResponse, RawTxBody, ValAddress,
 };
 use celestia_types::state::{
-    AccAddress, Address, AddressTrait, Coin, ErrorCode, TxResponse, BOND_DENOM,
+    AccAddress, Address, AddressTrait, BOND_DENOM, Coin, ErrorCode, TxResponse,
 };
 use celestia_types::{AppVersion, Blob, ExtendedHeader};
 
@@ -40,7 +40,7 @@ use crate::grpc::{
     AsyncGrpcCall, BroadcastMode, ConfigResponse, Context, GasEstimate, GasInfo, GetTxResponse,
     TxPriority, TxStatus, TxStatusResponse,
 };
-use crate::signer::{sign_tx, BoxedDocSigner};
+use crate::signer::{BoxedDocSigner, sign_tx};
 use crate::tx::TxInfo;
 use crate::{Error, Result, TxConfig};
 

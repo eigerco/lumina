@@ -5,7 +5,7 @@ use celestia_proto::cosmos::base::tendermint::v1beta1::{
 use celestia_types::block::Block;
 use celestia_types::state::AbciQueryResponse;
 
-use crate::grpc::{make_empty_params, FromGrpcResponse, IntoGrpcParam};
+use crate::grpc::{FromGrpcResponse, IntoGrpcParam, make_empty_params};
 use crate::{Error, Result};
 
 impl FromGrpcResponse<Block> for GetBlockByHeightResponse {

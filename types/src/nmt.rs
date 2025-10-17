@@ -33,9 +33,9 @@ mod namespace_proof;
 mod namespaced_hash;
 mod namespaced_merkle_tree;
 
-pub use self::namespace_proof::{NamespaceProof, EMPTY_LEAVES};
+pub use self::namespace_proof::{EMPTY_LEAVES, NamespaceProof};
 pub use self::namespaced_hash::{
-    NamespacedHashExt, RawNamespacedHash, HASH_SIZE, NAMESPACED_HASH_SIZE,
+    HASH_SIZE, NAMESPACED_HASH_SIZE, NamespacedHashExt, RawNamespacedHash,
 };
 pub use self::namespaced_merkle_tree::{MerkleHash, NamespacedSha2Hasher, Nmt, NmtExt};
 
@@ -341,7 +341,7 @@ impl Namespace {
 
     /// Converts the [`Namespace`] to a byte slice.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.0 .0
+        &self.0.0
     }
 
     /// Returns the first byte indicating the version of the [`Namespace`].

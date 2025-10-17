@@ -1,11 +1,11 @@
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
+use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;
 use libp2p::core::upgrade::DeniedUpgrade;
-use libp2p::core::Endpoint;
-use libp2p::swarm::handler::ConnectionEvent;
 use libp2p::swarm::NotifyHandler;
+use libp2p::swarm::handler::ConnectionEvent;
 use libp2p::swarm::{
     ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
     NetworkBehaviour, SubstreamProtocol, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,

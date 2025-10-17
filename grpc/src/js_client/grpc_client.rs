@@ -10,12 +10,12 @@ use celestia_types::state::auth::{JsAuthParams, JsBaseAccount};
 use celestia_types::state::{AbciQueryResponse, JsCoin, TxResponse};
 use celestia_types::{Blob, ExtendedHeader};
 
+use crate::Result;
 use crate::grpc::{
     ConfigResponse, GasInfo, GetTxResponse, JsBroadcastMode, TxPriority, TxStatusResponse,
 };
 use crate::js_client::GrpcClientBuilder;
 use crate::tx::{JsTxConfig, JsTxInfo};
-use crate::Result;
 
 /// Celestia gRPC client, for builder see [`GrpcClientBuilder`]
 #[wasm_bindgen]

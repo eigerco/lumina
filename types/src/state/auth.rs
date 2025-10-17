@@ -4,12 +4,12 @@ use celestia_proto::cosmos::crypto::ed25519::PubKey as Ed25519PubKey;
 use celestia_proto::cosmos::crypto::secp256k1::PubKey as Secp256k1PubKey;
 use prost::Message;
 use tendermint::public_key::PublicKey;
-use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
+use tendermint_proto::google::protobuf::Any;
 
+use crate::Error;
 use crate::state::AccAddress;
 use crate::validation_error;
-use crate::Error;
 
 pub use celestia_proto::cosmos::auth::v1beta1::BaseAccount as RawBaseAccount;
 pub use celestia_proto::cosmos::auth::v1beta1::ModuleAccount as RawModuleAccount;
@@ -279,7 +279,7 @@ mod wbg {
     use js_sys::{BigInt, Uint8Array};
     use lumina_utils::make_object;
     use tendermint::PublicKey;
-    use wasm_bindgen::{prelude::*, JsCast};
+    use wasm_bindgen::{JsCast, prelude::*};
 
     use super::{Account, AuthParams};
 

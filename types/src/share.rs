@@ -1,13 +1,13 @@
 use blockstore::block::{Block, CidError};
 use cid::CidGeneric;
 use multihash::Multihash;
-use nmt_rs::simple_merkle::tree::MerkleHash;
 use nmt_rs::NamespaceMerkleHasher;
+use nmt_rs::simple_merkle::tree::MerkleHash;
 use serde::{Deserialize, Serialize};
 
 use crate::consts::appconsts::{self, AppVersion};
 use crate::nmt::{
-    Namespace, NamespacedSha2Hasher, NMT_CODEC, NMT_ID_SIZE, NMT_MULTIHASH_CODE, NS_SIZE,
+    NMT_CODEC, NMT_ID_SIZE, NMT_MULTIHASH_CODE, NS_SIZE, Namespace, NamespacedSha2Hasher,
 };
 use crate::state::AccAddress;
 use crate::{Error, Result};
@@ -243,9 +243,9 @@ impl From<Share> for RawShare {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consts::appconsts::AppVersion;
-    use crate::nmt::{NamespaceProof, NamespacedHash, NAMESPACED_HASH_SIZE};
     use crate::Blob;
+    use crate::consts::appconsts::AppVersion;
+    use crate::nmt::{NAMESPACED_HASH_SIZE, NamespaceProof, NamespacedHash};
     use base64::prelude::*;
 
     #[cfg(target_arch = "wasm32")]

@@ -1,6 +1,6 @@
 //! Primitives for the trust level of consensus commits.
 
-use crate::{verification_error, VerificationError};
+use crate::{VerificationError, verification_error};
 
 /// A default trust level for the optimistic commit verification.
 pub const DEFAULT_TRUST_LEVEL: TrustLevelRatio = TrustLevelRatio::new(1, 3);

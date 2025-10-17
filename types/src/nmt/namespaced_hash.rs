@@ -1,4 +1,4 @@
-use crate::nmt::{NamespacedHash, NamespacedSha2Hasher, NS_SIZE};
+use crate::nmt::{NS_SIZE, NamespacedHash, NamespacedSha2Hasher};
 use crate::{Error, Result};
 
 use nmt_rs::simple_merkle::tree::MerkleHash;
@@ -65,22 +65,28 @@ impl NamespacedHashExt for NamespacedHash {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nmt::{Namespace, NS_ID_V0_SIZE};
+    use crate::nmt::{NS_ID_V0_SIZE, Namespace};
 
     #[test]
     fn namespaced_hash_validate_namespace_order() {
         let n0 = Namespace::new_v0(&[1]).unwrap();
         let n1 = Namespace::new_v0(&[2]).unwrap();
 
-        assert!(NamespacedHash::with_min_and_max_ns(*n0, *n1)
-            .validate_namespace_order()
-            .is_ok());
-        assert!(NamespacedHash::with_min_and_max_ns(*n1, *n1)
-            .validate_namespace_order()
-            .is_ok());
-        assert!(NamespacedHash::with_min_and_max_ns(*n1, *n0)
-            .validate_namespace_order()
-            .is_err());
+        assert!(
+            NamespacedHash::with_min_and_max_ns(*n0, *n1)
+                .validate_namespace_order()
+                .is_ok()
+        );
+        assert!(
+            NamespacedHash::with_min_and_max_ns(*n1, *n1)
+                .validate_namespace_order()
+                .is_ok()
+        );
+        assert!(
+            NamespacedHash::with_min_and_max_ns(*n1, *n0)
+                .validate_namespace_order()
+                .is_err()
+        );
     }
 
     #[test]

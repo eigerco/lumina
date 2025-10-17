@@ -20,7 +20,7 @@ use std::task::Poll;
 use std::time::Duration;
 
 use blockstore::Blockstore;
-use celestia_proto::p2p::pb::{header_request, HeaderRequest};
+use celestia_proto::p2p::pb::{HeaderRequest, header_request};
 use celestia_types::fraud_proof::BadEncodingFraudProof;
 use celestia_types::hash::Hash;
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
@@ -29,13 +29,13 @@ use celestia_types::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
 use celestia_types::sample::{Sample, SampleId};
 use celestia_types::{Blob, ExtendedHeader, FraudProof};
 use cid::Cid;
-use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
+use futures::stream::FuturesOrdered;
 use libp2p::gossipsub::TopicHash;
 use libp2p::identity::Keypair;
 use libp2p::swarm::{NetworkBehaviour, NetworkInfo};
-use libp2p::{gossipsub, Multiaddr, PeerId};
-use lumina_utils::executor::{spawn, JoinHandle};
+use libp2p::{Multiaddr, PeerId, gossipsub};
+use lumina_utils::executor::{JoinHandle, spawn};
 use lumina_utils::time::{self, Interval};
 use lumina_utils::token::Token;
 use smallvec::SmallVec;
@@ -56,14 +56,14 @@ use crate::block_ranges::BlockRange;
 use crate::events::EventPublisher;
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
-use crate::p2p::shwap::{convert_cid, get_block_container, ShwapMultihasher};
+use crate::p2p::shwap::{ShwapMultihasher, convert_cid, get_block_container};
 use crate::p2p::swarm_manager::SwarmManager;
 use crate::peer_tracker::PeerTracker;
 use crate::peer_tracker::PeerTrackerInfo;
 use crate::store::{Store, StoreError};
 use crate::utils::{
-    celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic, MultiaddrExt,
-    OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt,
+    MultiaddrExt, OneshotResultSender, OneshotResultSenderExt, OneshotSenderExt,
+    celestia_protocol_id, fraudsub_ident_topic, gossipsub_ident_topic,
 };
 
 pub use crate::p2p::header_ex::HeaderExError;

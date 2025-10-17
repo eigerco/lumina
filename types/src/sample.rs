@@ -18,8 +18,8 @@ use serde::Serialize;
 
 use crate::eds::{AxisType, ExtendedDataSquare};
 use crate::nmt::NamespaceProof;
-use crate::row::{RowId, ROW_ID_SIZE};
-use crate::{bail_validation, DataAvailabilityHeader, Error, Result, Share};
+use crate::row::{ROW_ID_SIZE, RowId};
+use crate::{DataAvailabilityHeader, Error, Result, Share, bail_validation};
 
 pub use celestia_proto::shwap::Sample as RawSample;
 

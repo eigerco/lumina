@@ -2,12 +2,12 @@ use celestia_proto::cosmos::auth::v1beta1::{
     QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
     QueryParamsRequest as QueryAuthParamsRequest, QueryParamsResponse as QueryAuthParamsResponse,
 };
-use celestia_types::state::auth::{Account, AuthParams, RawBaseAccount, RawModuleAccount};
 use celestia_types::state::AccAddress;
+use celestia_types::state::auth::{Account, AuthParams, RawBaseAccount, RawModuleAccount};
 use prost::{Message, Name};
 use tendermint_proto::google::protobuf::Any;
 
-use crate::grpc::{make_empty_params, FromGrpcResponse, IntoGrpcParam};
+use crate::grpc::{FromGrpcResponse, IntoGrpcParam, make_empty_params};
 use crate::{Error, Result};
 
 impl FromGrpcResponse<AuthParams> for QueryAuthParamsResponse {

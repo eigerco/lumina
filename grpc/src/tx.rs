@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use celestia_types::hash::Hash;
 use celestia_types::Height;
+use celestia_types::hash::Hash;
 
 use crate::grpc::TxPriority;
 
@@ -66,7 +66,7 @@ pub use wbg::*;
 mod wbg {
     use super::{TxConfig, TxInfo, TxPriority};
     use lumina_utils::make_object;
-    use wasm_bindgen::{prelude::*, JsCast};
+    use wasm_bindgen::{JsCast, prelude::*};
 
     #[wasm_bindgen(typescript_custom_section)]
     const _: &str = "

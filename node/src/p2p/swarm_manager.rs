@@ -10,7 +10,7 @@ use libp2p::kad::{QueryInfo, RecordKey};
 use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use libp2p::swarm::{ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent};
-use libp2p::{autonat, identify, kad, ping, PeerId};
+use libp2p::{PeerId, autonat, identify, kad, ping};
 use lumina_utils::time::Interval;
 use multihash_codetable::{Code, MultihashDigest};
 use tokio::select;
@@ -18,11 +18,11 @@ use tokio::sync::watch;
 use tracing::{debug, error, instrument, trace, warn};
 
 use crate::events::{EventPublisher, NodeEvent};
+use crate::p2p::Result;
 use crate::p2p::connection_control;
 use crate::p2p::swarm::new_swarm;
-use crate::p2p::Result;
-use crate::peer_tracker::{Peer, PeerTracker, PeerTrackerInfo, GC_INTERVAL};
-use crate::utils::{celestia_protocol_id, MultiaddrExt};
+use crate::peer_tracker::{GC_INTERVAL, Peer, PeerTracker, PeerTrackerInfo};
+use crate::utils::{MultiaddrExt, celestia_protocol_id};
 
 const FULL_NODES_PROTECT_LIMIT: usize = 5;
 const ARCHIVAL_NODES_PROTECT_LIMIT: usize = 5;

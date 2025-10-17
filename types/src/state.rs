@@ -23,6 +23,6 @@ pub use self::query_delegation::{
     RedelegationEntryResponse, RedelegationResponse, UnbondingDelegation, UnbondingDelegationEntry,
 };
 pub use self::tx::{
-    AuthInfo, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, RawTxResponse, SignerInfo, Sum, Tx,
-    TxBody, TxResponse, BOND_DENOM,
+    AuthInfo, BOND_DENOM, ErrorCode, Fee, ModeInfo, RawTx, RawTxBody, RawTxResponse, SignerInfo,
+    Sum, Tx, TxBody, TxResponse,
 };

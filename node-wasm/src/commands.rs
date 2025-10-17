@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
-use celestia_types::nmt::Namespace;
 use celestia_types::Blob;
+use celestia_types::nmt::Namespace;
 use enum_as_inner::EnumAsInner;
 use libp2p::Multiaddr;
 use libp2p::PeerId;
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tracing::error;
 use wasm_bindgen::JsError;
 
-use celestia_types::{hash::Hash, ExtendedHeader};
+use celestia_types::{ExtendedHeader, hash::Hash};
 use lumina_node::node::{PeerTrackerInfo, SyncingInfo};
 use lumina_node::store::SamplingMetadata;
 

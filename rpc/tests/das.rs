@@ -5,7 +5,7 @@ use celestia_rpc::prelude::*;
 
 pub mod utils;
 
-use crate::utils::client::{new_test_client, AuthLevel};
+use crate::utils::client::{AuthLevel, new_test_client};
 
 #[tokio::test]
 async fn sampling_stats() {

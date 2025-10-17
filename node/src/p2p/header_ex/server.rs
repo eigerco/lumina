@@ -2,13 +2,13 @@ use std::fmt::{Debug, Display};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use celestia_proto::p2p::pb::{header_request, HeaderRequest, HeaderResponse};
+use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse, header_request};
 use celestia_types::hash::Hash;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
-use libp2p::request_response::{InboundFailure, InboundRequestId, ResponseChannel};
 use libp2p::PeerId;
+use libp2p::request_response::{InboundFailure, InboundRequestId, ResponseChannel};
 use tracing::{instrument, trace};
 
 use crate::p2p::header_ex::utils::{ExtendedHeaderExt, HeaderRequestExt, HeaderResponseExt};
@@ -206,8 +206,8 @@ mod tests {
     use super::{ResponseSender, *};
     use crate::store::InMemoryStore;
     use crate::test_utils::gen_filled_store;
-    use celestia_proto::p2p::pb::header_request::Data;
     use celestia_proto::p2p::pb::StatusCode;
+    use celestia_proto::p2p::pb::header_request::Data;
     use celestia_types::ExtendedHeader;
     use lumina_utils::test_utils::async_test;
     use std::future::poll_fn;

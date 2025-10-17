@@ -11,14 +11,14 @@ use wasm_bindgen::prelude::*;
 
 use crate::consts::appconsts::AppVersion;
 use crate::consts::data_availability_header::{
-    max_extended_square_width, MIN_EXTENDED_SQUARE_WIDTH,
+    MIN_EXTENDED_SQUARE_WIDTH, max_extended_square_width,
 };
 use crate::eds::AxisType;
 use crate::hash::Hash;
 use crate::nmt::{NamespacedHash, NamespacedHashExt};
 use crate::{
-    bail_validation, bail_verification, validation_error, Error, ExtendedDataSquare, MerkleProof,
-    Result, ValidateBasicWithAppVersion, ValidationError,
+    Error, ExtendedDataSquare, MerkleProof, Result, ValidateBasicWithAppVersion, ValidationError,
+    bail_validation, bail_verification, validation_error,
 };
 
 /// Header with commitments of the data availability.

@@ -5,9 +5,9 @@ use async_stream::try_stream;
 use celestia_rpc::FraudClient;
 use futures_util::{Stream, StreamExt};
 
+use crate::Result;
 use crate::api::fraud::{Proof, ProofType};
 use crate::client::ClientInner;
-use crate::Result;
 
 /// Fraud API for quering bridge nodes.
 pub struct FraudApi {

@@ -8,7 +8,7 @@ use std::time::Duration;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
-use lumina_utils::executor::{spawn, JoinHandle};
+use lumina_utils::executor::{JoinHandle, spawn};
 use lumina_utils::time::{Instant, Interval};
 use rand::Rng;
 use tendermint::Time;
@@ -620,8 +620,8 @@ fn random_indexes(square_width: u16, max_samples_needed: usize) -> HashSet<(u16,
     let mut rng = rand::thread_rng();
 
     while indexes.len() < max_samples_needed {
-        let row = rng.gen::<u16>() % square_width;
-        let col = rng.gen::<u16>() % square_width;
+        let row = rng.r#gen::<u16>() % square_width;
+        let col = rng.r#gen::<u16>() % square_width;
         indexes.insert((row, col));
     }
 
@@ -633,8 +633,8 @@ mod tests {
     use super::*;
     use crate::events::{EventChannel, EventSubscriber};
     use crate::node::SAMPLING_WINDOW;
-    use crate::p2p::shwap::convert_cid;
     use crate::p2p::P2pCmd;
+    use crate::p2p::shwap::convert_cid;
     use crate::store::InMemoryStore;
     use crate::test_utils::{ExtendedHeaderGeneratorExt, MockP2pHandle};
     use crate::utils::OneshotResultSender;
@@ -642,7 +642,7 @@ mod tests {
     use celestia_proto::bitswap::Block;
     use celestia_types::consts::appconsts::AppVersion;
     use celestia_types::sample::{Sample, SampleId};
-    use celestia_types::test_utils::{generate_dummy_eds, ExtendedHeaderGenerator};
+    use celestia_types::test_utils::{ExtendedHeaderGenerator, generate_dummy_eds};
     use celestia_types::{AxisType, DataAvailabilityHeader, ExtendedDataSquare};
     use cid::Cid;
     use lumina_utils::test_utils::async_test;
@@ -731,16 +731,48 @@ mod tests {
         })
         .unwrap();
 
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         handle.expect_no_cmd().await;
         handle.announce_peer_connected();
         handle.expect_no_cmd().await;
 
-        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 2, false).await;
-        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 4, false).await;
-        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 8, false).await;
-        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 16, false).await;
+        gen_and_sample_block(
+            &mut handle,
+            &mut generator,
+            &store,
+            &mut event_sub,
+            2,
+            false,
+        )
+        .await;
+        gen_and_sample_block(
+            &mut handle,
+            &mut generator,
+            &store,
+            &mut event_sub,
+            4,
+            false,
+        )
+        .await;
+        gen_and_sample_block(
+            &mut handle,
+            &mut generator,
+            &store,
+            &mut event_sub,
+            8,
+            false,
+        )
+        .await;
+        gen_and_sample_block(
+            &mut handle,
+            &mut generator,
+            &store,
+            &mut event_sub,
+            16,
+            false,
+        )
+        .await;
     }
 
     #[async_test]
@@ -760,15 +792,31 @@ mod tests {
         })
         .unwrap();
 
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         handle.expect_no_cmd().await;
         handle.announce_peer_connected();
         handle.expect_no_cmd().await;
 
-        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 2, false).await;
-        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 4, true).await;
-        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 8, false).await;
+        gen_and_sample_block(
+            &mut handle,
+            &mut generator,
+            &store,
+            &mut event_sub,
+            2,
+            false,
+        )
+        .await;
+        gen_and_sample_block(&mut handle, &mut generator, &store, &mut event_sub, 4, true).await;
+        gen_and_sample_block(
+            &mut handle,
+            &mut generator,
+            &store,
+            &mut event_sub,
+            8,
+            false,
+        )
+        .await;
     }
 
     #[async_test]
@@ -787,7 +835,7 @@ mod tests {
         })
         .unwrap();
 
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         handle.expect_no_cmd().await;
         handle.announce_peer_connected();
@@ -799,7 +847,7 @@ mod tests {
         for _ in 0..20 {
             let eds = generate_dummy_eds(2, AppVersion::V2);
             let dah = DataAvailabilityHeader::from_eds(&eds);
-            let header = gen.next_with_dah(dah);
+            let header = generator.next_with_dah(dah);
 
             edses.push(eds);
             headers.push(header);
@@ -873,7 +921,7 @@ mod tests {
         // Push block 21 in the store
         let eds = generate_dummy_eds(2, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
-        let header = gen.next_with_dah(dah);
+        let header = generator.next_with_dah(dah);
         store.insert(header).await.unwrap();
 
         // Sample block 21
@@ -897,8 +945,11 @@ mod tests {
         // generates per block.
         let shares_per_block = 4;
 
-        let mut gen = ExtendedHeaderGenerator::new();
-        store.insert(gen.next_many_verified(30)).await.unwrap();
+        let mut generator = ExtendedHeaderGenerator::new();
+        store
+            .insert(generator.next_many_verified(30))
+            .await
+            .unwrap();
 
         let _daser = Daser::start(DaserArgs {
             event_pub: events.publisher(),
@@ -924,7 +975,7 @@ mod tests {
         handle.expect_no_cmd().await;
 
         // However a new head will be allowed because additional limit is applied
-        store.insert(gen.next_many_verified(2)).await.unwrap();
+        store.insert(generator.next_many_verified(2)).await.unwrap();
 
         for _ in 0..shares_per_block {
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
@@ -949,7 +1000,7 @@ mod tests {
 
         // Generate 5 more heads
         for _ in 0..additional_headersub_concurrency {
-            store.insert(gen.next_many_verified(1)).await.unwrap();
+            store.insert(generator.next_many_verified(1)).await.unwrap();
             // Give some time for Daser to shedule it
             sleep(Duration::from_millis(10)).await;
         }
@@ -961,7 +1012,7 @@ mod tests {
 
         // Concurrency limit for heads is reached
         handle.expect_no_cmd().await;
-        store.insert(gen.next_many_verified(1)).await.unwrap();
+        store.insert(generator.next_many_verified(1)).await.unwrap();
         handle.expect_no_cmd().await;
 
         // Now we stop 1 block and Daser will schedule the head
@@ -975,7 +1026,7 @@ mod tests {
 
         // Concurrency limit for heads is reached again
         handle.expect_no_cmd().await;
-        store.insert(gen.next_many_verified(1)).await.unwrap();
+        store.insert(generator.next_many_verified(1)).await.unwrap();
         handle.expect_no_cmd().await;
     }
 
@@ -996,19 +1047,19 @@ mod tests {
         })
         .unwrap();
 
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         let now = Time::now();
         let first_header_time = (now - Duration::from_secs(1024)).unwrap();
-        gen.set_time(first_header_time, Duration::from_secs(1));
-        store.insert(gen.next_many(990)).await.unwrap();
+        generator.set_time(first_header_time, Duration::from_secs(1));
+        store.insert(generator.next_many(990)).await.unwrap();
 
         let mut edses = HashMap::new();
 
         for height in 991..=1000 {
             let eds = generate_dummy_eds(2, AppVersion::V2);
             let dah = DataAvailabilityHeader::from_eds(&eds);
-            let header = gen.next_with_dah(dah);
+            let header = generator.next_with_dah(dah);
 
             edses.insert(height, eds);
             store.insert(header).await.unwrap();
@@ -1025,8 +1076,24 @@ mod tests {
         handle.expect_no_cmd().await;
 
         // Any blocks above 1000 are not limited because they are not in prunable area
-        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 2, false).await;
-        gen_and_sample_block(&mut handle, &mut gen, &store, &mut event_sub, 2, false).await;
+        gen_and_sample_block(
+            &mut handle,
+            &mut generator,
+            &store,
+            &mut event_sub,
+            2,
+            false,
+        )
+        .await;
+        gen_and_sample_block(
+            &mut handle,
+            &mut generator,
+            &store,
+            &mut event_sub,
+            2,
+            false,
+        )
+        .await;
 
         // Again back to ratelimited
         handle.expect_no_cmd().await;
@@ -1101,7 +1168,7 @@ mod tests {
 
     async fn gen_and_sample_block(
         handle: &mut MockP2pHandle,
-        gen: &mut ExtendedHeaderGenerator,
+        generator: &mut ExtendedHeaderGenerator,
         store: &InMemoryStore,
         event_sub: &mut EventSubscriber,
         square_width: usize,
@@ -1109,7 +1176,7 @@ mod tests {
     ) {
         let eds = generate_dummy_eds(square_width, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
-        let header = gen.next_with_dah(dah);
+        let header = generator.next_with_dah(dah);
         let height = header.height().value();
 
         store.insert(header).await.unwrap();

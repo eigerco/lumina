@@ -4,8 +4,8 @@ use celestia_proto::celestia::core::v1::gas_estimation::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::grpc::{FromGrpcResponse, IntoGrpcParam};
 use crate::Result;
+use crate::grpc::{FromGrpcResponse, IntoGrpcParam};
 
 /// TxPriority is the priority level of the requested gas price.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]

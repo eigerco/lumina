@@ -4,10 +4,10 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{quote, TokenStreamExt};
+use quote::{TokenStreamExt, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::{parse_macro_input, Attribute, FnArg, Ident, Signature, Token};
+use syn::{Attribute, FnArg, Ident, Signature, Token, parse_macro_input};
 
 #[derive(Debug)]
 struct GrpcMethod {
@@ -75,9 +75,8 @@ impl GrpcMethod {
                     #[cfg(target_arch = "wasm32")]
                     let fut = ::send_wrapper::SendWrapper::new(fut);
 
-                    crate::grpc::FromGrpcResponse::try_from_response(
-                        fut.await?.into_inner()
-                    )
+                    let resp = fut.await?.into_inner();
+                    crate::grpc::FromGrpcResponse::try_from_response(resp)
                 })
                 .context(&self.inner.context)
             }

@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use libp2p::core::transport::PortUse;
 use libp2p::core::Endpoint;
+use libp2p::core::transport::PortUse;
 use libp2p::request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport};
 use libp2p::swarm::handler::ConnectionEvent;
 use libp2p::swarm::{
@@ -16,7 +16,7 @@ use libp2p::swarm::{
     NetworkBehaviour, SubstreamProtocol, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId, StreamProtocol};
-use lumina_utils::time::{timeout, Instant};
+use lumina_utils::time::{Instant, timeout};
 use prost::Message;
 use tracing::{debug, instrument, warn};
 
@@ -24,12 +24,12 @@ mod client;
 mod server;
 pub(crate) mod utils;
 
+use crate::p2p::P2pError;
 use crate::p2p::header_ex::client::HeaderExClientHandler;
 use crate::p2p::header_ex::server::HeaderExServerHandler;
-use crate::p2p::P2pError;
 use crate::peer_tracker::PeerTracker;
 use crate::store::Store;
-use crate::utils::{protocol_id, OneshotResultSender};
+use crate::utils::{OneshotResultSender, protocol_id};
 
 /// Size limit of a request in bytes
 const REQUEST_SIZE_LIMIT: usize = 1024;

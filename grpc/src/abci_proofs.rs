@@ -2,8 +2,8 @@ use celestia_proto::cosmos::base::tendermint::v1beta1::{ProofOp, ProofOps};
 use ics23::commitment_proof::Proof;
 use ics23::{CommitmentProof, ExistenceProof};
 use prost::Message;
-use tendermint::crypto::default::Sha256;
 use tendermint::crypto::Sha256 as _;
+use tendermint::crypto::default::Sha256;
 
 /// Representation of all the errors that can occur when trying to read and verify ABCI proof
 #[derive(Debug, thiserror::Error)]

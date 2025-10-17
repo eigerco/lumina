@@ -15,9 +15,9 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use tendermint::Time;
 
+use crate::Height;
 use crate::error::{Error, Result};
 use crate::state::{AccAddress, Coin, ValAddress};
-use crate::Height;
 
 /// Pagination details for the request.
 pub type PageRequest = RawPageRequest;

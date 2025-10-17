@@ -6,11 +6,11 @@ use blockstore::EitherBlockstore;
 use celestia_types::nmt::Namespace;
 use celestia_types::{Blob, ExtendedHeader};
 use js_sys::Array;
-use libp2p::identity::Keypair;
 use libp2p::Multiaddr;
+use libp2p::identity::Keypair;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::network;
-use lumina_node::node::{NodeBuilder, DEFAULT_PRUNING_WINDOW_IN_MEMORY};
+use lumina_node::node::{DEFAULT_PRUNING_WINDOW_IN_MEMORY, NodeBuilder};
 use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
@@ -21,7 +21,7 @@ use crate::commands::{CheckableResponseExt, NodeCommand, SingleHeaderQuery};
 use crate::error::{Context, Result};
 use crate::ports::WorkerClient;
 use crate::utils::{
-    is_safari, js_value_from_display, request_storage_persistence, timeout, Network,
+    Network, is_safari, js_value_from_display, request_storage_persistence, timeout,
 };
 use crate::worker::{WasmBlockstore, WasmStore};
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -437,11 +437,11 @@ mod tests {
 
     use std::time::Duration;
 
-    use celestia_rpc::{prelude::*, Client, TxConfig};
+    use celestia_rpc::{Client, TxConfig, prelude::*};
     use celestia_types::p2p::PeerId;
     use celestia_types::{AppVersion, ExtendedHeader};
     use gloo_timers::future::sleep;
-    use libp2p::{multiaddr::Protocol, Multiaddr};
+    use libp2p::{Multiaddr, multiaddr::Protocol};
     use rexie::Rexie;
     use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::wasm_bindgen_test;

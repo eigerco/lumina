@@ -2,11 +2,11 @@
 
 use tendermint::block::{Commit, CommitSig, Id};
 use tendermint::signature::SIGNATURE_LENGTH;
-use tendermint::{chain, vote, Vote};
+use tendermint::{Vote, chain, vote};
 
 use crate::block::GENESIS_HEIGHT;
 use crate::hash::Hash;
-use crate::{bail_validation, Error, Result, ValidateBasic, ValidationError};
+use crate::{Error, Result, ValidateBasic, ValidationError, bail_validation};
 
 impl ValidateBasic for Commit {
     fn validate_basic(&self) -> Result<(), ValidationError> {

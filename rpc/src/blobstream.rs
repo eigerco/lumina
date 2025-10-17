@@ -3,10 +3,10 @@
 use std::future::Future;
 use std::marker::{Send, Sync};
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use celestia_types::MerkleProof;
 use celestia_types::consts::HASH_SIZE;
 use celestia_types::hash::Hash;
-use celestia_types::MerkleProof;
 use jsonrpsee::core::client::{ClientT, Error};
 use jsonrpsee::proc_macros::rpc;
 

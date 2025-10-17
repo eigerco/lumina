@@ -6,7 +6,7 @@ use nmt_rs::simple_merkle::proof::Proof as NmtProof;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
-use crate::nmt::{NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher, NS_SIZE};
+use crate::nmt::{NS_SIZE, NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher};
 use crate::{Error, Result};
 
 type NmtNamespaceProof = nmt_rs::nmt_proof::NamespaceProof<NamespacedSha2Hasher, NS_SIZE>;

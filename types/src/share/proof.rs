@@ -5,8 +5,8 @@ use tendermint_proto::Protobuf;
 use crate::consts::appconsts::SHARE_SIZE;
 use crate::hash::Hash;
 use crate::nmt::NamespaceProof;
-use crate::{bail_verification, validation_error, RowProof};
-use crate::{nmt::Namespace, Error, Result};
+use crate::{Error, Result, nmt::Namespace};
+use crate::{RowProof, bail_verification, validation_error};
 
 /// A proof of inclusion of a continouous range of shares of some namespace
 /// in a [`DataAvailabilityHeader`].

@@ -2,8 +2,8 @@ use std::any::TypeId;
 use std::time::Duration;
 
 use blockstore::Blockstore;
-use libp2p::identity::Keypair;
 use libp2p::Multiaddr;
+use libp2p::identity::Keypair;
 use tracing::{info, warn};
 
 use crate::blockstore::InMemoryBlockstore;
@@ -253,7 +253,9 @@ where
             // It is a valid scenario for user to create a node without any bootnodes
             // and listening addresses. However it may not be what they wanted. Because
             // of that we display a warning.
-            warn!("Node has empty bootnodes and listening addresses. It will never connect to another peer.");
+            warn!(
+                "Node has empty bootnodes and listening addresses. It will never connect to another peer."
+            );
         }
 
         #[cfg(target_arch = "wasm32")]

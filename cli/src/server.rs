@@ -1,12 +1,12 @@
 use std::net::SocketAddr;
 
 use anyhow::Result;
+use axum::Router;
 use axum::body::Body;
 use axum::extract::Path;
-use axum::http::{header, StatusCode};
+use axum::http::{StatusCode, header};
 use axum::response::Response;
 use axum::routing::get;
-use axum::Router;
 use clap::Args;
 use rust_embed::RustEmbed;
 use tokio::net::TcpListener;

@@ -3,7 +3,7 @@ use celestia_proto::celestia::blob::v1::{
 };
 use celestia_types::blob::BlobParams;
 
-use crate::grpc::{make_empty_params, FromGrpcResponse};
+use crate::grpc::{FromGrpcResponse, make_empty_params};
 use crate::{Error, Result};
 
 impl FromGrpcResponse<BlobParams> for QueryBlobParamsResponse {

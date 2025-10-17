@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::future::Future;
 
 use futures::future::FutureExt;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
@@ -13,7 +13,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::error::{Context, Error, Result};
 use crate::ports::common::{MessageId, MultiplexMessage, Port, Transferable};
-use lumina_utils::executor::{spawn, JoinHandle};
+use lumina_utils::executor::{JoinHandle, spawn};
 
 /// Client responsible for sending `Request`s and receiving `Response`s to them over a port like
 /// object.

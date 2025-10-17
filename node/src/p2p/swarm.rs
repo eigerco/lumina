@@ -15,7 +15,7 @@ mod imp {
     use futures::future::Either;
     use libp2p::core::muxing::StreamMuxerBox;
     use libp2p::core::upgrade::Version;
-    use libp2p::{dns, noise, quic, swarm, tcp, websocket, yamux, PeerId, Transport};
+    use libp2p::{PeerId, Transport, dns, noise, quic, swarm, tcp, websocket, yamux};
     use rustls_pki_types::{CertificateDer, PrivateKeyDer};
     use tokio::fs;
 
@@ -161,7 +161,7 @@ mod imp {
 mod imp {
     use super::*;
     use libp2p::core::upgrade::Version;
-    use libp2p::{noise, websocket_websys, webtransport_websys, yamux, SwarmBuilder, Transport};
+    use libp2p::{SwarmBuilder, Transport, noise, websocket_websys, webtransport_websys, yamux};
 
     pub(crate) async fn new_swarm<B>(keypair: Keypair, behaviour: B) -> Result<Swarm<B>>
     where

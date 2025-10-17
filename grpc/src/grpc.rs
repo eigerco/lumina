@@ -8,8 +8,8 @@ use celestia_types::Hash;
 use futures::future::{BoxFuture, FutureExt};
 use tonic::metadata::{Ascii, Binary, KeyAndValueRef, MetadataKey, MetadataMap, MetadataValue};
 
-use crate::error::MetadataError;
 use crate::Result;
+use crate::error::MetadataError;
 
 // cosmos.auth
 mod auth;

@@ -15,8 +15,8 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 
 use crate::nmt::{Namespace, NamespaceProof};
-use crate::row::{RowId, ROW_ID_SIZE};
-use crate::{bail_validation, DataAvailabilityHeader, Error, Result, Share};
+use crate::row::{ROW_ID_SIZE, RowId};
+use crate::{DataAvailabilityHeader, Error, Result, Share, bail_validation};
 
 /// Number of bytes needed to represent [`RowNamespaceDataId`] in `multihash`.
 const ROW_NAMESPACE_DATA_ID_SIZE: usize = 39;
@@ -288,9 +288,9 @@ impl From<RowNamespaceDataId> for CidGeneric<ROW_NAMESPACE_DATA_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Blob;
     use crate::consts::appconsts::AppVersion;
     use crate::test_utils::{generate_dummy_eds, generate_eds};
-    use crate::Blob;
 
     #[test]
     fn round_trip() {

@@ -1,11 +1,11 @@
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt::Display;
 use std::pin::pin;
 
 use async_trait::async_trait;
-use celestia_types::hash::Hash;
 use celestia_types::ExtendedHeader;
+use celestia_types::hash::Hash;
 use cid::Cid;
 use libp2p::identity::Keypair;
 use tokio::sync::{Notify, RwLock};

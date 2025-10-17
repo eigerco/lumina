@@ -1,5 +1,5 @@
-use crate::consts::appconsts::AppVersion;
 use crate::ValidationError;
+use crate::consts::appconsts::AppVersion;
 
 /// A trait to perform basic validation of the data consistency.
 pub trait ValidateBasic {

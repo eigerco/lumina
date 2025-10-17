@@ -105,7 +105,7 @@ mod rpc {
 
         #[method(name = "GetShare")]
         async fn share_get_share(&self, height: u64, row: u64, col: u64)
-            -> Result<RawShare, Error>;
+        -> Result<RawShare, Error>;
 
         #[method(name = "GetNamespaceData")]
         async fn share_get_namespace_data(
