@@ -25,6 +25,7 @@ celestia-proto = { workspace = true, features = ["uniffi"] }
 lumina-node = { workspace = true, features = ["uniffi"] }
 
 async-trait.workspace = true
+futures.workspace = true
 k256.workspace = true
 libp2p.workspace = true
 redb.workspace = true
@@ -32,6 +33,7 @@ serde_json.workspace = true
 tendermint.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "sync"] }
+tokio-stream = { workspace = true, features = ["sync"] }
 tonic.workspace = true
 uniffi = { workspace = true, features = ["bindgen", "tokio", "cli"] }
 

@@ -28,7 +28,7 @@ pub(crate) struct Params {
 pub(crate) async fn run(args: Params) -> Result<()> {
     let app = Router::new()
         .route("/", get(serve_index_html))
-        .route("/*path", get(serve_embedded_path::<StaticResources>));
+        .route("/{*path}", get(serve_embedded_path::<StaticResources>));
 
     let listener = TcpListener::bind(&args.listen_addr).await?;
     info!("Address: http://{}", args.listen_addr);

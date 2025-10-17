@@ -1,6 +1,12 @@
 use wasm_bindgen::prelude::*;
 
-use crate::commands::{NodeCommand, WorkerResponse};
+use serde::de::DeserializeOwned;
+use serde_wasm_bindgen::from_value;
+use tokio::sync::mpsc;
+use web_sys::{MessageChannel, MessageEvent};
+
+use crate::commands::CheckableResponseExt;
+use crate::commands::{Command, ManagementCommand, NodeCommand, NodeSubscription, WorkerResponse};
 use crate::error::{Context, Error, Result};
 use crate::ports::client::Client;
 use crate::ports::server::Server;
@@ -9,10 +15,12 @@ mod client;
 mod common;
 mod server;
 
-pub(crate) type WorkerServer = Server<NodeCommand, WorkerResponse>;
+pub(crate) use common::{MessagePortLike, PayloadWithContext, Port};
+
+pub(crate) type WorkerServer = Server; //<NodeCommand, WorkerResponse>;
 
 pub struct WorkerClient {
-    client: Client<NodeCommand, WorkerResponse>,
+    client: Client<Command, WorkerResponse>,
 }
 
 impl WorkerClient {
@@ -22,14 +30,15 @@ impl WorkerClient {
         })
     }
 
-    pub(crate) async fn add_connection_to_worker(&self, port: JsValue) -> Result<()> {
-        let response = self.client.send(NodeCommand::InternalPing, Some(port))?;
+    pub(crate) async fn add_connection_to_worker(&self, port: MessagePortLike) -> Result<()> {
+        let command = Command::Meta(ManagementCommand::ConnectPort);
+        let response = self.client.send(command, Some(port))?;
 
         let worker_response = response
             .await
             .context("Response oneshot dropped, should not happen")?;
 
-        if !worker_response.is_internal_pong() {
+        if !worker_response.is_port_connected() {
             Err(Error::new(&format!(
                 "invalid response, expected InternalPing got {worker_response:?}"
             )))
@@ -38,11 +47,58 @@ impl WorkerClient {
         }
     }
 
-    pub(crate) async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse> {
+    pub(crate) async fn mgmt_command(&self, command: ManagementCommand) -> Result<WorkerResponse> {
+        let command = Command::Meta(command);
         let response = self.client.send(command, None)?;
         response
             .await
             .context("Response oneshot dropped, should not happen")
+    }
+
+    pub(crate) async fn exec(&self, command: NodeCommand) -> Result<WorkerResponse> {
+        let command = Command::Node(command);
+        let response = self.client.send(command, None)?;
+        response
+            .await
+            .context("Response oneshot dropped, should not happen")
+    }
+
+    pub(crate) async fn subscribe<T: DeserializeOwned + 'static>(
+        &self,
+        subscription: NodeSubscription,
+    ) -> Result<(mpsc::UnboundedReceiver<T>, Port)> {
+        let (server_port, client_port, subscription_stream) = self.prepare_subscription_port()?;
+        let command = Command::Subscribe(subscription);
+
+        let response = self.client.send(command, Some(server_port))?;
+        response
+            .await
+            .context("Response oneshot dropped, should not happen")?
+            .into_subscribed()
+            .check_variant()??;
+        Ok((subscription_stream, client_port))
+    }
+
+    fn prepare_subscription_port<T: DeserializeOwned + 'static>(
+        &self,
+    ) -> Result<(MessagePortLike, Port, mpsc::UnboundedReceiver<T>)> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let channel = MessageChannel::new()?;
+
+        let server_port = JsValue::from(channel.port1()).into();
+
+        let client_port = Port::new(
+            channel.port2().into(),
+            move |ev: MessageEvent| -> Result<()> {
+                web_sys::console::log_1(&ev.data());
+                let item: T = from_value(ev.data()).context("could not deserialize message")?;
+                tx.send(item)
+                    .context("forwarding subscription item failed")?;
+                Ok(())
+            },
+        )?;
+
+        Ok((server_port, client_port, rx))
     }
 }
 
@@ -56,6 +112,9 @@ mod tests {
 
     use lumina_utils::time::sleep;
 
+    type Request = Command;
+    type Response = WorkerResponse;
+
     #[wasm_bindgen_test]
     async fn worker_client_server() {
         let channel0 = MessageChannel::new().unwrap();
@@ -64,15 +123,24 @@ mod tests {
 
         spawn_local(async move {
             let (request, responder) = server.recv().await.unwrap();
-            assert!(matches!(request, NodeCommand::IsRunning));
+            assert!(matches!(
+                request.payload.unwrap(),
+                Command::Meta(ManagementCommand::IsRunning)
+            ));
             responder.send(WorkerResponse::IsRunning(false)).unwrap();
 
             let (request, responder) = server.recv().await.unwrap();
-            assert!(matches!(request, NodeCommand::InternalPing));
+            assert!(matches!(
+                request.payload.unwrap(),
+                Command::Meta(ManagementCommand::InternalPing)
+            ));
             responder.send(WorkerResponse::InternalPong).unwrap();
 
             let (request, responder) = server.recv().await.unwrap();
-            assert!(matches!(request, NodeCommand::IsRunning));
+            assert!(matches!(
+                request.payload.unwrap(),
+                Command::Meta(ManagementCommand::IsRunning)
+            ));
             responder.send(WorkerResponse::IsRunning(true)).unwrap();
 
             // otherwise server is dropped too soon and last message does not make it
@@ -82,35 +150,50 @@ mod tests {
         port_channel.send(channel0.port1().into()).unwrap();
         let client0 = WorkerClient::new(channel0.port2().into()).unwrap();
 
-        let response = client0.exec(NodeCommand::IsRunning).await.unwrap();
+        let response = client0
+            .mgmt_command(ManagementCommand::IsRunning)
+            .await
+            .unwrap();
         assert!(matches!(response, WorkerResponse::IsRunning(false)));
 
         let channel1 = MessageChannel::new().unwrap();
+        let worker_port: JsValue = channel1.port1().into();
         client0
-            .add_connection_to_worker(channel1.port1().into())
+            .add_connection_to_worker(worker_port.into())
             .await
             .unwrap();
         let client1 = WorkerClient::new(channel1.port2().into()).unwrap();
 
-        let response = client1.exec(NodeCommand::IsRunning).await.unwrap();
+        let response = client1
+            .mgmt_command(ManagementCommand::IsRunning)
+            .await
+            .unwrap();
         assert!(matches!(response, WorkerResponse::IsRunning(true)));
     }
 
     #[wasm_bindgen_test]
     async fn client_server() {
         let channel = MessageChannel::new().unwrap();
-        let mut server = Server::<i32, i32>::new();
+        let mut server = Server::new();
         let port_channel = server.get_port_channel();
         port_channel.send(channel.port2().into()).unwrap();
 
-        let client = Client::<i32, i32>::start(channel.port1().into()).unwrap();
+        let client = Client::<Request, Response>::start(channel.port1().into()).unwrap();
 
-        let response = client.send(1, None).unwrap();
+        let response = client
+            .send(Command::Meta(ManagementCommand::InternalPing), None)
+            .unwrap();
 
         let (request, responder) = server.recv().await.unwrap();
-        assert_eq!(request, 1);
-        responder.send(2).unwrap();
+        assert!(matches!(
+            request.payload.unwrap(),
+            Command::Meta(ManagementCommand::InternalPing)
+        ));
+        responder.send(WorkerResponse::InternalPong).unwrap();
 
-        assert_eq!(response.await.unwrap(), 2);
+        assert!(matches!(
+            response.await.unwrap(),
+            WorkerResponse::InternalPong
+        ));
     }
 }

@@ -4,25 +4,32 @@ use std::time::Duration;
 use blockstore::EitherBlockstore;
 use celestia_types::nmt::Namespace;
 use celestia_types::Blob;
+use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::to_value;
+use serde_wasm_bindgen::{from_value, to_value};
 use thiserror::Error;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::BroadcastChannel;
+use web_sys::{BroadcastChannel, MessageEvent};
 
 use celestia_types::ExtendedHeader;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::events::{EventSubscriber, NodeEventInfo};
+use lumina_node::node::SubscriptionError;
 use lumina_node::node::{Node, SyncingInfo};
 use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
+use lumina_utils::executor::spawn;
 
 use crate::client::WasmNodeConfig;
-use crate::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
+use crate::commands::{
+    Command, ManagementCommand, NodeCommand, NodeSubscription, SingleHeaderQuery, WorkerResponse,
+};
 use crate::error::{Context, Error, Result};
-use crate::ports::WorkerServer;
+use crate::ports::{MessagePortLike, PayloadWithContext, Port, WorkerServer};
 use crate::utils::random_id;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
@@ -59,7 +66,6 @@ pub struct NodeWorker {
 
 struct NodeWorkerInstance {
     node: Node<WasmBlockstore, WasmStore>,
-    events_channel_name: String,
 }
 
 #[wasm_bindgen]
@@ -84,8 +90,11 @@ impl NodeWorker {
 
     pub async fn run(&mut self) -> Result<(), Error> {
         loop {
-            let (command, responder) = self.request_server.recv().await?;
+            let (PayloadWithContext { payload, port, .. }, responder) =
+                self.request_server.recv().await?;
+            let command = payload.expect("WorkerServer should have ignored this message");
 
+            /*
             // StopNode needs special handling because `NodeWorkerInstance` needs to be consumed.
             if matches!(&command, NodeCommand::StopNode) {
                 if let Some(node) = self.node.take() {
@@ -96,7 +105,61 @@ impl NodeWorker {
                     continue;
                 }
             }
+            */
 
+            let response = match command {
+                Command::Meta(command) => match command {
+                    ManagementCommand::InternalPing => WorkerResponse::InternalPong,
+                    ManagementCommand::IsRunning => WorkerResponse::IsRunning(self.node.is_some()),
+                    ManagementCommand::GetEventsChannelName => {
+                        WorkerResponse::EventsChannelName(self.event_channel_name.clone())
+                    }
+                    ManagementCommand::StartNode(config) => match &mut self.node {
+                        Some(_) => {
+                            WorkerResponse::NodeStarted(Err(Error::new("Node already started")))
+                        }
+                        node => {
+                            match NodeWorkerInstance::new(&self.event_channel_name, config).await {
+                                Ok(instance) => {
+                                    let _ = node.insert(instance);
+                                    WorkerResponse::NodeStarted(Ok(()))
+                                }
+                                Err(e) => WorkerResponse::NodeStarted(Err(e)),
+                            }
+                        }
+                    },
+                    ManagementCommand::StopNode => {
+                        if let Some(node) = self.node.take() {
+                            node.stop().await;
+                            WorkerResponse::NodeStopped(())
+                        } else {
+                            WorkerResponse::NodeNotRunning
+                        }
+                    }
+                    // handled in `WorkerServer`
+                    ManagementCommand::ConnectPort => {
+                        unreachable!("should be handled in WorkerServer")
+                    }
+                },
+                Command::Node(command) => match &mut self.node {
+                    Some(node) => node.process_command(command).await,
+                    None => WorkerResponse::NodeNotRunning,
+                },
+                Command::Subscribe(command) => match &mut self.node {
+                    Some(node) => {
+                        let result = node
+                            .process_subscription(
+                                command,
+                                port.expect("port should be present here"),
+                            )
+                            .await;
+                        WorkerResponse::Subscribed(result)
+                    }
+                    None => WorkerResponse::NodeNotRunning,
+                },
+            };
+
+            /*
             let response = match &mut self.node {
                 Some(node) => node.process_command(command).await,
                 node @ None => match command {
@@ -120,6 +183,8 @@ impl NodeWorker {
                     }
                 },
             };
+            */
+
             if responder.send(response).is_err() {
                 error!("Failed to send response: channel dropped");
             }
@@ -137,10 +202,7 @@ impl NodeWorkerInstance {
 
         spawn_local(event_forwarder_task(events_sub, events_channel));
 
-        Ok(Self {
-            node,
-            events_channel_name: events_channel_name.to_owned(),
-        })
+        Ok(Self { node })
     }
 
     async fn stop(self) {
@@ -242,16 +304,8 @@ impl NodeWorkerInstance {
 
     async fn process_command(&mut self, command: NodeCommand) -> WorkerResponse {
         match command {
-            NodeCommand::IsRunning => WorkerResponse::IsRunning(true),
-            NodeCommand::StartNode(_) => {
-                WorkerResponse::NodeStarted(Err(Error::new("Node already started")))
-            }
-            NodeCommand::StopNode => unreachable!("StopNode is handled in `run()`"),
             NodeCommand::GetLocalPeerId => {
                 WorkerResponse::LocalPeerId(self.node.local_peer_id().to_string())
-            }
-            NodeCommand::GetEventsChannelName => {
-                WorkerResponse::EventsChannelName(self.events_channel_name.clone())
             }
             NodeCommand::GetSyncerInfo => WorkerResponse::SyncerInfo(self.get_syncer_info().await),
             NodeCommand::GetPeerTrackerInfo => {
@@ -297,9 +351,72 @@ impl NodeWorkerInstance {
                 self.request_all_blobs(namespace, block_height, timeout_secs)
                     .await,
             ),
-            NodeCommand::InternalPing => WorkerResponse::InternalPong,
         }
     }
+
+    async fn process_subscription(
+        &mut self,
+        subscription: NodeSubscription,
+        port: MessagePortLike,
+    ) -> Result<()> {
+        match subscription {
+            NodeSubscription::Headers => {
+                let stream = self.node.header_subscribe().await?;
+                register_forwarding_tasks_and_callbacks(port, stream)
+            }
+            NodeSubscription::Blobs(ns) => {
+                let stream = self.node.namespace_subscribe(ns).await?;
+                register_forwarding_tasks_and_callbacks(port, stream)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum SubscriptionFeedback {
+    /// receiver has read the previous item and is ready for more
+    Ready,
+    /// receiver closed the channel
+    Close,
+}
+
+fn register_forwarding_tasks_and_callbacks<T: Serialize + 'static>(
+    port: MessagePortLike,
+    mut stream: ReceiverStream<Result<T, SubscriptionError>>,
+) -> Result<()> {
+    let (signal_tx, mut signal_rx) = mpsc::channel(1);
+    let port = Port::new(port.into(), move |ev: MessageEvent| -> Result<()> {
+        let signal: SubscriptionFeedback =
+            from_value(ev.data()).context("could not deserialize subscription signal")?;
+        if signal_tx.try_send(signal).is_err() {
+            error!("Error forwarding subscription signal, should not happen");
+        }
+
+        Ok(())
+    })?;
+
+    spawn(async move {
+        info!("Starting subscription");
+        loop {
+            match signal_rx.recv().await {
+                Some(SubscriptionFeedback::Ready) => (),
+                Some(SubscriptionFeedback::Close) => break,
+                None => {
+                    warn!("unexpected subscription signal channel close, should not happen");
+                    break;
+                }
+            }
+            let item = stream.next().await;
+            info!("Forwarding subscription item");
+            let item: Result<Option<T>> = item.transpose().map_err(Error::from);
+            if let Err(e) = port.send_raw(&item) {
+                error!("Error sending subscription item: {e}");
+            }
+        }
+        info!("Ending subscription");
+    });
+
+    Ok(())
 }
 
 async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: BroadcastChannel) {
