@@ -250,7 +250,7 @@ jobs:
       env:
         NSUnbufferedIO: "YES"
       run: |
-        # `-parallel-testing-enabled NO` avoid creating clones of the simulator
+        # `-parallel-testing-enabled NO` avoids creating clones of the simulator
         xcodebuild \
           -scheme LuminaDemo \
           -sdk iphonesimulator \
