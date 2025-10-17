@@ -192,6 +192,7 @@ jobs:
     - name: Build demo webpage
       run: cd cli/js && npm ci && npm run build
 
+
   build-ios:
     runs-on: macos-latest
     steps:
@@ -206,16 +207,59 @@ jobs:
       with:
         action: none
         xcode: ^16
+
     - name: build and copy bindings
       run: |
         ./node-uniffi/build-ios.sh
         ./examples/ios/LuminaDemo/copy_bindings.sh
+
+    - name: create and boot simulator
+      run: |
+        xcrun simctl shutdown all || true
+        xcrun simctl erase all || true
+        xcrun simctl delete CI-iPhone || true
+
+        # Run `xcrun simctl list devicetypes` for more
+        DEVTYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-16
+        # Run `xcrun simctl list runtimes` for more
+        RUNTIME=com.apple.CoreSimulator.SimRuntime.iOS-26-0
+
+        # Create simulator
+        UDID=$(xcrun simctl create CI-iPhone "$DEVTYPE" "$RUNTIME")
+        # Boot it
+        xcrun simctl boot "$UDID"
+        # Wait until fully booted
+        xcrun simctl bootstatus "$UDID" -b
+
+        # Set env for the next steps
+        echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+
     - name: xcode clean build
       working-directory: examples/ios/LuminaDemo
-      run: xcodebuild -scheme LuminaDemo clean build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+      env:
+        NSUnbufferedIO: "YES"
+      run: |
+        xcodebuild \
+          -scheme LuminaDemo \
+          -destination "id=${SIM_UDID}" \
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+          clean build
+
     - name: xcode sim test
       working-directory: examples/ios/LuminaDemo
-      run: xcodebuild -scheme LuminaDemo -sdk iphonesimulator -destination "platform=iOS Simulator,name=iPhone 16" -skip-testing LuminaDemoTests/GrpcClientTest test
+      env:
+        NSUnbufferedIO: "YES"
+      run: |
+        # `-parallel-testing-enabled NO` avoids creating clones of the simulator
+        xcodebuild \
+          -scheme LuminaDemo \
+          -sdk iphonesimulator \
+          -destination "id=${SIM_UDID}" \
+          -parallel-testing-enabled NO \
+          -destination-timeout 360 \
+          -skip-testing LuminaDemoTests/GrpcClientTest \
+          test
+
 
   build-android:
     runs-on: ubuntu-latest
