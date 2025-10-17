@@ -368,8 +368,6 @@ impl NodeClient {
             .subscribe::<Result<ExtendedHeader, SubscriptionError>>(command)
             .await?;
 
-        //HeaderStream::new(response_channel, port);
-
         Ok(into_async_iterator(response_channel, port))
     }
 

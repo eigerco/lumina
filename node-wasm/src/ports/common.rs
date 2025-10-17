@@ -61,6 +61,16 @@ pub(crate) struct Port {
     onmessage: Closure<dyn Fn(MessageEvent)>,
 }
 
+impl MessageId {
+    /// i++
+    pub(crate) fn post_increment(&mut self) -> MessageId {
+        let ret = *self;
+        let (next, _carry) = self.0.overflowing_add(1);
+        self.0 = next;
+        ret
+    }
+}
+
 impl Port {
     /// Create a new Port out of JS object, registering on message callback.
     /// Minimal duck-type checking is performed using reflection when setting appropriate properties.
@@ -83,11 +93,10 @@ impl Port {
         Ok(Port { port, onmessage })
     }
 
-    // TODO: doc
+    /// Create a new `Port` object, where received message are forwarded over the provided channel
     pub fn new_with_channels<T>(
         object: JsValue,
         forwarding_channel: mpsc::UnboundedSender<PayloadWithContext<T>>,
-        //port_channel: Option<mpsc::UnboundedSender<JsValue>>,
     ) -> Result<Port>
     where
         T: Serialize + DeserializeOwned + 'static,
@@ -104,6 +113,8 @@ impl Port {
         })
     }
 
+    /// Send a raw serialisable message over the port. No checking is performed whether the
+    /// receiver is able to correctly interpret the message.
     pub fn send_raw<T: Serialize>(&self, msg: &T) -> Result<()> {
         let value = to_json_value(&msg).context("error converting to JsValue")?;
         self.port
@@ -112,26 +123,19 @@ impl Port {
         Ok(())
     }
 
-    /// Send a serialisable message over the port. No checking is performed whether receiver is
-    /// able to correctly interpret the message
+    /// Send a serialisable message over the port, wrapping it with MultiplexMessage.
+    /// No checking is performed whether receiver is able to correctly interpret the message
     pub fn send<T: Serialize>(&self, id: MessageId, payload: T) -> Result<()> {
         let msg = MultiplexMessage {
             id,
             payload: Some(payload),
         };
         self.send_raw(&msg)
-        /*
-                let value = to_json_value(&msg).context("error converting to JsValue")?;
-                self.port
-                    .post_message(&value)
-                    .context("could not send message")?;
-                Ok(())
-        */
     }
 
-    /// Send a serialisable message over the port together with a object to transfer.
-    /// No checking is performed whether receiver is able to correctly interpret the message, nor
-    /// whether port can actually perform object transfer.
+    /// Send a serialisable message over the port, wrapped with MultiplexMessage, together
+    /// with a object to transfer. No checking is performed whether receiver is able to correctly
+    /// interpret the message, nor whether port can actually perform object transfer.
     pub fn send_with_transferable<T: Serialize>(
         &self,
         id: MessageId,
@@ -153,16 +157,6 @@ impl Port {
 impl Drop for Port {
     fn drop(&mut self) {
         unregister_onmessage(&self.port, &self.onmessage)
-    }
-}
-
-impl MessageId {
-    /// i++
-    pub(crate) fn post_increment(&mut self) -> MessageId {
-        let ret = *self;
-        let (next, _carry) = self.0.overflowing_add(1);
-        self.0 = next;
-        ret
     }
 }
 

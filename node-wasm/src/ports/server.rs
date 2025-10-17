@@ -81,43 +81,7 @@ impl Server {
                     }
                 }
             }
-            /*
-                        let (request, response_sender) = self
-                            .requests_rx
-                            .recv()
-                            .await
-                            .expect("request channel should never drop");
-                        let Some(command) = &request.payload else {
-                            warn!("Request with empty command, ignoring");
-                            continue;
-                        };
-                        tracing::info!("received {command:?}");
-                        match command {
-                            Command::Meta(ManagementCommand::ConnectPort) => {
-                                let Some(port) = request.port else {
-                                    warn!("ConnectPort with no port, ignoring");
-                                    continue;
-                                };
-                                if let Err(e) = self.spawn_connection_worker(port) {
-                                    error!("Failed to add new client connection: {e}");
-                                }
-                            }
-                            _ => return Ok((request, response_sender)),
-                        }
-            */
         }
-        // loop {
-        //     select! {
-        //         request = self.requests_rx.recv() => {
-        //             return Ok(request.expect("request channel should not drop"))
-        //         }
-        //         port = self.ports_rx.recv() => {
-        //             if let Err(e) = self.spawn_connection_worker(port.expect("port channel should not drop")) {
-        //                 error!("Failed to add new client connection: {e}");
-        //             }
-        //         }
-        //     }
-        // }
     }
 
     fn spawn_connection_worker(&mut self, port: MessagePortLike) -> Result<()> {
@@ -156,7 +120,6 @@ impl ConnectionWorker
     fn new(
         port: MessagePortLike,
         request_tx: mpsc::UnboundedSender<(PayloadWithContext<Request>, oneshot::Sender<Response>)>,
-        //port_queue: mpsc::UnboundedSender<JsValue>,
         cancellation_token: CancellationToken,
     ) -> Result<ConnectionWorker> {
         let (incoming_requests_tx, incoming_requests) = mpsc::unbounded_channel();

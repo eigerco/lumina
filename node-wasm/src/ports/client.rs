@@ -149,12 +149,6 @@ where
         response_tx: oneshot::Sender<Response>,
     ) -> Result<()> {
         let mid = self.next_message_index.post_increment();
-        /*
-                let message = MultiplexMessage {
-                    id: mid,
-                    payload: Some(request),
-                };
-        */
 
         if let Err(e) = self.send_message(mid, request, port) {
             error!("Failed to send request: {e}");

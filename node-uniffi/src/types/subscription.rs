@@ -7,13 +7,16 @@ use uniffi::Object;
 
 use crate::error::LuminaError;
 
+type HeaderSubscriptionItem = Result<ExtendedHeader, SubscriptionError>;
+type BlobSubscriptionItem = Result<(u64, Vec<Blob>), SubscriptionError>;
+
 #[derive(Object)]
 pub struct HeaderStream {
-    stream: RwLock<ReceiverStream<Result<ExtendedHeader, SubscriptionError>>>,
+    stream: RwLock<ReceiverStream<HeaderSubscriptionItem>>,
 }
 
 impl HeaderStream {
-    pub(crate) fn new(stream: ReceiverStream<Result<ExtendedHeader, SubscriptionError>>) -> Self {
+    pub(crate) fn new(stream: ReceiverStream<HeaderSubscriptionItem>) -> Self {
         HeaderStream {
             stream: RwLock::new(stream),
         }
@@ -38,11 +41,11 @@ impl HeaderStream {
 
 #[derive(Object)]
 pub struct BlobStream {
-    stream: RwLock<ReceiverStream<Result<(u64, Vec<Blob>), SubscriptionError>>>,
+    stream: RwLock<ReceiverStream<BlobSubscriptionItem>>,
 }
 
 impl BlobStream {
-    pub(crate) fn new(stream: ReceiverStream<Result<(u64, Vec<Blob>), SubscriptionError>>) -> Self {
+    pub(crate) fn new(stream: ReceiverStream<BlobSubscriptionItem>) -> Self {
         BlobStream {
             stream: RwLock::new(stream),
         }

@@ -18,6 +18,7 @@ use crate::error::Error;
 use crate::error::Result;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum Command {
     Node(NodeCommand),
