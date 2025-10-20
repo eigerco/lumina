@@ -8772,7 +8772,7 @@ A payload to be signed
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:510
+lumina\_node\_wasm.d.ts:470
 
 ***
 
@@ -8782,7 +8782,7 @@ lumina\_node\_wasm.d.ts:510
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:508
+lumina\_node\_wasm.d.ts:468
 
 ***
 
@@ -8792,7 +8792,7 @@ lumina\_node\_wasm.d.ts:508
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:507
+lumina\_node\_wasm.d.ts:467
 
 ***
 
@@ -8802,7 +8802,7 @@ lumina\_node\_wasm.d.ts:507
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:509
+lumina\_node\_wasm.d.ts:469
 
 
 <a name="interfacestxconfigmd"></a>
@@ -8828,7 +8828,7 @@ query gas estimation service to get estimate gas limit.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:485
+lumina\_node\_wasm.d.ts:502
 
 ***
 
@@ -8841,7 +8841,7 @@ estimation service to get gas price estimate.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:490
+lumina\_node\_wasm.d.ts:507
 
 ***
 
@@ -8853,7 +8853,7 @@ Memo for the transaction
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:494
+lumina\_node\_wasm.d.ts:511
 
 ***
 
@@ -8865,7 +8865,7 @@ Priority of the transaction, used with gas estimation service
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:498
+lumina\_node\_wasm.d.ts:515
 
 
 <a name="interfacestxinfomd"></a>
@@ -8890,7 +8890,7 @@ Hash of the transaction.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:470
+lumina\_node\_wasm.d.ts:487
 
 ***
 
@@ -8902,7 +8902,7 @@ Height at which transaction was submitted.
 
 ##### Defined in
 
-lumina\_node\_wasm.d.ts:474
+lumina\_node\_wasm.d.ts:491
 
 # Type Aliases
 
@@ -8944,4 +8944,4 @@ A function that produces a signature of a payload
 
 ### Defined in
 
-lumina\_node\_wasm.d.ts:516
+lumina\_node\_wasm.d.ts:476
