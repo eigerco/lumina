@@ -29,8 +29,9 @@ use crate::commands::{
     Command, ManagementCommand, NodeCommand, NodeSubscription, SingleHeaderQuery, WorkerResponse,
 };
 use crate::error::{Context, Error, Result};
-use crate::ports::{MessagePortLike, PayloadWithContext, Port, WorkerServer};
+use crate::ports::{MessagePortLike, PayloadWithContext, Port};
 use crate::utils::random_id;
+use crate::worker_server::WorkerServer;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 pub(crate) type WasmBlockstore = EitherBlockstore<InMemoryBlockstore, IndexedDbBlockstore>;
@@ -94,21 +95,8 @@ impl NodeWorker {
                 self.request_server.recv().await?;
             let command = payload.expect("WorkerServer should have ignored this message");
 
-            /*
-            // StopNode needs special handling because `NodeWorkerInstance` needs to be consumed.
-            if matches!(&command, NodeCommand::StopNode) {
-                if let Some(node) = self.node.take() {
-                    node.stop().await;
-                    if responder.send(WorkerResponse::NodeStopped(())).is_err() {
-                        error!("Failed to send response: channel dropped");
-                    }
-                    continue;
-                }
-            }
-            */
-
             let response = match command {
-                Command::Meta(command) => match command {
+                Command::Management(command) => match command {
                     ManagementCommand::InternalPing => WorkerResponse::InternalPong,
                     ManagementCommand::IsRunning => WorkerResponse::IsRunning(self.node.is_some()),
                     ManagementCommand::GetEventsChannelName => {
@@ -137,8 +125,9 @@ impl NodeWorker {
                         }
                     }
                     // handled in `WorkerServer`
-                    ManagementCommand::ConnectPort => {
-                        unreachable!("should be handled in WorkerServer")
+                    ManagementCommand::ConnectPort(port) => {
+                        warn!("unhandled ConnectPort({port:?})");
+                        WorkerResponse::EmptyResponse
                     }
                 },
                 Command::Node(command) => match &mut self.node {
@@ -158,32 +147,6 @@ impl NodeWorker {
                     None => WorkerResponse::NodeNotRunning,
                 },
             };
-
-            /*
-            let response = match &mut self.node {
-                Some(node) => node.process_command(command).await,
-                node @ None => match command {
-                    NodeCommand::InternalPing => WorkerResponse::InternalPong,
-                    NodeCommand::IsRunning => WorkerResponse::IsRunning(false),
-                    NodeCommand::GetEventsChannelName => {
-                        WorkerResponse::EventsChannelName(self.event_channel_name.clone())
-                    }
-                    NodeCommand::StartNode(config) => {
-                        match NodeWorkerInstance::new(&self.event_channel_name, config).await {
-                            Ok(instance) => {
-                                let _ = node.insert(instance);
-                                WorkerResponse::NodeStarted(Ok(()))
-                            }
-                            Err(e) => WorkerResponse::NodeStarted(Err(e)),
-                        }
-                    }
-                    _ => {
-                        warn!("Worker not running");
-                        WorkerResponse::NodeNotRunning
-                    }
-                },
-            };
-            */
 
             if responder.send(response).is_err() {
                 error!("Failed to send response: channel dropped");

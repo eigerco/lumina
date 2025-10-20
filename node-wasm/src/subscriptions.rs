@@ -1,21 +1,19 @@
-use std::{
-    cell::RefCell,
-    future::Future,
-    pin::Pin,
-    rc::Rc,
-    task::{Context, Poll},
-};
+use std::cell::RefCell;
+use std::future::Future;
+use std::pin::Pin;
+use std::rc::Rc;
+use std::task::{Context, Poll};
 
 use js_sys::{AsyncIterator, Boolean, Object, Promise, Reflect, Symbol};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
 use tokio::sync::mpsc;
 use wasm_bindgen::prelude::*;
-
 use wasm_bindgen_futures::future_to_promise;
 
 use crate::error::Error;
-use crate::{ports::Port, worker::SubscriptionFeedback};
+use crate::ports::Port;
+use crate::worker::SubscriptionFeedback;
 
 #[wasm_bindgen(getter_with_clone)]
 #[derive(Debug, Serialize, Deserialize)]

@@ -5,7 +5,7 @@ use serde_wasm_bindgen::from_value;
 use tokio::sync::mpsc;
 use tracing::error;
 use wasm_bindgen::prelude::*;
-use web_sys::MessageEvent;
+use web_sys::{MessageEvent, MessagePort};
 
 use crate::error::{Context, Error, Result};
 use crate::utils::{to_json_value, MessageEventExt};
@@ -41,6 +41,7 @@ pub(crate) struct PayloadWithContext<T> {
 extern "C" {
     /// Abstraction over JavaScript MessagePort (but also runtime.Port for browser extension).
     /// Object which can `postMessage` and receive `onmessage` events.
+    #[derive(Debug)]
     pub(crate) type MessagePortLike;
 
     #[wasm_bindgen(catch, method, structural, js_name = postMessage)]
@@ -154,6 +155,12 @@ impl Port {
     }
 }
 
+impl From<MessagePort> for MessagePortLike {
+    fn from(value: MessagePort) -> Self {
+        MessagePortLike { obj: value.into() }
+    }
+}
+
 impl Drop for Port {
     fn drop(&mut self) {
         unregister_onmessage(&self.port, &self.onmessage)
@@ -218,7 +225,16 @@ pub(crate) fn unregister_onmessage(port: &JsValue, callback: &Closure<dyn Fn(Mes
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+    use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::wasm_bindgen_test;
+    use web_sys::MessageChannel;
+
+    use crate::commands::{Command, ManagementCommand, WorkerResponse};
+    use crate::worker_client::WorkerClient;
+    use crate::worker_server::WorkerServer;
+
+    use lumina_utils::time::sleep;
 
     #[wasm_bindgen_test]
     fn message_id_increment() {
@@ -236,5 +252,85 @@ mod tests {
         assert_eq!(m.post_increment(), MessageId(u32::MAX));
         assert_eq!(m.post_increment(), MessageId(0));
         assert_eq!(m.post_increment(), MessageId(1));
+    }
+
+    #[wasm_bindgen_test]
+    async fn worker_client_server() {
+        let channel0 = MessageChannel::new().unwrap();
+        let mut server = WorkerServer::new();
+        let port_channel = server.get_port_channel();
+
+        spawn_local(async move {
+            let (request, responder) = server.recv().await.unwrap();
+            assert!(matches!(
+                request.payload.unwrap(),
+                Command::Management(ManagementCommand::IsRunning)
+            ));
+            responder.send(WorkerResponse::IsRunning(false)).unwrap();
+
+            let (request, responder) = server.recv().await.unwrap();
+            assert!(matches!(
+                request.payload.unwrap(),
+                Command::Management(ManagementCommand::InternalPing)
+            ));
+            responder.send(WorkerResponse::InternalPong).unwrap();
+
+            let (request, responder) = server.recv().await.unwrap();
+            assert!(matches!(
+                request.payload.unwrap(),
+                Command::Management(ManagementCommand::IsRunning)
+            ));
+            responder.send(WorkerResponse::IsRunning(true)).unwrap();
+
+            // otherwise server is dropped too soon and last message does not make it
+            sleep(Duration::from_millis(100)).await;
+        });
+
+        port_channel.send(channel0.port1().into()).unwrap();
+        let client0 = WorkerClient::new(channel0.port2().into()).unwrap();
+
+        let response = client0
+            .management(ManagementCommand::IsRunning)
+            .await
+            .unwrap();
+        assert!(matches!(response, WorkerResponse::IsRunning(false)));
+
+        let channel1 = MessageChannel::new().unwrap();
+        client0
+            .management(ManagementCommand::ConnectPort(Some(
+                channel1.port1().into(),
+            )))
+            .await
+            .unwrap();
+        let client1 = WorkerClient::new(channel1.port2().into()).unwrap();
+
+        let response = client1
+            .management(ManagementCommand::IsRunning)
+            .await
+            .unwrap();
+        assert!(matches!(response, WorkerResponse::IsRunning(true)));
+    }
+
+    #[wasm_bindgen_test]
+    async fn client_server() {
+        let channel = MessageChannel::new().unwrap();
+        let mut server = WorkerServer::new();
+        let port_channel = server.get_port_channel();
+        port_channel.send(channel.port2().into()).unwrap();
+
+        let client = WorkerClient::new(channel.port1().into()).unwrap();
+        let response = client.management(ManagementCommand::InternalPing);
+
+        let (request, responder) = server.recv().await.unwrap();
+        assert!(matches!(
+            request.payload.unwrap(),
+            Command::Management(ManagementCommand::InternalPing)
+        ));
+        responder.send(WorkerResponse::InternalPong).unwrap();
+
+        assert!(matches!(
+            response.await.unwrap(),
+            WorkerResponse::InternalPong
+        ));
     }
 }

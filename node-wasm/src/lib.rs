@@ -5,9 +5,11 @@ pub mod client;
 mod commands;
 pub mod error;
 mod ports;
-pub mod subscriptions;
+pub(crate) mod subscriptions;
 pub mod utils;
 mod worker;
+mod worker_client;
+mod worker_server;
 mod wrapper;
 
 // include celestia-grpc when building lumina-node npm package

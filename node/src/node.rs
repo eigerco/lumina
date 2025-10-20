@@ -538,6 +538,9 @@ where
         Ok(ReceiverStream::new(rx))
     }
 
+    /// Return a stream which will yield all the blobs from the namespace, as the new headers
+    /// are being received by the node starting from the first header received after the call.
+    /// Stream is guaranteed to return all blobs (possibly zero) or error for each height, in order.
     pub async fn namespace_subscribe(
         &self,
         namespace: Namespace,
@@ -582,7 +585,9 @@ where
 #[derive(Debug, thiserror::Error)]
 #[error("Unable to receive subscription item at {height}: {source}")]
 pub struct SubscriptionError {
+    /// Height of the subscription item
     pub height: u64,
+    /// Error that occured
     #[source]
     pub source: NodeError,
 }

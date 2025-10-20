@@ -16,13 +16,14 @@ use lumina_node::store::SamplingMetadata;
 use crate::client::WasmNodeConfig;
 use crate::error::Error;
 use crate::error::Result;
+use crate::ports::MessagePortLike;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum Command {
     Node(NodeCommand),
-    Meta(ManagementCommand),
+    Management(ManagementCommand),
     Subscribe(NodeSubscription),
 }
 
@@ -30,7 +31,7 @@ pub(crate) enum Command {
 pub(crate) enum ManagementCommand {
     InternalPing,
     GetEventsChannelName,
-    ConnectPort,
+    ConnectPort(#[serde(skip)] Option<MessagePortLike>),
     IsRunning,
     StartNode(WasmNodeConfig),
     StopNode,
@@ -91,6 +92,7 @@ pub(crate) enum WorkerResponse {
     InternalPong,
     PortConnected,
     NodeNotRunning,
+    EmptyResponse,
     IsRunning(bool),
     NodeStarted(Result<()>),
     NodeStopped(()),

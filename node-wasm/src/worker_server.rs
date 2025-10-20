@@ -9,30 +9,27 @@ use wasm_bindgen::prelude::*;
 
 use crate::commands::{Command, ManagementCommand, WorkerResponse};
 use crate::error::{Context, Error, Result};
-use crate::ports::common::{MessageId, MessagePortLike, PayloadWithContext, Port};
+use crate::ports::{MessageId, MessagePortLike, PayloadWithContext, Port};
 use lumina_utils::executor::spawn;
 
-type Request = Command;
-type Response = WorkerResponse;
-
-/// `Server` aggregates multiple existing [`ServerConnection`]s, receiving `Request`s
+/// `WorkerServer` aggregates multiple existing [`ServerConnection`]s, receiving `Command`s
 /// from the connected clients, as well as handles new [`Client`]s connecting.
-pub struct Server {
+pub struct WorkerServer {
     connection_workers_drop_guards: Vec<DropGuard>,
-    requests_tx: mpsc::UnboundedSender<(PayloadWithContext<Request>, oneshot::Sender<Response>)>,
-    requests_rx: mpsc::UnboundedReceiver<(PayloadWithContext<Request>, oneshot::Sender<Response>)>,
+    requests_tx: mpsc::UnboundedSender<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)>,
+    requests_rx: mpsc::UnboundedReceiver<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)>,
     ports_tx: mpsc::UnboundedSender<JsValue>,
     ports_rx: mpsc::UnboundedReceiver<JsValue>,
 }
 
-impl Server {
-    /// Create a new `Server` without any client connections. See [`get_port_channel`] for adding a
+impl WorkerServer {
+    /// Create a new `WorkerServer` without any client connections. See [`get_port_channel`] for adding a
     /// new connection
     pub fn new() -> Self {
         let (requests_tx, requests_rx) = mpsc::unbounded_channel();
         let (ports_tx, ports_rx) = mpsc::unbounded_channel();
 
-        Server {
+        WorkerServer {
             connection_workers_drop_guards: vec![],
             requests_tx,
             requests_rx,
@@ -41,28 +38,24 @@ impl Server {
         }
     }
 
-    /// Receive next `Request` coming from one of the connected clients. Should be called
+    /// Receive next `Command` coming from one of the connected clients. Should be called
     /// semi-frequently, as it also transparently handles new clients connecting.
     pub async fn recv(
         &mut self,
-    ) -> Result<(PayloadWithContext<Request>, oneshot::Sender<Response>)> {
+    ) -> Result<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)> {
         loop {
             select! {
                 request_event = self.requests_rx.recv() => {
-                    let (request, response_sender) = request_event.expect("request channel should never drop");
+                    let (mut request, response_sender) = request_event.expect("request channel should never drop");
 
-                    let Some(command) = &request.payload else {
+                    let Some(command) = &mut request.payload else {
                         warn!("Request with empty command, ignoring");
                         continue;
                     };
 
                     match command {
-                        Command::Meta(ManagementCommand::ConnectPort) => {
-                            let Some(port) = request.port else {
-                                warn!("ConnectPort with no port, ignoring");
-                                continue;
-                            };
-                            if let Err(e) = self.spawn_connection_worker(port) {
+                        Command::Management(ManagementCommand::ConnectPort(port @ Some(_))) => {
+                            if let Err(e) = self.spawn_connection_worker(port.take().unwrap()) {
                                 error!("Failed to add new client connection: {e}");
                             }
                             if response_sender.send(WorkerResponse::PortConnected).is_err() {
@@ -103,23 +96,19 @@ struct ConnectionWorker {
     /// Port over which communication takes place
     port: Port,
     /// Queued requests from the onmessage callback
-    incoming_requests: mpsc::UnboundedReceiver<PayloadWithContext<Request>>,
+    incoming_requests: mpsc::UnboundedReceiver<PayloadWithContext<Command>>,
     /// Futures waiting for completion to be send as responses
-    pending_responses_map: FuturesUnordered<LocalBoxFuture<'static, (MessageId, Option<Response>)>>,
+    pending_responses_map: FuturesUnordered<LocalBoxFuture<'static, (MessageId, Option<WorkerResponse>)>>,
     /// Channel to send requests and response senders over
-    request_tx: mpsc::UnboundedSender<(PayloadWithContext<Request>, oneshot::Sender<Response>)>,
+    request_tx: mpsc::UnboundedSender<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)>,
     /// Cancellation token to stop the worker
     cancellation_token: CancellationToken,
 }
 
-impl ConnectionWorker
-//where
-//    Request: Serialize + DeserializeOwned + 'static,
-//    Response: Serialize + 'static,
-{
+impl ConnectionWorker {
     fn new(
         port: MessagePortLike,
-        request_tx: mpsc::UnboundedSender<(PayloadWithContext<Request>, oneshot::Sender<Response>)>,
+        request_tx: mpsc::UnboundedSender<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)>,
         cancellation_token: CancellationToken,
     ) -> Result<ConnectionWorker> {
         let (incoming_requests_tx, incoming_requests) = mpsc::unbounded_channel();
@@ -167,7 +156,7 @@ impl ConnectionWorker
     fn handle_incoming_request(
         &mut self,
         id: MessageId,
-        payload: Request,
+        payload: Command,
         port: Option<MessagePortLike>,
     ) -> Result<()> {
         let (response_tx, response_rx) = oneshot::channel();
@@ -190,7 +179,7 @@ impl ConnectionWorker
         Ok(())
     }
 
-    fn handle_outgoing_response(&mut self, id: MessageId, payload: Option<Response>) -> Result<()> {
+    fn handle_outgoing_response(&mut self, id: MessageId, payload: Option<WorkerResponse>) -> Result<()> {
         self.port
             .send(id, &payload)
             .context("failed to send outgoing response")?;
@@ -201,18 +190,14 @@ impl ConnectionWorker
 
 fn spawn_connection_worker(
     port: MessagePortLike,
-    request_tx: mpsc::UnboundedSender<(PayloadWithContext<Request>, oneshot::Sender<Response>)>,
-) -> Result<CancellationToken>
-//where
-    // Request: Serialize + DeserializeOwned + 'static,
-    // Response: Serialize + 'static,
-{
+    request_tx: mpsc::UnboundedSender<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)>,
+) -> Result<CancellationToken> {
     let cancellation_token = CancellationToken::new();
     let mut worker = ConnectionWorker::new(port, request_tx, cancellation_token.child_token())?;
 
     let _worker_join_handle = spawn(async move {
         if let Err(e) = worker.run().await {
-            error!("Server worker stopped because of a fatal error: {e}");
+            error!("WorkerServer worker stopped because of a fatal error: {e}");
         }
     });
     Ok(cancellation_token)
@@ -221,7 +206,8 @@ fn spawn_connection_worker(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{commands::NodeCommand, ports::client::Client};
+    use crate::commands::NodeCommand;
+    use crate::worker_client::WorkerClient;
 
     use tokio::sync::mpsc;
     use wasm_bindgen_test::wasm_bindgen_test;
@@ -231,21 +217,19 @@ mod tests {
     async fn smoke_test() {
         let channel = MessageChannel::new().unwrap();
         let worker_port: JsValue = channel.port2().into();
-        let client = Client::<Request, Response>::start(channel.port1().into()).unwrap();
+        let client = WorkerClient::new(channel.port1().into()).unwrap();
 
         let (request_tx, mut request_rx) = mpsc::unbounded_channel();
         let _worker_guard = spawn_connection_worker(worker_port.into(), request_tx)
             .unwrap()
             .drop_guard();
 
-        let response = client
-            .send(Command::Meta(ManagementCommand::InternalPing), None)
-            .unwrap();
+        let response = client.management(ManagementCommand::InternalPing);
 
         let (request, responder) = request_rx.recv().await.expect("failed to recv");
         assert!(matches!(
             request.payload.unwrap(),
-            Command::Meta(ManagementCommand::InternalPing)
+            Command::Management(ManagementCommand::InternalPing)
         ));
         responder.send(WorkerResponse::InternalPong).unwrap();
 
@@ -259,32 +243,30 @@ mod tests {
     async fn response_channel_dropped() {
         let channel = MessageChannel::new().unwrap();
         let worker_port: JsValue = channel.port2().into();
-        let client = Client::<Request, Response>::start(channel.port1().into()).unwrap();
+        let client = WorkerClient::new(channel.port1().into()).unwrap();
 
         let (request_tx, mut request_rx) = mpsc::unbounded_channel();
         let _worker_guard = spawn_connection_worker(worker_port.into(), request_tx)
             .unwrap()
             .drop_guard();
 
-        let response = client
-            .send(Command::Meta(ManagementCommand::InternalPing), None)
-            .unwrap();
+        let response = client.management(ManagementCommand::InternalPing);
 
         let (request, responder) = request_rx.recv().await.expect("failed to recv");
         assert!(matches!(
             request.payload.unwrap(),
-            Command::Meta(ManagementCommand::InternalPing)
+            Command::Management(ManagementCommand::InternalPing)
         ));
         drop(responder);
 
-        assert!(response.await.is_none());
+        assert!(response.await.is_err());
     }
 
     #[wasm_bindgen_test]
     async fn multiple_channels() {
         let channel = MessageChannel::new().unwrap();
         let worker_port: JsValue = channel.port2().into();
-        let client = Client::<Request, Response>::start(channel.port1().into()).unwrap();
+        let client = WorkerClient::new(channel.port1().into()).unwrap();
 
         let (request_tx, mut request_rx) = mpsc::unbounded_channel();
         let _worker_guard = spawn_connection_worker(worker_port.into(), request_tx)
@@ -294,12 +276,7 @@ mod tests {
         let mut responses = vec![];
         for i in 0..=5 {
             responses.push(Some(
-                client
-                    .send(
-                        Command::Node(NodeCommand::GetSamplingMetadata { height: i }),
-                        None,
-                    )
-                    .unwrap(),
+                client.node(NodeCommand::GetSamplingMetadata { height: i }),
             ))
         }
 
