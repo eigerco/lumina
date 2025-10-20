@@ -9,7 +9,7 @@ use celestia_types::state::{Coin, ErrorCode};
 use celestia_types::{AppVersion, Blob};
 use futures::FutureExt;
 use lumina_utils::test_utils::async_test;
-use utils::{load_account, new_rpc_client, TestAccount};
+use utils::{TestAccount, load_account, new_rpc_client};
 
 pub mod utils;
 
@@ -191,11 +191,9 @@ async fn submit_blobs_parallel() {
             let tx_client = tx_client.clone();
             spawn(async move {
                 let namespace = Namespace::new_v0(&[1, 2, n]).unwrap();
-                let blobs =
-                    vec![
-                        Blob::new(namespace, format!("bleb{n}").into(), None, AppVersion::V3)
-                            .unwrap(),
-                    ];
+                let blobs = vec![
+                    Blob::new(namespace, format!("bleb{n}").into(), None, AppVersion::V3).unwrap(),
+                ];
 
                 let response = tx_client
                     .submit_blobs(&blobs, TxConfig::default())

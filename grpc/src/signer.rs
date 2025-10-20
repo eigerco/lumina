@@ -5,11 +5,11 @@ use std::pin::Pin;
 
 use ::tendermint::chain::Id;
 use celestia_proto::cosmos::tx::v1beta1::SignDoc;
-use k256::ecdsa::signature::Signer;
 use k256::ecdsa::VerifyingKey;
+use k256::ecdsa::signature::Signer;
 use prost::{Message, Name};
-use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::Protobuf;
+use tendermint_proto::google::protobuf::Any;
 
 use celestia_proto::cosmos::crypto::secp256k1;
 use celestia_types::state::auth::BaseAccount;

@@ -5,7 +5,7 @@ use tendermint::merkle::{Hash, MerkleHash};
 use tendermint_proto::Protobuf;
 
 use crate::{
-    bail_validation, bail_verification, validation_error, verification_error, Error, Result,
+    Error, Result, bail_validation, bail_verification, validation_error, verification_error,
 };
 
 /// A proof of inclusion of some leaf in a merkle tree.

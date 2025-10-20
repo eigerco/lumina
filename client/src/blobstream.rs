@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use celestia_rpc::blobstream::BlobstreamClient;
 
-use crate::client::ClientInner;
-use crate::types::hash::Hash;
-use crate::types::MerkleProof;
 use crate::Result;
+use crate::client::ClientInner;
+use crate::types::MerkleProof;
+use crate::types::hash::Hash;
 
 /// Blobstream API for quering bridge nodes.
 pub struct BlobstreamApi {

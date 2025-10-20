@@ -1,14 +1,14 @@
 [package]
 name = "celestia-proto"
 version = "0.10.0"
-edition = "2021"
+edition.workspace = true
 license = "Apache-2.0"
 description = "Rust implementation of proto structs used in celestia ecosystem"
 authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
 readme = "README.md"
-rust-version = "1.82"
+rust-version = "1.85"
 # crates.io is limited to 5 keywords and 5 categories
 keywords = ["blockchain", "celestia", "lumina"]
 # Must be one of <https://crates.io/category_slugs>

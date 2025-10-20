@@ -1,6 +1,6 @@
-use nmt_rs::{simple_merkle::db::MemDb, NamespaceMerkleHasher};
+use nmt_rs::{NamespaceMerkleHasher, simple_merkle::db::MemDb};
 
-use super::{NamespacedHash, NS_SIZE};
+use super::{NS_SIZE, NamespacedHash};
 
 pub use nmt_rs::simple_merkle::tree::MerkleHash;
 

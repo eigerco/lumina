@@ -1,10 +1,10 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use celestia_rpc::{blobstream::BlobstreamClient, HeaderClient};
+use celestia_rpc::{HeaderClient, blobstream::BlobstreamClient};
 use celestia_types::hash::Hash;
 pub mod utils;
 
-use crate::utils::client::{new_test_client, AuthLevel};
+use crate::utils::client::{AuthLevel, new_test_client};
 
 #[tokio::test]
 async fn get_data_root_tuple_root_and_proof() {

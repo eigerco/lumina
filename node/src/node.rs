@@ -17,14 +17,14 @@ use celestia_types::{Blob, ExtendedHeader};
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
-use lumina_utils::executor::{spawn_cancellable, JoinHandle};
+use lumina_utils::executor::{JoinHandle, spawn_cancellable};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::blockstore::{InMemoryBlockstore, SampleBlockstore};
 use crate::daser::{
-    Daser, DaserArgs, DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY, DEFAULT_CONCURENCY_LIMIT,
+    DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY, DEFAULT_CONCURENCY_LIMIT, Daser, DaserArgs,
 };
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
 use crate::p2p::shwap::sample_cid;
@@ -36,7 +36,7 @@ use crate::syncer::{Syncer, SyncerArgs};
 mod builder;
 
 pub use self::builder::{
-    NodeBuilder, NodeBuilderError, DEFAULT_PRUNING_WINDOW, DEFAULT_PRUNING_WINDOW_IN_MEMORY,
+    DEFAULT_PRUNING_WINDOW, DEFAULT_PRUNING_WINDOW_IN_MEMORY, NodeBuilder, NodeBuilderError,
     SAMPLING_WINDOW,
 };
 pub use crate::daser::DaserError;

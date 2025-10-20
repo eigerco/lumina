@@ -2,17 +2,17 @@
 
 use std::time::Duration;
 
-use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::consts::HASH_SIZE;
+use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::fraud_proof::BadEncodingFraudProof;
 use celestia_types::hash::Hash;
-use celestia_types::test_utils::{corrupt_eds, generate_dummy_eds, ExtendedHeaderGenerator};
+use celestia_types::test_utils::{ExtendedHeaderGenerator, corrupt_eds, generate_dummy_eds};
 use futures::StreamExt;
 use libp2p::swarm::NetworkBehaviour;
-use libp2p::{gossipsub, noise, ping, tcp, yamux, Multiaddr, SwarmBuilder};
+use libp2p::{Multiaddr, SwarmBuilder, gossipsub, noise, ping, tcp, yamux};
 use lumina_node::store::{InMemoryStore, Store};
 use lumina_node::test_utils::{
-    gen_filled_store, listening_test_node_builder, test_node_builder, ExtendedHeaderGeneratorExt,
+    ExtendedHeaderGeneratorExt, gen_filled_store, listening_test_node_builder, test_node_builder,
 };
 use rand::Rng;
 use tendermint_proto::Protobuf;
@@ -60,11 +60,12 @@ async fn header_store_access() {
             res.unwrap_err();
         } else {
             // returns continuous range of headers
-            assert!(res
-                .unwrap()
-                .into_iter()
-                .zip(start..start + amount)
-                .all(|(header, height)| header.height().value() == height));
+            assert!(
+                res.unwrap()
+                    .into_iter()
+                    .zip(start..start + amount)
+                    .all(|(header, height)| header.height().value() == height)
+            );
         }
     }
 
@@ -161,15 +162,18 @@ async fn peer_discovery() {
 
 #[tokio::test]
 async fn stops_services_when_network_is_compromised() {
-    let mut gen = ExtendedHeaderGenerator::new();
+    let mut generator = ExtendedHeaderGenerator::new();
     let store = InMemoryStore::new();
 
     // add some initial headers
-    store.insert(gen.next_many_verified(64)).await.unwrap();
+    store
+        .insert(generator.next_many_verified(64))
+        .await
+        .unwrap();
 
     // create a corrupted block and insert it
     let mut eds = generate_dummy_eds(8, AppVersion::V2);
-    let (header, befp) = corrupt_eds(&mut gen, &mut eds);
+    let (header, befp) = corrupt_eds(&mut generator, &mut eds);
 
     store.insert(header).await.unwrap();
 

@@ -1,7 +1,7 @@
 use futures::future::{FutureExt, LocalBoxFuture};
 use futures::stream::{FuturesUnordered, StreamExt};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;

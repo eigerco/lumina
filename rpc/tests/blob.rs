@@ -14,7 +14,7 @@ use jsonrpsee::core::client::Subscription;
 
 pub mod utils;
 
-use crate::utils::client::{blob_submit, blob_submit_with_config, new_test_client, AuthLevel};
+use crate::utils::client::{AuthLevel, blob_submit, blob_submit_with_config, new_test_client};
 use crate::utils::{random_bytes, random_bytes_array, random_ns};
 
 #[tokio::test]

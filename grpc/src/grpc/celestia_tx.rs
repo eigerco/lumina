@@ -7,9 +7,9 @@ use wasm_bindgen::prelude::*;
 use celestia_proto::celestia::core::v1::tx::{
     TxStatusRequest as RawTxStatusRequest, TxStatusResponse as RawTxStatusResponse,
 };
+use celestia_types::Height;
 use celestia_types::hash::Hash;
 use celestia_types::state::ErrorCode;
-use celestia_types::Height;
 
 use crate::grpc::{FromGrpcResponse, IntoGrpcParam};
 use crate::{Error, Result};

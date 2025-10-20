@@ -5,11 +5,11 @@ use std::pin::pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use backoff::backoff::Backoff;
 use backoff::ExponentialBackoffBuilder;
+use backoff::backoff::Backoff;
 use celestia_types::ExtendedHeader;
-use lumina_utils::executor::{spawn, JoinHandle};
-use lumina_utils::time::{sleep, Instant, Interval};
+use lumina_utils::executor::{JoinHandle, spawn};
+use lumina_utils::time::{Instant, Interval, sleep};
 use serde::{Deserialize, Serialize};
 use tendermint::Time;
 use tokio::select;
@@ -390,7 +390,9 @@ where
             .map(|range| format!("{}", range.display()))
             .unwrap_or_else(|| "None".to_string());
 
-        info!("syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}");
+        info!(
+            "syncing: head: {subjective_head}, stored headers: {stored_headers}, ongoing batches: {ongoing_batch}"
+        );
         Ok(())
     }
 
@@ -741,10 +743,10 @@ mod tests {
     use super::*;
     use crate::block_ranges::{BlockRange, BlockRangeExt};
     use crate::events::EventChannel;
-    use crate::node::{HeaderExError, DEFAULT_PRUNING_WINDOW, SAMPLING_WINDOW};
+    use crate::node::{DEFAULT_PRUNING_WINDOW, HeaderExError, SAMPLING_WINDOW};
     use crate::p2p::header_session;
     use crate::store::InMemoryStore;
-    use crate::test_utils::{gen_filled_store, MockP2pHandle};
+    use crate::test_utils::{MockP2pHandle, gen_filled_store};
     use crate::utils::OneshotResultSenderExt;
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use libp2p::request_response::OutboundFailure;
@@ -825,8 +827,8 @@ mod tests {
     async fn init_without_genesis_hash() {
         let events = EventChannel::new();
         let (mock, mut handle) = P2p::mocked();
-        let mut gen = ExtendedHeaderGenerator::new();
-        let header = gen.next();
+        let mut generator = ExtendedHeaderGenerator::new();
+        let header = generator.next();
 
         let _syncer = Syncer::start(SyncerArgs {
             p2p: Arc::new(mock),
@@ -860,8 +862,8 @@ mod tests {
 
     #[async_test]
     async fn init_with_genesis_hash() {
-        let mut gen = ExtendedHeaderGenerator::new();
-        let head = gen.next();
+        let mut generator = ExtendedHeaderGenerator::new();
+        let head = generator.next();
 
         let (_syncer, _store, mut p2p_mock) = initialized_syncer(head.clone()).await;
 
@@ -871,8 +873,8 @@ mod tests {
 
     #[async_test]
     async fn syncing() {
-        let mut gen = ExtendedHeaderGenerator::new();
-        let headers = gen.next_many(1500);
+        let mut generator = ExtendedHeaderGenerator::new();
+        let headers = generator.next_many(1500);
 
         let (syncer, store, mut p2p_mock) = initialized_syncer(headers[1499].clone()).await;
         assert_syncing(&syncer, &store, &[1500..=1500], 1500).await;
@@ -886,7 +888,7 @@ mod tests {
         assert_syncing(&syncer, &store, &[476..=1500], 1500).await;
 
         // New HEAD was received by HeaderSub (height 1501)
-        let header1501 = gen.next();
+        let header1501 = generator.next();
         p2p_mock.announce_new_head(header1501.clone());
         // Height 1501 is adjacent to the last header of Store, so it is appended
         // immediately
@@ -900,13 +902,13 @@ mod tests {
         p2p_mock.expect_no_cmd().await;
 
         // New HEAD was received by HeaderSub (height 1502), it should be appended immediately
-        let header1502 = gen.next();
+        let header1502 = generator.next();
         p2p_mock.announce_new_head(header1502.clone());
         assert_syncing(&syncer, &store, &[1..=1502], 1502).await;
         p2p_mock.expect_no_cmd().await;
 
         // New HEAD was received by HeaderSub (height 1505), it should NOT be appended
-        let headers_1503_1505 = gen.next_many(3);
+        let headers_1503_1505 = generator.next_many(3);
         p2p_mock.announce_new_head(headers_1503_1505[2].clone());
         assert_syncing(&syncer, &store, &[1..=1502], 1505).await;
 
@@ -915,7 +917,7 @@ mod tests {
         assert_syncing(&syncer, &store, &[1..=1505], 1505).await;
 
         // New HEAD was received by HeaderSub (height 3000), it should NOT be appended
-        let mut headers = gen.next_many(1495);
+        let mut headers = generator.next_many(1495);
         p2p_mock.announce_new_head(headers[1494].clone());
         assert_syncing(&syncer, &store, &[1..=1505], 3000).await;
 
@@ -924,7 +926,7 @@ mod tests {
         assert_syncing(&syncer, &store, &[1..=2017], 3000).await;
 
         // New head from header sub added, should NOT be appended
-        headers.push(gen.next());
+        headers.push(generator.next());
         p2p_mock.announce_new_head(headers.last().unwrap().clone());
         assert_syncing(&syncer, &store, &[1..=2017], 3001).await;
 
@@ -945,12 +947,12 @@ mod tests {
         let pruning_window = Duration::from_secs(600);
         let sampling_window = SAMPLING_WINDOW;
 
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
         // Generate back in time 4 batches of 512 messages (= 2048 headers).
         let first_header_time = (Time::now() - Duration::from_secs(2048)).unwrap();
-        gen.set_time(first_header_time, Duration::from_secs(1));
-        let headers = gen.next_many(2048);
+        generator.set_time(first_header_time, Duration::from_secs(1));
+        let headers = generator.next_many(2048);
 
         let (syncer, store, mut p2p_mock) =
             initialized_syncer_with_windows(headers[2047].clone(), sampling_window, pruning_window)
@@ -995,14 +997,14 @@ mod tests {
     #[async_test]
     async fn window_edge() {
         let month_and_day_ago = Duration::from_secs(31 * 24 * 60 * 60);
-        let mut gen = ExtendedHeaderGenerator::new();
-        gen.set_time(
+        let mut generator = ExtendedHeaderGenerator::new();
+        generator.set_time(
             (Time::now() - month_and_day_ago).expect("to not underflow"),
             Duration::from_secs(1),
         );
-        let mut headers = gen.next_many(1200);
-        gen.reset_time();
-        headers.append(&mut gen.next_many(2049 - 1200));
+        let mut headers = generator.next_many(1200);
+        generator.reset_time();
+        headers.append(&mut generator.next_many(2049 - 1200));
 
         let (syncer, store, mut p2p_mock) = initialized_syncer(headers[2048].clone()).await;
         assert_syncing(&syncer, &store, &[2049..=2049], 2049).await;
@@ -1023,11 +1025,11 @@ mod tests {
     async fn start_with_filled_store() {
         let events = EventChannel::new();
         let (p2p, mut p2p_mock) = P2p::mocked();
-        let (store, mut gen) = gen_filled_store(25).await;
+        let (store, mut generator) = gen_filled_store(25).await;
         let store = Arc::new(store);
 
-        let mut headers = gen.next_many(520);
-        let network_head = gen.next(); // height 546
+        let mut headers = generator.next_many(520);
+        let network_head = generator.next(); // height 546
 
         let syncer = Syncer::start(SyncerArgs {
             p2p: Arc::new(p2p),
@@ -1073,8 +1075,8 @@ mod tests {
 
     #[async_test]
     async fn stop_syncer() {
-        let mut gen = ExtendedHeaderGenerator::new();
-        let head = gen.next();
+        let mut generator = ExtendedHeaderGenerator::new();
+        let head = generator.next();
 
         let (syncer, _store, mut p2p_mock) = initialized_syncer(head.clone()).await;
 
@@ -1092,14 +1094,14 @@ mod tests {
 
     #[async_test]
     async fn all_peers_disconnected() {
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
 
-        let _gap = gen.next_many(24);
-        let header25 = gen.next();
-        let _gap = gen.next_many(4);
-        let header30 = gen.next();
-        let _gap = gen.next_many(4);
-        let header35 = gen.next();
+        let _gap = generator.next_many(24);
+        let header25 = generator.next();
+        let _gap = generator.next_many(4);
+        let header30 = generator.next();
+        let _gap = generator.next_many(4);
+        let header35 = generator.next();
 
         // Start Syncer and report height 30 as HEAD
         let (syncer, store, mut p2p_mock) = initialized_syncer(header30).await;
@@ -1154,9 +1156,9 @@ mod tests {
 
     #[async_test]
     async fn all_peers_disconnected_and_no_network_head_progress() {
-        let mut gen = ExtendedHeaderGenerator::new_from_height(30);
+        let mut generator = ExtendedHeaderGenerator::new_from_height(30);
 
-        let header30 = gen.next();
+        let header30 = generator.next();
 
         // Start Syncer and report height 30 as HEAD
         let (syncer, store, mut p2p_mock) = initialized_syncer(header30.clone()).await;
@@ -1198,8 +1200,8 @@ mod tests {
 
     #[async_test]
     async fn non_contiguous_response() {
-        let mut gen = ExtendedHeaderGenerator::new();
-        let mut headers = gen.next_many(20);
+        let mut generator = ExtendedHeaderGenerator::new();
+        let mut headers = generator.next_many(20);
 
         // Start Syncer and report last header as network head
         let (syncer, store, mut p2p_mock) = initialized_syncer(headers[19].clone()).await;

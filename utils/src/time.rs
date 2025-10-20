@@ -1,5 +1,5 @@
 pub use self::imp::{
-    sleep, timeout, Elapsed, Instant, Interval, Sleep, SystemTime, SystemTimeError, Timeout,
+    Elapsed, Instant, Interval, Sleep, SystemTime, SystemTimeError, Timeout, sleep, timeout,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -8,7 +8,7 @@ mod imp {
 
     pub use std::time::{Instant, SystemTime, SystemTimeError};
     pub use tokio::time::error::Elapsed;
-    pub use tokio::time::{sleep, timeout, Sleep, Timeout};
+    pub use tokio::time::{Sleep, Timeout, sleep, timeout};
 
     /// Type allowing to wait on a sequence of instants with a certain duration between each instant.
     pub struct Interval(tokio::time::Interval);

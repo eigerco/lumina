@@ -10,7 +10,7 @@ use std::iter;
 
 use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
-use celestia_proto::shwap::{row::HalfSide as RawHalfSide, Row as RawRow, Share as RawShare};
+use celestia_proto::shwap::{Row as RawRow, Share as RawShare, row::HalfSide as RawHalfSide};
 use cid::CidGeneric;
 use multihash::Multihash;
 use prost::Message;
@@ -259,9 +259,9 @@ impl From<RowId> for CidGeneric<ROW_ID_SIZE> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Blob;
     use crate::consts::appconsts::{AppVersion, SHARE_SIZE};
     use crate::test_utils::{generate_dummy_eds, generate_eds};
-    use crate::Blob;
 
     #[test]
     fn round_trip_test() {

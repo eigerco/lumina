@@ -10,11 +10,11 @@ mod types;
 use blockstore::EitherBlockstore;
 use celestia_types::ExtendedHeader;
 use error::{LuminaError, Result};
+use lumina_node::Node;
 use lumina_node::blockstore::{InMemoryBlockstore, RedbBlockstore};
 use lumina_node::events::EventSubscriber;
 use lumina_node::node::PeerTrackerInfo;
 use lumina_node::store::{EitherStore, InMemoryStore, RedbStore};
-use lumina_node::Node;
 use std::str::FromStr;
 use tendermint::hash::Hash;
 use tokio::sync::{Mutex, RwLock};
@@ -70,11 +70,12 @@ impl LuminaNode {
     /// Stops the running node and closes all network connections.
     pub async fn stop(&self) -> Result<()> {
         let mut node = self.node.write().await;
-        if let Some(node) = node.take() {
-            node.stop().await;
-            Ok(())
-        } else {
-            Err(LuminaError::NodeNotRunning)
+        match node.take() {
+            Some(node) => {
+                node.stop().await;
+                Ok(())
+            }
+            _ => Err(LuminaError::NodeNotRunning),
         }
     }
 

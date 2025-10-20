@@ -3,13 +3,13 @@
 use std::iter;
 
 use celestia_rpc::prelude::*;
+use celestia_types::Blob;
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
-use celestia_types::Blob;
 
 pub mod utils;
 
-use crate::utils::client::{blob_submit, new_test_client, AuthLevel};
+use crate::utils::client::{AuthLevel, blob_submit, new_test_client};
 use crate::utils::{random_bytes, random_ns, random_ns_range};
 
 #[tokio::test]
