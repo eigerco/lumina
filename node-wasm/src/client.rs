@@ -18,17 +18,22 @@ use wasm_bindgen::prelude::*;
 use web_sys::BroadcastChannel;
 
 use crate::commands::{
-    CheckableResponseExt, ManagementCommand, NodeCommand, NodeSubscription, SingleHeaderQuery,
+    ManagementCommand, NodeCommand, NodeSubscription, SingleHeaderQuery, WorkerError,
+    WorkerResponse,
 };
 use crate::error::{Context, Result};
-use crate::worker_client::WorkerClient;
-use crate::subscriptions::{into_async_iterator, SubscriptionError};
+use crate::ports::subscription_port;
+use crate::subscriptions::into_async_iterator;
 use crate::utils::{
     is_safari, js_value_from_display, request_storage_persistence, timeout, Network,
 };
 use crate::worker::{WasmBlockstore, WasmStore};
+use crate::worker_client::WorkerClient;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::wrapper::node::{PeerTrackerInfoSnapshot, SyncingInfoSnapshot};
+
+// /// Alias for a `Result` with the error type [`WorkerError`].
+//pub type Result<T, E = WorkerError> = std::result::Result<T, E>;
 
 /// Config for the lumina wasm node.
 #[wasm_bindgen(inspectable, js_name = NodeConfig)]
@@ -120,16 +125,16 @@ impl NodeClient {
     pub async fn is_running(&self) -> Result<bool> {
         let command = ManagementCommand::IsRunning;
         let response = self.worker.management(command).await?;
-        let running = response.into_is_running().check_variant()?;
-
-        Ok(running)
+        Ok(response
+            .into_is_running()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Start a node with the provided config, if it's not running
     pub async fn start(&self, config: &WasmNodeConfig) -> Result<()> {
         let command = ManagementCommand::StartNode(config.clone());
         let response = self.worker.management(command).await?;
-        response.into_node_started().check_variant()??;
+        debug_assert!(matches!(response, WorkerResponse::Ok));
 
         Ok(())
     }
@@ -137,7 +142,7 @@ impl NodeClient {
     pub async fn stop(&self) -> Result<()> {
         let command = ManagementCommand::StopNode;
         let response = self.worker.management(command).await?;
-        response.into_node_stopped().check_variant()?;
+        debug_assert!(matches!(response, WorkerResponse::Ok));
 
         Ok(())
     }
@@ -147,7 +152,9 @@ impl NodeClient {
     pub async fn local_peer_id(&self) -> Result<String> {
         let command = NodeCommand::GetLocalPeerId;
         let response = self.worker.node(command).await?;
-        let peer_id = response.into_local_peer_id().check_variant()?;
+        let peer_id = response
+            .into_local_peer_id()
+            .map_err(|_| WorkerError::InvalidResponseType)?;
 
         Ok(peer_id)
     }
@@ -157,7 +164,9 @@ impl NodeClient {
     pub async fn peer_tracker_info(&self) -> Result<PeerTrackerInfoSnapshot> {
         let command = NodeCommand::GetPeerTrackerInfo;
         let response = self.worker.node(command).await?;
-        let peer_info = response.into_peer_tracker_info().check_variant()?;
+        let peer_info = response
+            .into_peer_tracker_info()
+            .map_err(|_| WorkerError::InvalidResponseType)?;
 
         Ok(peer_info.into())
     }
@@ -167,7 +176,7 @@ impl NodeClient {
     pub async fn wait_connected(&self) -> Result<()> {
         let command = NodeCommand::WaitConnected { trusted: false };
         let response = self.worker.node(command).await?;
-        let _ = response.into_connected().check_variant()?;
+        debug_assert!(matches!(response, WorkerResponse::Ok));
 
         Ok(())
     }
@@ -177,7 +186,9 @@ impl NodeClient {
     pub async fn wait_connected_trusted(&self) -> Result<()> {
         let command = NodeCommand::WaitConnected { trusted: true };
         let response = self.worker.node(command).await?;
-        response.into_connected().check_variant()?
+        debug_assert!(matches!(response, WorkerResponse::Ok));
+
+        Ok(())
     }
 
     /// Get current network info.
@@ -186,15 +197,19 @@ impl NodeClient {
         let command = NodeCommand::GetNetworkInfo;
         let response = self.worker.node(command).await?;
 
-        response.into_network_info().check_variant()?
+        Ok(response
+            .into_network_info()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Get all the multiaddresses on which the node listens.
     pub async fn listeners(&self) -> Result<Array> {
         let command = NodeCommand::GetListeners;
         let response = self.worker.node(command).await?;
-        let listeners = response.into_listeners().check_variant()?;
-        let result = listeners?.iter().map(js_value_from_display).collect();
+        let listeners = response
+            .into_listeners()
+            .map_err(|_| WorkerError::InvalidResponseType)?;
+        let result = listeners.iter().map(js_value_from_display).collect();
 
         Ok(result)
     }
@@ -204,8 +219,10 @@ impl NodeClient {
     pub async fn connected_peers(&self) -> Result<Array> {
         let command = NodeCommand::GetConnectedPeers;
         let response = self.worker.node(command).await?;
-        let peers = response.into_connected_peers().check_variant()?;
-        let result = peers?.iter().map(js_value_from_display).collect();
+        let peers = response
+            .into_connected_peers()
+            .map_err(|_| WorkerError::InvalidResponseType)?;
+        let result = peers.iter().map(js_value_from_display).collect();
 
         Ok(result)
     }
@@ -218,7 +235,9 @@ impl NodeClient {
             is_trusted,
         };
         let response = self.worker.node(command).await?;
-        response.into_set_peer_trust().check_variant()?
+        debug_assert!(matches!(response, WorkerResponse::Ok));
+
+        Ok(())
     }
 
     /// Request the head header from the network.
@@ -226,7 +245,9 @@ impl NodeClient {
     pub async fn request_head_header(&self) -> Result<ExtendedHeader> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::Head);
         let response = self.worker.node(command).await?;
-        response.into_header().check_variant()?
+        Ok(response
+            .into_header()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Request a header for the block with a given hash from the network.
@@ -234,7 +255,9 @@ impl NodeClient {
     pub async fn request_header_by_hash(&self, hash: &str) -> Result<ExtendedHeader> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHash(hash.parse()?));
         let response = self.worker.node(command).await?;
-        response.into_header().check_variant()?
+        Ok(response
+            .into_header()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Request a header for the block with a given height from the network.
@@ -242,7 +265,9 @@ impl NodeClient {
     pub async fn request_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let command = NodeCommand::RequestHeader(SingleHeaderQuery::ByHeight(height));
         let response = self.worker.node(command).await?;
-        response.into_header().check_variant()?
+        Ok(response
+            .into_header()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Request headers in range (from, from + amount] from the network.
@@ -259,7 +284,9 @@ impl NodeClient {
             amount,
         };
         let response = self.worker.node(command).await?;
-        response.into_headers().check_variant()?
+        Ok(response
+            .into_headers()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Request all blobs with provided namespace in the block corresponding to this header
@@ -277,7 +304,9 @@ impl NodeClient {
             timeout_secs,
         };
         let response = self.worker.node(command).await?;
-        response.into_blobs().check_variant()?
+        Ok(response
+            .into_blobs()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Get current header syncing info.
@@ -285,9 +314,11 @@ impl NodeClient {
     pub async fn syncer_info(&self) -> Result<SyncingInfoSnapshot> {
         let command = NodeCommand::GetSyncerInfo;
         let response = self.worker.node(command).await?;
-        let syncer_info = response.into_syncer_info().check_variant()?;
+        let syncer_info = response
+            .into_syncer_info()
+            .map_err(|_| WorkerError::InvalidResponseType)?;
 
-        Ok(syncer_info?.into())
+        Ok(syncer_info.into())
     }
 
     /// Get the latest header announced in the network.
@@ -295,7 +326,9 @@ impl NodeClient {
     pub async fn get_network_head_header(&self) -> Result<Option<ExtendedHeader>> {
         let command = NodeCommand::LastSeenNetworkHead;
         let response = self.worker.node(command).await?;
-        response.into_last_seen_network_head().check_variant()?
+        Ok(response
+            .into_last_seen_network_head()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Get the latest locally synced header.
@@ -303,7 +336,9 @@ impl NodeClient {
     pub async fn get_local_head_header(&self) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::Head);
         let response = self.worker.node(command).await?;
-        response.into_header().check_variant()?
+        Ok(response
+            .into_header()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Get a synced header for the block with a given hash.
@@ -311,7 +346,9 @@ impl NodeClient {
     pub async fn get_header_by_hash(&self, hash: &str) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHash(hash.parse()?));
         let response = self.worker.node(command).await?;
-        response.into_header().check_variant()?
+        Ok(response
+            .into_header()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Get a synced header for the block with a given height.
@@ -319,7 +356,9 @@ impl NodeClient {
     pub async fn get_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
         let command = NodeCommand::GetHeader(SingleHeaderQuery::ByHeight(height));
         let response = self.worker.node(command).await?;
-        response.into_header().check_variant()?
+        Ok(response
+            .into_header()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Get synced headers from the given heights range.
@@ -342,7 +381,9 @@ impl NodeClient {
             end_height,
         };
         let response = self.worker.node(command).await?;
-        response.into_headers().check_variant()?
+        Ok(response
+            .into_headers()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Get data sampling metadata of an already sampled height.
@@ -350,7 +391,9 @@ impl NodeClient {
     pub async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
         let command = NodeCommand::GetSamplingMetadata { height };
         let response = self.worker.node(command).await?;
-        response.into_sampling_metadata().check_variant()?
+        Ok(response
+            .into_sampling_metadata()
+            .map_err(|_| WorkerError::InvalidResponseType)?)
     }
 
     /// Returns a [`BroadcastChannel`] for events generated by [`Node`].
@@ -358,31 +401,36 @@ impl NodeClient {
     pub async fn events_channel(&self) -> Result<BroadcastChannel> {
         let command = ManagementCommand::GetEventsChannelName;
         let response = self.worker.management(command).await?;
-        let name = response.into_events_channel_name().check_variant()?;
+        let name = response
+            .into_events_channel_name()
+            .map_err(|_| WorkerError::InvalidResponseType)?;
 
         Ok(BroadcastChannel::new(&name).unwrap())
     }
 
     #[wasm_bindgen(js_name = headerSubscribe)]
     pub async fn header_subscribe(&self) -> Result<AsyncIterator> {
-        let command = NodeSubscription::Headers;
-        let (response_channel, port) = self
-            .worker
-            .subscribe::<Result<ExtendedHeader, SubscriptionError>>(command)
-            .await?;
+        let (worker_port, client_port, receiver) = subscription_port()?;
 
-        Ok(into_async_iterator(response_channel, port))
+        let command = NodeSubscription::Headers {
+            port: Some(worker_port),
+        };
+        self.worker.subscribe(command).await?;
+
+        Ok(into_async_iterator::<ExtendedHeader>(receiver, client_port))
     }
 
     #[wasm_bindgen(js_name = blobSubscribe)]
     pub async fn namespace_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
-        let command = NodeSubscription::Blobs(namespace);
-        let (response_channel, port) = self
-            .worker
-            .subscribe::<Result<(u64, Blob), SubscriptionError>>(command)
-            .await?;
+        let (worker_port, client_port, receiver) = subscription_port()?;
 
-        Ok(into_async_iterator(response_channel, port))
+        let command = NodeSubscription::Blobs {
+            port: Some(worker_port),
+            namespace,
+        };
+        self.worker.subscribe(command).await?;
+
+        Ok(into_async_iterator::<(u64, Blob)>(receiver, client_port))
     }
 }
 

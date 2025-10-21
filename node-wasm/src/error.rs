@@ -141,7 +141,7 @@ from_display! {
     lumina_node::node::NodeError,
     lumina_node::store::StoreError,
     lumina_node::node::SubscriptionError,
-    crate::worker::WorkerError,
+    crate::commands::WorkerError,
     tokio::sync::oneshot::error::RecvError,
 }
 

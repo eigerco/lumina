@@ -6,8 +6,8 @@ use enum_as_inner::EnumAsInner;
 use libp2p::Multiaddr;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
 use tracing::error;
-use wasm_bindgen::JsError;
 
 use celestia_types::{hash::Hash, ExtendedHeader};
 use lumina_node::node::{PeerTrackerInfo, SyncingInfo};
@@ -39,8 +39,15 @@ pub(crate) enum ManagementCommand {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NodeSubscription {
-    Headers,
-    Blobs(Namespace),
+    Headers {
+        #[serde(skip)]
+        port: Option<MessagePortLike>,
+    },
+    Blobs {
+        #[serde(skip)]
+        port: Option<MessagePortLike>,
+        namespace: Namespace,
+    },
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -87,49 +94,93 @@ pub(crate) enum SingleHeaderQuery {
     ByHeight(u64),
 }
 
+pub(crate) type WorkerResult = Result<WorkerResponse, WorkerError>;
+
 #[derive(Serialize, Deserialize, Debug, EnumAsInner)]
 pub(crate) enum WorkerResponse {
+    Ok,
     InternalPong,
-    PortConnected,
-    NodeNotRunning,
-    EmptyResponse,
+    PortConnected(bool),
     IsRunning(bool),
-    NodeStarted(Result<()>),
-    NodeStopped(()),
     EventsChannelName(String),
     LocalPeerId(String),
-    SyncerInfo(Result<SyncingInfo>),
+    SyncerInfo(SyncingInfo),
     PeerTrackerInfo(PeerTrackerInfo),
-    NetworkInfo(Result<NetworkInfoSnapshot>),
-    ConnectedPeers(Result<Vec<String>>),
-    SetPeerTrust(Result<()>),
-    Connected(Result<()>),
-    Listeners(Result<Vec<Multiaddr>>),
-    Header(Result<ExtendedHeader, Error>),
-    Headers(Result<Vec<ExtendedHeader>, Error>),
-    LastSeenNetworkHead(Result<Option<ExtendedHeader>, Error>),
-    SamplingMetadata(Result<Option<SamplingMetadata>>),
-    Blobs(Result<Vec<Blob>>),
-    Subscribed(Result<()>),
+    NetworkInfo(NetworkInfoSnapshot),
+    ConnectedPeers(Vec<String>),
+    Listeners(Vec<Multiaddr>),
+    Header(ExtendedHeader),
+    Headers(Vec<ExtendedHeader>),
+    LastSeenNetworkHead(Option<ExtendedHeader>),
+    SamplingMetadata(Option<SamplingMetadata>),
+    Blobs(Vec<Blob>),
 }
 
-pub(crate) trait CheckableResponseExt {
-    type Output;
-
-    fn check_variant(self) -> Result<Self::Output, JsError>;
+#[derive(thiserror::Error, Debug, Serialize, Deserialize)]
+pub(crate) enum WorkerError {
+    /// Node is already running
+    #[error("Node already running")]
+    NodeAlreadyRunning,
+    /// Node is not running
+    #[error("Node not running")]
+    NodeNotRunning,
+    /// Empty response received, dropped responder?
+    #[error("Empty response")]
+    EmptyResponse,
+    /// Worker received unrecognised command
+    #[error("invalid command received")]
+    InvalidCommandReceived,
+    /// Received invalid response type
+    #[error("invalid response type")]
+    InvalidResponseType,
+    /// Error forwarded from Node
+    #[error("Node error: {0}")]
+    Node(String),
 }
 
-impl<T: 'static> CheckableResponseExt for Result<T, WorkerResponse> {
-    type Output = T;
+impl From<Error> for WorkerError {
+    fn from(error: Error) -> Self {
+        WorkerError::Node(error.to_string())
+    }
+}
 
-    fn check_variant(self) -> Result<Self::Output, JsError> {
-        self.map_err(|response| match response {
-            // `NodeNotRunning` is not an invalid response, it is just another type of error.
-            WorkerResponse::NodeNotRunning => JsError::new("Node is not running"),
-            response => {
-                error!("invalid response, received: {response:?}");
-                JsError::new("invalid response received for the command sent")
-            }
-        })
+pub(crate) struct CommandWithResponder {
+    pub command: Command,
+    pub responder: oneshot::Sender<WorkerResult>,
+}
+
+impl Command {
+    pub(crate) fn insert_port(&mut self, event_port: MessagePortLike) {
+        match self {
+            Command::Management(cmd) => match cmd {
+                ManagementCommand::ConnectPort(port) => {
+                    let _ = port.insert(event_port);
+                }
+                _ => (),
+            },
+            Command::Subscribe(sub) => match sub {
+                NodeSubscription::Headers { port } => {
+                    let _ = port.insert(event_port);
+                }
+                NodeSubscription::Blobs { port, .. } => {
+                    let _ = port.insert(event_port);
+                }
+            },
+            _ => (),
+        };
+    }
+
+    pub(crate) fn take_port(&mut self) -> Option<MessagePortLike> {
+        match self {
+            Command::Management(cmd) => match cmd {
+                ManagementCommand::ConnectPort(port) => port.take(),
+                _ => None,
+            },
+            Command::Subscribe(sub) => match sub {
+                NodeSubscription::Headers { port } => port.take(),
+                NodeSubscription::Blobs { port, .. } => port.take(),
+            },
+            _ => None,
+        }
     }
 }

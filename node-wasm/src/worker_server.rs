@@ -7,17 +7,17 @@ use tokio_util::sync::{CancellationToken, DropGuard};
 use tracing::{error, warn};
 use wasm_bindgen::prelude::*;
 
-use crate::commands::{Command, ManagementCommand, WorkerResponse};
+use crate::commands::{Command, CommandWithResponder, WorkerResult};
 use crate::error::{Context, Error, Result};
-use crate::ports::{MessageId, MessagePortLike, PayloadWithContext, Port};
+use crate::ports::{command_port, MessageId, MessagePortLike, MultiplexMessage, Port};
 use lumina_utils::executor::spawn;
 
 /// `WorkerServer` aggregates multiple existing [`ServerConnection`]s, receiving `Command`s
 /// from the connected clients, as well as handles new [`Client`]s connecting.
 pub struct WorkerServer {
     connection_workers_drop_guards: Vec<DropGuard>,
-    requests_tx: mpsc::UnboundedSender<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)>,
-    requests_rx: mpsc::UnboundedReceiver<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)>,
+    requests_tx: mpsc::UnboundedSender<CommandWithResponder>,
+    requests_rx: mpsc::UnboundedReceiver<CommandWithResponder>,
     ports_tx: mpsc::UnboundedSender<JsValue>,
     ports_rx: mpsc::UnboundedReceiver<JsValue>,
 }
@@ -40,31 +40,11 @@ impl WorkerServer {
 
     /// Receive next `Command` coming from one of the connected clients. Should be called
     /// semi-frequently, as it also transparently handles new clients connecting.
-    pub async fn recv(
-        &mut self,
-    ) -> Result<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)> {
+    pub async fn recv(&mut self) -> Result<CommandWithResponder> {
         loop {
             select! {
                 request_event = self.requests_rx.recv() => {
-                    let (mut request, response_sender) = request_event.expect("request channel should never drop");
-
-                    let Some(command) = &mut request.payload else {
-                        warn!("Request with empty command, ignoring");
-                        continue;
-                    };
-
-                    match command {
-                        Command::Management(ManagementCommand::ConnectPort(port @ Some(_))) => {
-                            if let Err(e) = self.spawn_connection_worker(port.take().unwrap()) {
-                                error!("Failed to add new client connection: {e}");
-                            }
-                            if response_sender.send(WorkerResponse::PortConnected).is_err() {
-                                warn!("PortConnected response channel closed unexpectedly");
-                            }
-                        }
-                        _ => return Ok((request, response_sender)),
-                    }
-
+                    return Ok(request_event.expect("WorkerServer internal channel should never close"));
                 }
                 port = self.ports_rx.recv() => {
                     let port = port.expect("port channel should never drop");
@@ -77,7 +57,7 @@ impl WorkerServer {
         }
     }
 
-    fn spawn_connection_worker(&mut self, port: MessagePortLike) -> Result<()> {
+    pub fn spawn_connection_worker(&mut self, port: MessagePortLike) -> Result<()> {
         // TODO: connection pruning: https://github.com/eigerco/lumina/issues/434
         let cancellation_token = spawn_connection_worker(port, self.requests_tx.clone())?;
         self.connection_workers_drop_guards
@@ -96,11 +76,12 @@ struct ConnectionWorker {
     /// Port over which communication takes place
     port: Port,
     /// Queued requests from the onmessage callback
-    incoming_requests: mpsc::UnboundedReceiver<PayloadWithContext<Command>>,
+    incoming_requests: mpsc::UnboundedReceiver<MultiplexMessage<Command>>,
     /// Futures waiting for completion to be send as responses
-    pending_responses_map: FuturesUnordered<LocalBoxFuture<'static, (MessageId, Option<WorkerResponse>)>>,
+    pending_responses_map:
+        FuturesUnordered<LocalBoxFuture<'static, (MessageId, Option<WorkerResult>)>>,
     /// Channel to send requests and response senders over
-    request_tx: mpsc::UnboundedSender<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)>,
+    request_tx: mpsc::UnboundedSender<CommandWithResponder>,
     /// Cancellation token to stop the worker
     cancellation_token: CancellationToken,
 }
@@ -108,12 +89,13 @@ struct ConnectionWorker {
 impl ConnectionWorker {
     fn new(
         port: MessagePortLike,
-        request_tx: mpsc::UnboundedSender<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)>,
+        request_tx: mpsc::UnboundedSender<CommandWithResponder>,
         cancellation_token: CancellationToken,
     ) -> Result<ConnectionWorker> {
-        let (incoming_requests_tx, incoming_requests) = mpsc::unbounded_channel();
+        //let (incoming_requests_tx, incoming_requests) = mpsc::unbounded_channel();
+        //let port = Port::new_with_channels(port.into(), incoming_requests_tx)?;
 
-        let port = Port::new_with_channels(port.into(), incoming_requests_tx)?;
+        let (port, incoming_requests) = command_port(port)?;
 
         Ok(ConnectionWorker {
             port,
@@ -131,12 +113,12 @@ impl ConnectionWorker {
                     return Ok(())
                 }
                 msg = self.incoming_requests.recv() => {
-                    let PayloadWithContext { id, payload, port } = msg
+                    let MultiplexMessage { id, payload } = msg
                         .ok_or(Error::new("Incoming message channel closed, should not happen"))?;
 
                     match payload {
                         Some(request) =>
-                            self.handle_incoming_request(id, request, port)?,
+                            self.handle_incoming_request(id, request)?,
                         None => {
                             warn!("Received message with empty payload");
                             // send back empty message back, in case somebody's waiting
@@ -153,33 +135,25 @@ impl ConnectionWorker {
         }
     }
 
-    fn handle_incoming_request(
-        &mut self,
-        id: MessageId,
-        payload: Command,
-        port: Option<MessagePortLike>,
-    ) -> Result<()> {
-        let (response_tx, response_rx) = oneshot::channel();
+    fn handle_incoming_request(&mut self, id: MessageId, command: Command) -> Result<()> {
+        let (responder, response_receiver) = oneshot::channel();
 
         self.request_tx
-            .send((
-                PayloadWithContext {
-                    id,
-                    payload: Some(payload),
-                    port,
-                },
-                response_tx,
-            ))
+            .send(CommandWithResponder { command, responder })
             .context("forwarding received request failed, no receiver waiting")?;
 
-        let tagged_response = response_rx.map(move |r| (id, r.ok())).boxed_local();
+        let tagged_response = response_receiver.map(move |r| (id, r.ok())).boxed_local();
 
         self.pending_responses_map.push(tagged_response);
 
         Ok(())
     }
 
-    fn handle_outgoing_response(&mut self, id: MessageId, payload: Option<WorkerResponse>) -> Result<()> {
+    fn handle_outgoing_response(
+        &mut self,
+        id: MessageId,
+        payload: Option<WorkerResult>,
+    ) -> Result<()> {
         self.port
             .send(id, &payload)
             .context("failed to send outgoing response")?;
@@ -190,7 +164,7 @@ impl ConnectionWorker {
 
 fn spawn_connection_worker(
     port: MessagePortLike,
-    request_tx: mpsc::UnboundedSender<(PayloadWithContext<Command>, oneshot::Sender<WorkerResponse>)>,
+    request_tx: mpsc::UnboundedSender<CommandWithResponder>,
 ) -> Result<CancellationToken> {
     let cancellation_token = CancellationToken::new();
     let mut worker = ConnectionWorker::new(port, request_tx, cancellation_token.child_token())?;
@@ -206,7 +180,7 @@ fn spawn_connection_worker(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::NodeCommand;
+    use crate::commands::{ManagementCommand, NodeCommand, WorkerError, WorkerResponse};
     use crate::worker_client::WorkerClient;
 
     use tokio::sync::mpsc;
@@ -226,12 +200,13 @@ mod tests {
 
         let response = client.management(ManagementCommand::InternalPing);
 
-        let (request, responder) = request_rx.recv().await.expect("failed to recv");
+        let CommandWithResponder { command, responder } =
+            request_rx.recv().await.expect("failed to recv");
         assert!(matches!(
-            request.payload.unwrap(),
+            command,
             Command::Management(ManagementCommand::InternalPing)
         ));
-        responder.send(WorkerResponse::InternalPong).unwrap();
+        responder.send(Ok(WorkerResponse::InternalPong)).unwrap();
 
         assert!(matches!(
             response.await.unwrap(),
@@ -252,14 +227,18 @@ mod tests {
 
         let response = client.management(ManagementCommand::InternalPing);
 
-        let (request, responder) = request_rx.recv().await.expect("failed to recv");
+        let CommandWithResponder { command, responder } =
+            request_rx.recv().await.expect("failed to recv");
         assert!(matches!(
-            request.payload.unwrap(),
+            command,
             Command::Management(ManagementCommand::InternalPing)
         ));
         drop(responder);
 
-        assert!(response.await.is_err());
+        assert!(matches!(
+            response.await.unwrap_err(),
+            WorkerError::EmptyResponse,
+        ));
     }
 
     #[wasm_bindgen_test]
@@ -281,15 +260,13 @@ mod tests {
         }
 
         for i in 0..=5 {
-            let (request, responder) = request_rx.recv().await.unwrap();
-            let Command::Node(NodeCommand::GetSamplingMetadata { height }) =
-                request.payload.unwrap()
-            else {
+            let CommandWithResponder { command, responder } = request_rx.recv().await.unwrap();
+            let Command::Node(NodeCommand::GetSamplingMetadata { height }) = command else {
                 panic!("invalid command");
             };
             assert_eq!(i, height);
             responder
-                .send(WorkerResponse::EventsChannelName(format!("R:{height}")))
+                .send(Ok(WorkerResponse::EventsChannelName(format!("R:{height}"))))
                 .unwrap();
         }
 
