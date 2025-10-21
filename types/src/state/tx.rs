@@ -4,9 +4,9 @@ use celestia_proto::cosmos::base::abci::v1beta1::AbciMessageLog;
 use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 use serde_repr::Serialize_repr;
+use tendermint_proto::Protobuf;
 use tendermint_proto::google::protobuf::Any;
 use tendermint_proto::v0_38::abci::Event;
-use tendermint_proto::Protobuf;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 use wasm_bindgen::prelude::*;
 
@@ -23,14 +23,14 @@ use crate::state::{Address, Coin};
 use crate::{Error, Height};
 
 pub use celestia_proto::cosmos::base::abci::v1beta1::TxResponse as RawTxResponse;
-pub use celestia_proto::cosmos::tx::v1beta1::mode_info::Sum as RawSum;
-pub use celestia_proto::cosmos::tx::v1beta1::mode_info::{Multi, Single};
 pub use celestia_proto::cosmos::tx::v1beta1::AuthInfo as RawAuthInfo;
 pub use celestia_proto::cosmos::tx::v1beta1::Fee as RawFee;
 pub use celestia_proto::cosmos::tx::v1beta1::ModeInfo as RawModeInfo;
 pub use celestia_proto::cosmos::tx::v1beta1::SignerInfo as RawSignerInfo;
 pub use celestia_proto::cosmos::tx::v1beta1::Tx as RawTx;
 pub use celestia_proto::cosmos::tx::v1beta1::TxBody as RawTxBody;
+pub use celestia_proto::cosmos::tx::v1beta1::mode_info::Sum as RawSum;
+pub use celestia_proto::cosmos::tx::v1beta1::mode_info::{Multi, Single};
 
 pub type Signature = Vec<u8>;
 

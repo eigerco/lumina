@@ -15,11 +15,11 @@ mod native {
     use std::fmt;
     use std::result::Result;
 
-    use http::{header, HeaderValue};
+    use http::{HeaderValue, header};
+    use jsonrpsee::core::ClientError;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
-    use jsonrpsee::core::ClientError;
     use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
     use jsonrpsee::ws_client::{PingConfig, WsClient, WsClientBuilder};
     use serde::de::DeserializeOwned;
@@ -164,10 +164,10 @@ mod wasm {
     use std::fmt;
     use std::result::Result;
 
+    use jsonrpsee::core::ClientError;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
-    use jsonrpsee::core::ClientError;
     use jsonrpsee::wasm_client::{Client as WasmClient, WasmClientBuilder};
     use serde::de::DeserializeOwned;
 

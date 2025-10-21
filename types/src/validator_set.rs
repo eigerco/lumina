@@ -8,7 +8,7 @@ use tendermint::{account, block, chain};
 use crate::block::CommitExt;
 use crate::trust_level::TrustLevelRatio;
 use crate::{
-    bail_validation, bail_verification, Result, ValidateBasic, ValidationError, VerificationError,
+    Result, ValidateBasic, ValidationError, VerificationError, bail_validation, bail_verification,
 };
 
 impl ValidateBasic for Set {
@@ -75,7 +75,7 @@ impl ValidatorSetExt for Set {
         {
             let signature = match commit_sig {
                 CommitSig::BlockIdFlagCommit {
-                    signature: Some(ref sig),
+                    signature: Some(sig),
                     ..
                 } => sig,
                 CommitSig::BlockIdFlagCommit { .. } => {
@@ -114,7 +114,7 @@ impl ValidatorSetExt for Set {
             let (val_id, signature) = match commit_sig {
                 CommitSig::BlockIdFlagCommit {
                     validator_address,
-                    signature: Some(ref sig),
+                    signature: Some(sig),
                     ..
                 } => (validator_address, sig),
                 CommitSig::BlockIdFlagCommit { .. } => {

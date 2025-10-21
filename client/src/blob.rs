@@ -5,13 +5,13 @@ use async_stream::try_stream;
 use celestia_rpc::BlobClient;
 use futures_util::{Stream, StreamExt};
 
+use crate::Result;
 use crate::api::blob::BlobsAtHeight;
 use crate::client::ClientInner;
 use crate::state::AsyncGrpcCall;
 use crate::tx::{TxConfig, TxInfo};
 use crate::types::nmt::{Namespace, NamespaceProof};
 use crate::types::{Blob, Commitment};
-use crate::Result;
 
 /// Blob API for quering bridge nodes.
 pub struct BlobApi {

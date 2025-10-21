@@ -9,7 +9,7 @@ use web_sys::{MessageEvent, MessagePort};
 
 use crate::commands::PayloadWithTransferable;
 use crate::error::{Context, Error, Result};
-use crate::utils::{to_json_value, MessageEventExt};
+use crate::utils::{MessageEventExt, to_json_value};
 
 /// Counter-style message id for matching responses with requests
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]

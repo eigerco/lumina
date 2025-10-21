@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::commands::{Command, CommandWithResponder, WorkerError, WorkerResult};
 use crate::error::{Context, Error, Result};
-use crate::ports::{prepare_port, MessagePortLike, MultiplexMessage, Port};
+use crate::ports::{MessagePortLike, MultiplexMessage, Port, prepare_port};
 use lumina_utils::executor::spawn;
 
 /// `WorkerServer` aggregates multiple existing [`ServerConnection`]s, receiving `Command`s

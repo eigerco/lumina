@@ -2,7 +2,7 @@ use tendermint::block::Header;
 
 use crate::block::GENESIS_HEIGHT;
 use crate::consts::{genesis::MAX_CHAIN_ID_LEN, version};
-use crate::{bail_validation, Result, ValidateBasic, ValidationError};
+use crate::{Result, ValidateBasic, ValidationError, bail_validation};
 
 impl ValidateBasic for Header {
     fn validate_basic(&self) -> Result<(), ValidationError> {
@@ -48,14 +48,14 @@ pub use wbg::*;
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod wbg {
+    use tendermint::block::Header;
     use tendermint::block::header::Version;
     use tendermint::block::parts;
     use tendermint::block::signed_header::SignedHeader;
-    use tendermint::block::Header;
     use wasm_bindgen::prelude::*;
 
-    use crate::block::commit::JsCommit;
     use crate::block::JsBlockId;
+    use crate::block::commit::JsCommit;
 
     /// Version contains the protocol version for the blockchain and the application.
     #[derive(Clone, Copy, Debug)]
@@ -181,8 +181,8 @@ pub mod uniffi_types {
     use crate::block::commit::uniffi_types::Commit;
     use crate::block::uniffi_types::BlockId;
     use crate::error::UniffiConversionError;
-    use crate::hash::uniffi_types::AppHash;
     use crate::hash::Hash;
+    use crate::hash::uniffi_types::AppHash;
     use crate::state::UniffiAccountId;
     use crate::uniffi_types::{ChainId, Time};
 

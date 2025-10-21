@@ -17,8 +17,8 @@ use crate::header::HeaderApi;
 use crate::share::ShareApi;
 use crate::state::StateApi;
 use crate::tx::{DocSigner, Keypair, VerifyingKey};
-use crate::types::state::AccAddress;
 use crate::types::ExtendedHeader;
+use crate::types::state::AccAddress;
 use crate::{Error, Result};
 
 /// A high-level client for interacting with a Celestia node.

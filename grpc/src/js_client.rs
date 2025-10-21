@@ -2,8 +2,8 @@ use js_sys::Uint8Array;
 use k256::ecdsa::VerifyingKey;
 use wasm_bindgen::prelude::*;
 
-use crate::signer::{JsSigner, JsSignerFn};
 use crate::GrpcClientBuilderError;
+use crate::signer::{JsSigner, JsSignerFn};
 
 mod grpc_client;
 

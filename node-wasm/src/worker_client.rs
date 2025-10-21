@@ -11,8 +11,8 @@ use crate::commands::{
     PayloadWithTransferable, WorkerError, WorkerResponse, WorkerResult,
 };
 use crate::error::{Context, Error, Result};
-use crate::ports::{prepare_port, MessageId, MessagePortLike, MultiplexMessage, Port};
-use lumina_utils::executor::{spawn, JoinHandle};
+use crate::ports::{MessageId, MessagePortLike, MultiplexMessage, Port, prepare_port};
+use lumina_utils::executor::{JoinHandle, spawn};
 
 /// WorkerClient responsible for sending `Command`s and receiving `WorkerResponse`s to them over a port like
 /// object.

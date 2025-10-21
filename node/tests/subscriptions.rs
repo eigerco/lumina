@@ -1,6 +1,6 @@
 use std::array::from_ref;
 
-use celestia_types::{nmt::Namespace, Blob};
+use celestia_types::{Blob, nmt::Namespace};
 use futures::stream::StreamExt;
 
 use crate::utils::{blob_submit, bridge_client, new_connected_node};

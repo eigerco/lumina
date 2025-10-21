@@ -1,9 +1,6 @@
 use std::fmt::Debug;
 use std::time::Duration;
 
-use blockstore::EitherBlockstore;
-use celestia_types::nmt::Namespace;
-use celestia_types::Blob;
 use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
@@ -15,7 +12,9 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{BroadcastChannel, MessageChannel, MessageEvent, MessagePort};
 
-use celestia_types::ExtendedHeader;
+use blockstore::EitherBlockstore;
+use celestia_types::nmt::Namespace;
+use celestia_types::{Blob, ExtendedHeader};
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::events::{EventSubscriber, NodeEventInfo};
 use lumina_node::node::SubscriptionError;

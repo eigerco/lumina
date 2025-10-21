@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::consts::appconsts::{AppVersion, SHARE_SIZE};
 use crate::consts::data_availability_header::{
-    max_extended_square_width, MIN_EXTENDED_SQUARE_WIDTH,
+    MIN_EXTENDED_SQUARE_WIDTH, max_extended_square_width,
 };
-use crate::nmt::{Namespace, NamespacedSha2Hasher, Nmt, NmtExt, NS_SIZE};
+use crate::nmt::{NS_SIZE, Namespace, NamespacedSha2Hasher, Nmt, NmtExt};
 use crate::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
-use crate::{bail_validation, DataAvailabilityHeader, Error, InfoByte, Result, Share};
+use crate::{DataAvailabilityHeader, Error, InfoByte, Result, Share, bail_validation};
 
 /// Represents either column or row of the [`ExtendedDataSquare`].
 ///
@@ -248,12 +248,14 @@ impl ExtendedDataSquare {
     /// Crate a new EDS that represents an empty block
     pub fn empty() -> ExtendedDataSquare {
         // ODS in this case it is just one tail padded share.
-        let ods = vec![[
-            Namespace::TAIL_PADDING.as_bytes(),
-            &[InfoByte::new(0, true).unwrap().as_u8()],
-            &[0; SHARE_SIZE - NS_SIZE - 1],
-        ]
-        .concat()];
+        let ods = vec![
+            [
+                Namespace::TAIL_PADDING.as_bytes(),
+                &[InfoByte::new(0, true).unwrap().as_u8()],
+                &[0; SHARE_SIZE - NS_SIZE - 1],
+            ]
+            .concat(),
+        ];
 
         // App version doesn't matter in this case because an empty ODS is constructed
         // with the minimum size allowed shares, which is the same in any version.

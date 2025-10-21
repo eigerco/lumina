@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 use wasm_bindgen::prelude::*;
 
-use crate::grpc::{make_empty_params, FromGrpcResponse};
+use crate::grpc::{FromGrpcResponse, make_empty_params};
 use crate::{Error, Result};
 
 /// Response holding consensus node configuration.

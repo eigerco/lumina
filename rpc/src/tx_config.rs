@@ -1,7 +1,7 @@
 use celestia_types::state::AccAddress;
 use serde::{
-    ser::{SerializeStruct, Serializer},
     Serialize,
+    ser::{SerializeStruct, Serializer},
 };
 use serde_repr::Serialize_repr;
 

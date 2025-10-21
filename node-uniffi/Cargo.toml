@@ -1,7 +1,7 @@
 [package]
 name = "lumina-node-uniffi"
 version = "0.4.0"
-edition = "2021"
+edition.workspace = true
 license = "Apache-2.0"
 description = "Mobile bindings for Lumina node"
 authors = ["Eiger <hello@eiger.co>"]
