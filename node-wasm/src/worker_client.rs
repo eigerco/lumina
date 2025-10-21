@@ -3,15 +3,15 @@ use std::collections::HashMap;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::{CancellationToken, DropGuard};
-use tracing::{error, warn};
+use tracing::error;
 use wasm_bindgen::prelude::*;
 
 use crate::commands::{
-    Command, CommandWithResponder, ManagementCommand, NodeCommand, NodeSubscription, WorkerError,
-    WorkerResponse, WorkerResult,
+    Command, CommandWithResponder, ManagementCommand, NodeCommand, NodeSubscription,
+    PayloadWithTransferable, WorkerError, WorkerResponse, WorkerResult,
 };
 use crate::error::{Context, Error, Result};
-use crate::ports::{request_port, MessageId, MultiplexMessage, Port};
+use crate::ports::{prepare_port, MessageId, MessagePortLike, MultiplexMessage, Port};
 use lumina_utils::executor::{spawn, JoinHandle};
 
 /// WorkerClient responsible for sending `Command`s and receiving `WorkerResponse`s to them over a port like
@@ -58,13 +58,19 @@ impl WorkerClient {
         self.send(command).await
     }
 
-    pub async fn subscribe(&self, subscription: NodeSubscription) -> Result<(), WorkerError> {
+    pub async fn subscribe(
+        &self,
+        subscription: NodeSubscription,
+    ) -> Result<MessagePortLike, WorkerError> {
         let command = Command::Subscribe(subscription);
 
-        let response = self.send(command).await?;
-        debug_assert!(matches!(response, WorkerResponse::Ok));
+        let port = self
+            .send(command)
+            .await?
+            .into_subscribed()
+            .map_err(|_| WorkerError::InvalidResponseType)?;
 
-        Ok(())
+        port.ok_or(WorkerError::EmptyResponse)
     }
 
     /// Send a `Command` over the port and return a channel to receive `WorkerResponse` over
@@ -99,7 +105,7 @@ impl Worker {
         request_tx: mpsc::UnboundedReceiver<CommandWithResponder>,
         cancellation_token: CancellationToken,
     ) -> Result<Worker> {
-        let (port, incoming_responses) = request_port(port.into())?;
+        let (port, incoming_responses) = prepare_port::<WorkerResult>(port.into())?;
 
         Ok(Worker {
             port,
@@ -118,10 +124,11 @@ impl Worker {
                     return Ok(())
                 }
                 msg = self.incoming_responses.recv() => {
-                    // we don't expect server sending us ports, ignore
                     let MultiplexMessage { id, payload} = msg
                         .ok_or(Error::new("Incoming message channel closed, should not happen"))?;
-                    self.handle_incoming_response(id, payload);
+                    if let Some(response_sender) = self.pending_responses_map.remove(&id) {
+                        let _ = response_sender.send(payload);
+                    };
                 }
                 request = self.outgoing_requests.recv() => {
                     let command_with_responder = request
@@ -132,46 +139,35 @@ impl Worker {
         }
     }
 
-    fn handle_incoming_response(&mut self, id: MessageId, payload: Option<WorkerResult>) {
-        let Some(response_sender) = self.pending_responses_map.remove(&id) else {
-            warn!("received unsolicited response for {id:?}, ignoring");
-            return;
-        };
-
-        // empty response means the responder on the server side was dropped, without
-        // sending a response, so let's do the same here
-        if let Some(response) = payload {
-            let _ = response_sender.send(response);
-        }
-    }
-
     fn handle_outgoing_request(
         &mut self,
         CommandWithResponder { command, responder }: CommandWithResponder,
     ) -> Result<()> {
-        let mid = self.next_message_index.post_increment();
-
-        if let Err(e) = self.send_message(mid, command) {
+        let id = self.next_message_index.post_increment();
+        if let Err(e) = self.send_message(MultiplexMessage {
+            id,
+            payload: command,
+        }) {
             error!("Failed to send request: {e}");
-            drop(responder);
             return Ok(());
         }
 
-        if self.pending_responses_map.insert(mid, responder).is_some() {
+        if self.pending_responses_map.insert(id, responder).is_some() {
             return Err(Error::new("collision in message ids, should not happen"));
         }
 
         Ok(())
     }
 
-    fn send_message(&mut self, id: MessageId, mut command: Command) -> Result<()> {
-        if let Some(port) = command.take_port() {
+    fn send_message(&mut self, mut message: MultiplexMessage<Command>) -> Result<()> {
+        let port = message.payload.take_transferable();
+        if let Some(port) = port {
             self.port
-                .send_with_transferable(id, &command, port.into())
+                .send_with_transferable(&message, port.into())
                 .context("failed to send outgoing request with transferable")?;
         } else {
             self.port
-                .send(id, &command)
+                .send(&message)
                 .context("failed to send outgoing request without transferable")?;
         }
         Ok(())

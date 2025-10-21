@@ -13,7 +13,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{BroadcastChannel, MessageEvent};
+use web_sys::{BroadcastChannel, MessageChannel, MessageEvent, MessagePort};
 
 use celestia_types::ExtendedHeader;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
@@ -29,7 +29,7 @@ use crate::commands::{
     SingleHeaderQuery, WorkerError, WorkerResponse, WorkerResult,
 };
 use crate::error::{Context, Error, Result};
-use crate::ports::{MessagePortLike, Port};
+use crate::ports::Port;
 use crate::utils::random_id;
 use crate::worker_server::WorkerServer;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -121,12 +121,13 @@ impl NodeWorker {
                     .await?
             }
             Command::Subscribe(command) => {
-                self.node
+                let port = self
+                    .node
                     .as_mut()
                     .ok_or(WorkerError::NodeNotRunning)?
                     .process_subscription(command)
                     .await?;
-                WorkerResponse::Ok
+                WorkerResponse::Subscribed(Some(port.into()))
             }
         })
     }
@@ -298,21 +299,18 @@ impl NodeWorkerInstance {
         })
     }
 
-    async fn process_subscription(&mut self, subscription: NodeSubscription) -> Result<()> {
+    async fn process_subscription(
+        &mut self,
+        subscription: NodeSubscription,
+    ) -> Result<MessagePort> {
         match subscription {
-            NodeSubscription::Headers { port } => {
+            NodeSubscription::Headers => {
                 let stream = self.node.header_subscribe().await?;
-                register_forwarding_tasks_and_callbacks(
-                    port.ok_or_else(|| JsError::new("expected MessagePort"))?,
-                    stream,
-                )
+                register_forwarding_tasks_and_callbacks(stream)
             }
-            NodeSubscription::Blobs { namespace, port } => {
+            NodeSubscription::Blobs(namespace) => {
                 let stream = self.node.namespace_subscribe(namespace).await?;
-                register_forwarding_tasks_and_callbacks(
-                    port.ok_or_else(|| JsError::new("expected MessagePort"))?,
-                    stream,
-                )
+                register_forwarding_tasks_and_callbacks(stream)
             }
         }
     }
@@ -327,19 +325,23 @@ pub enum SubscriptionFeedback {
 }
 
 fn register_forwarding_tasks_and_callbacks<T: Serialize + 'static>(
-    port: MessagePortLike,
     mut stream: ReceiverStream<Result<T, SubscriptionError>>,
-) -> Result<()> {
+) -> Result<MessagePort> {
+    let channel = MessageChannel::new()?;
     let (signal_tx, mut signal_rx) = mpsc::channel(1);
-    let port = Port::new(port.into(), move |ev: MessageEvent| -> Result<()> {
-        let signal: SubscriptionFeedback =
-            from_value(ev.data()).context("could not deserialize subscription signal")?;
-        if signal_tx.try_send(signal).is_err() {
-            error!("Error forwarding subscription signal, should not happen");
-        }
 
-        Ok(())
-    })?;
+    let port = Port::new(
+        channel.port1().into(),
+        move |ev: MessageEvent| -> Result<()> {
+            let signal: SubscriptionFeedback =
+                from_value(ev.data()).context("could not deserialize subscription signal")?;
+            if signal_tx.try_send(signal).is_err() {
+                error!("Error forwarding subscription signal, should not happen");
+            }
+
+            Ok(())
+        },
+    )?;
 
     spawn(async move {
         info!("Starting subscription");
@@ -352,17 +354,16 @@ fn register_forwarding_tasks_and_callbacks<T: Serialize + 'static>(
                     break;
                 }
             }
-            let item = stream.next().await;
-            info!("Forwarding subscription item");
-            let item: Result<Option<T>> = item.transpose().map_err(Error::from);
-            if let Err(e) = port.send_raw(&item) {
+            let item: Result<Option<T>> = stream.next().await.transpose().map_err(Error::from);
+
+            if let Err(e) = port.send(&item) {
                 error!("Error sending subscription item: {e}");
             }
         }
         info!("Ending subscription");
     });
 
-    Ok(())
+    Ok(channel.port2())
 }
 
 async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: BroadcastChannel) {

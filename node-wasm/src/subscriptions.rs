@@ -41,10 +41,7 @@ impl<S> JsStream<S> {
     }
 
     fn send_ready(&self) -> Result<(), Error> {
-        self.0
-            .borrow_mut()
-            .port
-            .send_raw(&SubscriptionFeedback::Ready)
+        self.0.borrow_mut().port.send(&SubscriptionFeedback::Ready)
     }
 }
 

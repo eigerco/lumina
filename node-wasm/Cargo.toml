@@ -79,6 +79,9 @@ celestia-rpc = { workspace = true, features = ["wasm-bindgen", "p2p"] }
 rexie.workspace = true
 wasm-bindgen-test.workspace = true
 
+[dependencies]
+dashmap = "6.1.0"
+
 [package.metadata.docs.rs]
 targets = ["wasm32-unknown-unknown"]
 

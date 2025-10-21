@@ -32,9 +32,6 @@ use crate::worker_client::WorkerClient;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 use crate::wrapper::node::{PeerTrackerInfoSnapshot, SyncingInfoSnapshot};
 
-// /// Alias for a `Result` with the error type [`WorkerError`].
-//pub type Result<T, E = WorkerError> = std::result::Result<T, E>;
-
 /// Config for the lumina wasm node.
 #[wasm_bindgen(inspectable, js_name = NodeConfig)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -410,27 +407,25 @@ impl NodeClient {
 
     #[wasm_bindgen(js_name = headerSubscribe)]
     pub async fn header_subscribe(&self) -> Result<AsyncIterator> {
-        let (worker_port, client_port, receiver) = subscription_port()?;
+        let command = NodeSubscription::Headers;
+        let port = self.worker.subscribe(command).await?;
 
-        let command = NodeSubscription::Headers {
-            port: Some(worker_port),
-        };
-        self.worker.subscribe(command).await?;
+        let (client_port, receiver) = subscription_port(port)?;
 
         Ok(into_async_iterator::<ExtendedHeader>(receiver, client_port))
     }
 
     #[wasm_bindgen(js_name = blobSubscribe)]
     pub async fn namespace_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
-        let (worker_port, client_port, receiver) = subscription_port()?;
+        let command = NodeSubscription::Blobs(namespace);
+        let port = self.worker.subscribe(command).await?;
 
-        let command = NodeSubscription::Blobs {
-            port: Some(worker_port),
-            namespace,
-        };
-        self.worker.subscribe(command).await?;
+        let (client_port, receiver) = subscription_port(port)?;
 
-        Ok(into_async_iterator::<(u64, Blob)>(receiver, client_port))
+        Ok(into_async_iterator::<(u64, Vec<Blob>)>(
+            receiver,
+            client_port,
+        ))
     }
 }
 

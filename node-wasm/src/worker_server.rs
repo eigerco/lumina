@@ -1,15 +1,14 @@
 use futures::future::{FutureExt, LocalBoxFuture};
 use futures::stream::{FuturesUnordered, StreamExt};
 use tokio::select;
-use tokio::sync::mpsc;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::{CancellationToken, DropGuard};
-use tracing::{error, warn};
+use tracing::error;
 use wasm_bindgen::prelude::*;
 
-use crate::commands::{Command, CommandWithResponder, WorkerResult};
+use crate::commands::{Command, CommandWithResponder, WorkerError, WorkerResult};
 use crate::error::{Context, Error, Result};
-use crate::ports::{command_port, MessageId, MessagePortLike, MultiplexMessage, Port};
+use crate::ports::{prepare_port, MessagePortLike, MultiplexMessage, Port};
 use lumina_utils::executor::spawn;
 
 /// `WorkerServer` aggregates multiple existing [`ServerConnection`]s, receiving `Command`s
@@ -79,7 +78,7 @@ struct ConnectionWorker {
     incoming_requests: mpsc::UnboundedReceiver<MultiplexMessage<Command>>,
     /// Futures waiting for completion to be send as responses
     pending_responses_map:
-        FuturesUnordered<LocalBoxFuture<'static, (MessageId, Option<WorkerResult>)>>,
+        FuturesUnordered<LocalBoxFuture<'static, MultiplexMessage<WorkerResult>>>,
     /// Channel to send requests and response senders over
     request_tx: mpsc::UnboundedSender<CommandWithResponder>,
     /// Cancellation token to stop the worker
@@ -92,10 +91,7 @@ impl ConnectionWorker {
         request_tx: mpsc::UnboundedSender<CommandWithResponder>,
         cancellation_token: CancellationToken,
     ) -> Result<ConnectionWorker> {
-        //let (incoming_requests_tx, incoming_requests) = mpsc::unbounded_channel();
-        //let port = Port::new_with_channels(port.into(), incoming_requests_tx)?;
-
-        let (port, incoming_requests) = command_port(port)?;
+        let (port, incoming_requests) = prepare_port::<Command>(port)?;
 
         Ok(ConnectionWorker {
             port,
@@ -113,36 +109,42 @@ impl ConnectionWorker {
                     return Ok(())
                 }
                 msg = self.incoming_requests.recv() => {
-                    let MultiplexMessage { id, payload } = msg
-                        .ok_or(Error::new("Incoming message channel closed, should not happen"))?;
-
-                    match payload {
-                        Some(request) =>
-                            self.handle_incoming_request(id, request)?,
-                        None => {
-                            warn!("Received message with empty payload");
-                            // send back empty message back, in case somebody's waiting
-                            self.handle_outgoing_response(id, None)?;
-                        }
-                    }
+                    self.handle_incoming_request(
+                        msg
+                        .ok_or(Error::new("Incoming message channel closed, should not happen"))?
+                    )?;
                 }
                 res = self.pending_responses_map.next(), if !self.pending_responses_map.is_empty() => {
-                    let (id, response) = res
-                        .ok_or(Error::new("Responses channel closed, should not happen"))?;
-                    self.handle_outgoing_response(id, response)?;
+                    self.handle_outgoing_response(
+                        &res
+                        .ok_or(Error::new("Responses channel closed, should not happen"))?
+                    )?;
                 }
             }
         }
     }
 
-    fn handle_incoming_request(&mut self, id: MessageId, command: Command) -> Result<()> {
+    fn handle_incoming_request(
+        &mut self,
+        MultiplexMessage { id, payload }: MultiplexMessage<Command>,
+    ) -> Result<()> {
         let (responder, response_receiver) = oneshot::channel();
 
         self.request_tx
-            .send(CommandWithResponder { command, responder })
+            .send(CommandWithResponder {
+                command: payload,
+                responder,
+            })
             .context("forwarding received request failed, no receiver waiting")?;
 
-        let tagged_response = response_receiver.map(move |r| (id, r.ok())).boxed_local();
+        let tagged_response = response_receiver
+            .map(move |r| MultiplexMessage {
+                id,
+                payload: r
+                    .map_err(|_: oneshot::error::RecvError| WorkerError::EmptyResponse)
+                    .flatten(),
+            })
+            .boxed_local();
 
         self.pending_responses_map.push(tagged_response);
 
@@ -151,12 +153,11 @@ impl ConnectionWorker {
 
     fn handle_outgoing_response(
         &mut self,
-        id: MessageId,
-        payload: Option<WorkerResult>,
+        response: &MultiplexMessage<WorkerResult>,
     ) -> Result<()> {
         self.port
-            .send(id, &payload)
-            .context("failed to send outgoing response")?;
+            .send(response)
+            .with_context(|| format!("failed to send outgoing response for {:?}", response.id))?;
 
         Ok(())
     }

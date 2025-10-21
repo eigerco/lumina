@@ -5,9 +5,9 @@ use serde_wasm_bindgen::from_value;
 use tokio::sync::mpsc;
 use tracing::error;
 use wasm_bindgen::prelude::*;
-use web_sys::{MessageChannel, MessageEvent, MessagePort};
+use web_sys::{MessageEvent, MessagePort};
 
-use crate::commands::{Command, WorkerResult};
+use crate::commands::PayloadWithTransferable;
 use crate::error::{Context, Error, Result};
 use crate::utils::{to_json_value, MessageEventExt};
 
@@ -23,20 +23,8 @@ pub(crate) struct MultiplexMessage<T: Serialize> {
     /// Id of the message being sent. Id should not be re-used
     pub id: MessageId,
     /// Actual content of the message
-    pub payload: Option<T>,
+    pub payload: T,
 }
-
-/*
-/// Message payload together with port being transferred, if applicable.
-pub(crate) struct PayloadWithContext<T> {
-    /// Id of the message being sent. Id should not be re-used
-    pub id: MessageId,
-    /// Actual content of the message
-    pub payload: Option<T>,
-    /// Port being transferred
-    pub port: Option<MessagePortLike>,
-}
-*/
 
 // Instead of supporting communication with just `MessagePort`, allow using any object which
 // provides compatible interface, eg. `Worker`
@@ -97,35 +85,9 @@ impl Port {
         Ok(Port { port, onmessage })
     }
 
-    /*
-    /// Create a new `Port` object, where received message are forwarded over the provided channel
-    pub fn new_with_channels<T>(
-        object: JsValue,
-        forwarding_channel: mpsc::UnboundedSender<PayloadWithContext<T>>,
-    ) -> Result<Port>
-    where
-        T: Serialize + DeserializeOwned + 'static,
-    {
-        tracing::info!("new port creation");
-        Port::new(object, move |ev: MessageEvent| -> Result<()> {
-            let MultiplexMessage { id, payload } =
-                from_value(ev.data()).context("could not deserialize message")?;
-
-            match &mut payload {
-                    Some()
-                }
-            if let Some(port) = ev.get_port() {}
-            forwarding_channel
-                .send(PayloadWithContext { id, payload, port })
-                .context("forwarding failed, no receiver waiting")?;
-            Ok(())
-        })
-    }
-    */
-
-    /// Send a raw serialisable message over the port. No checking is performed whether the
+    /// Send a serialisable message over the port. No checking is performed whether the
     /// receiver is able to correctly interpret the message.
-    pub fn send_raw<T: Serialize>(&self, msg: &T) -> Result<()> {
+    pub fn send<T: Serialize>(&self, msg: &T) -> Result<()> {
         let value = to_json_value(&msg).context("error converting to JsValue")?;
         self.port
             .post_message(&value)
@@ -133,29 +95,14 @@ impl Port {
         Ok(())
     }
 
-    /// Send a serialisable message over the port, wrapping it with MultiplexMessage.
-    /// No checking is performed whether receiver is able to correctly interpret the message
-    pub fn send<T: Serialize>(&self, id: MessageId, payload: T) -> Result<()> {
-        let msg = MultiplexMessage {
-            id,
-            payload: Some(payload),
-        };
-        self.send_raw(&msg)
-    }
-
-    /// Send a serialisable message over the port, wrapped with MultiplexMessage, together
-    /// with a object to transfer. No checking is performed whether receiver is able to correctly
-    /// interpret the message, nor whether port can actually perform object transfer.
+    /// Send a serialisable message over the port, together with a object to transfer.
+    /// No checking is performed whether receiver is able to correctly interpret the message,
+    /// nor whether port can actually perform object transfer.
     pub fn send_with_transferable<T: Serialize>(
         &self,
-        id: MessageId,
-        payload: T,
+        msg: &T,
         transferable: JsValue,
     ) -> Result<()> {
-        let msg = MultiplexMessage {
-            id,
-            payload: Some(payload),
-        };
         let value = to_json_value(&msg).context("error converting to JsValue")?;
         self.port
             .post_message_with_transferable(&value, &Array::of1(&transferable))
@@ -176,59 +123,37 @@ impl Drop for Port {
     }
 }
 
+/// Prepare a port for receiving subscription items
 pub(crate) fn subscription_port<T: DeserializeOwned + 'static>(
-) -> Result<(MessagePortLike, Port, mpsc::UnboundedReceiver<T>)> {
+    object: MessagePortLike,
+) -> Result<(Port, mpsc::UnboundedReceiver<T>)> {
     let (tx, rx) = mpsc::unbounded_channel();
-    let channel = MessageChannel::new()?;
 
-    let server_port = JsValue::from(channel.port1()).into();
+    let client_port = Port::new(object.into(), move |ev: MessageEvent| -> Result<()> {
+        let item: T = from_value(ev.data()).context("could not deserialize message")?;
+        tx.send(item)
+            .context("forwarding subscription item failed")?;
+        Ok(())
+    })?;
 
-    let client_port = Port::new(
-        channel.port2().into(),
-        move |ev: MessageEvent| -> Result<()> {
-            let item: T = from_value(ev.data()).context("could not deserialize message")?;
-            tx.send(item)
-                .context("forwarding subscription item failed")?;
-            Ok(())
-        },
-    )?;
-
-    Ok((server_port, client_port, rx))
+    Ok((client_port, rx))
 }
 
-pub(crate) fn command_port(
+/// Prepare a Port that is ready to receive Commands from the client or WorkerResults from the worker
+pub(crate) fn prepare_port<T: PayloadWithTransferable + Serialize + DeserializeOwned + 'static>(
     object: MessagePortLike,
-) -> Result<(Port, mpsc::UnboundedReceiver<MultiplexMessage<Command>>)> {
+) -> Result<(Port, mpsc::UnboundedReceiver<MultiplexMessage<T>>)> {
     let (tx, rx) = mpsc::unbounded_channel();
 
     let port = Port::new(object.into(), move |ev: MessageEvent| -> Result<()> {
-        let MultiplexMessage::<Command> { id, mut payload } =
+        let MultiplexMessage::<T> { id, mut payload } =
             from_value(ev.data()).context("could not deserialize message")?;
 
         if let Some(port) = ev.get_port() {
-            payload.as_mut().map(|command| command.insert_port(port));
+            payload.insert_transferable(port);
         };
 
         tx.send(MultiplexMessage { id, payload })
-            .context("forwarding failed, no receiver waiting")?;
-        Ok(())
-    })?;
-    Ok((port, rx))
-}
-
-pub(crate) fn request_port(
-    object: MessagePortLike,
-) -> Result<(
-    Port,
-    mpsc::UnboundedReceiver<MultiplexMessage<WorkerResult>>,
-)> {
-    let (tx, rx) = mpsc::unbounded_channel();
-
-    let port = Port::new(object.into(), move |ev: MessageEvent| -> Result<()> {
-        let msg: MultiplexMessage<WorkerResult> =
-            from_value(ev.data()).context("could not deserialize message")?;
-
-        tx.send(msg)
             .context("forwarding failed, no receiver waiting")?;
         Ok(())
     })?;

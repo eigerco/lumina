@@ -39,15 +39,8 @@ pub(crate) enum ManagementCommand {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NodeSubscription {
-    Headers {
-        #[serde(skip)]
-        port: Option<MessagePortLike>,
-    },
-    Blobs {
-        #[serde(skip)]
-        port: Option<MessagePortLike>,
-        namespace: Namespace,
-    },
+    Headers,
+    Blobs(Namespace),
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -100,6 +93,7 @@ pub(crate) type WorkerResult = Result<WorkerResponse, WorkerError>;
 pub(crate) enum WorkerResponse {
     Ok,
     InternalPong,
+    Subscribed(#[serde(skip)] Option<MessagePortLike>),
     PortConnected(bool),
     IsRunning(bool),
     EventsChannelName(String),
@@ -149,37 +143,36 @@ pub(crate) struct CommandWithResponder {
     pub responder: oneshot::Sender<WorkerResult>,
 }
 
-impl Command {
-    pub(crate) fn insert_port(&mut self, event_port: MessagePortLike) {
-        match self {
-            Command::Management(cmd) => match cmd {
-                ManagementCommand::ConnectPort(port) => {
-                    let _ = port.insert(event_port);
-                }
-                _ => (),
-            },
-            Command::Subscribe(sub) => match sub {
-                NodeSubscription::Headers { port } => {
-                    let _ = port.insert(event_port);
-                }
-                NodeSubscription::Blobs { port, .. } => {
-                    let _ = port.insert(event_port);
-                }
-            },
-            _ => (),
-        };
+pub(crate) trait PayloadWithTransferable {
+    fn insert_transferable(&mut self, transferable: MessagePortLike);
+    fn take_transferable(&mut self) -> Option<MessagePortLike>;
+}
+
+impl PayloadWithTransferable for Command {
+    fn insert_transferable(&mut self, transferable: MessagePortLike) {
+        if let Command::Management(ManagementCommand::ConnectPort(maybe_port)) = self {
+            let _ = maybe_port.insert(transferable);
+        }
     }
 
-    pub(crate) fn take_port(&mut self) -> Option<MessagePortLike> {
+    fn take_transferable(&mut self) -> Option<MessagePortLike> {
         match self {
-            Command::Management(cmd) => match cmd {
-                ManagementCommand::ConnectPort(port) => port.take(),
-                _ => None,
-            },
-            Command::Subscribe(sub) => match sub {
-                NodeSubscription::Headers { port } => port.take(),
-                NodeSubscription::Blobs { port, .. } => port.take(),
-            },
+            Command::Management(ManagementCommand::ConnectPort(maybe_port)) => maybe_port.take(),
+            _ => None,
+        }
+    }
+}
+
+impl PayloadWithTransferable for WorkerResult {
+    fn insert_transferable(&mut self, transferable: MessagePortLike) {
+        if let Ok(WorkerResponse::Subscribed(maybe_port)) = self {
+            let _ = maybe_port.insert(transferable);
+        }
+    }
+
+    fn take_transferable(&mut self) -> Option<MessagePortLike> {
+        match self {
+            Ok(WorkerResponse::Subscribed(maybe_port)) => maybe_port.take(),
             _ => None,
         }
     }
