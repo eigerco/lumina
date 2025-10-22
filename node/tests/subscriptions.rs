@@ -1,7 +1,8 @@
-use std::array::from_ref;
+use std::{array::from_ref, time::Duration};
 
 use celestia_types::{Blob, nmt::Namespace};
 use futures::stream::StreamExt;
+use lumina_utils::time::sleep;
 
 use crate::utils::{blob_submit, bridge_client, new_connected_node};
 
@@ -45,10 +46,13 @@ async fn blob_subscription() {
 
     let mut blob_stream = node.namespace_subscribe(namespace).await.unwrap();
 
-    let (_, bs0) = blob_stream.next().await.unwrap().unwrap();
-    assert!(bs0.is_empty());
+    let (h, bs) = blob_stream.next().await.unwrap().unwrap();
+    assert!(bs.is_empty());
 
     let submitted_at = blob_submit(&client, from_ref(&blob)).await;
+    assert!(h < submitted_at);
+
+    sleep(Duration::from_secs(2)).await;
 
     loop {
         let (h, bs) = blob_stream.next().await.unwrap().unwrap();

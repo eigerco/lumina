@@ -86,10 +86,10 @@ impl NodeClient {
     #[allow(deprecated)] // TODO: https://github.com/eigerco/lumina/issues/754
     pub async fn new(port: JsValue) -> Result<NodeClient> {
         // Safari doesn't have the `navigator.storage()` api
-        if !is_safari()? {
-            if let Err(e) = request_storage_persistence().await {
-                error!("Error requesting storage persistence: {e}");
-            }
+        if !is_safari()?
+            && let Err(e) = request_storage_persistence().await
+        {
+            error!("Error requesting storage persistence: {e}");
         }
 
         let worker = WorkerClient::new(port)?;

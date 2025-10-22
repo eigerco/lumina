@@ -381,10 +381,12 @@ async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: B
             info: ev,
         };
 
-        if let Ok(val) = to_value(&ev) {
-            if events_channel.post_message(&val).is_err() {
-                break;
-            }
+        let Ok(val) = to_value(&ev) else {
+            continue;
+        };
+
+        if events_channel.post_message(&val).is_err() {
+            break;
         }
     }
 }

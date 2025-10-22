@@ -8,7 +8,7 @@ authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
 readme = "README.md"
-rust-version = "1.87"
+rust-version = "1.89"
 # crates.io is limited to 5 keywords and 5 categories
 keywords = ["blockchain", "celestia", "lumina", "node", "browser"]
 # Must be one of <https://crates.io/category_slugs>
@@ -47,7 +47,7 @@ send_wrapper.workspace = true
 thiserror.workspace = true
 time = { workspace = true, features = ["wasm-bindgen"] }
 tokio = { workspace = true, features = ["sync"] }
-tokio-stream = { version = "0.1.16", features = ["sync"] }
+tokio-stream = { workspace = true }
 tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["time"] }
@@ -78,9 +78,6 @@ web-sys = { workspace = true, features = [
 celestia-rpc = { workspace = true, features = ["wasm-bindgen", "p2p"] }
 rexie.workspace = true
 wasm-bindgen-test.workspace = true
-
-[dependencies]
-dashmap = "6.1.0"
 
 [package.metadata.docs.rs]
 targets = ["wasm32-unknown-unknown"]

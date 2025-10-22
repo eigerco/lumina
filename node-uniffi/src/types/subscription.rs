@@ -1,14 +1,14 @@
 use celestia_types::{Blob, ExtendedHeader};
 use futures::StreamExt;
-use lumina_node::node::SubscriptionError;
+use lumina_node::node::SubscriptionError as NodeSubscriptionError;
 use tokio::sync::RwLock;
 use tokio_stream::wrappers::ReceiverStream;
 use uniffi::Object;
 
 use crate::error::LuminaError;
 
-type HeaderSubscriptionItem = Result<ExtendedHeader, SubscriptionError>;
-type BlobSubscriptionItem = Result<(u64, Vec<Blob>), SubscriptionError>;
+type HeaderSubscriptionItem = Result<ExtendedHeader, NodeSubscriptionError>;
+type BlobSubscriptionItem = Result<(u64, Vec<Blob>), NodeSubscriptionError>;
 
 #[derive(Object)]
 pub struct HeaderStream {
@@ -25,15 +25,15 @@ impl HeaderStream {
 
 #[uniffi::export]
 impl HeaderStream {
-    pub async fn next(&self) -> Result<String, Error> {
+    pub async fn next(&self) -> Result<String, SubscriptionError> {
         let header = self
             .stream
             .write()
             .await
             .next()
             .await
-            .ok_or(Error::StreamEnded)?
-            .map_err(Error::from)?;
+            .ok_or(SubscriptionError::StreamEnded)?
+            .map_err(SubscriptionError::from)?;
         // TODO: replace with plain ExtendedHeader, once it's uniffied
         Ok(serde_json::to_string(&header)?)
     }
@@ -54,15 +54,15 @@ impl BlobStream {
 
 #[uniffi::export]
 impl BlobStream {
-    pub async fn next(&self) -> Result<BlobAtHeight, Error> {
+    pub async fn next(&self) -> Result<BlobAtHeight, SubscriptionError> {
         let (height, blob) = self
             .stream
             .write()
             .await
             .next()
             .await
-            .ok_or(Error::StreamEnded)?
-            .map_err(Error::from)?;
+            .ok_or(SubscriptionError::StreamEnded)?
+            .map_err(SubscriptionError::from)?;
 
         Ok(BlobAtHeight { height, blob })
     }
@@ -75,26 +75,26 @@ pub struct BlobAtHeight {
 }
 
 #[derive(uniffi::Error, Debug, thiserror::Error)]
-pub enum Error {
+pub enum SubscriptionError {
     #[error("Unable to receive subscription item at {height}: {error}")]
-    Subscription { height: u64, error: LuminaError },
+    NodeError { height: u64, error: LuminaError },
     #[error("Subscription stream ended")]
     StreamEnded,
     #[error("Unable to serialize header: {0}")]
     Serialization(String),
 }
 
-impl From<SubscriptionError> for Error {
-    fn from(error: SubscriptionError) -> Self {
-        Error::Subscription {
+impl From<NodeSubscriptionError> for SubscriptionError {
+    fn from(error: NodeSubscriptionError) -> Self {
+        SubscriptionError::NodeError {
             height: error.height,
             error: error.source.into(),
         }
     }
 }
 
-impl From<serde_json::Error> for Error {
+impl From<serde_json::Error> for SubscriptionError {
     fn from(error: serde_json::Error) -> Self {
-        Error::Serialization(error.to_string())
+        SubscriptionError::Serialization(error.to_string())
     }
 }

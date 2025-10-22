@@ -264,11 +264,11 @@ mod tests {
                 .unwrap();
 
             let CommandWithResponder { command, responder } = server.recv().await.unwrap();
-            assert!(matches!(
-                command,
-                Command::Management(ManagementCommand::InternalPing)
-            ));
-            responder.send(Ok(WorkerResponse::InternalPong)).unwrap();
+            let Command::Management(ManagementCommand::ConnectPort(Some(port))) = command else {
+                panic!("received unexpected command")
+            };
+            server.spawn_connection_worker(port).unwrap();
+            responder.send(Ok(WorkerResponse::Ok)).unwrap();
 
             let CommandWithResponder { command, responder } = server.recv().await.unwrap();
             assert!(matches!(

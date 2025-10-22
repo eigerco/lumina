@@ -75,12 +75,12 @@ struct ConnectionWorker {
     /// Port over which communication takes place
     port: Port,
     /// Queued requests from the onmessage callback
-    incoming_requests: mpsc::UnboundedReceiver<MultiplexMessage<Command>>,
+    incoming_commands: mpsc::UnboundedReceiver<MultiplexMessage<Command>>,
     /// Futures waiting for completion to be send as responses
     pending_responses_map:
         FuturesUnordered<LocalBoxFuture<'static, MultiplexMessage<WorkerResult>>>,
     /// Channel to send requests and response senders over
-    request_tx: mpsc::UnboundedSender<CommandWithResponder>,
+    command_forwarding_channel: mpsc::UnboundedSender<CommandWithResponder>,
     /// Cancellation token to stop the worker
     cancellation_token: CancellationToken,
 }
@@ -88,16 +88,16 @@ struct ConnectionWorker {
 impl ConnectionWorker {
     fn new(
         port: MessagePortLike,
-        request_tx: mpsc::UnboundedSender<CommandWithResponder>,
+        command_forwarding_channel: mpsc::UnboundedSender<CommandWithResponder>,
         cancellation_token: CancellationToken,
     ) -> Result<ConnectionWorker> {
-        let (port, incoming_requests) = prepare_port::<Command>(port)?;
+        let (port, incoming_commands) = prepare_port::<Command>(port)?;
 
         Ok(ConnectionWorker {
             port,
-            incoming_requests,
+            incoming_commands,
             pending_responses_map: Default::default(),
-            request_tx,
+            command_forwarding_channel,
             cancellation_token,
         })
     }
@@ -108,17 +108,20 @@ impl ConnectionWorker {
                 _ = self.cancellation_token.cancelled() => {
                     return Ok(())
                 }
-                msg = self.incoming_requests.recv() => {
+                msg = self.incoming_commands.recv() => {
                     self.handle_incoming_request(
                         msg
                         .ok_or(Error::new("Incoming message channel closed, should not happen"))?
                     )?;
                 }
                 res = self.pending_responses_map.next(), if !self.pending_responses_map.is_empty() => {
-                    self.handle_outgoing_response(
-                        &res
-                        .ok_or(Error::new("Responses channel closed, should not happen"))?
-                    )?;
+                    let response =
+                            &res
+                            .ok_or(Error::new("Responses channel closed, should not happen"))?;
+                    self.port
+                        .send(response)
+                        .with_context(|| format!("failed to send outgoing response for {:?}", response.id))?;
+
                 }
             }
         }
@@ -130,7 +133,7 @@ impl ConnectionWorker {
     ) -> Result<()> {
         let (responder, response_receiver) = oneshot::channel();
 
-        self.request_tx
+        self.command_forwarding_channel
             .send(CommandWithResponder {
                 command: payload,
                 responder,
@@ -150,17 +153,6 @@ impl ConnectionWorker {
 
         Ok(())
     }
-
-    fn handle_outgoing_response(
-        &mut self,
-        response: &MultiplexMessage<WorkerResult>,
-    ) -> Result<()> {
-        self.port
-            .send(response)
-            .with_context(|| format!("failed to send outgoing response for {:?}", response.id))?;
-
-        Ok(())
-    }
 }
 
 fn spawn_connection_worker(
@@ -175,6 +167,7 @@ fn spawn_connection_worker(
             error!("WorkerServer worker stopped because of a fatal error: {e}");
         }
     });
+
     Ok(cancellation_token)
 }
 

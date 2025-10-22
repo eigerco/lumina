@@ -27,11 +27,11 @@ impl WorkerClient {
     /// callback.
     pub fn new(port: JsValue) -> Result<WorkerClient> {
         let cancellation_token = CancellationToken::new();
-        let (request_tx, request_rx) = mpsc::unbounded_channel();
-        let mut worker = Worker::new(port, request_rx, cancellation_token.child_token())?;
+        let mut worker = Worker::new(port, cancellation_token.child_token())?;
 
+        let (request_tx, request_rx) = mpsc::unbounded_channel();
         let _worker_join_handle = spawn(async move {
-            if let Err(e) = worker.run().await {
+            if let Err(e) = worker.run(request_rx).await {
                 error!("WorkerClient worker stopped because of a fatal error: {e}");
             }
         });
@@ -91,8 +91,6 @@ struct Worker {
     incoming_responses: mpsc::UnboundedReceiver<MultiplexMessage<WorkerResult>>,
     /// Map of message ids waiting for response to oneshot channels to send the response over
     pending_responses_map: HashMap<MessageId, oneshot::Sender<WorkerResult>>,
-    /// Queued requests to be sent
-    outgoing_requests: mpsc::UnboundedReceiver<CommandWithResponder>,
     /// MessageId to be used for the next request
     next_message_index: MessageId,
     /// Cancellation token to stop the worker
@@ -100,24 +98,22 @@ struct Worker {
 }
 
 impl Worker {
-    fn new(
-        port: JsValue,
-        request_tx: mpsc::UnboundedReceiver<CommandWithResponder>,
-        cancellation_token: CancellationToken,
-    ) -> Result<Worker> {
+    fn new(port: JsValue, cancellation_token: CancellationToken) -> Result<Worker> {
         let (port, incoming_responses) = prepare_port::<WorkerResult>(port.into())?;
 
         Ok(Worker {
             port,
             incoming_responses,
-            outgoing_requests: request_tx,
             next_message_index: Default::default(),
             pending_responses_map: Default::default(),
             cancellation_token,
         })
     }
 
-    async fn run(&mut self) -> Result<()> {
+    async fn run(
+        &mut self,
+        mut outgoing_requests: mpsc::UnboundedReceiver<CommandWithResponder>,
+    ) -> Result<()> {
         loop {
             select! {
                 _ = self.cancellation_token.cancelled() => {
@@ -130,7 +126,7 @@ impl Worker {
                         let _ = response_sender.send(payload);
                     };
                 }
-                request = self.outgoing_requests.recv() => {
+                request = outgoing_requests.recv() => {
                     let command_with_responder = request
                         .ok_or(Error::new("Outgoing requests channel closed, should not happen"))?;
                     self.handle_outgoing_request(command_with_responder)?;
