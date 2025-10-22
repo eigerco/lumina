@@ -1,4 +1,5 @@
 use celestia_rpc::prelude::*;
+use futures::StreamExt;
 use lumina_utils::test_utils::async_test;
 
 pub mod utils;
@@ -93,7 +94,7 @@ async fn subscribe() {
 
     let genesis_header = client.header_get_by_height(1).await.unwrap();
 
-    let mut incoming_headers = client.header_subscribe().await.unwrap();
+    let mut incoming_headers = client.header_subscribe();
     let header1 = incoming_headers.next().await.unwrap().unwrap();
     let header2 = incoming_headers.next().await.unwrap().unwrap();
 

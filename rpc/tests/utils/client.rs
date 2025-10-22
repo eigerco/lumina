@@ -6,7 +6,7 @@ use celestia_rpc::prelude::*;
 use celestia_rpc::{Client, TxConfig};
 use celestia_types::Blob;
 use jsonrpsee::core::ClientError;
-use jsonrpsee::core::client::SubscriptionClientT;
+use jsonrpsee::core::client::ClientT;
 use tokio::sync::{Mutex, MutexGuard};
 
 // Use node-2 (light node) as the default RPC URL
@@ -96,7 +96,7 @@ pub async fn blob_submit_with_config<C>(
     config: TxConfig,
 ) -> Result<u64, ClientError>
 where
-    C: SubscriptionClientT + Sync,
+    C: ClientT + Sync,
 {
     let _guard = write_lock().await;
     client.blob_submit(blobs, config).await
@@ -104,7 +104,7 @@ where
 
 pub async fn blob_submit<C>(client: &C, blobs: &[Blob]) -> Result<u64, ClientError>
 where
-    C: SubscriptionClientT + Sync,
+    C: ClientT + Sync,
 {
     blob_submit_with_config(client, blobs, TxConfig::default()).await
 }

@@ -8,7 +8,8 @@ use celestia_rpc::{TxConfig, TxPriority};
 use celestia_types::consts::appconsts::{self, AppVersion};
 use celestia_types::state::Address;
 use celestia_types::{Blob, Commitment};
-use jsonrpsee::core::client::Subscription;
+use futures::{Stream, StreamExt};
+use jsonrpsee::core::client::Error;
 use lumina_utils::test_utils::async_test;
 
 pub mod utils;
@@ -146,7 +147,7 @@ async fn blob_subscribe() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
 
-    let mut incoming_blobs = client.blob_subscribe(namespace).await.unwrap();
+    let mut incoming_blobs = client.blob_subscribe(namespace);
 
     // nothing was submitted
     let received_blobs = incoming_blobs.next().await.unwrap().unwrap();
@@ -265,7 +266,10 @@ async fn blob_get_all_with_no_blobs() {
 }
 
 // Skips blobs at height subscription until provided height is reached, then return blobs for the height
-async fn blobs_at_height(height: u64, sub: &mut Subscription<BlobsAtHeight>) -> Vec<Blob> {
+async fn blobs_at_height<S>(height: u64, sub: &mut S) -> Vec<Blob>
+where
+    S: Stream<Item = Result<BlobsAtHeight, Error>> + Unpin,
+{
     while let Some(received) = sub.next().await {
         let received = received.unwrap();
         match received.height.cmp(&height) {

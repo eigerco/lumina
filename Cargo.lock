@@ -815,12 +815,12 @@ name = "celestia-rpc"
 version = "0.14.0"
 dependencies = [
  "anyhow",
+ "async-stream",
  "base64 0.22.1",
  "celestia-proto",
  "celestia-types",
  "dotenvy",
  "futures",
- "futures-util",
  "getrandom 0.2.16",
  "gloo-net",
  "http",
