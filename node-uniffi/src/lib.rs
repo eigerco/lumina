@@ -4,22 +4,24 @@
 //! allowing it to be used from iOS and Android applications.
 #![cfg(not(target_arch = "wasm32"))]
 
-mod error;
-mod types;
+use std::str::FromStr;
 
 use blockstore::EitherBlockstore;
 use celestia_types::ExtendedHeader;
-use error::{LuminaError, Result};
 use lumina_node::Node;
 use lumina_node::blockstore::{InMemoryBlockstore, RedbBlockstore};
 use lumina_node::events::EventSubscriber;
 use lumina_node::node::PeerTrackerInfo;
 use lumina_node::store::{EitherStore, InMemoryStore, RedbStore};
-use std::str::FromStr;
 use tendermint::hash::Hash;
 use tokio::sync::{Mutex, RwLock};
-use types::{NetworkInfo, NodeConfig, NodeEvent, PeerId, SyncingInfo};
 use uniffi::Object;
+
+use crate::error::{LuminaError, Result};
+use crate::types::{NetworkInfo, NodeConfig, NodeEvent, PeerId, SyncingInfo};
+
+mod error;
+mod types;
 
 uniffi::setup_scaffolding!();
 

@@ -215,6 +215,7 @@ jobs:
 
     - name: create and boot simulator
       run: |
+        set +x
         xcrun simctl shutdown all || true
         xcrun simctl erase all || true
         xcrun simctl delete CI-iPhone || true
@@ -243,7 +244,7 @@ jobs:
           -scheme LuminaDemo \
           -destination "id=${SIM_UDID}" \
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-          clean build
+          clean build-for-testing
 
     - name: xcode sim test
       working-directory: examples/ios/LuminaDemo
@@ -258,7 +259,7 @@ jobs:
           -parallel-testing-enabled NO \
           -destination-timeout 360 \
           -skip-testing LuminaDemoTests/GrpcClientTest \
-          test
+          test-without-building
 
 
   build-android:
