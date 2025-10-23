@@ -4,6 +4,8 @@ set -euxo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
+target_dir="$(realpath ../target)"
+
 # create swift bindings
 
 rm -rf ./bindings ./ios
@@ -11,8 +13,9 @@ mkdir -p ./bindings
 mkdir -p ./ios
 mkdir -p ./bindings/Headers
 
-cargo build
-cargo run --bin uniffi-bindgen \
+cargo build --lib --bin uniffi-bindgen
+
+"$target_dir"/debug/uniffi-bindgen \
   generate \
   --library ../target/debug/liblumina_node_uniffi.dylib \
   --language swift \
@@ -31,14 +34,16 @@ rm -rf ./ios/lumina.xcframework
 
 # create xcode project
 
-for target in aarch64-apple-ios aarch64-apple-ios-sim; do
-  cargo build --lib --release --target="$target"
-done
+cargo build \
+  --lib \
+  --release \
+  --target aarch64-apple-ios \
+  --target aarch64-apple-ios-sim
 
 xcodebuild -create-xcframework \
-        -library ../target/aarch64-apple-ios-sim/release/liblumina_node_uniffi.a -headers ./bindings/Headers \
-        -library ../target/aarch64-apple-ios/release/liblumina_node_uniffi.a -headers ./bindings/Headers \
-        -output "ios/lumina.xcframework"
+  -library "$target_dir"/aarch64-apple-ios/release/liblumina_node_uniffi.a -headers ./bindings/Headers \
+  -library "$target_dir"/aarch64-apple-ios-sim/release/liblumina_node_uniffi.a -headers ./bindings/Headers \
+  -output "ios/lumina.xcframework"
 
 cp ./bindings/*.swift ./ios/
 
