@@ -174,103 +174,124 @@ fn spawn_connection_worker(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::{ManagementCommand, NodeCommand, WorkerError, WorkerResponse};
-    use crate::worker_client::WorkerClient;
 
+    use std::sync::Arc;
+
+    use futures::stream::FuturesOrdered;
+    use send_wrapper::SendWrapper;
     use tokio::sync::mpsc;
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
 
+    use crate::commands::{ManagementCommand, NodeCommand, WorkerError, WorkerResponse};
+    use crate::worker_client::WorkerClient;
+
     #[wasm_bindgen_test]
     async fn smoke_test() {
         let channel = MessageChannel::new().unwrap();
-        let worker_port: JsValue = channel.port2().into();
         let client = WorkerClient::new(channel.port1().into()).unwrap();
+        let (stop_tx, stop_rx) = oneshot::channel();
 
-        let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-        let _worker_guard = spawn_connection_worker(worker_port.into(), request_tx)
-            .unwrap()
-            .drop_guard();
+        spawn(async move {
+            let (request_tx, mut request_rx) = mpsc::unbounded_channel();
+            let _worker_guard = spawn_connection_worker(channel.port2().into(), request_tx)
+                .unwrap()
+                .drop_guard();
 
-        let response = client.management(ManagementCommand::InternalPing);
+            let CommandWithResponder { command, responder } =
+                request_rx.recv().await.expect("failed to recv");
+            assert!(matches!(
+                command,
+                Command::Management(ManagementCommand::InternalPing)
+            ));
+            responder.send(Ok(WorkerResponse::InternalPong)).unwrap();
+            stop_rx.await.unwrap(); // wait for the test to finish before shutting the server
+        });
 
-        let CommandWithResponder { command, responder } =
-            request_rx.recv().await.expect("failed to recv");
-        assert!(matches!(
-            command,
-            Command::Management(ManagementCommand::InternalPing)
-        ));
-        responder.send(Ok(WorkerResponse::InternalPong)).unwrap();
+        let response = client
+            .management(ManagementCommand::InternalPing)
+            .await
+            .unwrap();
 
-        assert!(matches!(
-            response.await.unwrap(),
-            WorkerResponse::InternalPong
-        ));
+        assert!(matches!(response, WorkerResponse::InternalPong));
+        stop_tx.send(()).unwrap();
     }
 
     #[wasm_bindgen_test]
     async fn response_channel_dropped() {
         let channel = MessageChannel::new().unwrap();
-        let worker_port: JsValue = channel.port2().into();
         let client = WorkerClient::new(channel.port1().into()).unwrap();
+        let (stop_tx, stop_rx) = oneshot::channel();
 
-        let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-        let _worker_guard = spawn_connection_worker(worker_port.into(), request_tx)
-            .unwrap()
-            .drop_guard();
+        spawn(async move {
+            let (request_tx, mut request_rx) = mpsc::unbounded_channel();
+            let _worker_guard = spawn_connection_worker(channel.port2().into(), request_tx)
+                .unwrap()
+                .drop_guard();
+            let CommandWithResponder { command, responder } =
+                request_rx.recv().await.expect("failed to recv");
+            assert!(matches!(
+                command,
+                Command::Management(ManagementCommand::InternalPing)
+            ));
+            drop(responder);
+            stop_rx.await.unwrap(); // wait for the test to finish before shutting the server
+        });
 
-        let response = client.management(ManagementCommand::InternalPing);
+        let response = client
+            .management(ManagementCommand::InternalPing)
+            .await
+            .unwrap_err();
 
-        let CommandWithResponder { command, responder } =
-            request_rx.recv().await.expect("failed to recv");
-        assert!(matches!(
-            command,
-            Command::Management(ManagementCommand::InternalPing)
-        ));
-        drop(responder);
-
-        assert!(matches!(
-            response.await.unwrap_err(),
-            WorkerError::EmptyResponse,
-        ));
+        assert!(matches!(response, WorkerError::EmptyResponse));
+        stop_tx.send(()).unwrap();
     }
 
     #[wasm_bindgen_test]
     async fn multiple_channels() {
+        const REQUEST_NUMBER: u64 = 16;
+
         let channel = MessageChannel::new().unwrap();
-        let worker_port: JsValue = channel.port2().into();
-        let client = WorkerClient::new(channel.port1().into()).unwrap();
+        let client = Arc::new(SendWrapper::new(
+            WorkerClient::new(channel.port1().into()).unwrap(),
+        ));
+        let (stop_tx, stop_rx) = oneshot::channel();
 
-        let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-        let _worker_guard = spawn_connection_worker(worker_port.into(), request_tx)
-            .unwrap()
-            .drop_guard();
+        spawn(async move {
+            let (request_tx, mut request_rx) = mpsc::unbounded_channel();
+            let _worker_guard = spawn_connection_worker(channel.port2().into(), request_tx)
+                .unwrap()
+                .drop_guard();
+            for i in 0..=REQUEST_NUMBER {
+                let CommandWithResponder { command, responder } = request_rx.recv().await.unwrap();
+                let Command::Node(NodeCommand::GetSamplingMetadata { height }) = command else {
+                    panic!("invalid command");
+                };
+                assert_eq!(i, height);
+                responder
+                    .send(Ok(WorkerResponse::EventsChannelName(format!("R:{height}"))))
+                    .unwrap();
+            }
+            stop_rx.await.unwrap(); // wait for the test to finish before shutting the server
+        });
 
-        let mut responses = vec![];
-        for i in 0..=5 {
-            responses.push(Some(
-                client.node(NodeCommand::GetSamplingMetadata { height: i }),
-            ))
+        let mut futs = FuturesOrdered::new();
+        for i in 0..=REQUEST_NUMBER {
+            let client = client.clone();
+            futs.push_back(async move {
+                let response = client.node(NodeCommand::GetSamplingMetadata { height: i });
+                let response = SendWrapper::new(response).await;
+                SendWrapper::new(response)
+            });
         }
 
-        for i in 0..=5 {
-            let CommandWithResponder { command, responder } = request_rx.recv().await.unwrap();
-            let Command::Node(NodeCommand::GetSamplingMetadata { height }) = command else {
-                panic!("invalid command");
-            };
-            assert_eq!(i, height);
-            responder
-                .send(Ok(WorkerResponse::EventsChannelName(format!("R:{height}"))))
-                .unwrap();
-        }
-
-        for i in (0..=5).rev() {
-            let WorkerResponse::EventsChannelName(response) =
-                responses[i].take().unwrap().await.unwrap()
-            else {
+        for i in 0..=REQUEST_NUMBER {
+            let response = futs.next().await.unwrap().take();
+            let WorkerResponse::EventsChannelName(name) = response.unwrap() else {
                 panic!("invalid response");
             };
-            assert_eq!(response, format!("R:{i}"));
+            assert_eq!(name, format!("R:{i}"));
         }
+        stop_tx.send(()).unwrap();
     }
 }

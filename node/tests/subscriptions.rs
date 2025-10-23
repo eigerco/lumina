@@ -46,24 +46,21 @@ async fn blob_subscription() {
 
     let mut blob_stream = node.namespace_subscribe(namespace).await.unwrap();
 
-    let (h, bs) = blob_stream.next().await.unwrap().unwrap();
-    assert!(bs.is_empty());
-
     let submitted_at = blob_submit(&client, from_ref(&blob)).await;
-    assert!(h < submitted_at);
 
     sleep(Duration::from_secs(2)).await;
 
-    loop {
+    let blobs = loop {
         let (h, bs) = blob_stream.next().await.unwrap().unwrap();
-        assert!(bs.is_empty());
-        assert!(h < submitted_at);
-        if h == submitted_at - 1 {
-            break;
+        if h == submitted_at {
+            break bs;
         }
-    }
+        assert!(h < submitted_at);
+        assert!(bs.is_empty());
+    };
 
-    let (h, bs) = blob_stream.next().await.unwrap().unwrap();
-    assert_eq!(&bs, &[blob]);
-    assert_eq!(h, submitted_at);
+    assert_eq!(&blobs, from_ref(&blob));
+
+    let (_h, bs) = blob_stream.next().await.unwrap().unwrap();
+    assert_eq!(bs, vec![]);
 }

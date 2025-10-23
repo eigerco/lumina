@@ -218,7 +218,9 @@ pub(crate) fn unregister_onmessage(port: &JsValue, callback: &Closure<dyn Fn(Mes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
+
+    use futures::channel::oneshot;
+    use lumina_utils::executor::spawn;
     use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
@@ -226,8 +228,6 @@ mod tests {
     use crate::commands::{Command, CommandWithResponder, ManagementCommand, WorkerResponse};
     use crate::worker_client::WorkerClient;
     use crate::worker_server::WorkerServer;
-
-    use lumina_utils::time::sleep;
 
     #[wasm_bindgen_test]
     fn message_id_increment() {
@@ -252,6 +252,7 @@ mod tests {
         let channel0 = MessageChannel::new().unwrap();
         let mut server = WorkerServer::new();
         let port_channel = server.get_port_channel();
+        let (stop_tx, stop_rx) = oneshot::channel();
 
         spawn_local(async move {
             let CommandWithResponder { command, responder } = server.recv().await.unwrap();
@@ -277,8 +278,7 @@ mod tests {
             ));
             responder.send(Ok(WorkerResponse::IsRunning(true))).unwrap();
 
-            // otherwise server is dropped too soon and last message does not make it
-            sleep(Duration::from_millis(100)).await;
+            stop_rx.await.unwrap(); // wait for the test to finish before shutting the server
         });
 
         port_channel.send(channel0.port1().into()).unwrap();
@@ -304,28 +304,35 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(response, WorkerResponse::IsRunning(true)));
+        stop_tx.send(()).unwrap();
     }
 
     #[wasm_bindgen_test]
-    async fn client_server() {
+    async fn spawn_client_server() {
         let channel = MessageChannel::new().unwrap();
-        let mut server = WorkerServer::new();
-        let port_channel = server.get_port_channel();
-        port_channel.send(channel.port2().into()).unwrap();
-
         let client = WorkerClient::new(channel.port1().into()).unwrap();
-        let response = client.management(ManagementCommand::InternalPing);
+        let (stop_tx, stop_rx) = oneshot::channel();
 
-        let CommandWithResponder { command, responder } = server.recv().await.unwrap();
-        assert!(matches!(
-            command,
-            Command::Management(ManagementCommand::InternalPing)
-        ));
-        responder.send(Ok(WorkerResponse::InternalPong)).unwrap();
+        spawn(async move {
+            let mut server = WorkerServer::new();
+            server
+                .spawn_connection_worker(channel.port2().into())
+                .unwrap();
 
-        assert!(matches!(
-            response.await.unwrap(),
-            WorkerResponse::InternalPong
-        ));
+            let CommandWithResponder { command, responder } = server.recv().await.unwrap();
+            assert!(matches!(
+                command,
+                Command::Management(ManagementCommand::InternalPing)
+            ));
+            responder.send(Ok(WorkerResponse::InternalPong)).unwrap();
+            stop_rx.await.unwrap(); // wait for the test to finish before shutting the server
+        });
+
+        let response = client
+            .management(ManagementCommand::InternalPing)
+            .await
+            .unwrap();
+        assert!(matches!(response, WorkerResponse::InternalPong));
+        stop_tx.send(()).unwrap();
     }
 }
