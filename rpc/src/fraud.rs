@@ -23,6 +23,7 @@ mod rpc {
         async fn fraud_get(&self, proof_type: ProofType) -> Result<Vec<Proof>, Error>;
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[rpc(client, namespace = "fraud", namespace_separator = ".")]
     pub trait FraudSubscription {
         #[subscription(name = "Subscribe", unsubscribe = "Unsubscribe", item = Proof)]

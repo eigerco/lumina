@@ -190,15 +190,10 @@ mod wasm {
     impl Client {
         /// Create a new Json RPC client.
         ///
-        /// Only the 'ws\[s\]' protocols are supported and they should
-        /// be specified in the provided `conn_str`. For more flexibility
-        /// consider creating the client using [`jsonrpsee`] directly.
-        ///
-        /// Since headers are not supported in the current version of
-        /// `jsonrpsee-wasm-client`, celestia-node requires disabling
-        /// authentication (--rpc.skip-auth) to use wasm.
-        ///
-        /// For a secure connection you have to hide it behind a proxy.
+        /// Only the 'http\[s\]' protocols are supported because javascirpt
+        /// doesn't allow setting headers with websocket. If you want to
+        /// use the websocket client anyway, you can use the one from the
+        /// `jsonrpsee` directly, but you need a node with `--rpc.skip-auth`.
         pub async fn new(conn_str: &str, auth_token: Option<&str>) -> Result<Self, Error> {
             let protocol = conn_str.split_once(':').map(|(proto, _)| proto);
             match protocol {
@@ -223,7 +218,7 @@ mod wasm {
                     req = req.header("Authorization", &format!("Bearer {token}"));
                 }
 
-                req.json(&request).map_err(parse_error)?.send()
+                req.json(&request).map_err(into_parse_error)?.send()
             };
 
             SendWrapper::new(fut)
@@ -238,7 +233,8 @@ mod wasm {
             let response = SendWrapper::new(self.send(request).await?);
 
             if !response.ok() {
-                return Err(ClientError::Transport(todo!("error with status")));
+                let error = format!("Request failed: {} {}", response.status(), response.status_text());
+                return Err(ClientError::Transport(error.into()));
             }
 
             SendWrapper::new(response.binary())
@@ -295,43 +291,42 @@ mod wasm {
         {
             // this will throw an error if batch is empty
             let batch = batch.build()?;
+            let batch_len = batch.len();
 
-            let mut first_id = None;
-            let mut last_id = 0;
+            // fill in batch request
+            let mut ids = Vec::with_capacity(batch_len);
+            let mut batch_request = Batch::with_capacity(batch_len);
 
-            let mut batch_request = Batch::with_capacity(batch.len());
             for (method, params) in batch.into_iter() {
                 let id = self.id.fetch_add(1, Ordering::Relaxed);
-                if first_id.is_none() {
-                    first_id = Some(id);
-                }
-                last_id = id;
+                let request = Request::owned(method.into(), params, Id::Number(id));
 
-                let id = Id::Number(id);
-                let request = Request::owned(method.into(), params, id);
+                ids.push(id);
                 batch_request.push(request);
             }
 
-            let first_id = first_id.expect("must be set");
-
+            // send it and grab response
             let body = self.send_and_read_body(batch_request).await?;
-
             let mut resps: Vec<Response<&JsonRawValue>> = serde_json::from_slice(&body)?;
+
+            // no docs mention that responses should be returned in order
+            // but jsonrpsee implementations always take care to do that
             resps.sort_by(|lhs, rhs| {
-                // put those with unexpected ids first, we'll error out on them
+                // put those with non-numeric ids first, we'll error out on them
                 // at the beginning of the next loop
                 let lhs_id = lhs.id.try_parse_inner_as_number().unwrap_or(0);
                 let rhs_id = rhs.id.try_parse_inner_as_number().unwrap_or(0);
                 lhs_id.cmp(&rhs_id)
             });
 
+            // prepare the batch result
             let mut successful = 0;
             let mut failed = 0;
 
-            let mut batch_resp = Vec::with_capacity((last_id - first_id) as usize + 1);
+            let mut batch_resp = Vec::with_capacity(batch_len);
             for resp in resps.into_iter() {
                 let id = resp.id.try_parse_inner_as_number()?;
-                if id < first_id || id > last_id {
+                if !ids.contains(&id) {
                     return Err(InvalidRequestId::NotPendingRequest(id.to_string()).into());
                 }
 
@@ -386,7 +381,7 @@ mod wasm {
 
     /// Used to translate gloo errors originating from serde into client errors.
     /// Can panic if used in a place that has other gloo error types possible.
-    fn parse_error(err: gloo_net::Error) -> ClientError {
+    fn into_parse_error(err: gloo_net::Error) -> ClientError {
         match err {
             gloo_net::Error::SerdeError(e) => ClientError::ParseError(e),
             _ => unreachable!("this can only fail on a call to serde_json"),
