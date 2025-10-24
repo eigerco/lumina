@@ -47,7 +47,7 @@ send_wrapper.workspace = true
 thiserror.workspace = true
 time = { workspace = true, features = ["wasm-bindgen"] }
 tokio = { workspace = true, features = ["sync"] }
-tokio-stream = { workspace = true }
+tokio-stream.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["time"] }
