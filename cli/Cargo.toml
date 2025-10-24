@@ -39,7 +39,7 @@ libp2p.workspace = true
 mime_guess = "2"
 parse_duration = "2"
 redb.workspace = true
-rust-embed = { version = "8", features = ["interpolate-folder-path"] }
+rust-embed = { workspace = true, features = ["interpolate-folder-path"] }
 serde.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tracing.workspace = true

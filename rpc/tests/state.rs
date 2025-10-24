@@ -1,28 +1,27 @@
-#![cfg(not(target_arch = "wasm32"))]
-
-use crate::utils::{random_bytes, random_ns};
 use celestia_rpc::TxConfig;
 use celestia_rpc::prelude::*;
 use celestia_types::{AppVersion, Blob};
+use lumina_utils::test_utils::async_test;
 
 pub mod utils;
 
 use crate::utils::client::{AuthLevel, new_test_client};
+use crate::utils::{random_bytes, random_ns};
 
-#[tokio::test]
+#[async_test]
 async fn account_address() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let _addr = client.state_account_address().await.unwrap();
 }
 
-#[tokio::test]
+#[async_test]
 async fn balance() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let balance = client.state_balance().await.unwrap();
     assert_eq!(balance.denom(), "utia");
 }
 
-#[tokio::test]
+#[async_test]
 async fn balance_for_address() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
@@ -33,7 +32,7 @@ async fn balance_for_address() {
     assert_eq!(my_balance, balance);
 }
 
-#[tokio::test]
+#[async_test]
 async fn submit_pay_for_blob() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
