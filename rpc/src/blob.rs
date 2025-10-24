@@ -7,7 +7,7 @@ use std::pin::Pin;
 use async_stream::try_stream;
 use celestia_types::nmt::{Namespace, NamespaceProof};
 use celestia_types::{Blob, Commitment};
-use futures::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt};
 #[cfg(not(target_arch = "wasm32"))]
 use jsonrpsee::core::client::SubscriptionClientT;
 use jsonrpsee::core::client::{ClientT, Error};
@@ -72,11 +72,6 @@ mod rpc {
     #[cfg(not(target_arch = "wasm32"))]
     #[rpc(client, namespace = "blob", namespace_separator = ".")]
     pub trait BlobSubscription {
-        /// Subscribe to published blobs from the given namespace as they are included.
-        ///
-        /// # Notes
-        ///
-        /// Unsubscribe is not implemented by Celestia nodes.
         #[subscription(name = "Subscribe", unsubscribe = "Unsubscribe", item = BlobsAtHeight)]
         async fn blob_subscribe(&self, namespace: Namespace) -> SubscriptionResult;
     }

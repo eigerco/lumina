@@ -8,7 +8,7 @@ use celestia_rpc::{TxConfig, TxPriority};
 use celestia_types::consts::appconsts::{self, AppVersion};
 use celestia_types::state::Address;
 use celestia_types::{Blob, Commitment};
-use futures::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt};
 use jsonrpsee::core::client::Error;
 use lumina_utils::test_utils::async_test;
 

@@ -25,7 +25,7 @@ celestia-types.workspace = true
 
 async-stream.workspace = true
 base64.workspace = true
-futures.workspace = true
+futures-util.workspace = true
 jsonrpsee = { workspace = true, features = ["client-core", "macros"] }
 serde = { workspace = true, features = ["derive"] }
 serde_repr.workspace = true
@@ -37,8 +37,7 @@ http.workspace = true
 jsonrpsee = { workspace = true, features = ["http-client", "ws-client"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-# todo, all features are default, maybe we don't care
-gloo-net = { version = "0.6", features = ["http", "json"] }
+gloo-net = { version = "0.6", default-features = false, features = ["http", "json"] }
 rust-embed = { workspace = true, features = ["debug-embed", "include-exclude", "interpolate-folder-path"] }
 send_wrapper.workspace = true
 serde_json.workspace = true

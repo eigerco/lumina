@@ -1,5 +1,5 @@
 use celestia_rpc::prelude::*;
-use futures::StreamExt;
+use futures_util::StreamExt;
 use lumina_utils::test_utils::async_test;
 
 pub mod utils;

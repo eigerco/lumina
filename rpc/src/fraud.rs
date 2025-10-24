@@ -5,8 +5,7 @@ use std::marker::{Send, Sync};
 use std::pin::Pin;
 
 use async_stream::try_stream;
-use futures::Stream;
-use futures::StreamExt;
+use futures_util::{Stream, StreamExt};
 #[cfg(not(target_arch = "wasm32"))]
 use jsonrpsee::core::client::SubscriptionClientT;
 use jsonrpsee::core::client::{ClientT, Error};

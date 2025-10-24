@@ -5,7 +5,7 @@ use std::pin::Pin;
 use async_stream::try_stream;
 use celestia_types::hash::Hash;
 use celestia_types::{ExtendedHeader, SyncState};
-use futures::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt};
 #[cfg(not(target_arch = "wasm32"))]
 use jsonrpsee::core::client::SubscriptionClientT;
 use jsonrpsee::core::client::{ClientT, Error};
