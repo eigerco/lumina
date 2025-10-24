@@ -112,25 +112,16 @@ impl HeaderApi {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn subscribe(
+    pub fn subscribe(
         &self,
     ) -> Pin<Box<dyn Stream<Item = Result<ExtendedHeader>> + Send + 'static>> {
         let inner = self.inner.clone();
 
+        // we need to re-stream it to map error and satisfy 'static
         try_stream! {
-            let mut prev_header: Option<ExtendedHeader> = None;
-            let mut subscription = inner.rpc.header_subscribe().await?;
-
+            let mut subscription = inner.rpc.header_subscribe();
             while let Some(item) = subscription.next().await {
-                let header = item?;
-                header.validate()?;
-
-                if let Some(ref prev_header) = prev_header {
-                    prev_header.verify_adjacent(&header)?;
-                }
-
-                prev_header = Some(header.clone());
-                yield header;
+                yield item?;
             }
         }
         .boxed()
@@ -169,6 +160,6 @@ mod tests {
 
         ensure_serializable_deserializable(api.sync_state().await.unwrap());
 
-        ensure_serializable_deserializable(api.subscribe().await.next().await.unwrap().unwrap());
+        ensure_serializable_deserializable(api.subscribe().next().await.unwrap().unwrap());
     }
 }

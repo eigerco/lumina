@@ -233,7 +233,11 @@ mod wasm {
             let response = SendWrapper::new(self.send(request).await?);
 
             if !response.ok() {
-                let error = format!("Request failed: {} {}", response.status(), response.status_text());
+                let error = format!(
+                    "Request failed: {} {}",
+                    response.status(),
+                    response.status_text(),
+                );
                 return Err(ClientError::Transport(error.into()));
             }
 

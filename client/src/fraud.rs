@@ -25,19 +25,18 @@ impl FraudApi {
     }
 
     /// Subscribe to fraud proof by its type.
-    pub async fn subscribe(
+    pub fn subscribe(
         &self,
         proof_type: ProofType,
     ) -> Pin<Box<dyn Stream<Item = Result<Proof>> + Send + 'static>> {
         let inner = self.inner.clone();
 
+        // we need to re-stream it to map error and satisfy 'static
         try_stream! {
-            let mut subscription = inner.rpc.fraud_subscribe(proof_type).await?;
-
+            let mut subscription = inner.rpc.fraud_subscribe(proof_type);
             while let Some(item) = subscription.next().await {
-                let proof = item?;
                 // TODO: Should we validate proof?
-                yield proof;
+                yield item?;
             }
         }
         .boxed()
@@ -63,12 +62,7 @@ mod tests {
 
         let proof_type = ensure_serializable_deserializable(unimplemented!());
         ensure_serializable_deserializable(
-            api.subscribe(proof_type)
-                .await
-                .next()
-                .await
-                .unwrap()
-                .unwrap(),
+            api.subscribe(proof_type).next().await.unwrap().unwrap(),
         );
     }
 }

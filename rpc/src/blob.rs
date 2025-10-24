@@ -15,6 +15,8 @@ use jsonrpsee::proc_macros::rpc;
 use serde::{Deserialize, Serialize};
 
 use crate::TxConfig;
+#[cfg(target_arch = "wasm32")]
+use crate::custom_client_error;
 
 /// Response type for [`BlobClient::blob_subscribe`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -170,6 +172,7 @@ pub trait BlobClient: ClientT {
             let mut subscription = rpc::BlobSubscriptionClient::blob_subscribe(self, namespace).await?;
 
             while let Some(blobs_at_height) = subscription.next().await {
+                // TODO: Should we validate blobs?
                 yield blobs_at_height?;
             }
         }
@@ -192,9 +195,17 @@ pub trait BlobClient: ClientT {
         try_stream! {
             let mut subscription = super::HeaderClient::header_subscribe(self);
 
-            while let Some(hdr) = subscription.next().await {
-                let height = hdr?.height().value();
+            while let Some(header) = subscription.next().await {
+                let header = header?;
+                let height = header.height().value();
                 let blobs = rpc::BlobClient::blob_get_all(self, height, &[namespace]).await?;
+
+                if let Some(blobs) = &blobs {
+                    let app_version = header.app_version().map_err(custom_client_error)?;
+                    for blob in blobs {
+                        blob.validate(app_version).map_err(custom_client_error)?;
+                    }
+                }
 
                 yield BlobsAtHeight { blobs, height };
             }
