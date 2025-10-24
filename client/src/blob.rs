@@ -159,7 +159,7 @@ impl BlobApi {
     ///     .await?;
     ///
     /// let ns = Namespace::new_v0(b"mydata").unwrap();
-    /// let mut blobs_rx = client.blob().subscribe(ns).await;
+    /// let mut blobs_rx = client.blob().subscribe(ns);
     ///
     /// while let Some(blobs) = blobs_rx.next().await {
     ///     dbg!(blobs);

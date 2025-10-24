@@ -82,6 +82,7 @@ mod rpc {
     }
 }
 
+/// Client implementation for the `Blob` RPC API.
 pub trait BlobClient: ClientT {
     /// Get retrieves the blob by commitment under the given namespace and height.
     fn blob_get<'a, 'fut>(

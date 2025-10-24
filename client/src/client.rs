@@ -272,11 +272,6 @@ impl ClientBuilder {
         let rpc_url = self.rpc_url.as_ref().ok_or(Error::RpcEndpointNotSet)?;
         let rpc_auth_token = self.rpc_auth_token.as_deref();
 
-        #[cfg(target_arch = "wasm32")]
-        if rpc_auth_token.is_some() {
-            return Err(Error::AuthTokenNotSupported);
-        }
-
         let (grpc, pubkey) = if let Some(grpc_builder) = self.grpc_builder {
             let client = grpc_builder.build()?;
             let pubkey = client.get_account_pubkey();

@@ -50,16 +50,12 @@ mod rpc {
     #[cfg(not(target_arch = "wasm32"))]
     #[rpc(client, namespace = "header", namespace_separator = ".")]
     pub trait HeaderSubscription {
-        /// Subscribe to recent ExtendedHeaders from the network.
-        ///
-        /// # Notes
-        ///
-        /// Unsubscribe is not implemented by Celestia nodes.
         #[subscription(name = "Subscribe", unsubscribe = "Unsubscribe", item = ExtendedHeader)]
         async fn header_subscribe(&self) -> SubscriptionResult;
     }
 }
 
+/// Client implementation for the `Header` RPC API.
 pub trait HeaderClient: ClientT {
     /// GetByHash returns the header of the given hash from the node's header store.
     fn header_get_by_hash<'a, 'fut>(

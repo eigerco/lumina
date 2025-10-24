@@ -31,6 +31,7 @@ mod rpc {
     }
 }
 
+/// Client implementation for the `Fraud` RPC API.
 pub trait FraudClient: ClientT {
     /// Fetches fraud proofs by their type.
     fn fraud_get<'a, 'fut>(

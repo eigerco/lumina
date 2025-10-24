@@ -104,7 +104,7 @@ impl HeaderApi {
     ///     .build()
     ///     .await?;
     ///
-    /// let mut headers_rx = client.header().subscribe().await;
+    /// let mut headers_rx = client.header().subscribe();
     ///
     /// while let Some(header) = headers_rx.next().await {
     ///     dbg!(header);
