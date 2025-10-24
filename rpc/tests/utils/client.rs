@@ -40,7 +40,11 @@ fn token_from_env(auth_level: AuthLevel) -> Result<Option<String>> {
 
 #[cfg(target_arch = "wasm32")]
 fn token_from_env(auth_level: AuthLevel) -> Result<Option<String>> {
-    let env = include_str!("../../../.env");
+    #[derive(rust_embed::Embed)]
+    #[folder = "$CARGO_MANIFEST_DIR/../"]
+    #[allow_missing = true]
+    #[include = ".env*"]
+    struct Env;
 
     let token_pattern = match auth_level {
         AuthLevel::Skip => return Ok(None),
@@ -49,13 +53,21 @@ fn token_from_env(auth_level: AuthLevel) -> Result<Option<String>> {
         AuthLevel::Admin => "CELESTIA_NODE_AUTH_TOKEN_ADMIN=",
     };
 
-    env.lines()
-        .find_map(|line| line.split_once(token_pattern))
-        .map(|(_, token)| token.to_owned())
-        .ok_or(anyhow::anyhow!(
-            "CELESTIA_NODE_AUTH_TOKEN_<LEVEL> variable must be set during build"
-        ))
-        .map(Some)
+    let env = Env::get(".env")
+        .or_else(|| Env::get(".env.sample"))
+        .ok_or(anyhow::anyhow!("Couldn't find .env file"))?;
+
+    let token = str::from_utf8(env.data.as_ref())?
+        .lines()
+        .find_map(|line| line.strip_prefix(token_pattern));
+
+    if token.is_some_and(|t| !t.is_empty()) {
+        Ok(token.map(ToOwned::to_owned))
+    } else {
+        anyhow::bail!(
+            "CELESTIA_NODE_AUTH_TOKEN_<LEVEL> variable not found. Make sure to run 'tools/gen_auth_tokens.sh'"
+        )
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
