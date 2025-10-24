@@ -21,6 +21,7 @@ use web_sys::{
 use lumina_node::network;
 
 use crate::error::{Error, Result};
+use crate::ports::MessagePortLike;
 
 /// Supported Celestia networks.
 #[wasm_bindgen]
@@ -107,15 +108,16 @@ impl WorkerSelf for ServiceWorker {
 }
 
 pub(crate) trait MessageEventExt {
-    fn get_port(&self) -> Option<JsValue>;
+    fn get_port(&self) -> Option<MessagePortLike>;
 }
+
 impl MessageEventExt for MessageEvent {
-    fn get_port(&self) -> Option<JsValue> {
+    fn get_port(&self) -> Option<MessagePortLike> {
         let ports = self.ports();
         if ports.is_array() {
             let port = ports.get(0);
             if !port.is_undefined() {
-                return Some(port);
+                return Some(port.into());
             }
         }
         None

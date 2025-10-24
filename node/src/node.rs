@@ -7,6 +7,14 @@ use std::ops::RangeBounds;
 use std::sync::Arc;
 use std::time::Duration;
 
+use libp2p::identity::Keypair;
+use libp2p::swarm::NetworkInfo;
+use libp2p::{Multiaddr, PeerId};
+use tokio::sync::{mpsc, watch};
+use tokio_stream::wrappers::ReceiverStream;
+use tokio_util::sync::CancellationToken;
+use tracing::warn;
+
 use blockstore::Blockstore;
 use celestia_types::hash::Hash;
 use celestia_types::nmt::Namespace;
@@ -14,13 +22,7 @@ use celestia_types::row::Row;
 use celestia_types::row_namespace_data::RowNamespaceData;
 use celestia_types::sample::Sample;
 use celestia_types::{Blob, ExtendedHeader};
-use libp2p::identity::Keypair;
-use libp2p::swarm::NetworkInfo;
-use libp2p::{Multiaddr, PeerId};
-use lumina_utils::executor::{JoinHandle, spawn_cancellable};
-use tokio::sync::watch;
-use tokio_util::sync::CancellationToken;
-use tracing::warn;
+use lumina_utils::executor::{JoinHandle, spawn, spawn_cancellable};
 
 use crate::blockstore::{InMemoryBlockstore, SampleBlockstore};
 use crate::daser::{
@@ -498,6 +500,97 @@ where
             Err(e) => Err(e.into()),
         }
     }
+
+    /// Return a stream which will yield all the headers, as they are being received by the node,
+    /// starting from the first header received after the call. Stream is guaranteed to return either
+    /// header or error for each height, in order.
+    pub async fn header_subscribe(
+        &self,
+    ) -> Result<ReceiverStream<Result<ExtendedHeader, SubscriptionError>>> {
+        let store = self
+            .store
+            .as_ref()
+            .cloned()
+            .expect("store should be present");
+        let mut prev_head = store.head_height().await?;
+
+        let (tx, rx) = mpsc::channel(16);
+
+        spawn(async move {
+            loop {
+                let new_head = store.wait_new_head().await;
+                for height in (prev_head + 1)..=new_head {
+                    let header_or_error =
+                        store
+                            .get_by_height(height)
+                            .await
+                            .map_err(|e| SubscriptionError {
+                                height,
+                                source: NodeError::Store(e),
+                            });
+                    if tx.send(header_or_error).await.is_err() {
+                        return; // receiver dropped
+                    }
+                    prev_head = new_head;
+                }
+            }
+        });
+
+        Ok(ReceiverStream::new(rx))
+    }
+
+    /// Return a stream which will yield all the blobs from the namespace, as the new headers
+    /// are being received by the node starting from the first header received after the call.
+    /// Stream is guaranteed to return all blobs (possibly zero) or error for each height, in order.
+    pub async fn namespace_subscribe(
+        &self,
+        namespace: Namespace,
+    ) -> Result<ReceiverStream<Result<(u64, Vec<Blob>), SubscriptionError>>> {
+        let store = self
+            .store
+            .as_ref()
+            .cloned()
+            .expect("store should be present");
+        let p2p = self.p2p.as_ref().cloned().expect("p2p should be present");
+
+        let mut prev_head = store.head_height().await?;
+
+        let (tx, rx) = mpsc::channel(16);
+
+        spawn(async move {
+            loop {
+                let new_head = store.wait_new_head().await;
+                for height in (prev_head + 1)..=new_head {
+                    let blobs_or_error = p2p
+                        .get_all_blobs(namespace, height, None, store.as_ref())
+                        .await
+                        .map(|blobs| (height, blobs))
+                        .map_err(|e| SubscriptionError {
+                            height,
+                            source: NodeError::P2p(e),
+                        });
+
+                    if tx.send(blobs_or_error).await.is_err() {
+                        return; // receiver dropped
+                    }
+                }
+                prev_head = new_head;
+            }
+        });
+
+        Ok(ReceiverStream::new(rx))
+    }
+}
+
+/// Error
+#[derive(Debug, thiserror::Error)]
+#[error("Unable to receive subscription item at {height}: {source}")]
+pub struct SubscriptionError {
+    /// Height of the subscription item
+    pub height: u64,
+    /// Error that occured
+    #[source]
+    pub source: NodeError,
 }
 
 impl<B, S> Drop for Node<B, S>
