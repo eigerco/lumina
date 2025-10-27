@@ -307,10 +307,10 @@ impl LuminaNode {
     /// Return a stream which will yield all the blobs from the namespace, as the new headers
     /// are being received by the node starting from the first header received after the call.
     /// Stream is guaranteed to return all blobs (possibly zero) or error for each height, in order.
-    pub async fn namespace_subscribe(&self, namespace: Arc<Namespace>) -> Result<BlobStream> {
+    pub async fn blob_subscribe(&self, namespace: Arc<Namespace>) -> Result<BlobStream> {
         let node = self.node.read().await;
         let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
-        let stream = node.namespace_subscribe(*namespace.as_ref()).await?;
+        let stream = node.blob_subscribe(*namespace.as_ref()).await?;
         Ok(BlobStream::new(stream))
     }
 }

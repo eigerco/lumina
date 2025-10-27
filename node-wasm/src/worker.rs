@@ -24,8 +24,8 @@ use lumina_utils::executor::spawn;
 
 use crate::client::WasmNodeConfig;
 use crate::commands::{
-    Command, CommandWithResponder, ManagementCommand, NodeCommand, NodeSubscription,
-    SingleHeaderQuery, WorkerError, WorkerResponse, WorkerResult,
+    Command, CommandWithResponder, NodeCommand, SingleHeaderQuery, SubscriptionCommand,
+    WorkerCommand, WorkerError, WorkerResponse, WorkerResult,
 };
 use crate::error::{Context, Error, Result};
 use crate::ports::Port;
@@ -86,12 +86,12 @@ impl NodeWorker {
     async fn execute_command(&mut self, command: Command) -> Result<WorkerResponse, WorkerError> {
         Ok(match command {
             Command::Management(command) => match command {
-                ManagementCommand::InternalPing => WorkerResponse::InternalPong,
-                ManagementCommand::IsRunning => WorkerResponse::IsRunning(self.node.is_some()),
-                ManagementCommand::GetEventsChannelName => {
+                WorkerCommand::InternalPing => WorkerResponse::InternalPong,
+                WorkerCommand::IsRunning => WorkerResponse::IsRunning(self.node.is_some()),
+                WorkerCommand::GetEventsChannelName => {
                     WorkerResponse::EventsChannelName(self.event_channel_name.clone())
                 }
-                ManagementCommand::StartNode(config) => match &mut self.node {
+                WorkerCommand::StartNode(config) => match &mut self.node {
                     Some(_) => return Err(WorkerError::NodeAlreadyRunning),
                     node => {
                         let instance =
@@ -100,12 +100,12 @@ impl NodeWorker {
                         WorkerResponse::Ok
                     }
                 },
-                ManagementCommand::StopNode => {
+                WorkerCommand::StopNode => {
                     let node = self.node.take().ok_or(WorkerError::NodeNotRunning)?;
                     node.stop().await;
                     WorkerResponse::Ok
                 }
-                ManagementCommand::ConnectPort(port) => {
+                WorkerCommand::ConnectPort(port) => {
                     self.request_server.spawn_connection_worker(
                         port.ok_or(WorkerError::InvalidCommandReceived)?,
                     )?;
@@ -300,15 +300,15 @@ impl NodeWorkerInstance {
 
     async fn process_subscription(
         &mut self,
-        subscription: NodeSubscription,
+        subscription: SubscriptionCommand,
     ) -> Result<MessagePort> {
         match subscription {
-            NodeSubscription::Headers => {
+            SubscriptionCommand::Headers => {
                 let stream = self.node.header_subscribe().await?;
                 register_forwarding_tasks_and_callbacks(stream)
             }
-            NodeSubscription::Blobs(namespace) => {
-                let stream = self.node.namespace_subscribe(namespace).await?;
+            SubscriptionCommand::Blobs(namespace) => {
+                let stream = self.node.blob_subscribe(namespace).await?;
                 register_forwarding_tasks_and_callbacks(stream)
             }
         }
@@ -355,7 +355,7 @@ fn register_forwarding_tasks_and_callbacks<T: Serialize + 'static>(
             }
             let item: Result<Option<T>> = stream.next().await.transpose().map_err(Error::from);
 
-            if let Err(e) = port.send(&item) {
+            if let Err(e) = port.send(&item, None) {
                 error!("Error sending subscription item: {e}");
             }
         }

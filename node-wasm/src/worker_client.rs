@@ -7,11 +7,11 @@ use tracing::error;
 use wasm_bindgen::prelude::*;
 
 use crate::commands::{
-    Command, CommandWithResponder, ManagementCommand, NodeCommand, NodeSubscription,
-    PayloadWithTransferable, WorkerError, WorkerResponse, WorkerResult,
+    Command, CommandWithResponder, HasMessagePort, NodeCommand, SubscriptionCommand, WorkerCommand,
+    WorkerError, WorkerResponse, WorkerResult,
 };
 use crate::error::{Context, Error, Result};
-use crate::ports::{MessageId, MessagePortLike, MultiplexMessage, Port, prepare_port};
+use crate::ports::{MessageId, MessagePortLike, MultiplexMessage, Port};
 use lumina_utils::executor::{JoinHandle, spawn};
 
 /// WorkerClient responsible for sending `Command`s and receiving `WorkerResponse`s to them over a port like
@@ -27,7 +27,7 @@ impl WorkerClient {
     /// callback.
     pub fn new(port: JsValue) -> Result<WorkerClient> {
         let cancellation_token = CancellationToken::new();
-        let mut worker = Worker::new(port, cancellation_token.child_token())?;
+        let mut worker = Worker::new(port.into(), cancellation_token.child_token())?;
 
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let _worker_join_handle = spawn(async move {
@@ -43,11 +43,8 @@ impl WorkerClient {
         })
     }
 
-    /// Send a `ManagementCommand`, awaiting for a `WorkerResponse`
-    pub async fn management(
-        &self,
-        command: ManagementCommand,
-    ) -> Result<WorkerResponse, WorkerError> {
+    /// Send a `WorkerCommand`, awaiting for a `WorkerResponse`
+    pub async fn worker(&self, command: WorkerCommand) -> Result<WorkerResponse, WorkerError> {
         let command = Command::Management(command);
         self.send(command).await
     }
@@ -60,7 +57,7 @@ impl WorkerClient {
 
     pub async fn subscribe(
         &self,
-        subscription: NodeSubscription,
+        subscription: SubscriptionCommand,
     ) -> Result<MessagePortLike, WorkerError> {
         let command = Command::Subscribe(subscription);
 
@@ -98,8 +95,9 @@ struct Worker {
 }
 
 impl Worker {
-    fn new(port: JsValue, cancellation_token: CancellationToken) -> Result<Worker> {
-        let (port, incoming_responses) = prepare_port::<WorkerResult>(port.into())?;
+    fn new(port: MessagePortLike, cancellation_token: CancellationToken) -> Result<Worker> {
+        let (port, incoming_responses) =
+            Port::with_multiplex_message_channel::<WorkerResult>(port)?;
 
         Ok(Worker {
             port,
@@ -156,16 +154,12 @@ impl Worker {
     }
 
     fn send_message(&mut self, mut message: MultiplexMessage<Command>) -> Result<()> {
-        let port = message.payload.take_transferable();
-        if let Some(port) = port {
-            self.port
-                .send_with_transferable(&message, port.into())
-                .context("failed to send outgoing request with transferable")?;
-        } else {
-            self.port
-                .send(&message)
-                .context("failed to send outgoing request without transferable")?;
-        }
+        let port = message.payload.take_port().map(Into::into);
+
+        self.port
+            .send(&message, port)
+            .context("failed to send outgoing request without a port transfer")?;
+
         Ok(())
     }
 }

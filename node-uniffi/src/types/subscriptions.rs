@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use celestia_types::{Blob, ExtendedHeader};
 use futures::StreamExt;
 use lumina_node::node::SubscriptionError as NodeSubscriptionError;
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 use tokio_stream::wrappers::ReceiverStream;
 use uniffi::Object;
 
@@ -10,16 +12,22 @@ use crate::error::LuminaError;
 type HeaderSubscriptionItem = Result<ExtendedHeader, NodeSubscriptionError>;
 type BlobSubscriptionItem = Result<(u64, Vec<Blob>), NodeSubscriptionError>;
 
-#[derive(Object)]
-pub struct HeaderStream {
-    stream: RwLock<ReceiverStream<HeaderSubscriptionItem>>,
+#[derive(uniffi::Error, Debug, thiserror::Error)]
+pub enum SubscriptionError {
+    #[error("Unable to receive subscription item at {height}: {error}")]
+    NodeError { height: u64, error: LuminaError },
+    #[error("Subscription stream ended")]
+    StreamEnded,
+    #[error("Unable to serialize header: {0}")]
+    Serialization(String),
 }
+
+#[derive(Object)]
+pub struct HeaderStream(Mutex<ReceiverStream<HeaderSubscriptionItem>>);
 
 impl HeaderStream {
     pub(crate) fn new(stream: ReceiverStream<HeaderSubscriptionItem>) -> Self {
-        HeaderStream {
-            stream: RwLock::new(stream),
-        }
+        HeaderStream(Mutex::new(stream))
     }
 }
 
@@ -27,8 +35,8 @@ impl HeaderStream {
 impl HeaderStream {
     pub async fn next(&self) -> Result<String, SubscriptionError> {
         let header = self
-            .stream
-            .write()
+            .0
+            .lock()
             .await
             .next()
             .await
@@ -40,48 +48,47 @@ impl HeaderStream {
 }
 
 #[derive(Object)]
-pub struct BlobStream {
-    stream: RwLock<ReceiverStream<BlobSubscriptionItem>>,
-}
+pub struct BlobStream(Mutex<ReceiverStream<BlobSubscriptionItem>>);
 
 impl BlobStream {
     pub(crate) fn new(stream: ReceiverStream<BlobSubscriptionItem>) -> Self {
-        BlobStream {
-            stream: RwLock::new(stream),
-        }
+        BlobStream(Mutex::new(stream))
     }
 }
 
 #[uniffi::export]
 impl BlobStream {
-    pub async fn next(&self) -> Result<BlobAtHeight, SubscriptionError> {
-        let (height, blob) = self
-            .stream
-            .write()
+    pub async fn next(&self) -> Result<BlobsAtHeight, SubscriptionError> {
+        let (height, blobs) = self
+            .0
+            .lock()
             .await
             .next()
             .await
             .ok_or(SubscriptionError::StreamEnded)?
             .map_err(SubscriptionError::from)?;
 
-        Ok(BlobAtHeight { height, blob })
+        let blobs = blobs.into_iter().map(Arc::new).collect();
+
+        Ok(BlobsAtHeight { height, blobs })
     }
 }
 
-#[derive(uniffi::Object)]
-pub struct BlobAtHeight {
+#[derive(Debug, Clone, uniffi::Object)]
+pub struct BlobsAtHeight {
     pub height: u64,
-    pub blob: Vec<Blob>,
+    pub blobs: Vec<Arc<Blob>>,
 }
 
-#[derive(uniffi::Error, Debug, thiserror::Error)]
-pub enum SubscriptionError {
-    #[error("Unable to receive subscription item at {height}: {error}")]
-    NodeError { height: u64, error: LuminaError },
-    #[error("Subscription stream ended")]
-    StreamEnded,
-    #[error("Unable to serialize header: {0}")]
-    Serialization(String),
+#[uniffi::export]
+impl BlobsAtHeight {
+    fn height(&self) -> u64 {
+        self.height
+    }
+
+    fn blobs(self: Arc<Self>) -> Vec<Arc<Blob>> {
+        self.blobs.iter().map(Arc::clone).collect()
+    }
 }
 
 impl From<NodeSubscriptionError> for SubscriptionError {

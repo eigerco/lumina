@@ -44,7 +44,7 @@ async fn blob_subscription() {
     )
     .unwrap();
 
-    let mut blob_stream = node.namespace_subscribe(namespace).await.unwrap();
+    let mut blob_stream = node.blob_subscribe(namespace).await.unwrap();
 
     let submitted_at = blob_submit(&client, from_ref(&blob)).await;
 

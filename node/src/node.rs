@@ -542,7 +542,7 @@ where
     /// Return a stream which will yield all the blobs from the namespace, as the new headers
     /// are being received by the node starting from the first header received after the call.
     /// Stream is guaranteed to return all blobs (possibly zero) or error for each height, in order.
-    pub async fn namespace_subscribe(
+    pub async fn blob_subscribe(
         &self,
         namespace: Namespace,
     ) -> Result<ReceiverStream<Result<(u64, Vec<Blob>), SubscriptionError>>> {
@@ -555,8 +555,10 @@ where
 
         let mut prev_head = store.head_height().await?;
 
+        // We're keeping a small buffer of headers, so that new headers are cached eagerly
+        // as they come in, giving consumer additional buffer of time before they are no longer
+        // available. This is mostly relevant for cases where pruning window is set to zero.
         let (tx, rx) = mpsc::channel(16);
-
         spawn(async move {
             loop {
                 let new_head = store.wait_new_head().await;

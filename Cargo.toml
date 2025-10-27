@@ -22,7 +22,9 @@ beetswap = "0.5"
 blockstore = "0.8"
 leopard-codec = "0.2"
 lumina-node = { version = "0.16.0", path = "node" }
+lumina-node-wasm = { version = "0.11.0", path = "node-wasm" }
 lumina-utils = { version = "0.4.0", path = "utils" }
+celestia-client = { version = "0.2.0", path = "client" }
 celestia-proto = { version = "0.10.0", path = "proto" }
 celestia-grpc = { version = "0.8.0", path = "grpc", default-features = false }
 celestia-grpc-macros = { version = "0.4.0", path = "grpc/grpc-macros" }
@@ -74,7 +76,7 @@ tendermint-proto = "0.40.3"
 time = { version = "0.3.35", default-features = false }
 tokio = "1.42"
 tokio-util = "0.7.1"
-tokio-stream = "^0.1.16"
+tokio-stream = "0.1.16"
 tonic = { version = "0.13", default-features = false }
 tonic-build = { version = "0.13", default-features = false }
 tonic-web-wasm-client = "0.7"

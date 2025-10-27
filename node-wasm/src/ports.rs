@@ -7,7 +7,7 @@ use tracing::error;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, MessagePort};
 
-use crate::commands::PayloadWithTransferable;
+use crate::commands::{Command, WorkerCommand, WorkerResponse, WorkerResult};
 use crate::error::{Context, Error, Result};
 use crate::utils::{MessageEventExt, to_json_value};
 
@@ -17,6 +17,16 @@ use crate::utils::{MessageEventExt, to_json_value};
 // with json serialisation that's happening for browser extension Port.
 pub(crate) struct MessageId(u32);
 
+impl MessageId {
+    /// i++
+    pub(crate) fn post_increment(&mut self) -> MessageId {
+        let ret = *self;
+        let (next, _carry) = self.0.overflowing_add(1);
+        self.0 = next;
+        ret
+    }
+}
+
 /// Message being exchanged over the message port. Carries an id for identification plus payload
 #[derive(Serialize, Deserialize)]
 pub(crate) struct MultiplexMessage<T: Serialize> {
@@ -24,6 +34,40 @@ pub(crate) struct MultiplexMessage<T: Serialize> {
     pub id: MessageId,
     /// Actual content of the message
     pub payload: T,
+}
+
+impl TryFrom<MessageEvent> for MultiplexMessage<Command> {
+    type Error = Error;
+
+    fn try_from(ev: MessageEvent) -> Result<Self, Self::Error> {
+        let MultiplexMessage::<Command> { id, mut payload } =
+            from_value(ev.data()).context("could not deserialize message")?;
+
+        if let Some(port) = ev.get_port() {
+            if let Command::Management(WorkerCommand::ConnectPort(maybe_port)) = &mut payload {
+                let _ = maybe_port.insert(port);
+            }
+        };
+
+        Ok(MultiplexMessage { id, payload })
+    }
+}
+
+impl TryFrom<MessageEvent> for MultiplexMessage<WorkerResult> {
+    type Error = Error;
+
+    fn try_from(ev: MessageEvent) -> Result<Self, Self::Error> {
+        let MultiplexMessage::<WorkerResult> { id, mut payload } =
+            from_value(ev.data()).context("could not deserialize message")?;
+
+        if let Some(port) = ev.get_port() {
+            if let Ok(WorkerResponse::Subscribed(maybe_port)) = &mut payload {
+                let _ = maybe_port.insert(port);
+            }
+        };
+
+        Ok(MultiplexMessage { id, payload })
+    }
 }
 
 // Instead of supporting communication with just `MessagePort`, allow using any object which
@@ -46,6 +90,12 @@ extern "C" {
     ) -> Result<(), JsValue>;
 }
 
+impl From<MessagePort> for MessagePortLike {
+    fn from(value: MessagePort) -> Self {
+        MessagePortLike { obj: value.into() }
+    }
+}
+
 /// Wraps JavaScript object with port-like semantics (can `postMessage` and receive `onmessage`),
 /// with some convenience functions and type checking.
 pub(crate) struct Port {
@@ -53,24 +103,14 @@ pub(crate) struct Port {
     onmessage: Closure<dyn Fn(MessageEvent)>,
 }
 
-impl MessageId {
-    /// i++
-    pub(crate) fn post_increment(&mut self) -> MessageId {
-        let ret = *self;
-        let (next, _carry) = self.0.overflowing_add(1);
-        self.0 = next;
-        ret
-    }
-}
-
 impl Port {
     /// Create a new Port out of JS object, registering on message callback.
     /// Minimal duck-type checking is performed using reflection when setting appropriate properties.
-    pub fn new<F>(object: JsValue, onmessage_callback: F) -> Result<Port>
+    pub fn new<F>(port: MessagePortLike, onmessage_callback: F) -> Result<Port>
     where
         F: Fn(MessageEvent) -> Result<()> + 'static,
     {
-        let _post_message: Function = Reflect::get(&object, &"postMessage".into())?
+        let _post_message: Function = Reflect::get(&port, &"postMessage".into())?
             .dyn_into()
             .context("could not get object's postMessage")?;
 
@@ -80,40 +120,62 @@ impl Port {
             }
         });
 
-        let port = register_onmessage_callback(object, &onmessage)?;
+        let port = register_onmessage_callback(port, &onmessage)?;
 
         Ok(Port { port, onmessage })
     }
 
-    /// Send a serialisable message over the port. No checking is performed whether the
-    /// receiver is able to correctly interpret the message.
-    pub fn send<T: Serialize>(&self, msg: &T) -> Result<()> {
-        let value = to_json_value(&msg).context("error converting to JsValue")?;
-        self.port
-            .post_message(&value)
-            .context("could not send message")?;
-        Ok(())
+    /// Prepare the port for receiving MultiplexMessages
+    pub fn with_multiplex_message_channel<T>(
+        port: MessagePortLike,
+    ) -> Result<(Self, mpsc::UnboundedReceiver<MultiplexMessage<T>>)>
+    where
+        MultiplexMessage<T>: TryFrom<MessageEvent, Error = Error>,
+        T: Serialize + 'static,
+    {
+        let (tx, rx) = mpsc::unbounded_channel();
+
+        let port = Port::new(port, move |ev: MessageEvent| -> Result<()> {
+            let msg = ev.try_into()?;
+            tx.send(msg)
+                .context("forwarding failed, no receiver waiting")?;
+            Ok(())
+        })?;
+
+        Ok((port, rx))
+    }
+
+    /// Prepare a port for receiving subscription items
+    pub fn with_subscription_channel<T: DeserializeOwned + 'static>(
+        port: MessagePortLike,
+    ) -> Result<(Self, mpsc::UnboundedReceiver<T>)> {
+        let (tx, rx) = mpsc::unbounded_channel();
+
+        let client_port = Port::new(port, move |ev: MessageEvent| -> Result<()> {
+            let item: T = from_value(ev.data()).context("could not deserialize message")?;
+            tx.send(item)
+                .context("forwarding subscription item failed, no receiver waiting")?;
+            Ok(())
+        })?;
+
+        Ok((client_port, rx))
     }
 
     /// Send a serialisable message over the port, together with a object to transfer.
     /// No checking is performed whether receiver is able to correctly interpret the message,
     /// nor whether port can actually perform object transfer.
-    pub fn send_with_transferable<T: Serialize>(
-        &self,
-        msg: &T,
-        transferable: JsValue,
-    ) -> Result<()> {
+    pub fn send<T: Serialize>(&self, msg: &T, transferable: Option<JsValue>) -> Result<()> {
         let value = to_json_value(&msg).context("error converting to JsValue")?;
-        self.port
-            .post_message_with_transferable(&value, &Array::of1(&transferable))
-            .context("could not send message")?;
+        if let Some(transferable) = transferable {
+            self.port
+                .post_message_with_transferable(&value, &Array::of1(&transferable))
+                .context("could not send message")?;
+        } else {
+            self.port
+                .post_message(&value)
+                .context("could not send message")?;
+        }
         Ok(())
-    }
-}
-
-impl From<MessagePort> for MessagePortLike {
-    fn from(value: MessagePort) -> Self {
-        MessagePortLike { obj: value.into() }
     }
 }
 
@@ -123,58 +185,21 @@ impl Drop for Port {
     }
 }
 
-/// Prepare a port for receiving subscription items
-pub(crate) fn subscription_port<T: DeserializeOwned + 'static>(
-    object: MessagePortLike,
-) -> Result<(Port, mpsc::UnboundedReceiver<T>)> {
-    let (tx, rx) = mpsc::unbounded_channel();
-
-    let client_port = Port::new(object.into(), move |ev: MessageEvent| -> Result<()> {
-        let item: T = from_value(ev.data()).context("could not deserialize message")?;
-        tx.send(item)
-            .context("forwarding subscription item failed")?;
-        Ok(())
-    })?;
-
-    Ok((client_port, rx))
-}
-
-/// Prepare a Port that is ready to receive Commands from the client or WorkerResults from the worker
-pub(crate) fn prepare_port<T: PayloadWithTransferable + Serialize + DeserializeOwned + 'static>(
-    object: MessagePortLike,
-) -> Result<(Port, mpsc::UnboundedReceiver<MultiplexMessage<T>>)> {
-    let (tx, rx) = mpsc::unbounded_channel();
-
-    let port = Port::new(object.into(), move |ev: MessageEvent| -> Result<()> {
-        let MultiplexMessage::<T> { id, mut payload } =
-            from_value(ev.data()).context("could not deserialize message")?;
-
-        if let Some(port) = ev.get_port() {
-            payload.insert_transferable(port);
-        };
-
-        tx.send(MultiplexMessage { id, payload })
-            .context("forwarding failed, no receiver waiting")?;
-        Ok(())
-    })?;
-    Ok((port, rx))
-}
-
 // helper to hide slight differences in message passing between runtime.Port used by browser
 // extensions and everything else
 pub(crate) fn register_onmessage_callback<F>(
-    object: JsValue,
+    port: MessagePortLike,
     callback: &Closure<F>,
 ) -> Result<MessagePortLike, Error>
 where
     F: Fn(MessageEvent) + ?Sized,
 {
-    if Reflect::has(&object, &JsValue::from("onMessage"))
+    if Reflect::has(&port, &JsValue::from("onMessage"))
         .context("failed to reflect onMessage property")?
     {
         // Browser extension runtime.Port has `onMessage` property, on which we should call
         // `addListener` on.
-        let listeners = Reflect::get(&object, &"onMessage".into())
+        let listeners = Reflect::get(&port, &"onMessage".into())
             .context("could not get `onMessage` property")?;
 
         let add_listener: Function = Reflect::get(&listeners, &"addListener".into())
@@ -183,18 +208,18 @@ where
             .context("expected `onMessage.addListener` to be a function")?;
         Reflect::apply(&add_listener, &listeners, &Array::of1(callback.as_ref()))
             .context("error calling `onMessage.addListener`")?;
-    } else if Reflect::has(&object, &JsValue::from("onmessage"))
+    } else if Reflect::has(&port, &JsValue::from("onmessage"))
         .context("failed to reflect onmessage property")?
     {
         // MessagePort, as well as message passing via Worker instance, requires setting
         // `onmessage` property to callback
-        Reflect::set(&object, &"onmessage".into(), callback.as_ref())
+        Reflect::set(&port, &"onmessage".into(), callback.as_ref())
             .context("could not set onmessage callback")?;
     } else {
         return Err(Error::new("Don't know how to register onmessage callback"));
     }
 
-    Ok(MessagePortLike::from(object))
+    Ok(port)
 }
 
 /// unregister onmessage callback in any of the various forms it can take
@@ -225,7 +250,7 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
 
-    use crate::commands::{Command, CommandWithResponder, ManagementCommand, WorkerResponse};
+    use crate::commands::{Command, CommandWithResponder, WorkerCommand, WorkerResponse};
     use crate::worker_client::WorkerClient;
     use crate::worker_server::WorkerServer;
 
@@ -258,14 +283,14 @@ mod tests {
             let CommandWithResponder { command, responder } = server.recv().await.unwrap();
             assert!(matches!(
                 command,
-                Command::Management(ManagementCommand::IsRunning)
+                Command::Management(WorkerCommand::IsRunning)
             ));
             responder
                 .send(Ok(WorkerResponse::IsRunning(false)))
                 .unwrap();
 
             let CommandWithResponder { command, responder } = server.recv().await.unwrap();
-            let Command::Management(ManagementCommand::ConnectPort(Some(port))) = command else {
+            let Command::Management(WorkerCommand::ConnectPort(Some(port))) = command else {
                 panic!("received unexpected command")
             };
             server.spawn_connection_worker(port).unwrap();
@@ -274,7 +299,7 @@ mod tests {
             let CommandWithResponder { command, responder } = server.recv().await.unwrap();
             assert!(matches!(
                 command,
-                Command::Management(ManagementCommand::IsRunning)
+                Command::Management(WorkerCommand::IsRunning)
             ));
             responder.send(Ok(WorkerResponse::IsRunning(true))).unwrap();
 
@@ -284,25 +309,17 @@ mod tests {
         port_channel.send(channel0.port1().into()).unwrap();
         let client0 = WorkerClient::new(channel0.port2().into()).unwrap();
 
-        let response = client0
-            .management(ManagementCommand::IsRunning)
-            .await
-            .unwrap();
+        let response = client0.worker(WorkerCommand::IsRunning).await.unwrap();
         assert!(matches!(response, WorkerResponse::IsRunning(false)));
 
         let channel1 = MessageChannel::new().unwrap();
         client0
-            .management(ManagementCommand::ConnectPort(Some(
-                channel1.port1().into(),
-            )))
+            .worker(WorkerCommand::ConnectPort(Some(channel1.port1().into())))
             .await
             .unwrap();
         let client1 = WorkerClient::new(channel1.port2().into()).unwrap();
 
-        let response = client1
-            .management(ManagementCommand::IsRunning)
-            .await
-            .unwrap();
+        let response = client1.worker(WorkerCommand::IsRunning).await.unwrap();
         assert!(matches!(response, WorkerResponse::IsRunning(true)));
         stop_tx.send(()).unwrap();
     }
@@ -322,16 +339,13 @@ mod tests {
             let CommandWithResponder { command, responder } = server.recv().await.unwrap();
             assert!(matches!(
                 command,
-                Command::Management(ManagementCommand::InternalPing)
+                Command::Management(WorkerCommand::InternalPing)
             ));
             responder.send(Ok(WorkerResponse::InternalPong)).unwrap();
             stop_rx.await.unwrap(); // wait for the test to finish before shutting the server
         });
 
-        let response = client
-            .management(ManagementCommand::InternalPing)
-            .await
-            .unwrap();
+        let response = client.worker(WorkerCommand::InternalPing).await.unwrap();
         assert!(matches!(response, WorkerResponse::InternalPong));
         stop_tx.send(()).unwrap();
     }

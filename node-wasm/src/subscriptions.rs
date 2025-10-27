@@ -41,7 +41,10 @@ impl<S> JsStream<S> {
     }
 
     fn send_ready(&self) -> Result<(), Error> {
-        self.0.borrow_mut().port.send(&SubscriptionFeedback::Ready)
+        self.0
+            .borrow_mut()
+            .port
+            .send(&SubscriptionFeedback::Ready, None)
     }
 }
 
@@ -86,14 +89,13 @@ pub(crate) fn into_async_iterator<S: Serialize + 'static>(
     .into_js_value();
 
     let iterator = Object::new();
-
     let iterator_self = iterator.clone();
-    let async_iterator =
+    let iterator_return_this =
         Closure::<dyn FnMut() -> JsValue>::new(move || iterator_self.clone().into())
             .into_js_value();
 
     Reflect::set(&iterator, &"next".into(), &next).expect("reflect shouldn't fail on Object");
-    Reflect::set(&iterator, &Symbol::async_iterator(), &async_iterator)
+    Reflect::set(&iterator, &Symbol::async_iterator(), &iterator_return_this)
         .expect("reflect shouldn't fail on Object");
     iterator.unchecked_into()
 }

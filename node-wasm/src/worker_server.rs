@@ -6,9 +6,9 @@ use tokio_util::sync::{CancellationToken, DropGuard};
 use tracing::error;
 use wasm_bindgen::prelude::*;
 
-use crate::commands::{Command, CommandWithResponder, WorkerError, WorkerResult};
+use crate::commands::{Command, CommandWithResponder, HasMessagePort, WorkerError, WorkerResult};
 use crate::error::{Context, Error, Result};
-use crate::ports::{MessagePortLike, MultiplexMessage, Port, prepare_port};
+use crate::ports::{MessagePortLike, MultiplexMessage, Port};
 use lumina_utils::executor::spawn;
 
 /// `WorkerServer` aggregates multiple existing [`ServerConnection`]s, receiving `Command`s
@@ -91,7 +91,7 @@ impl ConnectionWorker {
         command_forwarding_channel: mpsc::UnboundedSender<CommandWithResponder>,
         cancellation_token: CancellationToken,
     ) -> Result<ConnectionWorker> {
-        let (port, incoming_commands) = prepare_port::<Command>(port)?;
+        let (port, incoming_commands) = Port::with_multiplex_message_channel::<Command>(port)?;
 
         Ok(ConnectionWorker {
             port,
@@ -116,10 +116,11 @@ impl ConnectionWorker {
                 }
                 res = self.pending_responses_map.next(), if !self.pending_responses_map.is_empty() => {
                     let response =
-                            &res
+                            &mut res
                             .ok_or(Error::new("Responses channel closed, should not happen"))?;
+                    let port = response.payload.take_port().map(Into::into);
                     self.port
-                        .send(response)
+                        .send(response, port)
                         .with_context(|| format!("failed to send outgoing response for {:?}", response.id))?;
 
                 }
@@ -145,7 +146,7 @@ impl ConnectionWorker {
                 id,
                 payload: r
                     .map_err(|_: oneshot::error::RecvError| WorkerError::EmptyResponse)
-                    .flatten(),
+                    .and_then(|v| v),
             })
             .boxed_local();
 
@@ -183,7 +184,7 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
 
-    use crate::commands::{ManagementCommand, NodeCommand, WorkerError, WorkerResponse};
+    use crate::commands::{NodeCommand, WorkerCommand, WorkerError, WorkerResponse};
     use crate::worker_client::WorkerClient;
 
     #[wasm_bindgen_test]
@@ -202,16 +203,13 @@ mod tests {
                 request_rx.recv().await.expect("failed to recv");
             assert!(matches!(
                 command,
-                Command::Management(ManagementCommand::InternalPing)
+                Command::Management(WorkerCommand::InternalPing)
             ));
             responder.send(Ok(WorkerResponse::InternalPong)).unwrap();
             stop_rx.await.unwrap(); // wait for the test to finish before shutting the server
         });
 
-        let response = client
-            .management(ManagementCommand::InternalPing)
-            .await
-            .unwrap();
+        let response = client.worker(WorkerCommand::InternalPing).await.unwrap();
 
         assert!(matches!(response, WorkerResponse::InternalPong));
         stop_tx.send(()).unwrap();
@@ -232,14 +230,14 @@ mod tests {
                 request_rx.recv().await.expect("failed to recv");
             assert!(matches!(
                 command,
-                Command::Management(ManagementCommand::InternalPing)
+                Command::Management(WorkerCommand::InternalPing)
             ));
             drop(responder);
             stop_rx.await.unwrap(); // wait for the test to finish before shutting the server
         });
 
         let response = client
-            .management(ManagementCommand::InternalPing)
+            .worker(WorkerCommand::InternalPing)
             .await
             .unwrap_err();
 

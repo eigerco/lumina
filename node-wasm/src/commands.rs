@@ -1,21 +1,19 @@
 use std::fmt::Debug;
 
-use celestia_types::Blob;
-use celestia_types::nmt::Namespace;
 use enum_as_inner::EnumAsInner;
-use libp2p::Multiaddr;
-use libp2p::PeerId;
+use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 use tracing::error;
 
-use celestia_types::{ExtendedHeader, hash::Hash};
+use celestia_types::hash::Hash;
+use celestia_types::nmt::Namespace;
+use celestia_types::{Blob, ExtendedHeader};
 use lumina_node::node::{PeerTrackerInfo, SyncingInfo};
 use lumina_node::store::SamplingMetadata;
 
 use crate::client::WasmNodeConfig;
-use crate::error::Error;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::ports::MessagePortLike;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
@@ -23,12 +21,12 @@ use crate::wrapper::libp2p::NetworkInfoSnapshot;
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum Command {
     Node(NodeCommand),
-    Management(ManagementCommand),
-    Subscribe(NodeSubscription),
+    Management(WorkerCommand),
+    Subscribe(SubscriptionCommand),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) enum ManagementCommand {
+pub(crate) enum WorkerCommand {
     InternalPing,
     GetEventsChannelName,
     ConnectPort(#[serde(skip)] Option<MessagePortLike>),
@@ -38,7 +36,7 @@ pub(crate) enum ManagementCommand {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) enum NodeSubscription {
+pub(crate) enum SubscriptionCommand {
     Headers,
     Blobs(Namespace),
 }
@@ -143,37 +141,24 @@ pub(crate) struct CommandWithResponder {
     pub responder: oneshot::Sender<WorkerResult>,
 }
 
-pub(crate) trait PayloadWithTransferable {
-    fn insert_transferable(&mut self, transferable: MessagePortLike);
-    fn take_transferable(&mut self) -> Option<MessagePortLike>;
+pub(crate) trait HasMessagePort {
+    fn take_port(&mut self) -> Option<MessagePortLike>;
 }
 
-impl PayloadWithTransferable for Command {
-    fn insert_transferable(&mut self, transferable: MessagePortLike) {
-        if let Command::Management(ManagementCommand::ConnectPort(maybe_port)) = self {
-            let _ = maybe_port.insert(transferable);
+impl HasMessagePort for Command {
+    fn take_port(&mut self) -> Option<MessagePortLike> {
+        if let Command::Management(WorkerCommand::ConnectPort(maybe_port)) = self {
+            return maybe_port.take();
         }
-    }
-
-    fn take_transferable(&mut self) -> Option<MessagePortLike> {
-        match self {
-            Command::Management(ManagementCommand::ConnectPort(maybe_port)) => maybe_port.take(),
-            _ => None,
-        }
+        None
     }
 }
 
-impl PayloadWithTransferable for WorkerResult {
-    fn insert_transferable(&mut self, transferable: MessagePortLike) {
+impl HasMessagePort for WorkerResult {
+    fn take_port(&mut self) -> Option<MessagePortLike> {
         if let Ok(WorkerResponse::Subscribed(maybe_port)) = self {
-            let _ = maybe_port.insert(transferable);
+            return maybe_port.take();
         }
-    }
-
-    fn take_transferable(&mut self) -> Option<MessagePortLike> {
-        match self {
-            Ok(WorkerResponse::Subscribed(maybe_port)) => maybe_port.take(),
-            _ => None,
-        }
+        None
     }
 }
